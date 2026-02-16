@@ -4,16 +4,18 @@
 
 ### 三问自检（每个creative tip必须全部通过）
 
-**Q1：为什么是这个元素？** — 能不能一句话说清楚"因为画面里有X，所以加Y才好笑"？
-- ✅ "因为画面里在切烤鸭，所以一只鸡在旁边围观同胞" — 因果关系秒懂
+**Q1：为什么是这个元素？** — 能不能一句话说清楚"因为画面里有X，所以加Y才好笑"？而且这个Y**只能在这种场景出现**。说不清原因="不明所以"=4分，立即换一个。
+- ✅ "因为画面里在切烤鸭，所以一只鸡在旁边围观同胞" — 因果关系秒懂，只有烤鸭场景才好笑
 - ✅ "因为是Disney乐园，所以三眼仔探头" — 场景直接关联
-- ✅ "因为她怀孕了，所以宝宝从肚子里探头" — 人物状态关联
-- ❌ "因为...呃...就觉得魔法棒好看" — 没有因果关系 = 不通过
+- ✅ "因为桂林漓江，加个鸬鹚渔翁" — 只有桂林才合理（8分）
+- ❌ "因为在吃火锅，加个熊猫厨师" — 任何餐厅都能加熊猫厨师（6分，"跟鱼眼镜没什么关系"）
 - ❌ "因为...加个动物挺可爱的" — 通用理由 = 不通过
+- ❌ "在男生头旁边加个漂浮热可可" — 为什么是热可可？跟画面什么关系？（4分，"不明所以"）
 
 **Q2：情绪对不对？** — 加入的元素带来的情绪是让人笑/惊喜，还是害怕/困惑？
 - ✅ 让人会心一笑、想转发给朋友
-- ❌ 让人害怕（鳄鱼张嘴、蛇缠绕）、让人困惑（跟画面无关的东西）
+- ❌ 让人害怕（鳄鱼在脸旁边=4分 "比较吓人"、蛇缠绕、昆虫爬脸）、让人困惑（跟画面无关的东西）
+- ⚠️ 动物放在人脸附近时要特别注意：可爱动物=ok，爬行动物/有攻击性动物=吓人
 
 **Q3：这个创意能用在其他照片上吗？** — 如果能，说明它太通用了，不够好。
 - ✅ "孕妇照+宝宝探头" — 只有孕妇照才能用，专属创意
@@ -52,14 +54,28 @@
 - 原图80%以上画面保持不变，创意集中在一个局部焦点
 - 往画面里**加入**元素，不要**替换**大面积区域
 
-#### 品质要求
-- 写实风道具最安全（变色龙8、猴子8、鹦鹉8、熊猫8）
-- 如果用卡通风，必须是Pixar级品质，不能是简陋简笔画
-- editPrompt用 "photorealistic" 或 "Pixar-quality"，不用 "simple cartoon"
+#### 品质要求 + 融入感自检（V11最重要教训）
+**想象把编辑后的图发朋友圈，朋友会觉得"真拍到的"还是"P上去的"？**
+- "真拍到的" = 成功（法斗趴肩上7分、鸬鹚渔翁8分 — 像真的在场景里）
+- "P上去的" = 失败（卡通肌肉人5分"贴纸感"、竹筏熊猫5分"硬加进去的"）
+
+**导致贴纸感的三大原因**：
+1. 卡通/拟人化角色 — 跟实拍场景永远不搭（cartoon muscle figure=5分、panda chef=6分）
+2. 光影不匹配 — 角色没有被场景光正确照到
+3. 无物理接触 — 只是"浮在"画面中
+
+**规则**：所有加入的动物/角色必须是 **photorealistic**（写实）。禁止 cartoon-style、anthropomorphic、comic-style 角色（thought bubble 等漫画UI元素除外）。
+- editPrompt 必须包含："Match exact lighting direction, color temperature, and cast shadows from the original scene"
 
 #### 大小和可见性
 - 创意元素必须**足够大、足够显眼**（至少占画面5-10%）
 - 放在视觉焦点附近，不是角落
+
+#### 空间感知（画面拥挤度）
+- 添加元素前先评估画面空间：画面已经很满了吗？
+- ✅ 画面有空间（前景/背景有留白）→ 可以加较大元素
+- ❌ 画面已经很拥挤（多人合照挤满画面）→ 不要硬塞大元素（3分，"在原本就比较拥挤的画面加入一个火烈鸟，不是很有意思"）
+- 拥挤画面的处理：选择小巧但精致的元素（趴在肩头的小动物、头顶上方的物品），或改用风格化方向
 
 #### 互动感（极重要！不能有"贴纸感"）
 - 加入的元素必须与人物/场景**有互动**，不能像P上去的贴纸
@@ -68,9 +84,21 @@
 - editPrompt必须描述互动方式："looking at"、"reaching towards"、"reacting to"
 
 #### 避免无聊方向
-- ❌ 墨镜/眼镜镜片反射 — 连续低分（5分×2，"不好玩"、"反射出的东西很无聊"），概念本身不够有趣
+Q2自检"情绪对不对？"和Q3"太通用？"已覆盖大部分无聊方向。如果一个创意的"有趣程度"需要解释才能理解，说明它不够好。
+
+#### 背景净化
+- editPrompt必须包含：**"Remove all distracting background pedestrians and bystanders."**
+- 不只是enhance需要去路人！creative编辑时背景杂乱也会影响画面表现（V12反馈"背景里的人物也可以去掉，画面可以表现的更好"）
 
 #### editPrompt要求
 - 有人物时必须包含面部保真指令：**"Preserve the person's identity, bone structure, and facial features exactly. Do not alter face shape or proportions."**
+- 人物对新元素的反应写法（大脸场景）：**"The person's eyes glance slightly toward [the element], and their eyebrows raise by a tiny amount. Do NOT change mouth shapes or other facial features."** — 不要写 "surprised expression"、"lips part" 或 "looking with wide eyes"
 - 新元素的光影、透视必须与原图一致
 - 2个creative tip必须选不同方向
+
+### ⚠️ 小脸场景特殊处理（全身照/合照/远景/广角）
+当人脸在画面中占比小时，creative需要额外注意：
+- editPrompt必须包含：**"CRITICAL: Faces in this photo are small. Each person's face must remain PIXEL-IDENTICAL to the original — same face shape, same skin, same features, same expression. Do NOT regenerate, retouch, relight, or alter any face. Copy faces exactly as-is."**
+- 新元素不要放在紧贴人脸的位置（如趴在肩膀上看脸）——小脸时这会导致面部区域被重新生成
+- 互动方式改用身体语言：人物身体微微转向新元素、手指向新元素，而不是"looking at"或"eyes glance toward"
+- 最安全的方式：新元素与人物保持一定距离（如在桌上、在背景中、在脚边），但仍在视觉焦点附近

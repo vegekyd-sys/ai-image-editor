@@ -3,14 +3,24 @@ import { Tip } from '@/types';
 import fs from 'fs';
 import path from 'path';
 
+// ── Provider & Model Config ─────────────────────────────────────
+// Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
+const PROVIDER = (process.env.AI_PROVIDER || 'google') as 'google' | 'openrouter';
+
+// Model name (same for both providers, OpenRouter prefixes with 'google/')
+const MODEL = 'gemini-3-pro-image-preview';
+
+const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_MODEL = `google/${MODEL}`;
+
+// ── Google SDK singleton ────────────────────────────────────────
 let _ai: GoogleGenAI | null = null;
 function getAI() {
   if (!_ai) _ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! });
   return _ai;
 }
 
-// Switch model here. Primary: gemini-3-pro-image-preview. Fallback: gemini-2.5-flash-image
-const MODEL = 'gemini-2.5-flash-image';
+// ── Shared Prompts ──────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理解图片的每个细节——主体、情绪、光线、构图、环境、色彩、纹理、瑕疵和故事。
 
@@ -22,62 +32,97 @@ const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理�
 - 每个人的身份必须保持：相同的脸型、眼睛、鼻子、嘴巴、面部结构
 - 皮肤可以优化，但骨骼结构不能变
 - 发型发色保持不变（除非编辑要求改变）
-- 表情姿势保持不变（除非编辑要求改变）`;
+- 表情姿势保持不变（除非编辑要求改变）
 
-// --- Tips Generation (separate structured call) ---
+小脸保护规则（全身照/合照/远景/广角等人脸占比小的图片）：
+- 小脸图片中每个人的面部必须与原图完全一致——不做任何面部修改、补光、美颜
+- 编辑时如果需要人物有反应，只用身体语言（转身、倾斜、手势），不改变面部表情`;
 
-// Short system instruction for structured output (keeps under Gemini's limit)
-const TIPS_SYSTEM_PROMPT = `你是图片编辑建议专家。分析图片后生成6条编辑建议（2 enhance + 2 creative + 2 wild）。
+// ── Per-Category Tips Prompts ────────────────────────────────────
+// Tips are generated in 3 parallel calls (one per category) for faster loading.
 
-label必须用中文3-6字，动词开头。editPrompt用英文，极其具体。
+type TipCategory = 'enhance' | 'creative' | 'wild';
 
-三类tip的核心区别：
-- enhance = 让照片整体变好看（光影/色彩/通透感），变化必须肉眼明显
-- creative = 往画面里加入一个与画面内容有因果关系的有趣新元素
-- wild = 让画面中已有的物品发生疯狂变化（不是加新东西！）
-
-自检框架（输出每个tip前先过一遍）：
-
-enhance自检：
+const CATEGORY_INFO: Record<TipCategory, { cn: string; definition: string; selfCheck: string; rules: string }> = {
+  enhance: {
+    cn: 'enhance（专业增强）',
+    definition: 'enhance = 让照片整体变好看（光影/色彩/通透感），变化必须肉眼明显',
+    selfCheck: `enhance自检：
 - 放在原图旁边，任何人都能一眼看出提升吗？（"看不出变化"=3分）
 - 风格与照片情绪匹配吗？（搞笑照片配阴沉暗调=4分）
 - 有通透感+景深分离+色调层次吗？
-
-creative自检（三问全过才输出）：
+- enhance可以调整构图，但必须基于原图——编辑后还能一眼认出是同一张照片（"画面变化太多了"=3分）
+- 编辑后的背景还是原图的背景吗？enhance是提升原图不是生成新图（"背景被换掉了"=3分，"人物都变了"=1分）`,
+    rules: `⚠️ enhance的editPrompt必须包含背景锚定：
+"Keep the original background scene intact — enhance lighting and colors on the existing scene, do NOT replace or regenerate the background."`,
+  },
+  creative: {
+    cn: 'creative（趣味创意）',
+    definition: 'creative = 往画面里加入一个与画面内容有因果关系的有趣新元素',
+    selfCheck: `creative自检（三问全过才输出）：
 - Q1 为什么是这个元素？能不能一句话说清"因为画面里有X所以加Y"？说不清=换一个
 - Q2 情绪对吗？让人笑/惊喜=好，让人害怕/困惑=换
-- Q3 这个创意能用在其他照片上吗？能=太通用=换一个
-
-wild自检（三问全过才输出）：
+- Q3 这个创意能用在其他照片上吗？能=太通用=换一个`,
+    rules: `creative品质标准：
+- 加入的动物/角色必须是photorealistic写实风（cartoon/卡通=贴纸感）
+- 足够大且显眼，至少占画面5-10%面积
+- 必须与人物有互动/眼神交流，不能像贴纸`,
+  },
+  wild: {
+    cn: 'wild（疯狂脑洞）',
+    definition: 'wild = 让画面中已有的物品发生疯狂变化（不是加新东西！）',
+    selfCheck: `wild自检（四问全过才输出）：
 - Q1 变化的主角是画面中已有的什么东西？指不出来=不是wild
-- Q2 变化够大吗？一眼就能看到变化=好
-- Q3 变化是基于物品本身特点还是随便套的？表面视觉类比（层状=蛋糕）=换一个
+- Q2 变化够大吗？一眼就能看到变化=好。改镜片/眼镜反射内容=太小不够大(3分"眼镜idea傻")
+- Q3 变化是基于物品本身特点还是随便套的？表面视觉类比（层状=蛋糕/抹茶、圆形=球）=换一个。"变成食物/饮品"除非厨房场景否则=万金油套路
+- Q4 这个变化会不会让人不适/恐怖？（超长舌头=3分"有点吓人"、身体扭曲变形=不适）→ 换一个有趣的方向`,
+    rules: `wild额外规则：只选画面中重要/显眼的元素做变化，不要选边缘模糊的小物件`,
+  },
+};
+
+function buildCategorySystemPrompt(category: TipCategory): string {
+  const info = CATEGORY_INFO[category];
+  return `你是图片编辑建议专家。分析图片后生成2条${info.cn}编辑建议。label必须用中文3-6字，动词开头。editPrompt用英文，极其具体。
+
+${info.definition}
+
+⚠️ 第一步：判断人脸大小！
+分析图片时首先判断人脸在画面中的占比：
+- 大脸（特写/半身照，脸部占画面>10%）→ 正常处理
+- 小脸（全身照/合照/远景/广角，脸部占画面<10%）→ 触发小脸保护模式
+小脸保护模式下所有editPrompt必须包含：
+"CRITICAL: Faces in this photo are small. Each person's face must remain PIXEL-IDENTICAL to the original — same face shape, same skin, same features, same expression. Do NOT regenerate, retouch, relight, or alter any face. Copy faces exactly as-is from the original image."
+小脸时人物反应只能用身体语言（身体后仰/转头/手指向变化），绝不能要求面部表情变化。
+
+自检框架（输出每个tip前先过一遍）：
+
+${info.selfCheck}
+
+${info.rules}
 
 ⚠️ 人脸保真是最大扣分项！涉及人物的editPrompt必须包含：
 "Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider or rounder."
-- enhance不能把脸变胖（6分×3教训）
-- wild/creative如果需要改表情，风险极高——优先选不需要改表情的方向
 - 最安全：人物完全不变，只改物品/环境
 
-creative额外规则：加入的元素必须与人物有互动/眼神交流，不能像贴纸（5分教训）
-wild额外规则：只选画面中重要/显眼的元素做变化，不要选边缘模糊的小物件
-❌ 禁止方向：墨镜/眼镜镜片反射（连续5分，"无聊"）
+⚠️ 所有editPrompt都必须包含背景净化：
+"Remove all distracting background pedestrians and bystanders."
 
-6个tip必须各不相同。结尾加"Do NOT add any text, watermarks, or borders."`;
-
-// Load .md prompt templates from disk
-// In production: cached. In dev: reloads on every call for easy iteration.
-let _promptTemplates: string | null = null;
-function getPromptTemplates(): string {
-  if (_promptTemplates && process.env.NODE_ENV === 'production') return _promptTemplates;
-  const promptsDir = path.join(process.cwd(), 'src/lib/prompts');
-  const files = ['enhance.md', 'creative.md', 'wild.md'];
-  _promptTemplates = files
-    .map((f) => fs.readFileSync(path.join(promptsDir, f), 'utf-8'))
-    .join('\n\n');
-  return _promptTemplates;
+2个tip必须选不同方向。结尾加"Do NOT add any text, watermarks, or borders."`;
 }
 
+// Load single .md prompt template from disk
+const _promptTemplateCache: Record<string, string> = {};
+function getPromptTemplate(category: TipCategory): string {
+  if (_promptTemplateCache[category] && process.env.NODE_ENV === 'production') {
+    return _promptTemplateCache[category];
+  }
+  const promptsDir = path.join(process.cwd(), 'src/lib/prompts');
+  const content = fs.readFileSync(path.join(promptsDir, `${category}.md`), 'utf-8');
+  _promptTemplateCache[category] = content;
+  return content;
+}
+
+// Google structured output schema (only used with Google provider + gemini-3)
 const TIPS_SCHEMA = {
   type: Type.ARRAY,
   items: {
@@ -94,15 +139,40 @@ const TIPS_SCHEMA = {
   },
 };
 
-// --- Session Management ---
+const JSON_FORMAT_SUFFIX = `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字。格式：
+[{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild"}, ...]`;
 
-interface Session {
-  chat: Chat;
-  lastUsed: number;
+// ── OpenRouter Helpers ──────────────────────────────────────────
+
+function openrouterHeaders() {
+  return {
+    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
 }
 
+function toOpenRouterImageContent(imageBase64: string, text: string) {
+  // OpenRouter uses OpenAI vision format
+  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+  return [
+    { type: 'image_url' as const, image_url: { url: dataUrl } },
+    { type: 'text' as const, text },
+  ];
+}
+
+// ── Session Management ──────────────────────────────────────────
+
+// Google sessions use SDK Chat objects; OpenRouter sessions use message arrays
+type GoogleSession = { type: 'google'; chat: Chat; lastUsed: number };
+type OpenRouterSession = {
+  type: 'openrouter';
+  messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }>;
+  lastUsed: number;
+};
+type Session = GoogleSession | OpenRouterSession;
+
 const sessions = new Map<string, Session>();
-const SESSION_TTL = 30 * 60 * 1000; // 30 minutes
+const SESSION_TTL = 30 * 60 * 1000;
 
 setInterval(() => {
   const now = Date.now();
@@ -113,9 +183,9 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-function getOrCreateSession(sessionId: string): Chat {
+function getOrCreateGoogleSession(sessionId: string): Chat {
   const existing = sessions.get(sessionId);
-  if (existing) {
+  if (existing && existing.type === 'google') {
     existing.lastUsed = Date.now();
     return existing.chat;
   }
@@ -128,15 +198,31 @@ function getOrCreateSession(sessionId: string): Chat {
     },
   });
 
-  sessions.set(sessionId, { chat, lastUsed: Date.now() });
+  sessions.set(sessionId, { type: 'google', chat, lastUsed: Date.now() });
   return chat;
+}
+
+function getOrCreateOpenRouterSession(sessionId: string): OpenRouterSession {
+  const existing = sessions.get(sessionId);
+  if (existing && existing.type === 'openrouter') {
+    existing.lastUsed = Date.now();
+    return existing;
+  }
+
+  const session: OpenRouterSession = {
+    type: 'openrouter',
+    messages: [{ role: 'system', content: SYSTEM_PROMPT }],
+    lastUsed: Date.now(),
+  };
+  sessions.set(sessionId, session);
+  return session;
 }
 
 export function resetSession(sessionId: string): void {
   sessions.delete(sessionId);
 }
 
-// --- Streaming Chat ---
+// ── Streaming Chat ──────────────────────────────────────────────
 
 export type ChatStreamEvent =
   | { type: 'content'; text: string }
@@ -150,20 +236,31 @@ export async function* chatStreamWithModel(
   wantImage?: boolean,
   aspectRatio?: string,
 ): AsyncGenerator<ChatStreamEvent> {
-  const chat = getOrCreateSession(sessionId);
+  if (PROVIDER === 'openrouter') {
+    yield* chatStreamOpenRouter(sessionId, message, imageBase64, wantImage, aspectRatio);
+  } else {
+    yield* chatStreamGoogle(sessionId, message, imageBase64, wantImage, aspectRatio);
+  }
+}
 
-  // Build message parts
+// --- Google Provider ---
+async function* chatStreamGoogle(
+  sessionId: string,
+  message: string,
+  imageBase64?: string,
+  wantImage?: boolean,
+  aspectRatio?: string,
+): AsyncGenerator<ChatStreamEvent> {
+  const chat = getOrCreateGoogleSession(sessionId);
+
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
-
   if (imageBase64) {
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
     const mimeType = imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
     parts.push({ inlineData: { mimeType, data: base64Data } });
   }
-
   parts.push({ text: message });
 
-  // Per-request config
   const config: Record<string, unknown> = {};
   if (wantImage) {
     config.responseModalities = ['TEXT', 'IMAGE'];
@@ -174,55 +271,276 @@ export async function* chatStreamWithModel(
     config.responseModalities = ['TEXT'];
   }
 
-  // --- Stream text + image from main chat ---
-  const stream = await chat.sendMessageStream({
-    message: parts,
-    config,
-  });
-
-  let resultImageBase64: string | undefined;
+  const stream = await chat.sendMessageStream({ message: parts, config });
 
   for await (const chunk of stream) {
     const chunkParts = chunk.candidates?.[0]?.content?.parts;
     if (!chunkParts) continue;
-
     for (const part of chunkParts) {
       if (part.inlineData?.data) {
         const mime = part.inlineData.mimeType || 'image/png';
-        resultImageBase64 = `data:${mime};base64,${part.inlineData.data}`;
-        yield { type: 'image', image: resultImageBase64 };
+        yield { type: 'image', image: `data:${mime};base64,${part.inlineData.data}` };
       } else if (part.text) {
         yield { type: 'content', text: part.text };
       }
     }
   }
+  yield { type: 'done' };
+}
+
+// --- OpenRouter Provider ---
+async function* chatStreamOpenRouter(
+  sessionId: string,
+  message: string,
+  imageBase64?: string,
+  wantImage?: boolean,
+  aspectRatio?: string,
+): AsyncGenerator<ChatStreamEvent> {
+  const session = getOrCreateOpenRouterSession(sessionId);
+
+  // Build user message
+  let userContent: string | Array<Record<string, unknown>>;
+  if (imageBase64) {
+    const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+    userContent = [
+      { type: 'image_url', image_url: { url: dataUrl } },
+      { type: 'text', text: message },
+    ];
+  } else {
+    userContent = message;
+  }
+  session.messages.push({ role: 'user', content: userContent });
+
+  const body: Record<string, unknown> = {
+    model: OPENROUTER_MODEL,
+    messages: session.messages,
+    // Match Google API defaults for image editing fidelity
+    temperature: 1.0,
+    top_p: 0.95,
+  };
+
+  if (wantImage) {
+    body.modalities = ['image', 'text'];
+    // Lower temperature for image edits — reduces face deformation
+    body.temperature = 0.4;
+    body.top_p = 0.9;
+    if (aspectRatio) {
+      body.image_config = { aspect_ratio: aspectRatio };
+    }
+    // Image generation: non-streaming (images come in final response)
+    body.stream = false;
+  } else {
+    // Text-only: use streaming
+    body.stream = true;
+  }
+
+  const res = await fetch(OPENROUTER_BASE, {
+    method: 'POST',
+    headers: openrouterHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenRouter error ${res.status}: ${errText}`);
+  }
+
+  if (wantImage) {
+    // Non-streaming: parse full JSON response
+    const data = await res.json();
+    const choice = data.choices?.[0]?.message;
+    if (!choice) throw new Error('No response from OpenRouter');
+
+    // Text content
+    if (choice.content) {
+      yield { type: 'content', text: choice.content };
+    }
+
+    // Images
+    if (choice.images && Array.isArray(choice.images)) {
+      for (const img of choice.images) {
+        const url = img.image_url?.url || img.url;
+        if (url) {
+          yield { type: 'image', image: url };
+        }
+      }
+    }
+
+    // Save assistant message to history
+    session.messages.push({ role: 'assistant', content: choice.content || '' });
+  } else {
+    // Streaming: parse SSE
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') break;
+        try {
+          const chunk = JSON.parse(payload);
+          const delta = chunk.choices?.[0]?.delta;
+          if (delta?.content) {
+            fullText += delta.content;
+            yield { type: 'content', text: delta.content };
+          }
+        } catch { /* skip malformed chunks */ }
+      }
+    }
+
+    // Save assistant message to history
+    session.messages.push({ role: 'assistant', content: fullText });
+  }
 
   yield { type: 'done' };
 }
 
-// --- Streaming Tips Generation (separate call) ---
+// ── Stateless Preview Image Generation ──────────────────────────
 
-export async function* streamTips(imageBase64: string): AsyncGenerator<Tip> {
+export async function generatePreviewImage(
+  imageBase64: string,
+  editPrompt: string,
+  aspectRatio?: string,
+): Promise<string | null> {
+  if (PROVIDER === 'openrouter') {
+    return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio);
+  } else {
+    return generatePreviewImageGoogle(imageBase64, editPrompt, aspectRatio);
+  }
+}
+
+async function generatePreviewImageGoogle(
+  imageBase64: string,
+  editPrompt: string,
+  aspectRatio?: string,
+): Promise<string | null> {
   const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
   const mimeType = imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
 
-  // Load detailed creative direction templates from .md files
-  const templates = getPromptTemplates();
+  const config: Record<string, unknown> = {
+    responseModalities: ['IMAGE'],
+  };
+  if (aspectRatio) {
+    config.imageConfig = { aspectRatio };
+  }
 
-  // gemini-3-pro supports structured output; flash-image doesn't — fall back to plain JSON in prompt
+  const result = await getAI().models.generateContent({
+    model: MODEL,
+    contents: [{
+      role: 'user',
+      parts: [
+        { inlineData: { mimeType, data: base64Data } },
+        { text: editPrompt },
+      ],
+    }],
+    config,
+  });
+
+  const parts = result.candidates?.[0]?.content?.parts;
+  if (!parts) return null;
+  for (const part of parts) {
+    if (part.inlineData?.data) {
+      const mime = part.inlineData.mimeType || 'image/png';
+      return `data:${mime};base64,${part.inlineData.data}`;
+    }
+  }
+  return null;
+}
+
+async function generatePreviewImageOpenRouter(
+  imageBase64: string,
+  editPrompt: string,
+  aspectRatio?: string,
+): Promise<string | null> {
+  const dataUrl = imageBase64.startsWith('data:')
+    ? imageBase64
+    : `data:image/jpeg;base64,${imageBase64}`;
+
+  const body: Record<string, unknown> = {
+    model: OPENROUTER_MODEL,
+    stream: false,
+    modalities: ['image', 'text'],
+    temperature: 0.4,
+    top_p: 0.9,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: dataUrl } },
+          { type: 'text', text: editPrompt },
+        ],
+      },
+    ],
+  };
+  if (aspectRatio) {
+    body.image_config = { aspect_ratio: aspectRatio };
+  }
+
+  const res = await fetch(OPENROUTER_BASE, {
+    method: 'POST',
+    headers: openrouterHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const choice = data.choices?.[0]?.message;
+  if (!choice) return null;
+
+  if (choice.images && Array.isArray(choice.images)) {
+    for (const img of choice.images) {
+      const url = img.image_url?.url || img.url;
+      if (url) return url;
+    }
+  }
+  return null;
+}
+
+// ── Streaming Tips Generation (per-category) ────────────────────
+
+export async function* streamTipsByCategory(
+  imageBase64: string,
+  category: TipCategory,
+): AsyncGenerator<Tip> {
+  if (PROVIDER === 'openrouter') {
+    yield* streamTipsByCategoryOpenRouter(imageBase64, category);
+  } else {
+    yield* streamTipsByCategoryGoogle(imageBase64, category);
+  }
+}
+
+// --- Google Provider ---
+async function* streamTipsByCategoryGoogle(
+  imageBase64: string,
+  category: TipCategory,
+): AsyncGenerator<Tip> {
+  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  const mimeType = imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+  const template = getPromptTemplate(category);
+  const systemPrompt = buildCategorySystemPrompt(category);
+
   const supportsStructuredOutput = MODEL.includes('gemini-3');
   const config: Record<string, unknown> = {
-    systemInstruction: TIPS_SYSTEM_PROMPT,
+    systemInstruction: systemPrompt,
   };
   if (supportsStructuredOutput) {
     config.responseMimeType = 'application/json';
     config.responseSchema = TIPS_SCHEMA;
   }
 
-  const promptSuffix = supportsStructuredOutput
-    ? ''
-    : `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字。格式：
-[{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild"}, ...]`;
+  const promptSuffix = supportsStructuredOutput ? '' : JSON_FORMAT_SUFFIX;
 
   const stream = await getAI().models.generateContentStream({
     model: MODEL,
@@ -232,9 +550,9 @@ export async function* streamTips(imageBase64: string): AsyncGenerator<Tip> {
         parts: [
           { inlineData: { mimeType, data: base64Data } },
           {
-            text: `分析这张图片，参考以下素材库，给出6条编辑建议（2 enhance + 2 creative + 2 wild）。
+            text: `分析这张图片，参考以下模板，给出2条${category}编辑建议。
 
-${templates}${promptSuffix}`,
+${template}${promptSuffix}`,
           },
         ],
       },
@@ -242,23 +560,99 @@ ${templates}${promptSuffix}`,
     config,
   });
 
-  // Incrementally parse JSON array: detect each completed {...} object
+  yield* parseIncrementalTipsFromStream(streamToTextIterator(stream));
+}
+
+// --- OpenRouter Provider ---
+async function* streamTipsByCategoryOpenRouter(
+  imageBase64: string,
+  category: TipCategory,
+): AsyncGenerator<Tip> {
+  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+  const template = getPromptTemplate(category);
+  const systemPrompt = buildCategorySystemPrompt(category);
+
+  const res = await fetch(OPENROUTER_BASE, {
+    method: 'POST',
+    headers: openrouterHeaders(),
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      stream: true,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: dataUrl } },
+            {
+              type: 'text',
+              text: `分析这张图片，参考以下模板，给出2条${category}编辑建议。
+
+${template}${JSON_FORMAT_SUFFIX}`,
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenRouter tips error ${res.status}: ${errText}`);
+  }
+
+  yield* parseIncrementalTipsFromStream(sseToTextIterator(res));
+}
+
+// ── Shared Incremental JSON Parser ──────────────────────────────
+
+async function* streamToTextIterator(
+  stream: AsyncIterable<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>,
+): AsyncGenerator<string> {
+  for await (const chunk of stream) {
+    const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (text) yield text;
+  }
+}
+
+async function* sseToTextIterator(res: Response): AsyncGenerator<string> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const payload = line.slice(6).trim();
+      if (payload === '[DONE]') return;
+      try {
+        const chunk = JSON.parse(payload);
+        const text = chunk.choices?.[0]?.delta?.content;
+        if (text) yield text;
+      } catch { /* skip */ }
+    }
+  }
+}
+
+async function* parseIncrementalTipsFromStream(
+  textStream: AsyncIterable<string>,
+): AsyncGenerator<Tip> {
   let fullText = '';
   let tipsEmitted = 0;
 
-  for await (const chunk of stream) {
-    const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) continue;
+  for await (const text of textStream) {
     fullText += text;
 
-    // Try to extract complete JSON objects from the accumulated text
-    // The output is a JSON array like [{...}, {...}, ...]
-    // We find each complete object by matching balanced braces
-    let searchFrom = 0;
     let objectsFound = 0;
     for (let i = 0; i < fullText.length; i++) {
       if (fullText[i] === '{') {
-        // Find the matching closing brace
         let depth = 1;
         let j = i + 1;
         while (j < fullText.length && depth > 0) {
@@ -278,9 +672,8 @@ ${templates}${promptSuffix}`,
             } catch { /* incomplete or malformed, skip */ }
             tipsEmitted = objectsFound;
           }
-          i = j - 1; // skip past this object
+          i = j - 1;
         }
-        searchFrom = j;
       }
     }
   }

@@ -7,22 +7,25 @@ interface ImageCanvasProps {
   currentIndex: number;
   onIndexChange: (index: number) => void;
   isEditing: boolean;
+  previewImage?: string;
+  onDismissPreview?: () => void;
 }
 
-export default function ImageCanvas({ timeline, currentIndex, onIndexChange, isEditing }: ImageCanvasProps) {
+export default function ImageCanvas({ timeline, currentIndex, onIndexChange, isEditing, previewImage, onDismissPreview }: ImageCanvasProps) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const swiping = useRef(false);
   const [animDir, setAnimDir] = useState<'left' | 'right' | null>(null);
 
   const SWIPE_THRESHOLD = 40;
+  const isPreview = !!previewImage;
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (timeline.length <= 1) return;
+    if (isPreview || timeline.length <= 1) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     swiping.current = true;
-  }, [timeline.length]);
+  }, [timeline.length, isPreview]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (!swiping.current) return;
@@ -63,11 +66,14 @@ export default function ImageCanvas({ timeline, currentIndex, onIndexChange, isE
     return `Edit ${index}`;
   };
 
+  const displayImage = previewImage || timeline[currentIndex];
+
   return (
     <div
       className="absolute inset-0 flex items-center justify-center touch-pan-y"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
+      onClick={isPreview ? onDismissPreview : undefined}
     >
       {isEditing && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
@@ -80,7 +86,7 @@ export default function ImageCanvas({ timeline, currentIndex, onIndexChange, isE
 
       {/* Image */}
       <img
-        src={timeline[currentIndex]}
+        src={displayImage}
         alt="preview"
         className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
           animDir === 'left' ? 'opacity-0 -translate-x-8' :
@@ -90,8 +96,17 @@ export default function ImageCanvas({ timeline, currentIndex, onIndexChange, isE
         draggable={false}
       />
 
+      {/* Preview badge */}
+      {isPreview && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10">
+          <span className="text-white text-xs font-medium bg-fuchsia-600/80 backdrop-blur-sm rounded-full px-3 py-1.5">
+            Preview
+          </span>
+        </div>
+      )}
+
       {/* Bottom indicators */}
-      {timeline.length > 1 && (
+      {timeline.length > 1 && !isPreview && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-3 z-10">
           <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5">
             {timeline.map((_, i) => (
@@ -113,7 +128,7 @@ export default function ImageCanvas({ timeline, currentIndex, onIndexChange, isE
       )}
 
       {/* Arrow buttons (desktop) */}
-      {timeline.length > 1 && (
+      {timeline.length > 1 && !isPreview && (
         <>
           {currentIndex > 0 && (
             <button

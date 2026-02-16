@@ -95,7 +95,9 @@ export default function Home() {
   const [viewIndex, setViewIndex] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const [lastSeenMsgCount, setLastSeenMsgCount] = useState(0);
+  const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewAbortRef = useRef<AbortController>(new AbortController());
 
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
@@ -103,6 +105,8 @@ export default function Home() {
   viewIndexRef.current = viewIndex;
 
   const assistantMsgCount = messages.filter((m) => m.role === 'assistant').length;
+  const assistantMsgCountRef = useRef(assistantMsgCount);
+  assistantMsgCountRef.current = assistantMsgCount;
   const hasUnread = assistantMsgCount > lastSeenMsgCount;
 
   const timeline = useMemo(() => snapshots.map((s) => s.image), [snapshots]);
@@ -129,50 +133,120 @@ export default function Home() {
     return msg;
   }, []);
 
-  // Fetch tips via SSE stream — each tip appears as soon as it's generated
-  const fetchTipsForSnapshot = useCallback(async (snapshotId: string, imageBase64: string) => {
-    setIsTipsFetching(true);
+  // Generate preview image for a single tip (fire-and-forget)
+  // Uses editPrompt as key to find the tip (safe with concurrent streams)
+  const generatePreviewForTip = useCallback(async (
+    snapshotId: string,
+    editPrompt: string,
+    imageBase64: string,
+    aspectRatio?: string,
+  ) => {
+    // Mark as generating
+    setSnapshots((prev) => prev.map((s) => {
+      if (s.id !== snapshotId) return s;
+      const tips = s.tips.map(t =>
+        t.editPrompt === editPrompt ? { ...t, previewStatus: 'generating' as const } : t
+      );
+      return { ...s, tips };
+    }));
+
     try {
-      const res = await fetch('/api/tips', {
+      const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageBase64 }),
+        body: JSON.stringify({ image: imageBase64, editPrompt, aspectRatio }),
+        signal: previewAbortRef.current.signal,
       });
-      if (!res.ok) return;
 
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      if (!res.ok) throw new Error('Preview failed');
+      const { image } = await res.json();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let boundary;
-        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-          const line = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          if (line.startsWith('data: ')) {
-            const payload = line.slice(6);
-            if (payload === '[DONE]') break;
-            try {
-              const tip = JSON.parse(payload) as Tip;
-              if (tip.label && tip.editPrompt && tip.category) {
-                setSnapshots((prev) => prev.map((s) =>
-                  s.id === snapshotId ? { ...s, tips: [...s.tips, tip] } : s
-                ));
-              }
-            } catch { /* skip malformed */ }
-          }
-        }
-      }
-    } catch {
-      // Silent fail — tips are optional
-    } finally {
-      setIsTipsFetching(false);
+      setSnapshots((prev) => prev.map((s) => {
+        if (s.id !== snapshotId) return s;
+        const tips = s.tips.map(t =>
+          t.editPrompt === editPrompt ? { ...t, previewImage: image, previewStatus: 'done' as const } : t
+        );
+        return { ...s, tips };
+      }));
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      setSnapshots((prev) => prev.map((s) => {
+        if (s.id !== snapshotId) return s;
+        const tips = s.tips.map(t =>
+          t.editPrompt === editPrompt ? { ...t, previewStatus: 'error' as const } : t
+        );
+        return { ...s, tips };
+      }));
     }
   }, []);
+
+  // Fetch tips via 3 parallel SSE streams (one per category) for faster loading
+  const fetchTipsForSnapshot = useCallback((snapshotId: string, imageBase64: string) => {
+    setIsTipsFetching(true);
+    // Fresh abort controller for this batch of previews
+    previewAbortRef.current = new AbortController();
+
+    const categories = ['enhance', 'creative', 'wild'] as const;
+    let completedCount = 0;
+    let firstTipReceived = false;
+
+    const fetchCategory = async (category: string) => {
+      try {
+        const res = await fetch('/api/tips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageBase64, category }),
+        });
+        if (!res.ok) return;
+
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let boundary;
+          while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+            const line = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            if (line.startsWith('data: ')) {
+              const payload = line.slice(6);
+              if (payload === '[DONE]') break;
+              try {
+                const tip = JSON.parse(payload) as Tip;
+                if (tip.label && tip.editPrompt && tip.category) {
+                  tip.previewStatus = 'pending';
+                  setSnapshots((prev) => prev.map((s) =>
+                    s.id === snapshotId ? { ...s, tips: [...s.tips, tip] } : s
+                  ));
+                  // Auto-close chat panel on first tip arrival
+                  if (!firstTipReceived) {
+                    firstTipReceived = true;
+                    setChatOpen(false);
+                  }
+                  // Fire preview generation immediately
+                  generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
+                }
+              } catch { /* skip malformed */ }
+            }
+          }
+        }
+      } catch {
+        // Silent fail — tips are optional
+      } finally {
+        completedCount++;
+        if (completedCount === categories.length) {
+          setIsTipsFetching(false);
+        }
+      }
+    };
+
+    // Fire all 3 category streams in parallel
+    categories.forEach(cat => fetchCategory(cat));
+  }, [generatePreviewForTip]);
 
   const handleSendMessage = useCallback(async (text: string, image?: string) => {
     let uploadSnapshotId: string | undefined;
@@ -212,17 +286,34 @@ export default function Home() {
 
     setIsLoading(true);
 
-    // Upload: start tips fetch immediately in parallel with text analysis
-    if (uploadSnapshotId && image) {
-      fetchTipsForSnapshot(uploadSnapshotId, image);
+    // Auto-open chat panel on upload so user sees streaming analysis
+    if (isUpload) {
+      setChatOpen(true);
+      setLastSeenMsgCount(assistantMsgCountRef.current + 1);
     }
+
+    // Upload: start tips fetch after a short delay so the chat analysis
+    // gets priority (avoids API rate limit contention with 4 concurrent requests)
+    if (uploadSnapshotId && image) {
+      const snapId = uploadSnapshotId;
+      const img = image;
+      setTimeout(() => fetchTipsForSnapshot(snapId, img), 2000);
+    }
+
+    // For non-upload chat messages: send the current image + wantImage so
+    // the model can generate edited images when the user asks for edits
+    const chatImage = isUpload
+      ? image
+      : snapshotsRef.current[viewIndexRef.current]?.image || undefined;
+    const chatWantImage = !isUpload && !!chatImage;
 
     try {
       await streamChat(
         {
           sessionId,
           message: text,
-          image: image || undefined,
+          image: chatImage,
+          wantImage: chatWantImage,
           reset: isUpload,
         },
         {
@@ -258,73 +349,66 @@ export default function Home() {
     }
   }, [addMessage, sessionId, fetchTipsForSnapshot]);
 
-  const handleTipClick = useCallback(async (tip: Tip) => {
+  // Commit a tip: use its preview image directly (no re-generation)
+  const commitTip = useCallback((tip: Tip) => {
+    if (!tip.previewImage) return;
+
+    // Cancel remaining preview generations
+    previewAbortRef.current.abort();
+    setPreviewingTipIndex(null);
+
+    // Add chat messages for context
     addMessage('user', tip.label);
+    const assistantMsg = addMessage('assistant', `已应用编辑：${tip.desc}`);
 
-    const assistantMsgId = generateId();
-    setMessages((prev) => [...prev, {
-      id: assistantMsgId,
-      role: 'assistant' as const,
-      content: '',
-      timestamp: Date.now(),
-    }]);
+    // Create new snapshot from the preview image
+    const snapId = generateId();
+    const newSnapshot: Snapshot = {
+      id: snapId,
+      image: tip.previewImage,
+      tips: [],
+      messageId: assistantMsg.id,
+    };
+    setSnapshots((prev) => [...prev, newSnapshot]);
 
-    setIsEditing(true);
+    // Fetch new tips for the committed image
+    fetchTipsForSnapshot(snapId, tip.previewImage);
+  }, [addMessage, fetchTipsForSnapshot]);
 
-    try {
-      let newSnapshotId: string | undefined;
-      const currentImage = snapshotsRef.current[viewIndexRef.current]?.image;
-
-      await streamChat(
-        {
-          sessionId,
-          message: tip.editPrompt,
-          image: currentImage || undefined,
-          wantImage: true,
-          aspectRatio: tip.aspectRatio,
-        },
-        {
-          onContent: (delta) => {
-            setMessages((prev) => prev.map((m) =>
-              m.id === assistantMsgId ? { ...m, content: m.content + delta } : m
-            ));
-          },
-          onImage: (imageData) => {
-            newSnapshotId = generateId();
-            const newSnapshot: Snapshot = {
-              id: newSnapshotId,
-              image: imageData,
-              tips: [],
-              messageId: assistantMsgId,
-            };
-            setSnapshots((prev) => [...prev, newSnapshot]);
-            // Start tips fetch immediately when image arrives
-            fetchTipsForSnapshot(newSnapshotId, imageData);
-          },
-        }
-      );
-
-      if (!newSnapshotId) {
-        setMessages((prev) => prev.map((m) =>
-          m.id === assistantMsgId
-            ? { ...m, content: m.content || 'Image editing failed. Please try again.' }
-            : m
-        ));
-      }
-    } catch (err) {
-      console.error('Tip click error:', err);
-      setMessages((prev) => prev.map((m) =>
-        m.id === assistantMsgId
-          ? { ...m, content: 'Image editing failed. Please try again.' }
-          : m
-      ));
-    } finally {
-      setIsEditing(false);
+  // Two-click interaction: first click = preview, second click = commit
+  const handleTipInteraction = useCallback((tip: Tip, tipIndex: number) => {
+    if (previewingTipIndex === tipIndex) {
+      // Second click on same tip → commit
+      commitTip(tip);
+    } else {
+      // First click → preview
+      setPreviewingTipIndex(tipIndex);
     }
-  }, [addMessage, sessionId, fetchTipsForSnapshot]);
+  }, [previewingTipIndex, commitTip]);
+
+  // Computed preview image for canvas
+  const previewImage = useMemo(() => {
+    if (previewingTipIndex === null) return undefined;
+    const tip = currentTips[previewingTipIndex];
+    return tip?.previewImage || undefined;
+  }, [previewingTipIndex, currentTips]);
+
+  const dismissPreview = useCallback(() => {
+    setPreviewingTipIndex(null);
+  }, []);
+
+  // Dismiss preview when navigating timeline
+  const handleIndexChange = useCallback((index: number) => {
+    setViewIndex(index);
+    setPreviewingTipIndex(null);
+  }, []);
 
   const compressAndUpload = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) return;
+
+    // Cancel any in-flight preview generations
+    previewAbortRef.current.abort();
+    setPreviewingTipIndex(null);
 
     const previewUrl = URL.createObjectURL(file);
     const previewId = generateId();
@@ -401,8 +485,10 @@ export default function Home() {
           <ImageCanvas
             timeline={timeline}
             currentIndex={viewIndex}
-            onIndexChange={setViewIndex}
+            onIndexChange={handleIndexChange}
             isEditing={isEditing}
+            previewImage={previewImage}
+            onDismissPreview={dismissPreview}
           />
         )}
 
@@ -437,9 +523,10 @@ export default function Home() {
         <div className="flex-shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent">
           <TipsBar
             tips={currentTips}
-            isLoading={isLoading || isEditing || isTipsFetching}
+            isLoading={isLoading || isTipsFetching}
             isEditing={isEditing}
-            onTipClick={handleTipClick}
+            onTipClick={handleTipInteraction}
+            previewingIndex={previewingTipIndex}
           />
         </div>
       )}

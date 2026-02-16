@@ -18,13 +18,14 @@
 - ✅ 背景塔变成火箭发射台（8分）— 物品功能彻底变化
 - ❌ 只是颜色变了一点 — 变化太小
 - ❌ 加了一个微小的细节 — 那是creative不是wild
+- ❌ 改变镜片/眼镜的反射内容（3分×3 "眼镜idea傻"）— 镜片太小，变化不够显眼，观者需要凑近才能看到=不够大
 
 **Q3：变化是基于这个物品的特点，还是随便套的？**
 - ✅ 救生衣"膨胀" — 救生衣本来就会充气，推到极端=合理的荒诞
 - ✅ 弹簧狗"冲出墙面" — 壁画本来是2D的，变3D=有趣的维度跳跃
 - ✅ 信封"飞出纸鹤" — 信封里装东西，飞出东西=合理联想
-- ❌ 梯田"变成蛋糕" — 仅仅因为都是层状的？这是表面视觉类比，不是基于物品特点的有趣变化
-- ❌ 任何物品"变成食物" — 除非是厨房/餐饮场景，否则食物跟物品本身没关系
+- ❌ 梯田"变成蛋糕/抹茶/食物" — 仅仅因为都是层状的？这是表面视觉类比（3分×4 "idea一般"）。除非厨房/餐饮场景，否则"变成食物/饮品"是万金油套路=不过
+- ❌ 任何"X变成Y"如果理由只是"形状像"（层状=蛋糕、圆形=球、条状=面条）— 这是最低级的联想
 
 ### Wild 与 Creative 的本质区别
 - **Creative** = 往画面里**加入一个新的有趣元素**（加变色龙、加小鸡、加探险家）
@@ -66,19 +67,47 @@
 - ✅ 手中物品、身上配饰、背景主体建筑/壁画、桌上主菜
 - ❌ 边缘模糊的小物件、景深外的不重要背景物（饮料杯在角落=null分，"基于不重要内容做文章不是好主意"）
 
-### 避免无聊方向
-- ❌ 墨镜/眼镜镜片反射 — 连续低分（5分×2，"不好玩"、"无聊"），概念本身缺乏冲击力
+### 避免无聊/恐怖方向
+以上Q4自检已覆盖恐怖/不适方向。另外注意：如果一个概念本身缺乏冲击力（如只改镜片反射内容），Q2"变化够大吗？"应该不通过。
+
+### 选择元素的自检
+**闭上眼回想这张照片3秒，脑海中第一个浮现的物品是什么？**
+那个就是你应该选的变化主角。如果你选的东西需要"仔细看才能注意到"，换一个。
+- ✅ 画面的视觉框架（拱门、窗框）、穿戴的显眼物品（红色救生衣、大墨镜）、画面中心的主体
+- ❌ 手里拿着的小东西（文件夹4分，"很小的一个点，不是视觉重点"）、桌子角落的杯子
 
 ### editPrompt要求
-- 必须明确描述变化的物品是哪个、变化的具体样子
-- **人物要对变化有反应**——惊讶/注视/互动，不能像摆设（5分教训："人物跟无人机无互动"）
-- 表情变化必须合理应景（8分案例："我喜欢人物表情的变化，应景"）
-
-#### ⚠️ 人脸保真是最大扣分项！（V8最重要教训）
-- 多个7分tip本该是9-10分，全因为"idea很好但人脸变了"
-- editPrompt必须包含：**"Preserve the person's identity, bone structure, face shape, and facial features exactly. Do not make the face wider, rounder, or alter proportions in any way. Only allow minimal, natural expression changes."**
-- 如果tip需要大幅改变表情（惊讶张嘴、转头等），风险极高——优先选择不需要改变表情的方向
-- 最安全：人物保持原样，只有物品发生变化（耳环→精灵=9分，人物表情没变）
-
+- 必须明确描述变化的物品是哪个（用位置+外观精确定位：如"the man on the far right's thumb"而非"the thumb"）、变化的具体样子
+- **人物要对变化有反应**——但只允许极其轻微的微表情变化（见下方人脸规则）
+- 变化必须发生在物品本身的位置——不能跑到画面其他区域（3分 "大拇指应该出现在右一男生的手上，但是现在出现在画面的右边"）
 - 新元素与原图的光影、透视必须一致
+- editPrompt必须包含：**"Remove all distracting background pedestrians and bystanders."**
 - 2个wild tip必须选不同方向
+
+#### wild自检Q4（新增）：执行可行性
+- 这个变化需要精确的几何变形或透视计算吗？（如"帽子延伸到天花板并弯曲"=3分"idea没有被执行出来"）
+- 模型更擅长：材质变化、尺寸膨胀/缩小、物品活化、元素爆发
+- 模型不擅长：精确的几何延伸、复杂的物理模拟、多步骤连锁变化
+
+#### ⚠️ 人脸身份连贯性（V11最重要教训 — 10/10 wild因此扣分）
+V11实验证明：写"surprised expression"或"looking up with wide eyes"会导致人脸完全变形（3-4分）。
+
+**editPrompt中人物反应的写法必须用以下模板**：
+```
+The people's faces remain exactly as in the original photo — same face shape, same bone structure, same skin, same expressions. The ONLY change to their faces: their eyes glance slightly toward [the change], and their eyebrows raise by a tiny amount. Do NOT change their mouth shapes, jaw positions, head angles, or any other facial features.
+```
+
+**原因**：当前模型在改变表情时无法保持人物身份。不是prompt写得不够好——是物理限制。只允许眼神方向和眉毛的极微小变化。
+
+### ⚠️ 小脸场景特殊处理（全身照/合照/远景/广角）
+当人脸在画面中占比小时，即使是上方模板中的"eyes glance + eyebrows raise"也会导致面部重新生成和身份丢失（V12漓江远景两个wild都因此得5分/null分，"人脸非常奇怪"）。
+
+**小脸时人物反应必须用以下模板**（替代上方的大脸模板）：
+```
+CRITICAL: Faces in this photo are small. Every person's face must remain PIXEL-IDENTICAL to the original — same face shape, same skin, same features, same expression, same eye direction. Do NOT modify faces in any way. The ONLY acceptable reaction: their body leans slightly [toward/away from] [the change], or their hand gestures toward it. All faces stay completely frozen as in the original.
+```
+
+**小脸时额外规则**：
+- 变化区域不要紧贴人物身体——如果物品变化需要重新生成人物身体区域（如"救生衣膨胀包裹住人"），小脸上人脸必然崩坏
+- ✅ 安全方向：变化发生在人物附近但不接触（帽子上方、脚下、背景物品、桌面物品）
+- ❌ 危险方向：变化包裹/覆盖/紧贴人物身体（充气物包裹人=5分"人脸非常奇怪"）
