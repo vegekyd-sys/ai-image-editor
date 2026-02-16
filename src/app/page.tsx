@@ -438,7 +438,7 @@ export default function Home() {
   }, [handleSendMessage, addMessage]);
 
   const handleDownload = useCallback(async () => {
-    const img = timeline[viewIndex];
+    const img = previewImage || timeline[viewIndex];
     if (!img) return;
     const filename = `ai-edited-${Date.now()}.jpg`;
 
@@ -468,7 +468,7 @@ export default function Home() {
       link.download = filename;
       link.click();
     }
-  }, [timeline, viewIndex]);
+  }, [timeline, viewIndex, previewImage]);
 
   const handleChatOpen = useCallback(() => {
     setChatOpen(true);
@@ -529,7 +529,7 @@ export default function Home() {
             </button>
 
             <div className="flex items-center gap-2">
-              {viewIndex > 0 && (
+              {(viewIndex > 0 || previewImage) && (
                 <button
                   onClick={handleDownload}
                   className="px-3 py-1.5 rounded-full text-xs font-medium text-white bg-fuchsia-500/20 backdrop-blur-sm border border-fuchsia-500/30"
