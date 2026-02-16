@@ -39,3 +39,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# test images and results
+/testcase/
+/test-results/
+*.jpg
+*.jpeg
+*.png
+*.heic
+!src/**/*.jpg
+!src/**/*.png
+!public/**/*.jpg
+!public/**/*.png
+
+# dev scripts
+/scripts/
+
+# progress notes
+progress.md
+
+# playwright mcp
+.playwright-mcp/

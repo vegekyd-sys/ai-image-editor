@@ -9,9 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@google/genai": "^1.40.0",
+    "heic2any": "^0.0.4",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
