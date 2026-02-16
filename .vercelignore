@@ -1,0 +1,11 @@
+testcase/
+test-results/
+scripts/
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.HEIC
+progress.md
+.playwright-mcp/
+.claude/
