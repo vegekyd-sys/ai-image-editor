@@ -9,7 +9,8 @@ function getAI() {
   return _ai;
 }
 
-const MODEL = 'gemini-3-pro-image-preview';
+// Switch model here. Primary: gemini-3-pro-image-preview. Fallback: gemini-2.5-flash-image
+const MODEL = 'gemini-2.5-flash-image';
 
 const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理解图片的每个细节——主体、情绪、光线、构图、环境、色彩、纹理、瑕疵和故事。
 
@@ -199,6 +200,21 @@ export async function* streamTips(imageBase64: string): AsyncGenerator<Tip> {
   // Load detailed creative direction templates from .md files
   const templates = getPromptTemplates();
 
+  // gemini-3-pro supports structured output; flash-image doesn't — fall back to plain JSON in prompt
+  const supportsStructuredOutput = MODEL.includes('gemini-3');
+  const config: Record<string, unknown> = {
+    systemInstruction: TIPS_SYSTEM_PROMPT,
+  };
+  if (supportsStructuredOutput) {
+    config.responseMimeType = 'application/json';
+    config.responseSchema = TIPS_SCHEMA;
+  }
+
+  const promptSuffix = supportsStructuredOutput
+    ? ''
+    : `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字。格式：
+[{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild"}, ...]`;
+
   const stream = await getAI().models.generateContentStream({
     model: MODEL,
     contents: [
@@ -209,16 +225,12 @@ export async function* streamTips(imageBase64: string): AsyncGenerator<Tip> {
           {
             text: `分析这张图片，参考以下素材库，给出6条编辑建议（2 enhance + 2 creative + 2 wild）。
 
-${templates}`,
+${templates}${promptSuffix}`,
           },
         ],
       },
     ],
-    config: {
-      systemInstruction: TIPS_SYSTEM_PROMPT,
-      responseMimeType: 'application/json',
-      responseSchema: TIPS_SCHEMA,
-    },
+    config,
   });
 
   // Incrementally parse JSON array: detect each completed {...} object

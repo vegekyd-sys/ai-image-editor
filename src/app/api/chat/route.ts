@@ -26,9 +26,11 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
           }
         } catch (err) {
-          console.error('Chat stream error:', err);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error('Chat stream error:', errMsg);
+          const userMsg = errMsg;
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: 'error', message: 'Failed to process chat request' })}\n\n`)
+            encoder.encode(`data: ${JSON.stringify({ type: 'error', message: userMsg })}\n\n`)
           );
         } finally {
           controller.close();
