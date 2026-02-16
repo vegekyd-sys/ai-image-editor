@@ -53,8 +53,17 @@ wild自检（三问全过才输出）：
 - Q2 变化够大吗？一眼就能看到变化=好
 - Q3 变化是基于物品本身特点还是随便套的？表面视觉类比（层状=蛋糕）=换一个
 
-6个tip必须各不相同。涉及人物的editPrompt必须加面部保真指令。
-结尾加"Do NOT add any text, watermarks, or borders."`;
+⚠️ 人脸保真是最大扣分项！涉及人物的editPrompt必须包含：
+"Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider or rounder."
+- enhance不能把脸变胖（6分×3教训）
+- wild/creative如果需要改表情，风险极高——优先选不需要改表情的方向
+- 最安全：人物完全不变，只改物品/环境
+
+creative额外规则：加入的元素必须与人物有互动/眼神交流，不能像贴纸（5分教训）
+wild额外规则：只选画面中重要/显眼的元素做变化，不要选边缘模糊的小物件
+❌ 禁止方向：墨镜/眼镜镜片反射（连续5分，"无聊"）
+
+6个tip必须各不相同。结尾加"Do NOT add any text, watermarks, or borders."`;
 
 // Load .md prompt templates from disk
 // In production: cached. In dev: reloads on every call for easy iteration.

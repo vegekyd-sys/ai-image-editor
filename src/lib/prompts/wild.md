@@ -61,10 +61,24 @@
 - 人在看鱼缸 → 人在鱼缸里，鱼在外面看
 - 关键：找到画面中明显的"谁在控制谁"，然后反转
 
+### 选择元素的原则
+- 只选画面中**视觉占比大、位置重要**的元素做变化
+- ✅ 手中物品、身上配饰、背景主体建筑/壁画、桌上主菜
+- ❌ 边缘模糊的小物件、景深外的不重要背景物（饮料杯在角落=null分，"基于不重要内容做文章不是好主意"）
+
+### 避免无聊方向
+- ❌ 墨镜/眼镜镜片反射 — 连续低分（5分×2，"不好玩"、"无聊"），概念本身缺乏冲击力
+
 ### editPrompt要求
 - 必须明确描述变化的物品是哪个、变化的具体样子
 - **人物要对变化有反应**——惊讶/注视/互动，不能像摆设（5分教训："人物跟无人机无互动"）
 - 表情变化必须合理应景（8分案例："我喜欢人物表情的变化，应景"）
-- 有人物时：**"Preserve the person's identity, bone structure, and facial features exactly. Only allow natural expression changes that match the scene."**
+
+#### ⚠️ 人脸保真是最大扣分项！（V8最重要教训）
+- 多个7分tip本该是9-10分，全因为"idea很好但人脸变了"
+- editPrompt必须包含：**"Preserve the person's identity, bone structure, face shape, and facial features exactly. Do not make the face wider, rounder, or alter proportions in any way. Only allow minimal, natural expression changes."**
+- 如果tip需要大幅改变表情（惊讶张嘴、转头等），风险极高——优先选择不需要改变表情的方向
+- 最安全：人物保持原样，只有物品发生变化（耳环→精灵=9分，人物表情没变）
+
 - 新元素与原图的光影、透视必须一致
 - 2个wild tip必须选不同方向

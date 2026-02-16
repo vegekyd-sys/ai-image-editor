@@ -61,7 +61,16 @@
 - 创意元素必须**足够大、足够显眼**（至少占画面5-10%）
 - 放在视觉焦点附近，不是角落
 
+#### 互动感（极重要！不能有"贴纸感"）
+- 加入的元素必须与人物/场景**有互动**，不能像P上去的贴纸
+- ✅ 人物看向新元素、新元素看向人物、有眼神交流（熊猫看镜头=8分、小鸡看炸鸡=8分）
+- ❌ 元素只是放在画面中，跟人物毫无关系（松鼠在桌上但人没看它=5分，"贴纸感"）
+- editPrompt必须描述互动方式："looking at"、"reaching towards"、"reacting to"
+
+#### 避免无聊方向
+- ❌ 墨镜/眼镜镜片反射 — 连续低分（5分×2，"不好玩"、"反射出的东西很无聊"），概念本身不够有趣
+
 #### editPrompt要求
-- 有人物时必须包含面部保真指令
+- 有人物时必须包含面部保真指令：**"Preserve the person's identity, bone structure, and facial features exactly. Do not alter face shape or proportions."**
 - 新元素的光影、透视必须与原图一致
 - 2个creative tip必须选不同方向

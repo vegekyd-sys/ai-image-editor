@@ -90,6 +90,9 @@
   * ✅ 一个做光影氛围(如电影感)，另一个做环境/质感(如胶片质感或天气改造)
   * ✅ 一个偏暖色调，另一个偏冷色调或完全不同的风格
 - 每个editPrompt都必须包含：光影方案 + 色彩方案 + 景深处理 + 背景净化 + 人物美化（有人物时）
+- ⚠️ **人脸形状保真是enhance最大扣分项**：V8中3个enhance因"脸变胖"扣到6分
+  * editPrompt必须包含：**"Preserve each person's face shape, bone structure, and proportions exactly — do not make faces wider, rounder, or alter jaw lines."**
+  * 允许适度P小脸（用户允许），但绝不能把脸变胖/变宽
 - 皮肤处理措辞：
   * ✅ "luminous, translucent skin preserving natural texture and micro-shadows"
   * ✅ "healthy, glowing complexion with natural pore texture retained"
