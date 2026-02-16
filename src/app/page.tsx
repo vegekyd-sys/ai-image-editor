@@ -297,7 +297,7 @@ export default function Home() {
     if (uploadSnapshotId && image) {
       const snapId = uploadSnapshotId;
       const img = image;
-      setTimeout(() => fetchTipsForSnapshot(snapId, img), 2000);
+      setTimeout(() => fetchTipsForSnapshot(snapId, img), 500);
     }
 
     // For non-upload chat messages: send the current image + wantImage so
@@ -437,13 +437,37 @@ export default function Home() {
     }
   }, [handleSendMessage, addMessage]);
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     const img = timeline[viewIndex];
     if (!img) return;
-    const link = document.createElement('a');
-    link.href = img;
-    link.download = `ai-edited-${Date.now()}.jpg`;
-    link.click();
+    const filename = `ai-edited-${Date.now()}.jpg`;
+
+    // Convert base64 data URL to Blob
+    try {
+      const res = await fetch(img);
+      const blob = await res.blob();
+
+      // Use Web Share API on mobile for Camera Roll access
+      if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+        const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+        await navigator.share({ files: [file] });
+        return;
+      }
+
+      // Desktop fallback: download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Final fallback
+      const link = document.createElement('a');
+      link.href = img;
+      link.download = filename;
+      link.click();
+    }
   }, [timeline, viewIndex]);
 
   const handleChatOpen = useCallback(() => {
@@ -505,7 +529,7 @@ export default function Home() {
             </button>
 
             <div className="flex items-center gap-2">
-              {timeline.length > 1 && (
+              {viewIndex > 0 && (
                 <button
                   onClick={handleDownload}
                   className="px-3 py-1.5 rounded-full text-xs font-medium text-white bg-fuchsia-500/20 backdrop-blur-sm border border-fuchsia-500/30"
