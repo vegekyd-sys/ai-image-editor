@@ -321,9 +321,7 @@ async function* chatStreamOpenRouter(
 
   if (wantImage) {
     body.modalities = ['image', 'text'];
-    // Lower temperature for image edits — reduces face deformation
-    body.temperature = 0.4;
-    body.top_p = 0.9;
+    body.temperature = 1.0;
     if (aspectRatio) {
       body.image_config = { aspect_ratio: aspectRatio };
     }
@@ -470,8 +468,7 @@ async function generatePreviewImageOpenRouter(
     model: OPENROUTER_MODEL,
     stream: false,
     modalities: ['image', 'text'],
-    temperature: 0.4,
-    top_p: 0.9,
+    temperature: 1.0,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       {
