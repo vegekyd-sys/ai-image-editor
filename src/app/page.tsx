@@ -91,14 +91,15 @@ export default function Home() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [isTipsFetching, setIsTipsFetching] = useState(false);
+  const [tipsFetchingIds, setTipsFetchingIds] = useState<Set<string>>(new Set());
   const [viewIndex, setViewIndex] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const [lastSeenMsgCount, setLastSeenMsgCount] = useState(0);
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const previewAbortRef = useRef<AbortController>(new AbortController());
+  // Per-snapshot abort controllers so aborting one snapshot's previews doesn't kill others
+  const previewAbortMapRef = useRef<Map<string, AbortController>>(new Map());
 
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
@@ -134,6 +135,8 @@ export default function Home() {
   // Tips come from the parent snapshot when viewing draft, otherwise from the viewed snapshot
   const tipsSourceIndex = isViewingDraft ? draftParentIndex : viewIndex;
   const currentTips = snapshots[tipsSourceIndex]?.tips ?? [];
+  const currentSnapId = snapshots[tipsSourceIndex]?.id;
+  const isTipsFetching = currentSnapId ? tipsFetchingIds.has(currentSnapId) : false;
 
   // Auto-jump to latest when timeline grows; clamp when it shrinks (draft dismissed)
   const prevTimelineLen = useRef(0);
@@ -176,11 +179,12 @@ export default function Home() {
     }));
 
     try {
+      const controller = previewAbortMapRef.current.get(snapshotId);
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageBase64, editPrompt, aspectRatio }),
-        signal: previewAbortRef.current.signal,
+        signal: controller?.signal,
       });
 
       if (!res.ok) throw new Error('Preview failed');
@@ -207,9 +211,10 @@ export default function Home() {
 
   // Fetch tips via 3 parallel SSE streams (one per category) for faster loading
   const fetchTipsForSnapshot = useCallback((snapshotId: string, imageBase64: string) => {
-    setIsTipsFetching(true);
-    // Fresh abort controller for this batch of previews
-    previewAbortRef.current = new AbortController();
+    // Per-snapshot tracking: mark this snapshot as fetching
+    setTipsFetchingIds(prev => { const next = new Set(prev); next.add(snapshotId); return next; });
+    // Per-snapshot abort controller for preview requests
+    previewAbortMapRef.current.set(snapshotId, new AbortController());
 
     const categories = ['enhance', 'creative', 'wild'] as const;
     let completedCount = 0;
@@ -264,7 +269,7 @@ export default function Home() {
       } finally {
         completedCount++;
         if (completedCount === categories.length) {
-          setIsTipsFetching(false);
+          setTipsFetchingIds(prev => { const next = new Set(prev); next.delete(snapshotId); return next; });
         }
       }
     };
@@ -382,8 +387,8 @@ export default function Home() {
     const tip = parentTips[previewingTipIndex];
     if (!tip?.previewImage) return;
 
-    // Cancel remaining preview generations
-    previewAbortRef.current.abort();
+    // Note: do NOT abort parent snapshot's preview generations —
+    // they should continue loading in the background
 
     // Add chat messages for context
     addMessage('user', tip.label);
@@ -465,8 +470,10 @@ export default function Home() {
   const compressAndUpload = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) return;
 
-    // Cancel any in-flight preview generations and dismiss draft
-    previewAbortRef.current.abort();
+    // Cancel all in-flight preview generations and dismiss draft
+    previewAbortMapRef.current.forEach(c => c.abort());
+    previewAbortMapRef.current.clear();
+    setTipsFetchingIds(new Set());
     setPreviewingTipIndex(null);
     setDraftParentIndex(null);
 
