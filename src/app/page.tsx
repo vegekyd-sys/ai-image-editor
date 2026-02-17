@@ -96,6 +96,7 @@ export default function Home() {
   const [chatOpen, setChatOpen] = useState(false);
   const [lastSeenMsgCount, setLastSeenMsgCount] = useState(0);
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
+  const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
 
@@ -109,14 +110,38 @@ export default function Home() {
   assistantMsgCountRef.current = assistantMsgCount;
   const hasUnread = assistantMsgCount > lastSeenMsgCount;
 
-  const timeline = useMemo(() => snapshots.map((s) => s.image), [snapshots]);
-  const currentTips = snapshots[viewIndex]?.tips ?? [];
+  // Draft mode: draftParentIndex !== null means a virtual draft entry exists in timeline
+  const isDraft = draftParentIndex !== null;
 
-  // Auto-jump to latest when timeline grows
+  // Draft image is computed from the selected tip's preview (or parent image as fallback)
+  const draftImage = useMemo(() => {
+    if (draftParentIndex === null || previewingTipIndex === null) return null;
+    const parentTips = snapshots[draftParentIndex]?.tips ?? [];
+    const tip = parentTips[previewingTipIndex];
+    return tip?.previewImage || snapshots[draftParentIndex]?.image || null;
+  }, [draftParentIndex, previewingTipIndex, snapshots]);
+
+  // Timeline: committed snapshots + virtual draft (if exists)
+  const timeline = useMemo(() => {
+    const base = snapshots.map((s) => s.image);
+    if (draftImage) base.push(draftImage);
+    return base;
+  }, [snapshots, draftImage]);
+
+  // Are we currently viewing the draft entry (last timeline position when draft exists)?
+  const isViewingDraft = isDraft && viewIndex >= snapshots.length;
+
+  // Tips come from the parent snapshot when viewing draft, otherwise from the viewed snapshot
+  const tipsSourceIndex = isViewingDraft ? draftParentIndex : viewIndex;
+  const currentTips = snapshots[tipsSourceIndex]?.tips ?? [];
+
+  // Auto-jump to latest when timeline grows; clamp when it shrinks (draft dismissed)
   const prevTimelineLen = useRef(0);
   if (timeline.length !== prevTimelineLen.current) {
     if (timeline.length > prevTimelineLen.current) {
       setViewIndex(timeline.length - 1);
+    } else if (viewIndex >= timeline.length) {
+      setViewIndex(Math.max(0, timeline.length - 1));
     }
     prevTimelineLen.current = timeline.length;
   }
@@ -349,19 +374,22 @@ export default function Home() {
     }
   }, [addMessage, sessionId, fetchTipsForSnapshot]);
 
-  // Commit a tip: use its preview image directly (no re-generation)
-  const commitTip = useCallback((tip: Tip) => {
-    if (!tip.previewImage) return;
+  // Commit draft: finalize the virtual draft as a real snapshot
+  const commitDraft = useCallback(() => {
+    if (draftParentIndex === null || previewingTipIndex === null) return;
+
+    const parentTips = snapshots[draftParentIndex]?.tips ?? [];
+    const tip = parentTips[previewingTipIndex];
+    if (!tip?.previewImage) return;
 
     // Cancel remaining preview generations
     previewAbortRef.current.abort();
-    setPreviewingTipIndex(null);
 
     // Add chat messages for context
     addMessage('user', tip.label);
     const assistantMsg = addMessage('assistant', `已应用编辑：${tip.desc}`);
 
-    // Create new snapshot from the preview image
+    // Create new committed snapshot from the draft image
     const snapId = generateId();
     const newSnapshot: Snapshot = {
       id: snapId,
@@ -371,44 +399,76 @@ export default function Home() {
     };
     setSnapshots((prev) => [...prev, newSnapshot]);
 
+    // Clear draft state (timeline length stays the same: draft replaced by committed)
+    setDraftParentIndex(null);
+    setPreviewingTipIndex(null);
+
     // Fetch new tips for the committed image
     fetchTipsForSnapshot(snapId, tip.previewImage);
-  }, [addMessage, fetchTipsForSnapshot]);
+  }, [draftParentIndex, previewingTipIndex, snapshots, addMessage, fetchTipsForSnapshot]);
 
-  // Two-click interaction: first click = preview, second click = commit
+  // Click tip:
+  //   - Same tip clicked again (while viewing draft) → commit
+  //   - First click (no draft) → create draft
+  //   - Different tip (while viewing draft) → switch draft image
+  //   - Tip click while navigated away from draft → dismiss old draft, create new from current
   const handleTipInteraction = useCallback((tip: Tip, tipIndex: number) => {
-    if (previewingTipIndex === tipIndex) {
-      // Second click on same tip → commit
-      commitTip(tip);
-    } else {
-      // First click → preview
-      setPreviewingTipIndex(tipIndex);
+    const viewingDraft = draftParentIndex !== null && viewIndex >= snapshots.length;
+
+    if (viewingDraft && previewingTipIndex === tipIndex) {
+      // Same tip clicked again on draft → COMMIT
+      if (tip.previewStatus === 'done' && tip.previewImage) {
+        commitDraft();
+      }
+      return;
     }
-  }, [previewingTipIndex, commitTip]);
 
-  // Computed preview image for canvas
-  const previewImage = useMemo(() => {
-    if (previewingTipIndex === null) return undefined;
-    const tip = currentTips[previewingTipIndex];
-    return tip?.previewImage || undefined;
-  }, [previewingTipIndex, currentTips]);
+    // Update tip selection (switches draft image via draftImage memo)
+    setPreviewingTipIndex(tipIndex);
 
-  const dismissPreview = useCallback(() => {
+    if (draftParentIndex === null) {
+      // No draft → create one from current snapshot
+      setDraftParentIndex(viewIndex);
+      // Auto-jump will handle moving to the new draft position
+    } else if (!viewingDraft) {
+      // Viewing a committed snapshot with an existing draft elsewhere
+      // → update draft parent to current snapshot
+      setDraftParentIndex(viewIndex);
+      // Jump to draft position (will be last in timeline)
+      // Use snapshots.length since that's where the draft sits
+      setViewIndex(snapshots.length);
+    }
+  }, [draftParentIndex, viewIndex, snapshots.length, previewingTipIndex, commitDraft]);
+
+  // Previous image for long-press compare
+  const previousImage = useMemo(() => {
+    if (isViewingDraft && draftParentIndex !== null) {
+      // Viewing draft: "before" = parent snapshot's image
+      return snapshots[draftParentIndex]?.image;
+    }
+    // Normal mode: "before" = previous snapshot
+    return viewIndex > 0 ? snapshots[viewIndex - 1]?.image : undefined;
+  }, [isViewingDraft, draftParentIndex, snapshots, viewIndex]);
+
+  // Dismiss draft: remove virtual draft entry, return to parent
+  const dismissDraft = useCallback(() => {
+    setDraftParentIndex(null);
     setPreviewingTipIndex(null);
+    // viewIndex will auto-clamp via prevTimelineLen shrink handler
   }, []);
 
-  // Dismiss preview when navigating timeline
+  // Navigate timeline: keep draft alive so user can swipe back
   const handleIndexChange = useCallback((index: number) => {
     setViewIndex(index);
-    setPreviewingTipIndex(null);
   }, []);
 
   const compressAndUpload = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) return;
 
-    // Cancel any in-flight preview generations
+    // Cancel any in-flight preview generations and dismiss draft
     previewAbortRef.current.abort();
     setPreviewingTipIndex(null);
+    setDraftParentIndex(null);
 
     const previewUrl = URL.createObjectURL(file);
     const previewId = generateId();
@@ -438,7 +498,7 @@ export default function Home() {
   }, [handleSendMessage, addMessage]);
 
   const handleDownload = useCallback(async () => {
-    const img = previewImage || timeline[viewIndex];
+    const img = timeline[viewIndex];
     if (!img) return;
     const filename = `ai-edited-${Date.now()}.jpg`;
 
@@ -468,7 +528,7 @@ export default function Home() {
       link.download = filename;
       link.click();
     }
-  }, [timeline, viewIndex, previewImage]);
+  }, [timeline, viewIndex]);
 
   const handleChatOpen = useCallback(() => {
     setChatOpen(true);
@@ -511,8 +571,9 @@ export default function Home() {
             currentIndex={viewIndex}
             onIndexChange={handleIndexChange}
             isEditing={isEditing}
-            previewImage={previewImage}
-            onDismissPreview={dismissPreview}
+            isDraft={isViewingDraft}
+            onDismissDraft={dismissDraft}
+            previousImage={previousImage}
           />
         )}
 
@@ -529,7 +590,7 @@ export default function Home() {
             </button>
 
             <div className="flex items-center gap-2">
-              {(viewIndex > 0 || previewImage) && (
+              {(viewIndex > 0 || isViewingDraft) && (
                 <button
                   onClick={handleDownload}
                   className="px-3 py-1.5 rounded-full text-xs font-medium text-white bg-fuchsia-500/20 backdrop-blur-sm border border-fuchsia-500/30"
@@ -550,7 +611,7 @@ export default function Home() {
             isLoading={isLoading || isTipsFetching}
             isEditing={isEditing}
             onTipClick={handleTipInteraction}
-            previewingIndex={previewingTipIndex}
+            previewingIndex={isViewingDraft ? previewingTipIndex : null}
           />
         </div>
       )}

@@ -505,6 +505,116 @@ async function generatePreviewImageOpenRouter(
   return null;
 }
 
+// ── Multi-Image Generation (for experiments) ─────────────────────
+
+export async function generateWithMultipleImages(
+  images: string[],       // base64 data URLs
+  prompt: string,
+  wantImage: boolean,
+): Promise<{ text?: string; image?: string }> {
+  if (PROVIDER === 'openrouter') {
+    return generateMultiImageOpenRouter(images, prompt, wantImage);
+  } else {
+    return generateMultiImageGoogle(images, prompt, wantImage);
+  }
+}
+
+async function generateMultiImageGoogle(
+  images: string[],
+  prompt: string,
+  wantImage: boolean,
+): Promise<{ text?: string; image?: string }> {
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+  for (const img of images) {
+    const base64Data = img.replace(/^data:image\/\w+;base64,/, '');
+    const mimeType = img.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+    parts.push({ inlineData: { mimeType, data: base64Data } });
+  }
+  parts.push({ text: prompt });
+
+  const config: Record<string, unknown> = {
+    responseModalities: wantImage ? ['TEXT', 'IMAGE'] : ['TEXT'],
+  };
+
+  const result = await getAI().models.generateContent({
+    model: MODEL,
+    contents: [{ role: 'user', parts }],
+    config,
+  });
+
+  const resultParts = result.candidates?.[0]?.content?.parts;
+  if (!resultParts) return {};
+
+  let text: string | undefined;
+  let image: string | undefined;
+
+  for (const part of resultParts) {
+    if (part.inlineData?.data) {
+      const mime = part.inlineData.mimeType || 'image/png';
+      image = `data:${mime};base64,${part.inlineData.data}`;
+    } else if (part.text) {
+      text = (text || '') + part.text;
+    }
+  }
+
+  return { text, image };
+}
+
+async function generateMultiImageOpenRouter(
+  images: string[],
+  prompt: string,
+  wantImage: boolean,
+): Promise<{ text?: string; image?: string }> {
+  const content: Array<Record<string, unknown>> = [];
+
+  for (const img of images) {
+    const dataUrl = img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`;
+    content.push({ type: 'image_url', image_url: { url: dataUrl } });
+  }
+  content.push({ type: 'text', text: prompt });
+
+  const body: Record<string, unknown> = {
+    model: OPENROUTER_MODEL,
+    stream: false,
+    temperature: 1.0,
+    messages: [
+      { role: 'user', content },
+    ],
+  };
+
+  if (wantImage) {
+    body.modalities = ['image', 'text'];
+  }
+
+  const res = await fetch(OPENROUTER_BASE, {
+    method: 'POST',
+    headers: openrouterHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenRouter multi-image error ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json();
+  const choice = data.choices?.[0]?.message;
+  if (!choice) return {};
+
+  const text: string | undefined = choice.content || undefined;
+  let image: string | undefined;
+
+  if (choice.images && Array.isArray(choice.images)) {
+    for (const img of choice.images) {
+      const url = img.image_url?.url || img.url;
+      if (url) { image = url; break; }
+    }
+  }
+
+  return { text, image };
+}
+
 // ── Streaming Tips Generation (per-category) ────────────────────
 
 export async function* streamTipsByCategory(

@@ -77,3 +77,12 @@ body {
 .animate-tip-in {
   animation: tipIn 0.3s ease-out;
 }
+
+/* Glow animation for commit button */
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(217,70,239,0.3); }
+  50% { box-shadow: 0 0 12px rgba(217,70,239,0.8); }
+}
+.animate-glow {
+  animation: glow 1.5s ease-in-out infinite;
+}
