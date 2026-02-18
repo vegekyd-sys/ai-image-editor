@@ -56,3 +56,19 @@ export function getPublicUrl(supabase: SupabaseClient, path: string): string {
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
   return data.publicUrl
 }
+
+/**
+ * Convert a Supabase Storage public URL to a thumbnail URL using
+ * Supabase Image Transformations. Falls back to original URL if
+ * the URL format doesn't match.
+ *
+ * Replaces /object/public/ with /render/image/public/ and appends
+ * width/quality params.
+ */
+export function getThumbnailUrl(url: string, width = 200, quality = 60): string {
+  if (!url || !url.includes('/storage/v1/object/public/')) return url
+  return url.replace(
+    '/storage/v1/object/public/',
+    '/storage/v1/render/image/public/',
+  ) + `?width=${width}&quality=${quality}`
+}

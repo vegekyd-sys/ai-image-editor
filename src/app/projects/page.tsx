@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { uploadImage } from '@/lib/supabase/storage'
+import { uploadImage, getThumbnailUrl } from '@/lib/supabase/storage'
 
 interface ProjectWithSnapshots {
   id: string
@@ -311,7 +311,7 @@ function ProjectRow({
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={snap.image_url}
+              src={getThumbnailUrl(snap.image_url, 150)}
               alt=""
               className="w-full h-full object-cover"
               loading="lazy"

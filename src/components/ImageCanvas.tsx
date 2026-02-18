@@ -36,17 +36,25 @@ export default function ImageCanvas({
   // Double tap
   const lastTapTime = useRef(0);
 
+  // Image loading state
+  const [imageLoaded, setImageLoaded] = useState(false);
+
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
 
   const SWIPE_THRESHOLD = 40;
 
-  // Reset zoom when image changes (derived state pattern per React docs)
+  // Reset zoom and loading state when image changes (derived state pattern per React docs)
   const [prevIdx, setPrevIdx] = useState(currentIndex);
-  if (prevIdx !== currentIndex) {
+  const [prevSrc, setPrevSrc] = useState('');
+  const currentSrc = timeline[currentIndex] ?? '';
+  if (prevIdx !== currentIndex || prevSrc !== currentSrc) {
     setPrevIdx(currentIndex);
+    setPrevSrc(currentSrc);
     if (scale !== 1) setScale(1);
     if (translate.x !== 0 || translate.y !== 0) setTranslate({ x: 0, y: 0 });
+    // Only reset loading if source actually changed (avoids flicker on re-render)
+    if (prevSrc !== currentSrc) setImageLoaded(false);
   }
 
   const clearLongPress = useCallback(() => {
@@ -254,6 +262,10 @@ export default function ImageCanvas({
           transformOrigin: 'center center',
         } : undefined}
       >
+        {/* Grey placeholder while loading */}
+        {!imageLoaded && (
+          <div className="absolute inset-0 bg-zinc-900 animate-pulse" />
+        )}
         {/* Image */}
         <img
           src={displayImage}
@@ -261,9 +273,10 @@ export default function ImageCanvas({
           className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' :
-            'opacity-100 translate-x-0'
+            imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
           }`}
           draggable={false}
+          onLoad={() => setImageLoaded(true)}
         />
       </div>
 

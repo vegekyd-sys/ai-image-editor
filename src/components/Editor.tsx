@@ -262,69 +262,83 @@ export default function Editor({
     let resolvedBase64: string | null = null;
     const base64Ready = ensureBase64(imageInput).then(b64 => { resolvedBase64 = b64; return b64; });
 
-    const fetchCategory = async (category: string) => {
-      const imageBase64 = await base64Ready;
-      try {
-        const res = await fetch('/api/tips', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: imageBase64, category }),
-        });
-        if (!res.ok) return;
+    const fetchCategoryOnce = async (category: string, imageBase64: string) => {
+      const res = await fetch('/api/tips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageBase64, category }),
+      });
+      if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
 
-        const reader = res.body!.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let gotTips = false;
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-          let boundary;
-          while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-            const line = buffer.slice(0, boundary);
-            buffer = buffer.slice(boundary + 2);
-            if (line.startsWith('data: ')) {
-              const payload = line.slice(6);
-              if (payload === '[DONE]') break;
-              try {
-                const tip = JSON.parse(payload) as Tip;
-                if (tip.label && tip.editPrompt && tip.category) {
-                  tip.previewStatus = 'pending';
-                  setSnapshots((prev) => prev.map((s) =>
-                    s.id === snapshotId ? { ...s, tips: [...s.tips, tip] } : s
-                  ));
-                  // Auto-close chat panel on first tip arrival
-                  if (!firstTipReceived) {
-                    firstTipReceived = true;
-                    setChatOpen(false);
-                  }
-                  // Fire preview generation immediately
-                  generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
+        let boundary;
+        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+          const line = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          if (line.startsWith('data: ')) {
+            const payload = line.slice(6);
+            if (payload === '[DONE]') break;
+            try {
+              const tip = JSON.parse(payload) as Tip;
+              if (tip.label && tip.editPrompt && tip.category) {
+                gotTips = true;
+                tip.previewStatus = 'pending';
+                setSnapshots((prev) => prev.map((s) =>
+                  s.id === snapshotId ? { ...s, tips: [...s.tips, tip] } : s
+                ));
+                // Auto-close chat panel on first tip arrival
+                if (!firstTipReceived) {
+                  firstTipReceived = true;
+                  setChatOpen(false);
                 }
-              } catch { /* skip malformed */ }
-            }
+                // Fire preview generation immediately
+                generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
+              }
+            } catch { /* skip malformed */ }
           }
         }
-      } catch {
-        // Silent fail — tips are optional
-      } finally {
-        completedCount++;
-        if (completedCount === categories.length) {
-          setIsTipsFetching(false);
-          // Persist all tips once all categories are done
-          if (onUpdateTips) {
-            setSnapshots((prev) => {
-              const snap = prev.find(s => s.id === snapshotId);
-              if (snap && snap.tips.length > 0) {
-                // Strip preview data before persisting (only save prompt metadata)
-                const tipsForDb = snap.tips.map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
-                onUpdateTips(snapshotId, tipsForDb);
-              }
-              return prev;
-            });
+      }
+
+      if (!gotTips) throw new Error(`Tips ${category}: no tips received`);
+    };
+
+    const fetchCategory = async (category: string) => {
+      const imageBase64 = await base64Ready;
+      const MAX_RETRIES = 2;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          await fetchCategoryOnce(category, imageBase64);
+          break; // success
+        } catch {
+          if (attempt < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
           }
+          // Last attempt fails silently — tips are optional
+        }
+      }
+      completedCount++;
+      if (completedCount === categories.length) {
+        setIsTipsFetching(false);
+        // Persist all tips once all categories are done
+        if (onUpdateTips) {
+          setSnapshots((prev) => {
+            const snap = prev.find(s => s.id === snapshotId);
+            if (snap && snap.tips.length > 0) {
+              // Strip preview data before persisting (only save prompt metadata)
+              const tipsForDb = snap.tips.map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
+              onUpdateTips(snapshotId, tipsForDb);
+            }
+            return prev;
+          });
         }
       }
     };
@@ -503,6 +517,15 @@ export default function Editor({
       setViewIndex(snapshots.length);
     }
   }, [draftParentIndex, viewIndex, snapshots.length, previewingTipIndex, commitDraft]);
+
+  // Retry a failed preview generation
+  const handleRetryPreview = useCallback((tip: Tip, tipIndex: number) => {
+    // Find which snapshot owns this tip
+    const tipsSourceIdx = isViewingDraft ? draftParentIndex : viewIndex;
+    const snap = tipsSourceIdx !== null ? snapshots[tipsSourceIdx] : null;
+    if (!snap) return;
+    generatePreviewForTip(snap.id, tip.editPrompt, snap.image, tip.aspectRatio);
+  }, [isViewingDraft, draftParentIndex, viewIndex, snapshots, generatePreviewForTip]);
 
   // Previous image for long-press compare
   const previousImage = useMemo(() => {
@@ -687,6 +710,7 @@ export default function Editor({
             isLoading={isLoading || isTipsFetching}
             isEditing={isEditing}
             onTipClick={handleTipInteraction}
+            onRetryPreview={handleRetryPreview}
             previewingIndex={isViewingDraft ? previewingTipIndex : null}
           />
         </div>

@@ -1,18 +1,20 @@
 'use client';
 
 import { Tip } from '@/types';
+import { getThumbnailUrl } from '@/lib/supabase/storage';
 
 interface TipsBarProps {
   tips: Tip[];
   isLoading: boolean;
   isEditing: boolean;
   onTipClick: (tip: Tip, index: number) => void;
+  onRetryPreview?: (tip: Tip, index: number) => void;
   previewingIndex: number | null;
 }
 
 const CATEGORY_ORDER: Tip['category'][] = ['enhance', 'creative', 'wild'];
 
-export default function TipsBar({ tips, isLoading, isEditing, onTipClick, previewingIndex }: TipsBarProps) {
+export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onRetryPreview, previewingIndex }: TipsBarProps) {
   // Flatten tips in category order, tracking original indices
   const orderedTips: { tip: Tip; originalIndex: number }[] = [];
   for (const cat of CATEGORY_ORDER) {
@@ -52,13 +54,29 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, previe
                 <div className="w-[72px] h-[72px] flex-shrink-0 bg-white/5 relative overflow-hidden">
                   {tip.previewStatus === 'done' && tip.previewImage ? (
                     <img
-                      src={tip.previewImage}
+                      src={tip.previewImage.startsWith('http') ? getThumbnailUrl(tip.previewImage, 150) : tip.previewImage}
                       alt=""
                       className="w-full h-full object-cover"
                     />
                   ) : tip.previewStatus === 'generating' ? (
                     <div className="w-full h-full flex items-center justify-center">
                       <div className="w-5 h-5 border-2 border-fuchsia-400/30 border-t-fuchsia-400 rounded-full animate-spin" />
+                    </div>
+                  ) : tip.previewStatus === 'error' ? (
+                    <div
+                      className="w-full h-full flex flex-col items-center justify-center gap-0.5 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRetryPreview?.(tip, originalIndex);
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40">
+                        <path d="M21 2v6h-6" />
+                        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                        <path d="M3 22v-6h6" />
+                        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                      </svg>
+                      <span className="text-[9px] text-white/30">重试</span>
                     </div>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-2xl opacity-50">
