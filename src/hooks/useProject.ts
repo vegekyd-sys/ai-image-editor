@@ -50,20 +50,27 @@ export function useProject(projectId: string, userId: string) {
       image: s.image_url, // Use Storage URL as the image source
       tips: (Array.isArray(s.tips) ? s.tips : []).map(t => ({
         ...t,
-        // Restore previewStatus from persisted previewImage URL
         previewStatus: t.previewImage ? 'done' as const : undefined,
       })),
       messageId: s.message_id || '',
       imageUrl: s.image_url,
+      description: s.description ?? undefined,
     }))
 
-    const messages: Message[] = dbMessages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      timestamp: new Date(m.created_at).getTime(),
-      projectId: m.project_id,
-    }))
+    const messages: Message[] = dbMessages.map((m) => {
+      // Restore inline image: find the snapshot linked to this message
+      const linkedSnapshot = m.has_image
+        ? snapshots.find(s => s.messageId === m.id)
+        : undefined
+      return {
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.created_at).getTime(),
+        projectId: m.project_id,
+        ...(linkedSnapshot ? { image: linkedSnapshot.image } : {}),
+      }
+    })
 
     return { snapshots, messages }
   }, [projectId])
@@ -201,6 +208,21 @@ export function useProject(projectId: string, userId: string) {
     })
   }, [projectId])
 
+  const updateDescription = useCallback((snapshotId: string, description: string) => {
+    Promise.resolve().then(async () => {
+      try {
+        const supabase = getSupabase()
+        const { error } = await supabase
+          .from('snapshots')
+          .update({ description })
+          .eq('id', snapshotId)
+        if (error) console.error('updateDescription error:', error)
+      } catch (err) {
+        console.error('updateDescription error:', err)
+      }
+    })
+  }, [projectId])
+
   const updateTitle = useCallback((title: string) => {
     Promise.resolve().then(async () => {
       try {
@@ -221,6 +243,7 @@ export function useProject(projectId: string, userId: string) {
     saveSnapshot,
     saveMessage,
     updateTips,
+    updateDescription,
     updateCover,
     updateTitle,
   }

@@ -13,7 +13,7 @@ export default function ProjectPage() {
   const params = useParams()
   const projectId = params.id as string
 
-  const { loadProject, saveSnapshot, saveMessage, updateTips, updateCover } =
+  const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover } =
     useProject(projectId, user?.id ?? '')
 
   const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(null)
@@ -87,6 +87,7 @@ export default function ProjectPage() {
       onSaveSnapshot={handleSaveSnapshot}
       onSaveMessage={handleSaveMessage}
       onUpdateTips={handleUpdateTips}
+      onUpdateDescription={updateDescription}
       onBack={() => router.push('/projects')}
     />
   )

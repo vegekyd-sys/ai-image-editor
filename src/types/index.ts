@@ -39,6 +39,7 @@ export interface Snapshot {
   tips: Tip[];            // tips associated with this image version
   messageId: string;      // assistant message ID for chat scroll targeting
   imageUrl?: string;      // Supabase Storage URL (persisted)
+  description?: string;   // agent's analysis of this image (auto-generated, persisted)
 }
 
 export interface Project {
@@ -58,6 +59,7 @@ export interface DbSnapshot {
   message_id: string;
   sort_order: number;
   created_at: string;
+  description?: string;
 }
 
 export interface DbMessage {

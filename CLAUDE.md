@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current Status
 
-Tips prompt 迭代到 V14，均分 7.4（历史最高），≥8 分占 83%。Enhance 稳定 8.0，Creative/Wild 主要瓶颈是小脸保真和执行质量。交互模型已重构为 Virtual Draft（预览→确认两步流程）。当前使用 Google API 直连。
+Tips prompt 迭代到 V14，均分 7.4（历史最高），≥8 分占 83%。Enhance 稳定 8.0，Creative/Wild 主要瓶颈是小脸保真和执行质量。交互模型已重构为 Virtual Draft（预览→确认两步流程）。当前生图走 OpenRouter（Google API 日配额用完），tips/preview 缩略图走 MOCK_AI。
 
 Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）已完成。用户认证走 Supabase Auth（Google OAuth + Magic Link），数据持久化走 Supabase Storage + Database。路由结构：`/` → `/projects` 项目列表 → `/projects/[id]` 编辑器页面。项目列表展示所有历史项目的 snapshot 缩略图，点击进入编辑器，编辑器顶部有返回按钮。新项目通过项目列表页上传图片创建。所有写入异步后台执行，编辑器体验零延迟。
+
+**v0.6 Makaron Agent（主体完成）**：Claude Sonnet 4.6（Claude Agent SDK + AWS Bedrock）作为 agent 大脑，OpenRouter Gemini 作为生图工具。GUI/CUI 双模切换已实现：GUI = 图片画布模式，CUI = 全屏对话模式（Claude App 风格，无气泡 assistant 文字 + 深色 pill user bubble）。CUI 从右侧滑入，支持 PiP 缩略图、inline 图片（持久化后重进仍显示）。`analyze_image` tool 让 Agent 用 Sonnet 原生视觉看图。AgentStatusBar 常驻底部显示打招呼文字和 Chat 按钮。上传图片不再触发 AI 分析和 CUI 弹出，直接显示 GUI + tips。Agent 消息全量持久化到 Supabase，退出重进历史对话完整恢复。Token 级流式输出（includePartialMessages: true）。多 turn 内容分气泡（analyze 前/后分开）。iOS 右滑拦截（history.pushState）。
 
 ## Verified Conclusions（已验证的硬结论）
 
@@ -52,12 +54,14 @@ No test framework is configured.
 
 ### Frontend (single-page client app)
 
-`src/app/page.tsx` redirects to `/projects`. `src/app/projects/page.tsx` is the project gallery page (fetch projects + snapshots, new project creation via image upload). `src/app/projects/[id]/page.tsx` is the editor page that loads persisted data and renders `<Editor>`. `src/components/Editor.tsx` is the main client component managing all app state: messages, snapshots (image timeline), view index, loading states, and chat panel visibility. It accepts optional persistence callbacks (`onSaveSnapshot`, `onSaveMessage`, `onUpdateTips`) and `onBack` from the project page.
+`src/app/page.tsx` redirects to `/projects`. `src/app/projects/page.tsx` is the project gallery page (fetch projects + snapshots, new project creation via image upload). `src/app/projects/[id]/page.tsx` is the editor page that loads persisted data and renders `<Editor>`. `src/components/Editor.tsx` is the main client component managing all app state: messages, snapshots (image timeline), view index, loading states, and GUI/CUI view mode. It accepts optional persistence callbacks (`onSaveSnapshot`, `onSaveMessage`, `onUpdateTips`) and `onBack` from the project page. `viewMode` state controls GUI (image canvas) vs CUI (full-screen chat) rendering.
 
 Key components in `src/components/`:
 - **ImageCanvas** — Full-viewport image display with swipe/keyboard navigation, pinch zoom, long-press before/after comparison, draft preview mode
 - **TipsBar** — Horizontal carousel with thumbnail previews (72x72), two-click interaction (preview → commit), ">" glow button for confirmation
-- **ChatBubble** — Bottom-right chat panel with markdown rendering
+- **AgentChatView** — CUI full-screen chat (Claude App style): PiP thumbnail, inline images, tool status cards, markdown rendering, slide-in/out animation
+- **AgentStatusBar** — Agent activity indicator with "聊天" button to open CUI
+- **ChatBubble** — Legacy bottom-right chat panel (kept but no longer rendered in Editor)
 - **ImageUploader** — File input with client-side compression and drag-and-drop
 
 ### Tip Interaction Model (Virtual Draft)
@@ -84,6 +88,12 @@ Key components in `src/components/`:
 - **`streamTips`**: Analyzes uploaded image against prompt templates, yields parsed Tip objects incrementally
 - **`generatePreviewImage`**: Stateless one-shot image editing for thumbnail previews
 - **Prompt templates**: Loaded from `src/lib/prompts/*.md` files (cached in production). Three-question self-check framework for each category.
+
+`src/lib/agent.ts` is the Makaron Agent module (Claude Agent SDK):
+- **MCP tools**: `generate_image` (calls Gemini via `generatePreviewImage`) and `analyze_image` (returns image content block for Sonnet's native vision)
+- **`runMakaronAgent`**: Async generator yielding SSE events (`status`, `content`, `image`, `tool_call`, `done`, `error`)
+- **Multi-turn context**: Editor prepends recent 6 messages to the prompt for conversation continuity
+- **System prompt**: `src/lib/prompts/agent.md` — workflow: vague requests → analyze first, explicit requests → generate directly
 
 ### Persistence Layer
 

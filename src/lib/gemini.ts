@@ -422,11 +422,7 @@ export async function generatePreviewImage(
   editPrompt: string,
   aspectRatio?: string,
 ): Promise<string | null> {
-  if (process.env.MOCK_AI === 'true') {
-    await new Promise(r => setTimeout(r, 500));
-    return imageBase64;
-  }
-
+  // MOCK_AI only mocks tips/chat, not image generation
   if (PROVIDER === 'openrouter') {
     return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio);
   } else {

@@ -2,13 +2,17 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Message, Tip, Snapshot } from '@/types';
-import ChatBubble from '@/components/ChatBubble';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
+import AgentStatusBar from '@/components/AgentStatusBar';
+import AgentChatView from '@/components/AgentChatView';
+import { streamAgent } from '@/lib/agentStream';
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
 }
+
+const AGENT_GREETING = 'Hi! 想怎么编辑这张照片？';
 
 /**
  * Ensure an image is a base64 data URL.
@@ -49,57 +53,6 @@ function compressClientSide(file: File, maxSize = 1024, quality = 0.85): Promise
   });
 }
 
-async function streamChat(
-  body: {
-    sessionId: string;
-    message: string;
-    image?: string;
-    wantImage?: boolean;
-    aspectRatio?: string;
-    reset?: boolean;
-  },
-  callbacks: {
-    onContent: (text: string) => void;
-    onImage: (image: string) => void;
-  }
-): Promise<void> {
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) throw new Error('Chat request failed');
-
-  const reader = res.body!.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    let boundary;
-    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-      const message = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      if (message.startsWith('data: ')) {
-        let data;
-        try {
-          data = JSON.parse(message.slice(6));
-        } catch {
-          continue;
-        }
-        switch (data.type) {
-          case 'content': callbacks.onContent(data.text); break;
-          case 'image': callbacks.onImage(data.image); break;
-          case 'error': throw new Error(data.message || 'Stream error');
-        }
-      }
-    }
-  }
-}
 
 interface EditorProps {
   projectId?: string;
@@ -109,6 +62,7 @@ interface EditorProps {
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number) => void;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
+  onUpdateDescription?: (snapshotId: string, description: string) => void;
   onBack?: () => void;
 }
 
@@ -120,31 +74,29 @@ export default function Editor({
   onSaveSnapshot,
   onSaveMessage,
   onUpdateTips,
+  onUpdateDescription,
   onBack,
 }: EditorProps = {}) {
-  const [sessionId] = useState(() => projectId || generateId());
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
-  const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isTipsFetching, setIsTipsFetching] = useState(false);
   const [viewIndex, setViewIndex] = useState(0);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [lastSeenMsgCount, setLastSeenMsgCount] = useState(0);
+  const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
+  const [isAgentActive, setIsAgentActive] = useState(false);
+  const [agentStatus, setAgentStatus] = useState(AGENT_GREETING);
+  const agentAbortRef = useRef<AbortController>(new AbortController());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
+  // Snapshots pending auto-analysis after current agent run finishes
+  const pendingAnalysisRef = useRef<{ id: string; image: string }[]>([]);
 
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
   const viewIndexRef = useRef(viewIndex);
   viewIndexRef.current = viewIndex;
-
-  const assistantMsgCount = messages.filter((m) => m.role === 'assistant').length;
-  const assistantMsgCountRef = useRef(assistantMsgCount);
-  assistantMsgCountRef.current = assistantMsgCount;
-  const hasUnread = assistantMsgCount > lastSeenMsgCount;
 
   // Draft mode: draftParentIndex !== null means a virtual draft entry exists in timeline
   const isDraft = draftParentIndex !== null;
@@ -297,10 +249,8 @@ export default function Editor({
                 setSnapshots((prev) => prev.map((s) =>
                   s.id === snapshotId ? { ...s, tips: [...s.tips, tip] } : s
                 ));
-                // Auto-close chat panel on first tip arrival
                 if (!firstTipReceived) {
                   firstTipReceived = true;
-                  setChatOpen(false);
                 }
                 // Fire preview generation immediately
                 generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
@@ -349,27 +299,56 @@ export default function Editor({
     categories.forEach(cat => fetchCategory(cat));
   }, [generatePreviewForTip, onUpdateTips]);
 
-  const handleSendMessage = useCallback(async (text: string, image?: string) => {
-    let uploadSnapshotId: string | undefined;
-    const isUpload = !!image;
+  // Auto-analyze a snapshot: runs silently in background, stores result in snapshot.description only
+  const runAutoAnalysis = useCallback(async (
+    snapshotId: string,
+    imageBase64: string,
+    context: 'initial' | 'post-edit' = 'initial',
+  ) => {
+    if (!projectId) return;
 
-    if (isUpload) {
-      uploadSnapshotId = generateId();
-      const immediateSnapshot: Snapshot = {
-        id: uploadSnapshotId,
-        image,
-        tips: [],
-        messageId: '',
-      };
-      setSnapshots([immediateSnapshot]);
-      snapshotsRef.current = [immediateSnapshot];
-      setViewIndex(0);
-      prevTimelineLen.current = 1;
-      onSaveSnapshot?.(immediateSnapshot, 0);
+    setIsAgentActive(true);
+    setAgentStatus('分析图片中...');
+    agentAbortRef.current = new AbortController();
+
+    let description = '';
+
+    try {
+      await streamAgent(
+        { prompt: '', image: imageBase64, projectId, analysisOnly: true, analysisContext: context },
+        {
+          onStatus: (s) => setAgentStatus(s),
+          onContent: (delta) => { description += delta; },
+          onNewTurn: () => {},
+          onImage: () => {},
+          onToolCall: () => {},
+          onDone: () => {
+            if (description) {
+              setSnapshots((prev) => prev.map((s) =>
+                s.id === snapshotId ? { ...s, description } : s
+              ));
+              onUpdateDescription?.(snapshotId, description);
+            }
+            setAgentStatus(AGENT_GREETING);
+          },
+          onError: () => {},
+        },
+        agentAbortRef.current.signal,
+      );
+    } catch (err) {
+      console.error('Auto-analysis failed:', err);
+    } finally {
+      setIsAgentActive(false);
     }
+  }, [projectId, onUpdateDescription]);
 
-    addMessage('user', text, image);
+  // Agent request: route user message through Makaron Agent
+  const handleAgentRequest = useCallback(async (text: string) => {
+    const currentImage = snapshotsRef.current[viewIndexRef.current]?.image;
+    if (!currentImage || !projectId) return;
 
+    const imageBase64 = await ensureBase64(currentImage);
+    addMessage('user', text);
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
       id: assistantMsgId,
@@ -378,80 +357,121 @@ export default function Editor({
       timestamp: Date.now(),
     }]);
 
-    if (uploadSnapshotId) {
-      setSnapshots((prev) =>
-        prev.map((s) =>
-          s.id === uploadSnapshotId ? { ...s, messageId: assistantMsgId } : s
-        )
-      );
-    }
+    // Auto-switch to CUI
+    setViewMode('cui');
+    setIsAgentActive(true);
+    setAgentStatus('Agent 正在思考...');
+    agentAbortRef.current = new AbortController();
 
-    setIsLoading(true);
+    // Mutable local var so onNewTurn can point content to a fresh message
+    let currentMsgId = assistantMsgId;
+    // Track all assistant message IDs created in this run for persistence on done
+    const agentMsgIds: string[] = [assistantMsgId];
 
-    // Auto-open chat panel on upload so user sees streaming analysis
-    if (isUpload) {
-      setChatOpen(true);
-      setLastSeenMsgCount(assistantMsgCountRef.current + 1);
-    }
+    // Include pre-computed image description if available
+    const currentDescription = snapshotsRef.current[viewIndexRef.current]?.description;
+    const descriptionContext = currentDescription
+      ? `[图片分析结果]\n${currentDescription}\n\n`
+      : '';
 
-    // Upload: start tips fetch after a short delay so the chat analysis
-    // gets priority (avoids API rate limit contention with 4 concurrent requests)
-    if (uploadSnapshotId && image) {
-      const snapId = uploadSnapshotId;
-      const img = image;
-      setTimeout(() => fetchTipsForSnapshot(snapId, img), 500);
-    }
+    // Build multi-turn context: only include previous user messages
+    const prevUserMsgs = messages
+      .filter(m => m.role === 'user' && m.content)
+      .slice(-4)
+      .map(m => `- "${m.content.slice(0, 150)}"`)
+      .join('\n');
+    const historyContext = prevUserMsgs
+      ? `[最近请求记录]\n${prevUserMsgs}\n\n`
+      : '';
 
-    // For non-upload chat messages: send the current image + wantImage so
-    // the model can generate edited images when the user asks for edits
-    const rawChatImage = isUpload
-      ? image
-      : snapshotsRef.current[viewIndexRef.current]?.image || undefined;
-    const chatImage = rawChatImage ? await ensureBase64(rawChatImage) : undefined;
-    const chatWantImage = !isUpload && !!chatImage;
+    const fullPrompt = `${descriptionContext}${historyContext}[当前请求]\n${text}`;
 
     try {
-      await streamChat(
+      await streamAgent(
+        { prompt: fullPrompt, image: imageBase64, projectId },
         {
-          sessionId,
-          message: text,
-          image: chatImage,
-          wantImage: chatWantImage,
-          reset: isUpload,
-        },
-        {
+          onStatus: (status) => setAgentStatus(status),
+          onNewTurn: () => {
+            const newId = generateId();
+            currentMsgId = newId;
+            agentMsgIds.push(newId);
+            setMessages((prev) => [...prev, {
+              id: newId,
+              role: 'assistant' as const,
+              content: '',
+              timestamp: Date.now(),
+            }]);
+          },
           onContent: (delta) => {
+            const id = currentMsgId;
             setMessages((prev) => prev.map((m) =>
-              m.id === assistantMsgId ? { ...m, content: m.content + delta } : m
+              m.id === id ? { ...m, content: m.content + delta } : m
             ));
           },
           onImage: (imageData) => {
-            // Image generated in chat (e.g. model decided to edit)
             const snapId = generateId();
             const newSnapshot: Snapshot = {
               id: snapId,
               image: imageData,
               tips: [],
-              messageId: assistantMsgId,
+              messageId: currentMsgId,
             };
             setSnapshots((prev) => [...prev, newSnapshot]);
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length);
-            // Start tips fetch immediately when image arrives
             fetchTipsForSnapshot(snapId, imageData);
+            setAgentStatus('图片已生成');
+            const id = currentMsgId;
+            setMessages((prev) => prev.map((m) =>
+              m.id === id ? { ...m, image: imageData } : m
+            ));
+            // Queue auto-analysis of the new snapshot after this agent run finishes
+            pendingAnalysisRef.current.push({ id: snapId, image: imageData });
           },
-        }
+          onToolCall: () => {
+            // status is already set via onStatus from agent.ts
+          },
+          onDone: () => {
+            setAgentStatus('完成');
+            // Persist all assistant messages created in this agent run
+            setMessages((prev) => {
+              const toSave = prev.filter(m => agentMsgIds.includes(m.id) && m.content);
+              toSave.forEach(m => onSaveMessage?.(m));
+              return prev;
+            });
+            // After a short delay, run auto-analysis on any newly generated snapshots
+            const pending = [...pendingAnalysisRef.current];
+            pendingAnalysisRef.current = [];
+            if (pending.length > 0) {
+              setTimeout(() => {
+                pending.forEach(({ id, image }) => runAutoAnalysis(id, image, 'post-edit'));
+              }, 800);
+            } else {
+              setTimeout(() => setAgentStatus(AGENT_GREETING), 2000);
+            }
+          },
+          onError: (msg) => {
+            console.error('Agent error:', msg);
+            const id = currentMsgId;
+            setMessages((prev) => {
+              const updated = prev.map((m) =>
+                m.id === id ? { ...m, content: m.content || `出错了，请重试` } : m
+              );
+              // Persist whatever content we have
+              const toSave = updated.filter(m => agentMsgIds.includes(m.id) && m.content);
+              toSave.forEach(m => onSaveMessage?.(m));
+              return updated;
+            });
+          },
+        },
+        agentAbortRef.current.signal,
       );
     } catch (err) {
-      console.error('Send message error:', err);
-      setMessages((prev) => prev.map((m) =>
-        m.id === assistantMsgId
-          ? { ...m, content: m.content || 'Something went wrong. Please try again.' }
-          : m
-      ));
+      console.error('Agent request failed:', err);
     } finally {
-      setIsLoading(false);
+      setIsAgentActive(false);
     }
-  }, [addMessage, sessionId, fetchTipsForSnapshot, onSaveSnapshot]);
+  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages]);
+
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
@@ -554,14 +574,16 @@ export default function Editor({
   const compressAndUpload = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) return;
 
-    // Cancel any in-flight preview generations and dismiss draft
     previewAbortRef.current.abort();
     setPreviewingTipIndex(null);
     setDraftParentIndex(null);
+    setMessages([]);
 
     const previewUrl = URL.createObjectURL(file);
-    const previewId = generateId();
-    setSnapshots([{ id: previewId, image: previewUrl, tips: [], messageId: '' }]);
+    const snapId = generateId();
+    const previewSnapshot: Snapshot = { id: snapId, image: previewUrl, tips: [], messageId: '' };
+    setSnapshots([previewSnapshot]);
+    snapshotsRef.current = [previewSnapshot];
     setViewIndex(0);
     prevTimelineLen.current = 1;
 
@@ -578,22 +600,36 @@ export default function Editor({
       }
       URL.revokeObjectURL(previewUrl);
 
-      handleSendMessage('Please analyze this image and give me editing tips.', base64);
+      const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
+      setSnapshots([newSnapshot]);
+      snapshotsRef.current = [newSnapshot];
+      onSaveSnapshot?.(newSnapshot, 0);
+      fetchTipsForSnapshot(snapId, base64);
+      // Auto-analyze the uploaded photo
+      runAutoAnalysis(snapId, base64);
     } catch (err) {
       console.error('Image upload error:', err);
       URL.revokeObjectURL(previewUrl);
-      addMessage('assistant', 'Failed to process image. Please try a different photo.');
     }
-  }, [handleSendMessage, addMessage]);
+  }, [fetchTipsForSnapshot, onSaveSnapshot]);
 
   // Auto-trigger upload when a pending image is passed (new project from projects page)
   const pendingHandled = useRef(false);
   useEffect(() => {
     if (pendingImage && !pendingHandled.current) {
       pendingHandled.current = true;
-      handleSendMessage('Please analyze this image and give me editing tips.', pendingImage);
+      const snapId = generateId();
+      const newSnapshot: Snapshot = { id: snapId, image: pendingImage, tips: [], messageId: '' };
+      setSnapshots([newSnapshot]);
+      snapshotsRef.current = [newSnapshot];
+      prevTimelineLen.current = 1;
+      setViewIndex(0);
+      onSaveSnapshot?.(newSnapshot, 0);
+      fetchTipsForSnapshot(snapId, pendingImage);
+      // Auto-analyze the uploaded photo
+      runAutoAnalysis(snapId, pendingImage);
     }
-  }, [pendingImage, handleSendMessage]);
+  }, [pendingImage, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
 
   // Preload adjacent snapshots (not yet in DOM) so swipe transitions are instant
   useEffect(() => {
@@ -639,10 +675,22 @@ export default function Editor({
     }
   }, [timeline, viewIndex]);
 
-  const handleChatOpen = useCallback(() => {
-    setChatOpen(true);
-    setLastSeenMsgCount(assistantMsgCount);
-  }, [assistantMsgCount]);
+  // CUI: tap inline image → find snapshot → switch to GUI at that index
+  const handleImageTap = useCallback((messageId: string) => {
+    const idx = snapshots.findIndex(s => s.messageId === messageId);
+    if (idx >= 0) setViewIndex(idx);
+    setViewMode('gui');
+  }, [snapshots]);
+
+  // Intercept browser/iOS back gesture when CUI is open:
+  // push a history state on enter, listen for popstate to go back to GUI.
+  useEffect(() => {
+    if (viewMode !== 'cui') return;
+    window.history.pushState({ makaronCui: true }, '');
+    const handlePop = () => setViewMode('gui');
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, [viewMode]);
 
   return (
     <div className="h-dvh bg-black relative overflow-hidden flex flex-col">
@@ -658,111 +706,109 @@ export default function Editor({
         }}
       />
 
-      {/* Canvas area (fills remaining space) */}
-      <div className="flex-1 relative min-h-0">
-        {timeline.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors"
-            >
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="9" cy="9" r="2" />
-                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-              </svg>
-              <span className="text-lg font-medium">Tap to upload a photo</span>
-            </button>
-          </div>
-        ) : (
-          <ImageCanvas
-            timeline={timeline}
-            currentIndex={viewIndex}
-            onIndexChange={handleIndexChange}
-            isEditing={isEditing}
-            isDraft={isViewingDraft}
-            onDismissDraft={dismissDraft}
-            previousImage={previousImage}
-          />
-        )}
-
-        {/* Top toolbar */}
-        {snapshots.length > 0 && (
-          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
-            <div className="flex items-center gap-1">
-              {onBack && (
+      {/* GUI mode */}
+      {viewMode === 'gui' && (
+        <>
+          {/* Canvas area (fills remaining space) */}
+          <div className="flex-1 relative min-h-0">
+            {timeline.length === 0 ? (
+              <div className="absolute inset-0 flex items-center justify-center">
                 <button
-                  onClick={onBack}
-                  className="text-white/80 hover:text-white p-2"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors"
                 >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="9" cy="9" r="2" />
+                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
                   </svg>
+                  <span className="text-lg font-medium">Tap to upload a photo</span>
                 </button>
-              )}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="text-white/80 hover:text-white p-2"
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-            </div>
+              </div>
+            ) : (
+              <ImageCanvas
+                timeline={timeline}
+                currentIndex={viewIndex}
+                onIndexChange={handleIndexChange}
+                isEditing={isEditing}
+                isDraft={isViewingDraft}
+                onDismissDraft={dismissDraft}
+                previousImage={previousImage}
+              />
+            )}
 
-            <div className="flex items-center gap-2">
-              {(viewIndex > 0 || isViewingDraft) && (
-                <button
-                  onClick={handleDownload}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium text-white bg-fuchsia-500/20 backdrop-blur-sm border border-fuchsia-500/30"
-                >
-                  Save
-                </button>
-              )}
-            </div>
+            {/* Top toolbar */}
+            {snapshots.length > 0 && (
+              <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
+                <div className="flex items-center gap-1">
+                  {onBack && (
+                    <button
+                      onClick={onBack}
+                      className="text-white/80 hover:text-white p-2"
+                    >
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M19 12H5M12 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-white/80 hover:text-white p-2"
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {(viewIndex > 0 || isViewingDraft) && (
+                    <button
+                      onClick={handleDownload}
+                      className="px-3 py-1.5 rounded-full text-xs font-medium text-white bg-fuchsia-500/20 backdrop-blur-sm border border-fuchsia-500/30"
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Bottom tips bar */}
-      {snapshots.length > 0 && (
-        <div className="flex-shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent">
-          <TipsBar
-            tips={currentTips}
-            isLoading={isLoading || isTipsFetching}
-            isEditing={isEditing}
-            onTipClick={handleTipInteraction}
-            onRetryPreview={handleRetryPreview}
-            previewingIndex={isViewingDraft ? previewingTipIndex : null}
-          />
-        </div>
-      )}
-
-      {/* Chat button — fixed bottom-right */}
-      {snapshots.length > 0 && (
-        <button
-          onClick={handleChatOpen}
-          className="fixed bottom-[env(safe-area-inset-bottom)] right-3 mb-3 z-20 w-10 h-10 rounded-full bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-500/25 flex items-center justify-center hover:bg-fuchsia-500 active:scale-95 transition-all"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-          {hasUnread && (
-            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-fuchsia-300 rounded-full border-2 border-black" />
+          {/* Bottom bar: Agent status bar (always) + Tips */}
+          {snapshots.length > 0 && (
+            <div className="flex-shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent">
+              <AgentStatusBar
+                statusText={agentStatus}
+                isActive={isAgentActive}
+                onOpenChat={() => setViewMode('cui')}
+              />
+              <TipsBar
+                tips={currentTips}
+                isLoading={isTipsFetching}
+                isEditing={isEditing}
+                onTipClick={handleTipInteraction}
+                onRetryPreview={handleRetryPreview}
+                previewingIndex={isViewingDraft ? previewingTipIndex : null}
+              />
+            </div>
           )}
-        </button>
+        </>
       )}
 
-      {/* Chat panel */}
-      <ChatBubble
-        messages={messages}
-        isLoading={isLoading || isEditing}
-        isOpen={chatOpen}
-        onClose={() => setChatOpen(false)}
-        onSendMessage={handleSendMessage}
-        hasImage={snapshots.length > 0}
-        scrollToMessageId={snapshots[viewIndex]?.messageId}
-      />
+      {/* CUI mode */}
+      {viewMode === 'cui' && (
+        <AgentChatView
+          messages={messages}
+          isAgentActive={isAgentActive}
+          agentStatus={agentStatus}
+          currentImage={snapshots[viewIndex]?.image}
+          onSendMessage={handleAgentRequest}
+          onBack={() => window.history.back()}
+          onPipTap={() => window.history.back()}
+          onImageTap={handleImageTap}
+        />
+      )}
     </div>
   );
 }

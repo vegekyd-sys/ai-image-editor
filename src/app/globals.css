@@ -99,3 +99,19 @@ body {
 .animate-shimmer-glow {
   animation: shimmer-glow 2.5s ease-in-out infinite;
 }
+
+/* CUI slide animations */
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes slideOutRight {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out forwards;
+}
+.animate-slide-out-right {
+  animation: slideOutRight 0.3s ease-in forwards;
+}

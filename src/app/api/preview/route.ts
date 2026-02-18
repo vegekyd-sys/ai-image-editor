@@ -24,6 +24,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Mock mode: return original image unchanged (saves API cost for tip thumbnails)
+    if (process.env.MOCK_AI === 'true') {
+      return new Response(
+        JSON.stringify({ image }),
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const previewImage = await generatePreviewImage(image, editPrompt, aspectRatio);
 
     if (!previewImage) {
