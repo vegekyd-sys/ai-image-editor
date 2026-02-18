@@ -18,6 +18,12 @@ export default function ProjectPage() {
 
   const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(null)
   const [initialMessages, setInitialMessages] = useState<Message[] | null>(null)
+  const [pendingImage] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const pending = sessionStorage.getItem('pendingImage')
+    if (pending) sessionStorage.removeItem('pendingImage')
+    return pending
+  })
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -77,6 +83,7 @@ export default function ProjectPage() {
       projectId={projectId}
       initialSnapshots={initialSnapshots ?? []}
       initialMessages={initialMessages ?? []}
+      pendingImage={pendingImage ?? undefined}
       onSaveSnapshot={handleSaveSnapshot}
       onSaveMessage={handleSaveMessage}
       onUpdateTips={handleUpdateTips}

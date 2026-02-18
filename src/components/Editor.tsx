@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Message, Tip, Snapshot } from '@/types';
 import ChatBubble from '@/components/ChatBubble';
 import ImageCanvas from '@/components/ImageCanvas';
@@ -105,6 +105,7 @@ interface EditorProps {
   projectId?: string;
   initialSnapshots?: Snapshot[];
   initialMessages?: Message[];
+  pendingImage?: string;
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number) => void;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
@@ -115,6 +116,7 @@ export default function Editor({
   projectId,
   initialSnapshots,
   initialMessages,
+  pendingImage,
   onSaveSnapshot,
   onSaveMessage,
   onUpdateTips,
@@ -583,6 +585,26 @@ export default function Editor({
       addMessage('assistant', 'Failed to process image. Please try a different photo.');
     }
   }, [handleSendMessage, addMessage]);
+
+  // Auto-trigger upload when a pending image is passed (new project from projects page)
+  const pendingHandled = useRef(false);
+  useEffect(() => {
+    if (pendingImage && !pendingHandled.current) {
+      pendingHandled.current = true;
+      handleSendMessage('Please analyze this image and give me editing tips.', pendingImage);
+    }
+  }, [pendingImage, handleSendMessage]);
+
+  // Preload adjacent snapshots (not yet in DOM) so swipe transitions are instant
+  useEffect(() => {
+    for (const offset of [-1, 1]) {
+      const src = timeline[viewIndex + offset];
+      if (src && src.startsWith('http')) {
+        const img = new Image();
+        img.src = src;
+      }
+    }
+  }, [viewIndex, timeline]);
 
   const handleDownload = useCallback(async () => {
     const img = timeline[viewIndex];

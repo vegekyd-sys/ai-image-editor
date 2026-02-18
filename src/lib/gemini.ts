@@ -236,6 +236,18 @@ export async function* chatStreamWithModel(
   wantImage?: boolean,
   aspectRatio?: string,
 ): AsyncGenerator<ChatStreamEvent> {
+  if (process.env.MOCK_AI === 'true') {
+    const mockText = imageBase64
+      ? '这是一张很棒的照片！构图自然，色彩和谐。我为你准备了几组编辑建议，可以从下方卡片中选择预览效果。'
+      : '好的，我来帮你处理。';
+    for (let i = 0; i < mockText.length; i += 3) {
+      await new Promise(r => setTimeout(r, 30));
+      yield { type: 'content', text: mockText.slice(i, i + 3) };
+    }
+    yield { type: 'done' };
+    return;
+  }
+
   if (PROVIDER === 'openrouter') {
     yield* chatStreamOpenRouter(projectId, message, imageBase64, wantImage, aspectRatio);
   } else {
@@ -410,6 +422,11 @@ export async function generatePreviewImage(
   editPrompt: string,
   aspectRatio?: string,
 ): Promise<string | null> {
+  if (process.env.MOCK_AI === 'true') {
+    await new Promise(r => setTimeout(r, 500));
+    return imageBase64;
+  }
+
   if (PROVIDER === 'openrouter') {
     return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio);
   } else {
@@ -621,6 +638,29 @@ export async function* streamTipsByCategory(
   imageBase64: string,
   category: TipCategory,
 ): AsyncGenerator<Tip> {
+  if (process.env.MOCK_AI === 'true') {
+    const mockTips: Record<string, Tip[]> = {
+      enhance: [
+        { emoji: '🌅', label: '电影感光影', desc: '增强光影对比，营造电影级氛围。', editPrompt: 'Enhance with cinematic lighting, add warm golden hour glow, increase contrast between highlights and shadows.', category: 'enhance' },
+        { emoji: '📷', label: '胶片质感', desc: '添加柔和颗粒和复古色调。', editPrompt: 'Apply analog film look with soft grain, slightly faded blacks, and warm vintage color grading.', category: 'enhance' },
+      ],
+      creative: [
+        { emoji: '🦋', label: '蝴蝶停驻', desc: '一只蓝色蝴蝶停在肩膀上。', editPrompt: 'Add a photorealistic blue morpho butterfly perched on the shoulder, with natural shadow and lighting matching the scene.', category: 'creative' },
+        { emoji: '🌸', label: '樱花飘落', desc: '画面中飘落几片粉色花瓣。', editPrompt: 'Add several photorealistic pink cherry blossom petals gently falling through the scene with natural depth of field blur.', category: 'creative' },
+      ],
+      wild: [
+        { emoji: '🔮', label: '微缩世界', desc: '场景变成精致的微缩模型。', editPrompt: 'Transform the entire scene into a tilt-shift miniature model with exaggerated depth of field and saturated colors.', category: 'wild' },
+        { emoji: '🌊', label: '水下幻境', desc: '整个画面沉入梦幻的水下世界。', editPrompt: 'Transform the scene to appear submerged underwater with light rays filtering from above, floating bubbles, and caustic light patterns.', category: 'wild' },
+      ],
+    };
+    const tips = mockTips[category] || mockTips.enhance;
+    for (const tip of tips) {
+      await new Promise(r => setTimeout(r, 200));
+      yield tip;
+    }
+    return;
+  }
+
   if (PROVIDER === 'openrouter') {
     yield* streamTipsByCategoryOpenRouter(imageBase64, category);
   } else {

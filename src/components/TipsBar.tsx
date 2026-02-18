@@ -1,7 +1,7 @@
 'use client';
 
+import { useState } from 'react';
 import { Tip } from '@/types';
-import { getThumbnailUrl } from '@/lib/supabase/storage';
 
 interface TipsBarProps {
   tips: Tip[];
@@ -13,6 +13,66 @@ interface TipsBarProps {
 }
 
 const CATEGORY_ORDER: Tip['category'][] = ['enhance', 'creative', 'wild'];
+
+function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
+  tip: Tip;
+  onRetryPreview?: (tip: Tip, index: number) => void;
+  originalIndex: number;
+}) {
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const isStorageUrl = tip.previewImage?.startsWith('http') ?? false;
+
+  if (tip.previewStatus === 'done' && tip.previewImage) {
+    return (
+      <div className="w-full h-full relative">
+        {isStorageUrl && !imgLoaded && (
+          <div className="absolute inset-0 bg-white/5 animate-pulse" />
+        )}
+        <img
+          src={tip.previewImage}
+          alt=""
+          className={`w-full h-full object-cover ${isStorageUrl && !imgLoaded ? 'opacity-0' : ''}`}
+          loading="lazy"
+          onLoad={() => setImgLoaded(true)}
+        />
+      </div>
+    );
+  }
+
+  if (tip.previewStatus === 'generating') {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-fuchsia-400/30 border-t-fuchsia-400 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (tip.previewStatus === 'error') {
+    return (
+      <div
+        className="w-full h-full flex flex-col items-center justify-center gap-0.5 cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRetryPreview?.(tip, originalIndex);
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40">
+          <path d="M21 2v6h-6" />
+          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+          <path d="M3 22v-6h6" />
+          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+        </svg>
+        <span className="text-[9px] text-white/30">重试</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full flex items-center justify-center text-2xl opacity-50">
+      {tip.emoji}
+    </div>
+  );
+}
 
 export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onRetryPreview, previewingIndex }: TipsBarProps) {
   // Flatten tips in category order, tracking original indices
@@ -52,37 +112,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onRetr
               <div className="flex">
                 {/* Thumbnail */}
                 <div className="w-[72px] h-[72px] flex-shrink-0 bg-white/5 relative overflow-hidden">
-                  {tip.previewStatus === 'done' && tip.previewImage ? (
-                    <img
-                      src={tip.previewImage.startsWith('http') ? getThumbnailUrl(tip.previewImage, 150) : tip.previewImage}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                  ) : tip.previewStatus === 'generating' ? (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="w-5 h-5 border-2 border-fuchsia-400/30 border-t-fuchsia-400 rounded-full animate-spin" />
-                    </div>
-                  ) : tip.previewStatus === 'error' ? (
-                    <div
-                      className="w-full h-full flex flex-col items-center justify-center gap-0.5 cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRetryPreview?.(tip, originalIndex);
-                      }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40">
-                        <path d="M21 2v6h-6" />
-                        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-                        <path d="M3 22v-6h6" />
-                        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-                      </svg>
-                      <span className="text-[9px] text-white/30">重试</span>
-                    </div>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-2xl opacity-50">
-                      {tip.emoji}
-                    </div>
-                  )}
+                  <TipThumbnail tip={tip} onRetryPreview={onRetryPreview} originalIndex={originalIndex} />
                 </div>
 
                 {/* Text */}

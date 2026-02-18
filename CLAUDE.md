@@ -46,6 +46,7 @@ No test framework is configured.
 - `GOOGLE_API_KEY` (required) — Google Gemini API key
 - `AI_PROVIDER` — `'google'` (default) or `'openrouter'`
 - `OPENROUTER_API_KEY` — Required when `AI_PROVIDER=openrouter`
+- `MOCK_AI` — Set to `'true'` to mock all AI calls in `gemini.ts` (chat returns mock text, tips returns hardcoded 6 tips, preview returns original image). 不需要测试 AI 功能时使用，节省 Gemini API 费用。仅在 `.env.local` 中设置，Vercel 线上不设置。
 
 ## Architecture
 

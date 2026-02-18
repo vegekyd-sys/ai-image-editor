@@ -11,8 +11,11 @@ interface LoadedProject {
   messages: Message[]
 }
 
+const MAX_UPLOAD_ATTEMPTS = 3
+
 export function useProject(projectId: string, userId: string) {
   const supabaseRef = useRef<SupabaseClient | null>(null)
+  const uploadAttemptsRef = useRef<Map<string, number>>(new Map())
 
   function getSupabase() {
     if (!supabaseRef.current) {
@@ -149,8 +152,18 @@ export function useProject(projectId: string, userId: string) {
               .reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)
               .toString(36).replace('-', 'n')
             const filename = `preview-${snapshotId}-${hash}.jpg`
+
+            // Skip if already failed too many times
+            const attempts = uploadAttemptsRef.current.get(filename) ?? 0
+            if (attempts >= MAX_UPLOAD_ATTEMPTS) {
+              const { previewImage, ...noPreview } = rest
+              return noPreview
+            }
+
+            uploadAttemptsRef.current.set(filename, attempts + 1)
             const imageUrl = await uploadImage(supabase, userId, projectId, filename, rest.previewImage)
             if (imageUrl) {
+              uploadAttemptsRef.current.delete(filename) // reset on success
               return { ...rest, previewImage: imageUrl }
             }
             // Upload failed — strip base64 (too large for jsonb)

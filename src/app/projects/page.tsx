@@ -4,7 +4,6 @@ import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { uploadImage, getThumbnailUrl } from '@/lib/supabase/storage'
 
 interface ProjectWithSnapshots {
   id: string
@@ -146,7 +145,7 @@ export default function ProjectsPage() {
 
       const supabase = createClient()
 
-      // Create project
+      // Create project (no snapshot yet — editor will handle the full upload flow)
       const { data: project, error: pErr } = await supabase
         .from('projects')
         .insert({ user_id: user.id, title: '未命名项目' })
@@ -155,27 +154,8 @@ export default function ProjectsPage() {
 
       if (pErr || !project) throw new Error('Failed to create project')
 
-      // Upload image to Storage
-      const imageUrl = await uploadImage(supabase, user.id, project.id, 'snapshot-original.jpg', base64)
-      if (!imageUrl) throw new Error('Failed to upload image')
-
-      // Create initial snapshot
-      const snapshotId = crypto.randomUUID()
-      const { error: sErr } = await supabase.from('snapshots').insert({
-        id: snapshotId,
-        project_id: project.id,
-        image_url: imageUrl,
-        tips: [],
-        message_id: '',
-        sort_order: 0,
-      })
-      if (sErr) console.error('Failed to create snapshot:', sErr)
-
-      // Update cover
-      await supabase
-        .from('projects')
-        .update({ cover_url: imageUrl })
-        .eq('id', project.id)
+      // Store image in sessionStorage for the editor to pick up
+      sessionStorage.setItem('pendingImage', base64)
 
       router.push(`/projects/${project.id}`)
     } catch (err) {
@@ -311,7 +291,7 @@ function ProjectRow({
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={getThumbnailUrl(snap.image_url, 150)}
+              src={snap.image_url}
               alt=""
               className="w-full h-full object-cover"
               loading="lazy"
