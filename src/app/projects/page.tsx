@@ -176,7 +176,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-black text-white">
+    <div className="min-h-dvh bg-black text-white flex flex-col">
       <input
         ref={fileInputRef}
         type="file"
@@ -189,50 +189,46 @@ export default function ProjectsPage() {
         }}
       />
 
-      {/* Header */}
-      <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">我的项目</h1>
+      {/* Upper section — New project hero area */}
+      <div className="min-h-[55dvh] flex flex-col items-center justify-center relative overflow-hidden">
+        {/* Radial glow background */}
+        <div className="absolute inset-0 pointer-events-none" style={{
+          background: 'radial-gradient(ellipse 60% 40% at 50% 50%, rgba(217,70,239,0.08) 0%, transparent 70%)'
+        }} />
+
+        {/* Sign out button */}
         <button
           onClick={() => signOut()}
-          className="text-xs text-white/40 hover:text-white/60 transition-colors"
+          className="absolute top-4 right-4 text-xs text-white/30 hover:text-white/50 transition-colors z-10"
         >
           退出登录
         </button>
-      </div>
 
-      {/* New project upload area */}
-      <div className="px-4 pb-4">
+        {/* Glowing icon button */}
         <button
           onClick={() => !creating && fileInputRef.current?.click()}
           disabled={creating}
-          className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-white/10 hover:border-fuchsia-500/40 transition-colors flex flex-col items-center justify-center gap-3 bg-surface/50 disabled:opacity-50"
+          className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-fuchsia-500/25 to-fuchsia-800/20 border border-fuchsia-500/25 flex items-center justify-center animate-shimmer-glow disabled:animate-none transition-all active:scale-95"
         >
           {creating ? (
-            <>
-              <svg className="animate-spin h-8 w-8 text-fuchsia-500" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span className="text-sm text-white/40">创建中...</span>
-            </>
+            <svg className="animate-spin h-10 w-10 text-fuchsia-400" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
           ) : (
-            <>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/30">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="9" cy="9" r="2" />
-                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-              </svg>
-              <div className="text-center">
-                <p className="text-sm font-medium text-white/50">上传照片开始新项目</p>
-                <p className="text-xs text-white/25 mt-1">点击选择图片</p>
-              </div>
-            </>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-fuchsia-400">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
           )}
         </button>
+        <p className="mt-5 text-sm text-white/25 tracking-wide">
+          {creating ? '创建中...' : '上传照片开始新项目'}
+        </p>
       </div>
 
-      {/* Project list */}
-      <div className="px-4 pb-8">
+      {/* Lower section — Project list */}
+      <div className="flex-1 px-4 pb-8">
         {loadingProjects ? (
           <div className="flex justify-center py-12">
             <svg className="animate-spin h-5 w-5 text-white/20" viewBox="0 0 24 24">
@@ -242,10 +238,10 @@ export default function ProjectsPage() {
           </div>
         ) : projects.length === 0 ? (
           <div className="text-center py-12 text-white/20 text-sm">
-            还没有项目，上传一张照片开始吧
+            还没有项目
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-6">
             {projects.map((project) => (
               <ProjectRow
                 key={project.id}
@@ -283,22 +279,33 @@ function ProjectRow({
       </div>
 
       {/* Snapshot thumbnails — horizontal scroll */}
-      <div className="flex gap-1.5 overflow-x-auto hide-scrollbar">
-        {project.snapshots.map((snap) => (
-          <div
-            key={snap.id}
-            className="flex-shrink-0 w-[72px] h-[72px] rounded-lg overflow-hidden bg-surface-secondary"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={snap.image_url}
-              alt=""
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
-          </div>
+      <div className="flex gap-2.5 overflow-x-auto hide-scrollbar">
+        {project.snapshots.map((snap, i) => (
+          <Thumbnail key={snap.id} url={snap.image_url} isFirst={i === 0} />
         ))}
       </div>
     </button>
+  )
+}
+
+function Thumbnail({ url, isFirst }: { url: string; isFirst: boolean }) {
+  const [loaded, setLoaded] = useState(false)
+  return (
+    <div
+      className={`relative flex-shrink-0 w-32 h-32 rounded-2xl overflow-hidden ${
+        isFirst ? 'ring-2 ring-fuchsia-500/40' : ''
+      }`}
+    >
+      {/* Placeholder — always behind the image */}
+      <div className={`absolute inset-0 bg-surface-secondary ${loaded ? '' : 'animate-pulse'}`} />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt=""
+        className={`relative w-full h-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+      />
+    </div>
   )
 }

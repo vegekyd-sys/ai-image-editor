@@ -86,3 +86,16 @@ body {
 .animate-glow {
   animation: glow 1.5s ease-in-out infinite;
 }
+
+/* Shimmer glow for new project icon */
+@keyframes shimmer-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px 4px rgba(217,70,239,0.15), inset 0 0 20px rgba(217,70,239,0.05);
+  }
+  50% {
+    box-shadow: 0 0 40px 8px rgba(217,70,239,0.35), inset 0 0 30px rgba(217,70,239,0.1);
+  }
+}
+.animate-shimmer-glow {
+  animation: shimmer-glow 2.5s ease-in-out infinite;
+}
