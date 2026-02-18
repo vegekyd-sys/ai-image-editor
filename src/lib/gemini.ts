@@ -183,8 +183,8 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-function getOrCreateGoogleSession(sessionId: string): Chat {
-  const existing = sessions.get(sessionId);
+function getOrCreateGoogleSession(projectId: string): Chat {
+  const existing = sessions.get(projectId);
   if (existing && existing.type === 'google') {
     existing.lastUsed = Date.now();
     return existing.chat;
@@ -198,12 +198,12 @@ function getOrCreateGoogleSession(sessionId: string): Chat {
     },
   });
 
-  sessions.set(sessionId, { type: 'google', chat, lastUsed: Date.now() });
+  sessions.set(projectId, { type: 'google', chat, lastUsed: Date.now() });
   return chat;
 }
 
-function getOrCreateOpenRouterSession(sessionId: string): OpenRouterSession {
-  const existing = sessions.get(sessionId);
+function getOrCreateOpenRouterSession(projectId: string): OpenRouterSession {
+  const existing = sessions.get(projectId);
   if (existing && existing.type === 'openrouter') {
     existing.lastUsed = Date.now();
     return existing;
@@ -214,12 +214,12 @@ function getOrCreateOpenRouterSession(sessionId: string): OpenRouterSession {
     messages: [{ role: 'system', content: SYSTEM_PROMPT }],
     lastUsed: Date.now(),
   };
-  sessions.set(sessionId, session);
+  sessions.set(projectId, session);
   return session;
 }
 
-export function resetSession(sessionId: string): void {
-  sessions.delete(sessionId);
+export function resetSession(projectId: string): void {
+  sessions.delete(projectId);
 }
 
 // ── Streaming Chat ──────────────────────────────────────────────
@@ -230,28 +230,28 @@ export type ChatStreamEvent =
   | { type: 'done' };
 
 export async function* chatStreamWithModel(
-  sessionId: string,
+  projectId: string,
   message: string,
   imageBase64?: string,
   wantImage?: boolean,
   aspectRatio?: string,
 ): AsyncGenerator<ChatStreamEvent> {
   if (PROVIDER === 'openrouter') {
-    yield* chatStreamOpenRouter(sessionId, message, imageBase64, wantImage, aspectRatio);
+    yield* chatStreamOpenRouter(projectId, message, imageBase64, wantImage, aspectRatio);
   } else {
-    yield* chatStreamGoogle(sessionId, message, imageBase64, wantImage, aspectRatio);
+    yield* chatStreamGoogle(projectId, message, imageBase64, wantImage, aspectRatio);
   }
 }
 
 // --- Google Provider ---
 async function* chatStreamGoogle(
-  sessionId: string,
+  projectId: string,
   message: string,
   imageBase64?: string,
   wantImage?: boolean,
   aspectRatio?: string,
 ): AsyncGenerator<ChatStreamEvent> {
-  const chat = getOrCreateGoogleSession(sessionId);
+  const chat = getOrCreateGoogleSession(projectId);
 
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
   if (imageBase64) {
@@ -290,13 +290,13 @@ async function* chatStreamGoogle(
 
 // --- OpenRouter Provider ---
 async function* chatStreamOpenRouter(
-  sessionId: string,
+  projectId: string,
   message: string,
   imageBase64?: string,
   wantImage?: boolean,
   aspectRatio?: string,
 ): AsyncGenerator<ChatStreamEvent> {
-  const session = getOrCreateOpenRouterSession(sessionId);
+  const session = getOrCreateOpenRouterSession(projectId);
 
   // Build user message
   let userContent: string | Array<Record<string, unknown>>;

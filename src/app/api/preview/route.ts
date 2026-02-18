@@ -1,10 +1,20 @@
 import { NextRequest } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { generatePreviewImage } from '@/lib/gemini';
 
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { image, editPrompt, aspectRatio } = await req.json();
 
     if (!image || !editPrompt) {

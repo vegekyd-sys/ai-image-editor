@@ -4,6 +4,7 @@ export interface Message {
   content: string;
   image?: string; // base64 data URL
   timestamp: number;
+  projectId?: string;
 }
 
 export interface ChatRequest {
@@ -37,4 +38,33 @@ export interface Snapshot {
   image: string;          // base64
   tips: Tip[];            // tips associated with this image version
   messageId: string;      // assistant message ID for chat scroll targeting
+  imageUrl?: string;      // Supabase Storage URL (persisted)
+}
+
+export interface Project {
+  id: string;
+  userId: string;
+  title: string;
+  coverUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DbSnapshot {
+  id: string;
+  project_id: string;
+  image_url: string;
+  tips: Tip[];
+  message_id: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface DbMessage {
+  id: string;
+  project_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  has_image: boolean;
+  created_at: string;
 }
