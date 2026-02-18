@@ -108,6 +108,7 @@ interface EditorProps {
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number) => void;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
+  onBack?: () => void;
 }
 
 export default function Editor({
@@ -117,6 +118,7 @@ export default function Editor({
   onSaveSnapshot,
   onSaveMessage,
   onUpdateTips,
+  onBack,
 }: EditorProps = {}) {
   const [sessionId] = useState(() => projectId || generateId());
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
@@ -642,14 +644,26 @@ export default function Editor({
         {/* Top toolbar */}
         {snapshots.length > 0 && (
           <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="text-white/80 hover:text-white p-2"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-1">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="text-white/80 hover:text-white p-2"
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              )}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-white/80 hover:text-white p-2"
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+            </div>
 
             <div className="flex items-center gap-2">
               {(viewIndex > 0 || isViewingDraft) && (

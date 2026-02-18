@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Tips prompt 迭代到 V14，均分 7.4（历史最高），≥8 分占 83%。Enhance 稳定 8.0，Creative/Wild 主要瓶颈是小脸保真和执行质量。交互模型已重构为 Virtual Draft（预览→确认两步流程）。当前使用 Google API 直连。
 
-Phase 1（认证）和 Phase 2（数据持久化）已完成。用户认证走 Supabase Auth（Google OAuth + Magic Link），数据持久化走 Supabase Storage + Database。路由结构：`/` 自动创建项目 → `/projects/[id]` 编辑器页面。所有写入异步后台执行，编辑器体验零延迟。
+Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）已完成。用户认证走 Supabase Auth（Google OAuth + Magic Link），数据持久化走 Supabase Storage + Database。路由结构：`/` → `/projects` 项目列表 → `/projects/[id]` 编辑器页面。项目列表展示所有历史项目的 snapshot 缩略图，点击进入编辑器，编辑器顶部有返回按钮。新项目通过项目列表页上传图片创建。所有写入异步后台执行，编辑器体验零延迟。
 
 ## Verified Conclusions（已验证的硬结论）
 
@@ -51,7 +51,7 @@ No test framework is configured.
 
 ### Frontend (single-page client app)
 
-`src/app/page.tsx` creates a new project and redirects to `/projects/[id]`. `src/app/projects/[id]/page.tsx` is the editor page that loads persisted data and renders `<Editor>`. `src/components/Editor.tsx` is the main client component managing all app state: messages, snapshots (image timeline), view index, loading states, and chat panel visibility. It accepts optional persistence callbacks (`onSaveSnapshot`, `onSaveMessage`, `onUpdateTips`) from the project page.
+`src/app/page.tsx` redirects to `/projects`. `src/app/projects/page.tsx` is the project gallery page (fetch projects + snapshots, new project creation via image upload). `src/app/projects/[id]/page.tsx` is the editor page that loads persisted data and renders `<Editor>`. `src/components/Editor.tsx` is the main client component managing all app state: messages, snapshots (image timeline), view index, loading states, and chat panel visibility. It accepts optional persistence callbacks (`onSaveSnapshot`, `onSaveMessage`, `onUpdateTips`) and `onBack` from the project page.
 
 Key components in `src/components/`:
 - **ImageCanvas** — Full-viewport image display with swipe/keyboard navigation, pinch zoom, long-press before/after comparison, draft preview mode

@@ -30,10 +30,10 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Logged-in user visiting /login → redirect to /
+  // Logged-in user visiting /login → redirect to /projects
   if (user && pathname === '/login') {
     const url = request.nextUrl.clone()
-    url.pathname = '/'
+    url.pathname = '/projects'
     return NextResponse.redirect(url)
   }
 

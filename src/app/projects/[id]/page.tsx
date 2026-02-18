@@ -80,6 +80,7 @@ export default function ProjectPage() {
       onSaveSnapshot={handleSaveSnapshot}
       onSaveMessage={handleSaveMessage}
       onUpdateTips={handleUpdateTips}
+      onBack={() => router.push('/projects')}
     />
   )
 }

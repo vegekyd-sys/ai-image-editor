@@ -2,39 +2,20 @@
 
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useEffect } from 'react';
 
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (loading) return;
+    if (!user) {
       router.replace('/login');
-      return;
+    } else {
+      router.replace('/projects');
     }
-
-    if (!loading && user && !creating) {
-      setCreating(true);
-      // Create a new project and redirect to it
-      const supabase = createClient();
-      supabase
-        .from('projects')
-        .insert({ user_id: user.id, title: '未命名项目' })
-        .select('id')
-        .single()
-        .then(({ data, error }) => {
-          if (error || !data) {
-            console.error('Failed to create project:', error);
-            setCreating(false);
-            return;
-          }
-          router.replace(`/projects/${data.id}`);
-        });
-    }
-  }, [user, loading, router, creating]);
+  }, [user, loading, router]);
 
   return (
     <div className="h-dvh bg-black flex items-center justify-center">
