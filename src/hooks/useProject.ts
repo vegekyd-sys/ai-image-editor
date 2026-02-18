@@ -72,15 +72,22 @@ export function useProject(projectId: string, userId: string) {
       try {
         const supabase = getSupabase()
 
-        // Upload image to Storage
-        const filename = `snapshot-${snapshot.id}.jpg`
-        const imageUrl = await uploadImage(
-          supabase,
-          userId,
-          projectId,
-          filename,
-          snapshot.image,
-        )
+        let imageUrl: string | null
+
+        // If image is already a Storage URL, skip upload
+        if (snapshot.image.startsWith('http')) {
+          imageUrl = snapshot.image
+        } else {
+          // Upload base64 image to Storage
+          const filename = `snapshot-${snapshot.id}.jpg`
+          imageUrl = await uploadImage(
+            supabase,
+            userId,
+            projectId,
+            filename,
+            snapshot.image,
+          )
+        }
 
         if (!imageUrl) {
           console.error('Failed to upload snapshot image')

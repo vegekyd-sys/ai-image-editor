@@ -10,6 +10,22 @@ function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
 }
 
+/**
+ * Ensure an image is a base64 data URL.
+ * If already base64, returns as-is. If a URL, fetches and converts.
+ */
+async function ensureBase64(image: string): Promise<string> {
+  if (image.startsWith('data:')) return image;
+  const res = await fetch(image);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 function compressClientSide(file: File, maxSize = 1024, quality = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -180,9 +196,12 @@ export default function Editor({
   const generatePreviewForTip = useCallback(async (
     snapshotId: string,
     editPrompt: string,
-    imageBase64: string,
+    imageInput: string,
     aspectRatio?: string,
   ) => {
+    // Ensure we have base64 for the API
+    const imageBase64 = await ensureBase64(imageInput);
+
     // Mark as generating
     setSnapshots((prev) => prev.map((s) => {
       if (s.id !== snapshotId) return s;
@@ -229,7 +248,7 @@ export default function Editor({
   }, [onUpdateTips]);
 
   // Fetch tips via 3 parallel SSE streams (one per category) for faster loading
-  const fetchTipsForSnapshot = useCallback((snapshotId: string, imageBase64: string) => {
+  const fetchTipsForSnapshot = useCallback((snapshotId: string, imageInput: string) => {
     setIsTipsFetching(true);
     // Fresh abort controller for this batch of previews
     previewAbortRef.current = new AbortController();
@@ -237,8 +256,12 @@ export default function Editor({
     const categories = ['enhance', 'creative', 'wild'] as const;
     let completedCount = 0;
     let firstTipReceived = false;
+    // Resolve base64 once, share across all category streams
+    let resolvedBase64: string | null = null;
+    const base64Ready = ensureBase64(imageInput).then(b64 => { resolvedBase64 = b64; return b64; });
 
     const fetchCategory = async (category: string) => {
+      const imageBase64 = await base64Ready;
       try {
         const res = await fetch('/api/tips', {
           method: 'POST',
@@ -363,9 +386,10 @@ export default function Editor({
 
     // For non-upload chat messages: send the current image + wantImage so
     // the model can generate edited images when the user asks for edits
-    const chatImage = isUpload
+    const rawChatImage = isUpload
       ? image
       : snapshotsRef.current[viewIndexRef.current]?.image || undefined;
+    const chatImage = rawChatImage ? await ensureBase64(rawChatImage) : undefined;
     const chatWantImage = !isUpload && !!chatImage;
 
     try {
