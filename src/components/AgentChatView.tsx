@@ -158,15 +158,11 @@ export default function AgentChatView({
       style={{ background: '#0a0a0a' }}
       onAnimationEnd={handleAnimationEnd}
     >
-      {/* ── Header ── */}
+      {/* ── Back button (floating, no full-width bar) ── */}
       <div
         ref={headerRef}
-        className="flex items-center px-3 flex-shrink-0"
-        style={{
-          paddingTop: 'max(0.875rem, env(safe-area-inset-top))',
-          paddingBottom: '0.75rem',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-        }}
+        className="flex-shrink-0 px-3"
+        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))', paddingBottom: '0.25rem' }}
       >
         <button
           onClick={handleBack}
@@ -176,8 +172,6 @@ export default function AgentChatView({
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
         </button>
-        <span className="flex-1 text-center text-white/90 text-[15px] font-semibold tracking-tight">Makaron</span>
-        <div className="w-9" />{/* balance the back button */}
       </div>
 
       {/* ── Floating PiP ── */}
