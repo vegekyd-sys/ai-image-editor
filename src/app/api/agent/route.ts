@@ -16,9 +16,10 @@ export async function POST(req: NextRequest) {
     }
 
     const { prompt, image, projectId, analysisOnly, analysisContext,
-            tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description } = await req.json();
+            tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
+            previewsReady, readyTips } = await req.json();
 
-    if (!projectId || (!tipsTeaser && !nameProject && !image)) {
+    if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image)) {
       return new Response(
         JSON.stringify({ error: 'projectId and image (or tipsTeaser) are required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
       tipsTeaser: '试试把它变成微缩模型？特别适合这种场景。',
       tipReaction: '效果很棒！新图很自然。',
       nameProject: '咖啡下午茶',
+      previewsReady: '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
     };
 
     const encoder = new TextEncoder();
@@ -62,6 +64,24 @@ export async function POST(req: NextRequest) {
             const desc = (description as string) || '';
             const namePrompt = `根据以下照片描述，用2-4个中文词起一个简洁的项目名（如"咖啡下午茶"、"都市街头"、"猫咪日常"）：${desc}。只输出名称，不加任何标点或解释。`;
             for await (const event of runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true })) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            }
+            return;
+          }
+
+          // previewsReady: AI notification that all preview images are done
+          if (previewsReady && readyTips) {
+            if (process.env.MOCK_AI === 'true') {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content', text: MOCK_TEXTS.previewsReady })}\n\n`));
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`));
+              return;
+            }
+            const tips = readyTips as { emoji: string; label: string; desc: string; category: string }[];
+            const tipsSummary = tips
+              .map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`)
+              .join('\n');
+            const readyPrompt = `以下${tips.length}条修图建议的预览图已全部生成完毕：\n${tipsSummary}\n\n用1-2句中文告诉用户预览已就绪、可以滑动TipsBar看看。可以点评其中一个有趣的。语气像朋友聊天，不要用"我"开头。`;
+            for await (const event of runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true })) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             }
             return;

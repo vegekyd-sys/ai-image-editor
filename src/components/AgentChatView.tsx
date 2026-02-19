@@ -158,17 +158,17 @@ export default function AgentChatView({
       style={{ background: '#0a0a0a' }}
       onAnimationEnd={handleAnimationEnd}
     >
-      {/* ── Back button (floating, no full-width bar) ── */}
+      {/* ── Back button (absolute overlay, no layout space) ── */}
       <div
         ref={headerRef}
-        className="flex-shrink-0 px-3"
-        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))', paddingBottom: '0.25rem' }}
+        className="absolute top-0 left-0 z-50 px-3"
+        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
       >
         <button
           onClick={handleBack}
-          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/6 active:bg-white/10 transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm hover:bg-white/10 active:bg-white/15 transition-colors"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/80">
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
         </button>
@@ -217,7 +217,7 @@ export default function AgentChatView({
       )}
 
       {/* ── Messages ── */}
-      <div className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 py-5 min-h-0" style={{ gap: 0 }}>
+      <div className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: '1.25rem' }}>
         {/* Empty state */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 pb-10">
@@ -373,7 +373,7 @@ export default function AgentChatView({
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleSubmit(); } }}
             placeholder="Reply to Makaron…"
             disabled={isAgentActive}
             className="flex-1 bg-transparent text-[14px] outline-none border-none leading-relaxed disabled:opacity-40"

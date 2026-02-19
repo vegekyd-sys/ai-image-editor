@@ -85,7 +85,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onRetr
   const hasTips = tips.length > 0;
 
   return (
-    <div className="flex items-end gap-2 pl-3 pr-14 py-3 min-h-[96px] overflow-x-auto hide-scrollbar">
+    <div className="flex items-end gap-2 px-3 py-3 min-h-[96px] overflow-x-auto hide-scrollbar">
       {/* Tip cards with thumbnails */}
       {hasTips && orderedTips.map(({ tip, originalIndex }) => {
         const isSelected = previewingIndex === originalIndex;

@@ -111,6 +111,11 @@ export default function Editor({
   const teaserSnapshotRef = useRef<string | null>(null);
   // Track if we've already triggered auto-naming this session (only once per new project)
   const hasTriggeredNamingRef = useRef(false);
+  // Track which snapshots have already received "previews ready" CUI notification
+  // Pre-seed with initialSnapshots so restored projects don't re-trigger
+  const previewsNotifiedRef = useRef<Set<string>>(
+    new Set(initialSnapshots?.map(s => s.id) ?? [])
+  );
 
   // Draft mode: draftParentIndex !== null means a virtual draft entry exists in timeline
   const isDraft = draftParentIndex !== null;
@@ -175,6 +180,52 @@ export default function Editor({
       console.error('Tips teaser failed:', err);
     }
   }, [projectId]);
+
+  // AI-generated CUI notification when all preview images are done
+  const triggerPreviewsReadyNotification = useCallback(async (snapshotId: string, tips: Tip[]) => {
+    if (!projectId) return;
+    if (previewsNotifiedRef.current.has(snapshotId)) return;
+    previewsNotifiedRef.current.add(snapshotId);
+
+    const doneTips = tips.filter(t => t.previewStatus === 'done');
+    if (doneTips.length === 0) return;
+
+    const readyTips = doneTips.map(({ emoji, label, desc, category }) => ({ emoji, label, desc, category }));
+
+    const msgId = generateId();
+    setMessages((prev) => [...prev, {
+      id: msgId,
+      role: 'assistant' as const,
+      content: '',
+      timestamp: Date.now(),
+    }]);
+
+    try {
+      await streamAgent(
+        { prompt: '', image: '', projectId, previewsReady: true, readyTips },
+        {
+          onContent: (delta) => {
+            setMessages((prev) => prev.map((m) =>
+              m.id === msgId ? { ...m, content: m.content + delta } : m
+            ));
+          },
+          onDone: () => {
+            setMessages((prev) => {
+              const msg = prev.find(m => m.id === msgId);
+              if (msg?.content) onSaveMessage?.(msg);
+              else return prev.filter(m => m.id !== msgId); // remove if empty
+              return prev;
+            });
+          },
+          onError: () => {
+            setMessages((prev) => prev.filter(m => m.id !== msgId || m.content));
+          },
+        },
+      );
+    } catch {
+      setMessages((prev) => prev.filter(m => m.id !== msgId || m.content));
+    }
+  }, [projectId, onSaveMessage]);
 
   // Auto-name the project based on the image analysis description (fires once, only if title is default)
   const triggerProjectNaming = useCallback(async (description: string) => {
@@ -825,6 +876,19 @@ export default function Editor({
     }
   }, [pendingImage, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
 
+  // Auto-name existing projects that still have a default title (runs once on mount)
+  useEffect(() => {
+    if (hasTriggeredNamingRef.current) return;
+    if (!initialTitle || initialTitle === 'Untitled' || initialTitle === '未命名' || initialTitle === '未命名项目') {
+      // Find the first snapshot with a description (from previous analysis)
+      const desc = initialSnapshots?.find(s => s.description)?.description;
+      if (desc) {
+        hasTriggeredNamingRef.current = true;
+        triggerProjectNaming(desc);
+      }
+    }
+  }, [initialTitle, initialSnapshots, triggerProjectNaming]);
+
   // Preload adjacent snapshots (not yet in DOM) so swipe transitions are instant
   useEffect(() => {
     for (const offset of [-1, 1]) {
@@ -841,23 +905,35 @@ export default function Editor({
     if (isAgentActive) return;
     const snap = snapshots[tipsSourceIndex];
     if (!snap) return;
-    // Don't overwrite if teaser has already appeared for this snapshot
-    if (teaserSnapshotRef.current === snap.id) return;
 
     if (isTipsFetching) {
-      setAgentStatus('正在生成有趣的 tips...');
+      if (teaserSnapshotRef.current !== snap.id) {
+        setAgentStatus('正在生成有趣的 tips...');
+      }
       return;
     }
 
     const total = snap.tips.length;
     if (total === 0) return;
-    // Count done + error as "settled"; show progress until all settled
     const settled = snap.tips.filter(t => t.previewStatus === 'done' || t.previewStatus === 'error').length;
     const done = snap.tips.filter(t => t.previewStatus === 'done').length;
-    if (settled < total) {
+    if (settled < total && teaserSnapshotRef.current !== snap.id) {
       setAgentStatus(`tips图片生成中 ${done}/${total}`);
     }
   }, [snapshots, tipsSourceIndex, isAgentActive, isTipsFetching]);
+
+  // CUI notification when all preview images are settled (independent of StatusBar / agent state)
+  useEffect(() => {
+    const snap = snapshots[tipsSourceIndex];
+    if (!snap || snap.tips.length === 0 || isTipsFetching) return;
+    if (previewsNotifiedRef.current.has(snap.id)) return;
+    const total = snap.tips.length;
+    const settled = snap.tips.filter(t => t.previewStatus === 'done' || t.previewStatus === 'error').length;
+    if (settled === total) {
+      triggerPreviewsReadyNotification(snap.id, snap.tips);
+    }
+  }, [snapshots, tipsSourceIndex, isTipsFetching, triggerPreviewsReadyNotification]);
+
 
   const handleDownload = useCallback(async () => {
     const img = timeline[viewIndex];

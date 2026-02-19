@@ -56,7 +56,8 @@ export function useProject(projectId: string, userId: string) {
       image: s.image_url, // Use Storage URL as the image source
       tips: (Array.isArray(s.tips) ? s.tips : []).map(t => ({
         ...t,
-        previewStatus: t.previewImage ? 'done' as const : undefined,
+        previewStatus: t.previewImage ? 'done' as const
+          : t.editPrompt ? 'error' as const : undefined,
       })),
       messageId: s.message_id || '',
       imageUrl: s.image_url,
