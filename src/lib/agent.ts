@@ -101,9 +101,9 @@ const ANALYSIS_PROMPT_POSTEDIT =
 
 function getModelId(client: Anthropic | AnthropicBedrock): string {
   if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
-    return 'us.anthropic.claude-3-7-sonnet-20250219-v1:0';
+    return 'us.anthropic.claude-3-5-sonnet-20241022-v2:0';
   }
-  return 'claude-3-7-sonnet-20250219';
+  return 'claude-3-5-sonnet-20241022';
 }
 
 // ---------------------------------------------------------------------------
