@@ -9,7 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.26.3",
     "@anthropic-ai/claude-agent-sdk": "^0.2.45",
+    "@anthropic-ai/sdk": "^0.77.0",
     "@google/genai": "^1.40.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.96.0",
