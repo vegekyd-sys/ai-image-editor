@@ -63,6 +63,8 @@ interface EditorProps {
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
   onUpdateDescription?: (snapshotId: string, description: string) => void;
+  initialTitle?: string;
+  onRenameProject?: (title: string) => void;
   onBack?: () => void;
 }
 
@@ -75,6 +77,8 @@ export default function Editor({
   onSaveMessage,
   onUpdateTips,
   onUpdateDescription,
+  initialTitle,
+  onRenameProject,
   onBack,
 }: EditorProps = {}) {
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
@@ -97,6 +101,16 @@ export default function Editor({
   snapshotsRef.current = snapshots;
   const viewIndexRef = useRef(viewIndex);
   viewIndexRef.current = viewIndex;
+  const isAgentActiveRef = useRef(isAgentActive);
+  useEffect(() => { isAgentActiveRef.current = isAgentActive; }, [isAgentActive]);
+  const isTipsFetchingRef = useRef(isTipsFetching);
+  isTipsFetchingRef.current = isTipsFetching;
+  const pendingTeaserRef = useRef<{ snapshotId: string; tips: Tip[] } | null>(null);
+  const isReactionInFlightRef = useRef(false);
+  // Track which snapshot's teaser has already been displayed (prevents progress bar from overwriting)
+  const teaserSnapshotRef = useRef<string | null>(null);
+  // Track if we've already triggered auto-naming this session (only once per new project)
+  const hasTriggeredNamingRef = useRef(false);
 
   // Draft mode: draftParentIndex !== null means a virtual draft entry exists in timeline
   const isDraft = draftParentIndex !== null;
@@ -133,6 +147,102 @@ export default function Editor({
     }
     prevTimelineLen.current = timeline.length;
   }
+
+  // Trigger a one-sentence teaser about the tips shown in StatusBar
+  const triggerTipsTeaser = useCallback(async (snapshotId: string, tips: Tip[]) => {
+    if (!projectId) return;
+    // Check user is still viewing this snapshot
+    if (snapshotsRef.current[viewIndexRef.current]?.id !== snapshotId) return;
+
+    const tipsPayload = tips.map(({ emoji, label, desc, category }) => ({ emoji, label, desc, category }));
+    try {
+      let teaser = '';
+      await streamAgent(
+        { prompt: '', image: '', projectId, tipsTeaser: true, tipsPayload },
+        {
+          onContent: (delta) => { teaser += delta; },
+          onDone: () => {
+            // Only update if user still viewing same snapshot
+            if (snapshotsRef.current[viewIndexRef.current]?.id === snapshotId && teaser.trim()) {
+              teaserSnapshotRef.current = snapshotId; // mark only when teaser actually shown
+              setAgentStatus(teaser.trim());
+            }
+          },
+          onError: () => {},
+        },
+      );
+    } catch (err) {
+      console.error('Tips teaser failed:', err);
+    }
+  }, [projectId]);
+
+  // Auto-name the project based on the image analysis description (fires once, only if title is default)
+  const triggerProjectNaming = useCallback(async (description: string) => {
+    if (!projectId || !onRenameProject || !description.trim()) return;
+    let name = '';
+    try {
+      await streamAgent(
+        { prompt: '', image: '', projectId, nameProject: true, description },
+        {
+          onContent: (delta) => { name += delta; },
+          onDone: () => { if (name.trim()) onRenameProject(name.trim()); },
+          onError: () => {},
+        },
+      );
+    } catch (err) {
+      console.error('Project naming failed:', err);
+    }
+  }, [projectId, onRenameProject]);
+
+  // Trigger a 1-2 sentence CUI reaction after user commits a tip in the GUI
+  const triggerTipCommitReaction = useCallback(async (
+    committedTip: { emoji: string; label: string; desc: string; category: string },
+    tipImage: string | undefined,
+  ) => {
+    if (!projectId || isReactionInFlightRef.current) return;
+    isReactionInFlightRef.current = true;
+
+    const reactionMsgId = generateId();
+    setMessages((prev) => [...prev, {
+      id: reactionMsgId,
+      role: 'assistant' as const,
+      content: '',
+      timestamp: Date.now(),
+    }]);
+
+    const image = tipImage || snapshotsRef.current[viewIndexRef.current]?.image || '';
+    const imageBase64 = image ? await ensureBase64(image) : '';
+
+    try {
+      await streamAgent(
+        { prompt: '', image: imageBase64, projectId, tipReaction: true, committedTip },
+        {
+          onContent: (delta) => {
+            setMessages((prev) => prev.map((m) =>
+              m.id === reactionMsgId ? { ...m, content: m.content + delta } : m
+            ));
+          },
+          onDone: () => {
+            setMessages((prev) => {
+              const msg = prev.find(m => m.id === reactionMsgId);
+              if (msg?.content) onSaveMessage?.(msg);
+              return prev;
+            });
+            isReactionInFlightRef.current = false;
+          },
+          onError: () => {
+            // Remove empty message on error
+            setMessages((prev) => prev.filter(m => m.id !== reactionMsgId || m.content));
+            isReactionInFlightRef.current = false;
+          },
+        },
+      );
+    } catch (err) {
+      console.error('Tip commit reaction failed:', err);
+      setMessages((prev) => prev.filter(m => m.id !== reactionMsgId || m.content));
+      isReactionInFlightRef.current = false;
+    }
+  }, [projectId, onSaveMessage]);
 
   const addMessage = useCallback((role: 'user' | 'assistant', content: string, image?: string) => {
     const msg: Message = {
@@ -208,6 +318,10 @@ export default function Editor({
     setIsTipsFetching(true);
     // Fresh abort controller for this batch of previews
     previewAbortRef.current = new AbortController();
+    // Show a loading hint in StatusBar if agent is not busy
+    if (!isAgentActiveRef.current) {
+      setAgentStatus('正在发现有趣的可能...');
+    }
 
     const categories = ['enhance', 'creative', 'wild'] as const;
     let completedCount = 0;
@@ -292,12 +406,25 @@ export default function Editor({
             return prev;
           });
         }
+        // Trigger tips teaser after all tips loaded
+        setTimeout(() => {
+          const snap = snapshotsRef.current.find(s => s.id === snapshotId);
+          if (snap && snap.tips.length > 0) {
+            if (isAgentActiveRef.current) {
+              pendingTeaserRef.current = { snapshotId, tips: snap.tips };
+            } else {
+              triggerTipsTeaser(snapshotId, snap.tips);
+            }
+          } else if (!isAgentActiveRef.current) {
+            setAgentStatus(AGENT_GREETING);
+          }
+        }, 100);
       }
     };
 
     // Fire all 3 category streams in parallel
     categories.forEach(cat => fetchCategory(cat));
-  }, [generatePreviewForTip, onUpdateTips]);
+  }, [generatePreviewForTip, onUpdateTips, triggerTipsTeaser]);
 
   // Auto-analyze a snapshot: runs silently in background, stores result in snapshot.description only
   const runAutoAnalysis = useCallback(async (
@@ -328,8 +455,19 @@ export default function Editor({
                 s.id === snapshotId ? { ...s, description } : s
               ));
               onUpdateDescription?.(snapshotId, description);
+              // Auto-name the project once, based on the image analysis description
+              if (!hasTriggeredNamingRef.current && (!initialTitle || initialTitle === 'Untitled' || initialTitle === '未命名' || initialTitle === '未命名项目')) {
+                hasTriggeredNamingRef.current = true;
+                triggerProjectNaming(description);
+              }
             }
-            setAgentStatus(AGENT_GREETING);
+            // Only fall back to GREETING if tips failed entirely (useEffect handles other cases)
+            if (!isTipsFetchingRef.current) {
+              const snap = snapshotsRef.current.find(s => s.id === snapshotId);
+              if (!snap || snap.tips.length === 0) {
+                setAgentStatus(AGENT_GREETING);
+              }
+            }
           },
           onError: () => {},
         },
@@ -339,8 +477,14 @@ export default function Editor({
       console.error('Auto-analysis failed:', err);
     } finally {
       setIsAgentActive(false);
+      // Drain any pending teaser that was queued while analysis was running
+      const pending = pendingTeaserRef.current;
+      if (pending) {
+        pendingTeaserRef.current = null;
+        setTimeout(() => triggerTipsTeaser(pending.snapshotId, pending.tips), 400);
+      }
     }
-  }, [projectId, onUpdateDescription]);
+  }, [projectId, onUpdateDescription, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
   const handleAgentRequest = useCallback(async (text: string) => {
@@ -384,7 +528,13 @@ export default function Editor({
       ? `[最近请求记录]\n${prevUserMsgs}\n\n`
       : '';
 
-    const fullPrompt = `${descriptionContext}${historyContext}[当前请求]\n${text}`;
+    // Inject current tips into the prompt so agent can reference them
+    const currentTipsForPrompt = snapshotsRef.current[viewIndexRef.current]?.tips ?? [];
+    const tipsContext = currentTipsForPrompt.length > 0
+      ? `[当前TipsBar中的编辑建议]\n${currentTipsForPrompt.map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`).join('\n')}\n\n`
+      : '';
+
+    const fullPrompt = `${descriptionContext}${tipsContext}${historyContext}[当前请求]\n${text}`;
 
     try {
       await streamAgent(
@@ -446,7 +596,14 @@ export default function Editor({
                 pending.forEach(({ id, image }) => runAutoAnalysis(id, image, 'post-edit'));
               }, 800);
             } else {
-              setTimeout(() => setAgentStatus(AGENT_GREETING), 2000);
+              // Drain pending teaser or reset to greeting
+              const pendingTeaser = pendingTeaserRef.current;
+              if (pendingTeaser) {
+                pendingTeaserRef.current = null;
+                setTimeout(() => triggerTipsTeaser(pendingTeaser.snapshotId, pendingTeaser.tips), 400);
+              } else {
+                setTimeout(() => setAgentStatus(AGENT_GREETING), 2000);
+              }
             }
           },
           onError: (msg) => {
@@ -470,7 +627,7 @@ export default function Editor({
     } finally {
       setIsAgentActive(false);
     }
-  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages]);
+  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser]);
 
 
   // Commit draft: finalize the virtual draft as a real snapshot
@@ -505,7 +662,12 @@ export default function Editor({
 
     // Fetch new tips for the committed image
     fetchTipsForSnapshot(snapId, tip.previewImage);
-  }, [draftParentIndex, previewingTipIndex, snapshots, addMessage, fetchTipsForSnapshot, onSaveSnapshot]);
+
+    // Trigger agent CUI reaction to the committed tip
+    const tipSnapshot = { emoji: tip.emoji, label: tip.label, desc: tip.desc, category: tip.category };
+    const tipImg = tip.previewImage;
+    setTimeout(() => triggerTipCommitReaction(tipSnapshot, tipImg), 200);
+  }, [draftParentIndex, previewingTipIndex, snapshots, addMessage, fetchTipsForSnapshot, onSaveSnapshot, triggerTipCommitReaction]);
 
   // Click tip:
   //   - Same tip clicked again (while viewing draft) → commit
@@ -641,6 +803,29 @@ export default function Editor({
       }
     }
   }, [viewIndex, timeline]);
+
+  // Drive StatusBar text based on tips/preview generation progress
+  useEffect(() => {
+    if (isAgentActive) return;
+    const snap = snapshots[tipsSourceIndex];
+    if (!snap) return;
+    // Don't overwrite if teaser has already appeared for this snapshot
+    if (teaserSnapshotRef.current === snap.id) return;
+
+    if (isTipsFetching) {
+      setAgentStatus('正在生成有趣的 tips...');
+      return;
+    }
+
+    const total = snap.tips.length;
+    if (total === 0) return;
+    // Count done + error as "settled"; show progress until all settled
+    const settled = snap.tips.filter(t => t.previewStatus === 'done' || t.previewStatus === 'error').length;
+    const done = snap.tips.filter(t => t.previewStatus === 'done').length;
+    if (settled < total) {
+      setAgentStatus(`tips图片生成中 ${done}/${total}`);
+    }
+  }, [snapshots, tipsSourceIndex, isAgentActive, isTipsFetching]);
 
   const handleDownload = useCallback(async () => {
     const img = timeline[viewIndex];

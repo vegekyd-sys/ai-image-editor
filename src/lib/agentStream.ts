@@ -13,7 +13,13 @@ export interface AgentStreamCallbacks {
 }
 
 export async function streamAgent(
-  body: { prompt: string; image: string; projectId: string; analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit' },
+  body: {
+    prompt: string; image: string; projectId: string;
+    analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit';
+    tipReaction?: boolean; committedTip?: object;
+    tipsTeaser?: boolean; tipsPayload?: object[];
+    nameProject?: boolean; description?: string;
+  },
   callbacks: AgentStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {

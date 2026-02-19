@@ -9,6 +9,7 @@ import { Snapshot, Message, Tip, DbSnapshot, DbMessage } from '@/types'
 interface LoadedProject {
   snapshots: Snapshot[]
   messages: Message[]
+  title: string
 }
 
 const MAX_UPLOAD_ATTEMPTS = 3
@@ -29,7 +30,7 @@ export function useProject(projectId: string, userId: string) {
   const loadProject = useCallback(async (): Promise<LoadedProject> => {
     const supabase = getSupabase()
 
-    const [snapshotsRes, messagesRes] = await Promise.all([
+    const [snapshotsRes, messagesRes, projectRes] = await Promise.all([
       supabase
         .from('snapshots')
         .select('*')
@@ -40,6 +41,11 @@ export function useProject(projectId: string, userId: string) {
         .select('*')
         .eq('project_id', projectId)
         .order('created_at', { ascending: true }),
+      supabase
+        .from('projects')
+        .select('title')
+        .eq('id', projectId)
+        .single(),
     ])
 
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
@@ -72,7 +78,7 @@ export function useProject(projectId: string, userId: string) {
       }
     })
 
-    return { snapshots, messages }
+    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled' }
   }, [projectId])
 
   // --- Write (all fire-and-forget) ---

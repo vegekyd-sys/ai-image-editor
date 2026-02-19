@@ -13,11 +13,12 @@ export default function ProjectPage() {
   const params = useParams()
   const projectId = params.id as string
 
-  const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover } =
+  const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle } =
     useProject(projectId, user?.id ?? '')
 
   const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(null)
   const [initialMessages, setInitialMessages] = useState<Message[] | null>(null)
+  const [initialTitle, setInitialTitle] = useState<string>('未命名')
   const [pendingImage] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     const pending = sessionStorage.getItem('pendingImage')
@@ -36,9 +37,10 @@ export default function ProjectPage() {
   useEffect(() => {
     if (!user || !projectId || loaded) return
 
-    loadProject().then(({ snapshots, messages }) => {
+    loadProject().then(({ snapshots, messages, title }) => {
       setInitialSnapshots(snapshots)
       setInitialMessages(messages)
+      setInitialTitle(title)
       setLoaded(true)
 
       // Set cover from first snapshot if available
@@ -88,6 +90,8 @@ export default function ProjectPage() {
       onSaveMessage={handleSaveMessage}
       onUpdateTips={handleUpdateTips}
       onUpdateDescription={updateDescription}
+      initialTitle={initialTitle}
+      onRenameProject={updateTitle}
       onBack={() => router.push('/projects')}
     />
   )

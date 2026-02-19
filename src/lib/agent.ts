@@ -115,7 +115,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit' },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -130,6 +130,7 @@ export async function* runMakaronAgent(
 
   try {
     const analysisOnly = options?.analysisOnly ?? false;
+    const tipReactionOnly = options?.tipReactionOnly ?? false;
     const analysisPrompt = options?.analysisContext === 'post-edit'
       ? ANALYSIS_PROMPT_POSTEDIT
       : ANALYSIS_PROMPT_INITIAL;
@@ -141,9 +142,11 @@ export async function* runMakaronAgent(
         mcpServers: { makaron: makaronServer },
         allowedTools: analysisOnly
           ? ['mcp__makaron__analyze_image']
-          : ['mcp__makaron__generate_image', 'mcp__makaron__analyze_image'],
+          : tipReactionOnly
+            ? []
+            : ['mcp__makaron__generate_image', 'mcp__makaron__analyze_image'],
         settingSources: [],
-        maxTurns: analysisOnly ? 2 : 5,
+        maxTurns: analysisOnly ? 2 : tipReactionOnly ? 1 : 5,
         permissionMode: 'bypassPermissions',
         includePartialMessages: true,
       },

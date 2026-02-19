@@ -207,6 +207,18 @@ export default function AgentChatView({
             className="w-full h-full object-cover pointer-events-none"
             draggable={false}
           />
+          {/* Editing badge */}
+          <div
+            className="absolute top-0 left-0 px-1.5 py-0.5 text-[10px] font-medium tracking-wide pointer-events-none"
+            style={{
+              background: 'rgba(0,0,0,0.55)',
+              borderBottomRightRadius: 8,
+              color: 'rgba(255,255,255,0.75)',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            Editing
+          </div>
         </div>
       )}
 
