@@ -439,13 +439,32 @@ export default function Editor({
     agentAbortRef.current = new AbortController();
 
     let description = '';
+    // For initial upload: show analysis as a CUI message so the user sees it
+    const isInitial = context === 'initial';
+    const msgId = isInitial ? generateId() : null;
+    if (isInitial && msgId) {
+      setMessages((prev) => [...prev, {
+        id: msgId,
+        role: 'assistant' as const,
+        content: '',
+        timestamp: Date.now(),
+      }]);
+    }
 
     try {
       await streamAgent(
         { prompt: '', image: imageBase64, projectId, analysisOnly: true, analysisContext: context },
         {
           onStatus: (s) => setAgentStatus(s),
-          onContent: (delta) => { description += delta; },
+          onContent: (delta) => {
+            description += delta;
+            // Stream into the CUI message for initial uploads
+            if (isInitial && msgId) {
+              setMessages((prev) => prev.map((m) =>
+                m.id === msgId ? { ...m, content: m.content + delta } : m
+              ));
+            }
+          },
           onNewTurn: () => {},
           onImage: () => {},
           onToolCall: () => {},
@@ -455,6 +474,19 @@ export default function Editor({
                 s.id === snapshotId ? { ...s, description } : s
               ));
               onUpdateDescription?.(snapshotId, description);
+              // Append a hint about tips being generated, then persist the CUI message
+              if (isInitial && msgId) {
+                const suffix = '\n\n正在为你想一些好玩的修图点子~';
+                setMessages((prev) => {
+                  const msg = prev.find(m => m.id === msgId);
+                  if (msg) {
+                    const finalMsg = { ...msg, content: msg.content + suffix };
+                    onSaveMessage?.(finalMsg);
+                    return prev.map(m => m.id === msgId ? finalMsg : m);
+                  }
+                  return prev;
+                });
+              }
               // Auto-name the project once, based on the image analysis description
               if (!hasTriggeredNamingRef.current && (!initialTitle || initialTitle === 'Untitled' || initialTitle === '未命名' || initialTitle === '未命名项目')) {
                 hasTriggeredNamingRef.current = true;
@@ -484,7 +516,7 @@ export default function Editor({
         setTimeout(() => triggerTipsTeaser(pending.snapshotId, pending.tips), 400);
       }
     }
-  }, [projectId, onUpdateDescription, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
+  }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
   const handleAgentRequest = useCallback(async (text: string) => {
