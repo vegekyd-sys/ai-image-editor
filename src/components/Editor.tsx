@@ -249,6 +249,7 @@ export default function Editor({
   const triggerTipCommitReaction = useCallback(async (
     committedTip: { emoji: string; label: string; desc: string; category: string },
     tipImage: string | undefined,
+    siblingTips: { emoji: string; label: string; desc: string; category: string }[],
   ) => {
     if (!projectId || isReactionInFlightRef.current) return;
     isReactionInFlightRef.current = true;
@@ -266,7 +267,7 @@ export default function Editor({
 
     try {
       await streamAgent(
-        { prompt: '', image: imageBase64, projectId, tipReaction: true, committedTip },
+        { prompt: '', image: imageBase64, projectId, tipReaction: true, committedTip, currentTips: siblingTips },
         {
           onContent: (delta) => {
             setMessages((prev) => prev.map((m) =>
@@ -749,7 +750,11 @@ export default function Editor({
     // Trigger agent CUI reaction to the committed tip
     const tipSnapshot = { emoji: tip.emoji, label: tip.label, desc: tip.desc, category: tip.category };
     const tipImg = tip.previewImage;
-    setTimeout(() => triggerTipCommitReaction(tipSnapshot, tipImg), 200);
+    // Pass other tips so agent can recommend a real one as next step
+    const siblings = parentTips
+      .filter((_, i) => i !== previewingTipIndex)
+      .map(t => ({ emoji: t.emoji, label: t.label, desc: t.desc, category: t.category }));
+    setTimeout(() => triggerTipCommitReaction(tipSnapshot, tipImg, siblings), 200);
   }, [draftParentIndex, previewingTipIndex, snapshots, addMessage, fetchTipsForSnapshot, onSaveSnapshot, triggerTipCommitReaction]);
 
   // Click tip:
@@ -908,7 +913,7 @@ export default function Editor({
 
     if (isTipsFetching) {
       if (teaserSnapshotRef.current !== snap.id) {
-        setAgentStatus('正在生成有趣的 tips...');
+        setAgentStatus('正在生成修图建议 Ready to Suprise');
       }
       return;
     }
@@ -918,7 +923,7 @@ export default function Editor({
     const settled = snap.tips.filter(t => t.previewStatus === 'done' || t.previewStatus === 'error').length;
     const done = snap.tips.filter(t => t.previewStatus === 'done').length;
     if (settled < total && teaserSnapshotRef.current !== snap.id) {
-      setAgentStatus(`tips图片生成中 ${done}/${total}`);
+      setAgentStatus(`正使用nano banana pro生成图片 ${done}/${total}`);
     }
   }, [snapshots, tipsSourceIndex, isAgentActive, isTipsFetching]);
 

@@ -233,7 +233,7 @@ export default function AgentChatView({
                 <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
               </svg>
             </div>
-            <p className="text-white/25 text-[13px] text-center leading-relaxed max-w-[180px]">
+            <p className="text-white/25 text-[19px] text-center leading-relaxed max-w-[220px]">
               Tell me what you&apos;d like to do with your photo
             </p>
           </div>
@@ -247,7 +247,7 @@ export default function AgentChatView({
                 /* User bubble — right-aligned pill */
                 <div className="flex justify-end">
                   <div
-                    className="text-white/90 text-[14px] leading-relaxed px-4 py-2.5 max-w-[82%]"
+                    className="text-white/90 text-[21px] leading-relaxed px-4 py-2.5 max-w-[82%]"
                     style={{
                       background: '#222222',
                       borderRadius: '18px 18px 5px 18px',
@@ -260,25 +260,25 @@ export default function AgentChatView({
               ) : (
                 /* Assistant — no bubble, full-width text */
                 <div className="flex flex-col gap-2.5">
-                  <div className="text-[14.5px] leading-[1.68] pr-2" style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
+                  <div className="text-[22px] leading-[1.68] pr-2" style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
                     {msg.content && (
                       <div className="markdown-body">
                         <ReactMarkdown
                           key={msg.id}
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            h1: ({ children }) => <h1 className="text-[16px] font-bold mt-3 mb-1">{children}</h1>,
-                            h2: ({ children }) => <h2 className="text-[15px] font-semibold mt-3 mb-1">{children}</h2>,
-                            h3: ({ children }) => <h3 className="text-[14px] font-semibold mt-2 mb-0.5">{children}</h3>,
+                            h1: ({ children }) => <h1 className="text-[24px] font-bold mt-3 mb-1">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-[22px] font-semibold mt-3 mb-1">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-[21px] font-semibold mt-2 mb-0.5">{children}</h3>,
                             p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                             strong: ({ children }) => <strong className="font-semibold text-white/95">{children}</strong>,
                             em: ({ children }) => <em className="italic">{children}</em>,
                             del: ({ children }) => <del className="line-through opacity-50">{children}</del>,
                             code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) =>
                               inline ? (
-                                <code className="font-mono text-[12.5px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
+                                <code className="font-mono text-[18px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
                               ) : (
-                                <code className="block font-mono text-[12.5px] p-3 rounded-xl my-2 overflow-x-auto" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
+                                <code className="block font-mono text-[18px] p-3 rounded-xl my-2 overflow-x-auto" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
                               ),
                             pre: ({ children }) => <pre className="my-0">{children}</pre>,
                             ul: ({ children }) => <ul className="list-none pl-3 my-1.5 space-y-0.5">{children}</ul>,
@@ -286,7 +286,7 @@ export default function AgentChatView({
                             li: ({ children, ordered }: { children?: React.ReactNode; ordered?: boolean }) => (
                               <li className={`flex gap-2 ${ordered ? '[counter-increment:item]' : ''}`}>
                                 <span className="flex-shrink-0 mt-[3px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                  {ordered ? <span className="font-mono text-[12px] before:content-[counter(item,decimal)_'.']" /> : '•'}
+                                  {ordered ? <span className="font-mono text-[18px] before:content-[counter(item,decimal)_'.']" /> : '•'}
                                 </span>
                                 <span>{children}</span>
                               </li>
@@ -300,7 +300,7 @@ export default function AgentChatView({
                             ),
                             table: ({ children }) => (
                               <div className="overflow-x-auto my-2">
-                                <table className="text-[13px] border-collapse w-full">{children}</table>
+                                <table className="text-[20px] border-collapse w-full">{children}</table>
                               </div>
                             ),
                             th: ({ children }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
@@ -376,7 +376,7 @@ export default function AgentChatView({
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleSubmit(); } }}
             placeholder="Reply to Makaron…"
             disabled={isAgentActive}
-            className="flex-1 bg-transparent text-[14px] outline-none border-none leading-relaxed disabled:opacity-40"
+            className="flex-1 bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40"
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef' }}
           />
           <button

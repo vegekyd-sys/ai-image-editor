@@ -59,6 +59,46 @@ export default function ProjectsPage() {
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameMode, setRenameMode] = useState(false)
+
+  const openActionSheet = useCallback((e: React.MouseEvent, project: ProjectWithSnapshots) => {
+    e.stopPropagation()
+    setActionSheet(project)
+    setRenameValue(project.title)
+    setRenameMode(false)
+  }, [])
+
+  const handleDelete = useCallback(() => {
+    if (!actionSheet) return
+    // Optimistic: remove from UI and close sheet immediately
+    const projectId = actionSheet.id
+    setProjects(prev => prev.filter(p => p.id !== projectId))
+    setActionSheet(null)
+    // Delete from DB in background (fire-and-forget)
+    Promise.resolve().then(async () => {
+      try {
+        const supabase = createClient()
+        await Promise.all([
+          supabase.from('messages').delete().eq('project_id', projectId),
+          supabase.from('snapshots').delete().eq('project_id', projectId),
+        ])
+        await supabase.from('projects').delete().eq('id', projectId)
+      } catch (err) {
+        console.error('Delete project error:', err)
+      }
+    })
+  }, [actionSheet])
+
+  const handleRename = useCallback(async () => {
+    if (!actionSheet || !renameValue.trim()) return
+    const newTitle = renameValue.trim()
+    const supabase = createClient()
+    await supabase.from('projects').update({ title: newTitle, updated_at: new Date().toISOString() }).eq('id', actionSheet.id)
+    setProjects(prev => prev.map(p => p.id === actionSheet.id ? { ...p, title: newTitle } : p))
+    setActionSheet(null)
+  }, [actionSheet, renameValue])
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login')
@@ -312,12 +352,120 @@ export default function ProjectsPage() {
                   project={project}
                   index={i}
                   onClick={() => router.push(`/projects/${project.id}`)}
+                  onMore={(e) => openActionSheet(e, project)}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* ── Action Sheet ── */}
+      {actionSheet && (
+        <div
+          onClick={() => setActionSheet(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'flex-end',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: '480px', margin: '0 auto',
+              background: '#141414', borderRadius: '20px 20px 0 0',
+              padding: '12px 16px 32px',
+              border: '1px solid rgba(255,255,255,0.07)',
+            }}
+          >
+            {/* Handle */}
+            <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.15)', margin: '0 auto 16px' }} />
+
+            {/* Project name */}
+            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.06em', textAlign: 'center', marginBottom: '16px' }}>
+              {actionSheet.title}
+            </div>
+
+            {renameMode ? (
+              /* Rename input */
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setRenameMode(false); }}
+                  style={{
+                    flex: 1, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: '10px', padding: '12px 14px', color: '#fff', fontSize: '0.9rem',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={handleRename}
+                  style={{
+                    background: 'rgba(217,70,239,0.2)', border: '1px solid rgba(217,70,239,0.3)',
+                    borderRadius: '10px', color: 'rgba(217,70,239,0.9)', padding: '0 18px',
+                    cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500,
+                  }}
+                >
+                  保存
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Rename button */}
+                <button
+                  onClick={() => setRenameMode(true)}
+                  style={{
+                    width: '100%', padding: '16px', background: 'rgba(255,255,255,0.04)',
+                    border: 'none', borderRadius: '12px', color: 'rgba(255,255,255,0.8)',
+                    cursor: 'pointer', fontSize: '0.9rem', textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px',
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  重命名
+                </button>
+
+                {/* Delete button */}
+                <button
+                  onClick={handleDelete}
+                  style={{
+                    width: '100%', padding: '16px', background: 'rgba(239,68,68,0.08)',
+                    border: 'none', borderRadius: '12px', color: 'rgba(239,68,68,0.85)',
+                    cursor: 'pointer', fontSize: '0.9rem', textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px',
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3,6 5,6 21,6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                  </svg>
+                  删除项目
+                </button>
+              </>
+            )}
+
+            {/* Cancel */}
+            <button
+              onClick={() => setActionSheet(null)}
+              style={{
+                width: '100%', padding: '14px', background: 'none',
+                border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer',
+                fontSize: '0.85rem', marginTop: '4px',
+              }}
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -326,27 +474,30 @@ function ProjectRow({
   project,
   index,
   onClick,
+  onMore,
 }: {
   project: ProjectWithSnapshots
   index: number
   onClick: () => void
+  onMore: (e: React.MouseEvent) => void
 }) {
   const total = project.snapshots.length
 
   return (
-    <button
-      onClick={onClick}
+    <div
       className="mkr-row mkr-row-enter"
       style={{
-        textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
+        textAlign: 'left', background: 'none',
         padding: '16px 12px', borderRadius: '14px', display: 'block',
         animationDelay: `${index * 0.05}s`,
         marginLeft: '-12px', width: 'calc(100% + 24px)',
+        cursor: 'pointer',
       }}
+      onClick={onClick}
     >
-      {/* Title + time */}
+      {/* Title + time + more button */}
       <div style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: '12px',
       }}>
         <span style={{
@@ -356,9 +507,23 @@ function ProjectRow({
         }}>
           {project.title}
         </span>
-        <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.22)', letterSpacing: '0.04em', flexShrink: 0 }}>
-          {timeAgo(project.updated_at)}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.22)', letterSpacing: '0.04em' }}>
+            {timeAgo(project.updated_at)}
+          </span>
+          <button
+            onClick={onMore}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px',
+              color: 'rgba(255,255,255,0.2)', fontSize: '1rem', lineHeight: 1,
+              borderRadius: '6px', transition: 'color 0.15s',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.55)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.2)')}
+          >
+            ···
+          </button>
+        </div>
       </div>
 
       {/* Filmstrip: thumbnails connected by a timeline rail */}
@@ -387,7 +552,7 @@ function ProjectRow({
           ))}
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
