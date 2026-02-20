@@ -52,11 +52,18 @@ function timeAgo(dateStr: string): string {
   return `${months}mo ago`
 }
 
+// Module-level cache — survives navigation, cleared on explicit refresh
+let _projectsCache: ProjectWithSnapshots[] | null = null
+
+export function invalidateProjectsCache() {
+  _projectsCache = null
+}
+
 export default function ProjectsPage() {
   const { user, loading: authLoading, signOut } = useAuth()
   const router = useRouter()
-  const [projects, setProjects] = useState<ProjectWithSnapshots[]>([])
-  const [loadingProjects, setLoadingProjects] = useState(true)
+  const [projects, setProjects] = useState<ProjectWithSnapshots[]>(_projectsCache ?? [])
+  const [loadingProjects, setLoadingProjects] = useState(_projectsCache === null)
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
@@ -107,46 +114,63 @@ export default function ProjectsPage() {
   useEffect(() => {
     if (!user) return
     const supabase = createClient()
+    const hasCache = _projectsCache !== null
 
     async function fetchProjects() {
       const { data: projectRows, error: pErr } = await supabase
         .from('projects')
         .select('id, title, cover_url, updated_at, created_at')
         .eq('user_id', user!.id)
-        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (pErr || !projectRows) {
         console.error('Failed to fetch projects:', pErr)
-        setLoadingProjects(false)
+        if (!hasCache) setLoadingProjects(false)
         return
       }
 
       if (projectRows.length === 0) {
+        _projectsCache = []
         setProjects([])
         setLoadingProjects(false)
         return
       }
 
-      const projectIds = projectRows.map((p) => p.id)
-      const { data: snapshotRows, error: sErr } = await supabase
-        .from('snapshots')
-        .select('id, project_id, image_url, sort_order')
-        .in('project_id', projectIds)
-        .order('sort_order', { ascending: true })
+      // Incremental: only fetch snapshots for projects whose updated_at changed
+      const cachedMap = new Map(_projectsCache?.map(p => [p.id, p]) ?? [])
+      const staleIds = projectRows
+        .filter(p => {
+          const cached = cachedMap.get(p.id)
+          return !cached || cached.updated_at !== p.updated_at
+        })
+        .map(p => p.id)
 
-      if (sErr) console.error('Failed to fetch snapshots:', sErr)
-
+      const staleSet = new Set(staleIds)
       const snapshotMap = new Map<string, { id: string; image_url: string; sort_order: number }[]>()
-      for (const s of snapshotRows ?? []) {
-        const list = snapshotMap.get(s.project_id) ?? []
-        list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
-        snapshotMap.set(s.project_id, list)
+      // Carry over cached snapshots only for unchanged projects
+      for (const [id, p] of cachedMap) {
+        if (!staleSet.has(id)) snapshotMap.set(id, p.snapshots)
+      }
+
+      if (staleIds.length > 0) {
+        const { data: snapshotRows, error: sErr } = await supabase
+          .from('snapshots')
+          .select('id, project_id, image_url, sort_order')
+          .in('project_id', staleIds)
+          .order('sort_order', { ascending: true })
+        if (sErr) console.error('Failed to fetch snapshots:', sErr)
+        for (const s of snapshotRows ?? []) {
+          const list = snapshotMap.get(s.project_id) ?? []
+          list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
+          snapshotMap.set(s.project_id, list)
+        }
       }
 
       const result: ProjectWithSnapshots[] = projectRows
         .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [] }))
         .filter((p) => p.snapshots.length > 0)
 
+      _projectsCache = result
       setProjects(result)
       setLoadingProjects(false)
     }

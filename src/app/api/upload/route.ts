@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     const jpegBuffer = await sharp(inputBuffer)
       .rotate()
-      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+      .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 85 })
       .toBuffer();
 

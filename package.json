@@ -9,12 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.26.3",
-    "@anthropic-ai/claude-agent-sdk": "^0.2.45",
-    "@anthropic-ai/sdk": "^0.77.0",
+    "@ai-sdk/amazon-bedrock": "^4.0.61",
     "@google/genai": "^1.40.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.96.0",
+    "ai": "^6.0.91",
     "heic2any": "^0.0.4",
     "next": "16.1.6",
     "react": "19.2.3",
@@ -31,6 +30,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jsonwebtoken": "^9.0.3",
+    "raw-loader": "^4.0.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

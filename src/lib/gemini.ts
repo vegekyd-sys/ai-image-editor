@@ -1,7 +1,8 @@
 import { GoogleGenAI, Chat, Type } from '@google/genai';
 import { Tip } from '@/types';
-import fs from 'fs';
-import path from 'path';
+import enhancePrompt from './prompts/enhance.md';
+import creativePrompt from './prompts/creative.md';
+import wildPrompt from './prompts/wild.md';
 
 // ── Provider & Model Config ─────────────────────────────────────
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
@@ -40,86 +41,30 @@ const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理�
 
 // ── Per-Category Tips Prompts ────────────────────────────────────
 // Tips are generated in 3 parallel calls (one per category) for faster loading.
+// All rules live in the .md files — this is just role + format framing.
 
 type TipCategory = 'enhance' | 'creative' | 'wild';
 
-const CATEGORY_INFO: Record<TipCategory, { cn: string; definition: string; selfCheck: string; rules: string }> = {
-  enhance: {
-    cn: 'enhance（专业增强）',
-    definition: 'enhance = 让照片整体变好看（光影/色彩/通透感），变化必须肉眼明显',
-    selfCheck: `enhance自检：
-- 放在原图旁边，任何人都能一眼看出提升吗？（"看不出变化"=3分）
-- 风格与照片情绪匹配吗？（搞笑照片配阴沉暗调=4分）
-- 有通透感+景深分离+色调层次吗？
-- enhance可以调整构图，但必须基于原图——编辑后还能一眼认出是同一张照片（"画面变化太多了"=3分）
-- 编辑后的背景还是原图的背景吗？enhance是提升原图不是生成新图（"背景被换掉了"=3分，"人物都变了"=1分）`,
-    rules: `⚠️ enhance的editPrompt必须包含背景锚定：
-"Keep the original background scene intact — enhance lighting and colors on the existing scene, do NOT replace or regenerate the background."`,
-  },
-  creative: {
-    cn: 'creative（趣味创意）',
-    definition: 'creative = 往画面里加入一个与画面内容有因果关系的有趣新元素',
-    selfCheck: `creative自检（三问全过才输出）：
-- Q1 为什么是这个元素？能不能一句话说清"因为画面里有X所以加Y"？说不清=换一个
-- Q2 情绪对吗？让人笑/惊喜=好，让人害怕/困惑=换
-- Q3 这个创意能用在其他照片上吗？能=太通用=换一个`,
-    rules: `creative品质标准：
-- 加入的动物/角色必须是photorealistic写实风（cartoon/卡通=贴纸感）
-- 足够大且显眼，至少占画面5-10%面积
-- 必须与人物有互动/眼神交流，不能像贴纸`,
-  },
-  wild: {
-    cn: 'wild（疯狂脑洞）',
-    definition: 'wild = 让画面中已有的物品发生疯狂变化（不是加新东西！）',
-    selfCheck: `wild自检（四问全过才输出）：
-- Q1 变化的主角是画面中已有的什么东西？指不出来=不是wild
-- Q2 变化够大吗？一眼就能看到变化=好。改镜片/眼镜反射内容=太小不够大(3分"眼镜idea傻")
-- Q3 变化是基于物品本身特点还是随便套的？表面视觉类比（层状=蛋糕/抹茶、圆形=球）=换一个。"变成食物/饮品"除非厨房场景否则=万金油套路
-- Q4 这个变化会不会让人不适/恐怖？（超长舌头=3分"有点吓人"、身体扭曲变形=不适）→ 换一个有趣的方向`,
-    rules: `wild额外规则：只选画面中重要/显眼的元素做变化，不要选边缘模糊的小物件`,
-  },
+const CATEGORY_CN: Record<TipCategory, string> = {
+  enhance: 'enhance（专业增强）',
+  creative: 'creative（趣味创意）',
+  wild: 'wild（疯狂脑洞）',
 };
 
 function buildCategorySystemPrompt(category: TipCategory): string {
-  const info = CATEGORY_INFO[category];
-  return `你是图片编辑建议专家。分析图片后生成2条${info.cn}编辑建议。label必须用中文3-6字，动词开头。editPrompt用英文，极其具体。
-
-${info.definition}
-
-⚠️ 第一步：判断人脸大小！
-分析图片时首先判断人脸在画面中的占比：
-- 大脸（特写/半身照，脸部占画面>10%）→ 正常处理
-- 小脸（全身照/合照/远景/广角，脸部占画面<10%）→ 触发小脸保护模式
-小脸保护模式下所有editPrompt必须包含：
-"CRITICAL: Faces in this photo are small. Each person's face must remain PIXEL-IDENTICAL to the original — same face shape, same skin, same features, same expression. Do NOT regenerate, retouch, relight, or alter any face. Copy faces exactly as-is from the original image."
-小脸时人物反应只能用身体语言（身体后仰/转头/手指向变化），绝不能要求面部表情变化。
-
-自检框架（输出每个tip前先过一遍）：
-
-${info.selfCheck}
-
-${info.rules}
-
-⚠️ 人脸保真是最大扣分项！涉及人物的editPrompt必须包含：
-"Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider or rounder."
-- 最安全：人物完全不变，只改物品/环境
-
-⚠️ 所有editPrompt都必须包含背景净化：
-"Remove all distracting background pedestrians and bystanders."
-
-2个tip必须选不同方向。结尾加"Do NOT add any text, watermarks, or borders."`;
+  return `你是图片编辑建议专家。分析图片后生成2条${CATEGORY_CN[category]}编辑建议。
+label必须用中文3-6字，动词开头。editPrompt用英文，极其具体。`;
 }
 
-// Load single .md prompt template from disk
-const _promptTemplateCache: Record<string, string> = {};
+// Prompt templates bundled via webpack asset/source
+const PROMPT_TEMPLATES: Record<TipCategory, string> = {
+  enhance: enhancePrompt,
+  creative: creativePrompt,
+  wild: wildPrompt,
+};
+
 function getPromptTemplate(category: TipCategory): string {
-  if (_promptTemplateCache[category] && process.env.NODE_ENV === 'production') {
-    return _promptTemplateCache[category];
-  }
-  const promptsDir = path.join(process.cwd(), 'src/lib/prompts');
-  const content = fs.readFileSync(path.join(promptsDir, `${category}.md`), 'utf-8');
-  _promptTemplateCache[category] = content;
-  return content;
+  return PROMPT_TEMPLATES[category];
 }
 
 // Google structured output schema (only used with Google provider + gemini-3)
@@ -693,7 +638,9 @@ async function* streamTipsByCategoryGoogle(
         parts: [
           { inlineData: { mimeType, data: base64Data } },
           {
-            text: `分析这张图片，参考以下模板，给出2条${category}编辑建议。
+            text: `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
+
+基于分析，严格遵循以下所有规则，给出2条${category}编辑建议：
 
 ${template}${promptSuffix}`,
           },
@@ -729,7 +676,9 @@ async function* streamTipsByCategoryOpenRouter(
             { type: 'image_url', image_url: { url: dataUrl } },
             {
               type: 'text',
-              text: `分析这张图片，参考以下模板，给出2条${category}编辑建议。
+              text: `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
+
+基于分析，严格遵循以下所有规则，给出2条${category}编辑建议：
 
 ${template}${JSON_FORMAT_SUFFIX}`,
             },

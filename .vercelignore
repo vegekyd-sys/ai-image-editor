@@ -1,6 +1,9 @@
 testcase/
 test-results/
-scripts/
+scripts/batch-test*
+scripts/auto-optimize*
+scripts/run-variations*
+scripts/serve*
 *.jpg
 *.jpeg
 *.png

@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { prompt, image, projectId, analysisOnly, analysisContext,
-            tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
+            tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips } = await req.json();
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image)) {
@@ -95,7 +95,11 @@ export async function POST(req: NextRequest) {
               return;
             }
             const tip = committedTip as { emoji: string; label: string; desc: string; category: string };
-            const reactionPrompt = `用户刚刚通过TipsBar确认了编辑操作：\n${tip.emoji} ${tip.label}（${tip.category}）：${tip.desc}\n\n用1-2句中文自然地回应，像朋友聊天。可评价效果或提下一步。禁止以"我"开头，禁止照抄tip名称。`;
+            const siblings = (currentTips ?? []) as { emoji: string; label: string; desc: string; category: string }[];
+            const siblingContext = siblings.length > 0
+              ? `\n\nTipsBar 里还有这些可以试的：\n${siblings.map(t => `- ${t.emoji} ${t.label}（${t.category}）`).join('\n')}`
+              : '';
+            const reactionPrompt = `用户刚刚通过TipsBar确认了编辑操作：\n${tip.emoji} ${tip.label}（${tip.category}）：${tip.desc}${siblingContext}\n\n用1-2句中文自然地回应，像朋友聊天。如果提下一步，必须从上面的TipsBar建议里挑一个具体推荐。禁止以"我"开头，禁止照抄tip名称。`;
             for await (const event of runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true })) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             }

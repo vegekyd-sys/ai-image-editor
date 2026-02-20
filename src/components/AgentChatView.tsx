@@ -123,8 +123,14 @@ export default function AgentChatView({
     if (headerRef.current) setHeaderH(headerRef.current.offsetHeight);
   }, []);
 
+  const isFirstScrollRef = useRef(true);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isFirstScrollRef.current) {
+      isFirstScrollRef.current = false;
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, agentStatus]);
 
   useEffect(() => {

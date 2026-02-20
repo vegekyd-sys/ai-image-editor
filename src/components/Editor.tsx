@@ -101,10 +101,15 @@ export default function Editor({
   snapshotsRef.current = snapshots;
   const viewIndexRef = useRef(viewIndex);
   viewIndexRef.current = viewIndex;
+  const draftParentIndexRef = useRef(draftParentIndex);
+  draftParentIndexRef.current = draftParentIndex;
+  const previewingTipIndexRef = useRef(previewingTipIndex);
+  previewingTipIndexRef.current = previewingTipIndex;
   const isAgentActiveRef = useRef(isAgentActive);
   useEffect(() => { isAgentActiveRef.current = isAgentActive; }, [isAgentActive]);
   const isTipsFetchingRef = useRef(isTipsFetching);
   isTipsFetchingRef.current = isTipsFetching;
+  const previewDoneBaselineRef = useRef(0);
   const pendingTeaserRef = useRef<{ snapshotId: string; tips: Tip[] } | null>(null);
   const isReactionInFlightRef = useRef(false);
   // Track which snapshot's teaser has already been displayed (prevents progress bar from overwriting)
@@ -368,6 +373,7 @@ export default function Editor({
   // Fetch tips via 3 parallel SSE streams (one per category) for faster loading
   const fetchTipsForSnapshot = useCallback((snapshotId: string, imageInput: string) => {
     setIsTipsFetching(true);
+    previewDoneBaselineRef.current = 0; // new snapshot, no prior done tips
     // Fresh abort controller for this batch of previews
     previewAbortRef.current = new AbortController();
     // Show a loading hint in StatusBar if agent is not busy
@@ -558,7 +564,7 @@ export default function Editor({
         agentAbortRef.current.signal,
       );
     } catch (err) {
-      console.error('Auto-analysis failed:', err);
+      console.error('[runAutoAnalysis] error:', err);
     } finally {
       setIsAgentActive(false);
       // Drain any pending teaser that was queued while analysis was running
@@ -572,7 +578,15 @@ export default function Editor({
 
   // Agent request: route user message through Makaron Agent
   const handleAgentRequest = useCallback(async (text: string) => {
-    const currentImage = snapshotsRef.current[viewIndexRef.current]?.image;
+    // When viewing a draft, use the preview image; otherwise use the snapshot image
+    let currentImage = snapshotsRef.current[viewIndexRef.current]?.image;
+    let contextSnapshotIndex = viewIndexRef.current;
+    if (!currentImage && draftParentIndexRef.current !== null && previewingTipIndexRef.current !== null) {
+      const parentTips = snapshotsRef.current[draftParentIndexRef.current]?.tips ?? [];
+      currentImage = parentTips[previewingTipIndexRef.current]?.previewImage
+        || snapshotsRef.current[draftParentIndexRef.current]?.image;
+      contextSnapshotIndex = draftParentIndexRef.current;
+    }
     if (!currentImage || !projectId) return;
 
     const imageBase64 = await ensureBase64(currentImage);
@@ -596,8 +610,10 @@ export default function Editor({
     // Track all assistant message IDs created in this run for persistence on done
     const agentMsgIds: string[] = [assistantMsgId];
 
-    // Include pre-computed image description if available
-    const currentDescription = snapshotsRef.current[viewIndexRef.current]?.description;
+    // Include pre-computed image description only when viewing a real snapshot (not a draft/preview)
+    // Draft's image may differ significantly from the parent snapshot's description — skip to avoid mismatch
+    const isViewingDraft = contextSnapshotIndex !== viewIndexRef.current;
+    const currentDescription = isViewingDraft ? undefined : snapshotsRef.current[contextSnapshotIndex]?.description;
     const descriptionContext = currentDescription
       ? `[图片分析结果]\n${currentDescription}\n\n`
       : '';
@@ -613,7 +629,7 @@ export default function Editor({
       : '';
 
     // Inject current tips into the prompt so agent can reference them
-    const currentTipsForPrompt = snapshotsRef.current[viewIndexRef.current]?.tips ?? [];
+    const currentTipsForPrompt = snapshotsRef.current[contextSnapshotIndex]?.tips ?? [];
     const tipsContext = currentTipsForPrompt.length > 0
       ? `[当前TipsBar中的编辑建议]\n${currentTipsForPrompt.map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`).join('\n')}\n\n`
       : '';
@@ -727,7 +743,7 @@ export default function Editor({
 
     // Add chat messages for context
     addMessage('user', tip.label);
-    const assistantMsg = addMessage('assistant', `已应用编辑：${tip.desc}`);
+    const assistantMsg = addMessage('assistant', '', tip.previewImage);
 
     // Create new committed snapshot from the draft image
     const snapId = generateId();
@@ -796,6 +812,8 @@ export default function Editor({
     const tipsSourceIdx = isViewingDraft ? draftParentIndex : viewIndex;
     const snap = tipsSourceIdx !== null ? snapshots[tipsSourceIdx] : null;
     if (!snap) return;
+    // Baseline = done count right now, so x/y resets to 0/1 (or 0/N for multi-retry)
+    previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
     generatePreviewForTip(snap.id, tip.editPrompt, snap.image, tip.aspectRatio);
   }, [isViewingDraft, draftParentIndex, viewIndex, snapshots, generatePreviewForTip]);
 
@@ -864,6 +882,21 @@ export default function Editor({
   }, [fetchTipsForSnapshot, onSaveSnapshot]);
 
   // Auto-trigger upload when a pending image is passed (new project from projects page)
+  // Lock body scroll while editor is mounted to prevent iOS back-navigation jump
+  useEffect(() => {
+    const prev = { overflow: document.body.style.overflow, position: document.body.style.position, width: document.body.style.width, top: document.body.style.top };
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.top = '0';
+    return () => {
+      document.body.style.overflow = prev.overflow;
+      document.body.style.position = prev.position;
+      document.body.style.width = prev.width;
+      document.body.style.top = prev.top;
+    };
+  }, []);
+
   const pendingHandled = useRef(false);
   useEffect(() => {
     if (pendingImage && !pendingHandled.current) {
@@ -920,10 +953,15 @@ export default function Editor({
 
     const total = snap.tips.length;
     if (total === 0) return;
-    const settled = snap.tips.filter(t => t.previewStatus === 'done' || t.previewStatus === 'error').length;
+    const generating = snap.tips.filter(t => t.previewStatus === 'generating').length;
     const done = snap.tips.filter(t => t.previewStatus === 'done').length;
-    if (settled < total && teaserSnapshotRef.current !== snap.id) {
-      setAgentStatus(`正使用nano banana pro生成图片 ${done}/${total}`);
+    const settled = snap.tips.filter(t => t.previewStatus === 'done' || t.previewStatus === 'error').length;
+    if (generating > 0 && teaserSnapshotRef.current !== snap.id) {
+      const x = done - previewDoneBaselineRef.current;
+      const y = x + generating;
+      setAgentStatus(`正使用nano banana pro生成图片 ${x}/${y}`);
+    } else if (settled === total && !isAgentActive) {
+      setAgentStatus(prev => prev.includes('nano banana') ? AGENT_GREETING : prev);
     }
   }, [snapshots, tipsSourceIndex, isAgentActive, isTipsFetching]);
 
@@ -1100,7 +1138,7 @@ export default function Editor({
           messages={messages}
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
-          currentImage={snapshots[viewIndex]?.image}
+          currentImage={isDraft ? (draftImage ?? undefined) : snapshots[viewIndex]?.image}
           onSendMessage={handleAgentRequest}
           onBack={() => window.history.back()}
           onPipTap={() => window.history.back()}

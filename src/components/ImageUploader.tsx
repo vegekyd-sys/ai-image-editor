@@ -7,7 +7,7 @@ interface ImageUploaderProps {
   disabled?: boolean;
 }
 
-function compressImage(file: File, maxWidth = 1024): Promise<string> {
+function compressImage(file: File, maxWidth = 2048): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {

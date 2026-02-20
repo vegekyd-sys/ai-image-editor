@@ -16,7 +16,7 @@ export async function streamAgent(
   body: {
     prompt: string; image: string; projectId: string;
     analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit';
-    tipReaction?: boolean; committedTip?: object;
+    tipReaction?: boolean; committedTip?: object; currentTips?: object[];
     tipsTeaser?: boolean; tipsPayload?: object[];
     nameProject?: boolean; description?: string;
     previewsReady?: boolean; readyTips?: object[];
