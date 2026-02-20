@@ -1,8 +1,12 @@
-import { streamText, tool, stepCountIs } from 'ai';
+import { streamText, generateText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
-import { generatePreviewImage } from './gemini';
+import { generatePreviewImage, generateImageWithReferences } from './gemini';
 import agentPrompt from './prompts/agent.md';
+import enhancePrompt from './prompts/enhance.md';
+import creativePrompt from './prompts/creative.md';
+import wildPrompt from './prompts/wild.md';
+import type { Tip } from '@/types';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -20,7 +24,8 @@ const MODEL = bedrock('us.anthropic.claude-sonnet-4-5-20250929-v1:0');
 // ---------------------------------------------------------------------------
 
 interface AgentContext {
-  currentImage: string; // base64 data URL – updated by tools
+  currentImage: string;    // base64 data URL – updated after each generation
+  originalImage?: string;  // base64 data URL – the very first image, never changes
   projectId: string;
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
@@ -50,17 +55,36 @@ function getAgentSystemPrompt(): string {
 function createTools(ctx: AgentContext) {
   return {
     generate_image: tool({
-      description: 'Edit the current photo. Takes a detailed English editing prompt and produces an edited image. The result is automatically shown to the user.',
+      description: `Edit the current photo using a detailed prompt.
+When originalImage is available (different from currentImage), TWO images are sent to the generator:
+  - Image 1 (原图/original): use for face, person identity, and scene reference — preserve what the user liked
+  - Image 2 (当前版本/current): the base image to edit from
+In your editPrompt, always reference these roles explicitly, e.g.:
+  "Referring to Image 1 (original) for exact face shape and identity preservation: [describe original face]
+   Edit Image 2 (current version): [describe what to change]"
+When user says "face changed" or "person looks different", use Image 1 as strict face reference.
+When no originalImage, only Image 1 (current) is sent.`,
       inputSchema: z.object({
-        editPrompt: z.string().describe('Detailed English prompt describing the desired edits'),
+        editPrompt: z.string().describe('Detailed English prompt. Reference Image 1/Image 2 roles when multiple images are available.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       }),
       execute: async ({ editPrompt, aspectRatio }) => {
-        const result = await generatePreviewImage(
-          ctx.currentImage,
-          editPrompt,
-          aspectRatio,
-        );
+        const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
+        let result: string | null;
+
+        if (hasOriginal) {
+          result = await generateImageWithReferences(
+            [
+              { url: ctx.originalImage!, role: '原图（人脸/人物/场景保真参考）' },
+              { url: ctx.currentImage,   role: '当前编辑版本（编辑基础，在此基础上修改）' },
+            ],
+            editPrompt,
+            aspectRatio,
+          );
+        } else {
+          result = await generatePreviewImage(ctx.currentImage, editPrompt, aspectRatio);
+        }
+
         if (!result) {
           return { success: false as const, message: 'Image generation failed. Try a different prompt.' };
         }
@@ -114,10 +138,11 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
+    originalImage: options?.originalImage,
     projectId,
     generatedImages: [],
   };
@@ -128,7 +153,7 @@ export async function* runMakaronAgent(
 
   const analysisOnly = options?.analysisOnly ?? false;
   const tipReactionOnly = options?.tipReactionOnly ?? false;
-  const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : 5;
+  const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : 10;
   const analysisPrompt = options?.analysisContext === 'post-edit'
     ? ANALYSIS_PROMPT_POSTEDIT
     : ANALYSIS_PROMPT_INITIAL;
@@ -205,4 +230,66 @@ export async function* runMakaronAgent(
   } catch (err) {
     yield { type: 'error', message: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Tips Skill: generate tips text using Claude (fast, ~2-3s vs Gemini ~15s)
+// ---------------------------------------------------------------------------
+
+const TIPS_JSON_FORMAT = `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字：
+[{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild"}, ...]`;
+
+const TIPS_PROMPTS: Record<'enhance' | 'creative' | 'wild', string> = {
+  enhance: enhancePrompt,
+  creative: creativePrompt,
+  wild: wildPrompt,
+};
+
+export async function* streamTipsWithClaude(
+  imageBase64: string,
+  category: 'enhance' | 'creative' | 'wild',
+): AsyncGenerator<Tip> {
+  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+  const template = TIPS_PROMPTS[category];
+
+  const systemPrompt = `你是图片编辑建议专家。分析图片后生成2条${category}编辑建议。label必须用中文3-6字，动词开头。editPrompt用英文，极其具体。`;
+
+  const userPrompt = `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
+
+基于分析，严格遵循以下所有规则，给出2条${category}编辑建议：
+
+${template}${TIPS_JSON_FORMAT}`;
+
+  const { textStream } = streamText({
+    model: MODEL,
+    system: systemPrompt,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'image', image: dataUrl },
+          { type: 'text', text: userPrompt },
+        ],
+      },
+    ],
+  });
+
+  // Collect full text then parse JSON
+  let fullText = '';
+  for await (const delta of textStream) {
+    fullText += delta;
+  }
+
+  // Extract JSON array from response
+  const jsonMatch = fullText.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return;
+
+  try {
+    const tips = JSON.parse(jsonMatch[0]) as Tip[];
+    for (const tip of tips) {
+      if (tip.label && tip.editPrompt && tip.category) {
+        yield tip;
+      }
+    }
+  } catch { /* parse error, yield nothing */ }
 }

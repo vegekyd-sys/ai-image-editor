@@ -403,7 +403,7 @@ export default function AgentChatView({
               }
             }}
             placeholder="你想怎么修改这张图片？"
-            disabled={isAgentActive}
+
             className="flex-1 bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden"
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem' }}
           />

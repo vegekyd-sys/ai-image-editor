@@ -947,6 +947,33 @@ V13 从 V12 的 7.3 降到 6.1，原因：
 
 ---
 
+## 待开发功能
+
+### 自适应 Tips 推荐（后续做）
+根据用户行为动态调整 6 个 tips 的类别分布（当前固定 2 enhance + 2 creative + 2 wild）：
+- **修图导向**：用户持续点击 enhance tips 或在 CUI 中说修图需求（"调色"、"变好看"、"光影"）→ 下一轮推 3-4 enhance + 1 creative + 1 wild
+- **娱乐导向**：用户点 creative/wild 或聊天内容偏"好玩"、"脑洞" → 下一轮推 1 enhance + 2-3 creative + 2 wild
+- **信号来源**：tip 点击历史（commit 了哪类）+ CUI 对话关键词 + 已生成图片的类别分布
+- **实现思路**：在 tips 生成请求中加 `preferredCategories` 权重，调整给模型的类别数量指令
+
+---
+
+## 待解决问题
+
+### Agent 多图人脸保真不稳定（已记录，待修）
+- **现象**：通过 CUI 多轮对话修图，用户要求"人脸跟原图一致"时，有时有效（人脸保真），有时无效（人脸仍然变形）
+- **当前实现**：`generate_image` 工具在 originalImage ≠ currentImage 时自动传入两张图给 Gemini（Image 1=原图，Image 2=当前版本），由 Claude 在 editPrompt 中引用
+- **可能原因**：
+  1. Gemini 对多图中的人脸参考图 (Image 1) 权重不稳定，有时忽略
+  2. editPrompt 写法不够强制 — Claude 有时没有在 editPrompt 中显式引用 Image 1 的人脸
+  3. 当 currentImage 已经是第 N 次生成结果时，人脸特征在 Image 2 中已经退化，Gemini 难以从 Image 1 恢复
+- **待尝试方向**：
+  - 在 `generateImageWithReferences` 里强制在 prompt 开头加人脸锚定句，不依赖 Claude 自己写
+  - 探索 Gemini 的 `reference_image` / `subject_preservation` 参数（如有）
+  - 对比只传原图（不传 currentImage）的效果
+
+---
+
 ## V42 测试结果（Prompt 架构重构后首次全量测试）
 
 ### 架构变更说明（V42 前）

@@ -30,7 +30,7 @@ async function ensureBase64(image: string): Promise<string> {
   });
 }
 
-function compressClientSide(file: File, maxSize = 1024, quality = 0.85): Promise<string> {
+function compressClientSide(file: File, maxSize = 2048, quality = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -66,6 +66,7 @@ interface EditorProps {
   initialTitle?: string;
   onRenameProject?: (title: string) => void;
   onBack?: () => void;
+  onNewProject?: (file: File) => void;
 }
 
 export default function Editor({
@@ -80,6 +81,7 @@ export default function Editor({
   initialTitle,
   onRenameProject,
   onBack,
+  onNewProject,
 }: EditorProps = {}) {
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
@@ -93,6 +95,7 @@ export default function Editor({
   const [agentStatus, setAgentStatus] = useState(AGENT_GREETING);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const newProjectFileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
   // Snapshots pending auto-analysis after current agent run finishes
   const pendingAnalysisRef = useRef<{ id: string; image: string }[]>([]);
@@ -370,104 +373,107 @@ export default function Editor({
     }
   }, [onUpdateTips]);
 
-  // Fetch tips via 3 parallel SSE streams (one per category) for faster loading
-  const fetchTipsForSnapshot = useCallback((snapshotId: string, imageInput: string) => {
+  // Fetch tips via 3 parallel calls to Claude (fast, ~2-3s vs Gemini ~15s)
+  // previewMode: 'full' = all tips get preview; 'selective' = 1 enhance + 1 wild; 'none' = no previews
+  const fetchTipsForSnapshot = useCallback((
+    snapshotId: string,
+    imageInput: string,
+    previewMode: 'full' | 'selective' | 'none' = 'full',
+  ) => {
     setIsTipsFetching(true);
-    previewDoneBaselineRef.current = 0; // new snapshot, no prior done tips
-    // Fresh abort controller for this batch of previews
+    previewDoneBaselineRef.current = 0;
     previewAbortRef.current = new AbortController();
-    // Show a loading hint in StatusBar if agent is not busy
     if (!isAgentActiveRef.current) {
       setAgentStatus('正在发现有趣的可能...');
     }
 
     const categories = ['enhance', 'creative', 'wild'] as const;
     let completedCount = 0;
-    let firstTipReceived = false;
-    // Resolve base64 once, share across all category streams
-    let resolvedBase64: string | null = null;
-    const base64Ready = ensureBase64(imageInput).then(b64 => { resolvedBase64 = b64; return b64; });
-
-    const fetchCategoryOnce = async (category: string, imageBase64: string) => {
-      const res = await fetch('/api/tips', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageBase64, category }),
-      });
-      if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
-
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let gotTips = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let boundary;
-        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-          const line = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          if (line.startsWith('data: ')) {
-            const payload = line.slice(6);
-            if (payload === '[DONE]') break;
-            try {
-              const tip = JSON.parse(payload) as Tip;
-              if (tip.label && tip.editPrompt && tip.category) {
-                gotTips = true;
-                tip.previewStatus = 'pending';
-                setSnapshots((prev) => prev.map((s) =>
-                  s.id === snapshotId ? { ...s, tips: [...s.tips, tip] } : s
-                ));
-                if (!firstTipReceived) {
-                  firstTipReceived = true;
-                }
-                // Fire preview generation immediately
-                generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
-              }
-            } catch { /* skip malformed */ }
-          }
-        }
-      }
-
-      if (!gotTips) throw new Error(`Tips ${category}: no tips received`);
-    };
+    const previewGenerated: Record<string, number> = { enhance: 0, wild: 0 };
 
     const fetchCategory = async (category: string) => {
-      const imageBase64 = await base64Ready;
+      const imageBase64 = await ensureBase64(imageInput);
       const MAX_RETRIES = 2;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
-          await fetchCategoryOnce(category, imageBase64);
-          break; // success
-        } catch {
-          if (attempt < MAX_RETRIES) {
-            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          const res = await fetch('/api/tips', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: imageBase64, category }),
+          });
+          if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
+
+          const reader = res.body!.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let boundary;
+            while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+              const line = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + 2);
+              if (line.startsWith('data: ')) {
+                const payload = line.slice(6);
+                if (payload === '[DONE]') break;
+                try {
+                  const tip = JSON.parse(payload) as Tip;
+                  if (tip.label && tip.editPrompt && tip.category) {
+                    tip.previewStatus = 'pending';
+                    setSnapshots((prev) => prev.map((s) =>
+                      s.id === snapshotId ? { ...s, tips: [...s.tips, tip] } : s
+                    ));
+
+                    const shouldPreview = (() => {
+                      if (previewMode === 'none') return false;
+                      if (previewMode === 'full') return true;
+                      const cat = tip.category as string;
+                      if ((cat === 'enhance' || cat === 'wild') && previewGenerated[cat] === 0) {
+                        previewGenerated[cat]++;
+                        return true;
+                      }
+                      return false;
+                    })();
+
+                    if (shouldPreview) {
+                      generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
+                    } else {
+                      setSnapshots((prev) => prev.map((s) =>
+                        s.id === snapshotId ? {
+                          ...s,
+                          tips: s.tips.map(t => t.label === tip.label ? { ...t, previewStatus: 'none' } : t),
+                        } : s
+                      ));
+                    }
+                  }
+                } catch { /* skip malformed */ }
+              }
+            }
           }
-          // Last attempt fails silently — tips are optional
+          break;
+        } catch {
+          if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         }
       }
+
       completedCount++;
       if (completedCount === categories.length) {
         setIsTipsFetching(false);
-        // Persist all tips once all categories are done
         if (onUpdateTips) {
           setSnapshots((prev) => {
             const snap = prev.find(s => s.id === snapshotId);
-            if (snap && snap.tips.length > 0) {
-              // Strip preview data before persisting (only save prompt metadata)
+            if (snap?.tips.length) {
               const tipsForDb = snap.tips.map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
               onUpdateTips(snapshotId, tipsForDb);
             }
             return prev;
           });
         }
-        // Trigger tips teaser after all tips loaded
         setTimeout(() => {
           const snap = snapshotsRef.current.find(s => s.id === snapshotId);
-          if (snap && snap.tips.length > 0) {
+          if (snap?.tips.length) {
             if (isAgentActiveRef.current) {
               pendingTeaserRef.current = { snapshotId, tips: snap.tips };
             } else {
@@ -480,7 +486,6 @@ export default function Editor({
       }
     };
 
-    // Fire all 3 category streams in parallel
     categories.forEach(cat => fetchCategory(cat));
   }, [generatePreviewForTip, onUpdateTips, triggerTipsTeaser]);
 
@@ -618,14 +623,15 @@ export default function Editor({
       ? `[图片分析结果]\n${currentDescription}\n\n`
       : '';
 
-    // Build multi-turn context: only include previous user messages
-    const prevUserMsgs = messages
-      .filter(m => m.role === 'user' && m.content)
-      .slice(-4)
-      .map(m => `- "${m.content.slice(0, 150)}"`)
+    // Build multi-turn context: include both user and assistant messages for full conversation history
+    // Large context model (1M tokens) — no need to truncate aggressively
+    const recentMessages = messages
+      .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
+      .slice(-30)
+      .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 500)}`)
       .join('\n');
-    const historyContext = prevUserMsgs
-      ? `[最近请求记录]\n${prevUserMsgs}\n\n`
+    const historyContext = recentMessages
+      ? `[对话历史]\n${recentMessages}\n\n`
       : '';
 
     // Inject current tips into the prompt so agent can reference them
@@ -636,9 +642,15 @@ export default function Editor({
 
     const fullPrompt = `${descriptionContext}${tipsContext}${historyContext}[当前请求]\n${text}`;
 
+    // Always pass the original snapshot (index 0) as reference for face/person preservation
+    const originalSnapshot = snapshotsRef.current[0];
+    const originalImageBase64 = originalSnapshot?.image
+      ? await ensureBase64(originalSnapshot.image)
+      : undefined;
+
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageBase64, projectId },
+        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId },
         {
           onStatus: (status) => setAgentStatus(status),
           onNewTurn: () => {
@@ -668,7 +680,7 @@ export default function Editor({
             };
             setSnapshots((prev) => [...prev, newSnapshot]);
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length);
-            fetchTipsForSnapshot(snapId, imageData);
+            fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
             setAgentStatus('图片已生成');
             const id = currentMsgId;
             setMessages((prev) => prev.map((m) =>
@@ -760,8 +772,8 @@ export default function Editor({
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
 
-    // Fetch new tips for the committed image
-    fetchTipsForSnapshot(snapId, tip.previewImage);
+    // Fetch new tips — selective preview (1 enhance + 1 wild) after commit
+    fetchTipsForSnapshot(snapId, tip.previewImage, 'selective');
 
     // Trigger agent CUI reaction to the committed tip
     const tipSnapshot = { emoji: tip.emoji, label: tip.label, desc: tip.desc, category: tip.category };
@@ -789,22 +801,40 @@ export default function Editor({
       return;
     }
 
+    // If tip has no preview yet ('none'), trigger generation only — don't select as draft yet
+    if (!tip.previewImage && (tip.previewStatus === 'none' || !tip.previewStatus)) {
+      // In draft state viewIndex is out of bounds; use draftParentIndex instead
+      const snapIdx = viewIndex < snapshots.length ? viewIndex : (draftParentIndex ?? 0);
+      const snap = snapshots[snapIdx];
+      if (snap && tip.editPrompt) {
+        previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
+        setSnapshots(prev => prev.map(s =>
+          s.id === snap.id ? {
+            ...s,
+            tips: s.tips.map(t => t.label === tip.label ? { ...t, previewStatus: 'pending' } : t),
+          } : s
+        ));
+        generatePreviewForTip(snap.id, tip.editPrompt, snap.image, tip.aspectRatio);
+      }
+      return; // don't create draft until image is ready
+    }
+
+    // If tip is still generating, ignore click
+    if (tip.previewStatus === 'pending' || tip.previewStatus === 'generating') return;
+
     // Update tip selection (switches draft image via draftImage memo)
     setPreviewingTipIndex(tipIndex);
 
     if (draftParentIndex === null) {
       // No draft → create one from current snapshot
       setDraftParentIndex(viewIndex);
-      // Auto-jump will handle moving to the new draft position
     } else if (!viewingDraft) {
       // Viewing a committed snapshot with an existing draft elsewhere
       // → update draft parent to current snapshot
       setDraftParentIndex(viewIndex);
-      // Jump to draft position (will be last in timeline)
-      // Use snapshots.length since that's where the draft sits
       setViewIndex(snapshots.length);
     }
-  }, [draftParentIndex, viewIndex, snapshots.length, previewingTipIndex, commitDraft]);
+  }, [draftParentIndex, viewIndex, snapshots, previewingTipIndex, commitDraft, generatePreviewForTip]);
 
   // Retry a failed preview generation
   const handleRetryPreview = useCallback((tip: Tip, tipIndex: number) => {
@@ -856,10 +886,22 @@ export default function Editor({
     prevTimelineLen.current = 1;
 
     try {
-      let base64: string;
+      // A1: try client-side compression first (fast), start tips immediately
+      let base64: string | null = null;
+      let tipsStarted = false;
       try {
         base64 = await compressClientSide(file);
+        // Start tips generation immediately with client-compressed image (A1)
+        const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
+        setSnapshots([newSnapshot]);
+        snapshotsRef.current = [newSnapshot];
+        fetchTipsForSnapshot(snapId, base64, 'full');
+        tipsStarted = true;
       } catch {
+        // HEIC or other format — fall through to server upload
+      }
+
+      if (!base64) {
         const formData = new FormData();
         formData.append('file', file);
         const res = await fetch('/api/upload', { method: 'POST', body: formData });
@@ -868,13 +910,17 @@ export default function Editor({
       }
       URL.revokeObjectURL(previewUrl);
 
-      const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
+      // Update snapshot image with final base64 (may differ from client-compressed for HEIC)
+      const newSnapshot: Snapshot = { id: snapId, image: base64!, tips: [], messageId: '' };
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
       onSaveSnapshot?.(newSnapshot, 0);
-      fetchTipsForSnapshot(snapId, base64);
+      // Only start tips if not already started (HEIC path)
+      if (!tipsStarted) {
+        fetchTipsForSnapshot(snapId, base64!, 'full');
+      }
       // Auto-analyze the uploaded photo
-      runAutoAnalysis(snapId, base64);
+      runAutoAnalysis(snapId, base64!);
     } catch (err) {
       console.error('Image upload error:', err);
       URL.revokeObjectURL(previewUrl);
@@ -956,8 +1002,8 @@ export default function Editor({
     const generating = snap.tips.filter(t => t.previewStatus === 'generating').length;
     const done = snap.tips.filter(t => t.previewStatus === 'done').length;
     const settled = snap.tips.filter(t => t.previewStatus === 'done' || t.previewStatus === 'error').length;
-    if (generating > 0 && teaserSnapshotRef.current !== snap.id) {
-      const x = done - previewDoneBaselineRef.current;
+    if (generating > 0) {
+      const x = Math.max(0, done - previewDoneBaselineRef.current);
       const y = x + generating;
       setAgentStatus(`正使用nano banana pro生成图片 ${x}/${y}`);
     } else if (settled === total && !isAgentActive) {
@@ -1041,6 +1087,18 @@ export default function Editor({
           e.target.value = '';
         }}
       />
+      {/* New project file input */}
+      <input
+        ref={newProjectFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onNewProject?.(file);
+          e.target.value = '';
+        }}
+      />
 
       {/* GUI mode */}
       {viewMode === 'gui' && (
@@ -1088,7 +1146,7 @@ export default function Editor({
                     </button>
                   )}
                   <button
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => newProjectFileInputRef.current?.click()}
                     className="text-white/80 hover:text-white p-2"
                   >
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

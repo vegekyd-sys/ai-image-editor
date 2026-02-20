@@ -15,6 +15,7 @@ export interface AgentStreamCallbacks {
 export async function streamAgent(
   body: {
     prompt: string; image: string; projectId: string;
+    originalImage?: string;
     analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit';
     tipReaction?: boolean; committedTip?: object; currentTips?: object[];
     tipsTeaser?: boolean; tipsPayload?: object[];

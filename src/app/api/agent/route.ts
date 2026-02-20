@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const { prompt, image, projectId, analysisOnly, analysisContext,
+    const { prompt, image, originalImage, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips } = await req.json();
 
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
           }
 
           // Normal agent request
-          for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext })) {
+          for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage })) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
           }
         } catch (err) {

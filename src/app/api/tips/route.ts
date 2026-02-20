@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { streamTipsByCategory } from '@/lib/gemini';
+import { streamTipsWithClaude } from '@/lib/agent';
 
 export const maxDuration = 60;
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const tip of streamTipsByCategory(image, category)) {
+          for await (const tip of streamTipsWithClaude(image, category)) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(tip)}\n\n`));
           }
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));

@@ -24,7 +24,7 @@ export interface Tip {
   category: 'enhance' | 'creative' | 'wild'; // tip category
   aspectRatio?: string; // target aspect ratio for recomposition (e.g. "4:5", "1:1", "16:9")
   previewImage?: string;    // base64 data URL of generated preview
-  previewStatus?: 'pending' | 'generating' | 'done' | 'error';
+  previewStatus?: 'pending' | 'generating' | 'done' | 'error' | 'none';
 }
 
 export interface ChatResponse {

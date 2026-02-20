@@ -127,10 +127,14 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onRetr
             {showCommit && (
               <button
                 onClick={() => onTipClick(tip, originalIndex)}
-                className="w-[36px] flex flex-col items-center justify-center gap-0 rounded-r-2xl border border-l-0 border-fuchsia-500 bg-fuchsia-500/20 text-fuchsia-300 hover:bg-fuchsia-500/30 active:scale-95 transition-all animate-glow"
+                className="w-[28px] flex items-center justify-center rounded-r-2xl border border-l-0 border-fuchsia-500 bg-fuchsia-500/20 text-fuchsia-300 hover:bg-fuchsia-500/30 active:scale-95 transition-all animate-glow"
               >
-                <span className="text-[18px] font-bold leading-none">›</span>
-                <span className="text-[9px] font-medium leading-tight opacity-80">继续</span>
+                <span
+                  className="text-[11px] font-semibold tracking-widest"
+                  style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}
+                >
+                  继续编辑
+                </span>
               </button>
             )}
           </div>

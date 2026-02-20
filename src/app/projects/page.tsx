@@ -14,7 +14,7 @@ interface ProjectWithSnapshots {
   snapshots: { id: string; image_url: string; sort_order: number }[]
 }
 
-function compressClientSide(file: File, maxSize = 1024, quality = 0.85): Promise<string> {
+function compressClientSide(file: File, maxSize = 2048, quality = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
     const img = new Image()
@@ -67,6 +67,7 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
+
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
 

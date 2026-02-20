@@ -8,11 +8,14 @@ import wildPrompt from './prompts/wild.md';
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
 const PROVIDER = (process.env.AI_PROVIDER || 'google') as 'google' | 'openrouter';
 
-// Model name (same for both providers, OpenRouter prefixes with 'google/')
+// Image generation model
 const MODEL = 'gemini-3-pro-image-preview';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = `google/${MODEL}`;
+
+// Fast vision model for tips TEXT generation (much faster than image gen model)
+const TIPS_MODEL = 'google/gemini-2.0-flash-001';
 
 // ── Google SDK singleton ────────────────────────────────────────
 let _ai: GoogleGenAI | null = null;
@@ -463,6 +466,37 @@ async function generatePreviewImageOpenRouter(
   return null;
 }
 
+// ── Multi-Reference Image Generation ────────────────────────────
+// Used by agent when originalImage is available alongside currentImage.
+// Each image gets a labeled role so Gemini knows what to do with each.
+
+export interface ImageReference {
+  url: string;   // base64 data URL
+  role: string;  // e.g. "原图（人脸/人物保真参考）", "当前编辑版本（编辑基础）"
+}
+
+export async function generateImageWithReferences(
+  images: ImageReference[],
+  editPrompt: string,
+  aspectRatio?: string,
+): Promise<string | null> {
+  // Build a prompt that labels each image by its role
+  const imageLabels = images
+    .map((img, i) => `[图片${i + 1}: ${img.role}]`)
+    .join('\n');
+  const fullPrompt = `${imageLabels}\n\n${editPrompt}`;
+
+  const urls = images.map(img => img.url);
+  const result = await generateWithMultipleImages(urls, fullPrompt, true);
+
+  if (result.image) return result.image;
+  // Fallback: if multi-image failed, use single-image on the last image (edit base)
+  const base = images[images.length - 1].url;
+  return PROVIDER === 'openrouter'
+    ? generatePreviewImageOpenRouter(base, editPrompt, aspectRatio)
+    : generatePreviewImageGoogle(base, editPrompt, aspectRatio);
+}
+
 // ── Multi-Image Generation (for experiments) ─────────────────────
 
 export async function generateWithMultipleImages(
@@ -571,6 +605,96 @@ async function generateMultiImageOpenRouter(
   }
 
   return { text, image };
+}
+
+// ── Streaming All Tips (single call for all 6) ─────────────────
+// Faster than 3 parallel calls — one API round trip, streams tips incrementally
+
+// ── Fast Tips Phase 1: emoji+label+desc+category only (no editPrompt) ──────
+// Very short prompt → ~3s to first result (vs 8-10s with full .md templates)
+
+const FAST_TIPS_SYSTEM = `你是图片编辑建议专家。快速分析图片给出6条编辑方向（2 enhance + 2 creative + 2 wild）。
+label中文3-6字动词开头。desc中文10-20字。不需要editPrompt。`;
+
+const FAST_TIPS_FORMAT = `\n\n请以JSON数组输出，只输出JSON：
+[{"emoji":"1个emoji","label":"中文3-6字","desc":"中文10-20字描述","category":"enhance|creative|wild"}, ...]`;
+
+export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<Tip, 'editPrompt'> & { editPrompt?: string }> {
+  if (process.env.MOCK_AI === 'true') {
+    for (const cat of ['enhance', 'creative', 'wild'] as const) {
+      yield* streamTipsByCategory(imageBase64, cat);
+    }
+    return;
+  }
+  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+  const res = await fetch(OPENROUTER_BASE, {
+    method: 'POST',
+    headers: openrouterHeaders(),
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      stream: true,
+      messages: [
+        { role: 'system', content: FAST_TIPS_SYSTEM },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: dataUrl } },
+            { type: 'text', text: `分析图片（判断人脸大小、具体物品、情绪基调），给出6条建议（2 enhance + 2 creative + 2 wild）。只输出emoji+label+desc+category。${FAST_TIPS_FORMAT}` },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`Fast tips error ${res.status}`);
+
+  // Reuse incremental parser — tips without editPrompt are fine here
+  for await (const tip of parseIncrementalTipsFromStream(sseToTextIterator(res))) {
+    yield tip;
+  }
+}
+
+// ── EditPrompt generation for a single tip (Phase 2) ────────────
+export async function generateEditPromptForTip(
+  imageBase64: string,
+  tip: { emoji: string; label: string; desc: string; category: string },
+): Promise<string | null> {
+  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+  const cat = tip.category as 'enhance' | 'creative' | 'wild';
+  const template = PROMPT_TEMPLATES[cat] ?? '';
+  const systemPrompt = buildCategorySystemPrompt(cat);
+
+  const res = await fetch(OPENROUTER_BASE, {
+    method: 'POST',
+    headers: openrouterHeaders(),
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      stream: false,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: dataUrl } },
+            {
+              type: 'text',
+              text: `这张图片有一条编辑建议：${tip.emoji} ${tip.label}（${tip.desc}）\n\n严格遵循以下规范，为这条建议生成详细的 editPrompt（英文，200词以内）。只输出 editPrompt 字符串本身，不要 JSON，不要解释。\n\n${template}`,
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) return null;
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content;
+  return typeof text === 'string' ? text.trim() : null;
+}
+
+export async function* streamAllTips(imageBase64: string): AsyncGenerator<Tip> {
+  for (const cat of ['enhance', 'creative', 'wild'] as const) {
+    yield* streamTipsByCategory(imageBase64, cat);
+  }
 }
 
 // ── Streaming Tips Generation (per-category) ────────────────────
