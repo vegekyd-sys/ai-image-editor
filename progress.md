@@ -947,6 +947,38 @@ V13 从 V12 的 7.3 降到 6.1，原因：
 
 ---
 
+## V43 架构改动记录（2026-02-20）
+
+### Tips 速度优化（最重要）
+- **根本原因**：之前用 Gemini 图片生成模型（`gemini-3-pro-image-preview`）生成 tips 文字，该模型专为图片生成设计，用于文字生成极慢（~17-35s）
+- **修复**：Tips 文字生成改用 Claude Sonnet (Bedrock)，速度提升至 ~10s
+- **实现**：`agent.ts` 新增 `streamTipsWithClaude`，`/api/tips` 路由调用 Claude 而非 Gemini
+- **架构**：保留 3 个并行 per-category 调用（faster first-tip）；Gemini 只用于图片生成
+
+### Tips 预览图选择性生成（B 功能）
+- 首次上传 → `previewMode: 'full'`（6 张预览图）
+- Tip commit 后 → `previewMode: 'selective'`（1 enhance + 1 wild）
+- CUI 生图后 → `previewMode: 'none'`（0 张）
+- 点击 `none` 状态 tip → 触发按需生成，spinner 显示，生成完成后才可选中（不提前创建 draft）
+- StatusBar 修复：移除 `teaserSnapshotRef` 干扰条件，手动触发生成正确显示"正使用nano banana pro"
+
+### Agent 多图参考
+- `generate_image` 工具在有 `originalImage` 时自动传入两张图给 Gemini（原图+当前版本）
+- Claude 的 editPrompt 明确引用 Image 1（原图）做人脸保真参考
+- `agent.md` 更新多图 prompt 模板和人脸问题处理策略
+
+### 其他改进
+- 对话历史从 4 条扩展到 30 条（适配 1M context 模型）
+- agent 分析中输入框可输入
+- 客户端压缩统一提升到 2048px（提升输出图片分辨率）
+- 编辑页「+」按钮改为创建新项目（不再上传到当前项目）
+
+### 已知问题
+- Agent 多图人脸保真仍不稳定（有时有效有时无效，待深入调查）
+- Tips 速度目标是 5s，目前 ~10s，还有空间（可考虑 Claude Haiku）
+
+---
+
 ## 待开发功能
 
 ### 自适应 Tips 推荐（后续做）
