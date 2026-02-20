@@ -55,28 +55,47 @@ function getAgentSystemPrompt(): string {
 function createTools(ctx: AgentContext) {
   return {
     generate_image: tool({
-      description: `Edit the current photo using a detailed prompt.
-When originalImage is available (different from currentImage), TWO images are sent to the generator:
-  - Image 1 (原图/original): use for face, person identity, and scene reference — preserve what the user liked
-  - Image 2 (当前版本/current): the base image to edit from
-In your editPrompt, always reference these roles explicitly, e.g.:
-  "Referring to Image 1 (original) for exact face shape and identity preservation: [describe original face]
-   Edit Image 2 (current version): [describe what to change]"
-When user says "face changed" or "person looks different", use Image 1 as strict face reference.
-When no originalImage, only Image 1 (current) is sent.`,
+      description: `Edit the current photo. Write a detailed English editPrompt and optionally set useOriginalAsBase.
+
+--- DECIDING useOriginalAsBase ---
+Before calling this tool, answer: does the user want to FIX the current version, or START FRESH from the original?
+- Fix current (default, useOriginalAsBase=false): "再调整一下" / "人脸不对" / "保留效果但..." / "去掉某个元素"
+- Start fresh (useOriginalAsBase=true): "P的不好重新做" / "不满意重来" / "换个方式"
+
+--- IMAGES SENT TO GEMINI ---
+When useOriginalAsBase=false (default): Image 1 = current version (BASE), Image 2 = original (face reference only)
+When useOriginalAsBase=true: only the original photo is sent (single image, start fresh)
+When no originalImage exists: only current photo is sent (single image)
+
+--- EDITPROMPT STRUCTURE ---
+BASE: State which image is the foundation (omit if useOriginalAsBase=true — original is implicitly the base)
+FACE (when people are present): Copy face from original exactly:
+  - Large face (>10% of frame): "Restore/preserve each person's face to exactly match the original photo: copy the exact face shape, eye shape, nose, mouth, jaw line, skin tone and texture. Do NOT slim, beautify, enlarge eyes, or alter any facial feature."
+  - Small face (<10% of frame): "CRITICAL: Faces are small. Leave ALL face areas completely untouched — do NOT sharpen, retouch, relight, or process any face region. Treat face areas as masked off."
+EDIT: What to actually change, in detail.`,
       inputSchema: z.object({
-        editPrompt: z.string().describe('Detailed English prompt. Reference Image 1/Image 2 roles when multiple images are available.'),
+        editPrompt: z.string().describe('Detailed English prompt following the BASE/REFERENCE/FACE/EDIT structure from agent.md.'),
+        useOriginalAsBase: z.boolean().optional().describe('Set true when user wants to start fresh from the original photo (e.g. "P的不好重新做"). Default false = use current version as base.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       }),
-      execute: async ({ editPrompt, aspectRatio }) => {
+      execute: async ({ editPrompt, useOriginalAsBase, aspectRatio }) => {
         const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
-        let result: string | null;
+        // Determine which image is the base
+        const baseImage = (useOriginalAsBase && hasOriginal) ? ctx.originalImage! : ctx.currentImage;
+        const refImage = hasOriginal ? (useOriginalAsBase ? ctx.currentImage : ctx.originalImage!) : null;
 
-        if (hasOriginal) {
+        console.log(`\n🎨 [generate_image] base=${useOriginalAsBase ? 'ORIGINAL' : 'CURRENT'} hasRef=${!!refImage}\neditPrompt:\n${editPrompt}\n`);
+
+        let result: string | null;
+        if (useOriginalAsBase && hasOriginal) {
+          // Start fresh from original — single image, no reference to current version
+          result = await generatePreviewImage(ctx.originalImage!, editPrompt, aspectRatio);
+        } else if (!useOriginalAsBase && hasOriginal) {
+          // Edit current version, reference original for face/details
           result = await generateImageWithReferences(
             [
-              { url: ctx.originalImage!, role: '原图（人脸/人物/场景保真参考）' },
-              { url: ctx.currentImage,   role: '当前编辑版本（编辑基础，在此基础上修改）' },
+              { url: ctx.currentImage,   role: '当前编辑版本【主图】— 输出图片必须以这张图为基础进行修改' },
+              { url: ctx.originalImage!, role: '原图【人脸参考】— 仅用于还原人脸细节，保持与原图人脸完全一致' },
             ],
             editPrompt,
             aspectRatio,

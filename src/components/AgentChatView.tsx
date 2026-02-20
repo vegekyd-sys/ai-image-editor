@@ -5,6 +5,31 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message } from '@/types';
 
+/** Collapsible card showing the English editPrompt sent to Gemini */
+function EditPromptCard({ prompt }: { prompt: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left active:opacity-70 transition-opacity"
+      >
+        <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          📋 发给 Gemini 的 prompt
+        </span>
+        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? '收起 ▲' : '展开 ▼'}</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3">
+          <p className="text-[11px] leading-relaxed whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>
+            {prompt}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Fix CommonMark strict closing-delimiter rules that break **text:**
  * When closing ** is preceded by punctuation and followed by non-whitespace,
@@ -356,6 +381,11 @@ export default function AgentChatView({
                           style={{ border: '1px solid rgba(255,255,255,0.08)' }}
                         />
                       </button>
+                    )}
+
+                    {/* editPrompt card — collapsible */}
+                    {msg.editPrompt && (
+                      <EditPromptCard prompt={msg.editPrompt} />
                     )}
                   </div>
 

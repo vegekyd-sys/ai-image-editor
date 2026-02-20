@@ -45,14 +45,25 @@ export async function POST(req: NextRequest) {
 
     let inputBuffer: Buffer<ArrayBuffer> = buffer;
     if (isHeic) {
-      // sips (macOS) handles HEIC → JPEG conversion
-      inputBuffer = await convertHeicWithSips(buffer) as Buffer<ArrayBuffer>;
+      // Try Sharp first (cross-platform, no double compression)
+      try {
+        const jpegDirect = await sharp(buffer)
+          .rotate()
+          .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 90 })
+          .toBuffer();
+        const base64Direct = `data:image/jpeg;base64,${jpegDirect.toString('base64')}`;
+        return NextResponse.json({ image: base64Direct });
+      } catch {
+        // Fallback to sips (macOS only)
+        inputBuffer = await convertHeicWithSips(buffer) as Buffer<ArrayBuffer>;
+      }
     }
 
     const jpegBuffer = await sharp(inputBuffer)
       .rotate()
       .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 85 })
+      .jpeg({ quality: 90 })
       .toBuffer();
 
     const base64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;

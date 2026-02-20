@@ -30,7 +30,7 @@ async function ensureBase64(image: string): Promise<string> {
   });
 }
 
-function compressClientSide(file: File, maxSize = 2048, quality = 0.85): Promise<string> {
+function compressClientSide(file: File, maxSize = 2048, quality = 0.92): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -99,6 +99,7 @@ export default function Editor({
   const previewAbortRef = useRef<AbortController>(new AbortController());
   // Snapshots pending auto-analysis after current agent run finishes
   const pendingAnalysisRef = useRef<{ id: string; image: string }[]>([]);
+  const lastEditPromptRef = useRef<string | null>(null); // captures editPrompt from generate_image tool calls
 
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
@@ -683,14 +684,20 @@ export default function Editor({
             fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
             setAgentStatus('图片已生成');
             const id = currentMsgId;
+            // Attach the last captured editPrompt to the image message
+            const capturedPrompt = lastEditPromptRef.current;
+            lastEditPromptRef.current = null;
             setMessages((prev) => prev.map((m) =>
-              m.id === id ? { ...m, image: imageData } : m
+              m.id === id ? { ...m, image: imageData, editPrompt: capturedPrompt ?? undefined } : m
             ));
             // Queue auto-analysis of the new snapshot after this agent run finishes
             pendingAnalysisRef.current.push({ id: snapId, image: imageData });
           },
-          onToolCall: () => {
-            // status is already set via onStatus from agent.ts
+          onToolCall: (tool, input) => {
+            // Capture editPrompt from generate_image calls
+            if (tool === 'generate_image' && typeof input.editPrompt === 'string') {
+              lastEditPromptRef.current = input.editPrompt;
+            }
           },
           onDone: () => {
             setAgentStatus('完成');

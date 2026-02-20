@@ -130,6 +130,22 @@ Both tips and chat use the same SSE pattern:
 - **Path alias**: `@/*` maps to `./src/*`
 - **Deployment**: Vercel (`.vercelignore` excludes test assets)
 
+## Agent 开发原则（已验证）
+
+### System Prompt vs 工具描述的职责分离
+| 文件 | 放什么 |
+|------|--------|
+| `agent.md`（system prompt）| **路由层**：工作流判断、何时调哪个工具、用户意图识别 |
+| tool description（`agent.ts` 里） | **工具层**：参数含义、图的角色、输出格式、边界条件 |
+
+### 最佳实践
+1. **工具描述自包含**：假设 Claude 只看工具描述，应该知道如何正确调用它。不要在 agent.md 里重复工具的参数细节。
+2. **自检问题 > 规则清单**：`"先答：用户想 FIX 现在的，还是 START FRESH？"` 比 `"当用户说'重新做'时设 true"` 更健壮，让模型自己推理。
+3. **把意图决策变成显式参数**：让 Claude 显式传参（如 `useOriginalAsBase`），不要让工具内部猜意图，职责清晰。
+4. **Context injection 优于重复说明**：`[图片分析结果]`、`[对话历史]` 等 injected context 比在 system prompt 里重复描述图片信息更高效。
+
+---
+
 ## Memory Protocol（记忆协议）
 
 ### 文件职责

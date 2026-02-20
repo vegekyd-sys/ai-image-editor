@@ -2,7 +2,8 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  image?: string; // base64 data URL
+  image?: string;       // base64 data URL
+  editPrompt?: string;  // the English editPrompt sent to generate_image (for transparency)
   timestamp: number;
   projectId?: string;
 }

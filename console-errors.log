@@ -1,0 +1,63 @@
+Total messages: 44 (Errors: 40, Warnings: 0)
+Returning 40 messages for level "error"
+
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-badtwb.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-badtwb.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-npuboks.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-npuboks.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-badtwb.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-badtwb.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-ngx474l.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-npuboks.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-npuboks.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-badtwb.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-badtwb.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-ngx474l.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-ngx474l.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-npuboks.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-ngx474l.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-npuboks.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-badtwb.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-badtwb.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-caihbx.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://usirwprbadrxmeuubitt.supabase.co/storage/v1/object/images/6629b4bc-5988-4500-8afd-279541b2b11e/507c91a5-ac8b-483f-8c6c-1fbe3713b1c6/preview-1771389139167dfxgdztdr65-caihbx.jpg:0
+[ERROR] Storage upload error: StorageApiError: new row violates row-level security policy
+    at http://localhost:3000/_next/static/chunks/3bee9_5bb22b12._.js:7236:20 @ http://localhost:3000/_next/static/chunks/3bee9_next_dist_eef64e30._.js:3127

@@ -14,7 +14,7 @@ interface ProjectWithSnapshots {
   snapshots: { id: string; image_url: string; sort_order: number }[]
 }
 
-function compressClientSide(file: File, maxSize = 2048, quality = 0.85): Promise<string> {
+function compressClientSide(file: File, maxSize = 2048, quality = 0.92): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
     const img = new Image()
