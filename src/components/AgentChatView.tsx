@@ -27,6 +27,7 @@ interface AgentChatViewProps {
   onBack: () => void;
   onPipTap: () => void;
   onImageTap: (messageId: string) => void;
+  focusOnOpen?: boolean;
 }
 
 export default function AgentChatView({
@@ -37,6 +38,7 @@ export default function AgentChatView({
   onSendMessage,
   onBack,
   onImageTap,
+  focusOnOpen = false,
 }: AgentChatViewProps) {
   const [input, setInput] = useState('');
   const [isExiting, setIsExiting] = useState(false);
@@ -51,7 +53,7 @@ export default function AgentChatView({
   const PIP_M = 14;
   const PIP_BOTTOM_OFFSET = 80; // clear the input bar
 
-  const [pipSizeIndex, setPipSizeIndex] = useState<number>(1); // default md
+  const [pipSizeIndex, setPipSizeIndex] = useState<number>(2); // default lg
   const PIP = PIP_SIZES[pipSizeIndex];
   const [pipCorner, setPipCorner] = useState<PipCorner>('bl');
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
@@ -137,8 +139,11 @@ export default function AgentChatView({
   }, [messages, agentStatus]);
 
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 350);
-  }, []);
+    if (!focusOnOpen) return;
+    inputRef.current?.focus();
+    const t = setTimeout(() => inputRef.current?.focus(), 350);
+    return () => clearTimeout(t);
+  }, [focusOnOpen]);
 
   // Auto-resize textarea on every input change
   useEffect(() => {
@@ -397,7 +402,7 @@ export default function AgentChatView({
                 handleSubmit();
               }
             }}
-            placeholder="Reply to Makaron…"
+            placeholder="你想怎么修改这张图片？"
             disabled={isAgentActive}
             className="flex-1 bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden"
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem' }}

@@ -123,13 +123,14 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onRetr
               </div>
             </button>
 
-            {/* Commit ">" button */}
+            {/* Commit button */}
             {showCommit && (
               <button
                 onClick={() => onTipClick(tip, originalIndex)}
-                className="w-[36px] flex flex-col items-center justify-center rounded-r-2xl border border-l-0 border-fuchsia-500 bg-fuchsia-500/20 text-fuchsia-300 hover:bg-fuchsia-500/30 active:scale-95 transition-all animate-glow"
+                className="w-[36px] flex flex-col items-center justify-center gap-0 rounded-r-2xl border border-l-0 border-fuchsia-500 bg-fuchsia-500/20 text-fuchsia-300 hover:bg-fuchsia-500/30 active:scale-95 transition-all animate-glow"
               >
-                <span className="text-lg font-bold leading-none">&gt;</span>
+                <span className="text-[18px] font-bold leading-none">›</span>
+                <span className="text-[9px] font-medium leading-tight opacity-80">继续</span>
               </button>
             )}
           </div>

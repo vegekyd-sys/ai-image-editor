@@ -1118,6 +1118,7 @@ export default function Editor({
                 statusText={agentStatus}
                 isActive={isAgentActive}
                 onOpenChat={() => setViewMode('cui')}
+                isViewingDraft={isViewingDraft}
               />
               <TipsBar
                 tips={currentTips}
@@ -1143,6 +1144,7 @@ export default function Editor({
           onBack={() => window.history.back()}
           onPipTap={() => window.history.back()}
           onImageTap={handleImageTap}
+          focusOnOpen={isViewingDraft}
         />
       )}
     </div>

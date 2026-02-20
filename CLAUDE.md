@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current Status
 
-Tips prompt 迭代到 V14，均分 7.4（历史最高），≥8 分占 83%。Enhance 稳定 8.0，Creative/Wild 主要瓶颈是小脸保真和执行质量。交互模型已重构为 Virtual Draft（预览→确认两步流程）。当前生图走 OpenRouter（Google API 日配额用完），tips/preview 缩略图走 MOCK_AI。
+Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。当前生图走 OpenRouter（Google API 日配额用完），tips/preview 缩略图不走 MOCK_AI（已关闭）。
+
+**Prompt 架构（V42 重构）**：`.md` 文件是唯一真相来源，gemini.ts system prompt 极简化（2行），batch-test TIPS_SYSTEM_PROMPT 极简化（3行）。enhance.md 包含 7 个方向（A-F + G 净化场景）、FIRST cleanup 第一句约束、jawline 瘦脸条件、眼睛禁改。creative.md 升级 cleanup 为第一句。wild.md 保留原版详细四问自检。V42 遗留问题：wild 眼镜禁止陷阱仍突破、enhance 方向F 人物重新生成、creative 风格化重绘、tip 数量分类不稳定。
 
 Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）已完成。用户认证走 Supabase Auth（Google OAuth + Magic Link），数据持久化走 Supabase Storage + Database。路由结构：`/` → `/projects` 项目列表 → `/projects/[id]` 编辑器页面。项目列表展示所有历史项目的 snapshot 缩略图，点击进入编辑器，编辑器顶部有返回按钮。新项目通过项目列表页上传图片创建。所有写入异步后台执行，编辑器体验零延迟。
 

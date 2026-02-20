@@ -100,7 +100,10 @@
       "Bash(gh auth:*)",
       "Bash(brew install:*)",
       "Bash(gh repo create:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "WebFetch(domain:sdk.vercel.ai)",
+      "WebFetch(domain:ai-sdk.dev)",
+      "Bash(npm install:*)"
     ]
   }
 }
