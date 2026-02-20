@@ -1138,7 +1138,7 @@ export default function Editor({
           messages={messages}
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
-          currentImage={isDraft ? (draftImage ?? undefined) : snapshots[viewIndex]?.image}
+          currentImage={timeline[viewIndex]}
           onSendMessage={handleAgentRequest}
           onBack={() => window.history.back()}
           onPipTap={() => window.history.back()}

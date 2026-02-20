@@ -41,16 +41,18 @@ export default function AgentChatView({
   const [input, setInput] = useState('');
   const [isExiting, setIsExiting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
 
   // ── PiP drag state ──────────────────────────────────────────────
   type PipCorner = 'tl' | 'tr' | 'ml' | 'mr' | 'bl' | 'br';
-  const PIP = 116;
+  const PIP_SIZES = [72, 116, 200] as const; // sm / md / lg
   const PIP_M = 14;
   const PIP_BOTTOM_OFFSET = 80; // clear the input bar
 
+  const [pipSizeIndex, setPipSizeIndex] = useState<number>(1); // default md
+  const PIP = PIP_SIZES[pipSizeIndex];
   const [pipCorner, setPipCorner] = useState<PipCorner>('bl');
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
   const pipDragRef = useRef<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
@@ -90,7 +92,7 @@ export default function AgentChatView({
       x: Math.max(PIP_M, Math.min(W - PIP - PIP_M, pipDragRef.current.ex + dx)),
       y: Math.max(PIP_M, Math.min(H - PIP - PIP_BOTTOM_OFFSET, pipDragRef.current.ey + dy)),
     });
-  }, []);
+  }, [PIP]);
 
   const onPipPointerUp = useCallback((_e: React.PointerEvent) => {
     if (!pipDragRef.current) return;
@@ -114,7 +116,8 @@ export default function AgentChatView({
       setPipCorner(corner);
       setPipFloatPos(null);
     } else if (!wasDrag) {
-      setIsExiting(true);
+      // Tap: cycle through sizes sm → md → lg → sm
+      setPipSizeIndex(i => (i + 1) % PIP_SIZES.length);
     }
   }, [pipFloatPos, headerH]);
   // ────────────────────────────────────────────────────────────────
@@ -136,6 +139,14 @@ export default function AgentChatView({
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 350);
   }, []);
+
+  // Auto-resize textarea on every input change
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   const handleSubmit = useCallback(() => {
     const text = input.trim();
@@ -368,22 +379,28 @@ export default function AgentChatView({
         style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))', borderTop: '1px solid rgba(255,255,255,0.05)' }}
       >
         <div
-          className="flex items-center gap-2 px-4 py-2.5"
+          className="flex items-end gap-2 px-4 py-2.5"
           style={{
             background: '#161616',
-            borderRadius: '24px',
+            borderRadius: '20px',
             border: '1px solid rgba(255,255,255,0.07)',
           }}
         >
-          <input
+          <textarea
             ref={inputRef}
             value={input}
+            rows={1}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleSubmit(); } }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
             placeholder="Reply to Makaron…"
             disabled={isAgentActive}
-            className="flex-1 bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40"
-            style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef' }}
+            className="flex-1 bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden"
+            style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem' }}
           />
           <button
             onClick={handleSubmit}
