@@ -979,6 +979,55 @@ V13 从 V12 的 7.3 降到 6.1，原因：
 
 ---
 
+## Agent 架构迭代记录（2026-02-20 下午）
+
+### 多图参考架构修复
+
+**问题**：之前 generate_image 传两张图给 Gemini 时，顺序是 [原图, 当前版本]，Gemini 把第一张（原图）当成了输出构图基础，导致"基于原图重新创作"而非"在当前版本上修改"。
+
+**修复**：
+1. 传图顺序调换：[当前版本（主图/BASE）, 原图（人脸参考）]
+2. 新增 `useOriginalAsBase` 参数：
+   - `false`（默认）→ 传两张图，当前版本为 BASE，原图为人脸参考
+   - `true`（"重新做"）→ 只传一张原图，从头创作
+3. Agent 根据用户意图决策（工具描述里有自检 Q1）
+
+**人脸还原正确写法**：参考原图时，要求原样复制（"copy face pixel-for-pixel"），不加任何美化/瘦脸。之前 enhance 里的 V-line 瘦脸逻辑不适用于"还原人脸"场景。
+
+### Prompt 架构进一步清晰化
+
+**职责分离原则**（已验证，写入 CLAUDE.md）：
+- `agent.md` = 路由层：工作流判断、何时调哪个工具、用户意图识别
+- tool description = 工具层：参数含义、图的角色、editPrompt 结构、人脸指令
+- `generate_image_tool.md` 新增：generate_image 工具描述提取为独立 .md 文件
+
+**所有 prompt 文件一览**：
+| 文件 | 控制什么 |
+|------|---------|
+| `agent.md` | Agent 路由逻辑 |
+| `generate_image_tool.md` | generate_image 工具行为（useOriginalAsBase、图的角色、editPrompt 结构） |
+| `enhance.md` | enhance tips 规则 |
+| `creative.md` | creative tips 规则 |
+| `wild.md` | wild tips 规则 |
+
+**Agent 最佳实践**（已验证）：
+1. 工具描述自包含 — 不在 agent.md 里重复工具参数细节
+2. 自检问题 > 规则清单 — 让模型自己推理意图，不靠关键词匹配
+3. 意图决策变显式参数 — Claude 显式传 `useOriginalAsBase`，工具侧不猜意图
+4. Context injection 优于重复说明 — `[图片分析结果]` 等注入优于在 system prompt 里复述
+
+### HEIC 压缩修复
+- **根本问题**：`sips` 是 macOS 专属命令，Vercel Linux 上不存在 → 线上 HEIC 上传直接 500
+- **修复**：优先用 Sharp 直接读 HEIC（跨平台，libheif 内置支持），失败才 fallback 到 sips
+- **额外优化**：所有压缩质量从 0.85 → 0.92（client canvas）/ 85 → 90（Sharp server）
+
+### editPrompt 透明化
+- CUI 每张生成图下方新增「📋 发给 Gemini 的 prompt」可折叠卡片
+- Server 日志每次调用 generate_image 时打印 editPrompt
+- editPrompt 通过 `tool_call` 事件捕获，关联到对应 image message
+
+---
+
 ## 待开发功能
 
 ### 自适应 Tips 推荐（后续做）
