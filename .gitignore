@@ -55,8 +55,6 @@ next-env.d.ts
 # dev scripts
 /scripts/
 
-# progress notes
-progress.md
 
 # playwright mcp
 .playwright-mcp/
