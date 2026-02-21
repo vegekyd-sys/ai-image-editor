@@ -154,6 +154,8 @@ export default function AgentChatView({
     return { bottom: b, right: m };
   }
 
+  const handleBack = useCallback(() => setIsExiting(true), []);
+
   const onPipPointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation(); // block touch from reaching scroll container (prevents screen jump when keyboard is up)
@@ -256,7 +258,7 @@ export default function AgentChatView({
         handleBack();
       }
     }
-  }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL]);
+  }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL, handleBack, onPipTap]);
   // ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -294,8 +296,6 @@ export default function AgentChatView({
     onSendMessage(text);
     setInput('');
   }, [input, isAgentActive, onSendMessage]);
-
-  const handleBack = useCallback(() => setIsExiting(true), []);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
