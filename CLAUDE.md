@@ -12,6 +12,8 @@ Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）�
 
 **v0.6 Makaron Agent（主体完成）**：Claude Sonnet 4.6（Claude Agent SDK + AWS Bedrock）作为 agent 大脑，OpenRouter Gemini 作为生图工具。GUI/CUI 双模切换已实现：GUI = 图片画布模式，CUI = 全屏对话模式（Claude App 风格，无气泡 assistant 文字 + 深色 pill user bubble）。CUI 从右侧滑入，支持 PiP 缩略图、inline 图片（持久化后重进仍显示）。`analyze_image` tool 让 Agent 用 Sonnet 原生视觉看图。AgentStatusBar 常驻底部显示打招呼文字和 Chat 按钮。上传图片不再触发 AI 分析和 CUI 弹出，直接显示 GUI + tips。Agent 消息全量持久化到 Supabase，退出重进历史对话完整恢复。Token 级流式输出（includePartialMessages: true）。多 turn 内容分气泡（analyze 前/后分开）。iOS 右滑拦截（history.pushState）。
 
+**v0.8 PiP 边缘收起**：去掉 72px small 模式（只保留 116/200px）。拖到边角后再推 60px 才收起（两步 UX）。收起后露出 28px peek + 箭头，tap 或 swipe 均可展开。左右两边均可收起。已知：左边收起后用 iOS 右滑手势会触发 back gesture（而非展开 PiP），用户接受 tap 展开作为 workaround。
+
 ## Verified Conclusions（已验证的硬结论）
 
 ### Tips Prompt 方法论
