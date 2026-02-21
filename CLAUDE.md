@@ -18,6 +18,10 @@ Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）�
 
 **v0.9 GUI↔CUI Hero 过渡动画**：点击 Chat 按钮时，canvas 图片飞入变成 PiP（GUI→CUI）；点击 PiP 时，PiP 放大飞回 canvas（CUI→GUI）。核心机制：`fixed z-[100]` Hero Overlay，在 canvas 图片位置和 PiP 位置之间做 CSS transition（380ms，cubic-bezier）。GUI→CUI 起点取图片的 1:1 中心裁剪正方形（用 `containRect` 计算后再取 `min(w,h)` 的正方形），因为两端都是正方形，img 直接用 `object-cover` 不做额外动画。CUI→GUI 起点是 PiP 真实 DOMRect，终点是 canvas 全区域，img 用 `coverRect`→`containRect` 绝对坐标动画，完美匹配 ImageCanvas 的 `object-contain` 渲染。hidePip prop 在动画期间隐藏真实 PiP（opacity:0）。PiP tap 改为返回 GUI（原来是切换尺寸）；尺寸切换移到右下角专属 resize handle（放大/缩小图标）。键盘打开时 tap PiP 会先 blur 等键盘收起（300ms）再执行动画。
 
+**多项 UX 修复（2026-02-22）**：①Draft 插入正确位置：draft 现在出现在父 snapshot 右边一格（而非末尾），`snapFromTimeline`/`timelineFromSnap` 辅助函数处理 timeline↔snapshot index 映射，commit 后跳到末尾新 snapshot。②Draft label 修复：`ImageCanvas` 接收 `draftTimelineIndex` prop，正确显示 "Draft"，draft 之后的 snapshot 显示正确 Edit 编号。③iOS 右滑多轮编辑后仍返回项目页：`hasCuiHistoryState` ref 追踪 pushState，防止 history entry 孤立堆积。④CUI 滚动收起键盘：native `touchstart`/`touchmove` 监听（8px threshold），iOS Safari 比 React 合成事件更可靠。⑤PiP transition 去掉 opacity 淡入闪烁：`transition: all` 改为列举具体属性，排除 opacity。
+
+**项目页重设计（2026-02-22）**：2 列 gallery 展示最新 snapshot，Makaron wordmark 800 字重大字，副标题改"one man studio"（Caveat 手写体），渐变光晕中心下移（`50% 40%`）实现顶部黑色→下方紫色的自然过渡，与 iOS 状态栏无缝衔接。Captions tips 琥珀黄底色区分于 wild 的红色。
+
 ## Verified Conclusions（已验证的硬结论）
 
 ### Tips Prompt 方法论
