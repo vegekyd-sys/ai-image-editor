@@ -59,22 +59,22 @@ function createTools(ctx: AgentContext) {
       description: generateImageToolPrompt,
       inputSchema: z.object({
         editPrompt: z.string().describe('Full English prompt with FACE/EDIT structure as described in the tool description.'),
-        preserveFaceFromOriginal: z.boolean().optional().describe('Set true ONLY when user explicitly complains about face distortion and needs face restored to match the original photo. Default false = single image edit (correct behavior for most requests).'),
+        useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       }),
-      execute: async ({ editPrompt, preserveFaceFromOriginal, aspectRatio }) => {
+      execute: async ({ editPrompt, useOriginalAsReference, aspectRatio }) => {
         const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
 
-        console.log(`\n🎨 [generate_image] preserveFace=${!!preserveFaceFromOriginal} hasOriginal=${!!hasOriginal}\neditPrompt:\n${editPrompt}\n`);
+        console.log(`\n🎨 [generate_image] useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal}\neditPrompt:\n${editPrompt}\n`);
 
         let result: string | null;
-        if (preserveFaceFromOriginal && hasOriginal) {
-          // Two-image mode: only for explicit face restoration
-          console.log('📸 Two-image mode (face restoration)');
+        if (useOriginalAsReference && hasOriginal) {
+          // Two-image mode: current as edit base, original as reference
+          console.log('📸 Two-image mode (original as reference)');
           result = await generateImageWithReferences(
             [
               { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
-              { url: ctx.originalImage!, role: 'Image 2 = 原图【仅用于人脸参考，不作为构图基础】' },
+              { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
             ],
             editPrompt,
             aspectRatio,
@@ -194,8 +194,8 @@ export async function* runMakaronAgent(
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
-          const inp = event.input as { preserveFaceFromOriginal?: boolean };
-          const twoImageMode = inp.preserveFaceFromOriginal && ctx.originalImage && ctx.originalImage !== ctx.currentImage;
+          const inp = event.input as { useOriginalAsReference?: boolean };
+          const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== ctx.currentImage;
           toolCallImages = twoImageMode
             ? [ctx.currentImage, ctx.originalImage!]
             : [ctx.currentImage];

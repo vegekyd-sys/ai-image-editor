@@ -14,6 +14,8 @@ Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）�
 
 **v0.8 PiP 边缘收起**：去掉 72px small 模式（只保留 116/200px）。拖到边角后再推 60px 才收起（两步 UX）。收起后露出 28px peek + 箭头，tap 或 swipe 均可展开。左右两边均可收起。已知：左边收起后用 iOS 右滑手势会触发 back gesture（而非展开 PiP），用户接受 tap 展开作为 workaround。
 
+**v0.9 GUI↔CUI Hero 过渡动画**：点击 Chat 按钮时，canvas 图片飞入变成 PiP（GUI→CUI）；点击 PiP 时，PiP 放大飞回 canvas（CUI→GUI）。核心机制：`fixed z-[100]` Hero Overlay，在 canvas 图片位置和 PiP 位置之间做 CSS transition（380ms，cubic-bezier）。GUI→CUI 起点取图片的 1:1 中心裁剪正方形（用 `containRect` 计算后再取 `min(w,h)` 的正方形），因为两端都是正方形，img 直接用 `object-cover` 不做额外动画。CUI→GUI 起点是 PiP 真实 DOMRect，终点是 canvas 全区域，img 用 `coverRect`→`containRect` 绝对坐标动画，完美匹配 ImageCanvas 的 `object-contain` 渲染。hidePip prop 在动画期间隐藏真实 PiP（opacity:0）。PiP tap 改为返回 GUI（原来是切换尺寸）；尺寸切换移到右下角专属 resize handle（放大/缩小图标）。键盘打开时 tap PiP 会先 blur 等键盘收起（300ms）再执行动画。
+
 ## Verified Conclusions（已验证的硬结论）
 
 ### Tips Prompt 方法论

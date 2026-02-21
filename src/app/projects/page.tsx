@@ -358,7 +358,9 @@ export default function ProjectsPage() {
           {/* + button */}
           <div style={{ marginTop: '28px' }}>
             {creating ? (
-              <Spinner size={24} />
+              <div style={{ width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Spinner size={24} />
+              </div>
             ) : (
               <button
                 onClick={() => fileInputRef.current?.click()}

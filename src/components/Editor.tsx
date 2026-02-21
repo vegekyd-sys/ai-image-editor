@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect, CSSProperties } from 'react';
 import { Message, Tip, Snapshot, PhotoMetadata } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
@@ -10,6 +10,22 @@ import { streamAgent } from '@/lib/agentStream';
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
+}
+
+// Compute image absolute rect within a container using object-contain semantics
+function containRect(cW: number, cH: number, ar: number) {
+  let w, h;
+  if (ar > cW / cH) { w = cW; h = cW / ar; }
+  else              { h = cH; w = cH * ar; }
+  return { l: (cW - w) / 2, t: (cH - h) / 2, w, h };
+}
+
+// Compute image absolute rect within a container using object-cover semantics
+function coverRect(cW: number, cH: number, ar: number) {
+  let w, h;
+  if (ar > cW / cH) { h = cH; w = cH * ar; }
+  else              { w = cW; h = cW / ar; }
+  return { l: (cW - w) / 2, t: (cH - h) / 2, w, h };
 }
 
 // Extract EXIF metadata (location + time) from a photo file
@@ -154,6 +170,28 @@ export default function Editor({
   const pendingAnalysisRef = useRef<{ id: string; image: string }[]>([]);
   const lastEditPromptRef = useRef<string | null>(null); // captures editPrompt from generate_image tool calls
   const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
+
+  // ── Hero animation (GUI ↔ CUI transition) ───────────────────────
+  const canvasAreaRef = useRef<HTMLDivElement>(null);
+  const lastCanvasRect = useRef<{ l: number; t: number; w: number; h: number } | null>(null);
+  const lastImageAR = useRef(1); // cached image aspect ratio for CUI→GUI direction
+  const HERO_DURATION = 380;
+  interface HeroAnim {
+    src: string;
+    // Container rect (overflow:hidden clip)
+    fromRect: { l: number; t: number; w: number; h: number };
+    toRect:   { l: number; t: number; w: number; h: number };
+    // Img absolute rect within container (simulates contain/cover).
+    // Unused when objectCover=true (img fills container with object-cover instead).
+    fromImg:  { l: number; t: number; w: number; h: number };
+    toImg:    { l: number; t: number; w: number; h: number };
+    fromRadius: string;
+    toRadius: string;
+    active: boolean;
+    objectCover?: boolean; // when true, img uses w-full h-full object-cover (no img animation)
+  }
+  const [heroAnim, setHeroAnim] = useState<HeroAnim | null>(null);
+  // ────────────────────────────────────────────────────────────────
 
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
@@ -307,6 +345,71 @@ export default function Editor({
       console.error('Project naming failed:', err);
     }
   }, [projectId, onRenameProject]);
+
+  // Open CUI with hero animation (canvas → PiP)
+  const openCUI = useCallback(() => {
+    const el = canvasAreaRef.current;
+    const src = timeline[viewIndex];
+    if (el && src) {
+      const cr = el.getBoundingClientRect();
+      lastCanvasRect.current = { l: cr.left, t: cr.top, w: cr.width, h: cr.height };
+      // Read natural AR from the loaded img element in canvas (synchronous)
+      const imgEl = el.querySelector('img');
+      const ar = (imgEl && imgEl.naturalWidth && imgEl.naturalHeight)
+        ? imgEl.naturalWidth / imgEl.naturalHeight
+        : 1;
+      lastImageAR.current = ar;
+      const PIP_SIZE = 200, PIP_M = 14, PIP_BOTTOM = 80;
+      // Start hero at the 1:1 center-crop square of the canvas image.
+      // Both from and to are squares → animation is pure position+size, no crop change.
+      const imgBounds = containRect(cr.width, cr.height, ar);
+      const side = Math.min(imgBounds.w, imgBounds.h);
+      const sqX = (imgBounds.w - side) / 2;
+      const sqY = (imgBounds.h - side) / 2;
+      const fromRect = {
+        l: cr.left + imgBounds.l + sqX,
+        t: cr.top  + imgBounds.t + sqY,
+        w: side, h: side,
+      };
+      const toRect = { l: PIP_M, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+      setHeroAnim({
+        src,
+        fromRect, toRect,
+        fromImg: coverRect(side, side, ar), // unused (objectCover=true)
+        toImg:   coverRect(PIP_SIZE, PIP_SIZE, ar), // unused
+        fromRadius: '0px', toRadius: '16px',
+        objectCover: true, // both containers are squares → object-cover is sufficient, no img animation needed
+        active: false,
+      });
+      requestAnimationFrame(() => requestAnimationFrame(() =>
+        setHeroAnim(p => p ? { ...p, active: true } : null)
+      ));
+      setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
+    }
+    setViewMode('cui');
+  }, [timeline, viewIndex]);
+
+  // Handle PiP tap: hero animation (PiP → canvas), then trigger GUI return
+  const handlePipTap = useCallback((pipRect: DOMRect) => {
+    const cr = lastCanvasRect.current;
+    const src = timeline[viewIndex];
+    if (cr && src) {
+      const ar = lastImageAR.current;
+      const fromRect = { l: pipRect.left, t: pipRect.top, w: pipRect.width, h: pipRect.height };
+      setHeroAnim({
+        src,
+        fromRect, toRect: cr,
+        fromImg: coverRect(pipRect.width, pipRect.height, ar),
+        toImg:   containRect(cr.w, cr.h, ar),
+        fromRadius: '16px', toRadius: '0px',
+        active: false,
+      });
+      requestAnimationFrame(() => requestAnimationFrame(() =>
+        setHeroAnim(p => p ? { ...p, active: true } : null)
+      ));
+      setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
+    }
+  }, [timeline, viewIndex]);
 
   // Trigger a 1-2 sentence CUI reaction after user commits a tip in the GUI
   const triggerTipCommitReaction = useCallback(async (
@@ -874,20 +977,16 @@ export default function Editor({
   }, [draftParentIndex, previewingTipIndex, snapshots, addMessage, fetchTipsForSnapshot, onSaveSnapshot, triggerTipCommitReaction]);
 
   // Click tip:
-  //   - Same tip clicked again (while viewing draft) → commit
   //   - First click (no draft) → create draft
   //   - Different tip (while viewing draft) → switch draft image
   //   - Tip click while navigated away from draft → dismiss old draft, create new from current
+  //   - Same tip while selected → handled by onTipDeselect (dismissDraft) in TipsBar
+  //   - Commit → handled by onTipCommit (commitDraft) in TipsBar
   const handleTipInteraction = useCallback((tip: Tip, tipIndex: number) => {
     const viewingDraft = draftParentIndex !== null && viewIndex >= snapshots.length;
 
-    if (viewingDraft && previewingTipIndex === tipIndex) {
-      // Same tip clicked again on draft → COMMIT
-      if (tip.previewStatus === 'done' && tip.previewImage) {
-        commitDraft();
-      }
-      return;
-    }
+    // Safety net: same tip re-clicked while draft is visible (shouldn't happen with new UI)
+    if (viewingDraft && previewingTipIndex === tipIndex) return;
 
     // If tip has no preview yet ('none'), trigger generation only — don't select as draft yet
     if (!tip.previewImage && (tip.previewStatus === 'none' || !tip.previewStatus)) {
@@ -947,10 +1046,12 @@ export default function Editor({
 
   // Dismiss draft: remove virtual draft entry, return to parent
   const dismissDraft = useCallback(() => {
+    // Explicitly restore viewIndex to the draft's parent before clearing draftParentIndex,
+    // so the auto-clamp doesn't fall back to the last snapshot instead.
+    if (draftParentIndex !== null) setViewIndex(draftParentIndex);
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
-    // viewIndex will auto-clamp via prevTimelineLen shrink handler
-  }, []);
+  }, [draftParentIndex]);
 
   // Navigate timeline: keep draft alive so user can swipe back
   const handleIndexChange = useCallback((index: number) => {
@@ -1198,7 +1299,16 @@ export default function Editor({
       {viewMode === 'gui' && (
         <>
           {/* Canvas area (fills remaining space) */}
-          <div className="flex-1 relative min-h-0 overflow-hidden">
+          <div
+            ref={(el) => {
+              canvasAreaRef.current = el;
+              if (el) {
+                const r = el.getBoundingClientRect();
+                lastCanvasRect.current = { l: r.left, t: r.top, w: r.width, h: r.height };
+              }
+            }}
+            className="flex-1 relative min-h-0 overflow-hidden"
+          >
             {timeline.length === 0 ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <button
@@ -1269,7 +1379,7 @@ export default function Editor({
               <AgentStatusBar
                 statusText={agentStatus}
                 isActive={isAgentActive}
-                onOpenChat={() => setViewMode('cui')}
+                onOpenChat={openCUI}
                 isViewingDraft={isViewingDraft}
               />
               <TipsBar
@@ -1277,6 +1387,8 @@ export default function Editor({
                 isLoading={isTipsFetching}
                 isEditing={isEditing}
                 onTipClick={handleTipInteraction}
+                onTipCommit={() => commitDraft()}
+                onTipDeselect={dismissDraft}
                 onRetryPreview={handleRetryPreview}
                 previewingIndex={isViewingDraft ? previewingTipIndex : null}
               />
@@ -1294,10 +1406,49 @@ export default function Editor({
           currentImage={timeline[viewIndex]}
           onSendMessage={handleAgentRequest}
           onBack={() => window.history.back()}
-          onPipTap={() => window.history.back()}
+          onPipTap={handlePipTap}
+          hidePip={heroAnim !== null}
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
         />
+      )}
+
+      {/* Hero Overlay: animates between canvas rect and PiP rect during GUI↔CUI transition */}
+      {heroAnim && (
+        <div
+          className="fixed pointer-events-none z-[100] overflow-hidden"
+          style={{
+            left:   heroAnim.active ? heroAnim.toRect.l : heroAnim.fromRect.l,
+            top:    heroAnim.active ? heroAnim.toRect.t : heroAnim.fromRect.t,
+            width:  heroAnim.active ? heroAnim.toRect.w : heroAnim.fromRect.w,
+            height: heroAnim.active ? heroAnim.toRect.h : heroAnim.fromRect.h,
+            borderRadius: heroAnim.active ? heroAnim.toRadius : heroAnim.fromRadius,
+            transition: heroAnim.active
+              ? `left ${HERO_DURATION}ms cubic-bezier(0.4,0,0.2,1), top ${HERO_DURATION}ms cubic-bezier(0.4,0,0.2,1), width ${HERO_DURATION}ms cubic-bezier(0.4,0,0.2,1), height ${HERO_DURATION}ms cubic-bezier(0.4,0,0.2,1), border-radius ${HERO_DURATION}ms`
+              : 'none',
+          } as CSSProperties}
+        >
+          {heroAnim.objectCover ? (
+            // Both containers are squares → object-cover always shows the same center crop, no squish
+            <img src={heroAnim.src} draggable={false} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <img
+              src={heroAnim.src}
+              draggable={false}
+              alt=""
+              style={{
+                position: 'absolute',
+                left:   heroAnim.active ? heroAnim.toImg.l   : heroAnim.fromImg.l,
+                top:    heroAnim.active ? heroAnim.toImg.t   : heroAnim.fromImg.t,
+                width:  heroAnim.active ? heroAnim.toImg.w   : heroAnim.fromImg.w,
+                height: heroAnim.active ? heroAnim.toImg.h   : heroAnim.fromImg.h,
+                transition: heroAnim.active
+                  ? `left ${HERO_DURATION}ms cubic-bezier(0.4,0,0.2,1), top ${HERO_DURATION}ms cubic-bezier(0.4,0,0.2,1), width ${HERO_DURATION}ms cubic-bezier(0.4,0,0.2,1), height ${HERO_DURATION}ms cubic-bezier(0.4,0,0.2,1)`
+                  : 'none',
+              } as CSSProperties}
+            />
+          )}
+        </div>
       )}
     </div>
   );

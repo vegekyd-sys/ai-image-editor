@@ -81,9 +81,10 @@ interface AgentChatViewProps {
   currentImage?: string;
   onSendMessage: (text: string) => void;
   onBack: () => void;
-  onPipTap: () => void;
+  onPipTap: (rect: DOMRect) => void;
   onImageTap: (messageId: string) => void;
   focusOnOpen?: boolean;
+  hidePip?: boolean;
 }
 
 export default function AgentChatView({
@@ -93,8 +94,10 @@ export default function AgentChatView({
   currentImage,
   onSendMessage,
   onBack,
+  onPipTap,
   onImageTap,
   focusOnOpen = false,
+  hidePip = false,
 }: AgentChatViewProps) {
   const [input, setInput] = useState('');
   const [isExiting, setIsExiting] = useState(false);
@@ -234,8 +237,24 @@ export default function AgentChatView({
     } else if (!wasDrag) {
       pipStartedAtRightEdge.current = false;
       pipStartedAtLeftEdge.current = false;
-      // Tap: cycle md ↔ lg
-      setPipSizeIndex(i => (i + 1) % PIP_SIZES.length);
+      // Tap PiP body → hero animation + return to GUI
+      const pipEl = _e.currentTarget as HTMLElement;
+      const kbOpen = window.visualViewport
+        ? window.innerHeight - window.visualViewport.height > 50
+        : false;
+      if (kbOpen) {
+        // Dismiss keyboard first; re-measure PiP rect after it closes, then animate
+        inputRef.current?.blur();
+        setTimeout(() => {
+          const rect = pipEl.getBoundingClientRect();
+          onPipTap?.(rect);
+          handleBack();
+        }, 300);
+      } else {
+        const rect = pipEl.getBoundingClientRect();
+        onPipTap?.(rect);
+        handleBack();
+      }
     }
   }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL]);
   // ────────────────────────────────────────────────────────────────
@@ -336,6 +355,7 @@ export default function AgentChatView({
             border: '1.5px solid rgba(255,255,255,0.14)',
             touchAction: 'none',
             cursor: pipFloatPos ? 'grabbing' : 'grab',
+            opacity: hidePip ? 0 : 1,
           }}
           onPointerDown={onPipPointerDown}
           onPointerMove={onPipPointerMove}
@@ -360,6 +380,36 @@ export default function AgentChatView({
               }}
             >
               Editing
+            </div>
+          )}
+          {/* Resize handle — bottom-right corner, cycles PIP size */}
+          {!pipHidden && (
+            <div
+              className="absolute bottom-2 right-2 w-6 h-6 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setPipSizeIndex(i => (i + 1) % PIP_SIZES.length);
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                   stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" strokeLinecap="round">
+                {PIP === PIP_SIZES[0]
+                  ? (<>
+                      <polyline points="15 3 21 3 21 9"/>
+                      <polyline points="9 21 3 21 3 15"/>
+                      <line x1="21" y1="3" x2="14" y2="10"/>
+                      <line x1="3" y1="21" x2="10" y2="14"/>
+                    </>)
+                  : (<>
+                      <polyline points="4 14 4 20 10 20"/>
+                      <polyline points="20 10 20 4 14 4"/>
+                      <line x1="14" y1="10" x2="20" y2="4"/>
+                      <line x1="4" y1="20" x2="10" y2="14"/>
+                    </>)
+                }
+              </svg>
             </div>
           )}
           {/* Peek arrow — only when hidden, on the visible edge */}
