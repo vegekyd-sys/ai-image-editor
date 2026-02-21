@@ -566,9 +566,7 @@ export default function Editor({
       setAgentStatus('正在发现有趣的可能...');
     }
 
-    const categories = (process.env.NEXT_PUBLIC_ONLY_CAPTIONS === 'true'
-      ? ['captions']
-      : ['enhance', 'creative', 'wild', 'captions']) as ('enhance' | 'creative' | 'wild' | 'captions')[];
+    const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
     let completedCount = 0;
     const previewGenerated: Record<string, number> = { enhance: 0, wild: 0 };
 

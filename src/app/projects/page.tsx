@@ -304,13 +304,13 @@ export default function ProjectsPage() {
         .mkr-more-btn:hover { opacity: 1 !important; }
       `}</style>
 
-      <div className="mkr-page" style={{ minHeight: '100dvh', background: '#080808', color: '#fff', overflowX: 'hidden' }}>
+      <div className="mkr-page" style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden' }}>
 
-        {/* Ambient glow — extends above viewport to cover status bar */}
+        {/* Ambient glow — center at 40% so top is black, fades to purple below */}
         <div style={{
-          position: 'fixed', top: '-80px', left: 0, right: 0,
-          height: '580px', pointerEvents: 'none', zIndex: 0,
-          background: 'radial-gradient(ellipse at 50% 0%, rgba(217,70,239,0.18) 0%, transparent 62%)',
+          position: 'fixed', top: 0, left: 0, right: 0,
+          height: '520px', pointerEvents: 'none', zIndex: 0,
+          background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
         }} />
 
         <input
