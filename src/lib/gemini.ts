@@ -489,9 +489,14 @@ export async function generateImageWithReferences(
   const urls = images.map(img => img.url);
   const result = await generateWithMultipleImages(urls, fullPrompt, true);
 
-  if (result.image) return result.image;
-  // Fallback: if multi-image failed, use single-image on the last image (edit base)
-  const base = images[images.length - 1].url;
+  if (result.image) {
+    console.log('✅ [generateImageWithReferences] multi-image generation succeeded');
+    return result.image;
+  }
+  // Fallback: if multi-image failed, use single-image on the first image (edit base = images[0])
+  // NOTE: images[0] is currentImage (edit base), images[last] is originalImage (reference only)
+  console.warn('⚠️ [generateImageWithReferences] multi-image failed, falling back to single image');
+  const base = images[0].url;
   return PROVIDER === 'openrouter'
     ? generatePreviewImageOpenRouter(base, editPrompt, aspectRatio)
     : generatePreviewImageGoogle(base, editPrompt, aspectRatio);
@@ -702,6 +707,7 @@ export async function* streamAllTips(imageBase64: string): AsyncGenerator<Tip> {
 export async function* streamTipsByCategory(
   imageBase64: string,
   category: TipCategory,
+  _metadata?: { takenAt?: string; location?: string },
 ): AsyncGenerator<Tip> {
   if (process.env.MOCK_AI === 'true') {
     const mockTips: Record<string, Tip[]> = {

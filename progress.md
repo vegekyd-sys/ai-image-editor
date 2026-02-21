@@ -1946,3 +1946,49 @@ v0.5 骨架验证通过后，本次核心改造：
   - Agent 思考中：fuchsia-400，1s 快呼吸
 - 状态文字更新：`正在生成修图建议 Ready to Suprise` / `正使用nano banana pro生成图片 X/X`
 
+
+---
+
+## v0.8 Tips 速度优化实验 + PiP 改版 (2026-02-21)
+
+### Tips 速度优化实验（结论：回滚）
+
+**compact .md 分层方案**（实验，已回滚）
+- 思路：在每个 `.md` 文件加 `<!-- DETAILED -->` 分隔，API 调用只传精简区（~1500 chars），batch-test 传全文
+- context 减少 54%（~6500 → ~3000 chars），理论首个 tip ~8-12s
+- V43 batch-test 跑了一轮（compact 模板），用户评价"效果一般"，已回滚
+
+**模型对比测试**
+- `gemini-3-pro-image-preview`（原始）：tips 完成 22-40s/次
+- `gemini-2.0-flash-001`：tips 完成 10-12s/次（快 3x），但用户反馈质量不好
+- `claude-sonnet-4-5`（OpenRouter）：tips 完成 22-24s/次，质量不错但不如 gemini-3
+- **结论**：保留 `gemini-3-pro-image-preview`，compact 模板和模型切换均回滚
+
+**V43 测试结果**（compact 模板）
+- 图片：IMG_1222.HEIC, IMG_4995.HEIC, DJI_20210913_170156_032.JPG, IMG_1259.PNG, IMG_4999.jpg
+- 成功率：30/30
+- 问题：梯田变蛋糕（wild 陷阱仍触发），镜片反射内容（wild Q2 不通过），整体效果一般
+
+### generateImageWithReferences fallback 修复
+- 旧：fallback 用 `images[images.length - 1]`（originalImage），错误
+- 新：fallback 用 `images[0]`（currentImage = edit base），加 success/failure 日志
+
+### PiP 画中画大改版
+
+**外观 & 尺寸**
+- 去掉 72px small 模式，只保留 116px / 200px，tap 循环
+- 新增边缘收起功能（类 iPhone 画中画）
+
+**收起/展开 UX**
+- 两步收起：先 snap 到角落，再从角落往边缘推超过 `PIP_EXTRA_PULL(60px)` 才收起
+- 收起方向：左边缘 / 右边缘均可
+- 收起后只露出 28px peek + 方向箭头（左 `>` / 右 `<`）
+- 展开：tap 或 swipe 均可触发
+- 限制：只有"从边角位置出发的拖动"才能触发收起，防止误操作
+
+**键盘适配**
+- `e.stopPropagation()` 阻止 PiP 触摸事件冒泡，解决键盘弹起时画面跳动
+- `visualViewport` 监听键盘高度，动态设 input bar `paddingBottom`，input bar 随键盘平滑上移（不 resize 容器）
+
+**Bug 修复**
+- 右边收起时漏加 `setPipHiddenEdge('right')`，导致收右边实际执行了左边动画

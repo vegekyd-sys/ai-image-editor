@@ -5,8 +5,10 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message } from '@/types';
 
-/** Collapsible card showing the English editPrompt sent to Gemini */
-function EditPromptCard({ prompt }: { prompt: string }) {
+const INPUT_IMAGE_LABELS = ['当前图（编辑基础）', '原图（人脸参考）'];
+
+/** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
+function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?: string[] }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}>
@@ -20,7 +22,36 @@ function EditPromptCard({ prompt }: { prompt: string }) {
         <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? '收起 ▲' : '展开 ▼'}</span>
       </button>
       {open && (
-        <div className="px-3 pb-3">
+        <div className="px-3 pb-3 flex flex-col gap-2.5">
+          {inputImages && inputImages.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                传入图片{inputImages.length > 1 ? `（${inputImages.length} 张）` : ''}
+              </span>
+              <div className="flex gap-2 flex-wrap">
+                {inputImages.map((img, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <img
+                      src={img}
+                      alt={`Input ${i + 1} to Gemini`}
+                      className="rounded-lg object-cover"
+                      style={{
+                        width: inputImages.length > 1 ? 100 : 'auto',
+                        height: inputImages.length > 1 ? 100 : 140,
+                        maxHeight: 140,
+                        border: '1px solid rgba(255,255,255,0.08)',
+                      }}
+                    />
+                    {inputImages.length > 1 && (
+                      <span className="text-[9px] text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                        {INPUT_IMAGE_LABELS[i] ?? `图 ${i + 1}`}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="text-[11px] leading-relaxed whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>
             {prompt}
           </p>
@@ -71,19 +102,40 @@ export default function AgentChatView({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
+  // ── Keyboard inset (visualViewport) — no container resize, no jump ──
+  const [kbInset, setKbInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKbInset(Math.round(inset));
+    };
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, []);
 
   // ── PiP drag state ──────────────────────────────────────────────
   type PipCorner = 'tl' | 'tr' | 'ml' | 'mr' | 'bl' | 'br';
-  const PIP_SIZES = [72, 116, 200] as const; // sm / md / lg
+  const PIP_SIZES = [116, 200] as const; // md / lg (small removed)
   const PIP_M = 14;
   const PIP_BOTTOM_OFFSET = 80; // clear the input bar
+  const PIP_PEEK = 28;        // px visible when hidden at right edge
+  const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 
-  const [pipSizeIndex, setPipSizeIndex] = useState<number>(2); // default lg
+  const [pipSizeIndex, setPipSizeIndex] = useState<number>(1); // default lg
   const PIP = PIP_SIZES[pipSizeIndex];
   const [pipCorner, setPipCorner] = useState<PipCorner>('bl');
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
+  const [pipHidden, setPipHidden] = useState(false);
+  const [pipHiddenEdge, setPipHiddenEdge] = useState<'left' | 'right'>('right');
+  const [pipHiddenY, setPipHiddenY] = useState(0);
   const pipDragRef = useRef<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const pipDidDrag = useRef(false);
+  // Tuck only allowed when drag started from the matching edge corner (two-step UX)
+  const pipStartedAtRightEdge = useRef(false);
+  const pipStartedAtLeftEdge = useRef(false);
 
   function pipCornerStyle(corner: PipCorner): React.CSSProperties {
     const m = PIP_M;
@@ -101,37 +153,74 @@ export default function AgentChatView({
 
   const onPipPointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // block touch from reaching scroll container (prevents screen jump when keyboard is up)
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     pipDragRef.current = { sx: e.clientX, sy: e.clientY, ex: rect.left, ey: rect.top };
     pipDidDrag.current = false;
-  }, []);
+    // Only drags starting from an edge corner can tuck that side (two-step UX)
+    const W = window.innerWidth;
+    pipStartedAtRightEdge.current = rect.right >= W - PIP_M - 8;
+    pipStartedAtLeftEdge.current = rect.left <= PIP_M + 8;
+  }, [PIP_M]);
 
   const onPipPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!pipDragRef.current) return;
+    if (!pipDragRef.current || pipHidden) return;
     const dx = e.clientX - pipDragRef.current.sx;
     const dy = e.clientY - pipDragRef.current.sy;
     if (Math.abs(dx) > 5 || Math.abs(dy) > 5) pipDidDrag.current = true;
     if (!pipDidDrag.current) return;
     const W = window.innerWidth;
     const H = window.innerHeight;
+    // Both edges: allow dragging into tuck zone past normal margin
     setPipFloatPos({
-      x: Math.max(PIP_M, Math.min(W - PIP - PIP_M, pipDragRef.current.ex + dx)),
+      x: Math.max(-(PIP - PIP_PEEK), Math.min(W - PIP_PEEK, pipDragRef.current.ex + dx)),
       y: Math.max(PIP_M, Math.min(H - PIP - PIP_BOTTOM_OFFSET, pipDragRef.current.ey + dy)),
     });
-  }, [PIP]);
+  }, [PIP, pipHidden, PIP_PEEK, PIP_M, PIP_BOTTOM_OFFSET]);
 
   const onPipPointerUp = useCallback((_e: React.PointerEvent) => {
     if (!pipDragRef.current) return;
     const wasDrag = pipDidDrag.current;
     const lastPos = pipFloatPos;
     pipDragRef.current = null;
+    pipDidDrag.current = false;
+
+    // Any interaction while hidden → reveal (tap or swipe both work)
+    if (pipHidden) {
+      setPipHidden(false);
+      setPipFloatPos(null);
+      return;
+    }
+
     if (wasDrag && lastPos) {
+      const W = window.innerWidth;
+      const clampedY = Math.max(headerH + PIP_M, Math.min(window.innerHeight - PIP_BOTTOM_OFFSET - PIP, lastPos.y));
+
+      const wasAtRightEdge = pipStartedAtRightEdge.current;
+      const wasAtLeftEdge = pipStartedAtLeftEdge.current;
+      pipStartedAtRightEdge.current = false;
+      pipStartedAtLeftEdge.current = false;
+      // Left tuck: must start from left-edge corner AND push past threshold
+      if (wasAtLeftEdge && lastPos.x < -(PIP - PIP_PEEK - PIP_EXTRA_PULL)) {
+        setPipHiddenEdge('left');
+        setPipHiddenY(clampedY);
+        setPipHidden(true);
+        setPipFloatPos(null);
+        return;
+      }
+      // Right tuck: from right-edge corner, push past right margin
+      if (wasAtRightEdge && lastPos.x > W - PIP - PIP_M + PIP_EXTRA_PULL) {
+        setPipHiddenEdge('right');
+        setPipHiddenY(clampedY);
+        setPipHidden(true);
+        setPipFloatPos(null);
+        return;
+      }
+      // Normal: snap to nearest corner
       const cx = lastPos.x + PIP / 2;
       const cy = lastPos.y + PIP / 2;
-      const W = window.innerWidth;
       const isLeft = cx < W / 2;
-      // Divide Y into 3 zones: top / middle / bottom
       const yTop = headerH;
       const yBot = window.innerHeight - PIP_BOTTOM_OFFSET;
       const zone1 = yTop + (yBot - yTop) / 3;
@@ -143,10 +232,12 @@ export default function AgentChatView({
       setPipCorner(corner);
       setPipFloatPos(null);
     } else if (!wasDrag) {
-      // Tap: cycle through sizes sm → md → lg → sm
+      pipStartedAtRightEdge.current = false;
+      pipStartedAtLeftEdge.current = false;
+      // Tap: cycle md ↔ lg
       setPipSizeIndex(i => (i + 1) % PIP_SIZES.length);
     }
-  }, [pipFloatPos, headerH]);
+  }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL]);
   // ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -228,9 +319,18 @@ export default function AgentChatView({
           style={{
             width: PIP,
             height: PIP,
-            ...(pipFloatPos
-              ? { left: pipFloatPos.x, top: pipFloatPos.y, transition: 'none' }
-              : { ...pipCornerStyle(pipCorner), transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }
+            ...(pipHidden
+              ? {
+                  ...(pipHiddenEdge === 'left'
+                    ? { left: -(PIP - PIP_PEEK) }
+                    : { right: -(PIP - PIP_PEEK) }
+                  ),
+                  top: pipHiddenY,
+                  transition: 'left 0.4s cubic-bezier(0.34,1.56,0.64,1), right 0.4s cubic-bezier(0.34,1.56,0.64,1), top 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+                }
+              : pipFloatPos
+                ? { left: pipFloatPos.x, top: pipFloatPos.y, transition: 'none' }
+                : { ...pipCornerStyle(pipCorner), transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }
             ),
             boxShadow: '0 6px 24px rgba(0,0,0,0.55)',
             border: '1.5px solid rgba(255,255,255,0.14)',
@@ -248,18 +348,38 @@ export default function AgentChatView({
             className="w-full h-full object-cover pointer-events-none"
             draggable={false}
           />
-          {/* Editing badge */}
-          <div
-            className="absolute top-0 left-0 px-1.5 py-0.5 text-[10px] font-medium tracking-wide pointer-events-none"
-            style={{
-              background: 'rgba(0,0,0,0.55)',
-              borderBottomRightRadius: 8,
-              color: 'rgba(255,255,255,0.75)',
-              backdropFilter: 'blur(4px)',
-            }}
-          >
-            Editing
-          </div>
+          {/* Editing badge — only when visible */}
+          {!pipHidden && (
+            <div
+              className="absolute top-0 left-0 px-1.5 py-0.5 text-[10px] font-medium tracking-wide pointer-events-none"
+              style={{
+                background: 'rgba(0,0,0,0.55)',
+                borderBottomRightRadius: 8,
+                color: 'rgba(255,255,255,0.75)',
+                backdropFilter: 'blur(4px)',
+              }}
+            >
+              Editing
+            </div>
+          )}
+          {/* Peek arrow — only when hidden, on the visible edge */}
+          {pipHidden && (
+            <div
+              className="absolute top-0 bottom-0 flex items-center justify-center"
+              style={{
+                [pipHiddenEdge === 'left' ? 'right' : 'left']: 0,
+                width: PIP_PEEK,
+                background: `linear-gradient(to ${pipHiddenEdge === 'left' ? 'right' : 'left'}, rgba(0,0,0,0.65) 0%, transparent 100%)`,
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                {pipHiddenEdge === 'left'
+                  ? <polyline points="9 18 15 12 9 6" />   /* > pull from left */
+                  : <polyline points="15 18 9 12 15 6" />  /* < pull from right */
+                }
+              </svg>
+            </div>
+          )}
         </div>
       )}
 
@@ -385,7 +505,7 @@ export default function AgentChatView({
 
                     {/* editPrompt card — collapsible */}
                     {msg.editPrompt && (
-                      <EditPromptCard prompt={msg.editPrompt} />
+                      <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} />
                     )}
                   </div>
 
@@ -411,7 +531,10 @@ export default function AgentChatView({
       {/* ── Input bar ── */}
       <div
         className="flex-shrink-0 px-3 pt-2"
-        style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))', borderTop: '1px solid rgba(255,255,255,0.05)' }}
+        style={{
+          paddingBottom: kbInset > 0 ? `${kbInset + 8}px` : 'max(0.75rem, env(safe-area-inset-bottom))',
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+        }}
       >
         <div
           className="flex items-end gap-2 px-4 py-2.5"
