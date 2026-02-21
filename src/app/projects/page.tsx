@@ -269,7 +269,9 @@ export default function ProjectsPage() {
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
         .mkr-page { font-family: inherit; }
+        .mkr-handwrite { font-family: 'Caveat', cursive; }
 
         @keyframes mkr-in {
           from { opacity: 0; transform: translateY(16px); }
@@ -304,11 +306,11 @@ export default function ProjectsPage() {
 
       <div className="mkr-page" style={{ minHeight: '100dvh', background: '#080808', color: '#fff', overflowX: 'hidden' }}>
 
-        {/* Ambient glow at top */}
+        {/* Ambient glow — extends above viewport to cover status bar */}
         <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0,
-          height: '500px', pointerEvents: 'none', zIndex: 0,
-          background: 'radial-gradient(ellipse at 50% -10%, rgba(217,70,239,0.15) 0%, transparent 60%)',
+          position: 'fixed', top: '-80px', left: 0, right: 0,
+          height: '580px', pointerEvents: 'none', zIndex: 0,
+          background: 'radial-gradient(ellipse at 50% 0%, rgba(217,70,239,0.18) 0%, transparent 62%)',
         }} />
 
         <input
@@ -378,15 +380,14 @@ export default function ProjectsPage() {
           </div>
 
           {/* Subtitle */}
-          <div style={{
-            marginTop: '6px',
-            fontSize: '0.6rem',
-            letterSpacing: '0.22em',
-            color: 'rgba(217,70,239,0.55)',
+          <div className="mkr-handwrite" style={{
+            marginTop: '4px',
+            fontSize: '1.15rem',
+            letterSpacing: '0.02em',
+            color: 'rgba(217,70,239,0.65)',
             fontWeight: 400,
-            textTransform: 'uppercase',
           }}>
-            AI Photo Studio
+            one man studio
           </div>
 
           {/* New project button */}
