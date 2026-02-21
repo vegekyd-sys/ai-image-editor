@@ -349,7 +349,7 @@ export default function AgentChatView({
                 }
               : pipFloatPos
                 ? { left: pipFloatPos.x, top: pipFloatPos.y, transition: 'none' }
-                : { ...pipCornerStyle(pipCorner), transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }
+                : { ...pipCornerStyle(pipCorner), transition: 'left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), right 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }
             ),
             boxShadow: '0 6px 24px rgba(0,0,0,0.55)',
             border: '1.5px solid rgba(255,255,255,0.14)',
