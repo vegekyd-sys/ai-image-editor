@@ -42,6 +42,16 @@ export type AgentStreamEvent =
   | { type: 'error'; message: string };
 
 // ---------------------------------------------------------------------------
+// Skill template map — reuses already-imported .md files
+// ---------------------------------------------------------------------------
+
+const SKILL_PROMPTS: Record<string, string> = {
+  enhance: enhancePrompt,
+  creative: creativePrompt,
+  wild: wildPrompt,
+};
+
+// ---------------------------------------------------------------------------
 // System prompt (bundled via webpack asset/source)
 // ---------------------------------------------------------------------------
 
@@ -58,14 +68,21 @@ function createTools(ctx: AgentContext) {
     generate_image: tool({
       description: generateImageToolPrompt,
       inputSchema: z.object({
-        editPrompt: z.string().describe('Full English prompt with FACE/EDIT structure as described in the tool description.'),
+        editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, write only the direction — template rules are auto-injected.'),
+        skill: z.enum(['enhance', 'creative', 'wild']).optional().describe('Activate a skill template. See tool description for routing rules.'),
         useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       }),
-      execute: async ({ editPrompt, useOriginalAsReference, aspectRatio }) => {
+      execute: async ({ editPrompt, skill, useOriginalAsReference, aspectRatio }) => {
         const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
 
-        console.log(`\n🎨 [generate_image] useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal}\neditPrompt:\n${editPrompt}\n`);
+        // Inject skill template if provided
+        const skillTemplate = skill ? SKILL_PROMPTS[skill] : null;
+        const finalPrompt = skillTemplate
+          ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
+          : editPrompt;
+
+        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal}\neditPrompt:\n${editPrompt}\n`);
 
         let result: string | null;
         if (useOriginalAsReference && hasOriginal) {
@@ -76,13 +93,13 @@ function createTools(ctx: AgentContext) {
               { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
               { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
             ],
-            editPrompt,
+            finalPrompt,
             aspectRatio,
           );
         } else {
           // Single-image mode (default): keeps Gemini in edit-in-place mode
           console.log('📸 Single-image mode');
-          result = await generatePreviewImage(ctx.currentImage, editPrompt, aspectRatio);
+          result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio);
         }
 
         if (!result) {

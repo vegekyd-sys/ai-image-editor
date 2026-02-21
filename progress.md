@@ -1949,6 +1949,49 @@ v0.5 骨架验证通过后，本次核心改造：
 
 ---
 
+## 人脸裁图 ref 实验 (2026-02-21)
+
+### 实验目标
+测试"人脸方形裁图作为 reference"是否比"原图整图作为 reference"对 Gemini 人脸还原效果更好。
+
+### 方法
+- 用 BlazeFace 检测原图所有人脸，裁出 512×512 方图
+- 方案 A（对照）：`[编辑图, 原图整图]` → `test-face-restore.mjs`
+- 方案 B（实验）：`[编辑图, 人脸裁图1, 人脸裁图2, ...]` → `test-face-crop-ref.mjs`
+- 测试素材：餐厅合影（左边女性 + 右边老人），编辑图加了一只穿红色汉服的松鼠（creative tip）
+
+### 测试素材
+- 原图：`test-assets/face-crop-experiment/original.jpg`
+- 编辑图（含松鼠）：`test-assets/face-crop-experiment/edited.jpg`
+- 对照组结果：`result-fullimg-ref.jpg`
+- 实验组结果：`result-crop-ref-4.jpg`（最终版）
+
+### 结论
+**人脸 identity 还原：裁图 ref 有效**
+- 4 轮 prompt 迭代后，左边女性 side-eye 变形修复，人脸恢复自然
+- 关键 prompt 改进：
+  - 明确"AI 变形"而非 restore，用 OVERRIDE/REPLACE 强制语言
+  - 图片前先用文字定义每张图角色（Image 1 = base，Image 2/3 = face reference only）
+  - 位置明示（leftmost / rightmost person）
+
+**构图/尺寸保持：Gemini 无法可靠控制**
+- 输出从 1200×896 变成近方形（受 512×512 裁图影响）
+- creative 元素（松鼠）构图有偏移
+- 这是 Gemini 多图输入模式的固有限制，prompt 无法完全解决
+
+**方案 A vs 方案 B**
+| | 方案 A（整图 ref） | 方案 B（裁图 ref） |
+|---|---|---|
+| 速度 | 9.5s | 25s |
+| 人脸还原 | 成功率低 | 成功率更高 |
+| 构图/尺寸稳定 | 较好 | 差（受方图干扰） |
+
+### 待探索方向
+- 裁图 ref + sharp 后处理强制还原尺寸（Gemini 只负责人脸内容，sharp 负责精准定位合成）
+- 或沿用 face-restore-auto 三步流程（blazeface → sharp 机械合成 → gemini 融边）
+
+---
+
 ## v0.8 Tips 速度优化实验 + PiP 改版 (2026-02-21)
 
 ### Tips 速度优化实验（结论：回滚）
@@ -1992,3 +2035,30 @@ v0.5 骨架验证通过后，本次核心改造：
 
 **Bug 修复**
 - 右边收起时漏加 `setPipHiddenEdge('right')`，导致收右边实际执行了左边动画
+
+---
+
+## Agent 指令接受修复 (2026-02-21)
+
+### 问题
+Makaron Agent 拒绝用户两类显式请求：
+1. **改变人脸/表情**（如"让他笑"、"改表情"）— agent 引用 Face Preservation 规则直接拒绝
+2. **加 caption/文字**（如"加字幕"、"做成明信片加文字"）— `generate_image_tool.md` 末尾硬写 `"Do NOT add any text"` 覆盖了用户意图
+
+### 根本原因
+- `agent.md` Face Preservation 用了绝对禁止语气（"NEVER request lip/mouth changes"），Claude 误解为"拒绝用户请求"而非"自主选择时避免"
+- `generate_image_tool.md` 的 `"Do NOT add any text, watermarks, or borders."` 无条件附加到所有 editPrompt
+
+### 修复
+**`agent.md`**：Face Preservation 改为"Default Constraint"，明确区分：
+- 自主选择时 → 遵守限制
+- 用户显式要求时 → 直接执行，不拒绝
+
+**`generate_image_tool.md`**：`"Do NOT add any text"` 加例外条款 —— 用户明确要求文字/caption 时省略这句
+
+### 验证结果（日志确认）
+- `skill=wild` → wild.md 注入 ✅
+- `skill=enhance` → enhance.md 注入 ✅  
+- `skill=creative` → creative.md 注入 ✅
+- 用户要求改表情 → `skill=none`，agent 直接写 editPrompt 执行 ✅（不再拒绝）
+- 用户要求加 caption/明信片文字 → editPrompt 包含文字指令，无 "Do NOT add text" ✅

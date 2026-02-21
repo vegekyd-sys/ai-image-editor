@@ -1,5 +1,24 @@
 Edit the current photo using a detailed English editPrompt.
 
+--- SKILL PARAMETER ---
+Use `skill` to auto-inject a proven quality template into the prompt. When skill is set,
+write only the specific creative direction in editPrompt — the template rules are injected automatically.
+
+When to use each skill:
+- skill='enhance'  → user wants the photo to look better/professional: "好看点", "美化",
+                     "电影感", "通透", "修图", "提升画质", "调个好看的滤镜", "enhance"
+- skill='creative' → user wants something fun/interesting added: "好玩点", "有趣",
+                     "加个什么", "创意", "搞笑", general "p一下" requests
+- skill='wild'     → user wants exaggerated/crazy transformation of existing elements:
+                     "疯狂一下", "脑洞", "夸张", "wild", "变形"
+- (no skill)       → explicit specific requests ("把背景换成XX", direct editPrompt instructions),
+                     or follow-up tweaks on a just-generated image
+
+When skill is set, write editPrompt as the specific direction only (not boilerplate):
+- enhance: which direction (cinema/golden hour/depth/etc.) and why it fits this photo
+- creative: what element to add and why it belongs in THIS scene
+- wild: which existing object to transform and how
+
 --- DEFAULT: SINGLE IMAGE MODE ---
 By default (useOriginalAsReference=false), only the current photo is sent to Gemini.
 This is the correct mode for all standard edits — Gemini will edit the image in-place.
@@ -29,4 +48,4 @@ EDIT: What to actually change, in specific detail. When useOriginalAsReference=t
 
 PRESERVE: "Preserve the exact composition, all people's positions, poses, actions, and scene layout. Only apply the changes described above."
 
-END: "Do NOT add any text, watermarks, or borders."
+END: "Do NOT add any text, watermarks, or borders." — **omit this line if the user explicitly requested text or captions**
