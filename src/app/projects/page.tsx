@@ -304,11 +304,11 @@ export default function ProjectsPage() {
 
       <div className="mkr-page" style={{ minHeight: '100dvh', background: '#080808', color: '#fff', overflowX: 'hidden' }}>
 
-        {/* Subtle bottom fade — blends hero into gallery */}
+        {/* Ambient glow at top */}
         <div style={{
-          position: 'absolute', bottom: '45dvh', left: 0, right: 0,
-          height: '120px', pointerEvents: 'none', zIndex: 0,
-          background: 'linear-gradient(to bottom, transparent 0%, rgba(217,70,239,0.04) 100%)',
+          position: 'fixed', top: 0, left: 0, right: 0,
+          height: '500px', pointerEvents: 'none', zIndex: 0,
+          background: 'radial-gradient(ellipse at 50% -10%, rgba(217,70,239,0.15) 0%, transparent 60%)',
         }} />
 
         <input
@@ -340,97 +340,94 @@ export default function ProjectsPage() {
         </button>
 
         {/* ═══════════════════════════════
-            HERO — editorial masthead style
+            HERO — ~45dvh, fully centered
         ════════════════════════════════ */}
         <div style={{
           height: '45dvh', display: 'flex', flexDirection: 'column',
-          justifyContent: 'flex-end',
+          alignItems: 'center', justifyContent: 'center', gap: '0px',
           position: 'relative', zIndex: 1,
         }}>
-
-          {/* Mark + edition tag — top-left */}
+          {/* Wordmark row: asterisk icon + Makaron */}
           <div style={{
-            position: 'absolute',
-            top: 'calc(max(1.25rem, env(safe-area-inset-top)) + 2px)',
-            left: '16px',
-            display: 'flex', alignItems: 'center', gap: '7px',
+            display: 'flex', alignItems: 'center', gap: '12px',
           }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-              stroke="rgba(217,70,239,0.8)" strokeWidth="2.2" strokeLinecap="round">
-              <line x1="12" y1="2" x2="12" y2="22"/>
-              <line x1="2" y1="12" x2="22" y2="12"/>
-              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-              <line x1="19.07" y1="4.93" x2="4.93" y2="19.07"/>
+            {/* Asterisk / sparkle SVG */}
+            <svg
+              width="20" height="20" viewBox="0 0 24 24"
+              fill="none"
+              stroke="rgb(217,70,239)"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            >
+              <line x1="12" y1="2" x2="12" y2="22" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+              <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
             </svg>
-            <span style={{
-              fontSize: '0.5rem', letterSpacing: '0.18em',
-              color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', fontWeight: 300,
-            }}>
-              AI Photo Studio
-            </span>
-          </div>
 
-          {/* Bottom-anchored editorial content */}
-          <div style={{ paddingBottom: '20px' }}>
-
-            {/* Giant masthead — 19vw fills ~95% of screen width across all phone sizes */}
+            {/* Wordmark */}
             <div style={{
-              fontWeight: 900,
-              fontSize: '19vw',
+              fontWeight: 800,
+              fontSize: 'clamp(3rem, 12vw, 5rem)',
               letterSpacing: '-0.04em',
-              lineHeight: 0.86,
               color: '#fff',
-              textTransform: 'uppercase',
-              padding: '0 4px',
-              marginBottom: '14px',
-              whiteSpace: 'nowrap',
+              lineHeight: 1,
             }}>
               Makaron
             </div>
+          </div>
 
-            {/* Rule */}
-            <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '0 14px 14px' }} />
+          {/* Subtitle */}
+          <div style={{
+            marginTop: '6px',
+            fontSize: '0.6rem',
+            letterSpacing: '0.22em',
+            color: 'rgba(217,70,239,0.55)',
+            fontWeight: 400,
+            textTransform: 'uppercase',
+          }}>
+            AI Photo Studio
+          </div>
 
-            {/* Bottom row: new project button left, issue tag right */}
-            <div style={{
-              padding: '0 14px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              {creating ? (
-                <button disabled style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  background: 'none', border: 'none', cursor: 'default',
-                  fontSize: '0.72rem', letterSpacing: '0.14em',
-                  textTransform: 'uppercase', color: 'rgba(217,70,239,0.5)',
-                  padding: 0,
-                }}>
-                  <Spinner size={11} />
-                  Creating…
-                </button>
-              ) : (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="mkr-new-btn"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontSize: '0.72rem', letterSpacing: '0.14em',
-                    textTransform: 'uppercase', color: 'rgba(217,70,239,0.85)',
-                    padding: 0, fontWeight: 500,
-                  }}
-                >
-                  <span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span>
-                  New project
-                </button>
-              )}
-
-              <span style={{
-                fontSize: '0.5rem', letterSpacing: '0.16em',
-                color: 'rgba(255,255,255,0.15)', textTransform: 'uppercase', fontWeight: 300,
-              }}>
-                2026 / I
-              </span>
-            </div>
+          {/* New project button */}
+          <div style={{ marginTop: '32px' }}>
+            {creating ? (
+              <button
+                disabled
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  borderRadius: '100px',
+                  border: '1.5px solid rgba(217,70,239,0.35)',
+                  background: 'transparent',
+                  color: 'rgba(217,70,239,0.6)',
+                  padding: '14px 36px',
+                  fontSize: '0.85rem',
+                  letterSpacing: '0.06em',
+                  cursor: 'default',
+                }}
+              >
+                <Spinner size={14} />
+                Creating…
+              </button>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="mkr-new-btn"
+                style={{
+                  borderRadius: '100px',
+                  border: '1.5px solid rgba(217,70,239,0.35)',
+                  background: 'transparent',
+                  color: 'rgb(217,70,239)',
+                  padding: '14px 36px',
+                  fontSize: '0.85rem',
+                  letterSpacing: '0.06em',
+                  cursor: 'pointer',
+                  fontWeight: 400,
+                }}
+              >
+                + New project
+              </button>
+            )}
           </div>
         </div>
 
