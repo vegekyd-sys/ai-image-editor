@@ -57,8 +57,11 @@ const CATEGORY_CN: Record<TipCategory, string> = {
 };
 
 function buildCategorySystemPrompt(category: TipCategory): string {
+  const labelNote = category === 'captions'
+    ? 'label必须用中文3-6字，动词开头，并尽量包含地点/场景等具体信息（如"迪士尼海报"、"梯田旁白"、"纽约胶片"）。'
+    : 'label必须用中文3-6字，动词开头。';
   return `你是图片编辑建议专家。分析图片后生成2条${CATEGORY_CN[category]}编辑建议。
-label必须用中文3-6字，动词开头。editPrompt用英文，极其具体。`;
+${labelNote}editPrompt用英文，极其具体。`;
 }
 
 // Prompt templates bundled via webpack asset/source

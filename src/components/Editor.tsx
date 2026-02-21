@@ -1377,6 +1377,7 @@ export default function Editor({
                 onIndexChange={handleIndexChange}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
+                draftTimelineIndex={draftParentIndex !== null ? draftParentIndex + 1 : undefined}
                 onDismissDraft={dismissDraft}
                 previousImage={previousImage}
               />

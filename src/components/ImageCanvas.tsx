@@ -8,13 +8,14 @@ interface ImageCanvasProps {
   onIndexChange: (index: number) => void;
   isEditing: boolean;
   isDraft?: boolean;
+  draftTimelineIndex?: number;
   onDismissDraft?: () => void;
   previousImage?: string;
 }
 
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
-  isDraft, onDismissDraft, previousImage,
+  isDraft, draftTimelineIndex, onDismissDraft, previousImage,
 }: ImageCanvasProps) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -229,8 +230,13 @@ export default function ImageCanvas({
 
   const getLabel = (index: number) => {
     if (index === 0) return 'Original';
-    if (isDraft && index === timeline.length - 1) return 'Draft';
-    return `Edit ${index}`;
+    // isDraft=true means we're currently viewing the draft slot
+    if (isDraft) return 'Draft';
+    // Adjust edit number: snapshots after the draft slot have a +1 offset in timeline index
+    const editNum = (draftTimelineIndex !== undefined && index > draftTimelineIndex)
+      ? index - 1
+      : index;
+    return `Edit ${editNum}`;
   };
 
   const baseImage = timeline[currentIndex];
