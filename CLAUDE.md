@@ -170,6 +170,8 @@ Both tips and chat use the same SSE pattern:
 4. **当前状态变化**（均分变了、瓶颈变了） → 更新本文件的 Current Status
 5. **重要 bug 修复或 UI 变更** → 追加到 `progress.md` 的相关章节
 
+**CLAUDE.md 记录粒度原则**：只记"下次新对话需要第一时间知道的事"。架构变化、当前状态、设计决策 → 进 CLAUDE.md。Bug fix 细节、UI 调整过程 → 进 progress.md 或不记。一句话概括不了的内容大概率不该进 CLAUDE.md。
+
 ### 何时读取 progress.md
 - 优化 tips prompt → 先读最新 2 个版本章节
 - 改 UI 交互 → 先读"产品优化"章节
