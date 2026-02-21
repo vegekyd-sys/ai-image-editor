@@ -1,18 +1,28 @@
-Edit the current photo. Write a detailed English editPrompt and optionally set useOriginalAsBase.
+Edit the current photo using a detailed English editPrompt.
 
---- DECIDING useOriginalAsBase ---
-Before calling this tool, answer: does the user want to FIX the current version, or START FRESH from the original?
-- Fix current (default, useOriginalAsBase=false): "再调整一下" / "人脸不对" / "保留效果但..." / "去掉某个元素"
-- Start fresh (useOriginalAsBase=true): "P的不好重新做" / "不满意重来" / "换个方式"
+--- DEFAULT: SINGLE IMAGE MODE ---
+By default (preserveFaceFromOriginal=false), only the current photo is sent to Gemini.
+This is the correct mode for all standard edits — Gemini will edit the image in-place.
+Do NOT set preserveFaceFromOriginal=true unless the user explicitly complains about face distortion.
 
---- IMAGES SENT TO GEMINI ---
-When useOriginalAsBase=false (default): Image 1 = current version (BASE), Image 2 = original (face reference only)
-When useOriginalAsBase=true: only the original photo is sent (single image, start fresh)
-When no originalImage exists: only current photo is sent (single image)
+--- WHEN TO USE preserveFaceFromOriginal=true ---
+Only set this to true when:
+- User says "人脸变了" / "脸不对" / "跟原图不一样" / "恢复人脸"
+- User explicitly wants the face to match the original photo
 
---- EDITPROMPT STRUCTURE ---
-BASE: State which image is the foundation (omit if useOriginalAsBase=true — original is implicitly the base)
-FACE (when people are present): Copy face from original exactly:
-  - Large face (>10% of frame): "Restore/preserve each person's face to exactly match the original photo: copy the exact face shape, eye shape, nose, mouth, jaw line, skin tone and texture. Do NOT slim, beautify, enlarge eyes, or alter any facial feature."
-  - Small face (<10% of frame): "CRITICAL: Faces are small. Leave ALL face areas completely untouched — do NOT sharpen, retouch, relight, or process any face region. Treat face areas as masked off."
-EDIT: What to actually change, in detail.
+When preserveFaceFromOriginal=true, Gemini receives:
+  Image 1 = current version (edit base, preserve composition)
+  Image 2 = original photo (face reference only)
+
+--- WRITING THE EDITPROMPT ---
+
+FACE (when people are present — always include):
+  Large face (>10% of frame): "Preserve each person's face exactly as in the current photo. Do NOT change face shape, eyes, skin, or any facial features."
+  When preserveFaceFromOriginal=true: "Restore each person's face to exactly match Image 2 (original): copy face shape, eyes, nose, mouth, jaw, skin from Image 2. Do NOT slim, beautify, or alter any feature."
+  Small face (<10% of frame): "CRITICAL: Faces are small. Leave ALL face areas completely untouched — do NOT sharpen, enhance, retouch, relight, resize, or process any face region. Treat face areas as masked off and invisible."
+
+EDIT: What to actually change, in specific detail.
+
+PRESERVE: "Preserve the exact composition, all people's positions, poses, actions, and scene layout. Only apply the changes described above."
+
+END: "Do NOT add any text, watermarks, or borders."

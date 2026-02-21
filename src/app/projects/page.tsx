@@ -184,6 +184,52 @@ export default function ProjectsPage() {
     setCreating(true)
 
     try {
+      // Extract EXIF metadata before compression (needs original File)
+      let metadata: { takenAt?: string; location?: string } | undefined
+      try {
+        const exifr = (await import('exifr')).default
+        // reviveValues:false keeps datetime as raw string "YYYY:MM:DD HH:MM:SS" — avoids timezone conversion
+        const exif = await exifr.parse(file, { gps: true, reviveValues: false })
+        console.log('[EXIF]', JSON.stringify({ lat: exif?.latitude, lng: exif?.longitude, date: exif?.DateTimeOriginal }))
+        if (exif) {
+          const lat = exif.latitude; const lng = exif.longitude
+          const datetimeRaw: string | undefined = exif.DateTimeOriginal || exif.CreateDate
+          let takenAt: string | undefined
+          if (datetimeRaw && typeof datetimeRaw === 'string') {
+            // Parse "YYYY:MM:DD HH:MM:SS" directly — no timezone conversion
+            const m = datetimeRaw.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/)
+            if (m) {
+              // Estimate UTC offset from longitude (each 15° = 1 hour)
+              const utcOffset = lat !== undefined && lng !== undefined
+                ? Math.round(lng / 15)
+                : undefined
+              const tzStr = utcOffset !== undefined
+                ? ` (UTC${utcOffset >= 0 ? '+' : ''}${utcOffset})`
+                : ''
+              takenAt = `${m[1]}年${parseInt(m[2])}月${parseInt(m[3])}日 ${m[4]}:${m[5]}${tzStr}`
+            }
+          }
+          let location: string | undefined
+          if (lat && lng) {
+            try {
+              // zoom=14 gives neighborhood/district level — more reliable than building-level (zoom=18) which may return wrong POIs
+              const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=zh-CN`, { headers: { 'User-Agent': 'Makaron-App/1.0' } })
+              if (geoRes.ok) {
+                const geo = await geoRes.json()
+                const addr = geo.address
+                const city = addr.city || addr.town || addr.village || addr.county
+                location = [city, addr.country].filter(Boolean).join(', ')
+                console.log('[GEOCODE]', location, '| addr:', JSON.stringify(addr))
+              } else {
+                console.log('[GEOCODE] failed:', geoRes.status)
+              }
+            } catch (e) { console.log('[GEOCODE] error:', e) }
+          }
+          if (takenAt || location) metadata = { takenAt, location }
+          console.log('[METADATA]', JSON.stringify(metadata))
+        }
+      } catch { /* EXIF reading is non-critical */ }
+
       let base64: string
       try {
         base64 = await compressClientSide(file)
@@ -204,6 +250,7 @@ export default function ProjectsPage() {
 
       if (pErr || !project) throw new Error('Failed to create project')
       sessionStorage.setItem('pendingImage', base64)
+      if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
       router.push(`/projects/${project.id}`)
     } catch (err) {
       console.error('Create project error:', err)

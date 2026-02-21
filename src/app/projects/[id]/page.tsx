@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
 import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
-import { Snapshot, Message, Tip } from '@/types'
+import { Snapshot, Message, Tip, PhotoMetadata } from '@/types'
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
 
@@ -25,6 +25,12 @@ export default function ProjectPage() {
     const pending = sessionStorage.getItem('pendingImage')
     if (pending) sessionStorage.removeItem('pendingImage')
     return pending
+  })
+  const [pendingMetadata] = useState<PhotoMetadata | undefined>(() => {
+    if (typeof window === 'undefined') return undefined
+    const raw = sessionStorage.getItem('pendingMetadata')
+    if (raw) { sessionStorage.removeItem('pendingMetadata'); try { return JSON.parse(raw) } catch { return undefined } }
+    return undefined
   })
   const [loaded, setLoaded] = useState(false)
 
@@ -121,6 +127,7 @@ export default function ProjectPage() {
       initialSnapshots={initialSnapshots ?? []}
       initialMessages={initialMessages ?? []}
       pendingImage={pendingImage ?? undefined}
+      pendingMetadata={pendingMetadata}
       onSaveSnapshot={handleSaveSnapshot}
       onSaveMessage={handleSaveMessage}
       onUpdateTips={handleUpdateTips}

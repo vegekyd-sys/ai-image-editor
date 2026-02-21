@@ -91,8 +91,8 @@ export default function ImageCanvas({
       swiping.current = true;
     }
 
-    // Long press detection (only when not zoomed)
-    if (scale === 1 && previousImage) {
+    // Long press detection
+    if (previousImage) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);

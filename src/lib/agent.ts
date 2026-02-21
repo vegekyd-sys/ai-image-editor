@@ -37,7 +37,7 @@ export type AgentStreamEvent =
   | { type: 'content'; text: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string }
-  | { type: 'tool_call'; tool: string; input: Record<string, unknown> }
+  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -58,33 +58,30 @@ function createTools(ctx: AgentContext) {
     generate_image: tool({
       description: generateImageToolPrompt,
       inputSchema: z.object({
-        editPrompt: z.string().describe('Detailed English prompt following the BASE/REFERENCE/FACE/EDIT structure from agent.md.'),
-        useOriginalAsBase: z.boolean().optional().describe('Set true when user wants to start fresh from the original photo (e.g. "P的不好重新做"). Default false = use current version as base.'),
+        editPrompt: z.string().describe('Full English prompt with FACE/EDIT structure as described in the tool description.'),
+        preserveFaceFromOriginal: z.boolean().optional().describe('Set true ONLY when user explicitly complains about face distortion and needs face restored to match the original photo. Default false = single image edit (correct behavior for most requests).'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       }),
-      execute: async ({ editPrompt, useOriginalAsBase, aspectRatio }) => {
+      execute: async ({ editPrompt, preserveFaceFromOriginal, aspectRatio }) => {
         const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
-        // Determine which image is the base
-        const baseImage = (useOriginalAsBase && hasOriginal) ? ctx.originalImage! : ctx.currentImage;
-        const refImage = hasOriginal ? (useOriginalAsBase ? ctx.currentImage : ctx.originalImage!) : null;
 
-        console.log(`\n🎨 [generate_image] base=${useOriginalAsBase ? 'ORIGINAL' : 'CURRENT'} hasRef=${!!refImage}\neditPrompt:\n${editPrompt}\n`);
+        console.log(`\n🎨 [generate_image] preserveFace=${!!preserveFaceFromOriginal} hasOriginal=${!!hasOriginal}\neditPrompt:\n${editPrompt}\n`);
 
         let result: string | null;
-        if (useOriginalAsBase && hasOriginal) {
-          // Start fresh from original — single image, no reference to current version
-          result = await generatePreviewImage(ctx.originalImage!, editPrompt, aspectRatio);
-        } else if (!useOriginalAsBase && hasOriginal) {
-          // Edit current version, reference original for face/details
+        if (preserveFaceFromOriginal && hasOriginal) {
+          // Two-image mode: only for explicit face restoration
+          console.log('📸 Two-image mode (face restoration)');
           result = await generateImageWithReferences(
             [
-              { url: ctx.currentImage,   role: '当前编辑版本【主图】— 输出图片必须以这张图为基础进行修改' },
-              { url: ctx.originalImage!, role: '原图【人脸参考】— 仅用于还原人脸细节，保持与原图人脸完全一致' },
+              { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
+              { url: ctx.originalImage!, role: 'Image 2 = 原图【仅用于人脸参考，不作为构图基础】' },
             ],
             editPrompt,
             aspectRatio,
           );
         } else {
+          // Single-image mode (default): keeps Gemini in edit-in-place mode
+          console.log('📸 Single-image mode');
           result = await generatePreviewImage(ctx.currentImage, editPrompt, aspectRatio);
         }
 
@@ -195,7 +192,20 @@ export async function* runMakaronAgent(
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: '生成图片中...' };
         }
-        yield { type: 'tool_call', tool: event.toolName, input: event.input as Record<string, unknown> };
+        let toolCallImages: string[] | undefined;
+        if (event.toolName === 'generate_image') {
+          const inp = event.input as { preserveFaceFromOriginal?: boolean };
+          const twoImageMode = inp.preserveFaceFromOriginal && ctx.originalImage && ctx.originalImage !== ctx.currentImage;
+          toolCallImages = twoImageMode
+            ? [ctx.currentImage, ctx.originalImage!]
+            : [ctx.currentImage];
+        }
+        yield {
+          type: 'tool_call',
+          tool: event.toolName,
+          input: event.input as Record<string, unknown>,
+          ...(toolCallImages ? { images: toolCallImages } : {}),
+        };
         continue;
       }
 
@@ -248,18 +258,93 @@ const TIPS_PROMPTS: Record<'enhance' | 'creative' | 'wild', string> = {
   wild: wildPrompt,
 };
 
+// Category-specific system prompts (restored from original gemini.ts structure)
+const TIPS_CATEGORY_INFO: Record<'enhance' | 'creative' | 'wild', { cn: string; definition: string; selfCheck: string; rules: string }> = {
+  enhance: {
+    cn: 'enhance（专业增强）',
+    definition: 'enhance = 让照片整体变好看（光影/色彩/通透感），变化必须肉眼明显',
+    selfCheck: `enhance自检：
+- 放在原图旁边，任何人都能一眼看出提升吗？（"看不出变化"=3分）
+- 风格与照片情绪匹配吗？（搞笑照片配阴沉暗调=4分）
+- 有通透感+景深分离+色调层次吗？
+- enhance可以调整构图，但必须基于原图——编辑后还能一眼认出是同一张照片（"画面变化太多了"=3分）
+- 编辑后的背景还是原图的背景吗？enhance是提升原图不是生成新图（"背景被换掉了"=3分，"人物都变了"=1分）`,
+    rules: `⚠️ enhance的editPrompt必须包含背景锚定：
+"Keep the original background scene intact — enhance lighting and colors on the existing scene, do NOT replace or regenerate the background."`,
+  },
+  creative: {
+    cn: 'creative（趣味创意）',
+    definition: 'creative = 往画面里加入一个与画面内容有因果关系的有趣新元素',
+    selfCheck: `creative自检（三问全过才输出）：
+- Q1 为什么是这个元素？能不能一句话说清"因为画面里有X所以加Y"？说不清=换一个
+- Q2 情绪对吗？让人笑/惊喜=好，让人害怕/困惑=换
+- Q3 这个创意能用在其他照片上吗？能=太通用=换一个`,
+    rules: `creative品质标准：
+- 加入的动物/角色必须是photorealistic写实风（cartoon/卡通=贴纸感）
+- 足够大且显眼，至少占画面5-10%面积
+- 必须与人物有互动/眼神交流，不能像贴纸`,
+  },
+  wild: {
+    cn: 'wild（疯狂脑洞）',
+    definition: 'wild = 让画面中已有的物品发生疯狂变化（不是加新东西！）',
+    selfCheck: `wild自检（四问全过才输出）：
+- Q1 变化的主角是画面中已有的什么东西？指不出来=不是wild
+- Q2 变化够大吗？一眼就能看到变化=好。改镜片/眼镜反射内容=太小不够大(3分"眼镜idea傻")
+- Q3 变化是基于物品本身特点还是随便套的？表面视觉类比（层状=蛋糕/抹茶、圆形=球）=换一个。"变成食物/饮品"除非厨房场景否则=万金油套路
+- Q4 这个变化会不会让人不适/恐怖？→ 换一个有趣的方向`,
+    rules: `wild额外规则：只选画面中重要/显眼的元素做变化，不要选边缘模糊的小物件`,
+  },
+};
+
+function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild'): string {
+  const info = TIPS_CATEGORY_INFO[category];
+  return `你是图片编辑建议专家。分析图片后生成2条${info.cn}编辑建议。label必须用中文3-6字，动词开头。editPrompt用英文，极其具体。
+
+${info.definition}
+
+⚠️ 第一步：判断人脸大小！
+分析图片时首先判断人脸在画面中的占比：
+- 大脸（特写/半身照，脸部占画面>10%）→ 正常处理
+- 小脸（全身照/合照/远景/广角，脸部占画面<10%）→ 触发小脸保护模式
+小脸保护模式下所有editPrompt必须包含：
+"CRITICAL: Faces in this photo are small. Leave ALL face areas completely untouched — do NOT sharpen, enhance, retouch, relight, resize, or process any face region in any way. Treat face areas as if they are masked off and invisible to you."
+小脸时人物反应只能用身体语言（身体后仰/转头/手指向变化），绝不能要求面部表情变化。
+
+自检框架（输出每个tip前先过一遍）：
+
+${info.selfCheck}
+
+${info.rules}
+
+⚠️ 人脸保真是最大扣分项！涉及人物的editPrompt必须包含：
+"Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider or rounder."
+
+⚠️ 所有editPrompt都必须包含背景净化：
+"Clean up the scene like a professional photographer would before shooting: remove any object that draws attention away from the main subject but adds no compositional value. Replace cleaned areas with natural-looking continuation of the scene."
+
+2个tip必须选不同方向。结尾加"Do NOT add any text, watermarks, or borders."`;
+}
+
 export async function* streamTipsWithClaude(
   imageBase64: string,
   category: 'enhance' | 'creative' | 'wild',
+  metadata?: { takenAt?: string; location?: string },
 ): AsyncGenerator<Tip> {
   const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const template = TIPS_PROMPTS[category];
+  const systemPrompt = buildTipsSystemPrompt(category);
 
-  const systemPrompt = `你是图片编辑建议专家。分析图片后生成2条${category}编辑建议。label必须用中文3-6字，动词开头。editPrompt用英文，极其具体。`;
+  // Build metadata context string
+  const metaLines: string[] = [];
+  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
+  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
+  const metaContext = metaLines.length > 0
+    ? `[照片元数据]\n${metaLines.join('\n')}\n（可用于更贴切的创意联想，例如地点特色元素、时间对应的光线氛围等）\n\n`
+    : '';
 
-  const userPrompt = `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
+  const userPrompt = `${metaContext}在生成建议之前，先分析这张图片：判断人脸大小；识别画面中的具体物品/食物/道具；判断照片情绪基调。
 
-基于分析，严格遵循以下所有规则，给出2条${category}编辑建议：
+基于分析，给出2条${category}编辑建议。以下是详细规范（必须遵循）：
 
 ${template}${TIPS_JSON_FORMAT}`;
 

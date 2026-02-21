@@ -7,7 +7,7 @@ export interface AgentStreamCallbacks {
   onContent?: (text: string) => void;
   onNewTurn?: () => void;
   onImage?: (image: string) => void;
-  onToolCall?: (tool: string, input: Record<string, unknown>) => void;
+  onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
 }
@@ -69,7 +69,7 @@ export async function streamAgent(
             callbacks.onImage?.(event.image);
             break;
           case 'tool_call':
-            callbacks.onToolCall?.(event.tool, event.input);
+            callbacks.onToolCall?.(event.tool, event.input, event.images);
             break;
           case 'done':
             callbacks.onDone?.();

@@ -2,8 +2,9 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  image?: string;       // base64 data URL
-  editPrompt?: string;  // the English editPrompt sent to generate_image (for transparency)
+  image?: string;        // base64 data URL
+  editPrompt?: string;   // the English editPrompt sent to generate_image (for transparency)
+  editInputImages?: string[]; // images passed to Gemini as input (1 = normal, 2 = face restoration)
   timestamp: number;
   projectId?: string;
 }
@@ -34,6 +35,16 @@ export interface ChatResponse {
   image?: string; // base64 edited image (if generated)
 }
 
+export interface PhotoMetadata {
+  takenAt?: string;    // e.g. "2024年12月25日 下午14:30"
+  location?: string;   // e.g. "台北市信义区, 台湾"
+  raw?: {
+    lat?: number;
+    lng?: number;
+    datetime?: string;
+  };
+}
+
 export interface Snapshot {
   id: string;
   image: string;          // base64
@@ -41,6 +52,7 @@ export interface Snapshot {
   messageId: string;      // assistant message ID for chat scroll targeting
   imageUrl?: string;      // Supabase Storage URL (persisted)
   description?: string;   // agent's analysis of this image (auto-generated, persisted)
+  metadata?: PhotoMetadata; // EXIF metadata (location, time)
 }
 
 export interface Project {

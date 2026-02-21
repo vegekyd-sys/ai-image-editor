@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { Message, Tip, Snapshot } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -10,6 +10,57 @@ import { streamAgent } from '@/lib/agentStream';
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
+}
+
+// Extract EXIF metadata (location + time) from a photo file
+async function extractPhotoMetadata(file: File): Promise<PhotoMetadata | undefined> {
+  try {
+    const exifr = (await import('exifr')).default;
+    // reviveValues:false keeps datetime as raw string — avoids timezone conversion
+    const exif = await exifr.parse(file, { gps: true, reviveValues: false });
+    if (!exif) return undefined;
+
+    const lat = exif.latitude;
+    const lng = exif.longitude;
+    const datetimeRaw: string | undefined = exif.DateTimeOriginal || exif.CreateDate;
+
+    // Parse "YYYY:MM:DD HH:MM:SS" directly — no timezone conversion (EXIF stores local time)
+    let takenAt: string | undefined;
+    if (datetimeRaw && typeof datetimeRaw === 'string') {
+      const m = datetimeRaw.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/);
+      if (m) {
+        const utcOffset = lat !== undefined && lng !== undefined
+          ? Math.round(lng / 15)
+          : undefined;
+        const tzStr = utcOffset !== undefined
+          ? ` (UTC${utcOffset >= 0 ? '+' : ''}${utcOffset})`
+          : '';
+        takenAt = `${m[1]}年${parseInt(m[2])}月${parseInt(m[3])}日 ${m[4]}:${m[5]}${tzStr}`;
+      }
+    }
+
+    // Reverse geocode — zoom=14 for neighborhood level (more reliable than building-level)
+    let location: string | undefined;
+    if (lat && lng) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=zh-CN`,
+          { headers: { 'User-Agent': 'Makaron-App/1.0' } }
+        );
+        if (res.ok) {
+          const geo = await res.json();
+          const addr = geo.address;
+          const city = addr.city || addr.town || addr.village || addr.county;
+          location = [city, addr.country].filter(Boolean).join(', ');
+        }
+      } catch { /* geocoding failure is non-critical */ }
+    }
+
+    if (!takenAt && !location) return undefined;
+    return { takenAt, location, raw: { lat, lng, datetime: datetimeRaw } };
+  } catch {
+    return undefined;
+  }
 }
 
 const AGENT_GREETING = 'Hi! 想怎么编辑这张照片？';
@@ -59,6 +110,7 @@ interface EditorProps {
   initialSnapshots?: Snapshot[];
   initialMessages?: Message[];
   pendingImage?: string;
+  pendingMetadata?: PhotoMetadata;
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number) => void;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
@@ -74,6 +126,7 @@ export default function Editor({
   initialSnapshots,
   initialMessages,
   pendingImage,
+  pendingMetadata,
   onSaveSnapshot,
   onSaveMessage,
   onUpdateTips,
@@ -100,6 +153,7 @@ export default function Editor({
   // Snapshots pending auto-analysis after current agent run finishes
   const pendingAnalysisRef = useRef<{ id: string; image: string }[]>([]);
   const lastEditPromptRef = useRef<string | null>(null); // captures editPrompt from generate_image tool calls
+  const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
 
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
@@ -400,7 +454,11 @@ export default function Editor({
           const res = await fetch('/api/tips', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image: imageBase64, category }),
+            body: JSON.stringify({
+              image: imageBase64,
+              category,
+              metadata: snapshotsRef.current.find(s => s.id === snapshotId)?.metadata,
+            }),
           });
           if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
 
@@ -641,7 +699,22 @@ export default function Editor({
       ? `[当前TipsBar中的编辑建议]\n${currentTipsForPrompt.map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`).join('\n')}\n\n`
       : '';
 
-    const fullPrompt = `${descriptionContext}${tipsContext}${historyContext}[当前请求]\n${text}`;
+    // Warn Claude if user is editing an intermediate snapshot (not the latest)
+    const isIntermediateSnapshot = contextSnapshotIndex < snapshotsRef.current.length - 1;
+    const snapshotWarning = isIntermediateSnapshot
+      ? `[重要提示] 用户当前正在编辑的是第 ${contextSnapshotIndex + 1} 个版本（共 ${snapshotsRef.current.length} 个），不是最新版本。对话历史描述的是其他版本的状态，与当前图片无关。请完全以传入的当前图片为准，忽略对话历史中对图片内容的描述。\n\n`
+      : '';
+
+    // Inject photo metadata (location + time) for original snapshot
+    const originalMeta = snapshotsRef.current[0]?.metadata;
+    const metaLines: string[] = [];
+    if (originalMeta?.takenAt) metaLines.push(`拍摄时间：${originalMeta.takenAt}`);
+    if (originalMeta?.location) metaLines.push(`拍摄地点：${originalMeta.location}`);
+    const metaContext = metaLines.length > 0
+      ? `[照片元数据]\n${metaLines.join('\n')}\n\n`
+      : '';
+
+    const fullPrompt = `${snapshotWarning}${metaContext}${descriptionContext}${tipsContext}${historyContext}[当前请求]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
@@ -684,19 +757,27 @@ export default function Editor({
             fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
             setAgentStatus('图片已生成');
             const id = currentMsgId;
-            // Attach the last captured editPrompt to the image message
+            // Attach the last captured editPrompt and input images to the image message
             const capturedPrompt = lastEditPromptRef.current;
+            const capturedInputImages = lastEditInputImagesRef.current;
             lastEditPromptRef.current = null;
+            lastEditInputImagesRef.current = null;
             setMessages((prev) => prev.map((m) =>
-              m.id === id ? { ...m, image: imageData, editPrompt: capturedPrompt ?? undefined } : m
+              m.id === id ? {
+                ...m,
+                image: imageData,
+                editPrompt: capturedPrompt ?? undefined,
+                editInputImages: capturedInputImages ?? undefined,
+              } : m
             ));
             // Queue auto-analysis of the new snapshot after this agent run finishes
             pendingAnalysisRef.current.push({ id: snapId, image: imageData });
           },
-          onToolCall: (tool, input) => {
-            // Capture editPrompt from generate_image calls
+          onToolCall: (tool, input, images) => {
+            // Capture editPrompt and input images from generate_image calls
             if (tool === 'generate_image' && typeof input.editPrompt === 'string') {
               lastEditPromptRef.current = input.editPrompt;
+              lastEditInputImagesRef.current = images ?? null;
             }
           },
           onDone: () => {
@@ -892,6 +973,9 @@ export default function Editor({
     setViewIndex(0);
     prevTimelineLen.current = 1;
 
+    // Extract EXIF metadata in parallel (non-blocking)
+    const metadataPromise = extractPhotoMetadata(file);
+
     try {
       // A1: try client-side compression first (fast), start tips immediately
       let base64: string | null = null;
@@ -917,8 +1001,11 @@ export default function Editor({
       }
       URL.revokeObjectURL(previewUrl);
 
-      // Update snapshot image with final base64 (may differ from client-compressed for HEIC)
-      const newSnapshot: Snapshot = { id: snapId, image: base64!, tips: [], messageId: '' };
+      // Attach metadata when available
+      const metadata = await metadataPromise;
+
+      // Update snapshot image with final base64 + metadata
+      const newSnapshot: Snapshot = { id: snapId, image: base64!, tips: [], messageId: '', metadata };
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
       onSaveSnapshot?.(newSnapshot, 0);
@@ -955,7 +1042,7 @@ export default function Editor({
     if (pendingImage && !pendingHandled.current) {
       pendingHandled.current = true;
       const snapId = generateId();
-      const newSnapshot: Snapshot = { id: snapId, image: pendingImage, tips: [], messageId: '' };
+      const newSnapshot: Snapshot = { id: snapId, image: pendingImage, tips: [], messageId: '', metadata: pendingMetadata };
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
       prevTimelineLen.current = 1;
@@ -965,7 +1052,7 @@ export default function Editor({
       // Auto-analyze the uploaded photo
       runAutoAnalysis(snapId, pendingImage);
     }
-  }, [pendingImage, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
+  }, [pendingImage, pendingMetadata, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
 
   // Auto-name existing projects that still have a default title (runs once on mount)
   useEffect(() => {
@@ -1111,7 +1198,7 @@ export default function Editor({
       {viewMode === 'gui' && (
         <>
           {/* Canvas area (fills remaining space) */}
-          <div className="flex-1 relative min-h-0">
+          <div className="flex-1 relative min-h-0 overflow-hidden">
             {timeline.length === 0 ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <button
