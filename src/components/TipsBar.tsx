@@ -146,7 +146,9 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                     ? 'rgba(217,70,239,0.06)'
                     : tip.category === 'creative'
                       ? 'rgba(217,70,239,0.12)'
-                      : 'rgba(239,68,68,0.12)',
+                      : tip.category === 'wild'
+                        ? 'rgba(239,68,68,0.12)'
+                        : 'rgba(245,158,11,0.12)',
               }}
             >
               <div className="flex">
