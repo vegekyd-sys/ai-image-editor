@@ -272,38 +272,43 @@ export default function ProjectsPage() {
         .mkr-page { font-family: inherit; }
 
         @keyframes mkr-in {
-          from { opacity: 0; transform: translateY(10px); }
+          from { opacity: 0; transform: translateY(16px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        .mkr-row-enter { animation: mkr-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .mkr-row-enter { animation: mkr-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
-        .mkr-row { transition: background 0.2s; cursor: pointer; }
-        .mkr-row:hover  { background: rgba(255,255,255,0.025); }
-        .mkr-row:active { background: rgba(255,255,255,0.045); }
+        .mkr-card {
+          cursor: pointer;
+          transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .mkr-card:hover  { transform: scale(0.98); }
+        .mkr-card:active { transform: scale(0.96); }
 
-        .mkr-plus-btn {
+        .mkr-new-btn {
           transition: border-color 0.25s, box-shadow 0.25s, transform 0.18s;
         }
-        .mkr-plus-btn:hover {
-          border-color: rgba(217,70,239,0.55) !important;
-          box-shadow: 0 0 24px rgba(217,70,239,0.18);
+        .mkr-new-btn:hover {
+          border-color: rgba(217,70,239,0.6) !important;
+          box-shadow: 0 0 32px rgba(217,70,239,0.2);
         }
-        .mkr-plus-btn:active { transform: scale(0.94); }
-
-        .mkr-snap-strip { -ms-overflow-style: none; scrollbar-width: none; }
-        .mkr-snap-strip::-webkit-scrollbar { display: none; }
+        .mkr-new-btn:active { transform: scale(0.96); }
 
         @keyframes mkr-spin { to { transform: rotate(360deg); } }
         .mkr-spin { animation: mkr-spin 0.9s linear infinite; }
+
+        .mkr-more-btn {
+          transition: background 0.15s, opacity 0.15s;
+        }
+        .mkr-more-btn:hover { opacity: 1 !important; }
       `}</style>
 
       <div className="mkr-page" style={{ minHeight: '100dvh', background: '#080808', color: '#fff', overflowX: 'hidden' }}>
 
-        {/* Ambient glow */}
+        {/* Ambient glow at top */}
         <div style={{
-          position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)',
-          width: '500px', height: '340px', pointerEvents: 'none', zIndex: 0,
-          background: 'radial-gradient(ellipse at 50% 0%, rgba(217,70,239,0.07) 0%, transparent 70%)',
+          position: 'fixed', top: 0, left: 0, right: 0,
+          height: '500px', pointerEvents: 'none', zIndex: 0,
+          background: 'radial-gradient(ellipse at 50% -10%, rgba(217,70,239,0.15) 0%, transparent 60%)',
         }} />
 
         <input
@@ -318,7 +323,7 @@ export default function ProjectsPage() {
           }}
         />
 
-        {/* ── Sign out (absolute top-right) ── */}
+        {/* Sign out — fixed top-right */}
         <button
           onClick={() => signOut()}
           style={{
@@ -335,93 +340,138 @@ export default function ProjectsPage() {
         </button>
 
         {/* ═══════════════════════════════
-            HERO — 60dvh, fully centered
+            HERO — ~45dvh, fully centered
         ════════════════════════════════ */}
         <div style={{
-          height: '60dvh', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: '6px',
+          height: '45dvh', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: '0px',
           position: 'relative', zIndex: 1,
         }}>
+          {/* Wordmark row: asterisk icon + Makaron */}
           <div style={{
-            fontWeight: 200, fontSize: '2rem', letterSpacing: '0.01em',
-            color: '#fff', lineHeight: 1,
+            display: 'flex', alignItems: 'center', gap: '12px',
           }}>
-            Makaron
+            {/* Asterisk / sparkle SVG */}
+            <svg
+              width="20" height="20" viewBox="0 0 24 24"
+              fill="none"
+              stroke="rgb(217,70,239)"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            >
+              <line x1="12" y1="2" x2="12" y2="22" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+              <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
+            </svg>
+
+            {/* Wordmark */}
+            <div style={{
+              fontWeight: 800,
+              fontSize: 'clamp(3rem, 12vw, 5rem)',
+              letterSpacing: '-0.04em',
+              color: '#fff',
+              lineHeight: 1,
+            }}>
+              Makaron
+            </div>
           </div>
+
+          {/* Subtitle */}
           <div style={{
-            fontSize: '0.6rem', letterSpacing: '0.18em',
-            color: 'rgba(217,70,239,0.5)', fontWeight: 300, textTransform: 'uppercase',
+            marginTop: '6px',
+            fontSize: '0.6rem',
+            letterSpacing: '0.22em',
+            color: 'rgba(217,70,239,0.55)',
+            fontWeight: 400,
+            textTransform: 'uppercase',
           }}>
             AI Photo Studio
           </div>
 
-          {/* + button */}
-          <div style={{ marginTop: '28px' }}>
+          {/* New project button */}
+          <div style={{ marginTop: '32px' }}>
             {creating ? (
-              <div style={{ width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Spinner size={24} />
-              </div>
+              <button
+                disabled
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  borderRadius: '100px',
+                  border: '1.5px solid rgba(217,70,239,0.35)',
+                  background: 'transparent',
+                  color: 'rgba(217,70,239,0.6)',
+                  padding: '14px 36px',
+                  fontSize: '0.85rem',
+                  letterSpacing: '0.06em',
+                  cursor: 'default',
+                }}
+              >
+                <Spinner size={14} />
+                Creating…
+              </button>
             ) : (
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="mkr-plus-btn"
+                className="mkr-new-btn"
                 style={{
-                  width: '60px', height: '60px', borderRadius: '14px',
+                  borderRadius: '100px',
+                  border: '1.5px solid rgba(217,70,239,0.35)',
                   background: 'transparent',
-                  border: '1.5px solid rgba(217,70,239,0.3)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'rgb(217,70,239)',
+                  padding: '14px 36px',
+                  fontSize: '0.85rem',
+                  letterSpacing: '0.06em',
                   cursor: 'pointer',
-                  color: 'rgba(217,70,239,0.7)',
-                  fontSize: '2rem', fontWeight: 200, lineHeight: 1,
-                  paddingBottom: '2px',
+                  fontWeight: 400,
                 }}
               >
-                +
+                + New project
               </button>
             )}
-            <p style={{
-              margin: '10px 0 0', textAlign: 'center',
-              fontSize: '0.68rem', color: 'rgba(255,255,255,0.22)',
-              letterSpacing: '0.04em',
-            }}>
-              {creating ? 'Creating…' : 'New project'}
-            </p>
           </div>
         </div>
 
         {/* ═══════════════════════════════
-            PROJECT LIST
+            GALLERY SECTION
         ════════════════════════════════ */}
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: '480px', margin: '0 auto', padding: '0 20px' }}>
+        <div style={{ position: 'relative', zIndex: 1 }}>
 
-          {/* Section label */}
+          {/* Section divider — only show when projects exist */}
           {!loadingProjects && projects.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '0 16px', marginBottom: '14px',
+            }}>
               <span style={{
                 fontSize: '0.58rem', letterSpacing: '0.2em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.18)', fontWeight: 300, flexShrink: 0,
+                color: 'rgba(255,255,255,0.18)', fontWeight: 400, flexShrink: 0,
               }}>
-                Recent
+                Recents
               </span>
-              <div style={{ height: '1px', flex: 1, background: 'rgba(255,255,255,0.05)' }} />
+              <div style={{ height: '1px', flex: 1, background: 'rgba(255,255,255,0.07)' }} />
             </div>
           )}
 
           {loadingProjects ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
-              <Spinner size={16} />
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
+              <Spinner size={20} />
             </div>
           ) : projects.length === 0 ? (
             <p style={{
-              textAlign: 'center', padding: '24px 0 48px', margin: 0,
-              color: 'rgba(255,255,255,0.14)', fontSize: '0.78rem', letterSpacing: '0.04em',
+              textAlign: 'center', padding: '40px 0 80px', margin: 0,
+              color: 'rgba(255,255,255,0.2)', fontSize: '0.82rem', letterSpacing: '0.04em',
             }}>
               No projects yet
             </p>
           ) : (
-            <div style={{ paddingBottom: '52px' }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '10px',
+              padding: '0 16px 80px',
+            }}>
               {projects.map((project, i) => (
-                <ProjectRow
+                <ProjectCard
                   key={project.id}
                   project={project}
                   index={i}
@@ -544,7 +594,7 @@ export default function ProjectsPage() {
   )
 }
 
-function ProjectRow({
+function ProjectCard({
   project,
   index,
   onClick,
@@ -555,132 +605,99 @@ function ProjectRow({
   onClick: () => void
   onMore: (e: React.MouseEvent) => void
 }) {
-  const total = project.snapshots.length
-
-  return (
-    <div
-      className="mkr-row mkr-row-enter"
-      style={{
-        textAlign: 'left', background: 'none',
-        padding: '16px 12px', borderRadius: '14px', display: 'block',
-        animationDelay: `${index * 0.05}s`,
-        marginLeft: '-12px', width: 'calc(100% + 24px)',
-        cursor: 'pointer',
-      }}
-      onClick={onClick}
-    >
-      {/* Title + time + more button */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: '12px',
-      }}>
-        <span style={{
-          fontSize: '0.82rem', fontWeight: 400, color: 'rgba(255,255,255,0.72)',
-          letterSpacing: '0.02em', overflow: 'hidden', textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap', marginRight: '8px', flex: 1,
-        }}>
-          {project.title}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.22)', letterSpacing: '0.04em' }}>
-            {timeAgo(project.updated_at)}
-          </span>
-          <button
-            onClick={onMore}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px',
-              color: 'rgba(255,255,255,0.2)', fontSize: '1rem', lineHeight: 1,
-              borderRadius: '6px', transition: 'color 0.15s',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.55)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.2)')}
-          >
-            ···
-          </button>
-        </div>
-      </div>
-
-      {/* Filmstrip: thumbnails connected by a timeline rail */}
-      <div style={{ position: 'relative' }}>
-        {/* Timeline rail — sits at vertical center of thumbnails */}
-        <div style={{
-          position: 'absolute',
-          top: '50px', /* half of 100px thumb height */
-          left: '6px', right: '6px', height: '1px',
-          background: 'rgba(255,255,255,0.06)',
-          zIndex: 0,
-        }} />
-
-        <div
-          className="mkr-snap-strip"
-          style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', overflowX: 'auto', position: 'relative', zIndex: 1 }}
-        >
-          {project.snapshots.map((snap, si) => (
-            <FilmFrame
-              key={snap.id}
-              url={snap.image_url}
-              step={si + 1}
-              total={total}
-              isLast={si === total - 1}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function FilmFrame({
-  url,
-  step,
-  total,
-  isLast,
-}: {
-  url: string
-  step: number
-  total: number
-  isLast: boolean
-}) {
+  const lastSnap = project.snapshots[project.snapshots.length - 1]
   const [loaded, setLoaded] = useState(false)
 
   return (
-    <div style={{ flexShrink: 0, textAlign: 'center' }}>
-      {/* Thumbnail */}
-      <div style={{
+    <div
+      className="mkr-card mkr-row-enter"
+      style={{
         position: 'relative',
-        width: '100px', height: '100px',
-        borderRadius: '10px', overflow: 'hidden',
-        border: isLast
-          ? '1.5px solid rgba(217,70,239,0.5)'
-          : '1.5px solid rgba(255,255,255,0.08)',
+        aspectRatio: '1 / 1',
+        borderRadius: '16px',
+        overflow: 'hidden',
         background: '#161616',
+        animationDelay: `${index * 0.06}s`,
+      }}
+      onClick={onClick}
+    >
+      {/* Placeholder shimmer while image loads */}
+      {!loaded && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(135deg, #1a1a1a 0%, #222 50%, #1a1a1a 100%)',
+        }} />
+      )}
+
+      {/* Full-bleed photo */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={lastSnap.image_url}
+        alt={project.title}
+        style={{
+          width: '100%', height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          opacity: loaded ? 1 : 0,
+          transition: 'opacity 0.3s',
+        }}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+      />
+
+      {/* Bottom gradient overlay */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%)',
+        pointerEvents: 'none',
+      }} />
+
+      {/* Overlaid text — bottom */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        padding: '10px 10px 11px',
+        pointerEvents: 'none',
       }}>
-        {!loaded && (
-          <div style={{ position: 'absolute', inset: 0, background: '#1a1a1a' }} />
-        )}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={url}
-          alt=""
-          style={{
-            width: '100%', height: '100%', objectFit: 'cover',
-            opacity: loaded ? 1 : 0, transition: 'opacity 0.25s',
-          }}
-          loading="lazy"
-          onLoad={() => setLoaded(true)}
-        />
+        <div style={{
+          fontSize: '0.82rem', fontWeight: 500, color: '#fff',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          lineHeight: 1.3,
+        }}>
+          {project.title}
+        </div>
+        <div style={{
+          marginTop: '2px',
+          fontSize: '0.62rem',
+          color: 'rgba(255,255,255,0.45)',
+        }}>
+          {timeAgo(project.updated_at)}
+        </div>
       </div>
 
-      {/* Step label */}
-      <div style={{
-        marginTop: '5px',
-        fontSize: '0.58rem',
-        letterSpacing: '0.06em',
-        color: isLast ? 'rgba(217,70,239,0.65)' : 'rgba(255,255,255,0.2)',
-        fontVariantNumeric: 'tabular-nums',
-      }}>
-        {isLast ? `v${step}` : String(step).padStart(2, '0')}
-      </div>
+      {/* Top-right more button */}
+      <button
+        className="mkr-more-btn"
+        onClick={onMore}
+        style={{
+          position: 'absolute', top: '8px', right: '8px',
+          background: 'rgba(0,0,0,0.45)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
+          border: 'none',
+          borderRadius: '8px',
+          color: 'rgba(255,255,255,0.75)',
+          width: '28px', height: '28px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer',
+          fontSize: '1rem',
+          lineHeight: 1,
+          opacity: 0.85,
+          letterSpacing: '0.02em',
+        }}
+        aria-label="More options"
+      >
+        ···
+      </button>
     </div>
   )
 }
