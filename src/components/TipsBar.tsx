@@ -14,7 +14,7 @@ interface TipsBarProps {
   previewingIndex: number | null;
 }
 
-const CATEGORY_ORDER: Tip['category'][] = ['enhance', 'creative', 'wild'];
+const CATEGORY_ORDER: Tip['category'][] = ['enhance', 'creative', 'wild', 'captions'];
 
 function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
   tip: Tip;

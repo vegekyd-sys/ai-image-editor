@@ -3,6 +3,7 @@ import { Tip } from '@/types';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
+import captionsPrompt from './prompts/captions.md';
 
 // ── Provider & Model Config ─────────────────────────────────────
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
@@ -46,12 +47,13 @@ const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理�
 // Tips are generated in 3 parallel calls (one per category) for faster loading.
 // All rules live in the .md files — this is just role + format framing.
 
-type TipCategory = 'enhance' | 'creative' | 'wild';
+type TipCategory = 'enhance' | 'creative' | 'wild' | 'captions';
 
 const CATEGORY_CN: Record<TipCategory, string> = {
   enhance: 'enhance（专业增强）',
   creative: 'creative（趣味创意）',
   wild: 'wild（疯狂脑洞）',
+  captions: 'captions（创意文案）',
 };
 
 function buildCategorySystemPrompt(category: TipCategory): string {
@@ -64,6 +66,7 @@ const PROMPT_TEMPLATES: Record<TipCategory, string> = {
   enhance: enhancePrompt,
   creative: creativePrompt,
   wild: wildPrompt,
+  captions: captionsPrompt,
 };
 
 function getPromptTemplate(category: TipCategory): string {
@@ -80,7 +83,7 @@ const TIPS_SCHEMA = {
       label: { type: Type.STRING, description: '3-6 Chinese chars, verb-first' },
       desc: { type: Type.STRING, description: '10-25 chars description' },
       editPrompt: { type: Type.STRING, description: 'Detailed English editing prompt' },
-      category: { type: Type.STRING, enum: ['enhance', 'creative', 'wild'] },
+      category: { type: Type.STRING, enum: ['enhance', 'creative', 'wild', 'captions'] },
       aspectRatio: { type: Type.STRING, description: 'Only for recomposition tips', nullable: true },
     },
     required: ['emoji', 'label', 'desc', 'editPrompt', 'category'],
@@ -88,7 +91,7 @@ const TIPS_SCHEMA = {
 };
 
 const JSON_FORMAT_SUFFIX = `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字。格式：
-[{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild"}, ...]`;
+[{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild|captions"}, ...]`;
 
 // ── OpenRouter Helpers ──────────────────────────────────────────
 
@@ -707,7 +710,7 @@ export async function* streamAllTips(imageBase64: string): AsyncGenerator<Tip> {
 export async function* streamTipsByCategory(
   imageBase64: string,
   category: TipCategory,
-  _metadata?: { takenAt?: string; location?: string },
+  metadata?: { takenAt?: string; location?: string },
 ): AsyncGenerator<Tip> {
   if (process.env.MOCK_AI === 'true') {
     const mockTips: Record<string, Tip[]> = {
@@ -723,6 +726,10 @@ export async function* streamTipsByCategory(
         { emoji: '🔮', label: '微缩世界', desc: '场景变成精致的微缩模型。', editPrompt: 'Transform the entire scene into a tilt-shift miniature model with exaggerated depth of field and saturated colors.', category: 'wild' },
         { emoji: '🌊', label: '水下幻境', desc: '整个画面沉入梦幻的水下世界。', editPrompt: 'Transform the scene to appear submerged underwater with light rays filtering from above, floating bubbles, and caustic light patterns.', category: 'wild' },
       ],
+      captions: [
+        { emoji: '✍️', label: '加创意文案', desc: '叠加与画面高度相关的创意文字。', editPrompt: 'Add a photorealistic text overlay with a creative caption specific to this image. Use elegant cursive script in warm cream color at the bottom-third of the image with a subtle drop shadow for readability. Preserve the exact composition and all people\'s faces exactly.', category: 'captions' },
+        { emoji: '📝', label: '加诗意标题', desc: '用诗意语言为画面命名。', editPrompt: 'Add a photorealistic text overlay with a poetic title for this image. Use clean minimal sans-serif font in soft white color, centered at the bottom of the image with a semi-transparent overlay behind the text. Preserve the exact composition and all people\'s faces exactly.', category: 'captions' },
+      ],
     };
     const tips = mockTips[category] || mockTips.enhance;
     for (const tip of tips) {
@@ -733,9 +740,9 @@ export async function* streamTipsByCategory(
   }
 
   if (PROVIDER === 'openrouter') {
-    yield* streamTipsByCategoryOpenRouter(imageBase64, category);
+    yield* streamTipsByCategoryOpenRouter(imageBase64, category, metadata);
   } else {
-    yield* streamTipsByCategoryGoogle(imageBase64, category);
+    yield* streamTipsByCategoryGoogle(imageBase64, category, metadata);
   }
 }
 
@@ -743,11 +750,18 @@ export async function* streamTipsByCategory(
 async function* streamTipsByCategoryGoogle(
   imageBase64: string,
   category: TipCategory,
+  metadata?: { takenAt?: string; location?: string },
 ): AsyncGenerator<Tip> {
   const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
   const mimeType = imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
   const template = getPromptTemplate(category);
   const systemPrompt = buildCategorySystemPrompt(category);
+  const metaLines: string[] = [];
+  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
+  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
+  const metaContext = metaLines.length > 0
+    ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
+    : '';
 
   const supportsStructuredOutput = MODEL.includes('gemini-3');
   const config: Record<string, unknown> = {
@@ -768,7 +782,7 @@ async function* streamTipsByCategoryGoogle(
         parts: [
           { inlineData: { mimeType, data: base64Data } },
           {
-            text: `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
+            text: `${metaContext}在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
 
 基于分析，严格遵循以下所有规则，给出2条${category}编辑建议：
 
@@ -787,10 +801,17 @@ ${template}${promptSuffix}`,
 async function* streamTipsByCategoryOpenRouter(
   imageBase64: string,
   category: TipCategory,
+  metadata?: { takenAt?: string; location?: string },
 ): AsyncGenerator<Tip> {
   const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const template = getPromptTemplate(category);
   const systemPrompt = buildCategorySystemPrompt(category);
+  const metaLines: string[] = [];
+  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
+  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
+  const metaContext = metaLines.length > 0
+    ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
+    : '';
 
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
@@ -806,7 +827,7 @@ async function* streamTipsByCategoryOpenRouter(
             { type: 'image_url', image_url: { url: dataUrl } },
             {
               type: 'text',
-              text: `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
+              text: `${metaContext}在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
 
 基于分析，严格遵循以下所有规则，给出2条${category}编辑建议：
 

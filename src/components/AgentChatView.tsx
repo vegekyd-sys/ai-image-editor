@@ -102,7 +102,9 @@ export default function AgentChatView({
   const [input, setInput] = useState('');
   const [isExiting, setIsExiting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const scrollStartY = useRef<number | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
@@ -282,6 +284,25 @@ export default function AgentChatView({
     return () => clearTimeout(t);
   }, [focusOnOpen]);
 
+  // Dismiss keyboard when user scrolls the chat (iOS Safari: native listeners work more reliably)
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const onTouchStart = (e: TouchEvent) => { scrollStartY.current = e.touches[0].clientY; };
+    const onTouchMove = (e: TouchEvent) => {
+      if (scrollStartY.current === null) return;
+      if (Math.abs(e.touches[0].clientY - scrollStartY.current) > 8) {
+        inputRef.current?.blur();
+      }
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+    };
+  }, []);
+
   // Auto-resize textarea on every input change
   useEffect(() => {
     const el = inputRef.current;
@@ -434,7 +455,7 @@ export default function AgentChatView({
       )}
 
       {/* ── Messages ── */}
-      <div className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: '1.25rem' }}>
+      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: '1.25rem' }}>
         {/* Empty state */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 pb-10">

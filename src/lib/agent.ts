@@ -6,6 +6,7 @@ import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
+import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import type { Tip } from '@/types';
 
@@ -49,6 +50,7 @@ const SKILL_PROMPTS: Record<string, string> = {
   enhance: enhancePrompt,
   creative: creativePrompt,
   wild: wildPrompt,
+  captions: captionsPrompt,
 };
 
 // ---------------------------------------------------------------------------
@@ -69,7 +71,7 @@ function createTools(ctx: AgentContext) {
       description: generateImageToolPrompt,
       inputSchema: z.object({
         editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, write only the direction — template rules are auto-injected.'),
-        skill: z.enum(['enhance', 'creative', 'wild']).optional().describe('Activate a skill template. See tool description for routing rules.'),
+        skill: z.enum(['enhance', 'creative', 'wild', 'captions']).optional().describe('Activate a skill template. See tool description for routing rules.'),
         useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       }),
@@ -269,14 +271,15 @@ export async function* runMakaronAgent(
 const TIPS_JSON_FORMAT = `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字：
 [{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild"}, ...]`;
 
-const TIPS_PROMPTS: Record<'enhance' | 'creative' | 'wild', string> = {
+const TIPS_PROMPTS: Record<'enhance' | 'creative' | 'wild' | 'captions', string> = {
   enhance: enhancePrompt,
   creative: creativePrompt,
   wild: wildPrompt,
+  captions: captionsPrompt,
 };
 
 // Category-specific system prompts (restored from original gemini.ts structure)
-const TIPS_CATEGORY_INFO: Record<'enhance' | 'creative' | 'wild', { cn: string; definition: string; selfCheck: string; rules: string }> = {
+const TIPS_CATEGORY_INFO: Record<'enhance' | 'creative' | 'wild' | 'captions', { cn: string; definition: string; selfCheck: string; rules: string }> = {
   enhance: {
     cn: 'enhance（专业增强）',
     definition: 'enhance = 让照片整体变好看（光影/色彩/通透感），变化必须肉眼明显',
@@ -311,9 +314,22 @@ const TIPS_CATEGORY_INFO: Record<'enhance' | 'creative' | 'wild', { cn: string; 
 - Q4 这个变化会不会让人不适/恐怖？→ 换一个有趣的方向`,
     rules: `wild额外规则：只选画面中重要/显眼的元素做变化，不要选边缘模糊的小物件`,
   },
+  captions: {
+    cn: 'captions（创意文案）',
+    definition: 'captions = 为照片添加与内容高度相关的创意文字叠加，字体风格必须与照片情绪一致',
+    selfCheck: `captions自检（三问全过才输出）：
+- Q1 这段文字只适合这张照片吗？换到其他照片上还合适=太通用=重写
+- Q2 字体风格与画面情绪匹配吗？（童趣照配严肃字体=4分，搞笑配优雅花体=3分）
+- Q3 有metadata时自然融入了吗？有地点/时间必须结合进文案`,
+    rules: `captions品质标准：
+- 文字必须是photorealistic渲染，不是卡通贴纸
+- 明确写出要叠加的文字内容（不能让Gemini自己编）
+- 一个tip只加一句/一行文字，简洁有力
+- 两个tip风格必须不同（如一中一英，或一童趣一简洁）`,
+  },
 };
 
-function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild'): string {
+function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild' | 'captions'): string {
   const info = TIPS_CATEGORY_INFO[category];
   return `你是图片编辑建议专家。分析图片后生成2条${info.cn}编辑建议。label必须用中文3-6字，动词开头。editPrompt用英文，极其具体。
 
@@ -344,7 +360,7 @@ ${info.rules}
 
 export async function* streamTipsWithClaude(
   imageBase64: string,
-  category: 'enhance' | 'creative' | 'wild',
+  category: 'enhance' | 'creative' | 'wild' | 'captions',
   metadata?: { takenAt?: string; location?: string },
 ): AsyncGenerator<Tip> {
   const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;

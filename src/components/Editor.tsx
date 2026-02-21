@@ -12,6 +12,21 @@ function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
 }
 
+/** Map a timeline index to the corresponding snapshot index.
+ *  Returns null when the timeline index points at the virtual draft entry. */
+function snapFromTimeline(timelineIdx: number, draftParentIdx: number | null): number | null {
+  if (draftParentIdx === null) return timelineIdx;
+  if (timelineIdx === draftParentIdx + 1) return null; // draft slot
+  if (timelineIdx <= draftParentIdx) return timelineIdx;
+  return timelineIdx - 1; // shift back past the draft slot
+}
+
+/** Map a snapshot index to its timeline index (accounting for draft slot). */
+function timelineFromSnap(snapIdx: number, draftParentIdx: number | null): number {
+  if (draftParentIdx === null || snapIdx <= draftParentIdx) return snapIdx;
+  return snapIdx + 1;
+}
+
 // Compute image absolute rect within a container using object-contain semantics
 function containRect(cW: number, cH: number, ar: number) {
   let w, h;
@@ -229,24 +244,29 @@ export default function Editor({
     return tip?.previewImage || snapshots[draftParentIndex]?.image || null;
   }, [draftParentIndex, previewingTipIndex, snapshots]);
 
-  // Timeline: committed snapshots + virtual draft (if exists)
+  // Timeline: committed snapshots with the virtual draft inserted right after its parent
   const timeline = useMemo(() => {
     const base = snapshots.map((s) => s.image);
-    if (draftImage) base.push(draftImage);
+    if (draftImage !== null && draftParentIndex !== null) {
+      base.splice(draftParentIndex + 1, 0, draftImage);
+    }
     return base;
-  }, [snapshots, draftImage]);
+  }, [snapshots, draftImage, draftParentIndex]);
 
-  // Are we currently viewing the draft entry (last timeline position when draft exists)?
-  const isViewingDraft = isDraft && viewIndex >= snapshots.length;
+  // Draft occupies the slot immediately after its parent snapshot
+  const isViewingDraft = isDraft && draftParentIndex !== null && viewIndex === draftParentIndex + 1;
 
-  // Tips come from the parent snapshot when viewing draft, otherwise from the viewed snapshot
-  const tipsSourceIndex = isViewingDraft ? draftParentIndex : viewIndex;
+  // Tips come from the parent snapshot when viewing draft; otherwise map timeline→snapshot index
+  const tipsSourceIndex = isViewingDraft
+    ? draftParentIndex!
+    : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0);
   const currentTips = snapshots[tipsSourceIndex]?.tips ?? [];
 
-  // Auto-jump to latest when timeline grows; clamp when it shrinks (draft dismissed)
+  // Auto-jump when timeline grows (commit adds snapshot) or shrinks (draft dismissed)
   const prevTimelineLen = useRef(0);
   if (timeline.length !== prevTimelineLen.current) {
-    if (timeline.length > prevTimelineLen.current) {
+    if (timeline.length > prevTimelineLen.current && !isDraft) {
+      // A new snapshot was committed → jump to the new last snapshot
       setViewIndex(timeline.length - 1);
     } else if (viewIndex >= timeline.length) {
       setViewIndex(Math.max(0, timeline.length - 1));
@@ -257,8 +277,9 @@ export default function Editor({
   // Trigger a one-sentence teaser about the tips shown in StatusBar
   const triggerTipsTeaser = useCallback(async (snapshotId: string, tips: Tip[]) => {
     if (!projectId) return;
-    // Check user is still viewing this snapshot
-    if (snapshotsRef.current[viewIndexRef.current]?.id !== snapshotId) return;
+    // Check user is still viewing this snapshot (map timeline index to snapshot index)
+    const snapIdx = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
+    if (snapIdx === null || snapshotsRef.current[snapIdx]?.id !== snapshotId) return;
 
     const tipsPayload = tips.map(({ emoji, label, desc, category }) => ({ emoji, label, desc, category }));
     try {
@@ -545,7 +566,9 @@ export default function Editor({
       setAgentStatus('正在发现有趣的可能...');
     }
 
-    const categories = ['enhance', 'creative', 'wild'] as const;
+    const categories = (process.env.NEXT_PUBLIC_ONLY_CAPTIONS === 'true'
+      ? ['captions']
+      : ['enhance', 'creative', 'wild', 'captions']) as ('enhance' | 'creative' | 'wild' | 'captions')[];
     let completedCount = 0;
     const previewGenerated: Record<string, number> = { enhance: 0, wild: 0 };
 
@@ -745,9 +768,10 @@ export default function Editor({
 
   // Agent request: route user message through Makaron Agent
   const handleAgentRequest = useCallback(async (text: string) => {
-    // When viewing a draft, use the preview image; otherwise use the snapshot image
-    let currentImage = snapshotsRef.current[viewIndexRef.current]?.image;
-    let contextSnapshotIndex = viewIndexRef.current;
+    // Map timeline index → snapshot index; null means we're at the draft slot
+    const snapIdx = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
+    let currentImage = snapIdx !== null ? snapshotsRef.current[snapIdx]?.image : undefined;
+    let contextSnapshotIndex = snapIdx ?? draftParentIndexRef.current ?? 0;
     if (!currentImage && draftParentIndexRef.current !== null && previewingTipIndexRef.current !== null) {
       const parentTips = snapshotsRef.current[draftParentIndexRef.current]?.tips ?? [];
       currentImage = parentTips[previewingTipIndexRef.current]?.previewImage
@@ -959,7 +983,8 @@ export default function Editor({
     setSnapshots((prev) => [...prev, newSnapshot]);
     onSaveSnapshot?.(newSnapshot, snapshots.length);
 
-    // Clear draft state (timeline length stays the same: draft replaced by committed)
+    // Clear draft and jump to the newly committed snapshot (appended at end)
+    setViewIndex(snapshots.length); // snapshots.length = index of new snapshot after append
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
 
@@ -983,16 +1008,19 @@ export default function Editor({
   //   - Same tip while selected → handled by onTipDeselect (dismissDraft) in TipsBar
   //   - Commit → handled by onTipCommit (commitDraft) in TipsBar
   const handleTipInteraction = useCallback((tip: Tip, tipIndex: number) => {
-    const viewingDraft = draftParentIndex !== null && viewIndex >= snapshots.length;
+    const viewingDraft = draftParentIndex !== null && viewIndex === draftParentIndex + 1;
 
     // Safety net: same tip re-clicked while draft is visible (shouldn't happen with new UI)
     if (viewingDraft && previewingTipIndex === tipIndex) return;
 
+    // Map current timeline index to snapshot index
+    const currentSnapIdx = viewingDraft
+      ? (draftParentIndex ?? 0)
+      : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0);
+
     // If tip has no preview yet ('none'), trigger generation only — don't select as draft yet
     if (!tip.previewImage && (tip.previewStatus === 'none' || !tip.previewStatus)) {
-      // In draft state viewIndex is out of bounds; use draftParentIndex instead
-      const snapIdx = viewIndex < snapshots.length ? viewIndex : (draftParentIndex ?? 0);
-      const snap = snapshots[snapIdx];
+      const snap = snapshots[currentSnapIdx];
       if (snap && tip.editPrompt) {
         previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
         setSnapshots(prev => prev.map(s =>
@@ -1013,21 +1041,21 @@ export default function Editor({
     setPreviewingTipIndex(tipIndex);
 
     if (draftParentIndex === null) {
-      // No draft → create one from current snapshot
-      setDraftParentIndex(viewIndex);
+      // No draft → create one; explicitly jump to the draft slot
+      setDraftParentIndex(currentSnapIdx);
+      setViewIndex(currentSnapIdx + 1);
     } else if (!viewingDraft) {
       // Viewing a committed snapshot with an existing draft elsewhere
-      // → update draft parent to current snapshot
-      setDraftParentIndex(viewIndex);
-      setViewIndex(snapshots.length);
+      // → update draft parent to current snapshot, jump to new draft slot
+      setDraftParentIndex(currentSnapIdx);
+      setViewIndex(currentSnapIdx + 1);
     }
   }, [draftParentIndex, viewIndex, snapshots, previewingTipIndex, commitDraft, generatePreviewForTip]);
 
   // Retry a failed preview generation
   const handleRetryPreview = useCallback((tip: Tip, tipIndex: number) => {
-    // Find which snapshot owns this tip
-    const tipsSourceIdx = isViewingDraft ? draftParentIndex : viewIndex;
-    const snap = tipsSourceIdx !== null ? snapshots[tipsSourceIdx] : null;
+    // Find which snapshot owns this tip (tipsSourceIndex already maps correctly)
+    const snap = snapshots[tipsSourceIndex] ?? null;
     if (!snap) return;
     // Baseline = done count right now, so x/y resets to 0/1 (or 0/N for multi-retry)
     previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
@@ -1040,14 +1068,16 @@ export default function Editor({
       // Viewing draft: "before" = parent snapshot's image
       return snapshots[draftParentIndex]?.image;
     }
-    // Normal mode: "before" = previous snapshot
-    return viewIndex > 0 ? snapshots[viewIndex - 1]?.image : undefined;
+    // Normal mode: map timeline index to snapshot index, then get previous snapshot
+    const snapIdx = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
+    return snapIdx > 0 ? snapshots[snapIdx - 1]?.image : undefined;
   }, [isViewingDraft, draftParentIndex, snapshots, viewIndex]);
 
   // Dismiss draft: remove virtual draft entry, return to parent
   const dismissDraft = useCallback(() => {
-    // Explicitly restore viewIndex to the draft's parent before clearing draftParentIndex,
+    // Restore viewIndex to the parent's timeline index before clearing draft,
     // so the auto-clamp doesn't fall back to the last snapshot instead.
+    // While draft exists, draftParentIndex === its timeline index (no earlier draft slot).
     if (draftParentIndex !== null) setViewIndex(draftParentIndex);
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
@@ -1254,19 +1284,36 @@ export default function Editor({
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string) => {
-    const idx = snapshots.findIndex(s => s.messageId === messageId);
-    if (idx >= 0) setViewIndex(idx);
+    const snapIdx = snapshots.findIndex(s => s.messageId === messageId);
+    if (snapIdx >= 0) setViewIndex(timelineFromSnap(snapIdx, draftParentIndex));
     setViewMode('gui');
-  }, [snapshots]);
+  }, [snapshots, draftParentIndex]);
+
+  // Track whether we've pushed a CUI history state that hasn't been consumed yet.
+  // We need this because setViewMode('gui') can be called via two paths:
+  //   1. popstate (history.back) → state already consumed, don't back() again
+  //   2. direct call (e.g. handleImageTap) → orphaned state, must clean up
+  const hasCuiHistoryState = useRef(false);
 
   // Intercept browser/iOS back gesture when CUI is open:
   // push a history state on enter, listen for popstate to go back to GUI.
   useEffect(() => {
-    if (viewMode !== 'cui') return;
-    window.history.pushState({ makaronCui: true }, '');
-    const handlePop = () => setViewMode('gui');
-    window.addEventListener('popstate', handlePop);
-    return () => window.removeEventListener('popstate', handlePop);
+    if (viewMode === 'cui') {
+      window.history.pushState({ makaronCui: true }, '');
+      hasCuiHistoryState.current = true;
+      const handlePop = () => {
+        hasCuiHistoryState.current = false;
+        setViewMode('gui');
+      };
+      window.addEventListener('popstate', handlePop);
+      return () => window.removeEventListener('popstate', handlePop);
+    }
+    // viewMode is 'gui': if a CUI state was pushed but not consumed (e.g. handleImageTap
+    // called setViewMode('gui') directly), pop it now so iOS back swipe goes to /projects.
+    if (hasCuiHistoryState.current) {
+      hasCuiHistoryState.current = false;
+      window.history.back(); // listener already removed by cleanup above — silently pops
+    }
   }, [viewMode]);
 
   return (

@@ -23,7 +23,7 @@ export interface Tip {
   label: string;       // short Chinese title (max ~10 chars)
   desc: string;        // 1-2 line Chinese description of what the edit does
   editPrompt: string;  // detailed English prompt for image generation
-  category: 'enhance' | 'creative' | 'wild'; // tip category
+  category: 'enhance' | 'creative' | 'wild' | 'captions'; // tip category
   aspectRatio?: string; // target aspect ratio for recomposition (e.g. "4:5", "1:1", "16:9")
   previewImage?: string;    // base64 data URL of generated preview
   previewStatus?: 'pending' | 'generating' | 'done' | 'error' | 'none';

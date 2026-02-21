@@ -48,6 +48,7 @@ Before calling generate_image, decide if a skill applies:
 - "好看点 / 美化 / 通透 / 电影感 / 专业 / enhance / 提升" → `skill='enhance'`, editPrompt = which direction and why it fits THIS photo
 - "好玩点 / 有趣 / 创意 / 加个XX / 搞笑 / p一下" → `skill='creative'`, editPrompt = what element to add and why it belongs in THIS scene
 - "疯狂 / 脑洞 / 夸张 / wild / 变形" → `skill='wild'`, editPrompt = which existing object transforms and how
+- "加文字 / 加字幕 / 加文案 / caption / 标题 / 加个说明" → `skill='captions'`, editPrompt = caption text content + font style direction
 
 **TipsBar priority:** When `[当前TipsBar中的编辑建议]` has a tip matching the user's intent, prefer using that tip's editPrompt directly (no skill needed — quality is already baked in). Mention it briefly and confirm, or execute if intent is clear.
 
