@@ -7,6 +7,7 @@ import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView from '@/components/AgentChatView';
 import { streamAgent } from '@/lib/agentStream';
+import { cacheImage } from '@/lib/imageCache';
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
@@ -536,6 +537,7 @@ export default function Editor({
       if (!res.ok) throw new Error('Preview failed');
       const { image } = await res.json();
 
+      cacheImage(`tip:${snapshotId}:${editPrompt}`, image);
       setSnapshots((prev) => {
         const updated = prev.map((s) => {
           if (s.id !== snapshotId) return s;
@@ -578,6 +580,7 @@ export default function Editor({
     const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
     let completedCount = 0;
     const previewGenerated: Record<string, number> = { enhance: 0, wild: 0 };
+    const fetchStart = Date.now();
 
     const fetchCategory = async (category: string) => {
       const imageBase64 = await ensureBase64(imageInput);
@@ -612,32 +615,41 @@ export default function Editor({
                 if (payload === '[DONE]') break;
                 try {
                   const tip = JSON.parse(payload) as Tip;
-                  if (tip.label && tip.editPrompt && tip.category) {
-                    tip.previewStatus = 'pending';
-                    setSnapshots((prev) => prev.map((s) =>
-                      s.id === snapshotId ? { ...s, tips: [...s.tips, tip] } : s
-                    ));
-
-                    const shouldPreview = (() => {
-                      if (previewMode === 'none') return false;
-                      if (previewMode === 'full') return true;
-                      const cat = tip.category as string;
-                      if ((cat === 'enhance' || cat === 'wild') && previewGenerated[cat] === 0) {
-                        previewGenerated[cat]++;
-                        return true;
-                      }
-                      return false;
-                    })();
-
-                    if (shouldPreview) {
-                      generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
+                  if (tip.label && tip.category) {
+                    if (!tip.editPrompt) {
+                      // Partial tip: label+desc ready, editPrompt still streaming — show immediately
+                      setSnapshots((prev) => prev.map((s) => {
+                        if (s.id !== snapshotId) return s;
+                        if (s.tips.some(t => t.label === tip.label)) return s;
+                        return { ...s, tips: [...s.tips, { ...tip, previewStatus: 'none' }] };
+                      }));
                     } else {
-                      setSnapshots((prev) => prev.map((s) =>
-                        s.id === snapshotId ? {
-                          ...s,
-                          tips: s.tips.map(t => t.label === tip.label ? { ...t, previewStatus: 'none' } : t),
-                        } : s
-                      ));
+                      // Complete tip: upsert by label (updates partial if exists, adds new otherwise)
+                      const shouldPreview = (() => {
+                        if (previewMode === 'none') return false;
+                        if (previewMode === 'full') return true;
+                        const cat = tip.category as string;
+                        if ((cat === 'enhance' || cat === 'wild') && previewGenerated[cat] === 0) {
+                          previewGenerated[cat]++;
+                          return true;
+                        }
+                        return false;
+                      })();
+
+                      setSnapshots((prev) => prev.map((s) => {
+                        if (s.id !== snapshotId) return s;
+                        const idx = s.tips.findIndex(t => t.label === tip.label);
+                        if (idx >= 0) {
+                          const newTips = [...s.tips];
+                          newTips[idx] = { ...newTips[idx], editPrompt: tip.editPrompt, previewStatus: shouldPreview ? 'pending' : 'none', aspectRatio: tip.aspectRatio };
+                          return { ...s, tips: newTips };
+                        }
+                        return { ...s, tips: [...s.tips, { ...tip, previewStatus: shouldPreview ? 'pending' : 'none' }] };
+                      }));
+
+                      if (shouldPreview) {
+                        generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
+                      }
                     }
                   }
                 } catch { /* skip malformed */ }
@@ -657,7 +669,8 @@ export default function Editor({
           setSnapshots((prev) => {
             const snap = prev.find(s => s.id === snapshotId);
             if (snap?.tips.length) {
-              const tipsForDb = snap.tips.map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
+              // Only persist complete tips (with editPrompt) — don't save partial streaming stubs
+              const tipsForDb = snap.tips.filter(t => !!t.editPrompt).map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
               onUpdateTips(snapshotId, tipsForDb);
             }
             return prev;
@@ -726,11 +739,10 @@ export default function Editor({
               if (payload === '[DONE]') break;
               try {
                 const tip = JSON.parse(payload) as Tip;
-                if (tip.label && tip.editPrompt && tip.category) {
+                if (tip.label && tip.category && tip.editPrompt) {
                   tip.previewStatus = 'none';
                   setSnapshots((prev) => prev.map((s) => {
                     if (s.id !== snapshotId) return s;
-                    // Skip if a tip with the same label already exists
                     if (s.tips.some(t => t.label === tip.label)) return s;
                     return { ...s, tips: [...s.tips, tip] };
                   }));
@@ -962,6 +974,7 @@ export default function Editor({
             };
             setSnapshots((prev) => [...prev, newSnapshot]);
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length);
+            cacheImage(`snap:${snapId}`, imageData);
             fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
             setAgentStatus('图片已生成');
             const id = currentMsgId;
@@ -1063,6 +1076,7 @@ export default function Editor({
     };
     setSnapshots((prev) => [...prev, newSnapshot]);
     onSaveSnapshot?.(newSnapshot, snapshots.length);
+    cacheImage(`snap:${snapId}`, newSnapshot.image);
 
     // Clear draft and jump to the newly committed snapshot (appended at end)
     setViewIndex(snapshots.length); // snapshots.length = index of new snapshot after append
@@ -1221,6 +1235,7 @@ export default function Editor({
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
       onSaveSnapshot?.(newSnapshot, 0);
+      cacheImage(`snap:${snapId}`, base64!);
       // Only start tips if not already started (HEIC path)
       if (!tipsStarted) {
         fetchTipsForSnapshot(snapId, base64!, 'full');
@@ -1260,6 +1275,7 @@ export default function Editor({
       prevTimelineLen.current = 1;
       setViewIndex(0);
       onSaveSnapshot?.(newSnapshot, 0);
+      cacheImage(`snap:${snapId}`, pendingImage);
       fetchTipsForSnapshot(snapId, pendingImage);
       // Auto-analyze the uploaded photo
       runAutoAnalysis(snapId, pendingImage);

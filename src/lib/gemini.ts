@@ -1,9 +1,18 @@
 import { GoogleGenAI, Chat, Type } from '@google/genai';
+import { streamText } from 'ai';
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { Tip } from '@/types';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
+import fs from 'fs';
+
+const LOG_FILE = '/tmp/tips-timing.log';
+function tlog(msg: string) {
+  const line = `${new Date().toISOString()} ${msg}\n`;
+  fs.appendFileSync(LOG_FILE, line);
+}
 
 // ── Provider & Model Config ─────────────────────────────────────
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
@@ -15,8 +24,22 @@ const MODEL = 'gemini-3-pro-image-preview';
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = `google/${MODEL}`;
 
-// Fast vision model for tips TEXT generation (much faster than image gen model)
-const TIPS_MODEL = 'google/gemini-2.0-flash-001';
+// Tips provider config — change TIPS_PROVIDER env var for A/B testing
+// 'bedrock' = Claude Sonnet (fast, default) | 'openrouter' = gemini-3 via OR | 'google' = direct Google SDK
+const TIPS_PROVIDER = (process.env.TIPS_PROVIDER || 'openrouter') as 'bedrock' | 'openrouter' | 'google';
+// Temperature for tips generation — higher = more creative
+const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
+
+// Bedrock instance for tips (lazy init)
+let _bedrockForTips: ReturnType<typeof createAmazonBedrock> | null = null;
+function getBedrockForTips() {
+  if (!_bedrockForTips) _bedrockForTips = createAmazonBedrock({
+    region: process.env.AWS_REGION?.trim(),
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
+  });
+  return _bedrockForTips('us.anthropic.claude-sonnet-4-5-20250929-v1:0');
+}
 
 // ── Google SDK singleton ────────────────────────────────────────
 let _ai: GoogleGenAI | null = null;
@@ -659,7 +682,7 @@ export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<
   if (!res.ok) throw new Error(`Fast tips error ${res.status}`);
 
   // Reuse incremental parser — tips without editPrompt are fine here
-  for await (const tip of parseIncrementalTipsFromStream(sseToTextIterator(res))) {
+  for await (const tip of parseIncrementalTipsFromStream(sseToTextIterator(res, 'fast'), 'fast')) {
     yield tip;
   }
 }
@@ -744,7 +767,9 @@ export async function* streamTipsByCategory(
     return;
   }
 
-  if (PROVIDER === 'openrouter') {
+  if (TIPS_PROVIDER === 'bedrock') {
+    yield* streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels);
+  } else if (TIPS_PROVIDER === 'openrouter') {
     yield* streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels);
   } else {
     yield* streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels);
@@ -805,7 +830,7 @@ async function* streamTipsByCategoryGoogle(
     config,
   });
 
-  yield* parseIncrementalTipsFromStream(streamToTextIterator(stream));
+  yield* parseIncrementalTipsFromStream(streamToTextIterator(stream), `google:${category}`, category);
 }
 
 // --- OpenRouter Provider ---
@@ -834,6 +859,8 @@ async function* streamTipsByCategoryOpenRouter(
     ? ''
     : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
 
+  const t0 = Date.now();
+  tlog(`[tips:openrouter:${category}] fetch start`);
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
     headers: openrouterHeaders(),
@@ -861,7 +888,53 @@ async function* streamTipsByCategoryOpenRouter(
     throw new Error(`OpenRouter tips error ${res.status}: ${errText}`);
   }
 
-  yield* parseIncrementalTipsFromStream(sseToTextIterator(res));
+  tlog(`[tips:openrouter:${category}] headers received at +${Date.now() - t0}ms`);
+  yield* parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`), `or:${category}`, category);
+  tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
+}
+
+// --- Bedrock Provider (Claude Sonnet — default for tips) ---
+async function* streamTipsByCategoryBedrock(
+  imageBase64: string,
+  category: TipCategory,
+  metadata?: { takenAt?: string; location?: string },
+  count: number = 2,
+  existingLabels?: string[],
+): AsyncGenerator<Tip> {
+  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+  const template = getPromptTemplate(category);
+  const systemPrompt = buildCategorySystemPrompt(category, count);
+  const metaLines: string[] = [];
+  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
+  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
+  const metaContext = metaLines.length > 0
+    ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
+    : '';
+  const dedupeNote = existingLabels?.length
+    ? `[已有以下建议，必须生成完全不同的方向] ${existingLabels.join('、')}\n\n`
+    : '';
+
+  const t0 = Date.now();
+  tlog(`[tips:bedrock:${category}] stream start`);
+
+  const result = await streamText({
+    model: getBedrockForTips(),
+    temperature: TIPS_TEMPERATURE,
+    system: systemPrompt,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'image', image: dataUrl },
+          { type: 'text', text: `${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${JSON_FORMAT_SUFFIX}` },
+        ],
+      },
+    ],
+  });
+
+  tlog(`[tips:bedrock:${category}] streamText ready at +${Date.now() - t0}ms`);
+  yield* parseIncrementalTipsFromStream(result.textStream, `bedrock:${category}`, category);
+  tlog(`[tips:bedrock:${category}] done at +${Date.now() - t0}ms`);
 }
 
 // ── Shared Incremental JSON Parser ──────────────────────────────
@@ -875,10 +948,12 @@ async function* streamToTextIterator(
   }
 }
 
-async function* sseToTextIterator(res: Response): AsyncGenerator<string> {
+async function* sseToTextIterator(res: Response, label: string): AsyncGenerator<string> {
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let firstToken = true;
+  const t0 = Date.now();
 
   while (true) {
     const { done, value } = await reader.read();
@@ -891,21 +966,58 @@ async function* sseToTextIterator(res: Response): AsyncGenerator<string> {
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
       const payload = line.slice(6).trim();
-      if (payload === '[DONE]') return;
+      if (payload === '[DONE]') {
+        tlog(`[tips:${label}] DONE at +${Date.now() - t0}ms`);
+        return;
+      }
       try {
         const chunk = JSON.parse(payload);
         const text = chunk.choices?.[0]?.delta?.content;
-        if (text) yield text;
+        if (text) {
+          if (firstToken) {
+            tlog(`[tips:${label}] first-token at +${Date.now() - t0}ms`);
+            firstToken = false;
+          }
+          yield text;
+        }
       } catch { /* skip */ }
     }
   }
 }
 
+// Extract a single quoted string field value from a (potentially partial) JSON object string
+function extractJsonStringField(json: string, field: string): string | null {
+  const regex = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
+  const match = json.match(regex);
+  return match ? match[1] : null;
+}
+
+// Try to build a partial Tip — category is injected since it comes after editPrompt in the JSON stream
+function tryPartialTip(partialObj: string, defaultCategory: TipCategory): Tip | null {
+  const label = extractJsonStringField(partialObj, 'label');
+  const desc = extractJsonStringField(partialObj, 'desc');
+  if (!label || !desc) return null;
+  const category = extractJsonStringField(partialObj, 'category') ?? defaultCategory;
+  return {
+    emoji: extractJsonStringField(partialObj, 'emoji') ?? '',
+    label,
+    desc,
+    category: category as Tip['category'],
+    editPrompt: '',      // signals "partial — editPrompt not yet available"
+    previewStatus: 'none',
+  };
+}
+
 async function* parseIncrementalTipsFromStream(
   textStream: AsyncIterable<string>,
+  label: string,
+  defaultCategory: TipCategory = 'enhance',
 ): AsyncGenerator<Tip> {
   let fullText = '';
   let tipsEmitted = 0;
+  let lastPartialLabel: string | null = null;
+  let partialEmitted = false;
+  const t0 = Date.now();
 
   for await (const text of textStream) {
     fullText += text;
@@ -913,6 +1025,7 @@ async function* parseIncrementalTipsFromStream(
     let objectsFound = 0;
     for (let i = 0; i < fullText.length; i++) {
       if (fullText[i] === '{') {
+        const start = i;
         let depth = 1;
         let j = i + 1;
         while (j < fullText.length && depth > 0) {
@@ -920,19 +1033,35 @@ async function* parseIncrementalTipsFromStream(
           else if (fullText[j] === '}') depth--;
           j++;
         }
+
         if (depth === 0) {
+          // Complete object
           objectsFound++;
           if (objectsFound > tipsEmitted) {
-            const objStr = fullText.slice(i, j);
+            const objStr = fullText.slice(start, j);
             try {
               const tip = JSON.parse(objStr) as Tip;
               if (tip.label && tip.editPrompt && tip.category) {
+                tlog(`[tips:${label}] complete tip "${tip.label}" at +${Date.now() - t0}ms`);
+                if (lastPartialLabel === tip.label) lastPartialLabel = null;
                 yield tip;
+                tipsEmitted = objectsFound;
               }
-            } catch { /* incomplete or malformed, skip */ }
-            tipsEmitted = objectsFound;
+            } catch { /* skip malformed */ }
           }
           i = j - 1;
+        } else {
+          // Incomplete object — emit partial tip if label+desc+category are ready
+          const partial = tryPartialTip(fullText.slice(start), defaultCategory);
+          if (partial && partial.label !== lastPartialLabel) {
+            if (!partialEmitted) {
+              tlog(`[tips:${label}] first partial tip "${partial.label}" at +${Date.now() - t0}ms (fullText len=${fullText.length})`);
+              partialEmitted = true;
+            }
+            yield partial;
+            lastPartialLabel = partial.label;
+          }
+          i = fullText.length;
         }
       }
     }

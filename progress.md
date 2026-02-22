@@ -2274,3 +2274,100 @@ Makaron Agent 拒绝用户两类显式请求：
 - **大标题放留白区**：天空/拱门/深色背景，高度20%+，颜色强对比 → 8-9分
 - **胶片戳三要素**：地点+月份+年份，缺一扣分 → 7-8分
 - **两个tip角色必须不同**：海报+海报/胶片+胶片 = 无聊
+
+---
+
+## Captions V57-V60 分析 + V61 方向 (2026-02-22)
+
+### 分数趋势（完整）
+| 版本 | 均分 | 备注 |
+|------|------|------|
+| V44 | 3.5 | 首测，全失败 |
+| V47 | 6.5 | 历史最高（当时）|
+| V51 | 6.1 | 4个8分 |
+| V53 | 3.6 | 大改版失败，回滚 |
+| V59 | **6.6** | 历史最高，7个高分 |
+| V60 | 5.3 | 模板化收敛，均分下降 |
+
+### 稳定高分模式（验证次数多）
+1. **心声贴着动作/表面**：文字颜色从物体来，形态贴着纹理走 → 8分（冰淇淋/砖墙/水面）
+2. **精确地名 + 大标题**：BROOKLYN/THE MET/迪士尼 + 占高度20%+ → 8-10分
+3. **胶片时间戳三要素齐全**：地点+月份+年份，橙色数字 → 7-8分
+
+### 稳定失败模式
+- A24/好莱坞海报模板（没有具体地名）→ 3-5分
+- 胶片时间戳放标题/缺年份 → 1-5分
+- 改变照片（B&W/letterbox/大幅调色）→ 1分
+- 白字放浅色背景 → 1-3分
+- 模板化（标题设计师+记录者 每张都一样）→ 用户说"像模板"
+
+### 5个尚未解决的问题
+1. **场景清场 vs 人脸保留冲突**：Clean up 有时破坏人脸（v58 1分）
+2. **Metadata 注入缺口**：没有真实EXIF时，模型猜年份/地点 → 经常猜错
+3. **模板化收敛**：总是 标题设计师+记录者 组合，缺乏多样性 → 已加防模板规则
+4. **杂志封面风格总被拒**："很土"/"老气" 是常见反馈，但手写体总得高分
+5. **场景类型判断缺失**：亲密日常照 ≠ 地标照，同一套模板不应该用在所有场景
+
+### V61 改进方向（优先级排序）
+1. 测试防模板规则效果（已加入）
+2. 强化"文字渲染在场景材质上"这个方向（ice cream字体感=材质感）
+3. 更明确的心声位置规则：动作延伸处=好；头顶=差
+4. 考虑加入场景类型自检：是亲密日常？还是地标/产品照？不同类型对应不同推荐角色
+
+---
+
+## Tips 首屏加速 (2026-02-23)
+
+### 背景
+首个 tip 出现需要 20+ 秒，partial streaming 逻辑代码正确但体感没有生效。
+
+### 根本原因（已确认）
+`streamTipsByCategoryOpenRouter` 第 848 行用的是 `OPENROUTER_MODEL`（`google/gemini-3-pro-image-preview`，图像生成模型），而非文本生成模型。`TIPS_MODEL = 'google/gemini-2.0-flash-001'` 早已定义但从未被 OpenRouter 路径使用。图像生成模型用于纯文本生成时 TTFT 高达 5-15 秒，是主因。
+
+### 修改内容
+| 文件 | 改动 |
+|------|------|
+| `src/lib/gemini.ts` | 新增 `streamTipsByCategoryBedrock`（Vercel AI SDK + AWS Bedrock Claude Sonnet）；`TIPS_PROVIDER` 默认 `'bedrock'`；`TIPS_TEMPERATURE=0.9`；修复 OpenRouter `t0` 计时位置；移除 `analysisStep`（Sonnet 不需要显式分析指令） |
+| `src/app/api/tips/route.ts` | 加 `X-Accel-Buffering: no` 防 SSE 缓冲 |
+| `src/components/Editor.tsx` | 加 `console.time` 前端计时日志 |
+
+Tips 模型可通过 `.env.local` 的 `TIPS_PROVIDER` / `TIPS_TEMPERATURE` 切换，方便 A/B 测试。
+
+### 测试结果（Bedrock Claude Sonnet-4-5，本地 dev）
+
+**后端计时（从 streamText 调用起，多次平均）：**
+| 分类 | 首个 partial tip |
+|------|----------------|
+| wild | ~5.8s |
+| creative | ~6.1s |
+| enhance | ~5.1~6.4s |
+| captions | ~6.0~6.6s |
+
+**前端感知时间（含 Supabase auth + routing 约 3s 额外开销）：**
+- 首个 tip 出现：**6.6~8.1s**（目标 10s ✅）
+- 全部 8 个 tip 流式完成：~14~17s
+
+**对比：**
+- 修复前（gemini-3-pro 图像模型）：20+ 秒
+- 修复后（Bedrock Sonnet）：首 tip 6.6~8s，稳定达标
+
+### 关键结论
+- 用图像生成模型做纯文本 tips 是主因，TTFT 极高且不稳定
+- `streamText ready at +0~4ms`——Bedrock 连接建立极快，时间主要在 TTFT（~5-7s）
+- 前端比后端多约 3s = Supabase auth check + Next.js routing 开销
+- Partial streaming 代码本身一直是正确的，瓶颈完全在模型选择
+
+### 后续：质量问题，回滚 gemini-3 (2026-02-23)
+
+Bedrock Sonnet 速度达标（6-8s）但 tips **质量明显差**——idea 层面（label/desc）就不如 gemini-3，不只是 editPrompt 差。这是第二次验证同一结论（第一次试 Flash 也失败）。根本原因：gemini-3-pro-image-preview 是图像生成模型，天然理解"什么编辑指令能出好图"，通用语言模型没有这种 image editing intuition。
+
+**两阶段方案 API 测试结果（gemini-3，OpenRouter）：**
+| | TTFT | Total |
+|---|---|---|
+| 全量请求（当前） | 23.8s | 25.2s |
+| Stage 1（仅 label+desc，短 prompt） | 9.9s ~ 15.6s | 10.4s ~ 16.3s |
+| Stage 2（editPrompt，120行模板，2条并行） | 16.4s ~ 30.4s | 31.8s |
+
+两阶段方案可以把首个 tip 卡片从 20+s 降到 10-16s，但 gemini-3 TTFT **抖动极大**（同样请求差 6s），且 Stage 2 editPrompt 要 32s 才全部就绪，用户点击时可能还没好。
+
+**当前决策：回滚到 gemini-3（`TIPS_PROVIDER=openrouter`）优先保质量**，速度问题待更好方案出现再解决。两阶段方案保留为候选，需要解决 TTFT 抖动问题才有实用价值。

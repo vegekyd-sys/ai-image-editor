@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { getCachedImages } from '@/lib/imageCache'
 
 interface ProjectWithSnapshots {
   id: string
@@ -171,8 +172,26 @@ export default function ProjectsPage() {
         .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [] }))
         .filter((p) => p.snapshots.length > 0)
 
-      _projectsCache = result
-      setProjects(result)
+      // Patch missing image_urls from IndexedDB cache (upload may not have completed)
+      const missingKeys = result.flatMap(p =>
+        p.snapshots.filter(s => !s.image_url).map(s => `snap:${s.id}`)
+      )
+      let displayResult = result
+      if (missingKeys.length > 0) {
+        const cacheMap = await getCachedImages(missingKeys)
+        if (cacheMap.size > 0) {
+          displayResult = result.map(p => ({
+            ...p,
+            snapshots: p.snapshots.map(s => {
+              const cached = !s.image_url ? cacheMap.get(`snap:${s.id}`) : undefined
+              return cached ? { ...s, image_url: cached } : s
+            }),
+          }))
+        }
+      }
+
+      _projectsCache = result  // Keep clean (Supabase URLs only)
+      setProjects(displayResult)
       setLoadingProjects(false)
     }
 
@@ -314,6 +333,7 @@ export default function ProjectsPage() {
         }} />
 
         <input
+          id="new-project-file-input"
           ref={fileInputRef}
           type="file"
           accept="image/*"
@@ -411,10 +431,11 @@ export default function ProjectsPage() {
                 Creating…
               </button>
             ) : (
-              <button
-                onClick={() => fileInputRef.current?.click()}
+              <label
+                htmlFor="new-project-file-input"
                 className="mkr-new-btn"
                 style={{
+                  display: 'inline-block',
                   borderRadius: '100px',
                   border: '1.5px solid rgba(217,70,239,0.35)',
                   background: 'transparent',
@@ -427,7 +448,7 @@ export default function ProjectsPage() {
                 }}
               >
                 + New project
-              </button>
+              </label>
             )}
           </div>
         </div>
