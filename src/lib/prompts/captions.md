@@ -105,15 +105,28 @@
 
 回答完四个问题后，写 editPrompt 时必须包含两部分：
 
-### Part 1：照片本身如何变化来迎合这个设计
-文字和照片是一个整体作品，照片要主动配合文字的风格。
-⚠️ 关键约束：**照片调整幅度要克制**——增强氛围感可以，但构图/人物/主体场景不能大幅改变，看完还要能一眼认出是同一张照片。
+## 📝 editPrompt 必须包含的固定句子
 
-- 做**电影海报** → Kodak Portra 400 color grading + film grain + 增强对比度，顶部加暗化渐变为文字让位，保持场景和人物不变
-- 做**旅行杂志大片** → 轻微调色（清透/胶片感），不裁切主体，在留白区域加文字
+**句子1（场景净化，必须是第一句）：**
+> "FIRST: Clean up the scene — remove any element that draws attention away from the main subject but adds no compositional value (cluttered objects, background people, distracting items). Replace with natural-looking scene."
+
+**句子2（瘦脸，有人物时）：**
+> "If and only if the person has a clearly defined adult jawline: apply a visible V-line face-slimming effect, narrowing the jaw width and slimming the lower face contour. For children or people with naturally round/soft faces, do NOT apply any face-slimming or face modification whatsoever. The upper face (eyes, nose, forehead) must remain completely unchanged for everyone."
+
+**句子3（人脸保真）：**
+> "Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider, rounder, or alter jaw lines."
+
+---
+
+### Part 1：照片如何配合设计
+
+⚠️ 关键约束：调整要克制——增强氛围感可以，但构图/人物/主体场景不能大幅改变，看完还要一眼认出是同一张照片。
+
+- 做**电影海报** → Kodak Portra 400 色调 + 胶片颗粒 + 增强对比度，顶部加暗化渐变为文字让位
+- 做**旅行杂志大片** → 轻微调色（清透感），不裁切主体，利用留白区域
 - 做**电影旁白字幕** → 加黑边（letterbox），轻微电影色调，字幕在黑边内
-- 做**胶片记录** → warm Kodak Portra 400 color grading + 轻微颗粒感，主体完全保留
-- 做**人物内心** → 局部柔化，背景轻微虚化，整体构图不变
+- 做**胶片记录** → Kodak Portra 400 暖色调 + 轻微颗粒感，主体完全保留
+- 做**人物内心** → 局部轻微柔化，整体构图不变
 
 ### Part 2：文字设计
 1. **文案内容**：根据照片内容创作具体的文字（Gemini 自己发挥，要有创意和画面感）。如果画面或 metadata 里有**具体地点名**（博物馆、城市、景点），必须用进文案——具体地点比泛化描述好 10 倍
@@ -141,35 +154,36 @@
 以下是测试中实际得到 8-10 分的案例规律，遇到类似场景可以直接参考：
 
 **10分 — 场景专属概念 + 具体地名 + 色彩呼应**
-> 迪士尼乐园，有 Slinky Dog 玩具 → "TOY SIZED ADVENTURES"（黄橙渐变字，呼应玩具颜色）+ "SHANGHAI DISNEY RESORT"
-> 公式：隐藏角度命名 + 真实地点 + 照片元素决定字体颜色
+- 迪士尼乐园，有 Slinky Dog 玩具 → 片名"玩具奇幻冒险"（黄橙渐变字，呼应玩具颜色）+ "上海迪士尼乐园"
+- 公式：隐藏角度命名 + 真实地点 + 照片元素决定字体颜色
 
-**8-9分 — 地标建筑 + editorial 标题**
-> 大都会博物馆埃及展厅 → "EGYPT AWAKENED" + "Metropolitan Museum of Art"
-> NYPL 阅读室 → "THE ROSE READING ROOM" + "WHERE SILENCE SPEAKS VOLUMES."
-> 布鲁克林大桥 → "BROOKLYN STATE OF MIND"（红字，20% 高度，A24 风格）
-> 公式：具体地名/地标 → 成为标题的核心词
+**8-9分 — 具体地标 + editorial 标题**
+- 大都会博物馆埃及展厅 → "EGYPT AWAKENED" + "Metropolitan Museum of Art"
+- 纽约公立图书馆阅读室 → "THE ROSE READING ROOM"，副标："WHERE SILENCE SPEAKS VOLUMES."
+- 布鲁克林大桥 → "BROOKLYN STATE OF MIND"（红字，占画面高度 20%，A24 风格）
+- 公式：具体地名/地标 → 成为标题核心词
 
-**8分 — Letterbox + 一句诗意旁白**
-> 黑边内白字：`"Chasing the sun's last stories."` / `"梯田里的风，记得我们曾来过。"`
-> 公式：letterbox 黑边 → 字幕在黑边内，一句话，不超过 10 个词
+**8分 — 黑边 + 一句诗意旁白**
+- 上下黑边，黑边内居中白字：梯田朋友照 → "梯田里的风，记得我们曾来过。"
+- 逆光夕阳照 → "Chasing the sun's last stories."
+- 公式：letterbox 黑边 → 字幕在黑边内，一句话，不超过 10 个词
 
 **8分 — 心声/内心独白，放在视线延伸处**
-> 女生回眸，文字在她视线前方的砖墙上：`"This moment, right here."`
-> 男孩双手合十，文字在手旁：`"please let the toy gods hear me..."`
-> 公式：找到人物的动作/视线方向 → 文字放在那个方向 → 手写小字 → 轻声说出那一刻的想法
+- 女生回眸，在她视线前方写："此刻，就在这里。"（手写小字贴着砖墙）
+- 男孩双手合十，在手旁写："神明，请让我得到那个玩具吧。"
+- 公式：找人物动作/视线方向 → 文字放那个方向 → 手写小字 → 说出那一刻的心声
 
 **8分 — 胶片时间戳，地点必须准确**
-> `"DUMBO, NYC / OCT 14 '18"` / `"OCT 11 '19  ANAHEIM, CA"` / `"NOV 23 '18 | BEIJING HOTPOT"`
-> 公式：橙色数字胶片体 + 右下角 + 城市/地名 + 月份年份（只用能确认的）
+- "DUMBO, NYC / OCT 14 '18"、"北京烤鸭 | NOV 23 '18"、"上海迪士尼 · OCT 26"
+- 公式：橙色数字胶片体 + 右下角 + 城市/地名 + 月份年份（只用能确认的信息）
 
-**8分 — Dazed editorial 竖排/大号**
-> 女生墨镜照，左侧竖排白色 "SUNLIT"（30% 高度）+ 下方手写 "urban pause."
-> 公式：一个有意义的单词 + 竖排或横排居一侧 + 小手写补充
+**8分 — 杂志感大字，位置出人意料**
+- 女生墨镜照，左侧竖排大号白色"日光"（占画面高度 30%）+ 下方小手写"午后静止"
+- 公式：一个有意义的词 + 竖排或横排居一侧（不要居中）+ 小手写补充
 
-**失败警示**：
-- `"A SILENT UNDERSTANDING"` → 概念空洞，3分
-- `"THE BEST OF US"` + `"A film about friendship"` → 2010年廉价感，5分
+**失败案例警示**：
+- "寂静的理解" → 概念空洞，3分
+- "我们最好的时光" + "关于友情的电影" → 2010 年廉价感，5分
 - 白字放在白色区域 → 看不见，5分
 - 编造地点/年份 → 0-3分
 
@@ -188,4 +202,7 @@
 
 ## 语言选择
 
-AI 根据画面自行判断：国内场景→中文，海外场景→英文，电影感强→英文更有质感，旅行手账→中英混排可以
+**默认用中文**。以下情况可以用英文或中英混排：
+- 画面是明显的海外场景（欧美街头、英文标识环境）→ 英文或中英混排
+- 标题是品牌/地名专有词（DUMBO、THE MET）→ 保留英文
+- 其余情况一律中文，包括"电影感"场景

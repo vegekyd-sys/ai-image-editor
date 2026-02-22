@@ -26,9 +26,9 @@ const MODEL = bedrock('us.anthropic.claude-sonnet-4-5-20250929-v1:0');
 // ---------------------------------------------------------------------------
 
 interface AgentContext {
-  currentImage: string;     // base64 data URL – updated after each generation
-  originalImage?: string;   // base64 data URL – the very first image, never changes
-  referenceImage?: string;  // base64 data URL – user-uploaded reference (e.g. a person to add)
+  currentImage: string;       // base64 data URL – updated after each generation
+  originalImage?: string;     // base64 data URL – the very first image, never changes
+  referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
@@ -78,7 +78,7 @@ function createTools(ctx: AgentContext) {
       }),
       execute: async ({ editPrompt, skill, useOriginalAsReference, aspectRatio }) => {
         const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
-        const hasReference = !!ctx.referenceImage;
+        const hasReference = !!ctx.referenceImages?.length;
 
         // Inject skill template if provided
         const skillTemplate = skill ? SKILL_PROMPTS[skill] : null;
@@ -90,24 +90,26 @@ function createTools(ctx: AgentContext) {
 
         let result: string | null;
         if (hasReference && useOriginalAsReference && hasOriginal) {
-          // Three-image mode: current base + original reference + user reference image
-          console.log('📸 Three-image mode (original + user reference)');
+          // Multi-image mode: current + original + user reference(s)
+          const refs = ctx.referenceImages!;
+          console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
           result = await generateImageWithReferences(
             [
-              { url: ctx.currentImage,    role: 'Image 1 = 当前编辑版本【编辑基础】' },
-              { url: ctx.originalImage!,  role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
-              { url: ctx.referenceImage!, role: 'Image 3 = 用户上传的参考图【按用户指令使用，例如将此人物/物体合成到 Image 1 中】' },
+              { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
+              { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
+              ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
             ],
             finalPrompt,
             aspectRatio,
           );
         } else if (hasReference) {
-          // Two-image mode: current base + user reference image
-          console.log('📸 Two-image mode (user reference)');
+          // Multi-image mode: current base + user reference image(s)
+          const refs = ctx.referenceImages!;
+          console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
           result = await generateImageWithReferences(
             [
-              { url: ctx.currentImage,    role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
-              { url: ctx.referenceImage!, role: 'Image 2 = 用户上传的参考图【按用户指令使用，例如将此人物/物体合成到 Image 1 中】' },
+              { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
+              ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
             ],
             finalPrompt,
             aspectRatio,
@@ -182,12 +184,12 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImage?: string },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[] },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
     originalImage: options?.originalImage,
-    referenceImage: options?.referenceImage,
+    referenceImages: options?.referenceImages,
     projectId,
     generatedImages: [],
   };
@@ -211,11 +213,27 @@ export async function* runMakaronAgent(
     ? { analyze_image: allTools.analyze_image }
     : allTools;
 
+  // Build user message — inject reference images as vision content blocks
+  // so Claude Sonnet can actually see what the user uploaded
+  const refImgs = options?.referenceImages ?? [];
+  type ContentPart = { type: 'text'; text: string } | { type: 'image'; image: string; mimeType?: string };
+  const userContent: ContentPart[] = refImgs.map((img, i) => ({
+    type: 'image' as const,
+    image: img,
+    mimeType: img.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
+    ...(refImgs.length > 1 ? { experimental_providerMetadata: { label: `参考图 ${i + 1}` } } : {}),
+  } as ContentPart));
+  if (refImgs.length > 0) {
+    userContent.push({ type: 'text', text: `[用户上传了 ${refImgs.length} 张参考图，见上方]\n\n${analysisOnly ? analysisPrompt : prompt}` });
+  } else {
+    userContent.push({ type: 'text', text: analysisOnly ? analysisPrompt : prompt });
+  }
+
   try {
     const result = streamText({
       model: MODEL,
       system: getAgentSystemPrompt(),
-      messages: [{ role: 'user', content: analysisOnly ? analysisPrompt : prompt }],
+      messages: [{ role: 'user', content: userContent.length === 1 && userContent[0].type === 'text' ? userContent[0].text : userContent }],
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: ['analyze_image' as const] } : {}),
       stopWhen: stepCountIs(maxSteps),
