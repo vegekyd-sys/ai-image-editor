@@ -259,9 +259,11 @@ export async function* runMakaronAgent(
         if (event.toolName === 'generate_image') {
           const inp = event.input as { useOriginalAsReference?: boolean };
           const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== ctx.currentImage;
-          toolCallImages = twoImageMode
-            ? [ctx.currentImage, ctx.originalImage!]
-            : [ctx.currentImage];
+          toolCallImages = [
+            ctx.currentImage,
+            ...(twoImageMode ? [ctx.originalImage!] : []),
+            ...(ctx.referenceImages ?? []),
+          ];
         }
         yield {
           type: 'tool_call',
