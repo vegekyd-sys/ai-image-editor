@@ -2196,3 +2196,42 @@ Makaron Agent 拒绝用户两类显式请求：
 2. 海报方向：概念 > 风格，弱概念+任何风格=3分
 3. 加文字对比度自检
 4. Metadata 规则继续强化
+
+---
+
+## 产品 UI 迭代（2026-02-22）
+
+### 参考图上传功能（CUI 图片附件）
+
+**功能描述**：在 CUI 聊天界面支持上传最多 3 张参考图，用于"把这个人加到图里"等合成需求。
+
+**架构**：
+- `AgentChatView`：输入框下方工具栏加图片按钮（圆形，与发送按钮统一风格），图片缩略图在工具栏内联显示，选图后客户端压缩（max 1024px, quality 0.85）
+- `agent.ts`：`referenceImages[]` 存入 `AgentContext`，`generate_image` 工具执行时将参考图作为 Image 2/3 传给 Gemini（N 图模式）；Claude Sonnet 本身不看参考图，只通过 prompt 文字获知"有 N 张参考图已备用"
+- `Editor.tsx`：`handleAgentRequest(text, attachedImages?)` → `streamAgent({ referenceImages })` → API → `runMakaronAgent({ referenceImages })`
+- 参考图也出现在 `EditPromptCard` 的"传入图片"展示里（`toolCallImages` 包含 referenceImages）
+
+**输入框布局（B 方案）**：
+- 上行：textarea 全宽（placeholder 文字，多行自然生长）
+- 下行工具栏：`[📷 圆形按钮] [缩略图 w-9 h-9...] [flex-1 spacer] [↑ 发送]`
+- 图片按钮与发送按钮统一为 `w-8 h-8 rounded-full`，图片按钮激活时 fuchsia 半透明底
+
+**已发消息气泡**：参考图显示为 `w-20 h-20 object-cover` 方形缩略图
+
+### CUI 输入框浮层化（分割线去除）
+
+- 去掉 `borderTop` 分割线
+- 输入框改为 `position: absolute bottom: 0`，顶部加 32px 渐变淡出（`transparent → #0a0a0a`）
+- 消息区域 `paddingBottom = inputBarH`（动态），最后一条消息能滚入渐变区域若隐若现
+- 键盘弹出时：`bottom: ${kbInset}px` 代替原来的 paddingBottom 调整
+
+### PiP 位置系列修复
+
+**PIP_BOTTOM_OFFSET 动态化**：
+- 用 `ResizeObserver` 监听 input bar 高度，`PIP_BOTTOM_OFFSET = inputBarH - 32 + 4`（减去渐变 paddingTop）
+- `cuiInputBarH` ref 通过 `onInputBarHeight` callback 传给 Editor
+
+**Race condition 修复**：
+- 旧问题：`openCUI` 立即计算 `toRect`，但 CUI 未挂载，`cuiInputBarH.current` 是旧值
+- 修法：`toRect` 移到第二个 `requestAnimationFrame` 里计算（此时 ResizeObserver 已触发，值准确）
+- 效果：GUI→CUI 动画终点与真实 PiP 位置完全吻合，无跳动
