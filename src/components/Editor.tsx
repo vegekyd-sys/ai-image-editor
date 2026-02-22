@@ -190,6 +190,7 @@ export default function Editor({
   const canvasAreaRef = useRef<HTMLDivElement>(null);
   const lastCanvasRect = useRef<{ l: number; t: number; w: number; h: number } | null>(null);
   const lastImageAR = useRef(1); // cached image aspect ratio for CUI→GUI direction
+  const cuiInputBarH = useRef(96); // cached CUI input bar height for PiP target position
   const HERO_DURATION = 380;
   interface HeroAnim {
     src: string;
@@ -380,7 +381,7 @@ export default function Editor({
         ? imgEl.naturalWidth / imgEl.naturalHeight
         : 1;
       lastImageAR.current = ar;
-      const PIP_SIZE = 200, PIP_M = 14, PIP_BOTTOM = 80;
+      const PIP_SIZE = 200, PIP_M = 14, PIP_BOTTOM = cuiInputBarH.current + 8;
       // Start hero at the 1:1 center-crop square of the canvas image.
       // Both from and to are squares → animation is pure position+size, no crop change.
       const imgBounds = containRect(cr.width, cr.height, ar);
@@ -1460,6 +1461,7 @@ export default function Editor({
           onBack={() => window.history.back()}
           onPipTap={handlePipTap}
           hidePip={heroAnim !== null}
+          onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
         />

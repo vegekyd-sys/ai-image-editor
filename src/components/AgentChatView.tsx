@@ -85,6 +85,7 @@ interface AgentChatViewProps {
   onImageTap: (messageId: string) => void;
   focusOnOpen?: boolean;
   hidePip?: boolean;
+  onInputBarHeight?: (h: number) => void;
 }
 
 export default function AgentChatView({
@@ -98,6 +99,7 @@ export default function AgentChatView({
   onImageTap,
   focusOnOpen = false,
   hidePip = false,
+  onInputBarHeight,
 }: AgentChatViewProps) {
   const [input, setInput] = useState('');
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
@@ -275,11 +277,15 @@ export default function AgentChatView({
   useEffect(() => {
     const el = inputBarRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setInputBarH(el.offsetHeight));
+    const update = () => {
+      setInputBarH(el.offsetHeight);
+      onInputBarHeight?.(el.offsetHeight);
+    };
+    const ro = new ResizeObserver(update);
     ro.observe(el);
-    setInputBarH(el.offsetHeight);
+    update();
     return () => ro.disconnect();
-  }, []);
+  }, [onInputBarHeight]);
 
   const isFirstScrollRef = useRef(true);
   useEffect(() => {
