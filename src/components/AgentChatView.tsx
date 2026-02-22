@@ -106,9 +106,11 @@ export default function AgentChatView({
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const inputBarRef = useRef<HTMLDivElement>(null);
   const scrollStartY = useRef<number | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
+  const [inputBarH, setInputBarH] = useState(80);
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
   const [kbInset, setKbInset] = useState(0);
   useEffect(() => {
@@ -127,7 +129,7 @@ export default function AgentChatView({
   type PipCorner = 'tl' | 'tr' | 'ml' | 'mr' | 'bl' | 'br';
   const PIP_SIZES = [116, 200] as const; // md / lg (small removed)
   const PIP_M = 14;
-  const PIP_BOTTOM_OFFSET = 80; // clear the input bar
+  const PIP_BOTTOM_OFFSET = inputBarH + 8; // dynamically tracks input bar height
   const PIP_PEEK = 28;        // px visible when hidden at right edge
   const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 
@@ -267,6 +269,16 @@ export default function AgentChatView({
 
   useEffect(() => {
     if (headerRef.current) setHeaderH(headerRef.current.offsetHeight);
+  }, []);
+
+  // Track input bar height so PiP moves up when textarea grows
+  useEffect(() => {
+    const el = inputBarRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setInputBarH(el.offsetHeight));
+    ro.observe(el);
+    setInputBarH(el.offsetHeight);
+    return () => ro.disconnect();
   }, []);
 
   const isFirstScrollRef = useRef(true);
@@ -495,12 +507,12 @@ export default function AgentChatView({
                       wordBreak: 'break-word',
                     }}
                   >
-                    {/* Attached reference images */}
+                    {/* Attached reference images — square thumbnails */}
                     {msg.editInputImages && msg.editInputImages.length > 0 && (
                       <div className={`flex gap-1.5 p-2 ${msg.content ? 'pb-1' : ''}`}>
                         {msg.editInputImages.map((img, i) => (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img key={i} src={img} alt="" className="h-20 rounded-lg object-cover" style={{ maxWidth: '120px' }} />
+                          <img key={i} src={img} alt="" className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
                         ))}
                       </div>
                     )}
@@ -644,30 +656,31 @@ export default function AgentChatView({
       />
 
       <div
+        ref={inputBarRef}
         className="flex-shrink-0 px-3 pt-2"
         style={{
           paddingBottom: kbInset > 0 ? `${kbInset + 8}px` : 'max(0.75rem, env(safe-area-inset-bottom))',
           borderTop: '1px solid rgba(255,255,255,0.05)',
         }}
       >
-        {/* Unified input box: images + text + buttons all inside */}
         <div
+          className="flex items-end gap-2 px-3 py-2.5"
           style={{
             background: '#161616',
             borderRadius: '20px',
             border: '1px solid rgba(255,255,255,0.07)',
           }}
         >
-          {/* Attached images row — inside the box, above textarea */}
+          {/* Attached images: stacked vertically on the left, aligned to bottom */}
           {attachedImages.length > 0 && (
-            <div className="flex gap-2 px-3 pt-2.5">
+            <div className="flex flex-col gap-1.5 flex-shrink-0">
               {attachedImages.map((img, i) => (
-                <div key={i} className="relative flex-shrink-0">
+                <div key={i} className="relative">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={img}
                     alt=""
-                    className="w-14 h-14 rounded-xl object-cover"
+                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
                     style={{ border: '1px solid rgba(255,255,255,0.1)' }}
                   />
                   <button
@@ -684,51 +697,50 @@ export default function AgentChatView({
             </div>
           )}
 
-          {/* Textarea + right-side buttons */}
-          <div className="flex items-end px-3 py-2.5 gap-2">
-            <textarea
-              ref={inputRef}
-              value={input}
-              rows={1}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-              placeholder="你想怎么修改这张图片？"
-              className="flex-1 bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden"
-              style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem' }}
-            />
-            {/* Image attach button */}
-            <button
-              onClick={() => imageInputRef.current?.click()}
-              disabled={isAgentActive || attachedImages.length >= 3}
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center transition-all active:scale-90"
-              style={{ color: attachedImages.length > 0 ? 'rgba(192,38,211,0.85)' : 'rgba(255,255,255,0.28)' }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-            </button>
-            {/* Send button */}
-            <button
-              onClick={handleSubmit}
-              disabled={isAgentActive || (!input.trim() && attachedImages.length === 0)}
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
-              style={{
-                background: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#c026d3' : 'rgba(255,255,255,0.08)',
-                color: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#fff' : 'rgba(255,255,255,0.25)',
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="19" x2="12" y2="5" />
-                <polyline points="5 12 12 5 19 12" />
-              </svg>
-            </button>
-          </div>
+          {/* Textarea (grows to fill remaining width) */}
+          <textarea
+            ref={inputRef}
+            value={input}
+            rows={1}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+            placeholder="你想怎么修改这张图片？"
+            className="flex-1 bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden"
+            style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem' }}
+          />
+
+          {/* Image attach button */}
+          <button
+            onClick={() => imageInputRef.current?.click()}
+            disabled={isAgentActive || attachedImages.length >= 3}
+            className="w-8 h-8 flex-shrink-0 flex items-center justify-center transition-all active:scale-90"
+            style={{ color: attachedImages.length > 0 ? 'rgba(192,38,211,0.85)' : 'rgba(255,255,255,0.28)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </button>
+          {/* Send button */}
+          <button
+            onClick={handleSubmit}
+            disabled={isAgentActive || (!input.trim() && attachedImages.length === 0)}
+            className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+            style={{
+              background: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#c026d3' : 'rgba(255,255,255,0.08)',
+              color: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#fff' : 'rgba(255,255,255,0.25)',
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
