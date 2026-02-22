@@ -131,7 +131,8 @@ export default function AgentChatView({
   type PipCorner = 'tl' | 'tr' | 'ml' | 'mr' | 'bl' | 'br';
   const PIP_SIZES = [116, 200] as const; // md / lg (small removed)
   const PIP_M = 14;
-  const PIP_BOTTOM_OFFSET = inputBarH + 8; // dynamically tracks input bar height
+  const INPUT_GRADIENT_TOP = 32; // paddingTop on input bar wrapper (gradient zone)
+  const PIP_BOTTOM_OFFSET = inputBarH - INPUT_GRADIENT_TOP + 4; // just above actual input box
   const PIP_PEEK = 28;        // px visible when hidden at right edge
   const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 

@@ -408,7 +408,7 @@ export default function Editor({
       requestAnimationFrame(() => requestAnimationFrame(() => {
         // By this frame CUI has mounted and ResizeObserver has fired —
         // recompute toRect with the accurate input bar height
-        const PIP_BOTTOM = cuiInputBarH.current + 8;
+        const PIP_BOTTOM = cuiInputBarH.current - 32 + 4; // mirror AgentChatView: inputBarH - gradient(32) + 4
         const toRect = { l: PIP_M, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
         setHeroAnim(p => p ? { ...p, toRect, active: true } : null);
       }));
