@@ -700,10 +700,13 @@ export default function AgentChatView({
             <button
               onClick={() => imageInputRef.current?.click()}
               disabled={isAgentActive || attachedImages.length >= 3}
-              className="flex-shrink-0 flex items-center gap-1.5 transition-all active:scale-90"
-              style={{ color: attachedImages.length > 0 ? 'rgba(192,38,211,0.85)' : 'rgba(255,255,255,0.28)' }}
+              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+              style={{
+                background: attachedImages.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
+                color: attachedImages.length > 0 ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
+              }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
                 <polyline points="21 15 16 10 5 21"/>
               </svg>
