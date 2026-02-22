@@ -483,12 +483,13 @@ export default function Editor({
     }
   }, [projectId, onSaveMessage]);
 
-  const addMessage = useCallback((role: 'user' | 'assistant', content: string, image?: string) => {
+  const addMessage = useCallback((role: 'user' | 'assistant', content: string, image?: string, attachedImages?: string[]) => {
     const msg: Message = {
       id: generateId(),
       role,
       content,
       image,
+      ...(attachedImages?.length ? { editInputImages: attachedImages } : {}),
       timestamp: Date.now(),
     };
     setMessages((prev) => [...prev, msg]);
@@ -765,7 +766,7 @@ export default function Editor({
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[]) => {
     // Map timeline index → snapshot index; null means we're at the draft slot
     const snapIdx = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
     let currentImage = snapIdx !== null ? snapshotsRef.current[snapIdx]?.image : undefined;
@@ -779,7 +780,8 @@ export default function Editor({
     if (!currentImage || !projectId) return;
 
     const imageBase64 = await ensureBase64(currentImage);
-    addMessage('user', text);
+    // Show attached images in the user message bubble
+    addMessage('user', text, undefined, attachedImages?.length ? attachedImages : undefined);
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
       id: assistantMsgId,
@@ -849,7 +851,7 @@ export default function Editor({
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId },
+        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
         {
           onStatus: (status) => setAgentStatus(status),
           onNewTurn: () => {
@@ -1450,7 +1452,7 @@ export default function Editor({
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
           currentImage={timeline[viewIndex]}
-          onSendMessage={handleAgentRequest}
+          onSendMessage={(text, imgs) => handleAgentRequest(text, imgs)}
           onBack={() => window.history.back()}
           onPipTap={handlePipTap}
           hidePip={heroAnim !== null}

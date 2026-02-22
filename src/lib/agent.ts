@@ -26,8 +26,9 @@ const MODEL = bedrock('us.anthropic.claude-sonnet-4-5-20250929-v1:0');
 // ---------------------------------------------------------------------------
 
 interface AgentContext {
-  currentImage: string;    // base64 data URL – updated after each generation
-  originalImage?: string;  // base64 data URL – the very first image, never changes
+  currentImage: string;     // base64 data URL – updated after each generation
+  originalImage?: string;   // base64 data URL – the very first image, never changes
+  referenceImage?: string;  // base64 data URL – user-uploaded reference (e.g. a person to add)
   projectId: string;
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
@@ -77,6 +78,7 @@ function createTools(ctx: AgentContext) {
       }),
       execute: async ({ editPrompt, skill, useOriginalAsReference, aspectRatio }) => {
         const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
+        const hasReference = !!ctx.referenceImage;
 
         // Inject skill template if provided
         const skillTemplate = skill ? SKILL_PROMPTS[skill] : null;
@@ -84,10 +86,33 @@ function createTools(ctx: AgentContext) {
           ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
           : editPrompt;
 
-        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal}\neditPrompt:\n${editPrompt}\n`);
+        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference}\neditPrompt:\n${editPrompt}\n`);
 
         let result: string | null;
-        if (useOriginalAsReference && hasOriginal) {
+        if (hasReference && useOriginalAsReference && hasOriginal) {
+          // Three-image mode: current base + original reference + user reference image
+          console.log('📸 Three-image mode (original + user reference)');
+          result = await generateImageWithReferences(
+            [
+              { url: ctx.currentImage,    role: 'Image 1 = 当前编辑版本【编辑基础】' },
+              { url: ctx.originalImage!,  role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
+              { url: ctx.referenceImage!, role: 'Image 3 = 用户上传的参考图【按用户指令使用，例如将此人物/物体合成到 Image 1 中】' },
+            ],
+            finalPrompt,
+            aspectRatio,
+          );
+        } else if (hasReference) {
+          // Two-image mode: current base + user reference image
+          console.log('📸 Two-image mode (user reference)');
+          result = await generateImageWithReferences(
+            [
+              { url: ctx.currentImage,    role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
+              { url: ctx.referenceImage!, role: 'Image 2 = 用户上传的参考图【按用户指令使用，例如将此人物/物体合成到 Image 1 中】' },
+            ],
+            finalPrompt,
+            aspectRatio,
+          );
+        } else if (useOriginalAsReference && hasOriginal) {
           // Two-image mode: current as edit base, original as reference
           console.log('📸 Two-image mode (original as reference)');
           result = await generateImageWithReferences(
@@ -157,11 +182,12 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImage?: string },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
     originalImage: options?.originalImage,
+    referenceImage: options?.referenceImage,
     projectId,
     generatedImages: [],
   };

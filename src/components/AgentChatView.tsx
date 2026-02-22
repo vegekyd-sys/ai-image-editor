@@ -79,7 +79,7 @@ interface AgentChatViewProps {
   isAgentActive: boolean;
   agentStatus: string;
   currentImage?: string;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, attachedImages?: string[]) => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
   onImageTap: (messageId: string) => void;
@@ -100,10 +100,12 @@ export default function AgentChatView({
   hidePip = false,
 }: AgentChatViewProps) {
   const [input, setInput] = useState('');
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isExiting, setIsExiting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const scrollStartY = useRef<number | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
@@ -313,10 +315,11 @@ export default function AgentChatView({
 
   const handleSubmit = useCallback(() => {
     const text = input.trim();
-    if (!text || isAgentActive) return;
-    onSendMessage(text);
+    if ((!text && attachedImages.length === 0) || isAgentActive) return;
+    onSendMessage(text, attachedImages.length > 0 ? attachedImages : undefined);
     setInput('');
-  }, [input, isAgentActive, onSendMessage]);
+    setAttachedImages([]);
+  }, [input, attachedImages, isAgentActive, onSendMessage]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
@@ -485,14 +488,25 @@ export default function AgentChatView({
                 /* User bubble — right-aligned pill */
                 <div className="flex justify-end">
                   <div
-                    className="text-white/90 text-[21px] leading-relaxed px-4 py-2.5 max-w-[82%]"
+                    className="text-white/90 text-[21px] leading-relaxed max-w-[82%]"
                     style={{
                       background: '#222222',
                       borderRadius: '18px 18px 5px 18px',
                       wordBreak: 'break-word',
                     }}
                   >
-                    {msg.content}
+                    {/* Attached reference images */}
+                    {msg.editInputImages && msg.editInputImages.length > 0 && (
+                      <div className={`flex gap-1.5 p-2 ${msg.content ? 'pb-1' : ''}`}>
+                        {msg.editInputImages.map((img, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img key={i} src={img} alt="" className="h-20 rounded-lg object-cover" style={{ maxWidth: '120px' }} />
+                        ))}
+                      </div>
+                    )}
+                    {msg.content && (
+                      <div className="px-4 py-2.5">{msg.content}</div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -607,14 +621,81 @@ export default function AgentChatView({
           borderTop: '1px solid rgba(255,255,255,0.05)',
         }}
       >
+        {/* Attached image previews */}
+        {attachedImages.length > 0 && (
+          <div className="flex gap-2 mb-2 px-1">
+            {attachedImages.map((img, i) => (
+              <div key={i} className="relative flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img}
+                  alt=""
+                  className="w-14 h-14 rounded-xl object-cover"
+                  style={{ border: '1px solid rgba(255,255,255,0.12)' }}
+                />
+                <button
+                  onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center"
+                  style={{ background: 'rgba(0,0,0,0.75)', border: '1px solid rgba(255,255,255,0.2)' }}
+                >
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="3" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div
-          className="flex items-end gap-2 px-4 py-2.5"
+          className="flex items-end gap-2 px-3 py-2.5"
           style={{
             background: '#161616',
             borderRadius: '20px',
             border: '1px solid rgba(255,255,255,0.07)',
           }}
         >
+          {/* Image attach button */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={async (e) => {
+              const files = Array.from(e.target.files ?? []);
+              e.target.value = '';
+              const remaining = 3 - attachedImages.length;
+              const toProcess = files.slice(0, remaining);
+              const compressed = await Promise.all(toProcess.map(file => new Promise<string>((resolve) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                  URL.revokeObjectURL(url);
+                  const scale = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+                  const canvas = document.createElement('canvas');
+                  canvas.width = Math.round(img.naturalWidth * scale);
+                  canvas.height = Math.round(img.naturalHeight * scale);
+                  canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                  resolve(canvas.toDataURL('image/jpeg', 0.85));
+                };
+                img.src = url;
+              })));
+              setAttachedImages(prev => [...prev, ...compressed].slice(0, 3));
+            }}
+          />
+          <button
+            onClick={() => imageInputRef.current?.click()}
+            disabled={isAgentActive || attachedImages.length >= 3}
+            className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+            style={{ color: attachedImages.length > 0 ? 'rgba(192,38,211,0.8)' : 'rgba(255,255,255,0.3)' }}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </button>
+
           <textarea
             ref={inputRef}
             value={input}
@@ -627,17 +708,16 @@ export default function AgentChatView({
               }
             }}
             placeholder="你想怎么修改这张图片？"
-
             className="flex-1 bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden"
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem' }}
           />
           <button
             onClick={handleSubmit}
-            disabled={isAgentActive || !input.trim()}
+            disabled={isAgentActive || (!input.trim() && attachedImages.length === 0)}
             className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
             style={{
-              background: input.trim() && !isAgentActive ? '#c026d3' : 'rgba(255,255,255,0.08)',
-              color: input.trim() && !isAgentActive ? '#fff' : 'rgba(255,255,255,0.25)',
+              background: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#c026d3' : 'rgba(255,255,255,0.08)',
+              color: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#fff' : 'rgba(255,255,255,0.25)',
             }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

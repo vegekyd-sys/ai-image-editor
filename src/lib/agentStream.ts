@@ -16,6 +16,7 @@ export async function streamAgent(
   body: {
     prompt: string; image: string; projectId: string;
     originalImage?: string;
+    referenceImages?: string[];  // up to 3 user-uploaded reference images
     analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit';
     tipReaction?: boolean; committedTip?: object; currentTips?: object[];
     tipsTeaser?: boolean; tipsPayload?: object[];
