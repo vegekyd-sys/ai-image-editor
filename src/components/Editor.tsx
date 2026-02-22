@@ -841,7 +841,11 @@ export default function Editor({
       ? `[照片元数据]\n${metaLines.join('\n')}\n\n`
       : '';
 
-    const fullPrompt = `${snapshotWarning}${metaContext}${descriptionContext}${tipsContext}${historyContext}[当前请求]\n${text}`;
+    const refContext = attachedImages?.length
+      ? `[用户上传了 ${attachedImages.length} 张参考图，已自动传给 generate_image 工具使用]\n\n`
+      : '';
+
+    const fullPrompt = `${snapshotWarning}${metaContext}${descriptionContext}${tipsContext}${historyContext}${refContext}[当前请求]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];

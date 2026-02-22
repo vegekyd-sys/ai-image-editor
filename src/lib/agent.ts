@@ -213,27 +213,11 @@ export async function* runMakaronAgent(
     ? { analyze_image: allTools.analyze_image }
     : allTools;
 
-  // Build user message — inject reference images as vision content blocks
-  // so Claude Sonnet can actually see what the user uploaded
-  const refImgs = options?.referenceImages ?? [];
-  type ContentPart = { type: 'text'; text: string } | { type: 'image'; image: string; mimeType?: string };
-  const userContent: ContentPart[] = refImgs.map((img, i) => ({
-    type: 'image' as const,
-    image: img,
-    mimeType: img.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
-    ...(refImgs.length > 1 ? { experimental_providerMetadata: { label: `参考图 ${i + 1}` } } : {}),
-  } as ContentPart));
-  if (refImgs.length > 0) {
-    userContent.push({ type: 'text', text: `[用户上传了 ${refImgs.length} 张参考图，见上方]\n\n${analysisOnly ? analysisPrompt : prompt}` });
-  } else {
-    userContent.push({ type: 'text', text: analysisOnly ? analysisPrompt : prompt });
-  }
-
   try {
     const result = streamText({
       model: MODEL,
       system: getAgentSystemPrompt(),
-      messages: [{ role: 'user', content: userContent.length === 1 && userContent[0].type === 'text' ? userContent[0].text : userContent }],
+      messages: [{ role: 'user', content: analysisOnly ? analysisPrompt : prompt }],
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: ['analyze_image' as const] } : {}),
       stopWhen: stepCountIs(maxSteps),
