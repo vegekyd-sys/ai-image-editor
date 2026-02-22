@@ -476,7 +476,7 @@ export default function AgentChatView({
       )}
 
       {/* ── Messages ── */}
-      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: '1.25rem' }}>
+      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: `${inputBarH}px` }}>
         {/* Empty state */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 pb-10">
@@ -663,10 +663,13 @@ export default function AgentChatView({
 
       <div
         ref={inputBarRef}
-        className="flex-shrink-0 px-3 pt-2"
+        className="absolute left-0 right-0 px-3"
         style={{
-          paddingBottom: kbInset > 0 ? `${kbInset + 8}px` : 'max(0.75rem, env(safe-area-inset-bottom))',
-          borderTop: '1px solid rgba(255,255,255,0.05)',
+          bottom: kbInset > 0 ? `${kbInset}px` : 0,
+          paddingBottom: kbInset > 0 ? '8px' : 'max(0.75rem, env(safe-area-inset-bottom))',
+          paddingTop: '32px',
+          background: 'linear-gradient(to bottom, transparent 0%, #0a0a0a 32px)',
+          zIndex: 20,
         }}
       >
         {/* Two-row layout: textarea on top, toolbar on bottom */}

@@ -381,7 +381,7 @@ export default function Editor({
         ? imgEl.naturalWidth / imgEl.naturalHeight
         : 1;
       lastImageAR.current = ar;
-      const PIP_SIZE = 200, PIP_M = 14, PIP_BOTTOM = cuiInputBarH.current + 8;
+      const PIP_SIZE = 200, PIP_M = 14;
       // Start hero at the 1:1 center-crop square of the canvas image.
       // Both from and to are squares → animation is pure position+size, no crop change.
       const imgBounds = containRect(cr.width, cr.height, ar);
@@ -393,19 +393,25 @@ export default function Editor({
         t: cr.top  + imgBounds.t + sqY,
         w: side, h: side,
       };
-      const toRect = { l: PIP_M, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+      // toRect uses a placeholder — will be corrected in the second rAF after
+      // CUI mounts and ResizeObserver updates cuiInputBarH.current with real height
       setHeroAnim({
         src,
-        fromRect, toRect,
+        fromRect,
+        toRect: { l: PIP_M, t: window.innerHeight - (cuiInputBarH.current + 8) - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE },
         fromImg: coverRect(side, side, ar), // unused (objectCover=true)
         toImg:   coverRect(PIP_SIZE, PIP_SIZE, ar), // unused
         fromRadius: '0px', toRadius: '16px',
-        objectCover: true, // both containers are squares → object-cover is sufficient, no img animation needed
+        objectCover: true,
         active: false,
       });
-      requestAnimationFrame(() => requestAnimationFrame(() =>
-        setHeroAnim(p => p ? { ...p, active: true } : null)
-      ));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        // By this frame CUI has mounted and ResizeObserver has fired —
+        // recompute toRect with the accurate input bar height
+        const PIP_BOTTOM = cuiInputBarH.current + 8;
+        const toRect = { l: PIP_M, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+        setHeroAnim(p => p ? { ...p, toRect, active: true } : null);
+      }));
       setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
     }
     setViewMode('cui');
