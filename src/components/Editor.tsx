@@ -177,6 +177,7 @@ export default function Editor({
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(AGENT_GREETING);
+  const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
@@ -679,6 +680,75 @@ export default function Editor({
 
     categories.forEach(cat => fetchCategory(cat));
   }, [generatePreviewForTip, onUpdateTips, triggerTipsTeaser]);
+
+  // Load more tips of a specific category and append to the given snapshot
+  const fetchMoreTipsForCategory = useCallback((
+    category: Tip['category'],
+    snapshotId: string,
+    imageInput: string,
+  ) => {
+    setLoadingMoreCategories(prev => new Set([...prev, category]));
+
+    const doFetch = async () => {
+      try {
+        const imageBase64 = await ensureBase64(imageInput);
+        const snap = snapshotsRef.current.find(s => s.id === snapshotId);
+        const existingLabels = snap?.tips
+          .filter(t => t.category === category)
+          .map(t => t.label) ?? [];
+        const res = await fetch('/api/tips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: imageBase64,
+            category,
+            count: 2,
+            metadata: snap?.metadata,
+            existingLabels,
+          }),
+        });
+        if (!res.ok) return;
+
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let boundary;
+          while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+            const line = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            if (line.startsWith('data: ')) {
+              const payload = line.slice(6);
+              if (payload === '[DONE]') break;
+              try {
+                const tip = JSON.parse(payload) as Tip;
+                if (tip.label && tip.editPrompt && tip.category) {
+                  tip.previewStatus = 'none';
+                  setSnapshots((prev) => prev.map((s) => {
+                    if (s.id !== snapshotId) return s;
+                    // Skip if a tip with the same label already exists
+                    if (s.tips.some(t => t.label === tip.label)) return s;
+                    return { ...s, tips: [...s.tips, tip] };
+                  }));
+                }
+              } catch { /* skip malformed */ }
+            }
+          }
+        }
+      } finally {
+        setLoadingMoreCategories(prev => {
+          const next = new Set(prev);
+          next.delete(category);
+          return next;
+        });
+      }
+    };
+    doFetch();
+  }, []);
 
   // Auto-analyze a snapshot: runs silently in background, stores result in snapshot.description only
   const runAutoAnalysis = useCallback(async (
@@ -1434,7 +1504,7 @@ export default function Editor({
 
           {/* Bottom bar: Agent status bar (always) + Tips */}
           {snapshots.length > 0 && (
-            <div className="flex-shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent">
+            <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
               <AgentStatusBar
                 statusText={agentStatus}
                 isActive={isAgentActive}
@@ -1450,6 +1520,11 @@ export default function Editor({
                 onTipDeselect={dismissDraft}
                 onRetryPreview={handleRetryPreview}
                 previewingIndex={isViewingDraft ? previewingTipIndex : null}
+                onLoadMore={(category) => {
+                  const snap = snapshots[tipsSourceIndex];
+                  if (snap) fetchMoreTipsForCategory(category, snap.id, snap.image);
+                }}
+                loadingMoreCategories={loadingMoreCategories}
               />
             </div>
           )}

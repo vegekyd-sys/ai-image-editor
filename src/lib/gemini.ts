@@ -56,11 +56,11 @@ const CATEGORY_CN: Record<TipCategory, string> = {
   captions: 'captions（创意文案）',
 };
 
-function buildCategorySystemPrompt(category: TipCategory): string {
+function buildCategorySystemPrompt(category: TipCategory, count: number = 2): string {
   const labelNote = category === 'captions'
     ? 'label必须用中文3-6字，动词开头，并尽量包含地点/场景等具体信息（如"迪士尼海报"、"梯田旁白"、"纽约胶片"）。'
     : 'label必须用中文3-6字，动词开头。';
-  return `你是图片编辑建议专家。分析图片后生成2条${CATEGORY_CN[category]}编辑建议。
+  return `你是图片编辑建议专家。分析图片后生成${count}条${CATEGORY_CN[category]}编辑建议。
 ${labelNote}editPrompt用英文，极其具体。`;
 }
 
@@ -714,6 +714,8 @@ export async function* streamTipsByCategory(
   imageBase64: string,
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string },
+  count: number = 2,
+  existingLabels?: string[],
 ): AsyncGenerator<Tip> {
   if (process.env.MOCK_AI === 'true') {
     const mockTips: Record<string, Tip[]> = {
@@ -743,9 +745,9 @@ export async function* streamTipsByCategory(
   }
 
   if (PROVIDER === 'openrouter') {
-    yield* streamTipsByCategoryOpenRouter(imageBase64, category, metadata);
+    yield* streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels);
   } else {
-    yield* streamTipsByCategoryGoogle(imageBase64, category, metadata);
+    yield* streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels);
   }
 }
 
@@ -754,17 +756,27 @@ async function* streamTipsByCategoryGoogle(
   imageBase64: string,
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string },
+  count: number = 2,
+  existingLabels?: string[],
 ): AsyncGenerator<Tip> {
   const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
   const mimeType = imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
   const template = getPromptTemplate(category);
-  const systemPrompt = buildCategorySystemPrompt(category);
+  const systemPrompt = buildCategorySystemPrompt(category, count);
   const metaLines: string[] = [];
   if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
   if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
   const metaContext = metaLines.length > 0
     ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
     : '';
+  const dedupeNote = existingLabels?.length
+    ? `[已有以下建议，必须生成完全不同的方向] ${existingLabels.join('、')}\n\n`
+    : '';
+
+  // enhance: skip image analysis — universal technical improvements don't need content analysis
+  const analysisStep = category === 'enhance'
+    ? ''
+    : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
 
   const supportsStructuredOutput = MODEL.includes('gemini-3');
   const config: Record<string, unknown> = {
@@ -785,11 +797,7 @@ async function* streamTipsByCategoryGoogle(
         parts: [
           { inlineData: { mimeType, data: base64Data } },
           {
-            text: `${metaContext}在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
-
-基于分析，严格遵循以下所有规则，给出2条${category}编辑建议：
-
-${template}${promptSuffix}`,
+            text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${promptSuffix}`,
           },
         ],
       },
@@ -805,16 +813,26 @@ async function* streamTipsByCategoryOpenRouter(
   imageBase64: string,
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string },
+  count: number = 2,
+  existingLabels?: string[],
 ): AsyncGenerator<Tip> {
   const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const template = getPromptTemplate(category);
-  const systemPrompt = buildCategorySystemPrompt(category);
+  const systemPrompt = buildCategorySystemPrompt(category, count);
   const metaLines: string[] = [];
   if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
   if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
   const metaContext = metaLines.length > 0
     ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
     : '';
+  const dedupeNote = existingLabels?.length
+    ? `[已有以下建议，必须生成完全不同的方向] ${existingLabels.join('、')}\n\n`
+    : '';
+
+  // enhance: skip image analysis — universal technical improvements don't need content analysis
+  const analysisStep = category === 'enhance'
+    ? ''
+    : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
 
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
@@ -830,11 +848,7 @@ async function* streamTipsByCategoryOpenRouter(
             { type: 'image_url', image_url: { url: dataUrl } },
             {
               type: 'text',
-              text: `${metaContext}在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。
-
-基于分析，严格遵循以下所有规则，给出2条${category}编辑建议：
-
-${template}${JSON_FORMAT_SUFFIX}`,
+              text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${JSON_FORMAT_SUFFIX}`,
             },
           ],
         },
