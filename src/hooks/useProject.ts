@@ -6,10 +6,19 @@ import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
 import { Snapshot, Message, Tip, DbSnapshot, DbMessage } from '@/types'
 
+interface LatestAnimation {
+  videoUrl: string | null
+  prompt: string
+  snapshotUrls: string[]
+  taskId?: string
+  status: 'completed' | 'processing'
+}
+
 interface LoadedProject {
   snapshots: Snapshot[]
   messages: Message[]
   title: string
+  latestAnimation?: LatestAnimation
 }
 
 const MAX_UPLOAD_ATTEMPTS = 3
@@ -30,7 +39,7 @@ export function useProject(projectId: string, userId: string) {
   const loadProject = useCallback(async (): Promise<LoadedProject> => {
     const supabase = getSupabase()
 
-    const [snapshotsRes, messagesRes, projectRes] = await Promise.all([
+    const [snapshotsRes, messagesRes, projectRes, animationRes] = await Promise.all([
       supabase
         .from('snapshots')
         .select('*')
@@ -46,6 +55,14 @@ export function useProject(projectId: string, userId: string) {
         .select('title')
         .eq('id', projectId)
         .single(),
+      supabase
+        .from('project_animations')
+        .select('video_url, prompt, snapshot_urls, status, piapi_task_id')
+        .eq('project_id', projectId)
+        .in('status', ['completed', 'processing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
 
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
@@ -79,12 +96,22 @@ export function useProject(projectId: string, userId: string) {
       }
     })
 
-    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled' }
+    const latestAnimation = animationRes.data
+      ? {
+          videoUrl: (animationRes.data.video_url ?? null) as string | null,
+          prompt: animationRes.data.prompt as string,
+          snapshotUrls: (animationRes.data.snapshot_urls ?? []) as string[],
+          taskId: animationRes.data.piapi_task_id as string | undefined,
+          status: animationRes.data.status as 'completed' | 'processing',
+        }
+      : undefined
+
+    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', latestAnimation }
   }, [projectId])
 
   // --- Write (all fire-and-forget) ---
 
-  const saveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number) => {
+  const saveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
     Promise.resolve().then(async () => {
       try {
         const supabase = getSupabase()
@@ -110,6 +137,9 @@ export function useProject(projectId: string, userId: string) {
           console.warn('Failed to upload snapshot image')
           return
         }
+
+        // Notify caller of the uploaded URL
+        onUploaded?.(imageUrl)
 
         // Upsert snapshot row (upsert handles React StrictMode double-invoke)
         const { error } = await supabase.from('snapshots').upsert({

@@ -10,6 +10,17 @@ import { streamAgent } from '@/lib/agentStream';
 import { cacheImage } from '@/lib/imageCache';
 import AnimateSheet from '@/components/AnimateSheet';
 
+export interface AnimationState {
+  imageUrls: string[]
+  prompt: string
+  taskId: string | null
+  videoUrl: string | null
+  status: 'idle' | 'generating_prompt' | 'ready' | 'submitting' | 'polling' | 'done' | 'error'
+  error: string | null
+  duration: number
+  pollSeconds: number
+}
+
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
 }
@@ -144,7 +155,7 @@ interface EditorProps {
   initialMessages?: Message[];
   pendingImage?: string;
   pendingMetadata?: PhotoMetadata;
-  onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number) => void;
+  onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
   onUpdateDescription?: (snapshotId: string, description: string) => void;
@@ -152,6 +163,7 @@ interface EditorProps {
   onRenameProject?: (title: string) => void;
   onBack?: () => void;
   onNewProject?: (file: File) => void;
+  initialAnimation?: { videoUrl: string | null; prompt: string; snapshotUrls: string[]; taskId?: string; status: 'completed' | 'processing' } | null;
 }
 
 export default function Editor({
@@ -168,6 +180,7 @@ export default function Editor({
   onRenameProject,
   onBack,
   onNewProject,
+  initialAnimation,
 }: EditorProps = {}) {
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
@@ -175,9 +188,40 @@ export default function Editor({
   const [isTipsFetching, setIsTipsFetching] = useState(false);
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
-  const [showAnimateSheet, setShowAnimateSheet] = useState(false);
-  // Preserved across CUI turns so follow-up messages also have animationImageUrls
-  const currentAnimationUrlsRef = useRef<string[]>([]);
+  const [showAnimateSheet, setShowAnimateSheet] = useState(() => {
+    // Auto-open if resuming a processing animation
+    return !!(initialAnimation?.status === 'processing' && initialAnimation?.taskId);
+  });
+  // Animation state: lifted from AnimateSheet so it persists across GUI↔CUI switches
+  const [animationState, setAnimationState] = useState<AnimationState | null>(() => {
+    if (initialAnimation) {
+      if (initialAnimation.status === 'completed' && initialAnimation.videoUrl) {
+        return {
+          imageUrls: initialAnimation.snapshotUrls,
+          prompt: initialAnimation.prompt,
+          taskId: null,
+          videoUrl: initialAnimation.videoUrl,
+          status: 'done',
+          error: null,
+          duration: 10,
+          pollSeconds: 0,
+        };
+      }
+      if (initialAnimation.status === 'processing' && initialAnimation.taskId) {
+        return {
+          imageUrls: initialAnimation.snapshotUrls,
+          prompt: initialAnimation.prompt,
+          taskId: initialAnimation.taskId,
+          videoUrl: null,
+          status: 'polling',
+          error: null,
+          duration: 10,
+          pollSeconds: 0,
+        };
+      }
+    }
+    return null;
+  });
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
@@ -252,13 +296,22 @@ export default function Editor({
   }, [draftParentIndex, previewingTipIndex, snapshots]);
 
   // Timeline: committed snapshots with the virtual draft inserted right after its parent
+  // + optional video sentinel at the end
   const timeline = useMemo(() => {
     const base = snapshots.map((s) => s.image);
     if (draftImage !== null && draftParentIndex !== null) {
       base.splice(draftParentIndex + 1, 0, draftImage);
     }
+    if (animationState?.status === 'done' && animationState.videoUrl) {
+      base.push('__VIDEO__');
+    }
     return base;
-  }, [snapshots, draftImage, draftParentIndex]);
+  }, [snapshots, draftImage, draftParentIndex, animationState?.status, animationState?.videoUrl]);
+
+  // Video entry: last item in timeline when video is done
+  const hasVideo = animationState?.status === 'done' && !!animationState.videoUrl;
+  const videoTimelineIndex = hasVideo ? timeline.length - 1 : -1;
+  const isViewingVideo = hasVideo && viewIndex === videoTimelineIndex;
 
   // Draft occupies the slot immediately after its parent snapshot
   const isViewingDraft = isDraft && draftParentIndex !== null && viewIndex === draftParentIndex + 1;
@@ -948,7 +1001,7 @@ export default function Editor({
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(currentAnimationUrlsRef.current.length ? { animationImageUrls: currentAnimationUrlsRef.current } : {}) },
+        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
         {
           onStatus: (status) => setAgentStatus(status),
           onNewTurn: () => {
@@ -977,7 +1030,9 @@ export default function Editor({
               messageId: currentMsgId,
             };
             setSnapshots((prev) => [...prev, newSnapshot]);
-            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length);
+            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
+              setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+            });
             cacheImage(`snap:${snapId}`, imageData);
             fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
             setAgentStatus('图片已生成');
@@ -1054,16 +1109,17 @@ export default function Editor({
     }
   }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser]);
 
-  // ── Animation CUI mode: open CUI and trigger agent with animation context ──
-  const handleAnimationCUI = useCallback(async (imageUrls: string[]) => {
-    if (!projectId || !imageUrls.length) return;
-
-    // Preserve for follow-up CUI turns
-    currentAnimationUrlsRef.current = imageUrls;
+  // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
+  const animPromptInFlightRef = useRef(false);
+  const generateAnimationPrompt = useCallback(async () => {
+    const imageUrls = animationState?.imageUrls;
+    if (!projectId || !imageUrls?.length) return;
+    if (isAgentActiveRef.current || animPromptInFlightRef.current) return;
+    animPromptInFlightRef.current = true;
 
     const n = imageUrls.length;
-    const imageListText = imageUrls.map((_, i) => `@image_${i + 1}`).join('、');
-    const animationPrompt = `[视频动画模式] 为以下 ${n} 张照片创作视频故事脚本（图片引用：${imageListText}）。`;
+    const imageListText = imageUrls.map((_: string, i: number) => `@image_${i + 1}`).join('、');
+    const prompt = `[视频动画模式] 为以下 ${n} 张照片创作视频故事脚本（图片引用：${imageListText}）。只输出脚本内容，不需要用户确认。`;
 
     const userMsgId = generateId();
     const assistantMsgId = generateId();
@@ -1073,25 +1129,27 @@ export default function Editor({
       { id: assistantMsgId, role: 'assistant' as const, content: '', timestamp: Date.now() },
     ]);
 
-    setViewMode('cui');
+    // Stay in GUI — Agent runs in background
+    setAnimationState(prev => prev ? { ...prev, status: 'generating_prompt', prompt: '' } : prev);
     setIsAgentActive(true);
     setAgentStatus('正在创作视频故事...');
     agentAbortRef.current = new AbortController();
-    setShowAnimateSheet(false);
 
+    let scriptText = '';
     let currentMsgId = assistantMsgId;
 
-    // Use a placeholder image (first snapshot) for the agent context
-    const contextImage = snapshotsRef.current[0]?.image || snapshotsRef.current[0]?.imageUrl || '';
-    const imageBase64 = contextImage ? await ensureBase64(contextImage) : '';
+    // Use URL for context image (avoid base64 upload overhead)
+    const contextImageUrl = snapshotsRef.current[0]?.imageUrl || snapshotsRef.current[0]?.image || '';
 
     try {
       await streamAgent(
         {
-          prompt: animationPrompt,
-          image: imageBase64,
+          prompt,
+          image: contextImageUrl,
           projectId,
           animationImageUrls: imageUrls,
+          // Pass URLs directly — Bedrock fetches them server-side (much faster than uploading base64)
+          animationImages: imageUrls,
         },
         {
           onStatus: (s) => setAgentStatus(s),
@@ -1101,52 +1159,39 @@ export default function Editor({
             setMessages((prev) => [...prev, { id: newId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
           },
           onContent: (delta) => {
+            scriptText += delta;
+            // Stream to CUI message
             const id = currentMsgId;
             setMessages((prev) => prev.map((m) => m.id === id ? { ...m, content: m.content + delta } : m));
+            // Stream to animationState.prompt (shown in AnimateSheet textarea)
+            setAnimationState(prev => prev ? { ...prev, prompt: scriptText } : prev);
           },
-          onAnimationTask: (taskId) => {
-            // Clear animation context once task is started
-            currentAnimationUrlsRef.current = [];
-            // Store taskId in a message for reference, then poll
-            const id = currentMsgId;
-            setMessages((prev) => prev.map((m) => m.id === id ? { ...m, animationTaskId: taskId } : m));
-            // Poll for video completion
-            const poll = setInterval(async () => {
-              try {
-                const res = await fetch(`/api/animate/${taskId}`);
-                const data = await res.json();
-                if (data.status === 'completed' && data.videoUrl) {
-                  clearInterval(poll);
-                  // Add a new message with the video URL
-                  setMessages((prev) => [...prev, {
-                    id: generateId(),
-                    role: 'assistant' as const,
-                    content: `🎬 视频生成完成！\n${data.videoUrl}`,
-                    timestamp: Date.now(),
-                  }]);
-                  setAgentStatus('视频已生成');
-                } else if (data.status === 'failed') {
-                  clearInterval(poll);
-                  setMessages((prev) => [...prev, {
-                    id: generateId(),
-                    role: 'assistant' as const,
-                    content: '视频生成失败，请重试。',
-                    timestamp: Date.now(),
-                  }]);
-                }
-              } catch { /* ignore */ }
-            }, 10000);
+          onAnimationTask: () => {}, // Agent should not call generate_animation anymore
+          onDone: () => {
+            setAgentStatus('脚本已就绪');
+            setAnimationState(prev => prev ? { ...prev, status: 'ready' } : prev);
+            // Persist messages
+            setMessages((prev) => {
+              const msg = prev.find(m => m.id === assistantMsgId);
+              if (msg?.content) onSaveMessage?.(msg);
+              return prev;
+            });
           },
-          onDone: () => { setAgentStatus('完成'); },
+          onError: (msg) => {
+            console.error('Animation prompt generation failed:', msg);
+            setAnimationState(prev => prev ? { ...prev, status: 'error', error: '脚本生成失败，请重试' } : prev);
+          },
         },
         agentAbortRef.current.signal,
       );
     } catch (err) {
-      console.error('Animation CUI failed:', err);
+      console.error('Animation prompt failed:', err);
+      setAnimationState(prev => prev ? { ...prev, status: 'error', error: '脚本生成失败' } : prev);
     } finally {
       setIsAgentActive(false);
+      animPromptInFlightRef.current = false;
     }
-  }, [projectId, addMessage, setViewMode]);
+  }, [projectId, animationState?.imageUrls, onSaveMessage]);
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
@@ -1172,7 +1217,9 @@ export default function Editor({
       messageId: assistantMsg.id,
     };
     setSnapshots((prev) => [...prev, newSnapshot]);
-    onSaveSnapshot?.(newSnapshot, snapshots.length);
+    onSaveSnapshot?.(newSnapshot, snapshots.length, (url) => {
+      setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+    });
     cacheImage(`snap:${snapId}`, newSnapshot.image);
 
     // Clear draft and jump to the newly committed snapshot (appended at end)
@@ -1331,7 +1378,9 @@ export default function Editor({
       const newSnapshot: Snapshot = { id: snapId, image: base64!, tips: [], messageId: '', metadata };
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
-      onSaveSnapshot?.(newSnapshot, 0);
+      onSaveSnapshot?.(newSnapshot, 0, (url) => {
+        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+      });
       cacheImage(`snap:${snapId}`, base64!);
       // Only start tips if not already started (HEIC path)
       if (!tipsStarted) {
@@ -1371,13 +1420,42 @@ export default function Editor({
       snapshotsRef.current = [newSnapshot];
       prevTimelineLen.current = 1;
       setViewIndex(0);
-      onSaveSnapshot?.(newSnapshot, 0);
+      onSaveSnapshot?.(newSnapshot, 0, (url) => {
+        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+      });
       cacheImage(`snap:${snapId}`, pendingImage);
       fetchTipsForSnapshot(snapId, pendingImage);
       // Auto-analyze the uploaded photo
       runAutoAnalysis(snapId, pendingImage);
     }
   }, [pendingImage, pendingMetadata, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
+
+  // Pick up late-arriving initialAnimation (from Supabase fetch after cache-init)
+  const animationInitRef = useRef(!!initialAnimation);
+  useEffect(() => {
+    if (animationInitRef.current || !initialAnimation) return;
+    animationInitRef.current = true;
+    if (initialAnimation.status === 'completed' && initialAnimation.videoUrl) {
+      setAnimationState({
+        imageUrls: initialAnimation.snapshotUrls,
+        prompt: initialAnimation.prompt,
+        taskId: null,
+        videoUrl: initialAnimation.videoUrl,
+        status: 'done',
+        error: null, duration: 10, pollSeconds: 0,
+      });
+    } else if (initialAnimation.status === 'processing' && initialAnimation.taskId) {
+      setAnimationState({
+        imageUrls: initialAnimation.snapshotUrls,
+        prompt: initialAnimation.prompt,
+        taskId: initialAnimation.taskId,
+        videoUrl: null,
+        status: 'polling',
+        error: null, duration: 10, pollSeconds: 0,
+      });
+      setShowAnimateSheet(true);
+    }
+  }, [initialAnimation]);
 
   // Auto-name existing projects that still have a default title (runs once on mount)
   useEffect(() => {
@@ -1443,24 +1521,92 @@ export default function Editor({
   }, [snapshots, tipsSourceIndex, isTipsFetching, triggerPreviewsReadyNotification]);
 
 
+  // When animationState transitions to 'done' (video completed), add a CUI message with the video
+  const prevAnimStatusRef = useRef(animationState?.status);
+  useEffect(() => {
+    const prev = prevAnimStatusRef.current;
+    const curr = animationState?.status;
+    prevAnimStatusRef.current = curr;
+    if (prev && prev !== 'done' && curr === 'done' && animationState?.videoUrl) {
+      // Check if a video message already exists (from handleAnimationCUI polling)
+      const alreadyHasVideo = messages.some(m => m.content?.includes('.mp4'));
+      if (!alreadyHasVideo) {
+        const videoMsg: Message = {
+          id: generateId(),
+          role: 'assistant',
+          content: `🎬 视频生成完成！\n${animationState.videoUrl}`,
+          timestamp: Date.now(),
+        };
+        setMessages(prev => [...prev, videoMsg]);
+        onSaveMessage?.(videoMsg);
+        setAgentStatus('视频已生成');
+      }
+      // Auto-navigate to the video timeline entry
+      // timeline length will increase by 1 (video sentinel added), so new last index
+      const newVideoIdx = snapshotsRef.current.length + (draftParentIndexRef.current !== null ? 1 : 0);
+      setViewIndex(newVideoIdx);
+    }
+  }, [animationState?.status, animationState?.videoUrl, messages, onSaveMessage]);
+
+  // Update StatusBar with video rendering progress
+  useEffect(() => {
+    if (animationState?.status === 'polling') {
+      const m = Math.floor(animationState.pollSeconds / 60);
+      const s = animationState.pollSeconds % 60;
+      setAgentStatus(`视频渲染中 ${m}:${s.toString().padStart(2, '0')}`);
+    } else if (animationState?.status === 'submitting') {
+      setAgentStatus('提交视频任务...');
+    } else if (animationState?.status === 'generating_prompt') {
+      setAgentStatus('正在写视频脚本...');
+    }
+  }, [animationState?.status, animationState?.pollSeconds]);
+
   const handleDownload = useCallback(async () => {
+    // Video download — proxy through our API to avoid CORS
+    if (isViewingVideo && animationState?.videoUrl) {
+      const videoSrc = animationState.videoUrl;
+      const filename = `makaron-video-${Date.now()}.mp4`;
+      const prevStatus = agentStatus;
+      setAgentStatus('准备视频下载中...');
+      try {
+        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}`;
+        const res = await fetch(proxyUrl);
+        const blob = await res.blob();
+        if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+          const file = new File([blob], filename, { type: 'video/mp4' });
+          await navigator.share({ files: [file] });
+          setAgentStatus(prevStatus);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+        setAgentStatus(prevStatus);
+      } catch {
+        setAgentStatus(prevStatus);
+        window.open(videoSrc, '_blank');
+      }
+      return;
+    }
+
+    // Image download
     const img = timeline[viewIndex];
     if (!img) return;
     const filename = `ai-edited-${Date.now()}.jpg`;
 
-    // Convert base64 data URL to Blob
     try {
       const res = await fetch(img);
       const blob = await res.blob();
 
-      // Use Web Share API on mobile for Camera Roll access
       if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
         const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
         await navigator.share({ files: [file] });
         return;
       }
 
-      // Desktop fallback: download link
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1468,13 +1614,12 @@ export default function Editor({
       link.click();
       URL.revokeObjectURL(url);
     } catch {
-      // Final fallback
       const link = document.createElement('a');
       link.href = img;
       link.download = filename;
       link.click();
     }
-  }, [timeline, viewIndex]);
+  }, [timeline, viewIndex, isViewingVideo, animationState?.videoUrl]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string) => {
@@ -1574,7 +1719,33 @@ export default function Editor({
                 draftTimelineIndex={draftParentIndex !== null ? draftParentIndex + 1 : undefined}
                 onDismissDraft={dismissDraft}
                 previousImage={previousImage}
-                onAnimate={snapshots.length >= 3 ? () => setShowAnimateSheet(true) : undefined}
+                onAnimate={snapshots.length >= 3 ? () => {
+                  if (hasVideo) {
+                    // Video exists — navigate to it
+                    setViewIndex(videoTimelineIndex);
+                    return;
+                  }
+                  if (!animationState) {
+                    const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+                    const imageUrls = allUrls.length <= 4
+                      ? allUrls
+                      : [0, 1, Math.floor(allUrls.length / 2), allUrls.length - 1].map(i => allUrls[i]);
+                    setAnimationState({
+                      imageUrls,
+                      prompt: '',
+                      taskId: null,
+                      videoUrl: null,
+                      status: 'idle',
+                      error: null,
+                      duration: 10,
+                      pollSeconds: 0,
+                    });
+                  }
+                  setShowAnimateSheet(true);
+                } : undefined}
+                hasVideo={hasVideo}
+                isVideoEntry={isViewingVideo}
+                videoUrl={animationState?.videoUrl}
               />
             )}
 
@@ -1603,7 +1774,7 @@ export default function Editor({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {(viewIndex > 0 || isViewingDraft) && (
+                  {(viewIndex > 0 || isViewingDraft || isViewingVideo) && (
                     <button
                       onClick={handleDownload}
                       className="px-3 py-1.5 rounded-full text-xs font-medium text-white bg-fuchsia-500/20 backdrop-blur-sm border border-fuchsia-500/30"
@@ -1700,13 +1871,23 @@ export default function Editor({
         </div>
       )}
 
-      {/* Animate Sheet */}
-      {showAnimateSheet && projectId && (
+      {/* Animate Sheet — bottom sheet card (no backdrop) */}
+      {(showAnimateSheet || isViewingVideo) && viewMode === 'gui' && animationState && projectId && (
         <AnimateSheet
           snapshots={snapshots.filter(s => s.imageUrl || s.image)}
           projectId={projectId}
-          onClose={() => setShowAnimateSheet(false)}
-          onOpenCUIWithAnimation={handleAnimationCUI}
+          onClose={() => {
+            setShowAnimateSheet(false);
+            // If viewing video entry, navigate back to last snapshot
+            if (isViewingVideo) {
+              const lastSnapIdx = videoTimelineIndex - 1;
+              if (lastSnapIdx >= 0) setViewIndex(lastSnapIdx);
+            }
+          }}
+          onOpenCUI={() => setViewMode('cui')}
+          onGeneratePrompt={generateAnimationPrompt}
+          animationState={animationState}
+          onStateChange={(update) => setAnimationState(prev => prev ? { ...prev, ...update } : prev)}
         />
       )}
     </div>

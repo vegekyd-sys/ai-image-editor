@@ -218,7 +218,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[] },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[] },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -252,12 +252,30 @@ export async function* runMakaronAgent(
       ? { generate_animation: allTools.generate_animation, analyze_image: allTools.analyze_image }
       : allTools;
 
+  // Build user message content — animation mode includes all snapshot images as visual content
+  const animImages = options?.animationImages;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let userContent: any;
+  if (animImages?.length && !analysisOnly && !tipReactionOnly) {
+    // Multi-image user message: text + all snapshot images
+    userContent = [
+      { type: 'text' as const, text: prompt },
+      ...animImages.map((img: string) =>
+        img.startsWith('data:')
+          ? { type: 'image' as const, image: img }
+          : { type: 'image' as const, image: new URL(img) }
+      ),
+    ];
+  } else {
+    userContent = analysisOnly ? analysisPrompt : prompt;
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = (streamText as any)({
       model: MODEL,
       system: getAgentSystemPrompt(),
-      messages: [{ role: 'user', content: analysisOnly ? analysisPrompt : prompt }],
+      messages: [{ role: 'user', content: userContent }],
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),

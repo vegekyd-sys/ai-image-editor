@@ -2,6 +2,8 @@
 
 import { useRef, useState, useCallback } from 'react';
 
+const VIDEO_SENTINEL = '__VIDEO__';
+
 interface ImageCanvasProps {
   timeline: string[];
   currentIndex: number;
@@ -12,11 +14,15 @@ interface ImageCanvasProps {
   onDismissDraft?: () => void;
   previousImage?: string;
   onAnimate?: () => void;
+  hasVideo?: boolean;
+  isVideoEntry?: boolean;
+  videoUrl?: string | null;
 }
 
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
+  hasVideo, isVideoEntry, videoUrl,
 }: ImageCanvasProps) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -41,6 +47,10 @@ export default function ImageCanvas({
   // Image loading state
   const [imageLoaded, setImageLoaded] = useState(false);
 
+  // Video playback state
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoPlaying, setVideoPlaying] = useState(false);
+
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
 
@@ -57,6 +67,8 @@ export default function ImageCanvas({
     if (translate.x !== 0 || translate.y !== 0) setTranslate({ x: 0, y: 0 });
     // Only reset loading if source actually changed (avoids flicker on re-render)
     if (prevSrc !== currentSrc) setImageLoaded(false);
+    // Reset video state when navigating away
+    if (videoPlaying) setVideoPlaying(false);
   }
 
   const clearLongPress = useCallback(() => {
@@ -68,7 +80,8 @@ export default function ImageCanvas({
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
-      // Pinch start
+      // Pinch start — skip for video entry
+      if (isVideoEntry) return;
       clearLongPress();
       isPinching.current = true;
       swiping.current = false;
@@ -83,8 +96,8 @@ export default function ImageCanvas({
     touchStartX.current = touch.clientX;
     touchStartY.current = touch.clientY;
 
-    if (scale > 1) {
-      // Pan mode when zoomed
+    if (!isVideoEntry && scale > 1) {
+      // Pan mode when zoomed (not for video)
       isPanning.current = true;
       lastPanPos.current = { x: touch.clientX, y: touch.clientY };
       swiping.current = false;
@@ -93,15 +106,15 @@ export default function ImageCanvas({
       swiping.current = true;
     }
 
-    // Long press detection
-    if (previousImage) {
+    // Long press detection — skip for video entry
+    if (previousImage && !isVideoEntry) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2 && isPinching.current) {
@@ -230,6 +243,8 @@ export default function ImageCanvas({
   }, [currentIndex, onIndexChange]);
 
   const getLabel = (index: number) => {
+    // Video entry
+    if (timeline[index] === VIDEO_SENTINEL) return 'Video';
     if (index === 0) return 'Original';
     // isDraft=true means we're currently viewing the draft slot
     if (isDraft) return 'Draft';
@@ -264,31 +279,73 @@ export default function ImageCanvas({
       {/* Zoom wrapper */}
       <div
         className="w-full h-full"
-        style={scale > 1 ? {
+        style={!isVideoEntry && scale > 1 ? {
           transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
           transformOrigin: 'center center',
         } : undefined}
       >
         {/* Grey placeholder while loading */}
-        {!imageLoaded && (
+        {!isVideoEntry && !imageLoaded && (
           <div className="absolute inset-0 bg-zinc-900 animate-pulse" />
         )}
-        {/* Image */}
-        <img
-          src={displayImage}
-          alt="preview"
-          className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
-            animDir === 'left' ? 'opacity-0 -translate-x-8' :
-            animDir === 'right' ? 'opacity-0 translate-x-8' :
-            imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
-          }`}
-          draggable={false}
-          onLoad={() => setImageLoaded(true)}
-        />
+
+        {/* Video entry */}
+        {isVideoEntry && videoUrl ? (
+          <div className="relative w-full h-full flex items-center justify-center">
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              playsInline
+              preload="auto"
+              poster={(() => { const prev = timeline[timeline.length - 2]; return prev && prev !== '__VIDEO__' ? prev : undefined; })()}
+              className={`w-full h-full object-contain select-none pointer-events-auto transition-all duration-150 ${
+                animDir === 'left' ? 'opacity-0 -translate-x-8' :
+                animDir === 'right' ? 'opacity-0 translate-x-8' :
+                'opacity-100 translate-x-0'
+              }`}
+              onPlay={() => setVideoPlaying(true)}
+              onPause={() => setVideoPlaying(false)}
+              onEnded={() => setVideoPlaying(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (videoPlaying) {
+                  videoRef.current?.pause();
+                }
+              }}
+            />
+            {/* Play button overlay */}
+            {!videoPlaying && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  videoRef.current?.play();
+                }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center z-10 active:scale-95 transition-transform"
+              >
+                <svg width="22" height="22" viewBox="0 0 10 10" fill="white">
+                  <polygon points="3,1 9,5 3,9" />
+                </svg>
+              </button>
+            )}
+          </div>
+        ) : (
+          /* Image */
+          <img
+            src={displayImage}
+            alt="preview"
+            className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
+              animDir === 'left' ? 'opacity-0 -translate-x-8' :
+              animDir === 'right' ? 'opacity-0 translate-x-8' :
+              imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
+            }`}
+            draggable={false}
+            onLoad={() => setImageLoaded(true)}
+          />
+        )}
       </div>
 
-      {/* Before badge (long press compare) */}
-      {isComparing && (
+      {/* Before badge (long press compare) — not for video */}
+      {isComparing && !isVideoEntry && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10">
           <span className="text-white text-xs font-medium bg-blue-600/80 backdrop-blur-sm rounded-full px-3 py-1.5">
             Before
@@ -300,23 +357,38 @@ export default function ImageCanvas({
       {timeline.length > 1 && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-3 z-10">
           <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5">
-            {timeline.map((_, i) => (
+            {timeline.map((entry, i) => {
+              // Skip the video sentinel in dot rendering — it has its own dot below
+              if (entry === VIDEO_SENTINEL) return null;
+              return (
+                <button
+                  key={i}
+                  onClick={() => goTo(i)}
+                  className={`rounded-full transition-all ${
+                    i === currentIndex
+                      ? 'w-5 h-2 bg-white'
+                      : 'w-2 h-2 bg-white/40'
+                  }`}
+                />
+              );
+            })}
+            {/* Animate button — right side of timeline dots */}
+            {onAnimate && !isDraft && (
               <button
-                key={i}
-                onClick={() => goTo(i)}
-                className={`rounded-full transition-all ${
-                  i === currentIndex
-                    ? 'w-5 h-2 bg-white'
-                    : 'w-2 h-2 bg-white/40'
-                }`}
-              />
-            ))}
-            {/* Animate button: visible when 3+ snapshots and no draft */}
-            {onAnimate && timeline.length >= 3 && !isDraft && (
-              <button
-                onClick={onAnimate}
+                onClick={() => {
+                  if (hasVideo) {
+                    const videoIdx = timeline.indexOf(VIDEO_SENTINEL);
+                    if (videoIdx >= 0) goTo(videoIdx);
+                  } else {
+                    onAnimate();
+                  }
+                }}
                 title="生成视频"
-                className="ml-1 w-6 h-6 rounded-full bg-fuchsia-500/80 hover:bg-fuchsia-500 flex items-center justify-center transition-colors"
+                className={`ml-1 w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
+                  isVideoEntry
+                    ? 'bg-fuchsia-500'
+                    : 'bg-fuchsia-500/80 hover:bg-fuchsia-500'
+                }`}
                 style={{ flexShrink: 0 }}
               >
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="white">

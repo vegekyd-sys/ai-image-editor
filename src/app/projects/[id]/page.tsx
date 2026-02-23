@@ -31,6 +31,7 @@ export default function ProjectPage() {
     const sync = getCachedProjectDataSync(projectId)
     return sync ? sync.title : '未命名'
   })
+  const [initialAnimation, setInitialAnimation] = useState<{ videoUrl: string | null; prompt: string; snapshotUrls: string[]; taskId?: string; status: 'completed' | 'processing' } | null>(null)
   const [pendingImage] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     const pending = sessionStorage.getItem('pendingImage')
@@ -105,10 +106,15 @@ export default function ProjectPage() {
     if (!user || !projectId) return
     let cancelled = false
 
-    loadProject().then(async ({ snapshots, messages, title }) => {
+    loadProject().then(async ({ snapshots, messages, title, latestAnimation }) => {
       if (cancelled) return
       // Always update project cache with fresh Supabase data
       cacheProjectData(projectId, snapshots, messages, title)
+
+      // Always set animation data (even if already showing from cache)
+      if (latestAnimation) {
+        setInitialAnimation(latestAnimation)
+      }
 
       if (shownRef.current) {
         // Already showing from cache — background refresh done, cover update only
@@ -146,8 +152,8 @@ export default function ProjectPage() {
     return () => { cancelled = true }
   }, [user, projectId, loadProject, updateCover])
 
-  const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number) => {
-    saveSnapshot(snapshot, sortOrder)
+  const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
+    saveSnapshot(snapshot, sortOrder, onUploaded)
   }, [saveSnapshot])
 
   const handleSaveMessage = useCallback((message: Message) => {
@@ -219,6 +225,7 @@ export default function ProjectPage() {
       onRenameProject={updateTitle}
       onBack={() => router.push('/projects')}
       onNewProject={handleNewProject}
+      initialAnimation={initialAnimation}
     />
     </div>
   )

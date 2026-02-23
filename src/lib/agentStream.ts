@@ -19,6 +19,7 @@ export async function streamAgent(
     originalImage?: string;
     referenceImages?: string[];  // up to 3 user-uploaded reference images
     animationImageUrls?: string[];  // Supabase Storage URLs for animation mode
+    animationImages?: string[];  // Actual image data (base64 or URL) for Agent vision in animation mode
     analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit';
     tipReaction?: boolean; committedTip?: object; currentTips?: object[];
     tipsTeaser?: boolean; tipsPayload?: object[];
