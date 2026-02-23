@@ -10,12 +10,13 @@ interface AnimateSheetProps {
   onClose: () => void;
   onOpenCUI?: () => void;
   onGeneratePrompt?: () => void;
+  onAbandon?: () => void;
   animationState: AnimationState;
   onStateChange: (update: Partial<AnimationState>) => void;
 }
 
 export default function AnimateSheet({
-  snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt,
+  snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt, onAbandon,
   animationState, onStateChange,
 }: AnimateSheetProps) {
   const { prompt, status, taskId, videoUrl, error, duration, pollSeconds, imageUrls } = animationState;
@@ -75,7 +76,11 @@ export default function AnimateSheet({
       onStateChange({ taskId: json.taskId, status: 'polling', pollSeconds: 0 });
       startPolling(json.taskId);
     } catch (err) {
-      onStateChange({ error: String(err), status: 'error' });
+      const raw = String(err);
+      const friendly = raw.includes('523') || raw.includes('unreachable') ? '视频服务暂时不可用，请稍后重试'
+        : raw.includes('500') || raw.includes('502') || raw.includes('503') ? '视频服务出错，请稍后重试'
+        : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
+      onStateChange({ error: friendly, status: 'error' });
     }
   }, [prompt, projectId, imageUrls, duration, onStateChange, startPolling]);
 
@@ -264,7 +269,7 @@ export default function AnimateSheet({
               borderRadius: 12, padding: '14px',
               textAlign: 'center',
             }}>
-              <div style={{ color: '#d946ef', fontWeight: 600, marginBottom: 4, fontSize: '0.88rem' }}>🎬 渲染中...</div>
+              <div style={{ color: '#d946ef', fontWeight: 600, marginBottom: 4, fontSize: '0.88rem' }}>渲染中...</div>
               <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.78rem' }}>
                 已等待 {formatTime(pollSeconds)}，约需 3-5 分钟
               </div>
@@ -278,6 +283,17 @@ export default function AnimateSheet({
                   transition: 'width 1s linear',
                 }} />
               </div>
+              <button
+                onClick={onAbandon}
+                style={{
+                  marginTop: 12, padding: '8px 20px',
+                  background: 'none', border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 10, color: 'rgba(255,255,255,0.4)',
+                  fontSize: '0.78rem', cursor: 'pointer',
+                }}
+              >
+                放弃
+              </button>
             </div>
           )}
 

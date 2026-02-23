@@ -14,6 +14,7 @@ interface ProjectWithSnapshots {
   updated_at: string
   created_at: string
   snapshots: { id: string; image_url: string; sort_order: number }[]
+  hasVideo?: boolean
 }
 
 function compressClientSide(file: File, maxSize = 2048, quality = 0.92): Promise<string> {
@@ -194,8 +195,24 @@ export default function ProjectsPage() {
 
         if (cancelled) return
 
+        // Fetch which projects have completed videos
+        const projectIds = projectRows.map(p => p.id)
+        const videoProjectIds = new Set<string>()
+        if (projectIds.length > 0) {
+          const { data: animRows } = await supabase
+            .from('project_animations')
+            .select('project_id')
+            .in('project_id', projectIds)
+            .eq('status', 'completed')
+          if (animRows) {
+            for (const row of animRows) videoProjectIds.add(row.project_id)
+          }
+        }
+
+        if (cancelled) return
+
         const result: ProjectWithSnapshots[] = projectRows
-          .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [] }))
+          .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [], hasVideo: videoProjectIds.has(p.id) }))
           .filter((p) => p.snapshots.length > 0)
 
         // Patch missing image_urls from IndexedDB cache (upload may not have completed)
@@ -717,7 +734,6 @@ function ProjectCard({
           userSelect: 'none',
           WebkitUserSelect: 'none',
         }}
-        loading="lazy"
         onLoad={() => setLoaded(true)}
       />
 
@@ -735,19 +751,60 @@ function ProjectCard({
         pointerEvents: 'none',
       }}>
         <div style={{
-          fontSize: '0.82rem', fontWeight: 500, color: '#fff',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          lineHeight: 1.3,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '6px',
         }}>
-          {project.title}
+          <div style={{
+            fontSize: '0.82rem', fontWeight: 500, color: '#fff',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            lineHeight: 1.3, flex: 1, minWidth: 0,
+          }}>
+            {project.title}
+          </div>
+          <div style={{
+            fontSize: '0.62rem',
+            color: 'rgba(255,255,255,0.45)',
+            flexShrink: 0,
+          }}>
+            {timeAgo(project.updated_at)}
+          </div>
         </div>
-        <div style={{
-          marginTop: '2px',
-          fontSize: '0.62rem',
-          color: 'rgba(255,255,255,0.45)',
-        }}>
-          {timeAgo(project.updated_at)}
-        </div>
+        {/* Badges row */}
+        {(project.snapshots.length > 1 || project.hasVideo) && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            marginTop: '5px',
+          }}>
+            {project.snapshots.length > 1 && (
+              <span style={{
+                background: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(4px)',
+                borderRadius: '6px',
+                padding: '2px 6px',
+                fontSize: '0.68rem',
+                fontWeight: 500,
+                color: 'rgba(255,255,255,0.8)',
+              }}>
+                {project.snapshots.length} snaps
+              </span>
+            )}
+            {project.hasVideo && (
+              <span style={{
+                background: 'rgba(217,70,239,0.4)',
+                backdropFilter: 'blur(4px)',
+                borderRadius: '6px',
+                padding: '2px 6px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+              }}>
+                <svg width="8" height="8" viewBox="0 0 10 10" fill="white">
+                  <polygon points="3,1.5 8.5,5 3,8.5" />
+                </svg>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Top-right more button */}

@@ -1897,6 +1897,16 @@ export default function Editor({
           }}
           onOpenCUI={() => setViewMode('cui')}
           onGeneratePrompt={generateAnimationPrompt}
+          onAbandon={() => {
+            // Stop polling, mark as abandoned in DB, reset to ready (keep prompt)
+            const tid = animationState?.taskId;
+            setAnimationState(prev => prev ? { ...prev, status: 'ready', taskId: null, pollSeconds: 0 } : prev);
+            setAgentStatus(AGENT_GREETING);
+            if (tid && projectId) {
+              // Fire-and-forget: mark abandoned in DB
+              fetch(`/api/animate/${tid}`, { method: 'DELETE' }).catch(() => {});
+            }
+          }}
           animationState={animationState}
           onStateChange={(update) => setAnimationState(prev => prev ? { ...prev, ...update } : prev)}
         />

@@ -38,3 +38,25 @@ export async function GET(
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ taskId: string }> }
+) {
+  try {
+    const supabase = await createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { taskId } = await params
+    await supabase
+      .from('project_animations')
+      .update({ status: 'abandoned' })
+      .eq('piapi_task_id', taskId)
+
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('animate DELETE error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
