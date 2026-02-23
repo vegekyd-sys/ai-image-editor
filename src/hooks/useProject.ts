@@ -107,7 +107,7 @@ export function useProject(projectId: string, userId: string) {
         }
 
         if (!imageUrl) {
-          console.error('Failed to upload snapshot image')
+          console.warn('Failed to upload snapshot image')
           return
         }
 
@@ -121,9 +121,9 @@ export function useProject(projectId: string, userId: string) {
           sort_order: sortOrder,
         }, { onConflict: 'id' })
 
-        if (error) console.error('saveSnapshot error:', error)
+        if (error) console.warn('saveSnapshot error:', error)
       } catch (err) {
-        console.error('saveSnapshot error:', err)
+        console.warn('saveSnapshot error:', err)
       }
     })
   }, [projectId, userId])
@@ -139,9 +139,9 @@ export function useProject(projectId: string, userId: string) {
           content: message.content,
           has_image: !!message.image,
         }, { onConflict: 'id' })
-        if (error) console.error('saveMessage error:', error)
+        if (error) console.warn('saveMessage error:', error)
       } catch (err) {
-        console.error('saveMessage error:', err)
+        console.warn('saveMessage error:', err)
       }
     })
   }, [projectId])
@@ -193,9 +193,9 @@ export function useProject(projectId: string, userId: string) {
           .from('snapshots')
           .update({ tips: tipsForDb })
           .eq('id', snapshotId)
-        if (error) console.error('updateTips error:', error)
+        if (error) console.warn('updateTips error:', error)
       } catch (err) {
-        console.error('updateTips error:', err)
+        console.warn('updateTips error:', err)
       }
     })
   }, [projectId, userId])
@@ -208,9 +208,9 @@ export function useProject(projectId: string, userId: string) {
           .from('projects')
           .update({ cover_url: imageUrl, updated_at: new Date().toISOString() })
           .eq('id', projectId)
-        if (error) console.error('updateCover error:', error)
+        if (error) console.warn('updateCover error:', error)
       } catch (err) {
-        console.error('updateCover error:', err)
+        console.warn('updateCover error:', err)
       }
     })
   }, [projectId])
@@ -223,9 +223,9 @@ export function useProject(projectId: string, userId: string) {
           .from('snapshots')
           .update({ description })
           .eq('id', snapshotId)
-        if (error) console.error('updateDescription error:', error)
+        if (error) console.warn('updateDescription error:', error)
       } catch (err) {
-        console.error('updateDescription error:', err)
+        console.warn('updateDescription error:', err)
       }
     })
   }, [projectId])
@@ -238,9 +238,9 @@ export function useProject(projectId: string, userId: string) {
           .from('projects')
           .update({ title, updated_at: new Date().toISOString() })
           .eq('id', projectId)
-        if (error) console.error('updateTitle error:', error)
+        if (error) console.warn('updateTitle error:', error)
       } catch (err) {
-        console.error('updateTitle error:', err)
+        console.warn('updateTitle error:', err)
       }
     })
   }, [projectId])
