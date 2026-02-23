@@ -302,12 +302,14 @@ export default function ProjectsPage() {
           cursor: pointer;
           touch-action: manipulation;
           -webkit-tap-highlight-color: transparent;
-          transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.15s;
           user-select: none;
           -webkit-user-select: none;
         }
-        .mkr-card:hover  { transform: scale(0.98); }
-        .mkr-card:active { transform: scale(0.94); opacity: 0.85; }
+        .mkr-card img {
+          transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+          transform-origin: center;
+        }
+        .mkr-card:active img { transform: scale(0.88); }
 
         .mkr-new-btn {
           touch-action: manipulation;
