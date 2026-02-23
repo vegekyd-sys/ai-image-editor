@@ -3,11 +3,11 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
 import { useRouter, useParams } from 'next/navigation'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Snapshot, Message, Tip, PhotoMetadata } from '@/types'
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
-import { getCachedImages } from '@/lib/imageCache'
+import { getCachedImages, getCachedProjectData, cacheProjectData } from '@/lib/imageCache'
 
 export default function ProjectPage() {
   const { user, loading: authLoading } = useAuth()
@@ -34,6 +34,8 @@ export default function ProjectPage() {
     return undefined
   })
   const [loaded, setLoaded] = useState(false)
+  // Tracks whether we've already shown content (cache or Supabase) to avoid double-set
+  const shownRef = useRef(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -41,52 +43,94 @@ export default function ProjectPage() {
     }
   }, [user, authLoading, router])
 
-  // Load project data on mount
+  // Helper: patch missing images from IndexedDB image cache
+  async function patchFromImageCache(snapshots: Snapshot[]): Promise<Snapshot[]> {
+    const keys: string[] = []
+    for (const s of snapshots) {
+      if (!s.image) keys.push(`snap:${s.id}`)
+      for (const t of s.tips) {
+        if (!t.previewImage && t.editPrompt) keys.push(`tip:${s.id}:${t.editPrompt}`)
+      }
+    }
+    if (keys.length === 0) return snapshots
+    const cacheMap = await getCachedImages(keys)
+    if (cacheMap.size === 0) return snapshots
+    return snapshots.map(s => ({
+      ...s,
+      image: s.image || (cacheMap.get(`snap:${s.id}`) ?? ''),
+      tips: s.tips.map(t => {
+        if (t.previewImage || !t.editPrompt) return t
+        const cached = cacheMap.get(`tip:${s.id}:${t.editPrompt}`)
+        return cached ? { ...t, previewImage: cached, previewStatus: 'done' as const } : t
+      }),
+    }))
+  }
+
+  // Effect 1: Load from project cache immediately (no auth dependency)
+  // This runs before Supabase fetch and shows Editor instantly on return visits
   useEffect(() => {
-    if (!user || !projectId || loaded) return
+    if (pendingImage) return  // New project flow: skip cache, use pendingImage directly
+    let cancelled = false
+    getCachedProjectData(projectId).then(async (cached) => {
+      if (!cached || cancelled || shownRef.current) return
+      const patched = await patchFromImageCache(cached.snapshots as Snapshot[])
+      if (cancelled || shownRef.current) return
+      shownRef.current = true
+      setInitialSnapshots(patched)
+      setInitialMessages(cached.messages as Message[])
+      setInitialTitle(cached.title)
+      setLoaded(true)
+    })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
+  // Effect 2: Fetch from Supabase (runs when user is available)
+  // If Effect 1 already showed data, this runs silently in background to update cache
+  useEffect(() => {
+    if (!user || !projectId) return
+    let cancelled = false
 
     loadProject().then(async ({ snapshots, messages, title }) => {
-      // Collect keys for missing images
-      const keys: string[] = []
-      for (const s of snapshots) {
-        if (!s.image) keys.push(`snap:${s.id}`)
-        for (const t of s.tips) {
-          if (!t.previewImage && t.editPrompt) keys.push(`tip:${s.id}:${t.editPrompt}`)
+      if (cancelled) return
+      // Always update project cache with fresh Supabase data
+      cacheProjectData(projectId, snapshots, messages, title)
+
+      if (shownRef.current) {
+        // Already showing from cache — background refresh done, cover update only
+        if (snapshots.length > 0 && snapshots[0].imageUrl) {
+          updateCover(snapshots[0].imageUrl)
         }
+        return
       }
 
-      let patchedSnapshots = snapshots
-      if (keys.length > 0) {
-        const cacheMap = await getCachedImages(keys)
-        if (cacheMap.size > 0) {
-          patchedSnapshots = snapshots.map(s => ({
-            ...s,
-            image: s.image || (cacheMap.get(`snap:${s.id}`) ?? ''),
-            tips: s.tips.map(t => {
-              if (t.previewImage || !t.editPrompt) return t
-              const cached = cacheMap.get(`tip:${s.id}:${t.editPrompt}`)
-              return cached ? { ...t, previewImage: cached, previewStatus: 'done' as const } : t
-            }),
-          }))
-        }
-      }
-
-      setInitialSnapshots(patchedSnapshots)
+      // Cache was empty or this won the race — show from Supabase
+      const patched = await patchFromImageCache(snapshots)
+      if (cancelled || shownRef.current) return
+      shownRef.current = true
+      setInitialSnapshots(patched)
       setInitialMessages(messages)
       setInitialTitle(title)
       setLoaded(true)
 
-      // Set cover from first snapshot if available
       if (snapshots.length > 0 && snapshots[0].imageUrl) {
         updateCover(snapshots[0].imageUrl)
       }
     }).catch((err) => {
+      if (cancelled) return
       console.error('Failed to load project:', err)
-      setInitialSnapshots([])
-      setInitialMessages([])
-      setLoaded(true)
+      if (!shownRef.current) {
+        // No cache + no network: show empty editor
+        shownRef.current = true
+        setInitialSnapshots([])
+        setInitialMessages([])
+        setLoaded(true)
+      }
+      // If cache already showed something, stay on it (offline mode)
     })
-  }, [user, projectId, loaded, loadProject, updateCover])
+
+    return () => { cancelled = true }
+  }, [user, projectId, loadProject, updateCover])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number) => {
     saveSnapshot(snapshot, sortOrder)
@@ -134,7 +178,7 @@ export default function ProjectPage() {
     }
   }, [user, router])
 
-  if (authLoading || !loaded) {
+  if (!loaded) {
     return (
       <div className="h-dvh bg-black flex items-center justify-center">
         <svg className="animate-spin h-6 w-6 text-fuchsia-500" viewBox="0 0 24 24">
@@ -144,8 +188,6 @@ export default function ProjectPage() {
       </div>
     )
   }
-
-  if (!user) return null
 
   return (
     <Editor
