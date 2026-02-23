@@ -25,8 +25,9 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // IMPORTANT: use getUser() not getSession() for JWT validation
-  const { data: { user } } = await supabase.auth.getUser()
+  // getSession() reads from cookie (no network call) — fast for middleware
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
 
   const { pathname } = request.nextUrl
 
