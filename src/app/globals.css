@@ -48,6 +48,15 @@ body {
   scrollbar-width: none;
 }
 
+/* Editor page slide-in from right */
+@keyframes page-slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.page-slide-in {
+  animation: page-slide-in 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
 /* Typing animation */
 @keyframes blink {
   0%, 100% { opacity: 1; }

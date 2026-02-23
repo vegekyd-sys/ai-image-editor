@@ -668,9 +668,9 @@ function ProjectCard({
           width: '100%', height: '100%',
           objectFit: 'cover',
           display: 'block',
+          pointerEvents: 'none',
           opacity: loaded ? 1 : 0,
           transition: 'opacity 0.3s',
-          pointerEvents: 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
         }}
