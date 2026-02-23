@@ -25,7 +25,11 @@ export default function AnimateSheet({ snapshots, projectId, onClose }: AnimateS
   const [videoFullscreen, setVideoFullscreen] = useState(false);
 
   // Only use Supabase Storage URLs (http) — base64 is too large for PiAPI
-  const imageUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+  // Cap at 4 images: evenly sampled from the timeline to stay within PiAPI limits
+  const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+  const imageUrls = allUrls.length <= 4
+    ? allUrls
+    : [0, 1, Math.floor(allUrls.length / 2), allUrls.length - 1].map(i => allUrls[i]);
 
   // Auto-generate prompt on open
   useEffect(() => {
