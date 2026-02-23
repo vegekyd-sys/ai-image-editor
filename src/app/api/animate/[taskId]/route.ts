@@ -10,7 +10,8 @@ export async function GET(
 ) {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const user = session?.user
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { taskId } = await params
