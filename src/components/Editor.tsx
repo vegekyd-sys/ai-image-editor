@@ -8,6 +8,7 @@ import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView from '@/components/AgentChatView';
 import { streamAgent } from '@/lib/agentStream';
 import { cacheImage } from '@/lib/imageCache';
+import AnimateSheet from '@/components/AnimateSheet';
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
@@ -174,6 +175,7 @@ export default function Editor({
   const [isTipsFetching, setIsTipsFetching] = useState(false);
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
+  const [showAnimateSheet, setShowAnimateSheet] = useState(false);
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
@@ -1477,6 +1479,7 @@ export default function Editor({
                 draftTimelineIndex={draftParentIndex !== null ? draftParentIndex + 1 : undefined}
                 onDismissDraft={dismissDraft}
                 previousImage={previousImage}
+                onAnimate={snapshots.length >= 3 ? () => setShowAnimateSheet(true) : undefined}
               />
             )}
 
@@ -1600,6 +1603,15 @@ export default function Editor({
             />
           )}
         </div>
+      )}
+
+      {/* Animate Sheet */}
+      {showAnimateSheet && projectId && (
+        <AnimateSheet
+          snapshots={snapshots.filter(s => s.imageUrl || s.image)}
+          projectId={projectId}
+          onClose={() => setShowAnimateSheet(false)}
+        />
       )}
     </div>
   );

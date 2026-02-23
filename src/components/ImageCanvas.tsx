@@ -11,11 +11,12 @@ interface ImageCanvasProps {
   draftTimelineIndex?: number;
   onDismissDraft?: () => void;
   previousImage?: string;
+  onAnimate?: () => void;
 }
 
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
-  isDraft, draftTimelineIndex, onDismissDraft, previousImage,
+  isDraft, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
 }: ImageCanvasProps) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -310,6 +311,19 @@ export default function ImageCanvas({
                 }`}
               />
             ))}
+            {/* Animate button: visible when 3+ snapshots and no draft */}
+            {onAnimate && timeline.length >= 3 && !isDraft && (
+              <button
+                onClick={onAnimate}
+                title="生成视频"
+                className="ml-1 w-6 h-6 rounded-full bg-fuchsia-500/80 hover:bg-fuchsia-500 flex items-center justify-center transition-colors"
+                style={{ flexShrink: 0 }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="white">
+                  <polygon points="3,2 8,5 3,8" />
+                </svg>
+              </button>
+            )}
           </div>
           <span className="text-white/80 text-xs font-medium bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5 whitespace-nowrap">
             {getLabel(currentIndex)}
