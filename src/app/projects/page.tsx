@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { getCachedImages } from '@/lib/imageCache'
+import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cacheProjectsList } from '@/lib/imageCache'
 
 interface ProjectWithSnapshots {
   id: string
@@ -54,22 +54,27 @@ function timeAgo(dateStr: string): string {
   return `${months}mo ago`
 }
 
-// Module-level cache — survives navigation, cleared on explicit refresh
-let _projectsCache: ProjectWithSnapshots[] | null = null
-
-export function invalidateProjectsCache() {
-  _projectsCache = null
-}
-
 export default function ProjectsPage() {
   const { user, loading: authLoading, signOut } = useAuth()
   const router = useRouter()
-  const [projects, setProjects] = useState<ProjectWithSnapshots[]>(_projectsCache ?? [])
-  const [loadingProjects, setLoadingProjects] = useState(_projectsCache === null)
+  // Phase 1: Synchronous memory cache — same-session instant render
+  const [projects, setProjects] = useState<ProjectWithSnapshots[]>(() => {
+    if (typeof window === 'undefined') return []
+    const userId = user?.id
+    if (!userId) return []
+    return (getCachedProjectsListSync(userId) as ProjectWithSnapshots[]) ?? []
+  })
+  const [loadingProjects, setLoadingProjects] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const userId = user?.id
+    if (!userId) return true
+    return getCachedProjectsListSync(userId) === null
+  })
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
+  const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
 
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
@@ -115,89 +120,119 @@ export default function ProjectsPage() {
     if (!authLoading && !user) router.replace('/login')
   }, [user, authLoading, router])
 
+  // Phase 2: Async IndexedDB cache (cross-session persistence, no auth dependency)
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    getCachedProjectsList(user.id).then((cached) => {
+      if (cancelled || shownRef.current || !cached) return
+      shownRef.current = true
+      setProjects(cached as ProjectWithSnapshots[])
+      setLoadingProjects(false)
+    })
+    return () => { cancelled = true }
+  }, [user])
+
+  // Phase 3: Supabase fetch (always runs when user is available, refreshes cache)
   useEffect(() => {
     if (!user) return
     const supabase = createClient()
-    const hasCache = _projectsCache !== null
+    let cancelled = false
 
     async function fetchProjects() {
-      const { data: projectRows, error: pErr } = await supabase
-        .from('projects')
-        .select('id, title, cover_url, updated_at, created_at')
-        .eq('user_id', user!.id)
-        .order('created_at', { ascending: false })
+      try {
+        const { data: projectRows, error: pErr } = await supabase
+          .from('projects')
+          .select('id, title, cover_url, updated_at, created_at')
+          .eq('user_id', user!.id)
+          .order('created_at', { ascending: false })
 
-      if (pErr || !projectRows) {
-        console.error('Failed to fetch projects:', pErr)
-        if (!hasCache) setLoadingProjects(false)
-        return
-      }
+        if (cancelled) return
 
-      if (projectRows.length === 0) {
-        _projectsCache = []
-        setProjects([])
+        if (pErr || !projectRows) {
+          console.error('Failed to fetch projects:', pErr)
+          if (!shownRef.current) setLoadingProjects(false)
+          return
+        }
+
+        if (projectRows.length === 0) {
+          cacheProjectsList(user!.id, [])
+          shownRef.current = true
+          setProjects([])
+          setLoadingProjects(false)
+          return
+        }
+
+        // Fetch all snapshots (incremental optimization based on current displayed projects)
+        const currentMap = new Map(projects.map(p => [p.id, p]))
+        const staleIds = projectRows
+          .filter(p => {
+            const cached = currentMap.get(p.id)
+            return !cached || cached.updated_at !== p.updated_at
+          })
+          .map(p => p.id)
+
+        const staleSet = new Set(staleIds)
+        const snapshotMap = new Map<string, { id: string; image_url: string; sort_order: number }[]>()
+        for (const [id, p] of currentMap) {
+          if (!staleSet.has(id)) snapshotMap.set(id, p.snapshots)
+        }
+
+        if (staleIds.length > 0) {
+          const { data: snapshotRows, error: sErr } = await supabase
+            .from('snapshots')
+            .select('id, project_id, image_url, sort_order')
+            .in('project_id', staleIds)
+            .order('sort_order', { ascending: true })
+          if (sErr) console.error('Failed to fetch snapshots:', sErr)
+          for (const s of snapshotRows ?? []) {
+            const list = snapshotMap.get(s.project_id) ?? []
+            list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
+            snapshotMap.set(s.project_id, list)
+          }
+        }
+
+        if (cancelled) return
+
+        const result: ProjectWithSnapshots[] = projectRows
+          .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [] }))
+          .filter((p) => p.snapshots.length > 0)
+
+        // Patch missing image_urls from IndexedDB cache (upload may not have completed)
+        const missingKeys = result.flatMap(p =>
+          p.snapshots.filter(s => !s.image_url).map(s => `snap:${s.id}`)
+        )
+        let displayResult = result
+        if (missingKeys.length > 0) {
+          const cacheMap = await getCachedImages(missingKeys)
+          if (cacheMap.size > 0) {
+            displayResult = result.map(p => ({
+              ...p,
+              snapshots: p.snapshots.map(s => {
+                const cached = !s.image_url ? cacheMap.get(`snap:${s.id}`) : undefined
+                return cached ? { ...s, image_url: cached } : s
+              }),
+            }))
+          }
+        }
+
+        if (cancelled) return
+        // Cache clean Supabase data (with URLs, no base64)
+        cacheProjectsList(user!.id, result)
+        shownRef.current = true
+        setProjects(displayResult)
         setLoadingProjects(false)
-        return
+      } catch (err) {
+        if (cancelled) return
+        console.error('Failed to fetch projects:', err)
+        // Offline: if cache already showed data, stay on it
+        if (!shownRef.current) setLoadingProjects(false)
       }
-
-      // Incremental: only fetch snapshots for projects whose updated_at changed
-      const cachedMap = new Map(_projectsCache?.map(p => [p.id, p]) ?? [])
-      const staleIds = projectRows
-        .filter(p => {
-          const cached = cachedMap.get(p.id)
-          return !cached || cached.updated_at !== p.updated_at
-        })
-        .map(p => p.id)
-
-      const staleSet = new Set(staleIds)
-      const snapshotMap = new Map<string, { id: string; image_url: string; sort_order: number }[]>()
-      // Carry over cached snapshots only for unchanged projects
-      for (const [id, p] of cachedMap) {
-        if (!staleSet.has(id)) snapshotMap.set(id, p.snapshots)
-      }
-
-      if (staleIds.length > 0) {
-        const { data: snapshotRows, error: sErr } = await supabase
-          .from('snapshots')
-          .select('id, project_id, image_url, sort_order')
-          .in('project_id', staleIds)
-          .order('sort_order', { ascending: true })
-        if (sErr) console.error('Failed to fetch snapshots:', sErr)
-        for (const s of snapshotRows ?? []) {
-          const list = snapshotMap.get(s.project_id) ?? []
-          list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
-          snapshotMap.set(s.project_id, list)
-        }
-      }
-
-      const result: ProjectWithSnapshots[] = projectRows
-        .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [] }))
-        .filter((p) => p.snapshots.length > 0)
-
-      // Patch missing image_urls from IndexedDB cache (upload may not have completed)
-      const missingKeys = result.flatMap(p =>
-        p.snapshots.filter(s => !s.image_url).map(s => `snap:${s.id}`)
-      )
-      let displayResult = result
-      if (missingKeys.length > 0) {
-        const cacheMap = await getCachedImages(missingKeys)
-        if (cacheMap.size > 0) {
-          displayResult = result.map(p => ({
-            ...p,
-            snapshots: p.snapshots.map(s => {
-              const cached = !s.image_url ? cacheMap.get(`snap:${s.id}`) : undefined
-              return cached ? { ...s, image_url: cached } : s
-            }),
-          }))
-        }
-      }
-
-      _projectsCache = result  // Keep clean (Supabase URLs only)
-      setProjects(displayResult)
-      setLoadingProjects(false)
     }
 
     fetchProjects()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   const handleCreateProject = useCallback(async (file: File) => {

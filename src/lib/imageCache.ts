@@ -1,6 +1,7 @@
 const DB_NAME = 'makaron-images'
 const STORE = 'images'
 const PROJECT_STORE = 'project-data'
+const PROJECTS_LIST_STORE = 'projects-list'
 const TTL_MS = 30 * 24 * 60 * 60 * 1000  // 30 days
 
 interface CacheEntry {
@@ -19,9 +20,17 @@ interface ProjectCacheEntry {
   cachedAt: number
 }
 
+interface ProjectsListCacheEntry {
+  userId: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  projects: any[]
+  cachedAt: number
+}
+
 // In-memory layer: synchronous, survives client-side navigation within the same tab session
 const memoryCache = new Map<string, string>()
 const projectMemCache = new Map<string, ProjectCacheEntry>()
+let projectsListMemCache: ProjectsListCacheEntry | null = null
 
 // IDB layer: persistent across tab close/reopen
 let dbPromise: Promise<IDBDatabase | null> | null = null
@@ -30,7 +39,7 @@ function getDB(): Promise<IDBDatabase | null> {
   if (typeof window === 'undefined') return Promise.resolve(null)
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 3)
+      const req = indexedDB.open(DB_NAME, 4)
       req.onupgradeneeded = () => {
         const db = req.result
         if (!db.objectStoreNames.contains(STORE)) {
@@ -38,6 +47,9 @@ function getDB(): Promise<IDBDatabase | null> {
         }
         if (!db.objectStoreNames.contains(PROJECT_STORE)) {
           db.createObjectStore(PROJECT_STORE, { keyPath: 'projectId' })
+        }
+        if (!db.objectStoreNames.contains(PROJECTS_LIST_STORE)) {
+          db.createObjectStore(PROJECTS_LIST_STORE, { keyPath: 'userId' })
         }
       }
       req.onsuccess = () => resolve(req.result)
@@ -172,4 +184,69 @@ async function writeProjectToIDB(entry: ProjectCacheEntry): Promise<void> {
   } catch {
     // IDB failures are non-critical
   }
+}
+
+// ── Projects List Cache (for /projects page) ──
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cacheProjectsList(userId: string, projects: any[]): void {
+  const entry: ProjectsListCacheEntry = { userId, projects, cachedAt: Date.now() }
+  projectsListMemCache = entry
+  void writeProjectsListToIDB(entry)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getCachedProjectsListSync(userId: string): any[] | null {
+  if (typeof window === 'undefined') return null
+  const mem = projectsListMemCache
+  if (mem && mem.userId === userId && Date.now() - mem.cachedAt < TTL_MS) {
+    return mem.projects
+  }
+  return null
+}
+
+export async function getCachedProjectsList(
+  userId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any[] | null> {
+  const mem = projectsListMemCache
+  if (mem && mem.userId === userId && Date.now() - mem.cachedAt < TTL_MS) {
+    return mem.projects
+  }
+
+  try {
+    const db = await getDB()
+    if (!db) return null
+    const entry = await new Promise<ProjectsListCacheEntry | null>((resolve) => {
+      const tx = db.transaction(PROJECTS_LIST_STORE, 'readonly')
+      const req = tx.objectStore(PROJECTS_LIST_STORE).get(userId)
+      req.onsuccess = () => resolve(req.result as ProjectsListCacheEntry | null ?? null)
+      req.onerror = () => resolve(null)
+    })
+    if (!entry || Date.now() - entry.cachedAt > TTL_MS) return null
+    projectsListMemCache = entry
+    return entry.projects
+  } catch {
+    return null
+  }
+}
+
+async function writeProjectsListToIDB(entry: ProjectsListCacheEntry): Promise<void> {
+  try {
+    const db = await getDB()
+    if (!db) return
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(PROJECTS_LIST_STORE, 'readwrite')
+      tx.objectStore(PROJECTS_LIST_STORE).put(entry)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch {
+    // IDB failures are non-critical
+  }
+}
+
+export function clearUserCache(): void {
+  projectsListMemCache = null
+  projectMemCache.clear()
 }

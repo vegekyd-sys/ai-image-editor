@@ -578,8 +578,23 @@ export default function AgentChatView({
                             td: ({ children }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
                           }}
                         >
-                          {fixMarkdownDelimiters(msg.content)}
+                          {fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, ''))}
                         </ReactMarkdown>
+                        {/* Inline video player for animation results */}
+                        {(() => {
+                          const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
+                          if (!mp4Match) return null;
+                          return (
+                            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden' }}>
+                              <video
+                                src={mp4Match[0]}
+                                controls
+                                playsInline
+                                style={{ width: '100%', display: 'block', maxHeight: 360, objectFit: 'contain', background: '#000' }}
+                              />
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
 

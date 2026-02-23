@@ -7,11 +7,13 @@ interface AnimateSheetProps {
   snapshots: Snapshot[];
   projectId: string;
   onClose: () => void;
+  /** Open CUI and trigger agent animation workflow */
+  onOpenCUIWithAnimation?: (imageUrls: string[]) => void;
 }
 
 type AnimateStatus = 'idle' | 'generating_prompt' | 'ready' | 'submitting' | 'polling' | 'done' | 'error';
 
-export default function AnimateSheet({ snapshots, projectId, onClose }: AnimateSheetProps) {
+export default function AnimateSheet({ snapshots, projectId, onClose, onOpenCUIWithAnimation }: AnimateSheetProps) {
   const [prompt, setPrompt] = useState('');
   const [status, setStatus] = useState<AnimateStatus>('idle');
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -210,18 +212,32 @@ export default function AnimateSheet({ snapshots, projectId, onClose }: AnimateS
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>✨ 视频故事</div>
-              {status === 'ready' && (
-                <button
-                  onClick={generatePrompt}
-                  style={{
-                    background: 'none', border: '1px solid rgba(217,70,239,0.4)',
-                    color: 'rgba(217,70,239,0.9)', borderRadius: 8, padding: '3px 10px',
-                    fontSize: '0.72rem', cursor: 'pointer',
-                  }}
-                >
-                  AI 重写
-                </button>
-              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                {onOpenCUIWithAnimation && (
+                  <button
+                    onClick={() => { onClose(); onOpenCUIWithAnimation(imageUrls); }}
+                    style={{
+                      background: 'none', border: '1px solid rgba(255,255,255,0.15)',
+                      color: 'rgba(255,255,255,0.5)', borderRadius: 8, padding: '3px 10px',
+                      fontSize: '0.72rem', cursor: 'pointer',
+                    }}
+                  >
+                    在 Chat 里看 ↗
+                  </button>
+                )}
+                {status === 'ready' && (
+                  <button
+                    onClick={generatePrompt}
+                    style={{
+                      background: 'none', border: '1px solid rgba(217,70,239,0.4)',
+                      color: 'rgba(217,70,239,0.9)', borderRadius: 8, padding: '3px 10px',
+                      fontSize: '0.72rem', cursor: 'pointer',
+                    }}
+                  >
+                    AI 重写
+                  </button>
+                )}
+              </div>
             </div>
             <textarea
               value={prompt}

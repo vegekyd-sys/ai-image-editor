@@ -3,6 +3,7 @@
 import { createContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User, SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
+import { clearUserCache } from '@/lib/imageCache'
 
 export interface AuthContextType {
   user: User | null
@@ -31,9 +32,23 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const supabase = getSupabase()
 
+    // Fast path: read session from cookie (no network)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
+
+      // Background validation: verify JWT is still valid
+      if (session?.user) {
+        supabase.auth.getUser().then(({ data: { user: validatedUser }, error }) => {
+          if (error || !validatedUser) {
+            // Session cookie exists but JWT is expired/invalid — force re-login
+            console.warn('[Auth] Session invalid, forcing re-login:', error?.message)
+            supabase.auth.signOut().then(() => {
+              window.location.href = '/login'
+            })
+          }
+        })
+      }
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -44,6 +59,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }, [])
 
   const signOut = useCallback(async () => {
+    clearUserCache()
     await getSupabase().auth.signOut()
     window.location.href = '/login'
   }, [])

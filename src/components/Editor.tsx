@@ -176,6 +176,8 @@ export default function Editor({
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
   const [showAnimateSheet, setShowAnimateSheet] = useState(false);
+  // Preserved across CUI turns so follow-up messages also have animationImageUrls
+  const currentAnimationUrlsRef = useRef<string[]>([]);
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
@@ -946,7 +948,7 @@ export default function Editor({
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
+        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(currentAnimationUrlsRef.current.length ? { animationImageUrls: currentAnimationUrlsRef.current } : {}) },
         {
           onStatus: (status) => setAgentStatus(status),
           onNewTurn: () => {
@@ -1052,6 +1054,99 @@ export default function Editor({
     }
   }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser]);
 
+  // ── Animation CUI mode: open CUI and trigger agent with animation context ──
+  const handleAnimationCUI = useCallback(async (imageUrls: string[]) => {
+    if (!projectId || !imageUrls.length) return;
+
+    // Preserve for follow-up CUI turns
+    currentAnimationUrlsRef.current = imageUrls;
+
+    const n = imageUrls.length;
+    const imageListText = imageUrls.map((_, i) => `@image_${i + 1}`).join('、');
+    const animationPrompt = `[视频动画模式] 为以下 ${n} 张照片创作视频故事脚本（图片引用：${imageListText}）。`;
+
+    const userMsgId = generateId();
+    const assistantMsgId = generateId();
+    setMessages((prev) => [
+      ...prev,
+      { id: userMsgId, role: 'user' as const, content: '✨ 帮我把这些照片做成一段视频', timestamp: Date.now() },
+      { id: assistantMsgId, role: 'assistant' as const, content: '', timestamp: Date.now() },
+    ]);
+
+    setViewMode('cui');
+    setIsAgentActive(true);
+    setAgentStatus('正在创作视频故事...');
+    agentAbortRef.current = new AbortController();
+    setShowAnimateSheet(false);
+
+    let currentMsgId = assistantMsgId;
+
+    // Use a placeholder image (first snapshot) for the agent context
+    const contextImage = snapshotsRef.current[0]?.image || snapshotsRef.current[0]?.imageUrl || '';
+    const imageBase64 = contextImage ? await ensureBase64(contextImage) : '';
+
+    try {
+      await streamAgent(
+        {
+          prompt: animationPrompt,
+          image: imageBase64,
+          projectId,
+          animationImageUrls: imageUrls,
+        },
+        {
+          onStatus: (s) => setAgentStatus(s),
+          onNewTurn: () => {
+            const newId = generateId();
+            currentMsgId = newId;
+            setMessages((prev) => [...prev, { id: newId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
+          },
+          onContent: (delta) => {
+            const id = currentMsgId;
+            setMessages((prev) => prev.map((m) => m.id === id ? { ...m, content: m.content + delta } : m));
+          },
+          onAnimationTask: (taskId) => {
+            // Clear animation context once task is started
+            currentAnimationUrlsRef.current = [];
+            // Store taskId in a message for reference, then poll
+            const id = currentMsgId;
+            setMessages((prev) => prev.map((m) => m.id === id ? { ...m, animationTaskId: taskId } : m));
+            // Poll for video completion
+            const poll = setInterval(async () => {
+              try {
+                const res = await fetch(`/api/animate/${taskId}`);
+                const data = await res.json();
+                if (data.status === 'completed' && data.videoUrl) {
+                  clearInterval(poll);
+                  // Add a new message with the video URL
+                  setMessages((prev) => [...prev, {
+                    id: generateId(),
+                    role: 'assistant' as const,
+                    content: `🎬 视频生成完成！\n${data.videoUrl}`,
+                    timestamp: Date.now(),
+                  }]);
+                  setAgentStatus('视频已生成');
+                } else if (data.status === 'failed') {
+                  clearInterval(poll);
+                  setMessages((prev) => [...prev, {
+                    id: generateId(),
+                    role: 'assistant' as const,
+                    content: '视频生成失败，请重试。',
+                    timestamp: Date.now(),
+                  }]);
+                }
+              } catch { /* ignore */ }
+            }, 10000);
+          },
+          onDone: () => { setAgentStatus('完成'); },
+        },
+        agentAbortRef.current.signal,
+      );
+    } catch (err) {
+      console.error('Animation CUI failed:', err);
+    } finally {
+      setIsAgentActive(false);
+    }
+  }, [projectId, addMessage, setViewMode]);
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
@@ -1611,6 +1706,7 @@ export default function Editor({
           snapshots={snapshots.filter(s => s.imageUrl || s.image)}
           projectId={projectId}
           onClose={() => setShowAnimateSheet(false)}
+          onOpenCUIWithAnimation={handleAnimationCUI}
         />
       )}
     </div>
