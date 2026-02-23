@@ -3,6 +3,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getCachedImages } from '@/lib/imageCache'
 
@@ -68,6 +69,7 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
+  const [navigating, setNavigating] = useState(false)
 
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
@@ -293,10 +295,10 @@ export default function ProjectsPage() {
         .mkr-handwrite { font-family: 'Caveat', cursive; }
 
         @keyframes mkr-in {
-          from { opacity: 0; transform: translateY(16px); }
-          to   { opacity: 1; transform: translateY(0); }
+          from { transform: translateY(12px); }
+          to   { transform: translateY(0); }
         }
-        .mkr-row-enter { animation: mkr-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .mkr-row-enter { animation: mkr-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
         .mkr-card {
           cursor: pointer;
@@ -306,10 +308,11 @@ export default function ProjectsPage() {
           -webkit-user-select: none;
         }
         .mkr-card img {
-          transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+          transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1);
           transform-origin: center;
         }
-        .mkr-card:active img { transform: scale(0.88); }
+        .mkr-card:active img,
+        .mkr-card:active .mkr-card-img { transform: scale(0.96); }
 
         .mkr-new-btn {
           touch-action: manipulation;
@@ -333,7 +336,7 @@ export default function ProjectsPage() {
         .mkr-more-btn:hover { opacity: 1 !important; }
       `}</style>
 
-      <div className="mkr-page" style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden' }}>
+      <div className={`mkr-page${navigating ? ' page-slide-out' : ''}`} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden' }}>
 
         {/* Ambient glow — center at 40% so top is black, fades to purple below */}
         <div style={{
@@ -507,8 +510,8 @@ export default function ProjectsPage() {
                   key={project.id}
                   project={project}
                   index={i}
-                  onClick={() => router.push(`/projects/${project.id}`)}
                   onMore={(e) => openActionSheet(e, project)}
+                  onNavigate={() => setNavigating(true)}
                 />
               ))}
             </div>
@@ -629,29 +632,32 @@ export default function ProjectsPage() {
 function ProjectCard({
   project,
   index,
-  onClick,
   onMore,
+  onNavigate,
 }: {
   project: ProjectWithSnapshots
   index: number
-  onClick: () => void
   onMore: (e: React.MouseEvent) => void
+  onNavigate: () => void
 }) {
   const lastSnap = project.snapshots[project.snapshots.length - 1]
   const [loaded, setLoaded] = useState(false)
 
   return (
-    <div
+    <Link
+      href={`/projects/${project.id}`}
       className="mkr-card mkr-row-enter"
+      onClick={onNavigate}
       style={{
+        display: 'block',
         position: 'relative',
         aspectRatio: '1 / 1',
         borderRadius: '16px',
         overflow: 'hidden',
         background: '#120d1a',
         animationDelay: `${index * 0.06}s`,
+        textDecoration: 'none',
       }}
-      onClick={onClick}
     >
       {/* Placeholder shimmer while image loads */}
       {!loaded && (
@@ -712,7 +718,7 @@ function ProjectCard({
       {/* Top-right more button */}
       <button
         className="mkr-more-btn"
-        onClick={onMore}
+        onClick={(e) => { e.preventDefault(); onMore(e) }}
         style={{
           position: 'absolute', top: '8px', right: '8px',
           background: 'rgba(0,0,0,0.45)',
@@ -733,7 +739,7 @@ function ProjectCard({
       >
         ···
       </button>
-    </div>
+    </Link>
   )
 }
 

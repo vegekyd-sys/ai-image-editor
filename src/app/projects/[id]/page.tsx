@@ -7,7 +7,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { Snapshot, Message, Tip, PhotoMetadata } from '@/types'
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
-import { getCachedImages, getCachedProjectData, cacheProjectData } from '@/lib/imageCache'
+import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
 
 export default function ProjectPage() {
   const { user, loading: authLoading } = useAuth()
@@ -18,9 +18,19 @@ export default function ProjectPage() {
   const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle } =
     useProject(projectId, user?.id ?? '')
 
-  const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(null)
-  const [initialMessages, setInitialMessages] = useState<Message[] | null>(null)
-  const [initialTitle, setInitialTitle] = useState<string>('未命名')
+  // Synchronous init from memory cache — eliminates spinner on same-session return visits
+  const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() => {
+    const sync = getCachedProjectDataSync(projectId)
+    return sync ? sync.snapshots as Snapshot[] : null
+  })
+  const [initialMessages, setInitialMessages] = useState<Message[] | null>(() => {
+    const sync = getCachedProjectDataSync(projectId)
+    return sync ? sync.messages as Message[] : null
+  })
+  const [initialTitle, setInitialTitle] = useState<string>(() => {
+    const sync = getCachedProjectDataSync(projectId)
+    return sync ? sync.title : '未命名'
+  })
   const [pendingImage] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     const pending = sessionStorage.getItem('pendingImage')
@@ -33,9 +43,13 @@ export default function ProjectPage() {
     if (raw) { sessionStorage.removeItem('pendingMetadata'); try { return JSON.parse(raw) } catch { return undefined } }
     return undefined
   })
-  const [loaded, setLoaded] = useState(false)
+  // If memory cache has data, start loaded=true — no spinner at all
+  const [loaded, setLoaded] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return getCachedProjectDataSync(projectId) !== null
+  })
   // Tracks whether we've already shown content (cache or Supabase) to avoid double-set
-  const shownRef = useRef(false)
+  const shownRef = useRef(loaded)
 
   useEffect(() => {
     if (!authLoading && !user) {

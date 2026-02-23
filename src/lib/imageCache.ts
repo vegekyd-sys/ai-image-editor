@@ -112,6 +112,19 @@ export async function getCachedImages(keys: string[]): Promise<Map<string, strin
   return result
 }
 
+// Synchronous memory-only lookup (use in useState initializer to avoid spinner flash)
+export function getCachedProjectDataSync(
+  projectId: string,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+): { snapshots: any[], messages: any[], title: string } | null {
+  if (typeof window === 'undefined') return null
+  const mem = projectMemCache.get(projectId)
+  if (mem && Date.now() - mem.cachedAt < TTL_MS) {
+    return { snapshots: mem.snapshots, messages: mem.messages, title: mem.title }
+  }
+  return null
+}
+
 // Project metadata cache (snapshots + messages + title, no base64 images)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function cacheProjectData(projectId: string, snapshots: any[], messages: any[], title: string): void {

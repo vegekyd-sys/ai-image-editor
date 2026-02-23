@@ -54,7 +54,17 @@ body {
   to   { transform: translateX(0); }
 }
 .page-slide-in {
-  animation: page-slide-in 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation: page-slide-in 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* Projects page slide-out to left when navigating */
+@keyframes page-slide-out {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-30%); opacity: 0; }
+}
+.page-slide-out {
+  animation: page-slide-out 0.32s cubic-bezier(0.55, 0, 1, 0.45) both;
+  pointer-events: none;
 }
 
 /* Typing animation */
