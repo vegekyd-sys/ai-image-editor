@@ -300,19 +300,27 @@ export default function ProjectsPage() {
 
         .mkr-card {
           cursor: pointer;
-          transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.15s;
+          user-select: none;
+          -webkit-user-select: none;
         }
         .mkr-card:hover  { transform: scale(0.98); }
-        .mkr-card:active { transform: scale(0.96); }
+        .mkr-card:active { transform: scale(0.94); opacity: 0.85; }
 
         .mkr-new-btn {
-          transition: border-color 0.25s, box-shadow 0.25s, transform 0.18s;
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          transition: border-color 0.25s, box-shadow 0.25s, transform 0.18s, opacity 0.15s;
+          user-select: none;
+          -webkit-user-select: none;
         }
         .mkr-new-btn:hover {
           border-color: rgba(217,70,239,0.6) !important;
           box-shadow: 0 0 32px rgba(217,70,239,0.2);
         }
-        .mkr-new-btn:active { transform: scale(0.96); }
+        .mkr-new-btn:active { transform: scale(0.96); opacity: 0.8; }
 
         @keyframes mkr-spin { to { transform: rotate(360deg); } }
         .mkr-spin { animation: mkr-spin 0.9s linear infinite; }
@@ -662,6 +670,9 @@ function ProjectCard({
           display: 'block',
           opacity: loaded ? 1 : 0,
           transition: 'opacity 0.3s',
+          pointerEvents: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
         }}
         loading="lazy"
         onLoad={() => setLoaded(true)}
