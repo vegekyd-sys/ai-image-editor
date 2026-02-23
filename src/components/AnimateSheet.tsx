@@ -79,13 +79,7 @@ export default function AnimateSheet({
     }
   }, [prompt, projectId, imageUrls, duration, onStateChange, startPolling]);
 
-  useEffect(() => {
-    if (status !== 'polling') return;
-    const timer = setInterval(() => {
-      onStateChange({ pollSeconds: pollSeconds + 1 });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [status, pollSeconds, onStateChange]);
+  // pollSeconds is incremented by Editor (persists even when sheet is closed)
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);

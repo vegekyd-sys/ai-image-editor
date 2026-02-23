@@ -1528,6 +1528,8 @@ export default function Editor({
     const curr = animationState?.status;
     prevAnimStatusRef.current = curr;
     if (prev && prev !== 'done' && curr === 'done' && animationState?.videoUrl) {
+      // Close the sheet — from now on it only shows via isViewingVideo
+      setShowAnimateSheet(false);
       // Check if a video message already exists (from handleAnimationCUI polling)
       const alreadyHasVideo = messages.some(m => m.content?.includes('.mp4'));
       if (!alreadyHasVideo) {
@@ -1547,6 +1549,15 @@ export default function Editor({
       setViewIndex(newVideoIdx);
     }
   }, [animationState?.status, animationState?.videoUrl, messages, onSaveMessage]);
+
+  // Increment pollSeconds while animation is polling (runs even when sheet is closed)
+  useEffect(() => {
+    if (animationState?.status !== 'polling') return;
+    const timer = setInterval(() => {
+      setAnimationState(prev => prev ? { ...prev, pollSeconds: prev.pollSeconds + 1 } : prev);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [animationState?.status]);
 
   // Update StatusBar with video rendering progress
   useEffect(() => {
