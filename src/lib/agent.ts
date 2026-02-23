@@ -26,8 +26,9 @@ const MODEL = bedrock('us.anthropic.claude-sonnet-4-5-20250929-v1:0');
 // ---------------------------------------------------------------------------
 
 interface AgentContext {
-  currentImage: string;    // base64 data URL – updated after each generation
-  originalImage?: string;  // base64 data URL – the very first image, never changes
+  currentImage: string;       // base64 data URL – updated after each generation
+  originalImage?: string;     // base64 data URL – the very first image, never changes
+  referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
@@ -77,6 +78,7 @@ function createTools(ctx: AgentContext) {
       }),
       execute: async ({ editPrompt, skill, useOriginalAsReference, aspectRatio }) => {
         const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
+        const hasReference = !!ctx.referenceImages?.length;
 
         // Inject skill template if provided
         const skillTemplate = skill ? SKILL_PROMPTS[skill] : null;
@@ -84,10 +86,35 @@ function createTools(ctx: AgentContext) {
           ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
           : editPrompt;
 
-        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal}\neditPrompt:\n${editPrompt}\n`);
+        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference}\neditPrompt:\n${editPrompt}\n`);
 
         let result: string | null;
-        if (useOriginalAsReference && hasOriginal) {
+        if (hasReference && useOriginalAsReference && hasOriginal) {
+          // Multi-image mode: current + original + user reference(s)
+          const refs = ctx.referenceImages!;
+          console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
+          result = await generateImageWithReferences(
+            [
+              { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
+              { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
+              ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
+            ],
+            finalPrompt,
+            aspectRatio,
+          );
+        } else if (hasReference) {
+          // Multi-image mode: current base + user reference image(s)
+          const refs = ctx.referenceImages!;
+          console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
+          result = await generateImageWithReferences(
+            [
+              { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
+              ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
+            ],
+            finalPrompt,
+            aspectRatio,
+          );
+        } else if (useOriginalAsReference && hasOriginal) {
           // Two-image mode: current as edit base, original as reference
           console.log('📸 Two-image mode (original as reference)');
           result = await generateImageWithReferences(
@@ -157,11 +184,12 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[] },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
     originalImage: options?.originalImage,
+    referenceImages: options?.referenceImages,
     projectId,
     generatedImages: [],
   };
@@ -215,9 +243,11 @@ export async function* runMakaronAgent(
         if (event.toolName === 'generate_image') {
           const inp = event.input as { useOriginalAsReference?: boolean };
           const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== ctx.currentImage;
-          toolCallImages = twoImageMode
-            ? [ctx.currentImage, ctx.originalImage!]
-            : [ctx.currentImage];
+          toolCallImages = [
+            ctx.currentImage,
+            ...(twoImageMode ? [ctx.originalImage!] : []),
+            ...(ctx.referenceImages ?? []),
+          ];
         }
         yield {
           type: 'tool_call',

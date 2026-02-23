@@ -2196,3 +2196,178 @@ Makaron Agent 拒绝用户两类显式请求：
 2. 海报方向：概念 > 风格，弱概念+任何风格=3分
 3. 加文字对比度自检
 4. Metadata 规则继续强化
+
+---
+
+## 产品 UI 迭代（2026-02-22）
+
+### 参考图上传功能（CUI 图片附件）
+
+**功能描述**：在 CUI 聊天界面支持上传最多 3 张参考图，用于"把这个人加到图里"等合成需求。
+
+**架构**：
+- `AgentChatView`：输入框下方工具栏加图片按钮（圆形，与发送按钮统一风格），图片缩略图在工具栏内联显示，选图后客户端压缩（max 1024px, quality 0.85）
+- `agent.ts`：`referenceImages[]` 存入 `AgentContext`，`generate_image` 工具执行时将参考图作为 Image 2/3 传给 Gemini（N 图模式）；Claude Sonnet 本身不看参考图，只通过 prompt 文字获知"有 N 张参考图已备用"
+- `Editor.tsx`：`handleAgentRequest(text, attachedImages?)` → `streamAgent({ referenceImages })` → API → `runMakaronAgent({ referenceImages })`
+- 参考图也出现在 `EditPromptCard` 的"传入图片"展示里（`toolCallImages` 包含 referenceImages）
+
+**输入框布局（B 方案）**：
+- 上行：textarea 全宽（placeholder 文字，多行自然生长）
+- 下行工具栏：`[📷 圆形按钮] [缩略图 w-9 h-9...] [flex-1 spacer] [↑ 发送]`
+- 图片按钮与发送按钮统一为 `w-8 h-8 rounded-full`，图片按钮激活时 fuchsia 半透明底
+
+**已发消息气泡**：参考图显示为 `w-20 h-20 object-cover` 方形缩略图
+
+### CUI 输入框浮层化（分割线去除）
+
+- 去掉 `borderTop` 分割线
+- 输入框改为 `position: absolute bottom: 0`，顶部加 32px 渐变淡出（`transparent → #0a0a0a`）
+- 消息区域 `paddingBottom = inputBarH`（动态），最后一条消息能滚入渐变区域若隐若现
+- 键盘弹出时：`bottom: ${kbInset}px` 代替原来的 paddingBottom 调整
+
+### PiP 位置系列修复
+
+**PIP_BOTTOM_OFFSET 动态化**：
+- 用 `ResizeObserver` 监听 input bar 高度，`PIP_BOTTOM_OFFSET = inputBarH - 32 + 4`（减去渐变 paddingTop）
+- `cuiInputBarH` ref 通过 `onInputBarHeight` callback 传给 Editor
+
+**Race condition 修复**：
+- 旧问题：`openCUI` 立即计算 `toRect`，但 CUI 未挂载，`cuiInputBarH.current` 是旧值
+- 修法：`toRect` 移到第二个 `requestAnimationFrame` 里计算（此时 ResizeObserver 已触发，值准确）
+- 效果：GUI→CUI 动画终点与真实 PiP 位置完全吻合，无跳动
+
+---
+
+## Captions V53-V60 迭代记录 (2026-02-22)
+
+### 分数趋势
+| 版本 | 均分 | 核心变化 |
+|------|------|---------|
+| V53 | 3.6 | 大改结构失败，回滚 |
+| V54 | — | enhance+captions 综合测试（API不稳定）|
+| V55/V56 | 5.1 | 新增固定句子(清场+V字脸)、高分公式参考、语言默认中文 |
+| V57 | 5.8 | 海报/杂志3问自检、A24/Supreme/Dazed词汇 |
+| V58 | 4.3 | **硬规则：caption不能改照片** |
+| V59 | 6.6 | **最高均分**。高分公式重写，正面案例引导 |
+| V60 | 5.3 | 发现"模板化"问题：每批都是海报+胶片戳 |
+
+### V59 为什么好（6.6分）
+- 高分公式按三个方向分别给正面案例
+- 案例具体：冰淇淋旁奶油色手写（8分）、拱门红字标题（9分）
+- 文字颜色从场景来（"感觉长在那里"）
+
+### V60 发现的核心问题
+**模板化**：每批固定输出"一个电影海报 + 一个胶片时间戳"，缺乏随机性
+- 根本原因：模型学会了这两个"安全"组合，不再真正思考
+- 已修复：在Q2加"防模板规则"——明确点名"标题设计师+记录者=最无聊的组合"
+
+### 继续更新的方向（已识别，待验证）
+
+1. **多样性问题**：需要验证防模板规则是否有效破除固化组合
+2. **心声方向深挖**：V59的8-9分都在心声方向，可以加更多心声的位置/颜色自检case
+3. **胶片戳年份问题**：V60仍有两个"缺年份"扣分，需要更强的提示
+4. **"改了照片"问题**：V60的7分黑白剧照其实改了图片，说明边界仍模糊
+5. **enhance开放方向**：修改了必选6方向→可选7方向，待跑一轮enhance测试验证
+
+### 已验证的 captions 高分案例规律（截至V60）
+- **心声贴着场景**：字色=物体颜色，字形=表面纹理 → 8-9分
+- **大标题放留白区**：天空/拱门/深色背景，高度20%+，颜色强对比 → 8-9分
+- **胶片戳三要素**：地点+月份+年份，缺一扣分 → 7-8分
+- **两个tip角色必须不同**：海报+海报/胶片+胶片 = 无聊
+
+---
+
+## Captions V57-V60 分析 + V61 方向 (2026-02-22)
+
+### 分数趋势（完整）
+| 版本 | 均分 | 备注 |
+|------|------|------|
+| V44 | 3.5 | 首测，全失败 |
+| V47 | 6.5 | 历史最高（当时）|
+| V51 | 6.1 | 4个8分 |
+| V53 | 3.6 | 大改版失败，回滚 |
+| V59 | **6.6** | 历史最高，7个高分 |
+| V60 | 5.3 | 模板化收敛，均分下降 |
+
+### 稳定高分模式（验证次数多）
+1. **心声贴着动作/表面**：文字颜色从物体来，形态贴着纹理走 → 8分（冰淇淋/砖墙/水面）
+2. **精确地名 + 大标题**：BROOKLYN/THE MET/迪士尼 + 占高度20%+ → 8-10分
+3. **胶片时间戳三要素齐全**：地点+月份+年份，橙色数字 → 7-8分
+
+### 稳定失败模式
+- A24/好莱坞海报模板（没有具体地名）→ 3-5分
+- 胶片时间戳放标题/缺年份 → 1-5分
+- 改变照片（B&W/letterbox/大幅调色）→ 1分
+- 白字放浅色背景 → 1-3分
+- 模板化（标题设计师+记录者 每张都一样）→ 用户说"像模板"
+
+### 5个尚未解决的问题
+1. **场景清场 vs 人脸保留冲突**：Clean up 有时破坏人脸（v58 1分）
+2. **Metadata 注入缺口**：没有真实EXIF时，模型猜年份/地点 → 经常猜错
+3. **模板化收敛**：总是 标题设计师+记录者 组合，缺乏多样性 → 已加防模板规则
+4. **杂志封面风格总被拒**："很土"/"老气" 是常见反馈，但手写体总得高分
+5. **场景类型判断缺失**：亲密日常照 ≠ 地标照，同一套模板不应该用在所有场景
+
+### V61 改进方向（优先级排序）
+1. 测试防模板规则效果（已加入）
+2. 强化"文字渲染在场景材质上"这个方向（ice cream字体感=材质感）
+3. 更明确的心声位置规则：动作延伸处=好；头顶=差
+4. 考虑加入场景类型自检：是亲密日常？还是地标/产品照？不同类型对应不同推荐角色
+
+---
+
+## Tips 首屏加速 (2026-02-23)
+
+### 背景
+首个 tip 出现需要 20+ 秒，partial streaming 逻辑代码正确但体感没有生效。
+
+### 根本原因（已确认）
+`streamTipsByCategoryOpenRouter` 第 848 行用的是 `OPENROUTER_MODEL`（`google/gemini-3-pro-image-preview`，图像生成模型），而非文本生成模型。`TIPS_MODEL = 'google/gemini-2.0-flash-001'` 早已定义但从未被 OpenRouter 路径使用。图像生成模型用于纯文本生成时 TTFT 高达 5-15 秒，是主因。
+
+### 修改内容
+| 文件 | 改动 |
+|------|------|
+| `src/lib/gemini.ts` | 新增 `streamTipsByCategoryBedrock`（Vercel AI SDK + AWS Bedrock Claude Sonnet）；`TIPS_PROVIDER` 默认 `'bedrock'`；`TIPS_TEMPERATURE=0.9`；修复 OpenRouter `t0` 计时位置；移除 `analysisStep`（Sonnet 不需要显式分析指令） |
+| `src/app/api/tips/route.ts` | 加 `X-Accel-Buffering: no` 防 SSE 缓冲 |
+| `src/components/Editor.tsx` | 加 `console.time` 前端计时日志 |
+
+Tips 模型可通过 `.env.local` 的 `TIPS_PROVIDER` / `TIPS_TEMPERATURE` 切换，方便 A/B 测试。
+
+### 测试结果（Bedrock Claude Sonnet-4-5，本地 dev）
+
+**后端计时（从 streamText 调用起，多次平均）：**
+| 分类 | 首个 partial tip |
+|------|----------------|
+| wild | ~5.8s |
+| creative | ~6.1s |
+| enhance | ~5.1~6.4s |
+| captions | ~6.0~6.6s |
+
+**前端感知时间（含 Supabase auth + routing 约 3s 额外开销）：**
+- 首个 tip 出现：**6.6~8.1s**（目标 10s ✅）
+- 全部 8 个 tip 流式完成：~14~17s
+
+**对比：**
+- 修复前（gemini-3-pro 图像模型）：20+ 秒
+- 修复后（Bedrock Sonnet）：首 tip 6.6~8s，稳定达标
+
+### 关键结论
+- 用图像生成模型做纯文本 tips 是主因，TTFT 极高且不稳定
+- `streamText ready at +0~4ms`——Bedrock 连接建立极快，时间主要在 TTFT（~5-7s）
+- 前端比后端多约 3s = Supabase auth check + Next.js routing 开销
+- Partial streaming 代码本身一直是正确的，瓶颈完全在模型选择
+
+### 后续：质量问题，回滚 gemini-3 (2026-02-23)
+
+Bedrock Sonnet 速度达标（6-8s）但 tips **质量明显差**——idea 层面（label/desc）就不如 gemini-3，不只是 editPrompt 差。这是第二次验证同一结论（第一次试 Flash 也失败）。根本原因：gemini-3-pro-image-preview 是图像生成模型，天然理解"什么编辑指令能出好图"，通用语言模型没有这种 image editing intuition。
+
+**两阶段方案 API 测试结果（gemini-3，OpenRouter）：**
+| | TTFT | Total |
+|---|---|---|
+| 全量请求（当前） | 23.8s | 25.2s |
+| Stage 1（仅 label+desc，短 prompt） | 9.9s ~ 15.6s | 10.4s ~ 16.3s |
+| Stage 2（editPrompt，120行模板，2条并行） | 16.4s ~ 30.4s | 31.8s |
+
+两阶段方案可以把首个 tip 卡片从 20+s 降到 10-16s，但 gemini-3 TTFT **抖动极大**（同样请求差 6s），且 Stage 2 editPrompt 要 32s 才全部就绪，用户点击时可能还没好。
+
+**当前决策：回滚到 gemini-3（`TIPS_PROVIDER=openrouter`）优先保质量**，速度问题待更好方案出现再解决。两阶段方案保留为候选，需要解决 TTFT 抖动问题才有实用价值。

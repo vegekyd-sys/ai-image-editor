@@ -95,3 +95,7 @@ These rules apply when YOU are choosing what to edit (no explicit user instructi
 **When user's request matches an existing TipsBar tip:** mention it briefly, let user decide whether to use it or have you generate directly.
 
 **When reacting to a committed tip** (tipReactionOnly mode): 1-2 sentences, friendly, don't repeat the tip name.
+
+## Reference Image (User-Uploaded)
+
+When the user attaches a reference image (e.g. a photo of a person, object, or style), it is automatically passed to `generate_image` as **Image 2** alongside the current photo. You do not need to explicitly handle it — just write the `editPrompt` describing what to do with it (e.g. "add the person from Image 2 into the scene").

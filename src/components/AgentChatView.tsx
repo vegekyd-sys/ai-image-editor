@@ -79,12 +79,13 @@ interface AgentChatViewProps {
   isAgentActive: boolean;
   agentStatus: string;
   currentImage?: string;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, attachedImages?: string[]) => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
   onImageTap: (messageId: string) => void;
   focusOnOpen?: boolean;
   hidePip?: boolean;
+  onInputBarHeight?: (h: number) => void;
 }
 
 export default function AgentChatView({
@@ -98,15 +99,20 @@ export default function AgentChatView({
   onImageTap,
   focusOnOpen = false,
   hidePip = false,
+  onInputBarHeight,
 }: AgentChatViewProps) {
   const [input, setInput] = useState('');
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isExiting, setIsExiting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const inputBarRef = useRef<HTMLDivElement>(null);
   const scrollStartY = useRef<number | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
+  const [inputBarH, setInputBarH] = useState(80);
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
   const [kbInset, setKbInset] = useState(0);
   useEffect(() => {
@@ -125,7 +131,8 @@ export default function AgentChatView({
   type PipCorner = 'tl' | 'tr' | 'ml' | 'mr' | 'bl' | 'br';
   const PIP_SIZES = [116, 200] as const; // md / lg (small removed)
   const PIP_M = 14;
-  const PIP_BOTTOM_OFFSET = 80; // clear the input bar
+  const INPUT_GRADIENT_TOP = 32; // paddingTop on input bar wrapper (gradient zone)
+  const PIP_BOTTOM_OFFSET = inputBarH - INPUT_GRADIENT_TOP + 4; // just above actual input box
   const PIP_PEEK = 28;        // px visible when hidden at right edge
   const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 
@@ -267,6 +274,20 @@ export default function AgentChatView({
     if (headerRef.current) setHeaderH(headerRef.current.offsetHeight);
   }, []);
 
+  // Track input bar height so PiP moves up when textarea grows
+  useEffect(() => {
+    const el = inputBarRef.current;
+    if (!el) return;
+    const update = () => {
+      setInputBarH(el.offsetHeight);
+      onInputBarHeight?.(el.offsetHeight);
+    };
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    update();
+    return () => ro.disconnect();
+  }, [onInputBarHeight]);
+
   const isFirstScrollRef = useRef(true);
   useEffect(() => {
     if (isFirstScrollRef.current) {
@@ -313,10 +334,11 @@ export default function AgentChatView({
 
   const handleSubmit = useCallback(() => {
     const text = input.trim();
-    if (!text || isAgentActive) return;
-    onSendMessage(text);
+    if ((!text && attachedImages.length === 0) || isAgentActive) return;
+    onSendMessage(text, attachedImages.length > 0 ? attachedImages : undefined);
     setInput('');
-  }, [input, isAgentActive, onSendMessage]);
+    setAttachedImages([]);
+  }, [input, attachedImages, isAgentActive, onSendMessage]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
@@ -455,7 +477,7 @@ export default function AgentChatView({
       )}
 
       {/* ── Messages ── */}
-      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: '1.25rem' }}>
+      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: `${inputBarH}px` }}>
         {/* Empty state */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 pb-10">
@@ -485,14 +507,25 @@ export default function AgentChatView({
                 /* User bubble — right-aligned pill */
                 <div className="flex justify-end">
                   <div
-                    className="text-white/90 text-[21px] leading-relaxed px-4 py-2.5 max-w-[82%]"
+                    className="text-white/90 text-[21px] leading-relaxed max-w-[82%]"
                     style={{
                       background: '#222222',
                       borderRadius: '18px 18px 5px 18px',
                       wordBreak: 'break-word',
                     }}
                   >
-                    {msg.content}
+                    {/* Attached reference images — square thumbnails */}
+                    {msg.editInputImages && msg.editInputImages.length > 0 && (
+                      <div className={`flex gap-1.5 p-2 ${msg.content ? 'pb-1' : ''}`}>
+                        {msg.editInputImages.map((img, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img key={i} src={img} alt="" className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
+                        ))}
+                      </div>
+                    )}
+                    {msg.content && (
+                      <div className="px-4 py-2.5">{msg.content}</div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -600,21 +633,55 @@ export default function AgentChatView({
       </div>
 
       {/* ── Input bar ── */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={async (e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = '';
+          const remaining = 3 - attachedImages.length;
+          const toProcess = files.slice(0, remaining);
+          const compressed = await Promise.all(toProcess.map(file => new Promise<string>((resolve) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+              URL.revokeObjectURL(url);
+              const scale = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+              const canvas = document.createElement('canvas');
+              canvas.width = Math.round(img.naturalWidth * scale);
+              canvas.height = Math.round(img.naturalHeight * scale);
+              canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL('image/jpeg', 0.85));
+            };
+            img.src = url;
+          })));
+          setAttachedImages(prev => [...prev, ...compressed].slice(0, 3));
+        }}
+      />
+
       <div
-        className="flex-shrink-0 px-3 pt-2"
+        ref={inputBarRef}
+        className="absolute left-0 right-0 px-3"
         style={{
-          paddingBottom: kbInset > 0 ? `${kbInset + 8}px` : 'max(0.75rem, env(safe-area-inset-bottom))',
-          borderTop: '1px solid rgba(255,255,255,0.05)',
+          bottom: kbInset > 0 ? `${kbInset}px` : 0,
+          paddingBottom: kbInset > 0 ? '8px' : 'max(0.75rem, env(safe-area-inset-bottom))',
+          paddingTop: '32px',
+          background: 'linear-gradient(to bottom, transparent 0%, #0a0a0a 32px)',
+          zIndex: 20,
         }}
       >
+        {/* Two-row layout: textarea on top, toolbar on bottom */}
         <div
-          className="flex items-end gap-2 px-4 py-2.5"
           style={{
             background: '#161616',
             borderRadius: '20px',
             border: '1px solid rgba(255,255,255,0.07)',
           }}
         >
+          {/* Row 1: Textarea */}
           <textarea
             ref={inputRef}
             value={input}
@@ -627,24 +694,69 @@ export default function AgentChatView({
               }
             }}
             placeholder="你想怎么修改这张图片？"
-
-            className="flex-1 bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden"
-            style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem' }}
+            className="w-full bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden block"
+            style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem', padding: '12px 16px 6px' }}
           />
-          <button
-            onClick={handleSubmit}
-            disabled={isAgentActive || !input.trim()}
-            className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
-            style={{
-              background: input.trim() && !isAgentActive ? '#c026d3' : 'rgba(255,255,255,0.08)',
-              color: input.trim() && !isAgentActive ? '#fff' : 'rgba(255,255,255,0.25)',
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="19" x2="12" y2="5" />
-              <polyline points="5 12 12 5 19 12" />
-            </svg>
-          </button>
+
+          {/* Row 2: Toolbar — 📷 | thumbnails | flex-1 spacer | ↑ */}
+          <div className="flex items-center gap-2 px-3 pb-2.5">
+            {/* Image attach button */}
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              disabled={isAgentActive || attachedImages.length >= 3}
+              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+              style={{
+                background: attachedImages.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
+                color: attachedImages.length > 0 ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </button>
+
+            {/* Attached image thumbnails */}
+            {attachedImages.map((img, i) => (
+              <div key={i} className="relative flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img}
+                  alt=""
+                  className="w-9 h-9 rounded-lg object-cover"
+                  style={{ border: '1px solid rgba(255,255,255,0.12)' }}
+                />
+                <button
+                  onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
+                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                  style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
+                >
+                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            ))}
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Send button */}
+            <button
+              onClick={handleSubmit}
+              disabled={isAgentActive || (!input.trim() && attachedImages.length === 0)}
+              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+              style={{
+                background: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#c026d3' : 'rgba(255,255,255,0.08)',
+                color: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#fff' : 'rgba(255,255,255,0.25)',
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="19" x2="12" y2="5" />
+                <polyline points="5 12 12 5 19 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>

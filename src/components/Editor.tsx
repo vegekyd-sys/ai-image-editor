@@ -7,6 +7,7 @@ import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView from '@/components/AgentChatView';
 import { streamAgent } from '@/lib/agentStream';
+import { cacheImage } from '@/lib/imageCache';
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
@@ -177,6 +178,7 @@ export default function Editor({
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(AGENT_GREETING);
+  const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
@@ -190,6 +192,7 @@ export default function Editor({
   const canvasAreaRef = useRef<HTMLDivElement>(null);
   const lastCanvasRect = useRef<{ l: number; t: number; w: number; h: number } | null>(null);
   const lastImageAR = useRef(1); // cached image aspect ratio for CUI→GUI direction
+  const cuiInputBarH = useRef(96); // cached CUI input bar height for PiP target position
   const HERO_DURATION = 380;
   interface HeroAnim {
     src: string;
@@ -380,7 +383,7 @@ export default function Editor({
         ? imgEl.naturalWidth / imgEl.naturalHeight
         : 1;
       lastImageAR.current = ar;
-      const PIP_SIZE = 200, PIP_M = 14, PIP_BOTTOM = 80;
+      const PIP_SIZE = 200, PIP_M = 14;
       // Start hero at the 1:1 center-crop square of the canvas image.
       // Both from and to are squares → animation is pure position+size, no crop change.
       const imgBounds = containRect(cr.width, cr.height, ar);
@@ -392,19 +395,25 @@ export default function Editor({
         t: cr.top  + imgBounds.t + sqY,
         w: side, h: side,
       };
-      const toRect = { l: PIP_M, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+      // toRect uses a placeholder — will be corrected in the second rAF after
+      // CUI mounts and ResizeObserver updates cuiInputBarH.current with real height
       setHeroAnim({
         src,
-        fromRect, toRect,
+        fromRect,
+        toRect: { l: PIP_M, t: window.innerHeight - (cuiInputBarH.current + 8) - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE },
         fromImg: coverRect(side, side, ar), // unused (objectCover=true)
         toImg:   coverRect(PIP_SIZE, PIP_SIZE, ar), // unused
         fromRadius: '0px', toRadius: '16px',
-        objectCover: true, // both containers are squares → object-cover is sufficient, no img animation needed
+        objectCover: true,
         active: false,
       });
-      requestAnimationFrame(() => requestAnimationFrame(() =>
-        setHeroAnim(p => p ? { ...p, active: true } : null)
-      ));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        // By this frame CUI has mounted and ResizeObserver has fired —
+        // recompute toRect with the accurate input bar height
+        const PIP_BOTTOM = cuiInputBarH.current - 32 + 4; // mirror AgentChatView: inputBarH - gradient(32) + 4
+        const toRect = { l: PIP_M, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+        setHeroAnim(p => p ? { ...p, toRect, active: true } : null);
+      }));
       setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
     }
     setViewMode('cui');
@@ -483,12 +492,13 @@ export default function Editor({
     }
   }, [projectId, onSaveMessage]);
 
-  const addMessage = useCallback((role: 'user' | 'assistant', content: string, image?: string) => {
+  const addMessage = useCallback((role: 'user' | 'assistant', content: string, image?: string, attachedImages?: string[]) => {
     const msg: Message = {
       id: generateId(),
       role,
       content,
       image,
+      ...(attachedImages?.length ? { editInputImages: attachedImages } : {}),
       timestamp: Date.now(),
     };
     setMessages((prev) => [...prev, msg]);
@@ -527,6 +537,7 @@ export default function Editor({
       if (!res.ok) throw new Error('Preview failed');
       const { image } = await res.json();
 
+      cacheImage(`tip:${snapshotId}:${editPrompt}`, image);
       setSnapshots((prev) => {
         const updated = prev.map((s) => {
           if (s.id !== snapshotId) return s;
@@ -569,6 +580,7 @@ export default function Editor({
     const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
     let completedCount = 0;
     const previewGenerated: Record<string, number> = { enhance: 0, wild: 0 };
+    const fetchStart = Date.now();
 
     const fetchCategory = async (category: string) => {
       const imageBase64 = await ensureBase64(imageInput);
@@ -603,32 +615,41 @@ export default function Editor({
                 if (payload === '[DONE]') break;
                 try {
                   const tip = JSON.parse(payload) as Tip;
-                  if (tip.label && tip.editPrompt && tip.category) {
-                    tip.previewStatus = 'pending';
-                    setSnapshots((prev) => prev.map((s) =>
-                      s.id === snapshotId ? { ...s, tips: [...s.tips, tip] } : s
-                    ));
-
-                    const shouldPreview = (() => {
-                      if (previewMode === 'none') return false;
-                      if (previewMode === 'full') return true;
-                      const cat = tip.category as string;
-                      if ((cat === 'enhance' || cat === 'wild') && previewGenerated[cat] === 0) {
-                        previewGenerated[cat]++;
-                        return true;
-                      }
-                      return false;
-                    })();
-
-                    if (shouldPreview) {
-                      generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
+                  if (tip.label && tip.category) {
+                    if (!tip.editPrompt) {
+                      // Partial tip: label+desc ready, editPrompt still streaming — show immediately
+                      setSnapshots((prev) => prev.map((s) => {
+                        if (s.id !== snapshotId) return s;
+                        if (s.tips.some(t => t.label === tip.label)) return s;
+                        return { ...s, tips: [...s.tips, { ...tip, previewStatus: 'none' }] };
+                      }));
                     } else {
-                      setSnapshots((prev) => prev.map((s) =>
-                        s.id === snapshotId ? {
-                          ...s,
-                          tips: s.tips.map(t => t.label === tip.label ? { ...t, previewStatus: 'none' } : t),
-                        } : s
-                      ));
+                      // Complete tip: upsert by label (updates partial if exists, adds new otherwise)
+                      const shouldPreview = (() => {
+                        if (previewMode === 'none') return false;
+                        if (previewMode === 'full') return true;
+                        const cat = tip.category as string;
+                        if ((cat === 'enhance' || cat === 'wild') && previewGenerated[cat] === 0) {
+                          previewGenerated[cat]++;
+                          return true;
+                        }
+                        return false;
+                      })();
+
+                      setSnapshots((prev) => prev.map((s) => {
+                        if (s.id !== snapshotId) return s;
+                        const idx = s.tips.findIndex(t => t.label === tip.label);
+                        if (idx >= 0) {
+                          const newTips = [...s.tips];
+                          newTips[idx] = { ...newTips[idx], editPrompt: tip.editPrompt, previewStatus: shouldPreview ? 'pending' : 'none', aspectRatio: tip.aspectRatio };
+                          return { ...s, tips: newTips };
+                        }
+                        return { ...s, tips: [...s.tips, { ...tip, previewStatus: shouldPreview ? 'pending' : 'none' }] };
+                      }));
+
+                      if (shouldPreview) {
+                        generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
+                      }
                     }
                   }
                 } catch { /* skip malformed */ }
@@ -648,7 +669,8 @@ export default function Editor({
           setSnapshots((prev) => {
             const snap = prev.find(s => s.id === snapshotId);
             if (snap?.tips.length) {
-              const tipsForDb = snap.tips.map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
+              // Only persist complete tips (with editPrompt) — don't save partial streaming stubs
+              const tipsForDb = snap.tips.filter(t => !!t.editPrompt).map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
               onUpdateTips(snapshotId, tipsForDb);
             }
             return prev;
@@ -671,6 +693,74 @@ export default function Editor({
 
     categories.forEach(cat => fetchCategory(cat));
   }, [generatePreviewForTip, onUpdateTips, triggerTipsTeaser]);
+
+  // Load more tips of a specific category and append to the given snapshot
+  const fetchMoreTipsForCategory = useCallback((
+    category: Tip['category'],
+    snapshotId: string,
+    imageInput: string,
+  ) => {
+    setLoadingMoreCategories(prev => new Set([...prev, category]));
+
+    const doFetch = async () => {
+      try {
+        const imageBase64 = await ensureBase64(imageInput);
+        const snap = snapshotsRef.current.find(s => s.id === snapshotId);
+        const existingLabels = snap?.tips
+          .filter(t => t.category === category)
+          .map(t => t.label) ?? [];
+        const res = await fetch('/api/tips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: imageBase64,
+            category,
+            count: 2,
+            metadata: snap?.metadata,
+            existingLabels,
+          }),
+        });
+        if (!res.ok) return;
+
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let boundary;
+          while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+            const line = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            if (line.startsWith('data: ')) {
+              const payload = line.slice(6);
+              if (payload === '[DONE]') break;
+              try {
+                const tip = JSON.parse(payload) as Tip;
+                if (tip.label && tip.category && tip.editPrompt) {
+                  tip.previewStatus = 'none';
+                  setSnapshots((prev) => prev.map((s) => {
+                    if (s.id !== snapshotId) return s;
+                    if (s.tips.some(t => t.label === tip.label)) return s;
+                    return { ...s, tips: [...s.tips, tip] };
+                  }));
+                }
+              } catch { /* skip malformed */ }
+            }
+          }
+        }
+      } finally {
+        setLoadingMoreCategories(prev => {
+          const next = new Set(prev);
+          next.delete(category);
+          return next;
+        });
+      }
+    };
+    doFetch();
+  }, []);
 
   // Auto-analyze a snapshot: runs silently in background, stores result in snapshot.description only
   const runAutoAnalysis = useCallback(async (
@@ -765,7 +855,7 @@ export default function Editor({
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[]) => {
     // Map timeline index → snapshot index; null means we're at the draft slot
     const snapIdx = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
     let currentImage = snapIdx !== null ? snapshotsRef.current[snapIdx]?.image : undefined;
@@ -779,7 +869,8 @@ export default function Editor({
     if (!currentImage || !projectId) return;
 
     const imageBase64 = await ensureBase64(currentImage);
-    addMessage('user', text);
+    // Show attached images in the user message bubble
+    addMessage('user', text, undefined, attachedImages?.length ? attachedImages : undefined);
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
       id: assistantMsgId,
@@ -839,7 +930,11 @@ export default function Editor({
       ? `[照片元数据]\n${metaLines.join('\n')}\n\n`
       : '';
 
-    const fullPrompt = `${snapshotWarning}${metaContext}${descriptionContext}${tipsContext}${historyContext}[当前请求]\n${text}`;
+    const refContext = attachedImages?.length
+      ? `[用户上传了 ${attachedImages.length} 张参考图，已自动传给 generate_image 工具使用]\n\n`
+      : '';
+
+    const fullPrompt = `${snapshotWarning}${metaContext}${descriptionContext}${tipsContext}${historyContext}${refContext}[当前请求]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
@@ -849,7 +944,7 @@ export default function Editor({
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId },
+        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
         {
           onStatus: (status) => setAgentStatus(status),
           onNewTurn: () => {
@@ -879,6 +974,7 @@ export default function Editor({
             };
             setSnapshots((prev) => [...prev, newSnapshot]);
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length);
+            cacheImage(`snap:${snapId}`, imageData);
             fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
             setAgentStatus('图片已生成');
             const id = currentMsgId;
@@ -980,6 +1076,7 @@ export default function Editor({
     };
     setSnapshots((prev) => [...prev, newSnapshot]);
     onSaveSnapshot?.(newSnapshot, snapshots.length);
+    cacheImage(`snap:${snapId}`, newSnapshot.image);
 
     // Clear draft and jump to the newly committed snapshot (appended at end)
     setViewIndex(snapshots.length); // snapshots.length = index of new snapshot after append
@@ -1138,6 +1235,7 @@ export default function Editor({
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
       onSaveSnapshot?.(newSnapshot, 0);
+      cacheImage(`snap:${snapId}`, base64!);
       // Only start tips if not already started (HEIC path)
       if (!tipsStarted) {
         fetchTipsForSnapshot(snapId, base64!, 'full');
@@ -1177,6 +1275,7 @@ export default function Editor({
       prevTimelineLen.current = 1;
       setViewIndex(0);
       onSaveSnapshot?.(newSnapshot, 0);
+      cacheImage(`snap:${snapId}`, pendingImage);
       fetchTipsForSnapshot(snapId, pendingImage);
       // Auto-analyze the uploaded photo
       runAutoAnalysis(snapId, pendingImage);
@@ -1421,7 +1520,7 @@ export default function Editor({
 
           {/* Bottom bar: Agent status bar (always) + Tips */}
           {snapshots.length > 0 && (
-            <div className="flex-shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent">
+            <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
               <AgentStatusBar
                 statusText={agentStatus}
                 isActive={isAgentActive}
@@ -1437,6 +1536,11 @@ export default function Editor({
                 onTipDeselect={dismissDraft}
                 onRetryPreview={handleRetryPreview}
                 previewingIndex={isViewingDraft ? previewingTipIndex : null}
+                onLoadMore={(category) => {
+                  const snap = snapshots[tipsSourceIndex];
+                  if (snap) fetchMoreTipsForCategory(category, snap.id, snap.image);
+                }}
+                loadingMoreCategories={loadingMoreCategories}
               />
             </div>
           )}
@@ -1450,10 +1554,11 @@ export default function Editor({
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
           currentImage={timeline[viewIndex]}
-          onSendMessage={handleAgentRequest}
+          onSendMessage={(text, imgs) => handleAgentRequest(text, imgs)}
           onBack={() => window.history.back()}
           onPipTap={handlePipTap}
           hidePip={heroAnim !== null}
+          onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
         />

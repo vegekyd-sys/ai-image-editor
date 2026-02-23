@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Snapshot, Message, Tip, PhotoMetadata } from '@/types'
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
+import { getCachedImages } from '@/lib/imageCache'
 
 export default function ProjectPage() {
   const { user, loading: authLoading } = useAuth()
@@ -44,8 +45,33 @@ export default function ProjectPage() {
   useEffect(() => {
     if (!user || !projectId || loaded) return
 
-    loadProject().then(({ snapshots, messages, title }) => {
-      setInitialSnapshots(snapshots)
+    loadProject().then(async ({ snapshots, messages, title }) => {
+      // Collect keys for missing images
+      const keys: string[] = []
+      for (const s of snapshots) {
+        if (!s.image) keys.push(`snap:${s.id}`)
+        for (const t of s.tips) {
+          if (!t.previewImage && t.editPrompt) keys.push(`tip:${s.id}:${t.editPrompt}`)
+        }
+      }
+
+      let patchedSnapshots = snapshots
+      if (keys.length > 0) {
+        const cacheMap = await getCachedImages(keys)
+        if (cacheMap.size > 0) {
+          patchedSnapshots = snapshots.map(s => ({
+            ...s,
+            image: s.image || (cacheMap.get(`snap:${s.id}`) ?? ''),
+            tips: s.tips.map(t => {
+              if (t.previewImage || !t.editPrompt) return t
+              const cached = cacheMap.get(`tip:${s.id}:${t.editPrompt}`)
+              return cached ? { ...t, previewImage: cached, previewStatus: 'done' as const } : t
+            }),
+          }))
+        }
+      }
+
+      setInitialSnapshots(patchedSnapshots)
       setInitialMessages(messages)
       setInitialTitle(title)
       setLoaded(true)

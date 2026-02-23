@@ -37,7 +37,7 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
         }
       `}</style>
       <div
-        className="flex items-center gap-3 px-4 py-3 min-h-[52px] active:opacity-70 transition-opacity cursor-pointer"
+        className="flex items-center gap-3 px-4 py-2 min-h-[44px] active:opacity-70 transition-opacity cursor-pointer"
         onClick={onOpenChat}
       >
         {/* Dot — always colored, always breathing */}
