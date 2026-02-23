@@ -3,11 +3,12 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
 import { useRouter, useParams } from 'next/navigation'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Snapshot, Message, Tip, PhotoMetadata } from '@/types'
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
 import { getCachedImages } from '@/lib/imageCache'
+import { getProjectFromCache } from '@/app/projects/page'
 
 export default function ProjectPage() {
   const { user, loading: authLoading } = useAuth()
@@ -18,9 +19,16 @@ export default function ProjectPage() {
   const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle } =
     useProject(projectId, user?.id ?? '')
 
-  const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(null)
-  const [initialMessages, setInitialMessages] = useState<Message[] | null>(null)
-  const [initialTitle, setInitialTitle] = useState<string>('未命名')
+  // Check module-level cache for instant load (populated when user came from projects list)
+  const cachedProject = typeof window !== 'undefined' ? getProjectFromCache(projectId) : null
+  const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() =>
+    cachedProject
+      ? cachedProject.snapshots.map(s => ({ id: s.id, image: s.image_url, tips: [], messageId: '', imageUrl: s.image_url }))
+      : null
+  )
+  const [initialMessages, setInitialMessages] = useState<Message[] | null>(() => cachedProject ? [] : null)
+  const [initialTitle, setInitialTitle] = useState<string>(() => cachedProject?.title ?? '未命名')
+  const [editorKey, setEditorKey] = useState<'cache' | 'full'>('cache')
   const [pendingImage] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     const pending = sessionStorage.getItem('pendingImage')
@@ -33,7 +41,9 @@ export default function ProjectPage() {
     if (raw) { sessionStorage.removeItem('pendingMetadata'); try { return JSON.parse(raw) } catch { return undefined } }
     return undefined
   })
-  const [loaded, setLoaded] = useState(false)
+  const [loaded, setLoaded] = useState(cachedProject !== null)
+  // Prevents double-fetch (StrictMode / re-renders), separate from `loaded` so cache path still fetches
+  const fullDataFetchedRef = useRef(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -43,9 +53,11 @@ export default function ProjectPage() {
 
   // Load project data on mount
   useEffect(() => {
-    if (!user || !projectId || loaded) return
+    if (!user || !projectId || fullDataFetchedRef.current) return
+    fullDataFetchedRef.current = true
 
     loadProject().then(async ({ snapshots, messages, title }) => {
+      // Full data arrived — update all state
       // Collect keys for missing images
       const keys: string[] = []
       for (const s of snapshots) {
@@ -75,6 +87,8 @@ export default function ProjectPage() {
       setInitialMessages(messages)
       setInitialTitle(title)
       setLoaded(true)
+      // If we rendered from cache, remount Editor with complete data (tips, messages)
+      if (cachedProject) setEditorKey('full')
 
       // Set cover from first snapshot if available
       if (snapshots.length > 0 && snapshots[0].imageUrl) {
@@ -86,7 +100,7 @@ export default function ProjectPage() {
       setInitialMessages([])
       setLoaded(true)
     })
-  }, [user, projectId, loaded, loadProject, updateCover])
+  }, [user, projectId, loadProject, updateCover])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number) => {
     saveSnapshot(snapshot, sortOrder)
@@ -149,6 +163,7 @@ export default function ProjectPage() {
 
   return (
     <Editor
+      key={editorKey}
       projectId={projectId}
       initialSnapshots={initialSnapshots ?? []}
       initialMessages={initialMessages ?? []}

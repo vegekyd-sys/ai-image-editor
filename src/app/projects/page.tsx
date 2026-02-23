@@ -60,6 +60,10 @@ export function invalidateProjectsCache() {
   _projectsCache = null
 }
 
+export function getProjectFromCache(projectId: string): ProjectWithSnapshots | null {
+  return _projectsCache?.find(p => p.id === projectId) ?? null
+}
+
 export default function ProjectsPage() {
   const { user, loading: authLoading, signOut } = useAuth()
   const router = useRouter()
