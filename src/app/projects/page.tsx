@@ -638,7 +638,7 @@ function ProjectCard({
         aspectRatio: '1 / 1',
         borderRadius: '16px',
         overflow: 'hidden',
-        background: '#161616',
+        background: '#120d1a',
         animationDelay: `${index * 0.06}s`,
       }}
       onClick={onClick}
@@ -647,7 +647,7 @@ function ProjectCard({
       {!loaded && (
         <div style={{
           position: 'absolute', inset: 0,
-          background: 'linear-gradient(135deg, #1a1a1a 0%, #222 50%, #1a1a1a 100%)',
+          background: 'linear-gradient(135deg, #120d1a 0%, #1c1026 50%, #120d1a 100%)',
         }} />
       )}
 
