@@ -96,10 +96,10 @@ export default function AnimateSheet({
     <>
       {/* No backdrop — canvas stays fully visible */}
 
-      {/* Sheet — shorter height, no overlay */}
+      {/* Sheet — compact, no overlay */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
-        maxHeight: '33dvh',
+        maxHeight: '25dvh',
         background: '#0e0e0e',
         borderRadius: '20px 20px 0 0',
         zIndex: 201,
@@ -115,21 +115,21 @@ export default function AnimateSheet({
         `}</style>
 
         {/* Drag handle */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0' }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
         </div>
 
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 16px 8px' }}>
-          <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#fff' }}>🎬 生成视频</div>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '1.4rem', cursor: 'pointer', padding: '4px 8px' }}
-          >×</button>
-        </div>
+        {/* All content scrollable — header included */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 16px' }}>
 
-        {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 20px' }}>
+          {/* Header — scrolls with content */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>生成视频</div>
+            <button
+              onClick={onClose}
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '1.3rem', cursor: 'pointer', padding: '2px 6px' }}
+            >×</button>
+          </div>
 
           {/* Prompt section */}
           <div style={{ marginBottom: 12 }}>

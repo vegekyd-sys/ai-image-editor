@@ -923,6 +923,11 @@ export default function Editor({
         || snapshotsRef.current[draftParentIndexRef.current]?.image;
       contextSnapshotIndex = draftParentIndexRef.current;
     }
+    // Fallback to last snapshot when viewing video entry
+    if (!currentImage) {
+      currentImage = snapshotsRef.current[snapshotsRef.current.length - 1]?.image;
+      contextSnapshotIndex = snapshotsRef.current.length - 1;
+    }
     if (!currentImage || !projectId) return;
 
     const imageBase64 = await ensureBase64(currentImage);
@@ -1833,7 +1838,7 @@ export default function Editor({
           messages={messages}
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
-          currentImage={timeline[viewIndex]}
+          currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
           onSendMessage={(text, imgs) => handleAgentRequest(text, imgs)}
           onBack={() => window.history.back()}
           onPipTap={handlePipTap}

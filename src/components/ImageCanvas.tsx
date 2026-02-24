@@ -50,6 +50,8 @@ export default function ImageCanvas({
   // Video playback state
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoBuffered, setVideoBuffered] = useState(0); // 0-1 progress
 
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
@@ -303,9 +305,17 @@ export default function ImageCanvas({
                 animDir === 'right' ? 'opacity-0 translate-x-8' :
                 'opacity-100 translate-x-0'
               }`}
-              onPlay={() => setVideoPlaying(true)}
+              onPlay={() => { setVideoPlaying(true); setVideoLoading(false); }}
               onPause={() => setVideoPlaying(false)}
               onEnded={() => setVideoPlaying(false)}
+              onWaiting={() => setVideoLoading(true)}
+              onCanPlay={() => setVideoLoading(false)}
+              onProgress={() => {
+                const v = videoRef.current;
+                if (v && v.buffered.length > 0 && v.duration) {
+                  setVideoBuffered(v.buffered.end(v.buffered.length - 1) / v.duration);
+                }
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 if (videoPlaying) {
@@ -313,11 +323,24 @@ export default function ImageCanvas({
                 }
               }}
             />
+            {/* Loading indicator — shows during buffering */}
+            {videoLoading && (
+              <div className="absolute bottom-0 left-0 right-0 z-10">
+                <div style={{ height: 3, background: 'rgba(255,255,255,0.1)' }}>
+                  <div style={{
+                    height: '100%', background: 'rgba(217,70,239,0.8)',
+                    width: `${Math.round(videoBuffered * 100)}%`,
+                    transition: 'width 0.3s',
+                  }} />
+                </div>
+              </div>
+            )}
             {/* Play button overlay */}
-            {!videoPlaying && (
+            {!videoPlaying && !videoLoading && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
+                  setVideoLoading(true);
                   videoRef.current?.play();
                 }}
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center z-10 active:scale-95 transition-transform"
@@ -326,6 +349,12 @@ export default function ImageCanvas({
                   <polygon points="3,1 9,5 3,9" />
                 </svg>
               </button>
+            )}
+            {/* Buffering spinner when loading during playback */}
+            {videoLoading && videoPlaying && (
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                <div className="w-10 h-10 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              </div>
             )}
           </div>
         ) : (
