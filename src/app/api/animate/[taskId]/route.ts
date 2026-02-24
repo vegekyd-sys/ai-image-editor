@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getKlingTask } from '@/lib/kling'
+import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 
 export const maxDuration = 15
 
@@ -16,8 +17,9 @@ export async function GET(
 
     const { taskId } = await params
 
-    // Poll PiAPI
-    const result = await getKlingTask(taskId)
+    // Poll task — switch provider via ANIMATE_PROVIDER env var
+    const useKlingDirect = process.env.ANIMATE_PROVIDER === 'kling'
+    const result = useKlingDirect ? await getKlingTask(taskId) : await getKlingTaskPiAPI(taskId)
 
     // If completed, update DB
     if (result.status === 'completed' && result.videoUrl) {

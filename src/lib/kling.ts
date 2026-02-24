@@ -39,13 +39,13 @@ function headers() {
   }
 }
 
-/** Submit a multi-image-to-video task. Returns the Kling task ID. */
+/** Submit an Omni Video O1 task. Returns the Kling task ID. */
 export async function createKlingTask(input: KlingTaskInput): Promise<string> {
   const body = {
-    model_name: 'kling-v1-6',
+    model_name: 'kling-video-o1',
     image_list: input.images.map(img => ({
-      // Strip data:image prefix if present (Kling requires raw base64 or URL)
-      image: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
+      // O1 uses image_url field; strip data: prefix if present
+      image_url: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
     })),
     prompt: input.prompt,
     mode: input.mode ?? 'pro',
@@ -53,7 +53,7 @@ export async function createKlingTask(input: KlingTaskInput): Promise<string> {
     aspect_ratio: input.aspect_ratio ?? '9:16',
   }
 
-  const res = await fetch(`${KLING_BASE}/v1/videos/multi-image2video`, {
+  const res = await fetch(`${KLING_BASE}/v1/videos/omni-video`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(body),
@@ -76,7 +76,7 @@ export async function createKlingTask(input: KlingTaskInput): Promise<string> {
 
 /** Poll a task for status + result. */
 export async function getKlingTask(taskId: string): Promise<KlingTaskResult> {
-  const res = await fetch(`${KLING_BASE}/v1/videos/multi-image2video/${taskId}`, {
+  const res = await fetch(`${KLING_BASE}/v1/videos/omni-video/${taskId}`, {
     headers: headers(),
   })
 

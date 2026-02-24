@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createKlingTask } from '@/lib/kling'
+import { createKlingTask as createKlingTaskPiAPI } from '@/lib/piapi'
 
 export const maxDuration = 30
 
@@ -27,13 +28,23 @@ export async function POST(req: NextRequest) {
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
-    // Create Kling task via official API
-    const piApiTaskId = await createKlingTask({
-      prompt,
-      images: imageUrls,
-      duration: duration ?? 10,
-      aspect_ratio: aspectRatio ?? '9:16',
-    })
+    // Create Kling task — switch provider via ANIMATE_PROVIDER env var
+    const useKlingDirect = process.env.ANIMATE_PROVIDER === 'kling'
+    const piApiTaskId = useKlingDirect
+      ? await createKlingTask({
+          prompt,
+          images: imageUrls,
+          duration: duration ?? 10,
+          aspect_ratio: aspectRatio ?? '9:16',
+        })
+      : await createKlingTaskPiAPI({
+          prompt,
+          images: imageUrls,
+          duration: duration ?? 10,
+          aspect_ratio: aspectRatio ?? '9:16',
+          enable_audio: true,
+          version: '3.0',
+        })
 
     // Save animation record to DB
     const { data: animation, error } = await supabase
