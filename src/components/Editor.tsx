@@ -185,6 +185,8 @@ export default function Editor({
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveToast, setSaveToast] = useState(false);
   const [isTipsFetching, setIsTipsFetching] = useState(false);
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
@@ -1598,13 +1600,17 @@ export default function Editor({
     }
   }, [animationState?.status, animationState?.pollSeconds]);
 
+  const showSaveToast = useCallback(() => {
+    setSaveToast(true);
+    setTimeout(() => setSaveToast(false), 2000);
+  }, []);
+
   const handleDownload = useCallback(async () => {
     // Video download — proxy through our API to avoid CORS
     if (isViewingVideo && animationState?.videoUrl) {
       const videoSrc = animationState.videoUrl;
       const filename = `makaron-video-${Date.now()}.mp4`;
-      const prevStatus = agentStatus;
-      setAgentStatus('准备视频下载中...');
+      setIsSaving(true);
       try {
         const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}`;
         const res = await fetch(proxyUrl);
@@ -1612,7 +1618,8 @@ export default function Editor({
         if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
           const file = new File([blob], filename, { type: 'video/mp4' });
           await navigator.share({ files: [file] });
-          setAgentStatus(prevStatus);
+          setIsSaving(false);
+          showSaveToast();
           return;
         }
         const url = URL.createObjectURL(blob);
@@ -1621,9 +1628,10 @@ export default function Editor({
         link.download = filename;
         link.click();
         URL.revokeObjectURL(url);
-        setAgentStatus(prevStatus);
+        setIsSaving(false);
+        showSaveToast();
       } catch {
-        setAgentStatus(prevStatus);
+        setIsSaving(false);
         window.open(videoSrc, '_blank');
       }
       return;
@@ -1633,6 +1641,7 @@ export default function Editor({
     const img = timeline[viewIndex];
     if (!img) return;
     const filename = `ai-edited-${Date.now()}.jpg`;
+    setIsSaving(true);
 
     try {
       const res = await fetch(img);
@@ -1641,6 +1650,8 @@ export default function Editor({
       if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
         const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
         await navigator.share({ files: [file] });
+        setIsSaving(false);
+        showSaveToast();
         return;
       }
 
@@ -1650,13 +1661,16 @@ export default function Editor({
       link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
+      setIsSaving(false);
+      showSaveToast();
     } catch {
+      setIsSaving(false);
       const link = document.createElement('a');
       link.href = img;
       link.download = filename;
       link.click();
     }
-  }, [timeline, viewIndex, isViewingVideo, animationState?.videoUrl]);
+  }, [timeline, viewIndex, isViewingVideo, animationState?.videoUrl, showSaveToast]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string) => {
@@ -1814,9 +1828,22 @@ export default function Editor({
                   {(viewIndex > 0 || isViewingDraft || isViewingVideo) && (
                     <button
                       onClick={handleDownload}
-                      className="px-3 py-1.5 rounded-full text-xs font-medium text-white bg-fuchsia-500/20 backdrop-blur-sm border border-fuchsia-500/30"
+                      disabled={isSaving}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all ${
+                        isSaving
+                          ? 'text-white/50 bg-fuchsia-500/10 border-fuchsia-500/20'
+                          : 'text-white bg-fuchsia-500/20 border-fuchsia-500/30'
+                      }`}
                     >
-                      Save
+                      {isSaving ? (
+                        <span className="flex items-center gap-1.5">
+                          <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Saving
+                        </span>
+                      ) : 'Save'}
                     </button>
                   )}
                 </div>
@@ -1937,6 +1964,24 @@ export default function Editor({
           onStateChange={(update) => setAnimationState(prev => prev ? { ...prev, ...update } : prev)}
         />
       )}
+
+      {/* Save success toast */}
+      {saveToast && (
+        <div
+          className="fixed top-16 left-1/2 -translate-x-1/2 z-[300] px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-sm text-white text-sm font-medium shadow-lg"
+          style={{ animation: 'fadeInOut 2s ease both' }}
+        >
+          保存成功
+        </div>
+      )}
+      <style>{`
+        @keyframes fadeInOut {
+          0% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+          15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          75% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+        }
+      `}</style>
     </div>
   );
 }
