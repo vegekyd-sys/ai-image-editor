@@ -92,17 +92,48 @@ export default function AnimateSheet({
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
-  // Drag-to-close state
+  // Drag-to-close: tracks finger position, translates sheet in real-time
   const dragStartY = useRef(0);
+  const dragOffsetY = useRef(0);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
 
   const handleDragStart = useCallback((e: React.TouchEvent) => {
     dragStartY.current = e.touches[0].clientY;
+    dragOffsetY.current = 0;
+    setDragging(true);
   }, []);
 
-  const handleDragEnd = useCallback((e: React.TouchEvent) => {
-    const deltaY = e.changedTouches[0].clientY - dragStartY.current;
-    if (deltaY > 40) onClose(); // swipe down > 40px → close
+  const handleDragMove = useCallback((e: React.TouchEvent) => {
+    if (!dragging) return;
+    const dy = Math.max(0, e.touches[0].clientY - dragStartY.current);
+    dragOffsetY.current = dy;
+    if (sheetRef.current) {
+      sheetRef.current.style.transform = `translateY(${dy}px)`;
+    }
+  }, [dragging]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragging(false);
+    if (dragOffsetY.current > 60) {
+      // Swipe far enough → animate out and close
+      if (sheetRef.current) {
+        sheetRef.current.style.transition = 'transform 0.2s ease-out';
+        sheetRef.current.style.transform = 'translateY(100%)';
+        setTimeout(() => onClose(), 200);
+      } else {
+        onClose();
+      }
+    } else {
+      // Snap back
+      if (sheetRef.current) {
+        sheetRef.current.style.transition = 'transform 0.2s ease-out';
+        sheetRef.current.style.transform = 'translateY(0)';
+        setTimeout(() => {
+          if (sheetRef.current) sheetRef.current.style.transition = '';
+        }, 200);
+      }
+    }
   }, [onClose]);
 
   return (
@@ -117,7 +148,7 @@ export default function AnimateSheet({
           borderRadius: '20px 20px 0 0',
           zIndex: 201,
           display: 'flex', flexDirection: 'column',
-          animation: 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
+          animation: dragging ? 'none' : 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
           boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
         }}
       >
@@ -128,22 +159,27 @@ export default function AnimateSheet({
           }
         `}</style>
 
-        {/* Drag handle row — functional: swipe down to close, X on the right */}
+        {/* Drag handle + header row */}
         <div
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 12px 0', position: 'relative' }}
+          style={{ padding: '8px 14px 0', touchAction: 'none' }}
           onTouchStart={handleDragStart}
+          onTouchMove={handleDragMove}
           onTouchEnd={handleDragEnd}
         >
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
-          <button
-            onClick={onClose}
-            style={{
-              position: 'absolute', right: 12, top: 4,
-              background: 'none', border: 'none',
-              color: 'rgba(255,255,255,0.4)', fontSize: '1.1rem',
-              cursor: 'pointer', padding: '2px 6px', lineHeight: 1,
-            }}
-          >×</button>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.25)' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>生成视频</div>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none', border: 'none',
+                color: 'rgba(255,255,255,0.4)', fontSize: '1.2rem',
+                cursor: 'pointer', padding: '0 4px', lineHeight: 1,
+              }}
+            >×</button>
+          </div>
         </div>
 
         {/* All content scrollable */}
