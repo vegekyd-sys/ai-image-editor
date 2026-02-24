@@ -92,21 +92,35 @@ export default function AnimateSheet({
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
+  // Drag-to-close state
+  const dragStartY = useRef(0);
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  const handleDragStart = useCallback((e: React.TouchEvent) => {
+    dragStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.TouchEvent) => {
+    const deltaY = e.changedTouches[0].clientY - dragStartY.current;
+    if (deltaY > 40) onClose(); // swipe down > 40px → close
+  }, [onClose]);
+
   return (
     <>
-      {/* No backdrop — canvas stays fully visible */}
-
       {/* Sheet — compact, no overlay */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        maxHeight: '20dvh',
-        background: '#0e0e0e',
-        borderRadius: '20px 20px 0 0',
-        zIndex: 201,
-        display: 'flex', flexDirection: 'column',
-        animation: 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
-        boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
-      }}>
+      <div
+        ref={sheetRef}
+        style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          maxHeight: '22dvh',
+          background: '#0e0e0e',
+          borderRadius: '20px 20px 0 0',
+          zIndex: 201,
+          display: 'flex', flexDirection: 'column',
+          animation: 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
+        }}
+      >
         <style>{`
           @keyframes slideUpSheet {
             from { transform: translateY(100%); }
@@ -114,22 +128,26 @@ export default function AnimateSheet({
           }
         `}</style>
 
-        {/* Drag handle */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0' }}>
+        {/* Drag handle row — functional: swipe down to close, X on the right */}
+        <div
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 12px 0', position: 'relative' }}
+          onTouchStart={handleDragStart}
+          onTouchEnd={handleDragEnd}
+        >
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
+          <button
+            onClick={onClose}
+            style={{
+              position: 'absolute', right: 12, top: 4,
+              background: 'none', border: 'none',
+              color: 'rgba(255,255,255,0.4)', fontSize: '1.1rem',
+              cursor: 'pointer', padding: '2px 6px', lineHeight: 1,
+            }}
+          >×</button>
         </div>
 
-        {/* All content scrollable — header included */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 16px' }}>
-
-          {/* Header — scrolls with content */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>生成视频</div>
-            <button
-              onClick={onClose}
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '1.3rem', cursor: 'pointer', padding: '2px 6px' }}
-            >×</button>
-          </div>
+        {/* All content scrollable */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 16px 14px' }}>
 
           {/* Prompt section */}
           <div style={{ marginBottom: 12 }}>
