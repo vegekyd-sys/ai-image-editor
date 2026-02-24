@@ -99,7 +99,7 @@ export default function AnimateSheet({
       {/* Sheet — compact, no overlay */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
-        maxHeight: '25dvh',
+        maxHeight: '20dvh',
         background: '#0e0e0e',
         borderRadius: '20px 20px 0 0',
         zIndex: 201,

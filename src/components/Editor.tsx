@@ -302,7 +302,8 @@ export default function Editor({
     if (draftImage !== null && draftParentIndex !== null) {
       base.splice(draftParentIndex + 1, 0, draftImage);
     }
-    if (animationState?.status === 'done' && animationState.videoUrl) {
+    // Always add video entry at end when ≥3 snapshots (swipeable even without video)
+    if (snapshots.length >= 3) {
       base.push('__VIDEO__');
     }
     return base;
@@ -310,8 +311,8 @@ export default function Editor({
 
   // Video entry: last item in timeline when video is done
   const hasVideo = animationState?.status === 'done' && !!animationState.videoUrl;
-  const videoTimelineIndex = hasVideo ? timeline.length - 1 : -1;
-  const isViewingVideo = hasVideo && viewIndex === videoTimelineIndex;
+  const videoTimelineIndex = snapshots.length >= 3 ? timeline.length - 1 : -1;
+  const isViewingVideo = videoTimelineIndex >= 0 && viewIndex === videoTimelineIndex;
 
   // Draft occupies the slot immediately after its parent snapshot
   const isViewingDraft = isDraft && draftParentIndex !== null && viewIndex === draftParentIndex + 1;
@@ -620,6 +621,40 @@ export default function Editor({
     }
   }, [onUpdateTips]);
 
+  // Shared helper: handle a tip SSE event (partial or complete) for a given snapshot
+  const handleTipEvent = useCallback((
+    tip: Tip,
+    snapshotId: string,
+    shouldPreview: (tip: Tip) => boolean,
+    imageBase64ForPreview?: string,
+  ) => {
+    if (!tip.label || !tip.category) return;
+    if (!tip.editPrompt) {
+      // Partial tip: label+desc ready, editPrompt still streaming — show immediately
+      setSnapshots((prev) => prev.map((s) => {
+        if (s.id !== snapshotId) return s;
+        if (s.tips.some(t => t.label === tip.label)) return s;
+        return { ...s, tips: [...s.tips, { ...tip, previewStatus: 'none' }] };
+      }));
+    } else {
+      // Complete tip: upsert by label (updates partial if exists, adds new otherwise)
+      const doPreview = shouldPreview(tip);
+      setSnapshots((prev) => prev.map((s) => {
+        if (s.id !== snapshotId) return s;
+        const idx = s.tips.findIndex(t => t.label === tip.label);
+        if (idx >= 0) {
+          const newTips = [...s.tips];
+          newTips[idx] = { ...newTips[idx], editPrompt: tip.editPrompt, previewStatus: doPreview ? 'pending' : 'none', aspectRatio: tip.aspectRatio };
+          return { ...s, tips: newTips };
+        }
+        return { ...s, tips: [...s.tips, { ...tip, previewStatus: doPreview ? 'pending' : 'none' }] };
+      }));
+      if (doPreview && imageBase64ForPreview) {
+        generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64ForPreview, tip.aspectRatio);
+      }
+    }
+  }, [generatePreviewForTip]);
+
   // Fetch tips via 3 parallel calls to Claude (fast, ~2-3s vs Gemini ~15s)
   // previewMode: 'full' = all tips get preview; 'selective' = 1 enhance + 1 wild; 'none' = no previews
   const fetchTipsForSnapshot = useCallback((
@@ -672,43 +707,16 @@ export default function Editor({
                 if (payload === '[DONE]') break;
                 try {
                   const tip = JSON.parse(payload) as Tip;
-                  if (tip.label && tip.category) {
-                    if (!tip.editPrompt) {
-                      // Partial tip: label+desc ready, editPrompt still streaming — show immediately
-                      setSnapshots((prev) => prev.map((s) => {
-                        if (s.id !== snapshotId) return s;
-                        if (s.tips.some(t => t.label === tip.label)) return s;
-                        return { ...s, tips: [...s.tips, { ...tip, previewStatus: 'none' }] };
-                      }));
-                    } else {
-                      // Complete tip: upsert by label (updates partial if exists, adds new otherwise)
-                      const shouldPreview = (() => {
-                        if (previewMode === 'none') return false;
-                        if (previewMode === 'full') return true;
-                        const cat = tip.category as string;
-                        if ((cat === 'enhance' || cat === 'wild') && previewGenerated[cat] === 0) {
-                          previewGenerated[cat]++;
-                          return true;
-                        }
-                        return false;
-                      })();
-
-                      setSnapshots((prev) => prev.map((s) => {
-                        if (s.id !== snapshotId) return s;
-                        const idx = s.tips.findIndex(t => t.label === tip.label);
-                        if (idx >= 0) {
-                          const newTips = [...s.tips];
-                          newTips[idx] = { ...newTips[idx], editPrompt: tip.editPrompt, previewStatus: shouldPreview ? 'pending' : 'none', aspectRatio: tip.aspectRatio };
-                          return { ...s, tips: newTips };
-                        }
-                        return { ...s, tips: [...s.tips, { ...tip, previewStatus: shouldPreview ? 'pending' : 'none' }] };
-                      }));
-
-                      if (shouldPreview) {
-                        generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
-                      }
+                  handleTipEvent(tip, snapshotId, (t) => {
+                    if (previewMode === 'none') return false;
+                    if (previewMode === 'full') return true;
+                    const cat = t.category as string;
+                    if ((cat === 'enhance' || cat === 'wild') && previewGenerated[cat] === 0) {
+                      previewGenerated[cat]++;
+                      return true;
                     }
-                  }
+                    return false;
+                  }, imageBase64);
                 } catch { /* skip malformed */ }
               }
             }
@@ -796,14 +804,7 @@ export default function Editor({
               if (payload === '[DONE]') break;
               try {
                 const tip = JSON.parse(payload) as Tip;
-                if (tip.label && tip.category && tip.editPrompt) {
-                  tip.previewStatus = 'none';
-                  setSnapshots((prev) => prev.map((s) => {
-                    if (s.id !== snapshotId) return s;
-                    if (s.tips.some(t => t.label === tip.label)) return s;
-                    return { ...s, tips: [...s.tips, tip] };
-                  }));
-                }
+                handleTipEvent(tip, snapshotId, () => false);
               } catch { /* skip malformed */ }
             }
           }
@@ -1462,6 +1463,26 @@ export default function Editor({
     }
   }, [initialAnimation]);
 
+  // Auto-initialize animationState when user swipes to video entry
+  useEffect(() => {
+    if (isViewingVideo && !animationState) {
+      const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+      const imageUrls = allUrls.length <= 4
+        ? allUrls
+        : [0, 1, Math.floor(allUrls.length / 2), allUrls.length - 1].map(i => allUrls[i]);
+      setAnimationState({
+        imageUrls,
+        prompt: '',
+        taskId: null,
+        videoUrl: null,
+        status: 'idle',
+        error: null,
+        duration: 10,
+        pollSeconds: 0,
+      });
+    }
+  }, [isViewingVideo, animationState, snapshots]);
+
   // Auto-name existing projects that still have a default title (runs once on mount)
   useEffect(() => {
     if (hasTriggeredNamingRef.current) return;
@@ -1888,7 +1909,7 @@ export default function Editor({
       )}
 
       {/* Animate Sheet — bottom sheet card (no backdrop) */}
-      {(showAnimateSheet || isViewingVideo) && viewMode === 'gui' && animationState && projectId && (
+      {(showAnimateSheet || isViewingVideo) && viewMode === 'gui' && projectId && animationState && (
         <AnimateSheet
           snapshots={snapshots.filter(s => s.imageUrl || s.image)}
           projectId={projectId}

@@ -405,10 +405,10 @@ export default function ImageCanvas({
             {onAnimate && !isDraft && (
               <button
                 onClick={() => {
-                  if (hasVideo) {
-                    const videoIdx = timeline.indexOf(VIDEO_SENTINEL);
-                    if (videoIdx >= 0) goTo(videoIdx);
-                  } else {
+                  const videoIdx = timeline.indexOf(VIDEO_SENTINEL);
+                  if (videoIdx >= 0) {
+                    goTo(videoIdx);
+                  } else if (onAnimate) {
                     onAnimate();
                   }
                 }}
