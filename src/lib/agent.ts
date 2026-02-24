@@ -2,7 +2,7 @@ import { streamText, generateText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import { generatePreviewImage, generateImageWithReferences } from './gemini';
-import { createKlingTask } from './piapi';
+import { createKlingTask } from './kling';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -163,8 +163,6 @@ function createTools(ctx: AgentContext) {
             images: imageUrls.slice(0, 4),
             duration: duration ?? 10,
             aspect_ratio: '9:16',
-            enable_audio: true,
-            version: '3.0',
           });
           ctx.animationTaskId = taskId;
           return { success: true as const, taskId, message: '视频生成任务已创建！大约需要 3-5 分钟，生成完成后会直接显示在这里。' };
