@@ -408,7 +408,7 @@ export default function ImageCanvas({
                   if (hasVideo) {
                     const videoIdx = timeline.indexOf(VIDEO_SENTINEL);
                     if (videoIdx >= 0) goTo(videoIdx);
-                  } else {
+                  } else if (onAnimate) {
                     onAnimate();
                   }
                 }}

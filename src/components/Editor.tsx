@@ -304,7 +304,6 @@ export default function Editor({
     if (draftImage !== null && draftParentIndex !== null) {
       base.splice(draftParentIndex + 1, 0, draftImage);
     }
-    // Video entry only when video is done
     if (animationState?.status === 'done' && animationState.videoUrl) {
       base.push('__VIDEO__');
     }
@@ -1464,6 +1463,26 @@ export default function Editor({
       setShowAnimateSheet(true);
     }
   }, [initialAnimation]);
+
+  // Auto-initialize animationState when user swipes to video entry
+  useEffect(() => {
+    if (isViewingVideo && !animationState) {
+      const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+      const imageUrls = allUrls.length <= 4
+        ? allUrls
+        : [0, 1, Math.floor(allUrls.length / 2), allUrls.length - 1].map(i => allUrls[i]);
+      setAnimationState({
+        imageUrls,
+        prompt: '',
+        taskId: null,
+        videoUrl: null,
+        status: 'idle',
+        error: null,
+        duration: 10,
+        pollSeconds: 0,
+      });
+    }
+  }, [isViewingVideo, animationState, snapshots]);
 
   // Auto-name existing projects that still have a default title (runs once on mount)
   useEffect(() => {
