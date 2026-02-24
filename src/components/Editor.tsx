@@ -304,8 +304,8 @@ export default function Editor({
     if (draftImage !== null && draftParentIndex !== null) {
       base.splice(draftParentIndex + 1, 0, draftImage);
     }
-    // Always add video entry at end when ≥3 snapshots (swipeable even without video)
-    if (snapshots.length >= 3) {
+    // Video entry only when video is done
+    if (animationState?.status === 'done' && animationState.videoUrl) {
       base.push('__VIDEO__');
     }
     return base;
@@ -313,8 +313,8 @@ export default function Editor({
 
   // Video entry: last item in timeline when video is done
   const hasVideo = animationState?.status === 'done' && !!animationState.videoUrl;
-  const videoTimelineIndex = snapshots.length >= 3 ? timeline.length - 1 : -1;
-  const isViewingVideo = videoTimelineIndex >= 0 && viewIndex === videoTimelineIndex;
+  const videoTimelineIndex = hasVideo ? timeline.length - 1 : -1;
+  const isViewingVideo = hasVideo && viewIndex === videoTimelineIndex;
 
   // Draft occupies the slot immediately after its parent snapshot
   const isViewingDraft = isDraft && draftParentIndex !== null && viewIndex === draftParentIndex + 1;
@@ -1464,26 +1464,6 @@ export default function Editor({
       setShowAnimateSheet(true);
     }
   }, [initialAnimation]);
-
-  // Auto-initialize animationState when user swipes to video entry
-  useEffect(() => {
-    if (isViewingVideo && !animationState) {
-      const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-      const imageUrls = allUrls.length <= 4
-        ? allUrls
-        : [0, 1, Math.floor(allUrls.length / 2), allUrls.length - 1].map(i => allUrls[i]);
-      setAnimationState({
-        imageUrls,
-        prompt: '',
-        taskId: null,
-        videoUrl: null,
-        status: 'idle',
-        error: null,
-        duration: 10,
-        pollSeconds: 0,
-      });
-    }
-  }, [isViewingVideo, animationState, snapshots]);
 
   // Auto-name existing projects that still have a default title (runs once on mount)
   useEffect(() => {
