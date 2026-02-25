@@ -399,10 +399,6 @@ export async function generatePreviewImage(
   editPrompt: string,
   aspectRatio?: string,
 ): Promise<string | null> {
-  // Text-to-image (no input image): always use Google direct (faster, more reliable)
-  if (!imageBase64) {
-    return generatePreviewImageGoogle('', editPrompt, aspectRatio);
-  }
   if (PROVIDER === 'openrouter') {
     return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio);
   } else {
@@ -491,18 +487,30 @@ async function generatePreviewImageOpenRouter(
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error(`[OpenRouter] ${res.status}: ${errText.slice(0, 200)}`);
+    return null;
+  }
 
   const data = await res.json();
   const choice = data.choices?.[0]?.message;
-  if (!choice) return null;
+  if (!choice) {
+    console.error('[OpenRouter] No choice in response:', JSON.stringify(data).slice(0, 300));
+    return null;
+  }
 
+  // Extract image from response
   if (choice.images && Array.isArray(choice.images)) {
     for (const img of choice.images) {
       const url = img.image_url?.url || img.url;
-      if (url) return url;
+      if (url) {
+        console.log(`[OpenRouter] Got image, url length: ${url.length}`);
+        return url;
+      }
     }
   }
+  console.error('[OpenRouter] No image in response, content:', (choice.content || '').slice(0, 100));
   return null;
 }
 
