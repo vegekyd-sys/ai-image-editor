@@ -149,7 +149,7 @@ function createTools(ctx: AgentContext) {
     generate_animation: tool({
       description: 'Create a 10-second animation video from the project snapshots using Kling AI. Only available when the user is in animation mode (animationImageUrls exist). Call this AFTER you have written the story script and the user has confirmed.',
       inputSchema: z.object({
-        story_prompt: z.string().describe('The cinematic story prompt in Chinese, with @image_1, @image_2 etc. referencing each snapshot'),
+        story_prompt: z.string().describe('The cinematic story prompt in Chinese, with <<<image_1>>>, <<<image_2>>> etc. referencing each snapshot'),
         duration: z.number().optional().describe('Duration in seconds: 5 or 10. Default 10.'),
       }),
       execute: async ({ story_prompt, duration }) => {
@@ -160,7 +160,7 @@ function createTools(ctx: AgentContext) {
         try {
           const taskId = await createKlingTask({
             prompt: story_prompt,
-            images: imageUrls.slice(0, 4),
+            images: imageUrls.slice(0, 7),
             duration: duration ?? 10,
             aspect_ratio: '9:16',
           });

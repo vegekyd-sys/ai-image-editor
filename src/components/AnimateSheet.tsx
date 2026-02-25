@@ -23,13 +23,19 @@ export default function AnimateSheet({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Auto-generate prompt when status is 'idle'
+  // Auto-generate prompt when status is 'idle' — refresh imageUrls from latest snapshots
   useEffect(() => {
     if (status !== 'idle') return;
-    if (imageUrls.length < 2) {
+    // Rebuild imageUrls from current snapshots (may have more than old 4-image limit)
+    const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+    const freshUrls = allUrls.length <= 7
+      ? allUrls
+      : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
+    if (freshUrls.length < 2) {
       onStateChange({ status: 'error', error: '需要至少 2 张已上传的图片才能生成视频。请等待图片上传完成后重试。' });
       return;
     }
+    onStateChange({ imageUrls: freshUrls });
     onGeneratePrompt?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -208,8 +214,11 @@ export default function AnimateSheet({
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>时长</div>
               <select
-                value={duration}
-                onChange={e => onStateChange({ duration: Number(e.target.value) })}
+                value={duration ?? 'smart'}
+                onChange={e => {
+                  const v = e.target.value
+                  onStateChange({ duration: v === 'smart' ? null : Number(v) })
+                }}
                 disabled={status === 'polling' || status === 'done'}
                 style={{
                   width: '100%', background: 'rgba(255,255,255,0.06)',
@@ -218,8 +227,12 @@ export default function AnimateSheet({
                   color: '#fff', fontSize: '0.82rem', cursor: 'pointer',
                 }}
               >
+                <option value={3}>3 秒</option>
                 <option value={5}>5 秒</option>
+                <option value={7}>7 秒</option>
                 <option value={10}>10 秒</option>
+                <option value={15}>15 秒</option>
+                <option value="smart">智能</option>
               </select>
             </div>
             <div style={{ flex: 1 }}>
@@ -229,7 +242,7 @@ export default function AnimateSheet({
                 borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
                 fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)',
               }}>
-                ~${(duration * 0.168).toFixed(2)}
+                {duration != null ? `~$${(duration * 0.112).toFixed(2)}` : '按实际时长'}
               </div>
             </div>
           </div>

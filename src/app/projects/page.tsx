@@ -73,6 +73,8 @@ export default function ProjectsPage() {
   })
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const inputBoxRef = useRef<HTMLDivElement>(null)
+  const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
   const [inputText, setInputText] = useState('')
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
   const [attachedPreview, setAttachedPreview] = useState<string | null>(null)
@@ -123,6 +125,17 @@ export default function ProjectsPage() {
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login')
   }, [user, authLoading, router])
+
+  // Measure input box height → set photo slot width = height (square)
+  useEffect(() => {
+    const el = inputBoxRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      setPhotoSlotWidth(Math.round(entry.contentRect.height))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // Phase 2: Async IndexedDB cache (cross-session persistence, no auth dependency)
   useEffect(() => {
@@ -428,6 +441,28 @@ export default function ProjectsPage() {
         }
         .mkr-new-btn:active { transform: scale(0.96); opacity: 0.8; }
 
+        .mkr-input-box {
+          transition: border-color 0.25s, box-shadow 0.25s;
+        }
+        .mkr-input-box:focus-within {
+          border-color: rgba(217,70,239,0.35) !important;
+          box-shadow: 0 0 0 1px rgba(217,70,239,0.12);
+        }
+
+        .mkr-create-btn {
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
+          -webkit-user-select: none;
+          transition: background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+        }
+        .mkr-create-btn:hover {
+          background: rgba(217,70,239,0.1) !important;
+          border-color: rgba(217,70,239,0.5) !important;
+          box-shadow: 0 0 20px rgba(217,70,239,0.15);
+        }
+        .mkr-create-btn:active { transform: scale(0.96); }
+
         @keyframes mkr-spin { to { transform: rotate(360deg); } }
         .mkr-spin { animation: mkr-spin 0.9s linear infinite; }
 
@@ -481,8 +516,9 @@ export default function ProjectsPage() {
             HERO — ~45dvh, fully centered
         ════════════════════════════════ */}
         <div style={{
-          height: '45dvh', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: '0px',
+          paddingTop: '20vh', paddingBottom: '40px',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: '0px',
           position: 'relative', zIndex: 1,
         }}>
           {/* Wordmark row: asterisk icon + Makaron */}
@@ -527,23 +563,22 @@ export default function ProjectsPage() {
           </div>
 
           {/* Create input: [photo] + [textarea] */}
-          <div style={{ marginTop: '28px', width: '100%', maxWidth: '420px', padding: '0 24px' }}>
-            <div style={{
+          <div style={{ marginTop: '32px', width: '100%', padding: '0 16px', maxWidth: '480px' }}>
+            <div ref={inputBoxRef} className="mkr-input-box" style={{
               display: 'flex', gap: 0,
-              borderRadius: 16,
-              border: '1.5px solid rgba(217,70,239,0.3)',
-              background: 'rgba(255,255,255,0.04)',
+              borderRadius: 18,
+              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(255,255,255,0.03)',
               overflow: 'hidden',
-              minHeight: 80,
             }}>
-              {/* Left: photo slot */}
+              {/* Left: photo slot — square, width = container height */}
               <label
                 htmlFor="new-project-file-input"
                 style={{
-                  width: 80, minHeight: 80, flexShrink: 0,
+                  width: photoSlotWidth, flexShrink: 0, alignSelf: 'stretch',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: creating ? 'default' : 'pointer',
-                  borderRight: '1px solid rgba(217,70,239,0.15)',
+                  borderRight: '1px solid rgba(255,255,255,0.08)',
                   position: 'relative',
                   background: attachedPreview ? 'transparent' : 'rgba(217,70,239,0.04)',
                 }}
@@ -553,7 +588,7 @@ export default function ProjectsPage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={attachedPreview} alt="attached"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, borderRadius: '14px 0 0 14px' }}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
                       onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}
                     />
                     <div style={{
@@ -572,7 +607,7 @@ export default function ProjectsPage() {
                 )}
               </label>
 
-              {/* Right: textarea + send */}
+              {/* Right: textarea + create */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
                 <textarea
                   value={inputText}
@@ -583,38 +618,51 @@ export default function ProjectsPage() {
                       handleCreate();
                     }
                   }}
-                  placeholder="Your imagination, our pixels."
+                  placeholder={"Got a pic? Let's glow it up.\nNo pic? I'll cook one up."}
                   disabled={creating}
                   rows={3}
                   style={{
                     flex: 1, border: 'none', background: 'transparent',
-                    color: '#fff', fontSize: '0.85rem', lineHeight: 1.4,
-                    padding: '10px 12px', paddingRight: 36,
+                    color: '#fff', fontSize: '0.95rem', lineHeight: 1.45,
+                    padding: '12px 14px', paddingBottom: 40,
                     outline: 'none', resize: 'none',
-                    fontFamily: 'inherit',
-                    minHeight: 76,
+                    fontFamily: 'var(--font-geist-sans), sans-serif',
+                    minHeight: 80,
                   }}
                 />
-                {/* Send button — visible when there's text or image */}
-                {(inputText.trim() || attachedFile) && (
-                  <button
-                    onClick={handleCreate}
-                    disabled={creating}
-                    style={{
-                      position: 'absolute', bottom: 8, right: 8,
-                      background: 'none', border: 'none',
-                      color: 'rgb(217,70,239)',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center',
-                      padding: 4,
-                    }}
-                  >
-                    {creating ? <Spinner size={16} /> : (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                {/* Create button — always visible, inside the box */}
+                <button
+                  className="mkr-create-btn"
+                  onClick={() => {
+                    if (inputText.trim() || attachedFile) handleCreate()
+                    else fileInputRef.current?.click()
+                  }}
+                  disabled={creating}
+                  style={{
+                    position: 'absolute', bottom: 8, right: 8,
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '5px 10px',
+                    borderRadius: '14px',
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(217,70,239,0.9)',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    letterSpacing: '0.03em',
+                    cursor: creating ? 'default' : 'pointer',
+                    fontFamily: 'var(--font-geist-sans), sans-serif',
+                  }}
+                >
+                  {creating ? <Spinner size={12} /> : (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
                       </svg>
-                    )}
-                  </button>
-                )}
+                      Create
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -623,7 +671,7 @@ export default function ProjectsPage() {
         {/* ═══════════════════════════════
             GALLERY SECTION
         ════════════════════════════════ */}
-        <div style={{ position: 'relative', zIndex: 1 }}>
+        <div style={{ position: 'relative', zIndex: 1, marginTop: '8px' }}>
 
           {/* Section divider — only show when projects exist */}
           {!loadingProjects && projects.length > 0 && (

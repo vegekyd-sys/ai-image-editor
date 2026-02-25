@@ -17,9 +17,9 @@ export async function GET(
 
     const { taskId } = await params
 
-    // Poll task — switch provider via ANIMATE_PROVIDER env var
-    const useKlingDirect = process.env.ANIMATE_PROVIDER === 'kling'
-    const result = useKlingDirect ? await getKlingTask(taskId) : await getKlingTaskPiAPI(taskId)
+    // Poll task — default Kling direct, ANIMATE_PROVIDER=piapi to fallback
+    const usePiAPI = process.env.ANIMATE_PROVIDER === 'piapi'
+    const result = usePiAPI ? await getKlingTaskPiAPI(taskId) : await getKlingTask(taskId)
 
     // If completed, update DB
     if (result.status === 'completed' && result.videoUrl) {

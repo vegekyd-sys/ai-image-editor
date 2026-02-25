@@ -39,18 +39,21 @@ function headers() {
   }
 }
 
-/** Submit an Omni Video O1 task. Returns the Kling task ID. */
+/** Submit a v3-omni video task. Returns the Kling task ID. */
 export async function createKlingTask(input: KlingTaskInput): Promise<string> {
-  const body = {
-    model_name: 'kling-video-o1',
+  const body: Record<string, unknown> = {
+    model_name: 'kling-v3-omni',
     image_list: input.images.map(img => ({
-      // O1 uses image_url field; strip data: prefix if present
       image_url: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
     })),
     prompt: input.prompt,
-    mode: input.mode ?? 'pro',
-    duration: String(input.duration ?? 10),
+    mode: input.mode ?? 'std',
     aspect_ratio: input.aspect_ratio ?? '9:16',
+    sound: 'on',
+  }
+  // duration undefined = smart mode (API decides 3-15s)
+  if (input.duration != null) {
+    body.duration = String(input.duration)
   }
 
   const res = await fetch(`${KLING_BASE}/v1/videos/omni-video`, {

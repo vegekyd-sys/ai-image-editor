@@ -28,22 +28,23 @@ export async function POST(req: NextRequest) {
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
-    // Create Kling task — switch provider via ANIMATE_PROVIDER env var
-    const useKlingDirect = process.env.ANIMATE_PROVIDER === 'kling'
-    const piApiTaskId = useKlingDirect
-      ? await createKlingTask({
-          prompt,
-          images: imageUrls,
-          duration: duration ?? 10,
-          aspect_ratio: aspectRatio ?? '9:16',
-        })
-      : await createKlingTaskPiAPI({
-          prompt,
+    // Create video task — default Kling direct (v3-omni), ANIMATE_PROVIDER=piapi to fallback
+    const usePiAPI = process.env.ANIMATE_PROVIDER === 'piapi'
+    const taskId = usePiAPI
+      ? await createKlingTaskPiAPI({
+          // PiAPI uses @image_N format; convert <<<image_N>>> → @image_N
+          prompt: prompt.replace(/<<<image_(\d+)>>>/g, '@image_$1'),
           images: imageUrls,
           duration: duration ?? 10,
           aspect_ratio: aspectRatio ?? '9:16',
           enable_audio: true,
           version: '3.0',
+        })
+      : await createKlingTask({
+          prompt,
+          images: imageUrls,
+          duration: duration ?? undefined, // null = smart mode
+          aspect_ratio: aspectRatio ?? '9:16',
         })
 
     // Save animation record to DB
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
       .from('project_animations')
       .insert({
         project_id: projectId,
-        piapi_task_id: piApiTaskId,
+        piapi_task_id: taskId,
         status: 'processing',
         prompt,
         snapshot_urls: imageUrls,
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ animationId: animation.id, taskId: piApiTaskId })
+    return NextResponse.json({ animationId: animation.id, taskId })
   } catch (err) {
     console.error('animate POST error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

@@ -90,7 +90,7 @@ When the user wants to create a video from their snapshots (animation mode), you
 
 **Workflow**:
 1. Directly write the story script in Chinese (100-200 characters):
-   - Reference each image with `@image_1`, `@image_2`, etc.
+   - Reference each image with `<<<image_1>>>`, `<<<image_2>>>`, etc.
    - Describe camera movement, mood, transitions
    - Create a narrative arc (beginning → development → end)
 2. Output ONLY the script text. No preamble, no "脚本写好了", no asking for confirmation.

@@ -17,7 +17,7 @@ export interface AnimationState {
   videoUrl: string | null
   status: 'idle' | 'generating_prompt' | 'ready' | 'submitting' | 'polling' | 'done' | 'error'
   error: string | null
-  duration: number
+  duration: number | null  // null = smart mode (API decides 3-15s)
   pollSeconds: number
 }
 
@@ -1129,7 +1129,7 @@ export default function Editor({
     animPromptInFlightRef.current = true;
 
     const n = imageUrls.length;
-    const imageListText = imageUrls.map((_: string, i: number) => `@image_${i + 1}`).join('、');
+    const imageListText = imageUrls.map((_: string, i: number) => `<<<image_${i + 1}>>>`).join('、');
     const prompt = `[视频动画模式] 为以下 ${n} 张照片创作视频故事脚本（图片引用：${imageListText}）。只输出脚本内容，不需要用户确认。`;
 
     const userMsgId = generateId();
@@ -1498,9 +1498,9 @@ export default function Editor({
   useEffect(() => {
     if (isViewingVideo && !animationState) {
       const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-      const imageUrls = allUrls.length <= 4
+      const imageUrls = allUrls.length <= 7
         ? allUrls
-        : [0, 1, Math.floor(allUrls.length / 2), allUrls.length - 1].map(i => allUrls[i]);
+        : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
       setAnimationState({
         imageUrls,
         prompt: '',
@@ -1584,6 +1584,10 @@ export default function Editor({
     const prev = prevAnimStatusRef.current;
     const curr = animationState?.status;
     prevAnimStatusRef.current = curr;
+    // Regenerate: done → idle — keep sheet open
+    if (prev === 'done' && curr === 'idle') {
+      setShowAnimateSheet(true);
+    }
     if (prev && prev !== 'done' && curr === 'done' && animationState?.videoUrl) {
       // Close the sheet — from now on it only shows via isViewingVideo
       setShowAnimateSheet(false);
@@ -1816,9 +1820,9 @@ export default function Editor({
                   }
                   if (!animationState) {
                     const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-                    const imageUrls = allUrls.length <= 4
+                    const imageUrls = allUrls.length <= 7
                       ? allUrls
-                      : [0, 1, Math.floor(allUrls.length / 2), allUrls.length - 1].map(i => allUrls[i]);
+                      : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
                     setAnimationState({
                       imageUrls,
                       prompt: '',

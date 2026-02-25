@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 环境 | URL | 部署方式 |
 |------|-----|---------|
 | 正式 | https://www.makaron.app | `npx vercel --prod` |
-| 测试 | `npx vercel`（每次生成新 preview URL） | `npx vercel`（不加 `--prod`） |
+| 测试 | 每次生成新 preview URL（可登录） | `npx vercel` |
 
-两个环境共享同一个 Supabase 数据库和 env vars。测试环境 URL 每次部署会变。
+两个环境共享同一个 Supabase 数据库。Vercel 环境变量已配 Production + Preview 双份，preview 部署可正常登录。
 
 ## Current Status
 

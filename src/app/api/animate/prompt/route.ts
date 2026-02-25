@@ -25,9 +25,13 @@ export async function POST(req: NextRequest) {
 
     // Build message with all images
     const imageCount = imageUrls.length
-    const imageRefs = Array.from({ length: imageCount }, (_, i) => `@image_${i + 1}`).join('、')
+    const imageRefs = Array.from({ length: imageCount }, (_, i) => `<<<image_${i + 1}>>>`).join('、')
 
-    const userMessage = `请分析以下 ${imageCount} 张图片（按顺序排列），写出视频故事 prompt。图片引用：${imageRefs}。直接输出 prompt，不加任何解释。`
+    const userMessage = `请分析以下 ${imageCount} 张图片（按顺序排列），写出视频故事 prompt。
+
+【重要】引用图片时必须使用三尖括号格式：${imageRefs}。不要使用 @image_N 格式，必须使用 <<<image_N>>> 格式。
+
+直接输出 prompt，不加任何解释。`
 
     const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY!
     const MODEL = 'google/gemini-2.5-pro-preview-03-25'
