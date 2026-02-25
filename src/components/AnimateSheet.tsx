@@ -126,6 +126,28 @@ export default function AnimateSheet({
         {/* Scrollable content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '6px 16px 16px' }}>
 
+          {/* Snapshot filmstrip — @image references */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
+            {snapshots.filter(s => s.imageUrl?.startsWith('http')).map((s, i) => (
+              <div key={s.id} style={{
+                flexShrink: 0, width: 56, height: 56, borderRadius: 10,
+                overflow: 'hidden', background: '#1a1a1a', position: 'relative',
+              }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={s.imageUrl!}
+                  alt={`snapshot ${i + 1}`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+                <div style={{
+                  position: 'absolute', bottom: 2, right: 3,
+                  fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)',
+                  background: 'rgba(0,0,0,0.5)', borderRadius: 3, padding: '1px 3px',
+                }}>@{i + 1}</div>
+              </div>
+            ))}
+          </div>
+
           {/* Prompt section */}
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -174,28 +196,6 @@ export default function AnimateSheet({
                 fontFamily: 'inherit',
               }}
             />
-          </div>
-
-          {/* Snapshot filmstrip — below prompt for @image reference context */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 }}>
-            {snapshots.filter(s => s.imageUrl?.startsWith('http')).map((s, i) => (
-              <div key={s.id} style={{
-                flexShrink: 0, width: 56, height: 56, borderRadius: 10,
-                overflow: 'hidden', background: '#1a1a1a', position: 'relative',
-              }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={s.imageUrl!}
-                  alt={`snapshot ${i + 1}`}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <div style={{
-                  position: 'absolute', bottom: 2, right: 3,
-                  fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)',
-                  background: 'rgba(0,0,0,0.5)', borderRadius: 3, padding: '1px 3px',
-                }}>@{i + 1}</div>
-              </div>
-            ))}
           </div>
 
           {/* Duration + cost */}
