@@ -44,6 +44,12 @@ export default function ProjectPage() {
     if (raw) { sessionStorage.removeItem('pendingMetadata'); try { return JSON.parse(raw) } catch { return undefined } }
     return undefined
   })
+  const [pendingPrompt] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const p = sessionStorage.getItem('pendingPrompt')
+    if (p) sessionStorage.removeItem('pendingPrompt')
+    return p
+  })
   // If memory cache has data, start loaded=true — no spinner at all
   const [loaded, setLoaded] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -217,6 +223,7 @@ export default function ProjectPage() {
       initialMessages={initialMessages ?? []}
       pendingImage={pendingImage ?? undefined}
       pendingMetadata={pendingMetadata}
+      pendingPrompt={pendingPrompt ?? undefined}
       onSaveSnapshot={handleSaveSnapshot}
       onSaveMessage={handleSaveMessage}
       onUpdateTips={handleUpdateTips}

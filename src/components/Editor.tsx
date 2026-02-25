@@ -155,6 +155,7 @@ interface EditorProps {
   initialMessages?: Message[];
   pendingImage?: string;
   pendingMetadata?: PhotoMetadata;
+  pendingPrompt?: string;
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
@@ -172,6 +173,7 @@ export default function Editor({
   initialMessages,
   pendingImage,
   pendingMetadata,
+  pendingPrompt,
   onSaveSnapshot,
   onSaveMessage,
   onUpdateTips,
@@ -930,9 +932,11 @@ export default function Editor({
       currentImage = snapshotsRef.current[snapshotsRef.current.length - 1]?.image;
       contextSnapshotIndex = snapshotsRef.current.length - 1;
     }
-    if (!currentImage || !projectId) return;
+    if (!projectId) return;
+    // Path 2 (text-only): no image is OK — Agent will generate one
+    if (!currentImage && snapshotsRef.current.length > 0) return;
 
-    const imageBase64 = await ensureBase64(currentImage);
+    const imageBase64 = currentImage ? await ensureBase64(currentImage) : '';
     // Show attached images in the user message bubble
     addMessage('user', text, undefined, attachedImages?.length ? attachedImages : undefined);
     const assistantMsgId = generateId();
@@ -1418,6 +1422,9 @@ export default function Editor({
   }, []);
 
   const pendingHandled = useRef(false);
+  const pendingPromptHandled = useRef(false);
+
+  // Path 1 (image only) or Path 3 (image + prompt): handle pendingImage
   useEffect(() => {
     if (pendingImage && !pendingHandled.current) {
       pendingHandled.current = true;
@@ -1431,11 +1438,34 @@ export default function Editor({
         setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
       });
       cacheImage(`snap:${snapId}`, pendingImage);
-      fetchTipsForSnapshot(snapId, pendingImage);
-      // Auto-analyze the uploaded photo
-      runAutoAnalysis(snapId, pendingImage);
+
+      if (pendingPrompt) {
+        // Path 3: image + prompt → CUI with prompt as first message
+        pendingPromptHandled.current = true;
+        // Still fetch tips in background
+        fetchTipsForSnapshot(snapId, pendingImage);
+        // Enter CUI and send the prompt
+        setTimeout(() => {
+          setViewMode('cui');
+          handleAgentRequest(pendingPrompt);
+        }, 200);
+      } else {
+        // Path 1: image only → original flow
+        fetchTipsForSnapshot(snapId, pendingImage);
+        runAutoAnalysis(snapId, pendingImage);
+      }
     }
-  }, [pendingImage, pendingMetadata, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
+  }, [pendingImage, pendingMetadata, pendingPrompt, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest]);
+
+  // Path 2: text only (no image) → CUI mode, send prompt to Agent
+  useEffect(() => {
+    if (pendingPrompt && !pendingImage && !pendingPromptHandled.current) {
+      pendingPromptHandled.current = true;
+      setViewMode('cui');
+      // Small delay to ensure CUI is mounted
+      setTimeout(() => handleAgentRequest(pendingPrompt), 200);
+    }
+  }, [pendingPrompt, pendingImage, handleAgentRequest]);
 
   // Pick up late-arriving initialAnimation (from Supabase fetch after cache-init)
   const animationInitRef = useRef(!!initialAnimation);
@@ -1746,19 +1776,28 @@ export default function Editor({
             className="flex-1 relative min-h-0 overflow-hidden"
           >
             {timeline.length === 0 ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors"
-                >
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <circle cx="9" cy="9" r="2" />
-                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                  </svg>
-                  <span className="text-lg font-medium">Tap to upload a photo</span>
-                </button>
-              </div>
+              isAgentActive ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-2 border-fuchsia-400 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-white/50 text-sm">AI 正在生成图片...</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors"
+                  >
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="9" cy="9" r="2" />
+                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                    </svg>
+                    <span className="text-lg font-medium">Tap to upload a photo</span>
+                  </button>
+                </div>
+              )
             ) : (
               <ImageCanvas
                 timeline={timeline}

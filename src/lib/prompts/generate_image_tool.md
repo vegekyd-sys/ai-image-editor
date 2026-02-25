@@ -1,4 +1,5 @@
-Edit the current photo using a detailed English editPrompt.
+Edit the current photo OR generate a new image from text using a detailed English editPrompt.
+When no photo exists (text-to-image mode), write the editPrompt as a detailed image generation prompt describing the scene, style, lighting, and composition.
 
 --- SKILL PARAMETER ---
 Use `skill` to auto-inject a proven quality template into the prompt. When skill is set,

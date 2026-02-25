@@ -73,6 +73,9 @@ export default function ProjectsPage() {
   })
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [inputText, setInputText] = useState('')
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const [attachedPreview, setAttachedPreview] = useState<string | null>(null)
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
@@ -252,6 +255,52 @@ export default function ProjectsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
+  // Unified create: text only, image only, or both
+  const handleCreate = useCallback(async () => {
+    const hasText = inputText.trim()
+    const hasFile = attachedFile
+    if (!hasText && !hasFile) return
+    if (!user || creating) return
+
+    // Image-only (no text) → original flow
+    if (hasFile && !hasText) {
+      handleCreateProject(hasFile)
+      return
+    }
+
+    setCreating(true)
+    try {
+      let base64: string | undefined
+      if (hasFile) {
+        try { base64 = await compressClientSide(hasFile) }
+        catch {
+          const formData = new FormData()
+          formData.append('file', hasFile)
+          const res = await fetch('/api/upload', { method: 'POST', body: formData })
+          if (res.ok) base64 = (await res.json()).image
+        }
+      }
+
+      const supabase = createClient()
+      const { data: project, error: pErr } = await supabase
+        .from('projects')
+        .insert({ user_id: user.id, title: 'Untitled' })
+        .select('id')
+        .single()
+      if (pErr || !project) throw new Error('Failed to create project')
+
+      if (base64) sessionStorage.setItem('pendingImage', base64)
+      sessionStorage.setItem('pendingPrompt', hasText)
+      setInputText('')
+      setAttachedFile(null)
+      setAttachedPreview(null)
+      router.push(`/projects/${project.id}`)
+    } catch (err) {
+      console.error('Create project error:', err)
+      setCreating(false)
+    }
+  }, [user, creating, router, inputText, attachedFile])
+
   const handleCreateProject = useCallback(async (file: File) => {
     if (!user || creating) return
     setCreating(true)
@@ -405,7 +454,9 @@ export default function ProjectsPage() {
           style={{ display: 'none' }}
           onChange={(e) => {
             const file = e.target.files?.[0]
-            if (file) handleCreateProject(file)
+            if (!file) return
+            setAttachedFile(file)
+            setAttachedPreview(URL.createObjectURL(file))
             e.target.value = ''
           }}
         />
@@ -475,46 +526,97 @@ export default function ProjectsPage() {
             one man studio
           </div>
 
-          {/* New project button */}
-          <div style={{ marginTop: '32px' }}>
-            {creating ? (
-              <button
-                disabled
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  borderRadius: '100px',
-                  border: '1.5px solid rgba(217,70,239,0.35)',
-                  background: 'transparent',
-                  color: 'rgba(217,70,239,0.6)',
-                  padding: '14px 36px',
-                  fontSize: '0.85rem',
-                  letterSpacing: '0.06em',
-                  cursor: 'default',
-                }}
-              >
-                <Spinner size={14} />
-                Creating…
-              </button>
-            ) : (
+          {/* Create input: [photo] + [textarea] */}
+          <div style={{ marginTop: '28px', width: '100%', maxWidth: '420px', padding: '0 24px' }}>
+            <div style={{
+              display: 'flex', gap: 0,
+              borderRadius: 16,
+              border: '1.5px solid rgba(217,70,239,0.3)',
+              background: 'rgba(255,255,255,0.04)',
+              overflow: 'hidden',
+              minHeight: 80,
+            }}>
+              {/* Left: photo slot */}
               <label
                 htmlFor="new-project-file-input"
-                className="mkr-new-btn"
                 style={{
-                  display: 'inline-block',
-                  borderRadius: '100px',
-                  border: '1.5px solid rgba(217,70,239,0.35)',
-                  background: 'transparent',
-                  color: 'rgb(217,70,239)',
-                  padding: '14px 36px',
-                  fontSize: '0.85rem',
-                  letterSpacing: '0.06em',
-                  cursor: 'pointer',
-                  fontWeight: 400,
+                  width: 80, minHeight: 80, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: creating ? 'default' : 'pointer',
+                  borderRight: '1px solid rgba(217,70,239,0.15)',
+                  position: 'relative',
+                  background: attachedPreview ? 'transparent' : 'rgba(217,70,239,0.04)',
                 }}
               >
-                + New project
+                {attachedPreview ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={attachedPreview} alt="attached"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, borderRadius: '14px 0 0 14px' }}
+                      onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}
+                    />
+                    <div style={{
+                      position: 'absolute', top: 4, right: 4,
+                      width: 18, height: 18, borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.6)', color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.6rem', cursor: 'pointer', zIndex: 1,
+                    }} onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}>✕</div>
+                  </>
+                ) : (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                )}
               </label>
-            )}
+
+              {/* Right: textarea + send */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                <textarea
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && (inputText.trim() || attachedFile)) {
+                      e.preventDefault();
+                      handleCreate();
+                    }
+                  }}
+                  placeholder="描述你想要的图片..."
+                  disabled={creating}
+                  rows={3}
+                  style={{
+                    flex: 1, border: 'none', background: 'transparent',
+                    color: '#fff', fontSize: '0.85rem', lineHeight: 1.4,
+                    padding: '10px 12px', paddingRight: 36,
+                    outline: 'none', resize: 'none',
+                    fontFamily: 'inherit',
+                    minHeight: 76,
+                  }}
+                />
+                {/* Send button — visible when there's text or image */}
+                {(inputText.trim() || attachedFile) && (
+                  <button
+                    onClick={handleCreate}
+                    disabled={creating}
+                    style={{
+                      position: 'absolute', bottom: 8, right: 8,
+                      background: 'none', border: 'none',
+                      color: 'rgb(217,70,239)',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      padding: 4,
+                    }}
+                  >
+                    {creating ? <Spinner size={16} /> : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

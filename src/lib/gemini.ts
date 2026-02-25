@@ -399,7 +399,6 @@ export async function generatePreviewImage(
   editPrompt: string,
   aspectRatio?: string,
 ): Promise<string | null> {
-  // MOCK_AI only mocks tips/chat, not image generation
   if (PROVIDER === 'openrouter') {
     return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio);
   } else {
@@ -412,9 +411,6 @@ async function generatePreviewImageGoogle(
   editPrompt: string,
   aspectRatio?: string,
 ): Promise<string | null> {
-  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-  const mimeType = imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-
   const config: Record<string, unknown> = {
     responseModalities: ['IMAGE'],
   };
@@ -422,15 +418,19 @@ async function generatePreviewImageGoogle(
     config.imageConfig = { aspectRatio };
   }
 
+  // Build content parts: text-only when no image, image+text otherwise
+  const isTextOnly = !imageBase64;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const contentParts: any[] = isTextOnly
+    ? [{ text: editPrompt }]
+    : [
+        { inlineData: { mimeType: imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', data: imageBase64.replace(/^data:image\/\w+;base64,/, '') } },
+        { text: editPrompt },
+      ];
+
   const result = await getAI().models.generateContent({
     model: MODEL,
-    contents: [{
-      role: 'user',
-      parts: [
-        { inlineData: { mimeType, data: base64Data } },
-        { text: editPrompt },
-      ],
-    }],
+    contents: [{ role: 'user', parts: contentParts }],
     config,
   });
 
@@ -454,20 +454,27 @@ async function generatePreviewImageOpenRouter(
     ? imageBase64
     : `data:image/jpeg;base64,${imageBase64}`;
 
+  // Text-only generation (no input image) uses a different system prompt
+  const isTextToImage = !imageBase64;
+  const systemPrompt = isTextToImage
+    ? 'You are a world-class AI image generator. Generate a high-quality, photorealistic image based on the user\'s description. Output the image directly.'
+    : SYSTEM_PROMPT;
+
+  const userContent = isTextToImage
+    ? [{ type: 'text', text: editPrompt }]
+    : [
+        { type: 'image_url', image_url: { url: dataUrl } },
+        { type: 'text', text: editPrompt },
+      ];
+
   const body: Record<string, unknown> = {
     model: OPENROUTER_MODEL,
     stream: false,
     modalities: ['image', 'text'],
     temperature: 1.0,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: [
-          { type: 'image_url', image_url: { url: dataUrl } },
-          { type: 'text', text: editPrompt },
-        ],
-      },
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
     ],
   };
   if (aspectRatio) {
@@ -1017,6 +1024,7 @@ async function* parseIncrementalTipsFromStream(
   let tipsEmitted = 0;
   let lastPartialLabel: string | null = null;
   let partialEmitted = false;
+  const emittedLabels = new Set<string>();
   const t0 = Date.now();
 
   for await (const text of textStream) {
@@ -1028,9 +1036,17 @@ async function* parseIncrementalTipsFromStream(
         const start = i;
         let depth = 1;
         let j = i + 1;
+        let inString = false;
         while (j < fullText.length && depth > 0) {
-          if (fullText[j] === '{') depth++;
-          else if (fullText[j] === '}') depth--;
+          const ch = fullText[j];
+          if (inString) {
+            if (ch === '\\') { j++; } // skip escaped char
+            else if (ch === '"') { inString = false; }
+          } else {
+            if (ch === '"') { inString = true; }
+            else if (ch === '{') depth++;
+            else if (ch === '}') depth--;
+          }
           j++;
         }
 
@@ -1044,6 +1060,7 @@ async function* parseIncrementalTipsFromStream(
               if (tip.label && tip.editPrompt && tip.category) {
                 tlog(`[tips:${label}] complete tip "${tip.label}" at +${Date.now() - t0}ms`);
                 if (lastPartialLabel === tip.label) lastPartialLabel = null;
+                emittedLabels.add(tip.label);
                 yield tip;
                 tipsEmitted = objectsFound;
               }
@@ -1066,4 +1083,24 @@ async function* parseIncrementalTipsFromStream(
       }
     }
   }
+
+  // Fallback: stream ended — try to parse any remaining complete tips from fullText
+  // This catches cases where the final chunk completed an object but the loop didn't re-scan
+  try {
+    // Strip markdown fences if present
+    let cleaned = fullText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    // Try to find a JSON array
+    const arrStart = cleaned.indexOf('[');
+    const arrEnd = cleaned.lastIndexOf(']');
+    if (arrStart >= 0 && arrEnd > arrStart) {
+      const arr = JSON.parse(cleaned.slice(arrStart, arrEnd + 1)) as Tip[];
+      for (const tip of arr) {
+        if (tip.label && tip.editPrompt && tip.category && !emittedLabels.has(tip.label)) {
+          tlog(`[tips:${label}] fallback recovered tip "${tip.label}"`);
+          emittedLabels.add(tip.label);
+          yield tip;
+        }
+      }
+    }
+  } catch { /* final parse failed — partial tips remain */ }
 }

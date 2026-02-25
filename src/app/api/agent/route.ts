@@ -19,9 +19,9 @@ export async function POST(req: NextRequest) {
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips } = await req.json();
 
-    if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image)) {
+    if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
       return new Response(
-        JSON.stringify({ error: 'projectId and image (or tipsTeaser) are required' }),
+        JSON.stringify({ error: 'projectId and (image or prompt) are required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
       );
     }
