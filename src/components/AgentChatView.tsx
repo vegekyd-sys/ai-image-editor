@@ -23,13 +23,13 @@ function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?:
       </button>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2.5">
-          {inputImages && inputImages.length > 0 && (
+          {inputImages && inputImages.filter(img => img && img.length > 10).length > 0 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.25)' }}>
                 传入图片{inputImages.length > 1 ? `（${inputImages.length} 张）` : ''}
               </span>
               <div className="flex gap-2 flex-wrap">
-                {inputImages.map((img, i) => (
+                {inputImages.filter(img => img && img.length > 10).map((img, i) => (
                   <div key={i} className="flex flex-col gap-1">
                     <img
                       src={img}
