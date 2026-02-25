@@ -115,11 +115,8 @@ export default function AnimateSheet({
         `}</style>
 
         {/* Fixed header: drag handle + X button — always visible */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 4px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>生成视频</span>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px 4px', flexShrink: 0 }}>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>生成视频</span>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '1.3rem', cursor: 'pointer', padding: '2px 6px' }}
