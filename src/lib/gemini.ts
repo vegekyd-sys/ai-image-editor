@@ -399,6 +399,10 @@ export async function generatePreviewImage(
   editPrompt: string,
   aspectRatio?: string,
 ): Promise<string | null> {
+  // Text-to-image (no input image): always use Google direct (faster, more reliable)
+  if (!imageBase64) {
+    return generatePreviewImageGoogle('', editPrompt, aspectRatio);
+  }
   if (PROVIDER === 'openrouter') {
     return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio);
   } else {
