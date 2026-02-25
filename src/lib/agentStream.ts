@@ -45,6 +45,7 @@ export async function streamAgent(
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let receivedDone = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -79,9 +80,11 @@ export async function streamAgent(
             callbacks.onAnimationTask?.(event.taskId);
             break;
           case 'done':
+            receivedDone = true;
             callbacks.onDone?.();
             break;
           case 'error':
+            receivedDone = true;
             callbacks.onError?.(event.message);
             break;
         }
@@ -89,5 +92,10 @@ export async function streamAgent(
         // skip malformed JSON
       }
     }
+  }
+
+  // Stream ended without done/error event (e.g. Vercel timeout, network cut)
+  if (!receivedDone) {
+    callbacks.onError?.('连接中断，请重试');
   }
 }
