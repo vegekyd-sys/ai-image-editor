@@ -114,17 +114,21 @@ export default function AnimateSheet({
           }
         `}</style>
 
-        {/* Fixed X button — always visible */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 16px 0', flexShrink: 0 }}>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '1.3rem', cursor: 'pointer', padding: '2px 6px' }}
-          >×</button>
-        </div>
+        {/* X button — floating fixed in top-right corner of sheet */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: 8, right: 12, zIndex: 1,
+            background: 'rgba(0,0,0,0.4)', border: 'none', borderRadius: '50%',
+            color: 'rgba(255,255,255,0.6)', fontSize: '1.1rem',
+            width: 28, height: 28,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >×</button>
 
-        {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '2px 16px 16px' }}>
-          {/* Title — scrolls with content */}
+        {/* Scrollable content — everything scrolls */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px 16px' }}>
           <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', marginBottom: 8 }}>生成视频</div>
 
           {/* Snapshot filmstrip — @image references */}
