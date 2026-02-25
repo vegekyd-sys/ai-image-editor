@@ -583,7 +583,7 @@ export default function ProjectsPage() {
                       handleCreate();
                     }
                   }}
-                  placeholder="描述你想要的图片..."
+                  placeholder="Your imagination, our pixels."
                   disabled={creating}
                   rows={3}
                   style={{
