@@ -1926,7 +1926,13 @@ export default function Editor({
           agentStatus={agentStatus}
           currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
           onSendMessage={(text, imgs) => handleAgentRequest(text, imgs)}
-          onBack={() => window.history.back()}
+          onBack={() => {
+            if (snapshots.length === 0 && onBack) {
+              onBack(); // No snapshots (text-only before image generated) → go to projects
+            } else {
+              window.history.back(); // Normal: CUI → GUI
+            }
+          }}
           onPipTap={handlePipTap}
           hidePip={heroAnim !== null}
           onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
