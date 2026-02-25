@@ -114,9 +114,8 @@ export default function AnimateSheet({
           }
         `}</style>
 
-        {/* Fixed header: drag handle + X button — always visible */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px 4px', flexShrink: 0 }}>
-          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>生成视频</span>
+        {/* Fixed X button — always visible */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 16px 0', flexShrink: 0 }}>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '1.3rem', cursor: 'pointer', padding: '2px 6px' }}
@@ -124,7 +123,9 @@ export default function AnimateSheet({
         </div>
 
         {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 16px 16px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '2px 16px 16px' }}>
+          {/* Title — scrolls with content */}
+          <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', marginBottom: 8 }}>生成视频</div>
 
           {/* Snapshot filmstrip — @image references */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
