@@ -43,12 +43,13 @@ function headers() {
 export async function createKlingTask(input: KlingTaskInput): Promise<string> {
   const body: Record<string, unknown> = {
     model_name: 'kling-v3-omni',
-    image_list: input.images.map(img => ({
+    image_list: input.images.map((img, i) => ({
       image_url: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
+      // First image as first_frame → API auto-detects aspect ratio from it
+      ...(i === 0 ? { type: 'first_frame' } : {}),
     })),
     prompt: input.prompt,
     mode: input.mode ?? 'std',
-    aspect_ratio: input.aspect_ratio ?? '9:16',
     sound: 'on',
   }
   // duration undefined = smart mode (API decides 3-15s)

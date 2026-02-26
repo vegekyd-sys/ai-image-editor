@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
           prompt,
           images: imageUrls,
           duration: duration ?? undefined, // null = smart mode
-          aspect_ratio: aspectRatio ?? '9:16',
+          aspect_ratio: aspectRatio, // undefined = API auto-detects from images
         })
 
     // Save animation record to DB

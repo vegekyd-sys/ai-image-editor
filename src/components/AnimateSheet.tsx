@@ -65,7 +65,7 @@ export default function AnimateSheet({
           onStateChange({ error: '视频生成失败，请重试', status: 'error' });
         }
       } catch { /* ignore */ }
-    }, 8000);
+    }, 4000);
   }, [onStateChange]);
 
   const handleGenerate = useCallback(async () => {
