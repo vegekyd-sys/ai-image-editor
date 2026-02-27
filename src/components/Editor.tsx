@@ -10,6 +10,7 @@ import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
 import { cacheImage } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
+import { newAnnotationId } from '@/components/AnnotationCanvas';
 import AnimateSheet from '@/components/AnimateSheet';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 
@@ -224,6 +225,13 @@ export default function Editor({
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationTool, setAnnotationTool] = useState<'brush' | 'rect' | 'text'>('brush');
   const [annotationEntries, setAnnotationEntries] = useState<AnnotationEntry[]>([]);
+  const [annotationColor, setAnnotationColor] = useState('#dc2626');
+  const [annotationBrushSize, setAnnotationBrushSize] = useState<'S' | 'M' | 'L'>('M');
+  // Text editing sub-mode
+  const [textEditPos, setTextEditPos] = useState<{ x: number; y: number } | null>(null);
+  const [textEditValue, setTextEditValue] = useState('');
+  const [textColor, setTextColor] = useState('#ec4899');
+  const [textBgEnabled, setTextBgEnabled] = useState(true);
   const [showAnimateSheet, setShowAnimateSheet] = useState(() => {
     // Auto-open if resuming a processing animation
     return !!(initialAnimation?.status === 'processing' && initialAnimation?.taskId);
@@ -263,6 +271,10 @@ export default function Editor({
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(AGENT_GREETING);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
+  const [pendingNewSnapIndex, setPendingNewSnapIndex] = useState<number | null>(null);
+  const [pendingNewSnapReady, setPendingNewSnapReady] = useState(false);
+  const committedTipIndexRef = useRef<number | null>(null);
+  const committedTipCategoryRef = useRef<string | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
@@ -1242,15 +1254,13 @@ export default function Editor({
   }, [projectId, animationState?.imageUrls, onSaveMessage]);
 
   // Commit draft: finalize the virtual draft as a real snapshot
+  // Stays in draft state — new snapshot loads tips/previews in background
   const commitDraft = useCallback(() => {
     if (draftParentIndex === null || previewingTipIndex === null) return;
 
     const parentTips = snapshots[draftParentIndex]?.tips ?? [];
     const tip = parentTips[previewingTipIndex];
     if (!tip?.previewImage) return;
-
-    // Cancel remaining preview generations
-    previewAbortRef.current.abort();
 
     // Add chat messages for context
     addMessage('user', tip.label);
@@ -1270,10 +1280,12 @@ export default function Editor({
     });
     cacheImage(`snap:${snapId}`, newSnapshot.image);
 
-    // Clear draft and jump to the newly committed snapshot (appended at end)
-    setViewIndex(snapshots.length); // snapshots.length = index of new snapshot after append
-    setDraftParentIndex(null);
-    setPreviewingTipIndex(null);
+    // Stay in draft — track pending new snapshot
+    committedTipIndexRef.current = previewingTipIndex;
+    committedTipCategoryRef.current = tip.category;
+    setPendingNewSnapIndex(snapshots.length);
+    setPendingNewSnapReady(false);
+    setAgentStatus('正在为你准备新的建议...');
 
     // Fetch new tips — auto-preview only the committed tip's category
     fetchTipsForSnapshot(snapId, tip.previewImage, 'none', tip.category);
@@ -1625,6 +1637,40 @@ export default function Editor({
     }
   }, [snapshots, tipsSourceIndex, isTipsFetching, triggerPreviewsReadyNotification]);
 
+  // When 2+ previews ready on pending new snapshot: auto-jump or notify
+  useEffect(() => {
+    if (pendingNewSnapIndex === null || pendingNewSnapReady) return;
+    const snap = snapshots[pendingNewSnapIndex];
+    if (!snap) return;
+    const doneCount = snap.tips.filter(t => t.previewStatus === 'done').length;
+    if (doneCount < 2) return;
+
+    if (isViewingDraft && previewingTipIndex === committedTipIndexRef.current) {
+      // User still on the committed preview → auto-jump to new snapshot
+      setDraftParentIndex(null);
+      setPreviewingTipIndex(null);
+      setViewIndex(pendingNewSnapIndex);
+      setPendingNewSnapIndex(null);
+      committedTipIndexRef.current = null;
+      committedTipCategoryRef.current = null;
+    } else {
+      // User browsing other tips → show notification
+      setPendingNewSnapReady(true);
+      setAgentStatus('新的tips准备好了！点击查看👉🏻');
+    }
+  }, [snapshots, pendingNewSnapIndex, pendingNewSnapReady, isViewingDraft, previewingTipIndex]);
+
+  const navigateToNewSnapshot = useCallback(() => {
+    if (pendingNewSnapIndex === null) return;
+    setDraftParentIndex(null);
+    setPreviewingTipIndex(null);
+    setViewIndex(pendingNewSnapIndex);
+    setPendingNewSnapIndex(null);
+    setPendingNewSnapReady(false);
+    committedTipIndexRef.current = null;
+    committedTipCategoryRef.current = null;
+  }, [pendingNewSnapIndex]);
+
 
   // When animationState transitions to 'done' (video completed), add a CUI message with the video
   const prevAnimStatusRef = useRef(animationState?.status);
@@ -1870,6 +1916,16 @@ export default function Editor({
                 annotationTool={annotationTool}
                 annotationEntries={annotationEntries}
                 onAddAnnotationEntry={(entry) => setAnnotationEntries(prev => [...prev, entry])}
+                onUpdateAnnotationEntry={(id, data) => setAnnotationEntries(prev => prev.map(e => e.id === id ? { ...e, data: { ...e.data, ...data } } : e))}
+                onDeleteAnnotationEntry={(id) => setAnnotationEntries(prev => prev.filter(e => e.id !== id))}
+                annotationColor={annotationColor}
+                annotationLineWidth={(() => {
+                  const base = 1408; // reference width
+                  const map = { S: base * 0.008, M: base * 0.028, L: base * 0.06 };
+                  return Math.round(map[annotationBrushSize]);
+                })()}
+                onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
+                textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
                 onAnimate={snapshots.length >= 3 ? () => {
                   if (hasVideo) {
                     // Video exists — navigate to it
@@ -1899,6 +1955,8 @@ export default function Editor({
                 videoUrl={animationState?.videoUrl}
               />
             )}
+
+            {/* TODO: Floating text input for annotation text tool — uncomment when text editing flow is ready */}
 
             {/* Top toolbar */}
             {snapshots.length > 0 && (
@@ -1976,10 +2034,20 @@ export default function Editor({
             annotationMode ? (
               <AnnotationToolbar
                 activeTool={annotationTool}
-                onToolChange={setAnnotationTool}
+                onToolChange={(tool) => {
+                  setAnnotationTool(tool);
+                  if (tool === 'text' && !textEditPos) {
+                    // Auto-place text at canvas center (use reference natural width/height)
+                    setTextEditPos({ x: 704, y: 704 }); // center of 1408 reference
+                    setTextEditValue('');
+                  } else if (tool !== 'text') {
+                    setTextEditPos(null);
+                    setTextEditValue('');
+                  }
+                }}
                 onUndo={() => setAnnotationEntries(prev => prev.slice(0, -1))}
                 onClear={() => setAnnotationEntries([])}
-                onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); }}
+                onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); setTextEditPos(null); }}
                 canUndo={annotationEntries.length > 0}
                 hasEntries={annotationEntries.length > 0}
                 isSending={isAgentActive}
@@ -1993,6 +2061,33 @@ export default function Editor({
                   setAnnotationEntries([]);
                   handleAgentRequest(text || '请根据标注修改图片', [merged]);
                 }}
+                color={annotationColor}
+                onColorChange={setAnnotationColor}
+                brushSize={annotationBrushSize}
+                onBrushSizeChange={setAnnotationBrushSize}
+                textEditing={!!textEditPos}
+                textColor={textColor}
+                onTextColorChange={setTextColor}
+                textBgEnabled={textBgEnabled}
+                onTextBgToggle={() => setTextBgEnabled(prev => !prev)}
+                onTextDone={() => {
+                  if (textEditPos && textEditValue.trim()) {
+                    const fontSize = Math.round(1408 * 0.05);
+                    setAnnotationEntries(prev => [...prev, {
+                      id: newAnnotationId(),
+                      type: 'text' as const,
+                      color: textColor,
+                      lineWidth: 0,
+                      data: { x: textEditPos.x, y: textEditPos.y, text: textEditValue.trim(), fontSize, textColor, bgColor: textBgEnabled ? '#000' : '' },
+                    }]);
+                  }
+                  setTextEditPos(null);
+                  setTextEditValue('');
+                }}
+                onTextCancel={() => {
+                  setTextEditPos(null);
+                  setTextEditValue('');
+                }}
               />
             ) : (
               <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
@@ -2002,6 +2097,8 @@ export default function Editor({
                   onOpenChat={openCUI}
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
+                  onViewNew={pendingNewSnapReady ? navigateToNewSnapshot : undefined}
+                  hasPendingCommit={pendingNewSnapIndex !== null}
                 />
                 <TipsBar
                   tips={currentTips}

@@ -6,9 +6,11 @@ interface AgentStatusBarProps {
   onOpenChat: () => void;
   isViewingDraft?: boolean;
   hideChat?: boolean;
+  onViewNew?: () => void;
+  hasPendingCommit?: boolean;
 }
 
-export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat }: AgentStatusBarProps) {
+export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, onViewNew, hasPendingCommit }: AgentStatusBarProps) {
   // Determine dot color and breathe speed based on state
   const isGeneratingImages = statusText.includes('正使用nano banana');
   const isFetchingTips = statusText.includes('Ready to Suprise');
@@ -52,8 +54,24 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
 
         {/* Status / greeting text */}
         <div className="flex-1 text-white/50 text-[13px] truncate">
-          {isViewingDraft ? '喜欢这个效果？你想怎么修改告诉我 👉🏻' : statusText}
+          {isViewingDraft && !hasPendingCommit ? '喜欢这个效果？你想怎么修改告诉我 👉🏻' : statusText}
         </div>
+
+        {/* "See" button — shown when new snapshot has previews ready */}
+        {onViewNew && (
+          <button
+            onClick={e => { e.stopPropagation(); onViewNew(); }}
+            className="px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
+            style={{
+              background: 'rgba(192,38,211,0.25)',
+              color: '#e879f9',
+              border: '1px solid rgba(192,38,211,0.4)',
+              animation: 'tipIn 0.3s ease-out',
+            }}
+          >
+            See
+          </button>
+        )}
 
         {/* Chat button (hidden on desktop where CUI panel is always visible) */}
         {!hideChat && (
