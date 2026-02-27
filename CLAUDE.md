@@ -27,7 +27,9 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 **Prompt 架构（V42 重构）**：`.md` 文件是唯一真相来源，gemini.ts system prompt 极简化（2行），batch-test TIPS_SYSTEM_PROMPT 极简化（3行）。enhance.md 包含 7 个方向（A-F + G 净化场景）、FIRST cleanup 第一句约束、jawline 瘦脸条件、眼睛禁改。creative.md 升级 cleanup 为第一句。wild.md 保留原版详细四问自检。V42 遗留问题：wild 眼镜禁止陷阱仍突破、enhance 方向F 人物重新生成、creative 风格化重绘、tip 数量分类不稳定。
 
-**图片传输 URL 优先（2026-02-27）**：所有 AI API 调用优先传 Supabase Storage URL（~100 bytes）而非 base64（~1-2MB）。`gemini.ts` 新增 `toImageContent()`（OpenRouter 路径，URL 直传）和 `ensureBase64Server()`（Google SDK 路径，服务端 fetch 转 base64）。`Editor.tsx` 新增 `getImageForApi(snapshot)` 返回 `imageUrl || image`。无 URL 时（刚上传、agent 新生图）fallback base64，agent 聊天额外用 `compressBase64` 兜底 Vercel 4.5MB 限制。前端渲染继续用 base64/内存缓存（零延迟显示），URL 仅用于 API 调用。
+**图片传输 URL 优先（2026-02-27）**：所有 AI API 调用优先传 Supabase Storage URL（~100 bytes）而非 base64（~1-2MB）。`gemini.ts` 新增 `toImageContent()`（OpenRouter 路径，URL 直传）和 `ensureBase64Server()`（Google SDK 路径，服务端 fetch 转 base64）。`Editor.tsx` 新增 `getImageForApi(snapshot)` 返回 `imageUrl || image`。无 URL 时（刚上传、agent 新生图）fallback base64，agent 聊天额外用 `compressBase64` 兜底 Vercel 4.5MB 限制。前端渲染继续用 base64/内存缓存（零延迟显示），URL 仅用于 API 调用。**重要区分**：Tips 分析（`/api/tips`）只看图不生图，用 `compressBase64(img, 600_000)` 压缩到 600KB 即可；Preview 生图（`/api/preview`）需要高清原图（否则人脸变形），用 `getImageForApi(snap)` 取原始 URL/base64。Commit 后 tips 请求从 ~12MB 并发降到 ~2.4MB，速度接近首次上传。
+
+**Tips Preview 按分类加载（2026-02-27）**：commit 后 `fetchTipsForSnapshot(snapId, img, 'none', tip.category)` 只自动 preview committed 分类的 tips。点击分类 tab 触发 `onCategorySelect` → `generatePreviewsForCategory` 补充其他分类。TipsBar auto-scroll 在 tip 开始生成（`generating`）或完成（`done`）时自动滚动。旧的 `'selective'` 模式（固定 1 enhance + 1 wild）已废弃。
 
 Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）已完成。用户认证走 Supabase Auth（Email + Password），数据持久化走 Supabase Storage + Database。路由结构：`/` → `/projects` 项目列表 → `/projects/[id]` 编辑器页面。项目列表展示所有历史项目的 snapshot 缩略图，点击进入编辑器，编辑器顶部有返回按钮。新项目通过项目列表页上传图片创建。所有写入异步后台执行，编辑器体验零延迟。
 

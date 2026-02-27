@@ -86,6 +86,9 @@
 #### 避免无聊方向
 Q2自检"情绪对不对？"和Q3"太通用？"已覆盖大部分无聊方向。如果一个创意的"有趣程度"需要解释才能理解，说明它不够好。
 
+#### 慎用令人不适的元素
+蛇、蜘蛛、蝎子等爬行/节肢动物容易让人不适（违反Q2情绪检验），尽量避免。画面有蛇形雕刻/浮雕时，优先选择其他更有趣的创意方向，不要默认"活化"。
+
 #### 场景净化（editPrompt第一句话必须是）
 - **`"FIRST: Clean up the scene — remove any element that draws attention away from the main subject but adds no compositional value (cluttered objects, background people, distracting items). Replace with natural-looking scene."`**
 - 不只是enhance需要去路人！creative编辑时背景杂乱也会分散注意力，影响创意焦点表现（V12反馈"背景里的人物也可以去掉，画面可以表现的更好"）

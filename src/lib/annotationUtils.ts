@@ -80,6 +80,7 @@ export function mergeAnnotation(
       resolve(canvas.toDataURL('image/jpeg', 0.92));
     };
     img.onerror = () => resolve(baseImageSrc); // fallback to original
+    img.crossOrigin = 'anonymous';
     img.src = baseImageSrc;
   });
 }

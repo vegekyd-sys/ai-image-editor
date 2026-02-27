@@ -615,7 +615,7 @@ export default function ProjectsPage() {
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && (inputText.trim() || attachedFile)) {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFile)) {
                       e.preventDefault();
                       handleCreate();
                     }
@@ -759,7 +759,7 @@ export default function ProjectsPage() {
                   autoFocus
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setRenameMode(false); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleRename(); if (e.key === 'Escape') setRenameMode(false); }}
                   style={{
                     flex: 1, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
                     borderRadius: '10px', padding: '12px 14px', color: '#fff', fontSize: '0.9rem',

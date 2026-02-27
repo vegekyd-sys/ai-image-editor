@@ -982,7 +982,7 @@ export default function Editor({
     // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
     const snapForApi = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     const rawImage = snapForApi ? getImageForApi(snapForApi) : (currentImage || '');
-    const imageBase64 = rawImage.startsWith('data:') ? await compressBase64(rawImage) : rawImage;
+    const imageForApi = rawImage.startsWith('data:') ? await compressBase64(rawImage) : rawImage;
     // Show attached images in the user message bubble
     addMessage('user', text, undefined, attachedImages?.length ? attachedImages : undefined);
     const assistantMsgId = generateId();
@@ -1057,7 +1057,7 @@ export default function Editor({
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
         {
           onStatus: (status) => setAgentStatus(status),
           onNewTurn: () => {
@@ -2037,12 +2037,10 @@ export default function Editor({
                       const merged = annotationEntries.length > 0
                         ? await mergeAnnotation(baseImage, annotationEntries)
                         : baseImage;
-                      // Tell the model what the red marks mean
-                      const ctx = '[The image has red annotations (lines/rectangles) drawn by the user to indicate specific areas. "Here"/"这里" refers to those marked regions.]';
-                      const userMsg = text ? `${ctx}\n${text}` : `${ctx}\n请根据标注修改图片`;
+                      const compressed = await compressBase64(merged);
                       setAnnotationMode(false);
                       setAnnotationEntries([]);
-                      handleAgentRequest(userMsg, [merged]);
+                      handleAgentRequest(text || '请根据标注修改图片', [compressed]);
                     }}
                     brushSize={annotationBrushSize}
                     onBrushSizeChange={setAnnotationBrushSize}

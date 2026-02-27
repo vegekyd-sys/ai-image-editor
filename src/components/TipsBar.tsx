@@ -144,40 +144,6 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
     return () => clearTimeout(timer);
   }, [previewingIndex]);
 
-  // Auto-scroll to tip when its preview starts generating or completes
-  const prevPreviewStatuses = useRef<Map<number, string>>(new Map());
-  useEffect(() => {
-    if (!tips.length) return;
-    let scrollTarget: number | null = null;
-    for (const { tip, originalIndex } of orderedTips) {
-      const prev = prevPreviewStatuses.current.get(originalIndex);
-      if (tip.category !== activeCategory) continue;
-      // Scroll to first tip that just started generating or just completed
-      if (tip.previewStatus === 'done' && prev && prev !== 'done') {
-        if (scrollTarget === null) scrollTarget = originalIndex;
-      } else if (tip.previewStatus === 'generating' && prev !== 'generating') {
-        if (scrollTarget === null) scrollTarget = originalIndex;
-      }
-    }
-    // Update stored statuses
-    const next = new Map<number, string>();
-    for (const { tip, originalIndex } of orderedTips) {
-      next.set(originalIndex, tip.previewStatus ?? 'none');
-    }
-    prevPreviewStatuses.current = next;
-
-    if (scrollTarget !== null && previewingIndex === null) {
-      const el = tipRefs.current.get(scrollTarget);
-      const container = scrollContainerRef.current;
-      if (el && container) {
-        const containerRect = container.getBoundingClientRect();
-        const elRect = el.getBoundingClientRect();
-        const targetScrollLeft = container.scrollLeft + (elRect.left - containerRect.left) - 12;
-        container.scrollTo({ left: Math.max(0, targetScrollLeft), behavior: 'smooth' });
-      }
-    }
-  }, [tips, orderedTips, activeCategory, previewingIndex]);
-
   // Desktop: convert vertical wheel to horizontal scroll
   useEffect(() => {
     if (!isDesktop) return;
