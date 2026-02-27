@@ -3,6 +3,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cacheProjectsList } from '@/lib/imageCache'
@@ -58,6 +59,7 @@ function timeAgo(dateStr: string): string {
 export default function ProjectsPage() {
   const { user, loading: authLoading, signOut } = useAuth()
   const router = useRouter()
+  const isDesktop = useIsDesktop()
   // Phase 1: Synchronous memory cache — same-session instant render
   const [projects, setProjects] = useState<ProjectWithSnapshots[]>(() => {
     if (typeof window === 'undefined') return []
@@ -671,7 +673,7 @@ export default function ProjectsPage() {
         {/* ═══════════════════════════════
             GALLERY SECTION
         ════════════════════════════════ */}
-        <div style={{ position: 'relative', zIndex: 1, marginTop: '8px' }}>
+        <div style={{ position: 'relative', zIndex: 1, marginTop: '8px', maxWidth: isDesktop ? '1232px' : undefined, margin: isDesktop ? '8px auto 0' : undefined }}>
 
           {/* Section divider — only show when projects exist */}
           {!loadingProjects && projects.length > 0 && (
@@ -703,9 +705,11 @@ export default function ProjectsPage() {
           ) : (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: '10px',
+              gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
+              gap: isDesktop ? '14px' : '10px',
               padding: '0 16px 80px',
+              maxWidth: isDesktop ? '1200px' : undefined,
+              margin: isDesktop ? '0 auto' : undefined,
             }}>
               {projects.map((project, i) => (
                 <ProjectCard

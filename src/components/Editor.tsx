@@ -9,6 +9,7 @@ import AgentChatView from '@/components/AgentChatView';
 import { streamAgent } from '@/lib/agentStream';
 import { cacheImage } from '@/lib/imageCache';
 import AnimateSheet from '@/components/AnimateSheet';
+import { useIsDesktop } from '@/hooks/useIsDesktop';
 
 export interface AnimationState {
   imageUrls: string[]
@@ -125,6 +126,44 @@ async function ensureBase64(image: string): Promise<string> {
   });
 }
 
+/**
+ * Compress a base64 image to fit within maxBytes (default 1.5MB).
+ * Uses canvas resize + JPEG quality reduction. Returns original if already small enough.
+ */
+/**
+ * Compress a base64 image only if it exceeds maxBytes (default 1.8MB).
+ * Preserves quality: only resizes beyond 2048px, starts at quality 0.92.
+ */
+async function compressBase64(image: string, maxBytes = 1_800_000): Promise<string> {
+  if (!image || !image.startsWith('data:')) return image;
+  if (image.length * 0.75 < maxBytes) return image;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxDim = 2048;
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+      for (const q of [0.92, 0.85, 0.75, 0.65]) {
+        const result = canvas.toDataURL('image/jpeg', q);
+        if (result.length * 0.75 < maxBytes) { resolve(result); return; }
+      }
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+    img.onerror = () => resolve(image);
+    img.src = image;
+  });
+}
+
 function compressClientSide(file: File, maxSize = 2048, quality = 0.92): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -184,6 +223,7 @@ export default function Editor({
   onNewProject,
   initialAnimation,
 }: EditorProps = {}) {
+  const isDesktop = useIsDesktop();
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
   const [isEditing, setIsEditing] = useState(false);
@@ -433,6 +473,9 @@ export default function Editor({
 
   // Open CUI with hero animation (canvas → PiP)
   const openCUI = useCallback(() => {
+    // Desktop: CUI panel is always visible, no hero animation needed
+    if (isDesktop) return;
+
     const el = canvasAreaRef.current;
     const src = timeline[viewIndex];
     if (el && src) {
@@ -478,7 +521,7 @@ export default function Editor({
       setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
     }
     setViewMode('cui');
-  }, [timeline, viewIndex]);
+  }, [timeline, viewIndex, isDesktop]);
 
   // Handle PiP tap: hero animation (PiP → canvas), then trigger GUI return
   const handlePipTap = useCallback((pipRect: DOMRect) => {
@@ -936,7 +979,8 @@ export default function Editor({
     // Path 2 (text-only): no image is OK — Agent will generate one
     if (!currentImage && snapshotsRef.current.length > 0) return;
 
-    const imageBase64 = currentImage ? await ensureBase64(currentImage) : '';
+    const imageRaw = currentImage ? await ensureBase64(currentImage) : '';
+    const imageBase64 = imageRaw ? await compressBase64(imageRaw) : '';
     // Show attached images in the user message bubble
     addMessage('user', text, undefined, attachedImages?.length ? attachedImages : undefined);
     const assistantMsgId = generateId();
@@ -947,8 +991,8 @@ export default function Editor({
       timestamp: Date.now(),
     }]);
 
-    // Auto-switch to CUI
-    setViewMode('cui');
+    // Auto-switch to CUI (mobile only — desktop CUI panel is always visible)
+    if (!isDesktop) setViewMode('cui');
     setIsAgentActive(true);
     setAgentStatus('Agent 正在思考...');
     agentAbortRef.current = new AbortController();
@@ -1006,8 +1050,11 @@ export default function Editor({
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
-    const originalImageBase64 = originalSnapshot?.image
+    const originalImageRaw = originalSnapshot?.image
       ? await ensureBase64(originalSnapshot.image)
+      : undefined;
+    const originalImageBase64 = originalImageRaw
+      ? await compressBase64(originalImageRaw)
       : undefined;
 
     try {
@@ -1444,9 +1491,9 @@ export default function Editor({
         pendingPromptHandled.current = true;
         // Still fetch tips in background
         fetchTipsForSnapshot(snapId, pendingImage);
-        // Enter CUI and send the prompt
+        // Enter CUI and send the prompt (mobile only — desktop CUI panel is always visible)
         setTimeout(() => {
-          setViewMode('cui');
+          if (!isDesktop) setViewMode('cui');
           handleAgentRequest(pendingPrompt);
         }, 200);
       } else {
@@ -1461,11 +1508,11 @@ export default function Editor({
   useEffect(() => {
     if (pendingPrompt && !pendingImage && !pendingPromptHandled.current) {
       pendingPromptHandled.current = true;
-      setViewMode('cui');
+      if (!isDesktop) setViewMode('cui');
       // Small delay to ensure CUI is mounted
       setTimeout(() => handleAgentRequest(pendingPrompt), 200);
     }
-  }, [pendingPrompt, pendingImage, handleAgentRequest]);
+  }, [pendingPrompt, pendingImage, handleAgentRequest, isDesktop]);
 
   // Pick up late-arriving initialAnimation (from Supabase fetch after cache-init)
   const animationInitRef = useRef(!!initialAnimation);
@@ -1559,7 +1606,7 @@ export default function Editor({
     if (generating > 0) {
       const x = Math.max(0, done - previewDoneBaselineRef.current);
       const y = x + generating;
-      setAgentStatus(`正使用nano banana pro生成图片 ${x}/${y}`);
+      setAgentStatus(`正使用nano banana 2生成图片 ${x}/${y}`);
     } else if (settled === total && !isAgentActive) {
       setAgentStatus(prev => prev.includes('nano banana') ? AGENT_GREETING : prev);
     }
@@ -1648,13 +1695,15 @@ export default function Editor({
         const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}`;
         const res = await fetch(proxyUrl);
         const blob = await res.blob();
-        if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
-          const file = new File([blob], filename, { type: 'video/mp4' });
+        const file = new File([blob], filename, { type: 'video/mp4' });
+        // Try native share (iOS/Android) — check canShare first since large videos may be unsupported
+        if (navigator.share && navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
           await navigator.share({ files: [file] });
           setIsSaving(false);
           showSaveToast();
           return;
         }
+        // Fallback: trigger download via blob URL (works on desktop + iOS when share fails)
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -1665,6 +1714,7 @@ export default function Editor({
         showSaveToast();
       } catch {
         setIsSaving(false);
+        // Last resort: open video URL directly (iOS will show video player, user can long-press to save)
         window.open(videoSrc, '_blank');
       }
       return;
@@ -1709,8 +1759,8 @@ export default function Editor({
   const handleImageTap = useCallback((messageId: string) => {
     const snapIdx = snapshots.findIndex(s => s.messageId === messageId);
     if (snapIdx >= 0) setViewIndex(timelineFromSnap(snapIdx, draftParentIndex));
-    setViewMode('gui');
-  }, [snapshots, draftParentIndex]);
+    if (!isDesktop) setViewMode('gui');
+  }, [snapshots, draftParentIndex, isDesktop]);
 
   // Track whether we've pushed a CUI history state that hasn't been consumed yet.
   // We need this because setViewMode('gui') can be called via two paths:
@@ -1720,7 +1770,9 @@ export default function Editor({
 
   // Intercept browser/iOS back gesture when CUI is open:
   // push a history state on enter, listen for popstate to go back to GUI.
+  // Desktop: no history management needed (CUI is always visible as side panel)
   useEffect(() => {
+    if (isDesktop) return;
     if (viewMode === 'cui') {
       window.history.pushState({ makaronCui: true }, '');
       hasCuiHistoryState.current = true;
@@ -1737,10 +1789,10 @@ export default function Editor({
       hasCuiHistoryState.current = false;
       window.history.back(); // listener already removed by cleanup above — silently pops
     }
-  }, [viewMode]);
+  }, [viewMode, isDesktop]);
 
   return (
-    <div className="h-dvh bg-black relative overflow-hidden flex flex-col">
+    <div className={`h-dvh bg-black relative overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}>
       <input
         ref={fileInputRef}
         type="file"
@@ -1765,9 +1817,9 @@ export default function Editor({
         }}
       />
 
-      {/* GUI mode */}
-      {viewMode === 'gui' && (
-        <>
+      {/* GUI mode — always visible on desktop, toggled on mobile */}
+      {(isDesktop || viewMode === 'gui') && (
+        <div className={isDesktop ? 'flex-1 min-w-0 flex flex-col' : 'contents'}>
           {/* Canvas area (fills remaining space) */}
           <div
             ref={(el) => {
@@ -1812,6 +1864,7 @@ export default function Editor({
                 draftTimelineIndex={draftParentIndex !== null ? draftParentIndex + 1 : undefined}
                 onDismissDraft={dismissDraft}
                 previousImage={previousImage}
+                isDesktop={isDesktop}
                 onAnimate={snapshots.length >= 3 ? () => {
                   if (hasVideo) {
                     // Video exists — navigate to it
@@ -1849,7 +1902,7 @@ export default function Editor({
                   {onBack && (
                     <button
                       onClick={onBack}
-                      className="text-white/80 hover:text-white p-2"
+                      className="text-white/80 hover:text-white p-2 cursor-pointer"
                     >
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -1858,7 +1911,7 @@ export default function Editor({
                   )}
                   <button
                     onClick={() => newProjectFileInputRef.current?.click()}
-                    className="text-white/80 hover:text-white p-2"
+                    className="text-white/80 hover:text-white p-2 cursor-pointer"
                   >
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 5v14M5 12h14" />
@@ -1871,7 +1924,7 @@ export default function Editor({
                     <button
                       onClick={handleDownload}
                       disabled={isSaving}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all ${
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all cursor-pointer ${
                         isSaving
                           ? 'text-white/50 bg-fuchsia-500/10 border-fuchsia-500/20'
                           : 'text-white bg-fuchsia-500/20 border-fuchsia-500/30'
@@ -1901,6 +1954,7 @@ export default function Editor({
                 isActive={isAgentActive}
                 onOpenChat={openCUI}
                 isViewingDraft={isViewingDraft}
+                hideChat={isDesktop}
               />
               <TipsBar
                 tips={currentTips}
@@ -1916,14 +1970,30 @@ export default function Editor({
                   if (snap) fetchMoreTipsForCategory(category, snap.id, snap.image);
                 }}
                 loadingMoreCategories={loadingMoreCategories}
+                isDesktop={isDesktop}
               />
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {/* CUI mode */}
-      {viewMode === 'cui' && (
+      {/* CUI mode — desktop: side panel (always visible), mobile: fullscreen overlay */}
+      {isDesktop ? (
+        <div className="w-[340px] flex-shrink-0 border-l border-white/[0.08]">
+          <AgentChatView
+            mode="panel"
+            messages={messages}
+            isAgentActive={isAgentActive}
+            agentStatus={agentStatus}
+            currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
+            onSendMessage={(text, imgs) => handleAgentRequest(text, imgs)}
+            onBack={() => {}}
+            onPipTap={() => {}}
+            onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
+            onImageTap={handleImageTap}
+          />
+        </div>
+      ) : viewMode === 'cui' ? (
         <AgentChatView
           messages={messages}
           isAgentActive={isAgentActive}
@@ -1943,7 +2013,7 @@ export default function Editor({
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
         />
-      )}
+      ) : null}
 
       {/* Hero Overlay: animates between canvas rect and PiP rect during GUI↔CUI transition */}
       {heroAnim && (
@@ -1996,7 +2066,7 @@ export default function Editor({
               if (lastSnapIdx >= 0) setViewIndex(lastSnapIdx);
             }
           }}
-          onOpenCUI={() => setViewMode('cui')}
+          onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
           onGeneratePrompt={generateAnimationPrompt}
           onAbandon={() => {
             // Stop polling, mark as abandoned in DB, reset to ready (keep prompt)

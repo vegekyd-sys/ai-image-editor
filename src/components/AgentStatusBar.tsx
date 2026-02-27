@@ -5,9 +5,10 @@ interface AgentStatusBarProps {
   isActive: boolean;
   onOpenChat: () => void;
   isViewingDraft?: boolean;
+  hideChat?: boolean;
 }
 
-export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft }: AgentStatusBarProps) {
+export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat }: AgentStatusBarProps) {
   // Determine dot color and breathe speed based on state
   const isGeneratingImages = statusText.includes('正使用nano banana');
   const isFetchingTips = statusText.includes('Ready to Suprise');
@@ -54,21 +55,23 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
           {isViewingDraft ? '喜欢这个效果？你想怎么修改告诉我 👉🏻' : statusText}
         </div>
 
-        {/* Chat button */}
-        <button
-          onClick={e => { e.stopPropagation(); onOpenChat(); }}
-          className="px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0"
-          style={isViewingDraft ? {
-            background: 'rgba(192,38,211,0.25)',
-            color: '#e879f9',
-            border: '1px solid rgba(192,38,211,0.4)',
-          } : {
-            background: 'rgba(255,255,255,0.08)',
-            color: 'rgba(255,255,255,0.7)',
-          }}
-        >
-          Chat
-        </button>
+        {/* Chat button (hidden on desktop where CUI panel is always visible) */}
+        {!hideChat && (
+          <button
+            onClick={e => { e.stopPropagation(); onOpenChat(); }}
+            className="px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
+            style={isViewingDraft ? {
+              background: 'rgba(192,38,211,0.25)',
+              color: '#e879f9',
+              border: '1px solid rgba(192,38,211,0.4)',
+            } : {
+              background: 'rgba(255,255,255,0.08)',
+              color: 'rgba(255,255,255,0.7)',
+            }}
+          >
+            Chat
+          </button>
+        )}
       </div>
     </>
   );

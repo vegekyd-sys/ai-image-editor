@@ -24,6 +24,14 @@
   --font-mono: var(--font-geist-mono);
 }
 
+button, [role="button"], a, label[for], input[type="file"] + label {
+  cursor: pointer;
+}
+
+[data-dragging] * {
+  cursor: grabbing !important;
+}
+
 html, body {
   background: #000;
   color: var(--foreground);

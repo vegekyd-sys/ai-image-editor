@@ -17,12 +17,13 @@ interface ImageCanvasProps {
   hasVideo?: boolean;
   isVideoEntry?: boolean;
   videoUrl?: string | null;
+  isDesktop?: boolean;
 }
 
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
-  hasVideo, isVideoEntry, videoUrl,
+  hasVideo, isVideoEntry, videoUrl, isDesktop,
 }: ImageCanvasProps) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -235,6 +236,58 @@ export default function ImageCanvas({
     if (isDraft) onDismissDraft?.();
   }, [isDraft, onDismissDraft]);
 
+  // Desktop: unified mouse handler — mirrors all touch interactions
+  // (long-press compare + swipe navigate, same logic as touch handlers)
+  const mouseStartPos = useRef<{ x: number; y: number } | null>(null);
+  const mouseDidDrag = useRef(false);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0 || isVideoEntry) return;
+    mouseStartPos.current = { x: e.clientX, y: e.clientY };
+    mouseDidDrag.current = false;
+
+    // Long press → compare (same as touch)
+    if (previousImage) {
+      clearLongPress();
+      longPressTimer.current = setTimeout(() => {
+        setIsComparing(true);
+      }, 200);
+    }
+  }, [previousImage, isVideoEntry, clearLongPress]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!mouseStartPos.current) return;
+    const dx = Math.abs(e.clientX - mouseStartPos.current.x);
+    const dy = Math.abs(e.clientY - mouseStartPos.current.y);
+    if (dx > 8 || dy > 8) {
+      mouseDidDrag.current = true;
+      clearLongPress();
+      if (isComparing) setIsComparing(false);
+    }
+  }, [clearLongPress, isComparing]);
+
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    clearLongPress();
+    if (isComparing) { setIsComparing(false); mouseStartPos.current = null; return; }
+
+    // Swipe detection (same threshold as touch: 40px horizontal, must exceed vertical)
+    if (mouseStartPos.current && mouseDidDrag.current) {
+      const deltaX = e.clientX - mouseStartPos.current.x;
+      const deltaY = e.clientY - mouseStartPos.current.y;
+      if (Math.abs(deltaX) >= SWIPE_THRESHOLD && Math.abs(deltaX) > Math.abs(deltaY)) {
+        skipClick.current = true;
+        if (deltaX < 0 && currentIndex < timeline.length - 1) {
+          setAnimDir('left');
+          setTimeout(() => { onIndexChange(currentIndex + 1); setAnimDir(null); }, 150);
+        } else if (deltaX > 0 && currentIndex > 0) {
+          setAnimDir('right');
+          setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
+        }
+      }
+    }
+    mouseStartPos.current = null;
+  }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange]);
+
   const goTo = useCallback((index: number) => {
     if (index === currentIndex) return;
     setAnimDir(index > currentIndex ? 'left' : 'right');
@@ -267,6 +320,10 @@ export default function ImageCanvas({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseUp}
       onClick={handleClick}
     >
       {isEditing && (
@@ -384,8 +441,8 @@ export default function ImageCanvas({
 
       {/* Bottom indicators */}
       {timeline.length > 1 && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-3 z-10">
-          <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5">
+        <div className={`absolute left-1/2 -translate-x-1/2 flex items-center z-10 ${isDesktop ? 'bottom-3 gap-2' : 'bottom-20 gap-3'}`}>
+          <div className={`flex items-center bg-black/50 backdrop-blur-sm rounded-full ${isDesktop ? 'gap-1 px-2 py-1' : 'gap-1.5 px-3 py-1.5'}`}>
             {timeline.map((entry, i) => {
               // Skip the video sentinel in dot rendering — it has its own dot below
               if (entry === VIDEO_SENTINEL) return null;
@@ -393,10 +450,10 @@ export default function ImageCanvas({
                 <button
                   key={i}
                   onClick={() => goTo(i)}
-                  className={`rounded-full transition-all ${
+                  className={`rounded-full transition-all cursor-pointer ${
                     i === currentIndex
-                      ? 'w-5 h-2 bg-white'
-                      : 'w-2 h-2 bg-white/40'
+                      ? isDesktop ? 'w-3.5 h-1.5 bg-white' : 'w-5 h-2 bg-white'
+                      : isDesktop ? 'w-1.5 h-1.5 bg-white/40' : 'w-2 h-2 bg-white/40'
                   }`}
                 />
               );
@@ -413,20 +470,22 @@ export default function ImageCanvas({
                   }
                 }}
                 title="生成视频"
-                className={`ml-1 w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
+                className={`ml-0.5 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                  isDesktop ? 'w-5 h-5' : 'ml-1 w-6 h-6'
+                } ${
                   isVideoEntry
                     ? 'bg-fuchsia-500'
                     : 'bg-fuchsia-500/80 hover:bg-fuchsia-500'
                 }`}
                 style={{ flexShrink: 0 }}
               >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="white">
+                <svg width={isDesktop ? "8" : "10"} height={isDesktop ? "8" : "10"} viewBox="0 0 10 10" fill="white">
                   <polygon points="3,2 8,5 3,8" />
                 </svg>
               </button>
             )}
           </div>
-          <span className="text-white/80 text-xs font-medium bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5 whitespace-nowrap">
+          <span className={`text-white/80 font-medium bg-black/50 backdrop-blur-sm rounded-full whitespace-nowrap ${isDesktop ? 'text-[10px] px-2 py-1' : 'text-xs px-3 py-1.5'}`}>
             {getLabel(currentIndex)}
           </span>
         </div>
@@ -438,7 +497,7 @@ export default function ImageCanvas({
           {currentIndex > 0 && (
             <button
               onClick={() => goTo(currentIndex - 1)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10 cursor-pointer"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m15 18-6-6 6-6" />
@@ -448,7 +507,7 @@ export default function ImageCanvas({
           {currentIndex < timeline.length - 1 && (
             <button
               onClick={() => goTo(currentIndex + 1)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10 cursor-pointer"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m9 18 6-6-6-6" />
