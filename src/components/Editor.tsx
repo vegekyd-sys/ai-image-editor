@@ -226,7 +226,7 @@ export default function Editor({
   const [annotationTool, setAnnotationTool] = useState<'brush' | 'rect' | 'text'>('brush');
   const [annotationEntries, setAnnotationEntries] = useState<AnnotationEntry[]>([]);
   const annotationColor = '#dc2626'; // fixed red for all annotations
-  const [annotationBrushSize, setAnnotationBrushSize] = useState<'S' | 'M' | 'L'>('M');
+  const [annotationBrushSize, setAnnotationBrushSize] = useState(30); // 0-100 slider
   // Text editing sub-mode
   const [textEditPos, setTextEditPos] = useState<{ x: number; y: number } | null>(null);
   const [textEditValue, setTextEditValue] = useState('');
@@ -960,7 +960,7 @@ export default function Editor({
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[]) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string) => {
     // Map timeline index → snapshot index; null means we're at the draft slot
     const snapIdx = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
     let currentImage = snapIdx !== null ? snapshotsRef.current[snapIdx]?.image : undefined;
@@ -984,9 +984,10 @@ export default function Editor({
     // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
     const snapForApi = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     const rawImage = snapForApi ? getImageForApi(snapForApi) : (currentImage || '');
-    const imageForApi = rawImage.startsWith('data:') ? await compressBase64(rawImage) : rawImage;
-    // Show attached images in the user message bubble
-    addMessage('user', text, undefined, attachedImages?.length ? attachedImages : undefined);
+    const imageForApi = overrideImage
+      || (rawImage.startsWith('data:') ? await compressBase64(rawImage) : rawImage);
+    // Show attached/annotated images in the user message bubble
+    addMessage('user', text, undefined, overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
       id: assistantMsgId,
@@ -1901,9 +1902,11 @@ export default function Editor({
                 onDeleteAnnotationEntry={(id) => setAnnotationEntries(prev => prev.filter(e => e.id !== id))}
                 annotationColor={annotationColor}
                 annotationLineWidth={(() => {
-                  const base = 1408; // reference width
-                  const map = { S: base * 0.008, M: base * 0.028, L: base * 0.06 };
-                  return Math.round(map[annotationBrushSize]);
+                  const base = 1408;
+                  const t = annotationBrushSize / 100; // 0..1
+                  // Brush: 0.006–0.07, Rect: thinner (0.004–0.035)
+                  const scale = annotationTool === 'rect' ? 0.004 + t * 0.031 : 0.006 + t * 0.064;
+                  return Math.max(4, Math.round(base * scale));
                 })()}
                 onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
                 textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
@@ -2010,71 +2013,74 @@ export default function Editor({
             )}
           </div>
 
-          {/* Bottom bar: tips always in DOM for stable height; annotation toolbar overlays on top */}
+          {/* Annotation toolbar — overlays TipsBar like AnimateSheet */}
+          {snapshots.length > 0 && annotationMode && (
+            <div style={{
+              position: isDesktop ? 'absolute' : 'fixed',
+              bottom: 0, left: 0, right: 0,
+              zIndex: 201,
+            }}>
+              <AnnotationToolbar
+                activeTool={annotationTool}
+                onToolChange={(tool) => {
+                  setAnnotationTool(tool);
+                  if (tool === 'text' && !textEditPos) {
+                    setTextEditPos({ x: 704, y: 704 });
+                    setTextEditValue('');
+                  } else if (tool !== 'text') {
+                    setTextEditPos(null);
+                    setTextEditValue('');
+                  }
+                }}
+                onUndo={() => setAnnotationEntries(prev => prev.slice(0, -1))}
+                onClear={() => setAnnotationEntries([])}
+                onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); setTextEditPos(null); }}
+                canUndo={annotationEntries.length > 0}
+                hasEntries={annotationEntries.length > 0}
+                isSending={isAgentActive}
+                onSend={async (text) => {
+                  const baseImage = timeline[viewIndex];
+                  if (!baseImage) return;
+                  const merged = annotationEntries.length > 0
+                    ? await mergeAnnotation(baseImage, annotationEntries)
+                    : baseImage;
+                  const compressed = await compressBase64(merged);
+                  setAnnotationMode(false);
+                  setAnnotationEntries([]);
+                  handleAgentRequest(text || '请根据标注修改图片', undefined, compressed);
+                }}
+                brushSize={annotationBrushSize}
+                onBrushSizeChange={setAnnotationBrushSize}
+                textEditing={!!textEditPos}
+                textColor={textColor}
+                onTextColorChange={setTextColor}
+                textBgEnabled={textBgEnabled}
+                onTextBgToggle={() => setTextBgEnabled(prev => !prev)}
+                onTextDone={() => {
+                  if (textEditPos && textEditValue.trim()) {
+                    const fontSize = Math.round(1408 * 0.05);
+                    setAnnotationEntries(prev => [...prev, {
+                      id: newAnnotationId(),
+                      type: 'text' as const,
+                      color: textColor,
+                      lineWidth: 0,
+                      data: { x: textEditPos.x, y: textEditPos.y, text: textEditValue.trim(), fontSize, textColor, bgColor: textBgEnabled ? '#000' : '' },
+                    }]);
+                  }
+                  setTextEditPos(null);
+                  setTextEditValue('');
+                }}
+                onTextCancel={() => {
+                  setTextEditPos(null);
+                  setTextEditValue('');
+                }}
+              />
+            </div>
+          )}
+
+          {/* Bottom bar: tips */}
           {snapshots.length > 0 && (
-            <div className="flex-shrink-0 relative">
-              {/* Annotation toolbar — absolute overlay, same position */}
-              {annotationMode && (
-                <div className="absolute inset-0 z-10 bg-black flex flex-col justify-end">
-                  <AnnotationToolbar
-                    activeTool={annotationTool}
-                    onToolChange={(tool) => {
-                      setAnnotationTool(tool);
-                      if (tool === 'text' && !textEditPos) {
-                        setTextEditPos({ x: 704, y: 704 });
-                        setTextEditValue('');
-                      } else if (tool !== 'text') {
-                        setTextEditPos(null);
-                        setTextEditValue('');
-                      }
-                    }}
-                    onUndo={() => setAnnotationEntries(prev => prev.slice(0, -1))}
-                    onClear={() => setAnnotationEntries([])}
-                    onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); setTextEditPos(null); }}
-                    canUndo={annotationEntries.length > 0}
-                    hasEntries={annotationEntries.length > 0}
-                    isSending={isAgentActive}
-                    onSend={async (text) => {
-                      const baseImage = timeline[viewIndex];
-                      if (!baseImage) return;
-                      const merged = annotationEntries.length > 0
-                        ? await mergeAnnotation(baseImage, annotationEntries)
-                        : baseImage;
-                      const compressed = await compressBase64(merged);
-                      setAnnotationMode(false);
-                      setAnnotationEntries([]);
-                      handleAgentRequest(text || '请根据标注修改图片', [compressed]);
-                    }}
-                    brushSize={annotationBrushSize}
-                    onBrushSizeChange={setAnnotationBrushSize}
-                    textEditing={!!textEditPos}
-                    textColor={textColor}
-                    onTextColorChange={setTextColor}
-                    textBgEnabled={textBgEnabled}
-                    onTextBgToggle={() => setTextBgEnabled(prev => !prev)}
-                    onTextDone={() => {
-                      if (textEditPos && textEditValue.trim()) {
-                        const fontSize = Math.round(1408 * 0.05);
-                        setAnnotationEntries(prev => [...prev, {
-                          id: newAnnotationId(),
-                          type: 'text' as const,
-                          color: textColor,
-                          lineWidth: 0,
-                          data: { x: textEditPos.x, y: textEditPos.y, text: textEditValue.trim(), fontSize, textColor, bgColor: textBgEnabled ? '#000' : '' },
-                        }]);
-                      }
-                      setTextEditPos(null);
-                      setTextEditValue('');
-                    }}
-                    onTextCancel={() => {
-                      setTextEditPos(null);
-                      setTextEditValue('');
-                    }}
-                  />
-                </div>
-              )}
-              {/* Tips bar — always rendered to define the height */}
-              <div className="bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
+              <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
                 <AgentStatusBar
                   statusText={agentStatus}
                   isActive={isAgentActive}
@@ -2101,7 +2107,6 @@ export default function Editor({
                   initialCategory={committedCategory ?? undefined}
                 />
               </div>
-            </div>
           )}
 
           {/* Animate Sheet — inside GUI wrapper so it doesn't cover CUI on desktop */}
