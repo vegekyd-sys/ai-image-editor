@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useRef, useCallback, useMemo, useEffect, CSSProperties } from 'react';
-import { Message, Tip, Snapshot, PhotoMetadata } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView from '@/components/AgentChatView';
+import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
 import { cacheImage } from '@/lib/imageCache';
+import { mergeAnnotation } from '@/lib/annotationUtils';
 import AnimateSheet from '@/components/AnimateSheet';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 
@@ -218,6 +220,10 @@ export default function Editor({
   const [isTipsFetching, setIsTipsFetching] = useState(false);
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
+  // Annotation (paintbrush) mode
+  const [annotationMode, setAnnotationMode] = useState(false);
+  const [annotationTool, setAnnotationTool] = useState<'brush' | 'rect' | 'text'>('brush');
+  const [annotationEntries, setAnnotationEntries] = useState<AnnotationEntry[]>([]);
   const [showAnimateSheet, setShowAnimateSheet] = useState(() => {
     // Auto-open if resuming a processing animation
     return !!(initialAnimation?.status === 'processing' && initialAnimation?.taskId);
@@ -1853,6 +1859,10 @@ export default function Editor({
                 onDismissDraft={dismissDraft}
                 previousImage={previousImage}
                 isDesktop={isDesktop}
+                annotationMode={annotationMode}
+                annotationTool={annotationTool}
+                annotationEntries={annotationEntries}
+                onAddAnnotationEntry={(entry) => setAnnotationEntries(prev => [...prev, entry])}
                 onAnimate={snapshots.length >= 3 ? () => {
                   if (hasVideo) {
                     // Video exists — navigate to it
@@ -1905,6 +1915,26 @@ export default function Editor({
                       <path d="M12 5v14M5 12h14" />
                     </svg>
                   </button>
+                  {/* Annotation (paintbrush) toggle */}
+                  {!isViewingVideo && timeline.length > 0 && (
+                    <button
+                      onClick={() => {
+                        if (annotationMode) {
+                          setAnnotationMode(false);
+                          setAnnotationEntries([]);
+                        } else {
+                          setAnnotationMode(true);
+                          setAnnotationTool('brush');
+                        }
+                      }}
+                      className={`p-2 cursor-pointer transition-colors ${annotationMode ? 'text-fuchsia-400' : 'text-white/80 hover:text-white'}`}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08" />
+                        <path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1934,33 +1964,56 @@ export default function Editor({
             )}
           </div>
 
-          {/* Bottom bar: Agent status bar (always) + Tips */}
+          {/* Bottom bar: annotation toolbar OR agent status + tips */}
           {snapshots.length > 0 && (
-            <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
-              <AgentStatusBar
-                statusText={agentStatus}
-                isActive={isAgentActive}
-                onOpenChat={openCUI}
-                isViewingDraft={isViewingDraft}
-                hideChat={isDesktop}
-              />
-              <TipsBar
-                tips={currentTips}
-                isLoading={isTipsFetching}
-                isEditing={isEditing}
-                onTipClick={handleTipInteraction}
-                onTipCommit={() => commitDraft()}
-                onTipDeselect={dismissDraft}
-                onRetryPreview={handleRetryPreview}
-                previewingIndex={isViewingDraft ? previewingTipIndex : null}
-                onLoadMore={(category) => {
-                  const snap = snapshots[tipsSourceIndex];
-                  if (snap) fetchMoreTipsForCategory(category, snap.id, getImageForApi(snap));
+            annotationMode ? (
+              <AnnotationToolbar
+                activeTool={annotationTool}
+                onToolChange={setAnnotationTool}
+                onUndo={() => setAnnotationEntries(prev => prev.slice(0, -1))}
+                onClear={() => setAnnotationEntries([])}
+                onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); }}
+                canUndo={annotationEntries.length > 0}
+                hasEntries={annotationEntries.length > 0}
+                isSending={isAgentActive}
+                onSend={async (text) => {
+                  const baseImage = timeline[viewIndex];
+                  if (!baseImage) return;
+                  const merged = annotationEntries.length > 0
+                    ? await mergeAnnotation(baseImage, annotationEntries)
+                    : baseImage;
+                  setAnnotationMode(false);
+                  setAnnotationEntries([]);
+                  handleAgentRequest(text || '请根据标注修改图片', [merged]);
                 }}
-                loadingMoreCategories={loadingMoreCategories}
-                isDesktop={isDesktop}
               />
-            </div>
+            ) : (
+              <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
+                <AgentStatusBar
+                  statusText={agentStatus}
+                  isActive={isAgentActive}
+                  onOpenChat={openCUI}
+                  isViewingDraft={isViewingDraft}
+                  hideChat={isDesktop}
+                />
+                <TipsBar
+                  tips={currentTips}
+                  isLoading={isTipsFetching}
+                  isEditing={isEditing}
+                  onTipClick={handleTipInteraction}
+                  onTipCommit={() => commitDraft()}
+                  onTipDeselect={dismissDraft}
+                  onRetryPreview={handleRetryPreview}
+                  previewingIndex={isViewingDraft ? previewingTipIndex : null}
+                  onLoadMore={(category) => {
+                    const snap = snapshots[tipsSourceIndex];
+                    if (snap) fetchMoreTipsForCategory(category, snap.id, getImageForApi(snap));
+                  }}
+                  loadingMoreCategories={loadingMoreCategories}
+                  isDesktop={isDesktop}
+                />
+              </div>
+            )
           )}
 
           {/* Animate Sheet — inside GUI wrapper so it doesn't cover CUI on desktop */}

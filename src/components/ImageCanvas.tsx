@@ -1,8 +1,18 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import type { AnnotationEntry } from '@/types';
+import AnnotationCanvas from '@/components/AnnotationCanvas';
 
 const VIDEO_SENTINEL = '__VIDEO__';
+
+// Compute image absolute rect within a container using object-contain semantics
+function containRect(cW: number, cH: number, ar: number) {
+  let w, h;
+  if (ar > cW / cH) { w = cW; h = cW / ar; }
+  else              { h = cH; w = cH * ar; }
+  return { l: (cW - w) / 2, t: (cH - h) / 2, w, h };
+}
 
 interface ImageCanvasProps {
   timeline: string[];
@@ -18,12 +28,17 @@ interface ImageCanvasProps {
   isVideoEntry?: boolean;
   videoUrl?: string | null;
   isDesktop?: boolean;
+  annotationMode?: boolean;
+  annotationTool?: 'brush' | 'rect' | 'text';
+  annotationEntries?: AnnotationEntry[];
+  onAddAnnotationEntry?: (entry: AnnotationEntry) => void;
 }
 
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
   hasVideo, isVideoEntry, videoUrl, isDesktop,
+  annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
 }: ImageCanvasProps) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -45,6 +60,20 @@ export default function ImageCanvas({
   // Double tap
   const lastTapTime = useRef(0);
 
+  // Annotation: image rect for overlay positioning
+  const imgElRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [imageRect, setImageRect] = useState({ l: 0, t: 0, w: 0, h: 0 });
+  const [naturalDims, setNaturalDims] = useState({ w: 0, h: 0 });
+
+  // Reset zoom when entering annotation mode
+  const prevAnnotationMode = useRef(annotationMode);
+  if (annotationMode && !prevAnnotationMode.current) {
+    if (scale !== 1) setScale(1);
+    if (translate.x !== 0 || translate.y !== 0) setTranslate({ x: 0, y: 0 });
+  }
+  prevAnnotationMode.current = annotationMode;
+
   // Image loading state
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -56,6 +85,26 @@ export default function ImageCanvas({
 
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
+
+  // Update imageRect when image loads or container resizes
+  const updateImageRect = useCallback(() => {
+    const img = imgElRef.current;
+    const container = containerRef.current;
+    if (!img || !container || !img.naturalWidth) return;
+    const cr = container.getBoundingClientRect();
+    const ar = img.naturalWidth / img.naturalHeight;
+    const rect = containRect(cr.width, cr.height, ar);
+    setImageRect(rect);
+    setNaturalDims({ w: img.naturalWidth, h: img.naturalHeight });
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(updateImageRect);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [updateImageRect]);
 
   const SWIPE_THRESHOLD = 40;
 
@@ -82,6 +131,7 @@ export default function ImageCanvas({
   }, []);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (annotationMode) return;
     if (e.touches.length === 2) {
       // Pinch start — skip for video entry
       if (isVideoEntry) return;
@@ -117,9 +167,10 @@ export default function ImageCanvas({
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (annotationMode) return;
     if (e.touches.length === 2 && isPinching.current) {
       // Pinch move
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -156,6 +207,7 @@ export default function ImageCanvas({
   }, [scale, isComparing, clearLongPress]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (annotationMode) return;
     clearLongPress();
 
     // End comparing
@@ -242,7 +294,7 @@ export default function ImageCanvas({
   const mouseDidDrag = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0 || isVideoEntry) return;
+    if (annotationMode || e.button !== 0 || isVideoEntry) return;
     mouseStartPos.current = { x: e.clientX, y: e.clientY };
     mouseDidDrag.current = false;
 
@@ -333,6 +385,7 @@ export default function ImageCanvas({
 
   return (
     <div
+      ref={containerRef}
       className="absolute inset-0 flex items-center justify-center touch-none select-none"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
       onTouchStart={handleTouchStart}
@@ -436,6 +489,7 @@ export default function ImageCanvas({
         ) : (
           /* Image */
           <img
+            ref={imgElRef}
             src={displayImage}
             alt="preview"
             className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
@@ -444,7 +498,21 @@ export default function ImageCanvas({
               imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
             }`}
             draggable={false}
-            onLoad={() => setImageLoaded(true)}
+            onLoad={() => { setImageLoaded(true); updateImageRect(); }}
+          />
+        )}
+
+        {/* Annotation overlay */}
+        {annotationMode && !isVideoEntry && imageRect.w > 0 && onAddAnnotationEntry && (
+          <AnnotationCanvas
+            imageRect={imageRect}
+            naturalWidth={naturalDims.w}
+            naturalHeight={naturalDims.h}
+            activeTool={annotationTool || 'brush'}
+            entries={annotationEntries || []}
+            onAddEntry={onAddAnnotationEntry}
+            color="rgba(236, 72, 153, 0.7)"
+            lineWidth={Math.max(3, Math.round(naturalDims.w * 0.004))}
           />
         )}
       </div>
