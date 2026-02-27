@@ -144,18 +144,19 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
     return () => clearTimeout(timer);
   }, [previewingIndex]);
 
-  // Auto-scroll to tip when its preview completes
+  // Auto-scroll to tip when its preview starts generating or completes
   const prevPreviewStatuses = useRef<Map<number, string>>(new Map());
   useEffect(() => {
     if (!tips.length) return;
-    let firstNewDone: number | null = null;
+    let scrollTarget: number | null = null;
     for (const { tip, originalIndex } of orderedTips) {
       const prev = prevPreviewStatuses.current.get(originalIndex);
+      if (tip.category !== activeCategory) continue;
+      // Scroll to first tip that just started generating or just completed
       if (tip.previewStatus === 'done' && prev && prev !== 'done') {
-        // Only scroll if this tip is in the currently active category
-        if (tip.category === activeCategory && firstNewDone === null) {
-          firstNewDone = originalIndex;
-        }
+        if (scrollTarget === null) scrollTarget = originalIndex;
+      } else if (tip.previewStatus === 'generating' && prev !== 'generating') {
+        if (scrollTarget === null) scrollTarget = originalIndex;
       }
     }
     // Update stored statuses
@@ -165,8 +166,8 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
     }
     prevPreviewStatuses.current = next;
 
-    if (firstNewDone !== null && previewingIndex === null) {
-      const el = tipRefs.current.get(firstNewDone);
+    if (scrollTarget !== null && previewingIndex === null) {
+      const el = tipRefs.current.get(scrollTarget);
       const container = scrollContainerRef.current;
       if (el && container) {
         const containerRect = container.getBoundingClientRect();

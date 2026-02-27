@@ -225,7 +225,7 @@ export default function Editor({
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationTool, setAnnotationTool] = useState<'brush' | 'rect' | 'text'>('brush');
   const [annotationEntries, setAnnotationEntries] = useState<AnnotationEntry[]>([]);
-  const [annotationColor, setAnnotationColor] = useState('#dc2626');
+  const annotationColor = '#dc2626'; // fixed red for all annotations
   const [annotationBrushSize, setAnnotationBrushSize] = useState<'S' | 'M' | 'L'>('M');
   // Text editing sub-mode
   const [textEditPos, setTextEditPos] = useState<{ x: number; y: number } | null>(null);
@@ -271,10 +271,6 @@ export default function Editor({
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(AGENT_GREETING);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
-  const [pendingNewSnapIndex, setPendingNewSnapIndex] = useState<number | null>(null);
-  const [pendingNewSnapReady, setPendingNewSnapReady] = useState(false);
-  const committedTipIndexRef = useRef<number | null>(null);
-  const committedTipCategoryRef = useRef<string | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
@@ -1254,13 +1250,15 @@ export default function Editor({
   }, [projectId, animationState?.imageUrls, onSaveMessage]);
 
   // Commit draft: finalize the virtual draft as a real snapshot
-  // Stays in draft state — new snapshot loads tips/previews in background
   const commitDraft = useCallback(() => {
     if (draftParentIndex === null || previewingTipIndex === null) return;
 
     const parentTips = snapshots[draftParentIndex]?.tips ?? [];
     const tip = parentTips[previewingTipIndex];
     if (!tip?.previewImage) return;
+
+    // Cancel remaining preview generations
+    previewAbortRef.current.abort();
 
     // Add chat messages for context
     addMessage('user', tip.label);
@@ -1280,15 +1278,21 @@ export default function Editor({
     });
     cacheImage(`snap:${snapId}`, newSnapshot.image);
 
-    // Stay in draft — track pending new snapshot
-    committedTipIndexRef.current = previewingTipIndex;
-    committedTipCategoryRef.current = tip.category;
-    setPendingNewSnapIndex(snapshots.length);
-    setPendingNewSnapReady(false);
-    setAgentStatus('正在为你准备新的建议...');
+    // Clear draft and jump to the newly committed snapshot
+    setViewIndex(snapshots.length);
+    setDraftParentIndex(null);
+    setPreviewingTipIndex(null);
 
     // Fetch new tips — auto-preview only the committed tip's category
-    fetchTipsForSnapshot(snapId, tip.previewImage, 'none', tip.category);
+    // Use URL if available (fast, ~100 bytes), otherwise compress base64 to avoid ~3MB per request × 4
+    const committedImage = tip.previewImage;
+    if (committedImage.startsWith('http')) {
+      fetchTipsForSnapshot(snapId, committedImage, 'none', tip.category);
+    } else {
+      compressBase64(committedImage, 600_000).then(compressed => {
+        fetchTipsForSnapshot(snapId, compressed, 'none', tip.category);
+      });
+    }
 
     // Trigger agent CUI reaction to the committed tip
     const tipSnapshot = { emoji: tip.emoji, label: tip.label, desc: tip.desc, category: tip.category };
@@ -1317,8 +1321,8 @@ export default function Editor({
       ? (draftParentIndex ?? 0)
       : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0);
 
-    // If tip has no preview yet ('none'), trigger generation only — don't select as draft yet
-    if (!tip.previewImage && (tip.previewStatus === 'none' || !tip.previewStatus)) {
+    // If tip has no preview yet ('none' or 'error'), trigger generation — don't select as draft yet
+    if (!tip.previewImage && (tip.previewStatus === 'none' || tip.previewStatus === 'error' || !tip.previewStatus)) {
       const snap = snapshots[currentSnapIdx];
       if (snap && tip.editPrompt) {
         previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
@@ -1427,7 +1431,9 @@ export default function Editor({
         const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
         setSnapshots([newSnapshot]);
         snapshotsRef.current = [newSnapshot];
-        fetchTipsForSnapshot(snapId, base64, 'full');
+        // Tips only need to "see" the image, not generate from it — use smaller version
+        const tipsImage = await compressBase64(base64, 600_000);
+        fetchTipsForSnapshot(snapId, tipsImage, 'full');
         tipsStarted = true;
       } catch {
         // HEIC or other format — fall through to server upload
@@ -1455,7 +1461,9 @@ export default function Editor({
       cacheImage(`snap:${snapId}`, base64!);
       // Only start tips if not already started (HEIC path)
       if (!tipsStarted) {
-        fetchTipsForSnapshot(snapId, base64!, 'full');
+        compressBase64(base64!, 600_000).then(compressed => {
+          fetchTipsForSnapshot(snapId, compressed, 'full');
+        });
       }
       // Auto-analyze the uploaded photo
       runAutoAnalysis(snapId, base64!);
@@ -1499,11 +1507,14 @@ export default function Editor({
       });
       cacheImage(`snap:${snapId}`, pendingImage);
 
+      // Tips only need to "see" the image — use smaller version
+      const tipsImagePromise = compressBase64(pendingImage, 600_000);
+
       if (pendingPrompt) {
         // Path 3: image + prompt → CUI with prompt as first message
         pendingPromptHandled.current = true;
         // Still fetch tips in background
-        fetchTipsForSnapshot(snapId, pendingImage);
+        tipsImagePromise.then(img => fetchTipsForSnapshot(snapId, img));
         // Enter CUI and send the prompt (mobile only — desktop CUI panel is always visible)
         setTimeout(() => {
           if (!isDesktop) setViewMode('cui');
@@ -1511,7 +1522,7 @@ export default function Editor({
         }, 200);
       } else {
         // Path 1: image only → original flow
-        fetchTipsForSnapshot(snapId, pendingImage);
+        tipsImagePromise.then(img => fetchTipsForSnapshot(snapId, img));
         runAutoAnalysis(snapId, pendingImage);
       }
     }
@@ -1637,39 +1648,6 @@ export default function Editor({
     }
   }, [snapshots, tipsSourceIndex, isTipsFetching, triggerPreviewsReadyNotification]);
 
-  // When 2+ previews ready on pending new snapshot: auto-jump or notify
-  useEffect(() => {
-    if (pendingNewSnapIndex === null || pendingNewSnapReady) return;
-    const snap = snapshots[pendingNewSnapIndex];
-    if (!snap) return;
-    const doneCount = snap.tips.filter(t => t.previewStatus === 'done').length;
-    if (doneCount < 2) return;
-
-    if (isViewingDraft && previewingTipIndex === committedTipIndexRef.current) {
-      // User still on the committed preview → auto-jump to new snapshot
-      setDraftParentIndex(null);
-      setPreviewingTipIndex(null);
-      setViewIndex(pendingNewSnapIndex);
-      setPendingNewSnapIndex(null);
-      committedTipIndexRef.current = null;
-      committedTipCategoryRef.current = null;
-    } else {
-      // User browsing other tips → show notification
-      setPendingNewSnapReady(true);
-      setAgentStatus('新的tips准备好了！点击查看👉🏻');
-    }
-  }, [snapshots, pendingNewSnapIndex, pendingNewSnapReady, isViewingDraft, previewingTipIndex]);
-
-  const navigateToNewSnapshot = useCallback(() => {
-    if (pendingNewSnapIndex === null) return;
-    setDraftParentIndex(null);
-    setPreviewingTipIndex(null);
-    setViewIndex(pendingNewSnapIndex);
-    setPendingNewSnapIndex(null);
-    setPendingNewSnapReady(false);
-    committedTipIndexRef.current = null;
-    committedTipCategoryRef.current = null;
-  }, [pendingNewSnapIndex]);
 
 
   // When animationState transitions to 'done' (video completed), add a CUI message with the video
@@ -2029,76 +2007,79 @@ export default function Editor({
             )}
           </div>
 
-          {/* Bottom bar: annotation toolbar OR agent status + tips */}
+          {/* Bottom bar: tips always in DOM for stable height; annotation toolbar overlays on top */}
           {snapshots.length > 0 && (
-            annotationMode ? (
-              <AnnotationToolbar
-                activeTool={annotationTool}
-                onToolChange={(tool) => {
-                  setAnnotationTool(tool);
-                  if (tool === 'text' && !textEditPos) {
-                    // Auto-place text at canvas center (use reference natural width/height)
-                    setTextEditPos({ x: 704, y: 704 }); // center of 1408 reference
-                    setTextEditValue('');
-                  } else if (tool !== 'text') {
-                    setTextEditPos(null);
-                    setTextEditValue('');
-                  }
-                }}
-                onUndo={() => setAnnotationEntries(prev => prev.slice(0, -1))}
-                onClear={() => setAnnotationEntries([])}
-                onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); setTextEditPos(null); }}
-                canUndo={annotationEntries.length > 0}
-                hasEntries={annotationEntries.length > 0}
-                isSending={isAgentActive}
-                onSend={async (text) => {
-                  const baseImage = timeline[viewIndex];
-                  if (!baseImage) return;
-                  const merged = annotationEntries.length > 0
-                    ? await mergeAnnotation(baseImage, annotationEntries)
-                    : baseImage;
-                  setAnnotationMode(false);
-                  setAnnotationEntries([]);
-                  handleAgentRequest(text || '请根据标注修改图片', [merged]);
-                }}
-                color={annotationColor}
-                onColorChange={setAnnotationColor}
-                brushSize={annotationBrushSize}
-                onBrushSizeChange={setAnnotationBrushSize}
-                textEditing={!!textEditPos}
-                textColor={textColor}
-                onTextColorChange={setTextColor}
-                textBgEnabled={textBgEnabled}
-                onTextBgToggle={() => setTextBgEnabled(prev => !prev)}
-                onTextDone={() => {
-                  if (textEditPos && textEditValue.trim()) {
-                    const fontSize = Math.round(1408 * 0.05);
-                    setAnnotationEntries(prev => [...prev, {
-                      id: newAnnotationId(),
-                      type: 'text' as const,
-                      color: textColor,
-                      lineWidth: 0,
-                      data: { x: textEditPos.x, y: textEditPos.y, text: textEditValue.trim(), fontSize, textColor, bgColor: textBgEnabled ? '#000' : '' },
-                    }]);
-                  }
-                  setTextEditPos(null);
-                  setTextEditValue('');
-                }}
-                onTextCancel={() => {
-                  setTextEditPos(null);
-                  setTextEditValue('');
-                }}
-              />
-            ) : (
-              <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
+            <div className="flex-shrink-0 relative">
+              {/* Annotation toolbar — absolute overlay, same position */}
+              {annotationMode && (
+                <div className="absolute inset-0 z-10 bg-black flex flex-col justify-end">
+                  <AnnotationToolbar
+                    activeTool={annotationTool}
+                    onToolChange={(tool) => {
+                      setAnnotationTool(tool);
+                      if (tool === 'text' && !textEditPos) {
+                        setTextEditPos({ x: 704, y: 704 });
+                        setTextEditValue('');
+                      } else if (tool !== 'text') {
+                        setTextEditPos(null);
+                        setTextEditValue('');
+                      }
+                    }}
+                    onUndo={() => setAnnotationEntries(prev => prev.slice(0, -1))}
+                    onClear={() => setAnnotationEntries([])}
+                    onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); setTextEditPos(null); }}
+                    canUndo={annotationEntries.length > 0}
+                    hasEntries={annotationEntries.length > 0}
+                    isSending={isAgentActive}
+                    onSend={async (text) => {
+                      const baseImage = timeline[viewIndex];
+                      if (!baseImage) return;
+                      const merged = annotationEntries.length > 0
+                        ? await mergeAnnotation(baseImage, annotationEntries)
+                        : baseImage;
+                      // Tell the model what the red marks mean
+                      const ctx = '[The image has red annotations (lines/rectangles) drawn by the user to indicate specific areas. "Here"/"这里" refers to those marked regions.]';
+                      const userMsg = text ? `${ctx}\n${text}` : `${ctx}\n请根据标注修改图片`;
+                      setAnnotationMode(false);
+                      setAnnotationEntries([]);
+                      handleAgentRequest(userMsg, [merged]);
+                    }}
+                    brushSize={annotationBrushSize}
+                    onBrushSizeChange={setAnnotationBrushSize}
+                    textEditing={!!textEditPos}
+                    textColor={textColor}
+                    onTextColorChange={setTextColor}
+                    textBgEnabled={textBgEnabled}
+                    onTextBgToggle={() => setTextBgEnabled(prev => !prev)}
+                    onTextDone={() => {
+                      if (textEditPos && textEditValue.trim()) {
+                        const fontSize = Math.round(1408 * 0.05);
+                        setAnnotationEntries(prev => [...prev, {
+                          id: newAnnotationId(),
+                          type: 'text' as const,
+                          color: textColor,
+                          lineWidth: 0,
+                          data: { x: textEditPos.x, y: textEditPos.y, text: textEditValue.trim(), fontSize, textColor, bgColor: textBgEnabled ? '#000' : '' },
+                        }]);
+                      }
+                      setTextEditPos(null);
+                      setTextEditValue('');
+                    }}
+                    onTextCancel={() => {
+                      setTextEditPos(null);
+                      setTextEditValue('');
+                    }}
+                  />
+                </div>
+              )}
+              {/* Tips bar — always rendered to define the height */}
+              <div className="bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
                 <AgentStatusBar
                   statusText={agentStatus}
                   isActive={isAgentActive}
                   onOpenChat={openCUI}
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
-                  onViewNew={pendingNewSnapReady ? navigateToNewSnapshot : undefined}
-                  hasPendingCommit={pendingNewSnapIndex !== null}
                 />
                 <TipsBar
                   tips={currentTips}
@@ -2118,7 +2099,7 @@ export default function Editor({
                   isDesktop={isDesktop}
                 />
               </div>
-            )
+            </div>
           )}
 
           {/* Animate Sheet — inside GUI wrapper so it doesn't cover CUI on desktop */}
