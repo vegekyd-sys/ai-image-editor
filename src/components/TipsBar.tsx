@@ -204,7 +204,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[62px] select-none' : 'min-h-[78px]'}`}
+        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
         style={isDragging ? { cursor: 'grabbing' } : undefined}
         data-dragging={isDragging || undefined}
       >
@@ -239,7 +239,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 <button
                   onClick={handleCardClick}
                   disabled={isEditing}
-                  className={`${isDesktop ? 'w-[156px]' : 'w-[200px]'} text-left hover:brightness-110 active:scale-[0.97] disabled:opacity-40 border overflow-hidden cursor-pointer ${
+                  className={`${isDesktop ? 'w-[176px]' : 'w-[200px]'} text-left hover:brightness-110 active:scale-[0.97] disabled:opacity-40 border overflow-hidden cursor-pointer ${
                     missingPrompt
                       ? 'border-white/5 opacity-50'
                       : isSelected
@@ -261,7 +261,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 >
                   <div className="flex">
                     {/* Thumbnail */}
-                    <div className={`${isDesktop ? 'w-[56px] h-[56px]' : 'w-[72px] h-[72px]'} flex-shrink-0 bg-white/5 relative overflow-hidden`}>
+                    <div className={`${isDesktop ? 'w-[64px] h-[64px]' : 'w-[72px] h-[72px]'} flex-shrink-0 bg-white/5 relative overflow-hidden`}>
                       {missingPrompt ? (
                         <div className="w-full h-full flex items-center justify-center">
                           <div className="flex gap-0.5">
@@ -277,8 +277,8 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
 
                     {/* Text */}
                     <div className={`flex-1 min-w-0 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
-                      <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[11px]' : 'text-[13px]'}`}>{tip.label}</div>
-                      <div className={`text-white/50 leading-snug mt-0.5 line-clamp-2 ${isDesktop ? 'text-[10px]' : 'text-[11px]'}`}>{tip.desc}</div>
+                      <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>{tip.label}</div>
+                      <div className={`text-white/50 leading-snug mt-0.5 line-clamp-2 ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>{tip.desc}</div>
                     </div>
                   </div>
                 </button>
@@ -287,13 +287,13 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 <div
                   className="overflow-hidden flex-shrink-0"
                   style={{
-                    width: showCommit ? (isDesktop ? 56 : 72) : 0,
+                    width: showCommit ? (isDesktop ? 64 : 72) : 0,
                     transition: 'width 0.2s ease-out',
                   }}
                 >
                   <button
                     onClick={() => onTipCommit?.(tip, originalIndex)}
-                    className={`${isDesktop ? 'w-[56px]' : 'w-[72px]'} h-full flex flex-col items-center justify-center gap-1.5 rounded-r-2xl border border-l-0 border-fuchsia-500 active:scale-95 overflow-hidden relative group cursor-pointer`}
+                    className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full flex flex-col items-center justify-center gap-1.5 rounded-r-2xl border border-l-0 border-fuchsia-500 active:scale-95 overflow-hidden relative group cursor-pointer`}
                     style={{
                       background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.32) 100%)',
                       transition: 'transform 0.1s',
@@ -329,7 +329,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 <button
                   onClick={() => onLoadMore(tip.category)}
                   disabled={isEditing || loadingMoreCategories?.has(tip.category)}
-                  className={`flex-shrink-0 rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer ${isDesktop ? 'w-[40px] h-[56px]' : 'w-[52px] h-[72px]'}`}
+                  className={`flex-shrink-0 rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer ${isDesktop ? 'w-[44px] h-[64px]' : 'w-[52px] h-[72px]'}`}
                   style={{ background: meta.activeBg.replace('0.18', '0.08') }}
                 >
                   {loadingMoreCategories?.has(tip.category) ? (
@@ -354,9 +354,9 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className={`flex-shrink-0 rounded-2xl bg-fuchsia-500/8 animate-pulse border border-fuchsia-500/10 flex ${isDesktop ? 'w-[156px] h-[56px]' : 'w-[200px] h-[72px]'}`}
+                className={`flex-shrink-0 rounded-2xl bg-fuchsia-500/8 animate-pulse border border-fuchsia-500/10 flex ${isDesktop ? 'w-[176px] h-[64px]' : 'w-[200px] h-[72px]'}`}
               >
-                <div className={`${isDesktop ? 'w-[56px]' : 'w-[72px]'} h-full bg-white/5`} />
+                <div className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full bg-white/5`} />
                 <div className="flex-1 p-2.5 space-y-1.5">
                   <div className="h-3 w-16 bg-white/10 rounded" />
                   <div className="h-2.5 w-24 bg-white/5 rounded" />

@@ -268,7 +268,7 @@ export default function ImageCanvas({
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     clearLongPress();
-    if (isComparing) { setIsComparing(false); mouseStartPos.current = null; return; }
+    if (isComparing) { setIsComparing(false); mouseStartPos.current = null; skipClick.current = true; return; }
 
     // Swipe detection (same threshold as touch: 40px horizontal, must exceed vertical)
     if (mouseStartPos.current && mouseDidDrag.current) {
@@ -287,6 +287,24 @@ export default function ImageCanvas({
     }
     mouseStartPos.current = null;
   }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange]);
+
+  // Desktop: trackpad two-finger horizontal swipe (wheel deltaX) → switch snapshot
+  const wheelCooldown = useRef(false);
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    // Only handle horizontal scroll (trackpad swipe), ignore vertical/pinch
+    if (Math.abs(e.deltaX) < 30 || Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
+    if (wheelCooldown.current) return;
+    wheelCooldown.current = true;
+    setTimeout(() => { wheelCooldown.current = false; }, 300);
+
+    if (e.deltaX > 0 && currentIndex < timeline.length - 1) {
+      setAnimDir('left');
+      setTimeout(() => { onIndexChange(currentIndex + 1); setAnimDir(null); }, 150);
+    } else if (e.deltaX < 0 && currentIndex > 0) {
+      setAnimDir('right');
+      setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
+    }
+  }, [currentIndex, timeline.length, onIndexChange]);
 
   const goTo = useCallback((index: number) => {
     if (index === currentIndex) return;
@@ -324,6 +342,7 @@ export default function ImageCanvas({
       onMouseUp={handleMouseUp}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseUp}
+      onWheel={handleWheel}
       onClick={handleClick}
     >
       {isEditing && (

@@ -13,11 +13,12 @@ interface AnimateSheetProps {
   onAbandon?: () => void;
   animationState: AnimationState;
   onStateChange: (update: Partial<AnimationState>) => void;
+  isDesktop?: boolean;
 }
 
 export default function AnimateSheet({
   snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt, onAbandon,
-  animationState, onStateChange,
+  animationState, onStateChange, isDesktop,
 }: AnimateSheetProps) {
   const { prompt, status, taskId, videoUrl, error, duration, pollSeconds, imageUrls } = animationState;
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -102,10 +103,11 @@ export default function AnimateSheet({
     <>
       {/* No backdrop — canvas stays fully visible */}
 
-      {/* Sheet — compact, no overlay */}
+      {/* Sheet — compact, no overlay. Desktop: absolute within GUI; Mobile: fixed full-width */}
       <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        maxHeight: '28dvh',
+        position: isDesktop ? 'absolute' : 'fixed',
+        bottom: 0, left: 0, right: 0,
+        maxHeight: isDesktop ? '40%' : '28dvh',
         background: '#0e0e0e',
         borderRadius: '20px 20px 0 0',
         zIndex: 201,

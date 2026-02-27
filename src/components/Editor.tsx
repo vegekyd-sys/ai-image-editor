@@ -110,28 +110,14 @@ async function extractPhotoMetadata(file: File): Promise<PhotoMetadata | undefin
 
 const AGENT_GREETING = 'Hi! 想怎么编辑这张照片？';
 
-/**
- * Ensure an image is a base64 data URL.
- * If already base64, returns as-is. If a URL, fetches and converts.
- */
-async function ensureBase64(image: string): Promise<string> {
-  if (image.startsWith('data:')) return image;
-  const res = await fetch(image);
-  const blob = await res.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+/** Get best image representation for API calls: URL if available (tiny payload), else raw image (base64) */
+function getImageForApi(snapshot: Snapshot | undefined): string {
+  return snapshot?.imageUrl || snapshot?.image || '';
 }
 
 /**
- * Compress a base64 image to fit within maxBytes (default 1.5MB).
- * Uses canvas resize + JPEG quality reduction. Returns original if already small enough.
- */
-/**
  * Compress a base64 image only if it exceeds maxBytes (default 1.8MB).
+ * Used as fallback when URL isn't available yet (e.g. user chats before Supabase upload completes).
  * Preserves quality: only resizes beyond 2048px, starts at quality 0.92.
  */
 async function compressBase64(image: string, maxBytes = 1_800_000): Promise<string> {
@@ -562,8 +548,9 @@ export default function Editor({
       timestamp: Date.now(),
     }]);
 
-    const image = tipImage || snapshotsRef.current[viewIndexRef.current]?.image || '';
-    const imageBase64 = image ? await ensureBase64(image) : '';
+    // Prefer URL for API calls — server handles both URL and base64
+    const snapForReaction = snapshotsRef.current[viewIndexRef.current];
+    const imageBase64 = tipImage || getImageForApi(snapForReaction) || '';
 
     try {
       await streamAgent(
@@ -618,8 +605,8 @@ export default function Editor({
     imageInput: string,
     aspectRatio?: string,
   ) => {
-    // Ensure we have base64 for the API
-    const imageBase64 = await ensureBase64(imageInput);
+    // imageInput can be URL (preferred, tiny payload) or base64 — server handles both
+    const imageForApi = imageInput;
 
     // Mark as generating
     setSnapshots((prev) => prev.map((s) => {
@@ -634,7 +621,7 @@ export default function Editor({
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageBase64, editPrompt, aspectRatio }),
+        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio }),
         signal: previewAbortRef.current.signal,
       });
 
@@ -721,7 +708,8 @@ export default function Editor({
     const fetchStart = Date.now();
 
     const fetchCategory = async (category: string) => {
-      const imageBase64 = await ensureBase64(imageInput);
+      // imageInput can be URL or base64 — server handles both
+      const imageForApi = imageInput;
       const MAX_RETRIES = 2;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
@@ -729,7 +717,7 @@ export default function Editor({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              image: imageBase64,
+              image: imageForApi,
               category,
               metadata: snapshotsRef.current.find(s => s.id === snapshotId)?.metadata,
             }),
@@ -762,7 +750,7 @@ export default function Editor({
                       return true;
                     }
                     return false;
-                  }, imageBase64);
+                  }, imageForApi);
                 } catch { /* skip malformed */ }
               }
             }
@@ -815,7 +803,8 @@ export default function Editor({
 
     const doFetch = async () => {
       try {
-        const imageBase64 = await ensureBase64(imageInput);
+        // imageInput can be URL or base64 — server handles both
+        const imageForApi = imageInput;
         const snap = snapshotsRef.current.find(s => s.id === snapshotId);
         const existingLabels = snap?.tips
           .filter(t => t.category === category)
@@ -824,7 +813,7 @@ export default function Editor({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            image: imageBase64,
+            image: imageForApi,
             category,
             count: 2,
             metadata: snap?.metadata,
@@ -979,8 +968,11 @@ export default function Editor({
     // Path 2 (text-only): no image is OK — Agent will generate one
     if (!currentImage && snapshotsRef.current.length > 0) return;
 
-    const imageRaw = currentImage ? await ensureBase64(currentImage) : '';
-    const imageBase64 = imageRaw ? await compressBase64(imageRaw) : '';
+    // Prefer URL (tiny payload) over base64 for API calls — server handles both
+    // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
+    const snapForApi = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
+    const rawImage = snapForApi ? getImageForApi(snapForApi) : (currentImage || '');
+    const imageBase64 = rawImage.startsWith('data:') ? await compressBase64(rawImage) : rawImage;
     // Show attached images in the user message bubble
     addMessage('user', text, undefined, attachedImages?.length ? attachedImages : undefined);
     const assistantMsgId = generateId();
@@ -1050,12 +1042,8 @@ export default function Editor({
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
-    const originalImageRaw = originalSnapshot?.image
-      ? await ensureBase64(originalSnapshot.image)
-      : undefined;
-    const originalImageBase64 = originalImageRaw
-      ? await compressBase64(originalImageRaw)
-      : undefined;
+    const rawOriginal = originalSnapshot ? getImageForApi(originalSnapshot) : undefined;
+    const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64(rawOriginal) : rawOriginal;
 
     try {
       await streamAgent(
@@ -1326,7 +1314,7 @@ export default function Editor({
             tips: s.tips.map(t => t.label === tip.label ? { ...t, previewStatus: 'pending' } : t),
           } : s
         ));
-        generatePreviewForTip(snap.id, tip.editPrompt, snap.image, tip.aspectRatio);
+        generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio);
       }
       return; // don't create draft until image is ready
     }
@@ -1356,7 +1344,7 @@ export default function Editor({
     if (!snap) return;
     // Baseline = done count right now, so x/y resets to 0/1 (or 0/N for multi-retry)
     previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
-    generatePreviewForTip(snap.id, tip.editPrompt, snap.image, tip.aspectRatio);
+    generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio);
   }, [isViewingDraft, draftParentIndex, viewIndex, snapshots, generatePreviewForTip]);
 
   // Previous image for long-press compare
@@ -1819,7 +1807,7 @@ export default function Editor({
 
       {/* GUI mode — always visible on desktop, toggled on mobile */}
       {(isDesktop || viewMode === 'gui') && (
-        <div className={isDesktop ? 'flex-1 min-w-0 flex flex-col' : 'contents'}>
+        <div className={isDesktop ? 'flex-1 min-w-0 flex flex-col relative' : 'contents'}>
           {/* Canvas area (fills remaining space) */}
           <div
             ref={(el) => {
@@ -1967,12 +1955,40 @@ export default function Editor({
                 previewingIndex={isViewingDraft ? previewingTipIndex : null}
                 onLoadMore={(category) => {
                   const snap = snapshots[tipsSourceIndex];
-                  if (snap) fetchMoreTipsForCategory(category, snap.id, snap.image);
+                  if (snap) fetchMoreTipsForCategory(category, snap.id, getImageForApi(snap));
                 }}
                 loadingMoreCategories={loadingMoreCategories}
                 isDesktop={isDesktop}
               />
             </div>
+          )}
+
+          {/* Animate Sheet — inside GUI wrapper so it doesn't cover CUI on desktop */}
+          {(showAnimateSheet || isViewingVideo) && projectId && animationState && (
+            <AnimateSheet
+              snapshots={snapshots.filter(s => s.imageUrl || s.image)}
+              projectId={projectId}
+              isDesktop={isDesktop}
+              onClose={() => {
+                setShowAnimateSheet(false);
+                if (isViewingVideo) {
+                  const lastSnapIdx = videoTimelineIndex - 1;
+                  if (lastSnapIdx >= 0) setViewIndex(lastSnapIdx);
+                }
+              }}
+              onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
+              onGeneratePrompt={generateAnimationPrompt}
+              onAbandon={() => {
+                const tid = animationState?.taskId;
+                setAnimationState(prev => prev ? { ...prev, status: 'ready', taskId: null, pollSeconds: 0 } : prev);
+                setAgentStatus(AGENT_GREETING);
+                if (tid && projectId) {
+                  fetch(`/api/animate/${tid}`, { method: 'DELETE' }).catch(() => {});
+                }
+              }}
+              animationState={animationState}
+              onStateChange={(update) => setAnimationState(prev => prev ? { ...prev, ...update } : prev)}
+            />
           )}
         </div>
       )}
@@ -2051,36 +2067,6 @@ export default function Editor({
             />
           )}
         </div>
-      )}
-
-      {/* Animate Sheet — bottom sheet card (no backdrop) */}
-      {(showAnimateSheet || isViewingVideo) && viewMode === 'gui' && projectId && animationState && (
-        <AnimateSheet
-          snapshots={snapshots.filter(s => s.imageUrl || s.image)}
-          projectId={projectId}
-          onClose={() => {
-            setShowAnimateSheet(false);
-            // If viewing video entry, navigate back to last snapshot
-            if (isViewingVideo) {
-              const lastSnapIdx = videoTimelineIndex - 1;
-              if (lastSnapIdx >= 0) setViewIndex(lastSnapIdx);
-            }
-          }}
-          onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
-          onGeneratePrompt={generateAnimationPrompt}
-          onAbandon={() => {
-            // Stop polling, mark as abandoned in DB, reset to ready (keep prompt)
-            const tid = animationState?.taskId;
-            setAnimationState(prev => prev ? { ...prev, status: 'ready', taskId: null, pollSeconds: 0 } : prev);
-            setAgentStatus(AGENT_GREETING);
-            if (tid && projectId) {
-              // Fire-and-forget: mark abandoned in DB
-              fetch(`/api/animate/${tid}`, { method: 'DELETE' }).catch(() => {});
-            }
-          }}
-          animationState={animationState}
-          onStateChange={(update) => setAnimationState(prev => prev ? { ...prev, ...update } : prev)}
-        />
       )}
 
       {/* Save success toast */}
