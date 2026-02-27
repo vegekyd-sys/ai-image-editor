@@ -695,11 +695,13 @@ export default function Editor({
   }, [generatePreviewForTip]);
 
   // Fetch tips via 3 parallel calls to Claude (fast, ~2-3s vs Gemini ~15s)
-  // previewMode: 'full' = all tips get preview; 'selective' = 1 enhance + 1 wild; 'none' = no previews
+  // previewMode: 'full' = all tips get preview; 'none' = no auto-previews
+  // autoPreviewCategory: if set, auto-preview tips in this category (used after commit)
   const fetchTipsForSnapshot = useCallback((
     snapshotId: string,
     imageInput: string,
-    previewMode: 'full' | 'selective' | 'none' = 'full',
+    previewMode: 'full' | 'none' = 'full',
+    autoPreviewCategory?: string,
   ) => {
     setIsTipsFetching(true);
     previewDoneBaselineRef.current = 0;
@@ -710,7 +712,6 @@ export default function Editor({
 
     const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
     let completedCount = 0;
-    const previewGenerated: Record<string, number> = { enhance: 0, wild: 0 };
     const fetchStart = Date.now();
 
     const fetchCategory = async (category: string) => {
@@ -748,13 +749,8 @@ export default function Editor({
                 try {
                   const tip = JSON.parse(payload) as Tip;
                   handleTipEvent(tip, snapshotId, (t) => {
-                    if (previewMode === 'none') return false;
                     if (previewMode === 'full') return true;
-                    const cat = t.category as string;
-                    if ((cat === 'enhance' || cat === 'wild') && previewGenerated[cat] === 0) {
-                      previewGenerated[cat]++;
-                      return true;
-                    }
+                    if (autoPreviewCategory && t.category === autoPreviewCategory) return true;
                     return false;
                   }, imageForApi);
                 } catch { /* skip malformed */ }
@@ -1279,8 +1275,8 @@ export default function Editor({
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
 
-    // Fetch new tips — selective preview (1 enhance + 1 wild) after commit
-    fetchTipsForSnapshot(snapId, tip.previewImage, 'selective');
+    // Fetch new tips — auto-preview only the committed tip's category
+    fetchTipsForSnapshot(snapId, tip.previewImage, 'none', tip.category);
 
     // Trigger agent CUI reaction to the committed tip
     const tipSnapshot = { emoji: tip.emoji, label: tip.label, desc: tip.desc, category: tip.category };
@@ -1352,6 +1348,17 @@ export default function Editor({
     previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
     generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio);
   }, [isViewingDraft, draftParentIndex, viewIndex, snapshots, generatePreviewForTip]);
+
+  // Generate previews for all tips in a category (triggered by category tab click)
+  const generatePreviewsForCategory = useCallback((category: string) => {
+    const snap = snapshots[tipsSourceIndex];
+    if (!snap) return;
+    const imageForApi = getImageForApi(snap);
+    const pending = snap.tips.filter(t => t.category === category && t.editPrompt && t.previewStatus === 'none');
+    if (pending.length === 0) return;
+    previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
+    pending.forEach(t => generatePreviewForTip(snap.id, t.editPrompt, imageForApi, t.aspectRatio));
+  }, [snapshots, tipsSourceIndex, generatePreviewForTip]);
 
   // Previous image for long-press compare
   const previousImage = useMemo(() => {
@@ -2009,6 +2016,7 @@ export default function Editor({
                     const snap = snapshots[tipsSourceIndex];
                     if (snap) fetchMoreTipsForCategory(category, snap.id, getImageForApi(snap));
                   }}
+                  onCategorySelect={generatePreviewsForCategory}
                   loadingMoreCategories={loadingMoreCategories}
                   isDesktop={isDesktop}
                 />

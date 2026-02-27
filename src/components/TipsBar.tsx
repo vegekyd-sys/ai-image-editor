@@ -14,6 +14,7 @@ interface TipsBarProps {
   onRetryPreview?: (tip: Tip, index: number) => void;
   previewingIndex: number | null;
   onLoadMore?: (category: Tip['category']) => void;
+  onCategorySelect?: (category: Tip['category']) => void;
   loadingMoreCategories?: Set<Tip['category']>;
   isDesktop?: boolean;
 }
@@ -72,7 +73,7 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
   );
 }
 
-export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipCommit, onTipDeselect, onRetryPreview, previewingIndex, onLoadMore, loadingMoreCategories, isDesktop }: TipsBarProps) {
+export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipCommit, onTipDeselect, onRetryPreview, previewingIndex, onLoadMore, onCategorySelect, loadingMoreCategories, isDesktop }: TipsBarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tipRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [activeCategory, setActiveCategory] = useState<Tip['category']>('enhance');
@@ -142,6 +143,39 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
     }, 220);
     return () => clearTimeout(timer);
   }, [previewingIndex]);
+
+  // Auto-scroll to tip when its preview completes
+  const prevPreviewStatuses = useRef<Map<number, string>>(new Map());
+  useEffect(() => {
+    if (!tips.length) return;
+    let firstNewDone: number | null = null;
+    for (const { tip, originalIndex } of orderedTips) {
+      const prev = prevPreviewStatuses.current.get(originalIndex);
+      if (tip.previewStatus === 'done' && prev && prev !== 'done') {
+        // Only scroll if this tip is in the currently active category
+        if (tip.category === activeCategory && firstNewDone === null) {
+          firstNewDone = originalIndex;
+        }
+      }
+    }
+    // Update stored statuses
+    const next = new Map<number, string>();
+    for (const { tip, originalIndex } of orderedTips) {
+      next.set(originalIndex, tip.previewStatus ?? 'none');
+    }
+    prevPreviewStatuses.current = next;
+
+    if (firstNewDone !== null && previewingIndex === null) {
+      const el = tipRefs.current.get(firstNewDone);
+      const container = scrollContainerRef.current;
+      if (el && container) {
+        const containerRect = container.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const targetScrollLeft = container.scrollLeft + (elRect.left - containerRect.left) - 12;
+        container.scrollTo({ left: Math.max(0, targetScrollLeft), behavior: 'smooth' });
+      }
+    }
+  }, [tips, orderedTips, activeCategory, previewingIndex]);
 
   // Desktop: convert vertical wheel to horizontal scroll
   useEffect(() => {
@@ -386,7 +420,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
           return (
             <button
               key={id}
-              onClick={() => enabled ? scrollToCategory(id) : undefined}
+              onClick={() => { if (!enabled) return; scrollToCategory(id); onCategorySelect?.(id as Tip['category']); }}
               className="flex-1 flex items-center justify-center py-2 transition-opacity cursor-pointer"
               style={{
                 color: isActive ? activeText : enabled ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.14)',
