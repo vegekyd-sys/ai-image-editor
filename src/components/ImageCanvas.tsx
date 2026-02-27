@@ -32,6 +32,12 @@ interface ImageCanvasProps {
   annotationTool?: 'brush' | 'rect' | 'text';
   annotationEntries?: AnnotationEntry[];
   onAddAnnotationEntry?: (entry: AnnotationEntry) => void;
+  onUpdateAnnotationEntry?: (id: string, data: Partial<AnnotationEntry['data']>) => void;
+  onDeleteAnnotationEntry?: (id: string) => void;
+  annotationColor?: string;
+  annotationLineWidth?: number;
+  onStartTextEdit?: (canvasX: number, canvasY: number) => void;
+  textEditing?: { x: number; y: number; text: string; textColor: string; bgColor: string } | null;
 }
 
 export default function ImageCanvas({
@@ -39,6 +45,8 @@ export default function ImageCanvas({
   isDraft, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
   hasVideo, isVideoEntry, videoUrl, isDesktop,
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
+  onUpdateAnnotationEntry, onDeleteAnnotationEntry,
+  annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
 }: ImageCanvasProps) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -511,8 +519,12 @@ export default function ImageCanvas({
             activeTool={annotationTool || 'brush'}
             entries={annotationEntries || []}
             onAddEntry={onAddAnnotationEntry}
-            color="rgba(236, 72, 153, 0.7)"
-            lineWidth={Math.max(3, Math.round(naturalDims.w * 0.004))}
+            onUpdateEntry={onUpdateAnnotationEntry || (() => {})}
+            onDeleteEntry={onDeleteAnnotationEntry || (() => {})}
+            color={annotationColor || '#dc2626'}
+            lineWidth={annotationLineWidth || Math.max(20, Math.round(naturalDims.w * 0.028))}
+            onStartTextEdit={onStartTextEdit}
+            textEditing={textEditing}
           />
         )}
       </div>

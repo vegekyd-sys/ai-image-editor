@@ -36,12 +36,26 @@ export function replayAnnotations(
         break;
       }
       case 'text': {
-        const { x, y, text, fontSize } = entry.data as TextData;
+        const { x, y, text, fontSize, textColor, bgColor } = entry.data as TextData;
         ctx.font = `bold ${fontSize}px sans-serif`;
-        // Text shadow for readability
-        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-        ctx.lineWidth = fontSize * 0.15;
-        ctx.strokeText(text, x, y);
+        const metrics = ctx.measureText(text);
+        const textW = metrics.width;
+        const pad = fontSize * 0.3;
+        // Background
+        if (bgColor) {
+          ctx.fillStyle = bgColor;
+          const r = fontSize * 0.25;
+          const bx = x - pad, by = y - fontSize - pad * 0.5, bw = textW + pad * 2, bh = fontSize + pad * 1.5;
+          ctx.beginPath();
+          ctx.moveTo(bx + r, by); ctx.lineTo(bx + bw - r, by); ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + r);
+          ctx.lineTo(bx + bw, by + bh - r); ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - r, by + bh);
+          ctx.lineTo(bx + r, by + bh); ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - r);
+          ctx.lineTo(bx, by + r); ctx.quadraticCurveTo(bx, by, bx + r, by);
+          ctx.closePath();
+          ctx.fill();
+        }
+        // Text
+        ctx.fillStyle = textColor || entry.color;
         ctx.fillText(text, x, y);
         break;
       }

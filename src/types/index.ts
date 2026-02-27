@@ -48,8 +48,9 @@ export interface PhotoMetadata {
 // ── Annotation types ──
 export interface BrushData { points: { x: number; y: number }[] }
 export interface RectData { x: number; y: number; w: number; h: number }
-export interface TextData { x: number; y: number; text: string; fontSize: number }
+export interface TextData { x: number; y: number; text: string; fontSize: number; textColor?: string; bgColor?: string }
 export interface AnnotationEntry {
+  id: string;
   type: 'brush' | 'rect' | 'text';
   data: BrushData | RectData | TextData;
   color: string;

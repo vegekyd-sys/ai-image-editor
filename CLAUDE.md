@@ -11,13 +11,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 两个环境共享同一个 Supabase 数据库。Vercel 环境变量已配 Production + Preview 双份，preview 部署可正常登录。
 
+**Vercel 环境变量设置必须用 `printf`，禁止用 `echo`**（echo 会在值末尾加 `\n`，导致值不匹配、API 请求失败等隐蔽 bug）：
+```bash
+printf 'value' | npx vercel env add NAME production --force
+printf 'value' | npx vercel env add NAME preview --force
+```
+
 ## Current Status
 
-Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。当前生图走 OpenRouter（Google API 日配额用完），tips/preview 缩略图不走 MOCK_AI（已关闭）。
+Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。当前生图和 tips 均走 OpenRouter `gemini-3.1-flash-image-preview`（从 `gemini-3-pro-image-preview` 切换，2026-02-27）。tips/preview 缩略图不走 MOCK_AI（已关闭）。
 
-**Tips 速度 vs 质量（未解决，2026-02-23）**：gemini-3 质量最佳但慢（首 tip 20+s），快模型（Sonnet/Flash）质量差——idea 层面就不如 gemini-3，已两次验证。两阶段方案（Stage 1 仅 label+desc，Stage 2 后台出 editPrompt）API 测试：Stage 1 TTFT 10~16s（抖动大），Stage 2 并行 32s，可用但不理想。**当前默认 gemini-3（`TIPS_PROVIDER=openrouter`）优先保质量**。`TIPS_PROVIDER` 可切换：`openrouter`（默认）/ `bedrock`（Sonnet，快但质量差）/ `google`。`TIPS_TEMPERATURE=0.9`。
+**模型切换 gemini-3.1-flash-image-preview（2026-02-27）**：`IMAGE_MODEL` 环境变量控制生图模型（默认 `gemini-3-pro-image-preview`），tips 和生图共用同一模型。切换后 tips 速度从 20+s 首 tip 降至 ~3-5s 全部出齐（4x 提速）。新模型额外能力：输出分辨率控制（512px/1K/2K/4K）、超宽比例（1:4/4:1/1:8/8:1）、Thinking 级别（minimal/high）、图片搜索 Grounding、更多参考图（10 物品+4 人物）。
+
+**Tips 速度 vs 质量（已解决，2026-02-27）**：gemini-3.1-flash-image-preview 同时解决速度和质量——tips 全部出齐 ~5s（之前 gemini-3-pro 首 tip 20+s），质量用户确认满意。`TIPS_PROVIDER` 可切换：`openrouter`（默认）/ `bedrock`（Sonnet）/ `google`。`TIPS_TEMPERATURE=0.9`。
 
 **Prompt 架构（V42 重构）**：`.md` 文件是唯一真相来源，gemini.ts system prompt 极简化（2行），batch-test TIPS_SYSTEM_PROMPT 极简化（3行）。enhance.md 包含 7 个方向（A-F + G 净化场景）、FIRST cleanup 第一句约束、jawline 瘦脸条件、眼睛禁改。creative.md 升级 cleanup 为第一句。wild.md 保留原版详细四问自检。V42 遗留问题：wild 眼镜禁止陷阱仍突破、enhance 方向F 人物重新生成、creative 风格化重绘、tip 数量分类不稳定。
+
+**图片传输 URL 优先（2026-02-27）**：所有 AI API 调用优先传 Supabase Storage URL（~100 bytes）而非 base64（~1-2MB）。`gemini.ts` 新增 `toImageContent()`（OpenRouter 路径，URL 直传）和 `ensureBase64Server()`（Google SDK 路径，服务端 fetch 转 base64）。`Editor.tsx` 新增 `getImageForApi(snapshot)` 返回 `imageUrl || image`。无 URL 时（刚上传、agent 新生图）fallback base64，agent 聊天额外用 `compressBase64` 兜底 Vercel 4.5MB 限制。前端渲染继续用 base64/内存缓存（零延迟显示），URL 仅用于 API 调用。
 
 Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）已完成。用户认证走 Supabase Auth（Email + Password），数据持久化走 Supabase Storage + Database。路由结构：`/` → `/projects` 项目列表 → `/projects/[id]` 编辑器页面。项目列表展示所有历史项目的 snapshot 缩略图，点击进入编辑器，编辑器顶部有返回按钮。新项目通过项目列表页上传图片创建。所有写入异步后台执行，编辑器体验零延迟。
 
@@ -100,6 +110,7 @@ No test framework is configured.
 
 - `GOOGLE_API_KEY` (required) — Google Gemini API key
 - `AI_PROVIDER` — `'google'` (default) or `'openrouter'`
+- `IMAGE_MODEL` — 生图模型 ID（默认 `gemini-3-pro-image-preview`），tips 和生图共用。当前线上 `gemini-3.1-flash-image-preview`
 - `OPENROUTER_API_KEY` — Required when `AI_PROVIDER=openrouter`
 - `MOCK_AI` — Set to `'true'` to mock all AI calls in `gemini.ts` (chat returns mock text, tips returns hardcoded 6 tips, preview returns original image). 不需要测试 AI 功能时使用，节省 Gemini API 费用。仅在 `.env.local` 中设置，Vercel 线上不设置。
 
@@ -137,6 +148,7 @@ Key components in `src/components/`:
 `src/lib/gemini.ts` is the core orchestration module:
 - **Dual provider support**: Google Gemini SDK or OpenRouter HTTP proxy, selected by `AI_PROVIDER` env var（用于生图）
 - **Tips provider 独立**: `TIPS_PROVIDER` env var 控制（`bedrock` 默认 / `openrouter` / `google`），与生图 provider 解耦
+- **Image content helpers**: `toImageContent(image)` 统一构建 OpenRouter 图片内容（HTTP URL 直传，base64 fallback）；`ensureBase64Server(image)` 服务端 fetch URL 转 base64（Google SDK `inlineData` 需要）
 - **Session management**: In-memory `Map<projectId, Session>` with 30-minute TTL auto-cleanup, keyed by project ID
 - **`chatStreamWithModel`**: Async generator yielding `{type: 'content'|'image'|'done'}` chunks
 - **`streamTips`**: Analyzes uploaded image against prompt templates, yields parsed Tip objects incrementally
@@ -176,8 +188,8 @@ Both tips and chat use the same SSE pattern:
 
 ## Key Conventions
 
-- **Image format**: All images are transmitted as base64 `data:image/jpeg;base64,...` URLs
-- **Client-side compression**: Canvas-based resize to max 2048px, JPEG quality 0.92。压缩完成后立即开始 tips 请求（不等服务端上传）。`/api/upload` 仅作 HEIC fallback
+- **Image format**: AI API 调用优先传 Supabase Storage URL（有 URL 时 ~100 bytes），无 URL 时 fallback base64 `data:image/jpeg;base64,...`。前端渲染始终用 base64/内存缓存（零延迟）
+- **Client-side compression**: Canvas-based resize to max 2048px, JPEG quality 0.92。压缩完成后立即开始 tips 请求（不等服务端上传）。`compressBase64` 仅在 agent 聊天且无 URL 时兜底 Vercel 4.5MB 限制。`/api/upload` 仅作 HEIC fallback
 - **Dark theme**: Black background with fuchsia/red accents, defined via CSS custom properties in `globals.css`
 - **Mobile-first**: Touch swipe handling (40px threshold), safe area insets, no-zoom viewport
 - **Path alias**: `@/*` maps to `./src/*`
