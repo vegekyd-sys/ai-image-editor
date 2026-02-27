@@ -271,6 +271,7 @@ export default function Editor({
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(AGENT_GREETING);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
+  const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
@@ -774,6 +775,7 @@ export default function Editor({
       completedCount++;
       if (completedCount === categories.length) {
         setIsTipsFetching(false);
+        setCommittedCategory(null);
         if (onUpdateTips) {
           setSnapshots((prev) => {
             const snap = prev.find(s => s.id === snapshotId);
@@ -1282,6 +1284,7 @@ export default function Editor({
     setViewIndex(snapshots.length);
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
+    setCommittedCategory(tip.category as Tip['category']);
 
     // Fetch new tips — auto-preview only the committed tip's category
     // Use URL if available (fast, ~100 bytes), otherwise compress base64 to avoid ~3MB per request × 4
@@ -2095,6 +2098,7 @@ export default function Editor({
                   onCategorySelect={generatePreviewsForCategory}
                   loadingMoreCategories={loadingMoreCategories}
                   isDesktop={isDesktop}
+                  initialCategory={committedCategory ?? undefined}
                 />
               </div>
             </div>

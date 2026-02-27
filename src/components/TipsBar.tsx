@@ -17,6 +17,7 @@ interface TipsBarProps {
   onCategorySelect?: (category: Tip['category']) => void;
   loadingMoreCategories?: Set<Tip['category']>;
   isDesktop?: boolean;
+  initialCategory?: Tip['category'];
 }
 
 function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
@@ -73,7 +74,7 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
   );
 }
 
-export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipCommit, onTipDeselect, onRetryPreview, previewingIndex, onLoadMore, onCategorySelect, loadingMoreCategories, isDesktop }: TipsBarProps) {
+export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipCommit, onTipDeselect, onRetryPreview, previewingIndex, onLoadMore, onCategorySelect, loadingMoreCategories, isDesktop, initialCategory }: TipsBarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tipRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [activeCategory, setActiveCategory] = useState<Tip['category']>('enhance');
@@ -130,6 +131,17 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
     const targetScrollLeft = container.scrollLeft + (elRect.left - containerRect.left) - 12;
     container.scrollTo({ left: Math.max(0, targetScrollLeft), behavior: 'smooth' });
   }, [orderedTips]);
+
+  // Scroll to initialCategory when tips first appear for a new snapshot
+  const prevTipsLen = useRef(tips.length);
+  useEffect(() => {
+    const wasEmpty = prevTipsLen.current === 0;
+    prevTipsLen.current = tips.length;
+    if (wasEmpty && tips.length > 0 && initialCategory && initialCategory !== 'enhance') {
+      // Delay slightly so DOM has rendered the new tips
+      setTimeout(() => scrollToCategory(initialCategory), 80);
+    }
+  }, [tips.length, initialCategory, scrollToCategory]);
 
   // Scroll selected tip to center — delayed 220ms so button animation finishes first
   useEffect(() => {
