@@ -1174,18 +1174,20 @@ export default function Editor({
     }
   }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser]);
 
-  // Shared: merge annotations → compress → send to agent, then exit annotation mode
+  // Shared: merge annotations → send to agent, then exit annotation mode
+  // NOTE: no compressBase64 here — annotated image is used as generation base,
+  // aggressive compression (1.8MB cap → quality 0.6) destroys image quality.
+  // mergeAnnotation already outputs JPEG 0.92 at the base image's dimensions (~2048px).
   const sendWithAnnotations = async (text: string, referenceImages?: string[]) => {
     const baseImage = timeline[viewIndex];
     if (!baseImage) return;
     const merged = annotationEntries.length > 0
       ? await mergeAnnotation(baseImage, annotationEntries)
       : baseImage;
-    const compressed = await compressBase64(merged);
     setAnnotationMode(false);
     setAnnotationEntries([]);
     setAnnotationUndoStack([]);
-    handleAgentRequest(text || '请根据标注修改图片', referenceImages, compressed);
+    handleAgentRequest(text || '请根据标注修改图片', referenceImages, merged);
   };
 
   // CUI send: if annotations exist, merge them; otherwise normal chat
