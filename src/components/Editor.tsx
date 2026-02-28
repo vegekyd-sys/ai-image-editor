@@ -749,6 +749,7 @@ export default function Editor({
           const reader = res.body!.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
+          let tipsReceived = 0;
 
           while (true) {
             const { done, value } = await reader.read();
@@ -768,13 +769,19 @@ export default function Editor({
                     if (autoPreviewCategory && t.category === autoPreviewCategory) return true;
                     return false;
                   });
+                  tipsReceived++;
                 } catch { /* skip malformed */ }
               }
             }
           }
+          // Stream succeeded but returned 0 tips — treat as failure and retry
+          if (tipsReceived === 0) throw new Error(`Tips ${category}: 0 tips returned`);
           break;
-        } catch {
-          if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        } catch (err) {
+          if (attempt < MAX_RETRIES) {
+            console.warn(`[tips] ${category} attempt ${attempt + 1} failed, retrying...`, err);
+            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          }
         }
       }
 
