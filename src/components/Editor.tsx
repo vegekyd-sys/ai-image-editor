@@ -225,6 +225,7 @@ export default function Editor({
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationTool, setAnnotationTool] = useState<'brush' | 'rect' | 'text'>('brush');
   const [annotationEntries, setAnnotationEntries] = useState<AnnotationEntry[]>([]);
+  const [annotationUndoStack, setAnnotationUndoStack] = useState<AnnotationEntry[]>([]);
   const annotationColor = '#dc2626'; // fixed red for all annotations
   const [annotationBrushSize, setAnnotationBrushSize] = useState(30); // 0-100 slider
   // Text editing sub-mode
@@ -674,7 +675,6 @@ export default function Editor({
     tip: Tip,
     snapshotId: string,
     shouldPreview: (tip: Tip) => boolean,
-    imageBase64ForPreview?: string,
   ) => {
     if (!tip.label || !tip.category) return;
     if (!tip.editPrompt) {
@@ -697,8 +697,14 @@ export default function Editor({
         }
         return { ...s, tips: [...s.tips, { ...tip, previewStatus: doPreview ? 'pending' : 'none' }] };
       }));
-      if (doPreview && imageBase64ForPreview) {
-        generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64ForPreview, tip.aspectRatio);
+      if (doPreview) {
+        // Always use original-quality image for preview generation (URL preferred, full base64 fallback).
+        // Never use the compressed 600KB tips image — it causes cumulative quality loss on faces.
+        const snap = snapshotsRef.current.find(s => s.id === snapshotId);
+        const imageForPreview = getImageForApi(snap);
+        if (imageForPreview) {
+          generatePreviewForTip(snapshotId, tip.editPrompt, imageForPreview, tip.aspectRatio);
+        }
       }
     }
   }, [generatePreviewForTip]);
@@ -761,7 +767,7 @@ export default function Editor({
                     if (previewMode === 'full') return true;
                     if (autoPreviewCategory && t.category === autoPreviewCategory) return true;
                     return false;
-                  }, imageForApi);
+                  });
                 } catch { /* skip malformed */ }
               }
             }
@@ -1167,6 +1173,29 @@ export default function Editor({
       setIsAgentActive(false);
     }
   }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser]);
+
+  // Shared: merge annotations → compress → send to agent, then exit annotation mode
+  const sendWithAnnotations = async (text: string, referenceImages?: string[]) => {
+    const baseImage = timeline[viewIndex];
+    if (!baseImage) return;
+    const merged = annotationEntries.length > 0
+      ? await mergeAnnotation(baseImage, annotationEntries)
+      : baseImage;
+    const compressed = await compressBase64(merged);
+    setAnnotationMode(false);
+    setAnnotationEntries([]);
+    setAnnotationUndoStack([]);
+    handleAgentRequest(text || '请根据标注修改图片', referenceImages, compressed);
+  };
+
+  // CUI send: if annotations exist, merge them; otherwise normal chat
+  const handleCuiSend = async (text: string, imgs?: string[]) => {
+    if (annotationMode && annotationEntries.length > 0) {
+      await sendWithAnnotations(text);
+    } else {
+      handleAgentRequest(text, imgs);
+    }
+  };
 
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
   const animPromptInFlightRef = useRef(false);
@@ -1897,15 +1926,15 @@ export default function Editor({
                 annotationMode={annotationMode}
                 annotationTool={annotationTool}
                 annotationEntries={annotationEntries}
-                onAddAnnotationEntry={(entry) => setAnnotationEntries(prev => [...prev, entry])}
+                onAddAnnotationEntry={(entry) => { setAnnotationEntries(prev => [...prev, entry]); setAnnotationUndoStack([]); }}
                 onUpdateAnnotationEntry={(id, data) => setAnnotationEntries(prev => prev.map(e => e.id === id ? { ...e, data: { ...e.data, ...data } } : e))}
                 onDeleteAnnotationEntry={(id) => setAnnotationEntries(prev => prev.filter(e => e.id !== id))}
                 annotationColor={annotationColor}
                 annotationLineWidth={(() => {
                   const base = 1408;
                   const t = annotationBrushSize / 100; // 0..1
-                  // Brush: 0.006–0.07, Rect: thinner (0.004–0.035)
-                  const scale = annotationTool === 'rect' ? 0.004 + t * 0.031 : 0.006 + t * 0.064;
+                  // Brush & Rect use same scale (0.006–0.07)
+                  const scale = 0.006 + t * 0.064;
                   return Math.max(4, Math.round(base * scale));
                 })()}
                 onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
@@ -1971,6 +2000,7 @@ export default function Editor({
                         if (annotationMode) {
                           setAnnotationMode(false);
                           setAnnotationEntries([]);
+                          setAnnotationUndoStack([]);
                         } else {
                           setAnnotationMode(true);
                           setAnnotationTool('brush');
@@ -2015,10 +2045,17 @@ export default function Editor({
 
           {/* Annotation toolbar — overlays TipsBar like AnimateSheet */}
           {snapshots.length > 0 && annotationMode && (
-            <div style={{
-              position: isDesktop ? 'absolute' : 'fixed',
+            <div style={isDesktop ? {
+              position: 'absolute',
+              top: 56, left: 12,
+              zIndex: 201,
+              maxWidth: 480,
+            } : {
+              position: 'fixed',
               bottom: 0, left: 0, right: 0,
               zIndex: 201,
+              maxWidth: 480,
+              margin: '0 auto',
             }}>
               <AnnotationToolbar
                 activeTool={annotationTool}
@@ -2032,23 +2069,28 @@ export default function Editor({
                     setTextEditValue('');
                   }
                 }}
-                onUndo={() => setAnnotationEntries(prev => prev.slice(0, -1))}
-                onClear={() => setAnnotationEntries([])}
-                onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); setTextEditPos(null); }}
-                canUndo={annotationEntries.length > 0}
-                hasEntries={annotationEntries.length > 0}
-                isSending={isAgentActive}
-                onSend={async (text) => {
-                  const baseImage = timeline[viewIndex];
-                  if (!baseImage) return;
-                  const merged = annotationEntries.length > 0
-                    ? await mergeAnnotation(baseImage, annotationEntries)
-                    : baseImage;
-                  const compressed = await compressBase64(merged);
-                  setAnnotationMode(false);
-                  setAnnotationEntries([]);
-                  handleAgentRequest(text || '请根据标注修改图片', undefined, compressed);
+                onUndo={() => {
+                  setAnnotationEntries(prev => {
+                    if (prev.length === 0) return prev;
+                    setAnnotationUndoStack(s => [...s, prev[prev.length - 1]]);
+                    return prev.slice(0, -1);
+                  });
                 }}
+                onRedo={() => {
+                  setAnnotationUndoStack(prev => {
+                    if (prev.length === 0) return prev;
+                    setAnnotationEntries(e => [...e, prev[prev.length - 1]]);
+                    return prev.slice(0, -1);
+                  });
+                }}
+                onClear={() => { setAnnotationEntries([]); setAnnotationUndoStack([]); }}
+                onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); setAnnotationUndoStack([]); setTextEditPos(null); }}
+                canUndo={annotationEntries.length > 0}
+                canRedo={annotationUndoStack.length > 0}
+                hasEntries={annotationEntries.length > 0}
+                isDesktop={isDesktop}
+                isSending={isAgentActive}
+                onSend={(text, refImg) => sendWithAnnotations(text, refImg ? [refImg] : undefined)}
                 brushSize={annotationBrushSize}
                 onBrushSizeChange={setAnnotationBrushSize}
                 textEditing={!!textEditPos}
@@ -2059,6 +2101,7 @@ export default function Editor({
                 onTextDone={() => {
                   if (textEditPos && textEditValue.trim()) {
                     const fontSize = Math.round(1408 * 0.05);
+                    setAnnotationUndoStack([]);
                     setAnnotationEntries(prev => [...prev, {
                       id: newAnnotationId(),
                       type: 'text' as const,
@@ -2148,7 +2191,7 @@ export default function Editor({
             isAgentActive={isAgentActive}
             agentStatus={agentStatus}
             currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
-            onSendMessage={(text, imgs) => handleAgentRequest(text, imgs)}
+            onSendMessage={handleCuiSend}
             onBack={() => {}}
             onPipTap={() => {}}
             onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
@@ -2161,7 +2204,7 @@ export default function Editor({
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
           currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
-          onSendMessage={(text, imgs) => handleAgentRequest(text, imgs)}
+          onSendMessage={handleCuiSend}
           onBack={() => {
             if (snapshots.length === 0 && onBack) {
               onBack(); // No snapshots (text-only before image generated) → go to projects

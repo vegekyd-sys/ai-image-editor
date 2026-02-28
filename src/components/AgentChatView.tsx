@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message } from '@/types';
+import { compressImageFile } from '@/lib/imageUtils';
 
 const INPUT_IMAGE_LABELS = ['当前图（编辑基础）', '原图（人脸参考）'];
 
@@ -666,20 +667,7 @@ export default function AgentChatView({
           e.target.value = '';
           const remaining = 3 - attachedImages.length;
           const toProcess = files.slice(0, remaining);
-          const compressed = await Promise.all(toProcess.map(file => new Promise<string>((resolve) => {
-            const url = URL.createObjectURL(file);
-            const img = new Image();
-            img.onload = () => {
-              URL.revokeObjectURL(url);
-              const scale = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
-              const canvas = document.createElement('canvas');
-              canvas.width = Math.round(img.naturalWidth * scale);
-              canvas.height = Math.round(img.naturalHeight * scale);
-              canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-              resolve(canvas.toDataURL('image/jpeg', 0.85));
-            };
-            img.src = url;
-          })));
+          const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
           setAttachedImages(prev => [...prev, ...compressed].slice(0, 3));
         }}
       />
