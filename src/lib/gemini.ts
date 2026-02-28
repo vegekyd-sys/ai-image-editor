@@ -18,8 +18,8 @@ function tlog(msg: string) {
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
 const PROVIDER = (process.env.AI_PROVIDER || 'google') as 'google' | 'openrouter';
 
-// Image generation model
-const MODEL = 'gemini-3-pro-image-preview';
+// Image generation model — override with IMAGE_MODEL env var
+const MODEL = process.env.IMAGE_MODEL || 'gemini-3-pro-image-preview';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = `google/${MODEL}`;
@@ -119,6 +119,28 @@ const TIPS_SCHEMA = {
 const JSON_FORMAT_SUFFIX = `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字。格式：
 [{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild|captions"}, ...]`;
 
+// ── Image Content Helpers ────────────────────────────────────────
+
+/** Build OpenRouter image content — uses URL directly if HTTP(S), else data URL */
+function toImageContent(image: string) {
+  if (image.startsWith('http')) {
+    return { type: 'image_url' as const, image_url: { url: image } };
+  }
+  const dataUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
+  return { type: 'image_url' as const, image_url: { url: dataUrl } };
+}
+
+/** Server-side: ensure image is base64 data URL (fetches HTTP URLs) for Google SDK inlineData */
+async function ensureBase64Server(image: string): Promise<string> {
+  if (image.startsWith('data:')) return image;
+  if (image.startsWith('http')) {
+    const res = await fetch(image);
+    const buf = Buffer.from(await res.arrayBuffer());
+    return `data:image/jpeg;base64,${buf.toString('base64')}`;
+  }
+  return `data:image/jpeg;base64,${image}`;
+}
+
 // ── OpenRouter Helpers ──────────────────────────────────────────
 
 function openrouterHeaders() {
@@ -126,15 +148,6 @@ function openrouterHeaders() {
     'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
     'Content-Type': 'application/json',
   };
-}
-
-function toOpenRouterImageContent(imageBase64: string, text: string) {
-  // OpenRouter uses OpenAI vision format
-  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
-  return [
-    { type: 'image_url' as const, image_url: { url: dataUrl } },
-    { type: 'text' as const, text },
-  ];
 }
 
 // ── Session Management ──────────────────────────────────────────
@@ -244,8 +257,9 @@ async function* chatStreamGoogle(
 
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
   if (imageBase64) {
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-    const mimeType = imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+    const resolved = await ensureBase64Server(imageBase64);
+    const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
+    const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
     parts.push({ inlineData: { mimeType, data: base64Data } });
   }
   parts.push({ text: message });
@@ -290,9 +304,8 @@ async function* chatStreamOpenRouter(
   // Build user message
   let userContent: string | Array<Record<string, unknown>>;
   if (imageBase64) {
-    const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
     userContent = [
-      { type: 'image_url', image_url: { url: dataUrl } },
+      toImageContent(imageBase64),
       { type: 'text', text: message },
     ];
   } else {
@@ -399,7 +412,6 @@ export async function generatePreviewImage(
   editPrompt: string,
   aspectRatio?: string,
 ): Promise<string | null> {
-  // MOCK_AI only mocks tips/chat, not image generation
   if (PROVIDER === 'openrouter') {
     return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio);
   } else {
@@ -412,9 +424,6 @@ async function generatePreviewImageGoogle(
   editPrompt: string,
   aspectRatio?: string,
 ): Promise<string | null> {
-  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-  const mimeType = imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-
   const config: Record<string, unknown> = {
     responseModalities: ['IMAGE'],
   };
@@ -422,15 +431,23 @@ async function generatePreviewImageGoogle(
     config.imageConfig = { aspectRatio };
   }
 
+  // Build content parts: text-only when no image, image+text otherwise
+  const isTextOnly = !imageBase64;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let contentParts: any[];
+  if (isTextOnly) {
+    contentParts = [{ text: editPrompt }];
+  } else {
+    const resolved = await ensureBase64Server(imageBase64);
+    contentParts = [
+      { inlineData: { mimeType: resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', data: resolved.replace(/^data:image\/\w+;base64,/, '') } },
+      { text: editPrompt },
+    ];
+  }
+
   const result = await getAI().models.generateContent({
     model: MODEL,
-    contents: [{
-      role: 'user',
-      parts: [
-        { inlineData: { mimeType, data: base64Data } },
-        { text: editPrompt },
-      ],
-    }],
+    contents: [{ role: 'user', parts: contentParts }],
     config,
   });
 
@@ -450,9 +467,18 @@ async function generatePreviewImageOpenRouter(
   editPrompt: string,
   aspectRatio?: string,
 ): Promise<string | null> {
-  const dataUrl = imageBase64.startsWith('data:')
-    ? imageBase64
-    : `data:image/jpeg;base64,${imageBase64}`;
+  // Text-only generation (no input image) uses a different system prompt
+  const isTextToImage = !imageBase64;
+  const systemPrompt = isTextToImage
+    ? 'You are a world-class AI image generator. Generate a high-quality, photorealistic image based on the user\'s description. Output the image directly.'
+    : SYSTEM_PROMPT;
+
+  const userContent = isTextToImage
+    ? [{ type: 'text', text: editPrompt }]
+    : [
+        toImageContent(imageBase64),
+        { type: 'text', text: editPrompt },
+      ];
 
   const body: Record<string, unknown> = {
     model: OPENROUTER_MODEL,
@@ -460,14 +486,8 @@ async function generatePreviewImageOpenRouter(
     modalities: ['image', 'text'],
     temperature: 1.0,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: [
-          { type: 'image_url', image_url: { url: dataUrl } },
-          { type: 'text', text: editPrompt },
-        ],
-      },
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
     ],
   };
   if (aspectRatio) {
@@ -480,18 +500,30 @@ async function generatePreviewImageOpenRouter(
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error(`[OpenRouter] ${res.status}: ${errText.slice(0, 200)}`);
+    return null;
+  }
 
   const data = await res.json();
   const choice = data.choices?.[0]?.message;
-  if (!choice) return null;
+  if (!choice) {
+    console.error('[OpenRouter] No choice in response:', JSON.stringify(data).slice(0, 300));
+    return null;
+  }
 
+  // Extract image from response
   if (choice.images && Array.isArray(choice.images)) {
     for (const img of choice.images) {
       const url = img.image_url?.url || img.url;
-      if (url) return url;
+      if (url) {
+        console.log(`[OpenRouter] Got image, url length: ${url.length}`);
+        return url;
+      }
     }
   }
+  console.error('[OpenRouter] No image in response, content:', (choice.content || '').slice(0, 100));
   return null;
 }
 
@@ -553,8 +585,9 @@ async function generateMultiImageGoogle(
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
 
   for (const img of images) {
-    const base64Data = img.replace(/^data:image\/\w+;base64,/, '');
-    const mimeType = img.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+    const resolved = await ensureBase64Server(img);
+    const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
+    const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
     parts.push({ inlineData: { mimeType, data: base64Data } });
   }
   parts.push({ text: prompt });
@@ -595,8 +628,7 @@ async function generateMultiImageOpenRouter(
   const content: Array<Record<string, unknown>> = [];
 
   for (const img of images) {
-    const dataUrl = img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`;
-    content.push({ type: 'image_url', image_url: { url: dataUrl } });
+    content.push(toImageContent(img));
   }
   content.push({ type: 'text', text: prompt });
 
@@ -660,7 +692,6 @@ export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<
     }
     return;
   }
-  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
     headers: openrouterHeaders(),
@@ -672,7 +703,7 @@ export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<
         {
           role: 'user',
           content: [
-            { type: 'image_url', image_url: { url: dataUrl } },
+            toImageContent(imageBase64),
             { type: 'text', text: `分析图片（判断人脸大小、具体物品、情绪基调），给出6条建议（2 enhance + 2 creative + 2 wild）。只输出emoji+label+desc+category。${FAST_TIPS_FORMAT}` },
           ],
         },
@@ -692,7 +723,6 @@ export async function generateEditPromptForTip(
   imageBase64: string,
   tip: { emoji: string; label: string; desc: string; category: string },
 ): Promise<string | null> {
-  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const cat = tip.category as 'enhance' | 'creative' | 'wild';
   const template = PROMPT_TEMPLATES[cat] ?? '';
   const systemPrompt = buildCategorySystemPrompt(cat);
@@ -708,7 +738,7 @@ export async function generateEditPromptForTip(
         {
           role: 'user',
           content: [
-            { type: 'image_url', image_url: { url: dataUrl } },
+            toImageContent(imageBase64),
             {
               type: 'text',
               text: `这张图片有一条编辑建议：${tip.emoji} ${tip.label}（${tip.desc}）\n\n严格遵循以下规范，为这条建议生成详细的 editPrompt（英文，200词以内）。只输出 editPrompt 字符串本身，不要 JSON，不要解释。\n\n${template}`,
@@ -784,8 +814,9 @@ async function* streamTipsByCategoryGoogle(
   count: number = 2,
   existingLabels?: string[],
 ): AsyncGenerator<Tip> {
-  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-  const mimeType = imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+  const resolved = await ensureBase64Server(imageBase64);
+  const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
+  const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
   const template = getPromptTemplate(category);
   const systemPrompt = buildCategorySystemPrompt(category, count);
   const metaLines: string[] = [];
@@ -841,7 +872,6 @@ async function* streamTipsByCategoryOpenRouter(
   count: number = 2,
   existingLabels?: string[],
 ): AsyncGenerator<Tip> {
-  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const template = getPromptTemplate(category);
   const systemPrompt = buildCategorySystemPrompt(category, count);
   const metaLines: string[] = [];
@@ -872,7 +902,7 @@ async function* streamTipsByCategoryOpenRouter(
         {
           role: 'user',
           content: [
-            { type: 'image_url', image_url: { url: dataUrl } },
+            toImageContent(imageBase64),
             {
               type: 'text',
               text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${JSON_FORMAT_SUFFIX}`,
@@ -901,7 +931,10 @@ async function* streamTipsByCategoryBedrock(
   count: number = 2,
   existingLabels?: string[],
 ): AsyncGenerator<Tip> {
-  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+  // Bedrock (ai SDK) needs data URL for image — ensure conversion
+  const dataUrl = imageBase64.startsWith('http')
+    ? (await ensureBase64Server(imageBase64))
+    : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const template = getPromptTemplate(category);
   const systemPrompt = buildCategorySystemPrompt(category, count);
   const metaLines: string[] = [];
@@ -1017,6 +1050,7 @@ async function* parseIncrementalTipsFromStream(
   let tipsEmitted = 0;
   let lastPartialLabel: string | null = null;
   let partialEmitted = false;
+  const emittedLabels = new Set<string>();
   const t0 = Date.now();
 
   for await (const text of textStream) {
@@ -1028,9 +1062,17 @@ async function* parseIncrementalTipsFromStream(
         const start = i;
         let depth = 1;
         let j = i + 1;
+        let inString = false;
         while (j < fullText.length && depth > 0) {
-          if (fullText[j] === '{') depth++;
-          else if (fullText[j] === '}') depth--;
+          const ch = fullText[j];
+          if (inString) {
+            if (ch === '\\') { j++; } // skip escaped char
+            else if (ch === '"') { inString = false; }
+          } else {
+            if (ch === '"') { inString = true; }
+            else if (ch === '{') depth++;
+            else if (ch === '}') depth--;
+          }
           j++;
         }
 
@@ -1044,6 +1086,7 @@ async function* parseIncrementalTipsFromStream(
               if (tip.label && tip.editPrompt && tip.category) {
                 tlog(`[tips:${label}] complete tip "${tip.label}" at +${Date.now() - t0}ms`);
                 if (lastPartialLabel === tip.label) lastPartialLabel = null;
+                emittedLabels.add(tip.label);
                 yield tip;
                 tipsEmitted = objectsFound;
               }
@@ -1066,4 +1109,24 @@ async function* parseIncrementalTipsFromStream(
       }
     }
   }
+
+  // Fallback: stream ended — try to parse any remaining complete tips from fullText
+  // This catches cases where the final chunk completed an object but the loop didn't re-scan
+  try {
+    // Strip markdown fences if present
+    const cleaned = fullText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    // Try to find a JSON array
+    const arrStart = cleaned.indexOf('[');
+    const arrEnd = cleaned.lastIndexOf(']');
+    if (arrStart >= 0 && arrEnd > arrStart) {
+      const arr = JSON.parse(cleaned.slice(arrStart, arrEnd + 1)) as Tip[];
+      for (const tip of arr) {
+        if (tip.label && tip.editPrompt && tip.category && !emittedLabels.has(tip.label)) {
+          tlog(`[tips:${label}] fallback recovered tip "${tip.label}"`);
+          emittedLabels.add(tip.label);
+          yield tip;
+        }
+      }
+    }
+  } catch { /* final parse failed — partial tips remain */ }
 }

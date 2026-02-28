@@ -2,6 +2,7 @@ import { streamText, generateText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import { generatePreviewImage, generateImageWithReferences } from './gemini';
+import { createKlingTask } from './kling';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -32,6 +33,10 @@ interface AgentContext {
   projectId: string;
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
+  /** Supabase Storage URLs for animation (set when in animation mode) */
+  animationImageUrls?: string[];
+  /** PiAPI task ID set by generate_animation tool, emitted as animation_task event */
+  animationTaskId?: string;
 }
 
 export type AgentStreamEvent =
@@ -40,6 +45,7 @@ export type AgentStreamEvent =
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
+  | { type: 'animation_task'; taskId: string }  // emitted when generate_animation tool creates a PiAPI task
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -140,6 +146,32 @@ function createTools(ctx: AgentContext) {
       },
     }),
 
+    generate_animation: tool({
+      description: 'Create a 10-second animation video from the project snapshots using Kling AI. Only available when the user is in animation mode (animationImageUrls exist). Call this AFTER you have written the story script and the user has confirmed.',
+      inputSchema: z.object({
+        story_prompt: z.string().describe('The cinematic story prompt in Chinese, with <<<image_1>>>, <<<image_2>>> etc. referencing each snapshot'),
+        duration: z.number().optional().describe('Duration in seconds: 5 or 10. Default 10.'),
+      }),
+      execute: async ({ story_prompt, duration }) => {
+        const imageUrls = ctx.animationImageUrls;
+        if (!imageUrls?.length) {
+          return { success: false as const, message: '没有可用的图片 URL，无法生成动画。' };
+        }
+        try {
+          const taskId = await createKlingTask({
+            prompt: story_prompt,
+            images: imageUrls.slice(0, 7),
+            duration: duration ?? 10,
+            aspect_ratio: '9:16',
+          });
+          ctx.animationTaskId = taskId;
+          return { success: true as const, taskId, message: '视频生成任务已创建！大约需要 3-5 分钟，生成完成后会直接显示在这里。' };
+        } catch (e) {
+          return { success: false as const, message: String(e) };
+        }
+      },
+    }),
+
     analyze_image: tool({
       description: 'See and analyze the current photo. Returns the image so you can view it directly with your vision capabilities.',
       inputSchema: z.object({
@@ -184,7 +216,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[] },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[] },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -192,6 +224,7 @@ export async function* runMakaronAgent(
     referenceImages: options?.referenceImages,
     projectId,
     generatedImages: [],
+    animationImageUrls: options?.animationImageUrls,
   };
 
   const allTools = createTools(ctx);
@@ -208,18 +241,41 @@ export async function* runMakaronAgent(
   // Determine which tools to expose
   // tipReactionOnly: no tools (text-only response)
   // analysisOnly: only analyze_image (agent uses tool to see the photo)
-  // normal chat: all tools (generate_image + analyze_image)
+  // animation mode: generate_animation + analyze_image (no image generation)
+  // normal chat: all tools
+  const hasAnimationImages = !!options?.animationImageUrls?.length;
   const tools = tipReactionOnly ? undefined : analysisOnly
     ? { analyze_image: allTools.analyze_image }
-    : allTools;
+    : hasAnimationImages
+      ? { generate_animation: allTools.generate_animation, analyze_image: allTools.analyze_image }
+      : allTools;
+
+  // Build user message content — animation mode includes all snapshot images as visual content
+  const animImages = options?.animationImages;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let userContent: any;
+  if (animImages?.length && !analysisOnly && !tipReactionOnly) {
+    // Multi-image user message: text + all snapshot images
+    userContent = [
+      { type: 'text' as const, text: prompt },
+      ...animImages.map((img: string) =>
+        img.startsWith('data:')
+          ? { type: 'image' as const, image: img }
+          : { type: 'image' as const, image: new URL(img) }
+      ),
+    ];
+  } else {
+    userContent = analysisOnly ? analysisPrompt : prompt;
+  }
 
   try {
-    const result = streamText({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = (streamText as any)({
       model: MODEL,
       system: getAgentSystemPrompt(),
-      messages: [{ role: 'user', content: analysisOnly ? analysisPrompt : prompt }],
+      messages: [{ role: 'user', content: userContent }],
       ...(tools ? { tools } : {}),
-      ...(analysisOnly && tools ? { activeTools: ['analyze_image' as const] } : {}),
+      ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
       onStepFinish: () => { stepCount++; },
     });
@@ -258,11 +314,15 @@ export async function* runMakaronAgent(
         continue;
       }
 
-      // ── Tool result — flush generated images ────────────────────────────────
+      // ── Tool result — flush generated images + animation task ───────────────
       if (event.type === 'tool-result') {
         while (imagesSent < ctx.generatedImages.length) {
           yield { type: 'image', image: ctx.generatedImages[imagesSent] };
           imagesSent++;
+        }
+        if (ctx.animationTaskId) {
+          yield { type: 'animation_task', taskId: ctx.animationTaskId };
+          ctx.animationTaskId = undefined;
         }
         continue;
       }

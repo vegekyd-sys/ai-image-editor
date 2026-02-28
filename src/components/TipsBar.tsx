@@ -14,7 +14,10 @@ interface TipsBarProps {
   onRetryPreview?: (tip: Tip, index: number) => void;
   previewingIndex: number | null;
   onLoadMore?: (category: Tip['category']) => void;
+  onCategorySelect?: (category: Tip['category']) => void;
   loadingMoreCategories?: Set<Tip['category']>;
+  isDesktop?: boolean;
+  initialCategory?: Tip['category'];
 }
 
 function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
@@ -53,19 +56,13 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
   if (tip.previewStatus === 'error') {
     return (
       <div
-        className="w-full h-full flex flex-col items-center justify-center gap-0.5 cursor-pointer"
+        className="w-full h-full flex items-center justify-center text-2xl cursor-pointer"
         onClick={(e) => {
           e.stopPropagation();
           onRetryPreview?.(tip, originalIndex);
         }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40">
-          <path d="M21 2v6h-6" />
-          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-          <path d="M3 22v-6h6" />
-          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-        </svg>
-        <span className="text-[9px] text-white/30">重试</span>
+        {tip.emoji}
       </div>
     );
   }
@@ -77,7 +74,7 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
   );
 }
 
-export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipCommit, onTipDeselect, onRetryPreview, previewingIndex, onLoadMore, loadingMoreCategories }: TipsBarProps) {
+export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipCommit, onTipDeselect, onRetryPreview, previewingIndex, onLoadMore, onCategorySelect, loadingMoreCategories, isDesktop, initialCategory }: TipsBarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tipRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [activeCategory, setActiveCategory] = useState<Tip['category']>('enhance');
@@ -135,6 +132,17 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
     container.scrollTo({ left: Math.max(0, targetScrollLeft), behavior: 'smooth' });
   }, [orderedTips]);
 
+  // Scroll to initialCategory when tips first appear for a new snapshot
+  const prevTipsLen = useRef(tips.length);
+  useEffect(() => {
+    const wasEmpty = prevTipsLen.current === 0;
+    prevTipsLen.current = tips.length;
+    if (wasEmpty && tips.length > 0 && initialCategory && initialCategory !== 'enhance') {
+      // Delay slightly so DOM has rendered the new tips
+      setTimeout(() => scrollToCategory(initialCategory), 80);
+    }
+  }, [tips.length, initialCategory, scrollToCategory]);
+
   // Scroll selected tip to center — delayed 220ms so button animation finishes first
   useEffect(() => {
     if (previewingIndex === null) return;
@@ -148,6 +156,56 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
     return () => clearTimeout(timer);
   }, [previewingIndex]);
 
+  // Desktop: convert vertical wheel to horizontal scroll
+  useEffect(() => {
+    if (!isDesktop) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [isDesktop]);
+
+  // Desktop: click-and-drag to scroll horizontally
+  const dragState = useRef<{ startX: number; scrollLeft: number; dragging: boolean } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!isDesktop) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    e.preventDefault(); // prevent browser default drag (text select / grab cursor)
+    dragState.current = { startX: e.clientX, scrollLeft: el.scrollLeft, dragging: false };
+  }, [isDesktop]);
+
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragState.current) return;
+    const dx = e.clientX - dragState.current.startX;
+    if (Math.abs(dx) > 4 && !dragState.current.dragging) {
+      dragState.current.dragging = true;
+      setIsDragging(true);
+    }
+    if (!dragState.current.dragging) return;
+    const el = scrollContainerRef.current;
+    if (el) el.scrollLeft = dragState.current.scrollLeft - dx;
+  }, []);
+
+  const onMouseUp = useCallback(() => {
+    if (dragState.current?.dragging) {
+      // Suppress the next click so dragging doesn't trigger a tip click
+      const suppress = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
+      window.addEventListener('click', suppress, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener('click', suppress, { capture: true }), 0);
+    }
+    dragState.current = null;
+    setIsDragging(false);
+  }, []);
+
   // Collect the set of categories present in current tips (for nav bar)
   return (
     <div className="flex flex-col">
@@ -155,7 +213,13 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex items-end gap-2 px-3 pt-2 pb-1.5 min-h-[78px] overflow-x-auto hide-scrollbar"
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
+        style={isDragging ? { cursor: 'grabbing' } : undefined}
+        data-dragging={isDragging || undefined}
       >
         {/* Tip cards with thumbnails */}
         {hasTips && orderedTips.map(({ tip, originalIndex }, i) => {
@@ -164,7 +228,9 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
           const isLastInCategory = orderedTips[i + 1]?.tip.category !== tip.category;
           const meta = CATEGORIES.find(c => c.id === tip.category) ?? CATEGORIES[0];
 
+          const missingPrompt = !tip.editPrompt;
           const handleCardClick = () => {
+            if (missingPrompt) return; // not ready yet
             if (showCommit) {
               onTipDeselect?.();
             } else {
@@ -186,10 +252,12 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 <button
                   onClick={handleCardClick}
                   disabled={isEditing}
-                  className={`w-[200px] text-left hover:brightness-110 active:scale-[0.97] disabled:opacity-40 border overflow-hidden ${
-                    isSelected
-                      ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
-                      : 'border-white/10'
+                  className={`${isDesktop ? 'w-[176px]' : 'w-[200px]'} text-left hover:brightness-110 active:scale-[0.97] disabled:opacity-40 border overflow-hidden cursor-pointer ${
+                    missingPrompt
+                      ? 'border-white/5 opacity-50'
+                      : isSelected
+                        ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
+                        : 'border-white/10'
                   }`}
                   style={{
                     borderRadius: showCommit ? '16px 0 0 16px' : '16px',
@@ -206,14 +274,24 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 >
                   <div className="flex">
                     {/* Thumbnail */}
-                    <div className="w-[72px] h-[72px] flex-shrink-0 bg-white/5 relative overflow-hidden">
-                      <TipThumbnail tip={tip} onRetryPreview={onRetryPreview} originalIndex={originalIndex} />
+                    <div className={`${isDesktop ? 'w-[64px] h-[64px]' : 'w-[72px] h-[72px]'} flex-shrink-0 bg-white/5 relative overflow-hidden`}>
+                      {missingPrompt ? (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="flex gap-0.5">
+                            <div className="w-1 h-1 bg-white/30 rounded-full typing-dot" />
+                            <div className="w-1 h-1 bg-white/30 rounded-full typing-dot" />
+                            <div className="w-1 h-1 bg-white/30 rounded-full typing-dot" />
+                          </div>
+                        </div>
+                      ) : (
+                        <TipThumbnail tip={tip} onRetryPreview={onRetryPreview} originalIndex={originalIndex} />
+                      )}
                     </div>
 
                     {/* Text */}
-                    <div className="flex-1 min-w-0 px-2.5 py-2 flex flex-col justify-center">
-                      <div className="text-white text-[13px] font-semibold leading-tight truncate">{tip.label}</div>
-                      <div className="text-white/50 text-[11px] leading-snug mt-0.5 line-clamp-2">{tip.desc}</div>
+                    <div className={`flex-1 min-w-0 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
+                      <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>{tip.label}</div>
+                      <div className={`text-white/50 leading-snug mt-0.5 line-clamp-2 ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>{tip.desc}</div>
                     </div>
                   </div>
                 </button>
@@ -222,13 +300,13 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 <div
                   className="overflow-hidden flex-shrink-0"
                   style={{
-                    width: showCommit ? 72 : 0,
+                    width: showCommit ? (isDesktop ? 64 : 72) : 0,
                     transition: 'width 0.2s ease-out',
                   }}
                 >
                   <button
                     onClick={() => onTipCommit?.(tip, originalIndex)}
-                    className="w-[72px] h-full flex flex-col items-center justify-center gap-1.5 rounded-r-2xl border border-l-0 border-fuchsia-500 active:scale-95 overflow-hidden relative group"
+                    className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full flex flex-col items-center justify-center gap-1.5 rounded-r-2xl border border-l-0 border-fuchsia-500 active:scale-95 overflow-hidden relative group cursor-pointer`}
                     style={{
                       background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.32) 100%)',
                       transition: 'transform 0.1s',
@@ -264,7 +342,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 <button
                   onClick={() => onLoadMore(tip.category)}
                   disabled={isEditing || loadingMoreCategories?.has(tip.category)}
-                  className="flex-shrink-0 w-[52px] h-[72px] rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-40"
+                  className={`flex-shrink-0 rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer ${isDesktop ? 'w-[44px] h-[64px]' : 'w-[52px] h-[72px]'}`}
                   style={{ background: meta.activeBg.replace('0.18', '0.08') }}
                 >
                   {loadingMoreCategories?.has(tip.category) ? (
@@ -289,9 +367,9 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className="flex-shrink-0 w-[200px] h-[72px] rounded-2xl bg-fuchsia-500/8 animate-pulse border border-fuchsia-500/10 flex"
+                className={`flex-shrink-0 rounded-2xl bg-fuchsia-500/8 animate-pulse border border-fuchsia-500/10 flex ${isDesktop ? 'w-[176px] h-[64px]' : 'w-[200px] h-[72px]'}`}
               >
-                <div className="w-[72px] h-full bg-white/5" />
+                <div className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full bg-white/5`} />
                 <div className="flex-1 p-2.5 space-y-1.5">
                   <div className="h-3 w-16 bg-white/10 rounded" />
                   <div className="h-2.5 w-24 bg-white/5 rounded" />
@@ -321,8 +399,8 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
           return (
             <button
               key={id}
-              onClick={() => enabled ? scrollToCategory(id) : undefined}
-              className="flex-1 flex items-center justify-center py-2 transition-opacity"
+              onClick={() => { if (!enabled) return; scrollToCategory(id); onCategorySelect?.(id as Tip['category']); }}
+              className="flex-1 flex items-center justify-center py-2 transition-opacity cursor-pointer"
               style={{
                 color: isActive ? activeText : enabled ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.14)',
                 pointerEvents: enabled ? 'auto' : 'none',

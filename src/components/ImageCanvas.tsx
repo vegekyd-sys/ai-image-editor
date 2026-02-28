@@ -1,6 +1,18 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import type { AnnotationEntry } from '@/types';
+import AnnotationCanvas from '@/components/AnnotationCanvas';
+
+const VIDEO_SENTINEL = '__VIDEO__';
+
+// Compute image absolute rect within a container using object-contain semantics
+function containRect(cW: number, cH: number, ar: number) {
+  let w, h;
+  if (ar > cW / cH) { w = cW; h = cW / ar; }
+  else              { h = cH; w = cH * ar; }
+  return { l: (cW - w) / 2, t: (cH - h) / 2, w, h };
+}
 
 interface ImageCanvasProps {
   timeline: string[];
@@ -11,11 +23,30 @@ interface ImageCanvasProps {
   draftTimelineIndex?: number;
   onDismissDraft?: () => void;
   previousImage?: string;
+  onAnimate?: () => void;
+  hasVideo?: boolean;
+  isVideoEntry?: boolean;
+  videoUrl?: string | null;
+  isDesktop?: boolean;
+  annotationMode?: boolean;
+  annotationTool?: 'brush' | 'rect' | 'text';
+  annotationEntries?: AnnotationEntry[];
+  onAddAnnotationEntry?: (entry: AnnotationEntry) => void;
+  onUpdateAnnotationEntry?: (id: string, data: Partial<AnnotationEntry['data']>) => void;
+  onDeleteAnnotationEntry?: (id: string) => void;
+  annotationColor?: string;
+  annotationLineWidth?: number;
+  onStartTextEdit?: (canvasX: number, canvasY: number) => void;
+  textEditing?: { x: number; y: number; text: string; textColor: string; bgColor: string } | null;
 }
 
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
-  isDraft, draftTimelineIndex, onDismissDraft, previousImage,
+  isDraft, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
+  hasVideo, isVideoEntry, videoUrl, isDesktop,
+  annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
+  onUpdateAnnotationEntry, onDeleteAnnotationEntry,
+  annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
 }: ImageCanvasProps) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -37,11 +68,51 @@ export default function ImageCanvas({
   // Double tap
   const lastTapTime = useRef(0);
 
+  // Annotation: image rect for overlay positioning
+  const imgElRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [imageRect, setImageRect] = useState({ l: 0, t: 0, w: 0, h: 0 });
+  const [naturalDims, setNaturalDims] = useState({ w: 0, h: 0 });
+
+  // Reset zoom when entering annotation mode
+  const prevAnnotationMode = useRef(annotationMode);
+  if (annotationMode && !prevAnnotationMode.current) {
+    if (scale !== 1) setScale(1);
+    if (translate.x !== 0 || translate.y !== 0) setTranslate({ x: 0, y: 0 });
+  }
+  prevAnnotationMode.current = annotationMode;
+
   // Image loading state
   const [imageLoaded, setImageLoaded] = useState(false);
 
+  // Video playback state
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoBuffered, setVideoBuffered] = useState(0); // 0-1 progress
+
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
+
+  // Update imageRect when image loads or container resizes
+  const updateImageRect = useCallback(() => {
+    const img = imgElRef.current;
+    const container = containerRef.current;
+    if (!img || !container || !img.naturalWidth) return;
+    const cr = container.getBoundingClientRect();
+    const ar = img.naturalWidth / img.naturalHeight;
+    const rect = containRect(cr.width, cr.height, ar);
+    setImageRect(rect);
+    setNaturalDims({ w: img.naturalWidth, h: img.naturalHeight });
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(updateImageRect);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [updateImageRect]);
 
   const SWIPE_THRESHOLD = 40;
 
@@ -56,6 +127,8 @@ export default function ImageCanvas({
     if (translate.x !== 0 || translate.y !== 0) setTranslate({ x: 0, y: 0 });
     // Only reset loading if source actually changed (avoids flicker on re-render)
     if (prevSrc !== currentSrc) setImageLoaded(false);
+    // Reset video state when navigating away
+    if (videoPlaying) setVideoPlaying(false);
   }
 
   const clearLongPress = useCallback(() => {
@@ -66,8 +139,10 @@ export default function ImageCanvas({
   }, []);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (annotationMode) return;
     if (e.touches.length === 2) {
-      // Pinch start
+      // Pinch start — skip for video entry
+      if (isVideoEntry) return;
       clearLongPress();
       isPinching.current = true;
       swiping.current = false;
@@ -82,8 +157,8 @@ export default function ImageCanvas({
     touchStartX.current = touch.clientX;
     touchStartY.current = touch.clientY;
 
-    if (scale > 1) {
-      // Pan mode when zoomed
+    if (!isVideoEntry && scale > 1) {
+      // Pan mode when zoomed (not for video)
       isPanning.current = true;
       lastPanPos.current = { x: touch.clientX, y: touch.clientY };
       swiping.current = false;
@@ -92,17 +167,18 @@ export default function ImageCanvas({
       swiping.current = true;
     }
 
-    // Long press detection
-    if (previousImage) {
+    // Long press detection — skip for video entry
+    if (previousImage && !isVideoEntry) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (annotationMode) return;
     if (e.touches.length === 2 && isPinching.current) {
       // Pinch move
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -139,6 +215,7 @@ export default function ImageCanvas({
   }, [scale, isComparing, clearLongPress]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (annotationMode) return;
     clearLongPress();
 
     // End comparing
@@ -219,6 +296,76 @@ export default function ImageCanvas({
     if (isDraft) onDismissDraft?.();
   }, [isDraft, onDismissDraft]);
 
+  // Desktop: unified mouse handler — mirrors all touch interactions
+  // (long-press compare + swipe navigate, same logic as touch handlers)
+  const mouseStartPos = useRef<{ x: number; y: number } | null>(null);
+  const mouseDidDrag = useRef(false);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (annotationMode || e.button !== 0 || isVideoEntry) return;
+    mouseStartPos.current = { x: e.clientX, y: e.clientY };
+    mouseDidDrag.current = false;
+
+    // Long press → compare (same as touch)
+    if (previousImage) {
+      clearLongPress();
+      longPressTimer.current = setTimeout(() => {
+        setIsComparing(true);
+      }, 200);
+    }
+  }, [previousImage, isVideoEntry, clearLongPress]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!mouseStartPos.current) return;
+    const dx = Math.abs(e.clientX - mouseStartPos.current.x);
+    const dy = Math.abs(e.clientY - mouseStartPos.current.y);
+    if (dx > 8 || dy > 8) {
+      mouseDidDrag.current = true;
+      clearLongPress();
+      if (isComparing) setIsComparing(false);
+    }
+  }, [clearLongPress, isComparing]);
+
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    clearLongPress();
+    if (isComparing) { setIsComparing(false); mouseStartPos.current = null; skipClick.current = true; return; }
+
+    // Swipe detection (same threshold as touch: 40px horizontal, must exceed vertical)
+    if (mouseStartPos.current && mouseDidDrag.current) {
+      const deltaX = e.clientX - mouseStartPos.current.x;
+      const deltaY = e.clientY - mouseStartPos.current.y;
+      if (Math.abs(deltaX) >= SWIPE_THRESHOLD && Math.abs(deltaX) > Math.abs(deltaY)) {
+        skipClick.current = true;
+        if (deltaX < 0 && currentIndex < timeline.length - 1) {
+          setAnimDir('left');
+          setTimeout(() => { onIndexChange(currentIndex + 1); setAnimDir(null); }, 150);
+        } else if (deltaX > 0 && currentIndex > 0) {
+          setAnimDir('right');
+          setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
+        }
+      }
+    }
+    mouseStartPos.current = null;
+  }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange]);
+
+  // Desktop: trackpad two-finger horizontal swipe (wheel deltaX) → switch snapshot
+  const wheelCooldown = useRef(false);
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    // Only handle horizontal scroll (trackpad swipe), ignore vertical/pinch
+    if (Math.abs(e.deltaX) < 30 || Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
+    if (wheelCooldown.current) return;
+    wheelCooldown.current = true;
+    setTimeout(() => { wheelCooldown.current = false; }, 300);
+
+    if (e.deltaX > 0 && currentIndex < timeline.length - 1) {
+      setAnimDir('left');
+      setTimeout(() => { onIndexChange(currentIndex + 1); setAnimDir(null); }, 150);
+    } else if (e.deltaX < 0 && currentIndex > 0) {
+      setAnimDir('right');
+      setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
+    }
+  }, [currentIndex, timeline.length, onIndexChange]);
+
   const goTo = useCallback((index: number) => {
     if (index === currentIndex) return;
     setAnimDir(index > currentIndex ? 'left' : 'right');
@@ -229,6 +376,8 @@ export default function ImageCanvas({
   }, [currentIndex, onIndexChange]);
 
   const getLabel = (index: number) => {
+    // Video entry
+    if (timeline[index] === VIDEO_SENTINEL) return 'Video';
     if (index === 0) return 'Original';
     // isDraft=true means we're currently viewing the draft slot
     if (isDraft) return 'Draft';
@@ -244,11 +393,17 @@ export default function ImageCanvas({
 
   return (
     <div
+      ref={containerRef}
       className="absolute inset-0 flex items-center justify-center touch-none select-none"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseUp}
+      onWheel={handleWheel}
       onClick={handleClick}
     >
       {isEditing && (
@@ -263,31 +418,119 @@ export default function ImageCanvas({
       {/* Zoom wrapper */}
       <div
         className="w-full h-full"
-        style={scale > 1 ? {
+        style={!isVideoEntry && scale > 1 ? {
           transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
           transformOrigin: 'center center',
         } : undefined}
       >
         {/* Grey placeholder while loading */}
-        {!imageLoaded && (
+        {!isVideoEntry && !imageLoaded && (
           <div className="absolute inset-0 bg-zinc-900 animate-pulse" />
         )}
-        {/* Image */}
-        <img
-          src={displayImage}
-          alt="preview"
-          className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
-            animDir === 'left' ? 'opacity-0 -translate-x-8' :
-            animDir === 'right' ? 'opacity-0 translate-x-8' :
-            imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
-          }`}
-          draggable={false}
-          onLoad={() => setImageLoaded(true)}
-        />
+
+        {/* Video entry */}
+        {isVideoEntry && videoUrl ? (
+          <div className="relative w-full h-full flex items-center justify-center">
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              playsInline
+              preload="auto"
+              poster={(() => { const prev = timeline[timeline.length - 2]; return prev && prev !== '__VIDEO__' ? prev : undefined; })()}
+              className={`w-full h-full object-contain select-none pointer-events-auto transition-all duration-150 ${
+                animDir === 'left' ? 'opacity-0 -translate-x-8' :
+                animDir === 'right' ? 'opacity-0 translate-x-8' :
+                'opacity-100 translate-x-0'
+              }`}
+              onPlay={() => { setVideoPlaying(true); setVideoLoading(false); }}
+              onPause={() => setVideoPlaying(false)}
+              onEnded={() => setVideoPlaying(false)}
+              onWaiting={() => setVideoLoading(true)}
+              onCanPlay={() => setVideoLoading(false)}
+              onProgress={() => {
+                const v = videoRef.current;
+                if (v && v.buffered.length > 0 && v.duration) {
+                  setVideoBuffered(v.buffered.end(v.buffered.length - 1) / v.duration);
+                }
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (videoPlaying) {
+                  videoRef.current?.pause();
+                }
+              }}
+            />
+            {/* Loading indicator — shows during buffering */}
+            {videoLoading && (
+              <div className="absolute bottom-0 left-0 right-0 z-10">
+                <div style={{ height: 3, background: 'rgba(255,255,255,0.1)' }}>
+                  <div style={{
+                    height: '100%', background: 'rgba(217,70,239,0.8)',
+                    width: `${Math.round(videoBuffered * 100)}%`,
+                    transition: 'width 0.3s',
+                  }} />
+                </div>
+              </div>
+            )}
+            {/* Play button overlay */}
+            {!videoPlaying && !videoLoading && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setVideoLoading(true);
+                  videoRef.current?.play();
+                }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center z-10 active:scale-95 transition-transform"
+              >
+                <svg width="22" height="22" viewBox="0 0 10 10" fill="white">
+                  <polygon points="3,1 9,5 3,9" />
+                </svg>
+              </button>
+            )}
+            {/* Buffering spinner when loading during playback */}
+            {videoLoading && videoPlaying && (
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                <div className="w-10 h-10 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Image */
+          <img
+            ref={imgElRef}
+            src={displayImage}
+            alt="preview"
+            className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
+              animDir === 'left' ? 'opacity-0 -translate-x-8' :
+              animDir === 'right' ? 'opacity-0 translate-x-8' :
+              imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
+            }`}
+            draggable={false}
+            onLoad={() => { setImageLoaded(true); updateImageRect(); }}
+          />
+        )}
+
+        {/* Annotation overlay */}
+        {annotationMode && !isVideoEntry && imageRect.w > 0 && onAddAnnotationEntry && (
+          <AnnotationCanvas
+            imageRect={imageRect}
+            naturalWidth={naturalDims.w}
+            naturalHeight={naturalDims.h}
+            activeTool={annotationTool || 'brush'}
+            entries={annotationEntries || []}
+            onAddEntry={onAddAnnotationEntry}
+            onUpdateEntry={onUpdateAnnotationEntry || (() => {})}
+            onDeleteEntry={onDeleteAnnotationEntry || (() => {})}
+            color={annotationColor || '#dc2626'}
+            lineWidth={annotationLineWidth || Math.max(20, Math.round(naturalDims.w * 0.028))}
+            onStartTextEdit={onStartTextEdit}
+            textEditing={textEditing}
+          />
+        )}
       </div>
 
-      {/* Before badge (long press compare) */}
-      {isComparing && (
+      {/* Before badge (long press compare) — not for video */}
+      {isComparing && !isVideoEntry && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10">
           <span className="text-white text-xs font-medium bg-blue-600/80 backdrop-blur-sm rounded-full px-3 py-1.5">
             Before
@@ -297,21 +540,51 @@ export default function ImageCanvas({
 
       {/* Bottom indicators */}
       {timeline.length > 1 && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-3 z-10">
-          <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5">
-            {timeline.map((_, i) => (
+        <div className={`absolute left-1/2 -translate-x-1/2 flex items-center z-10 ${isDesktop ? 'bottom-3 gap-2' : 'bottom-20 gap-3'}`}>
+          <div className={`flex items-center bg-black/50 backdrop-blur-sm rounded-full ${isDesktop ? 'gap-1 px-2 py-1' : 'gap-1.5 px-3 py-1.5'}`}>
+            {timeline.map((entry, i) => {
+              // Skip the video sentinel in dot rendering — it has its own dot below
+              if (entry === VIDEO_SENTINEL) return null;
+              return (
+                <button
+                  key={i}
+                  onClick={() => goTo(i)}
+                  className={`rounded-full transition-all cursor-pointer ${
+                    i === currentIndex
+                      ? isDesktop ? 'w-3.5 h-1.5 bg-white' : 'w-5 h-2 bg-white'
+                      : isDesktop ? 'w-1.5 h-1.5 bg-white/40' : 'w-2 h-2 bg-white/40'
+                  }`}
+                />
+              );
+            })}
+            {/* Animate button — right side of timeline dots */}
+            {onAnimate && !isDraft && (
               <button
-                key={i}
-                onClick={() => goTo(i)}
-                className={`rounded-full transition-all ${
-                  i === currentIndex
-                    ? 'w-5 h-2 bg-white'
-                    : 'w-2 h-2 bg-white/40'
+                onClick={() => {
+                  if (hasVideo) {
+                    const videoIdx = timeline.indexOf(VIDEO_SENTINEL);
+                    if (videoIdx >= 0) goTo(videoIdx);
+                  } else if (onAnimate) {
+                    onAnimate();
+                  }
+                }}
+                title="生成视频"
+                className={`ml-0.5 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                  isDesktop ? 'w-5 h-5' : 'ml-1 w-6 h-6'
+                } ${
+                  isVideoEntry
+                    ? 'bg-fuchsia-500'
+                    : 'bg-fuchsia-500/80 hover:bg-fuchsia-500'
                 }`}
-              />
-            ))}
+                style={{ flexShrink: 0 }}
+              >
+                <svg width={isDesktop ? "8" : "10"} height={isDesktop ? "8" : "10"} viewBox="0 0 10 10" fill="white">
+                  <polygon points="3,2 8,5 3,8" />
+                </svg>
+              </button>
+            )}
           </div>
-          <span className="text-white/80 text-xs font-medium bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5 whitespace-nowrap">
+          <span className={`text-white/80 font-medium bg-black/50 backdrop-blur-sm rounded-full whitespace-nowrap ${isDesktop ? 'text-[10px] px-2 py-1' : 'text-xs px-3 py-1.5'}`}>
             {getLabel(currentIndex)}
           </span>
         </div>
@@ -323,7 +596,7 @@ export default function ImageCanvas({
           {currentIndex > 0 && (
             <button
               onClick={() => goTo(currentIndex - 1)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10 cursor-pointer"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m15 18-6-6 6-6" />
@@ -333,7 +606,7 @@ export default function ImageCanvas({
           {currentIndex < timeline.length - 1 && (
             <button
               onClick={() => goTo(currentIndex + 1)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10 cursor-pointer"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m9 18 6-6-6-6" />

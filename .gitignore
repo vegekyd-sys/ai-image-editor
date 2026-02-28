@@ -56,5 +56,9 @@ next-env.d.ts
 /scripts/
 
 
+# claude code local settings
+.claude/settings.local.json
+
 # playwright mcp
 .playwright-mcp/
+test-kling.mjs

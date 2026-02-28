@@ -3,8 +3,10 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { getCachedImages } from '@/lib/imageCache'
+import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cacheProjectsList } from '@/lib/imageCache'
 
 interface ProjectWithSnapshots {
   id: string
@@ -13,6 +15,7 @@ interface ProjectWithSnapshots {
   updated_at: string
   created_at: string
   snapshots: { id: string; image_url: string; sort_order: number }[]
+  hasVideo?: boolean
 }
 
 function compressClientSide(file: File, maxSize = 2048, quality = 0.92): Promise<string> {
@@ -53,25 +56,33 @@ function timeAgo(dateStr: string): string {
   return `${months}mo ago`
 }
 
-// Module-level cache — survives navigation, cleared on explicit refresh
-let _projectsCache: ProjectWithSnapshots[] | null = null
-
-export function invalidateProjectsCache() {
-  _projectsCache = null
-}
-
-export function getProjectFromCache(projectId: string): ProjectWithSnapshots | null {
-  return _projectsCache?.find(p => p.id === projectId) ?? null
-}
-
 export default function ProjectsPage() {
   const { user, loading: authLoading, signOut } = useAuth()
   const router = useRouter()
-  const [projects, setProjects] = useState<ProjectWithSnapshots[]>(_projectsCache ?? [])
-  const [loadingProjects, setLoadingProjects] = useState(_projectsCache === null)
+  const isDesktop = useIsDesktop()
+  // Phase 1: Synchronous memory cache — same-session instant render
+  const [projects, setProjects] = useState<ProjectWithSnapshots[]>(() => {
+    if (typeof window === 'undefined') return []
+    const userId = user?.id
+    if (!userId) return []
+    return (getCachedProjectsListSync(userId) as ProjectWithSnapshots[]) ?? []
+  })
+  const [loadingProjects, setLoadingProjects] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const userId = user?.id
+    if (!userId) return true
+    return getCachedProjectsListSync(userId) === null
+  })
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const inputBoxRef = useRef<HTMLDivElement>(null)
+  const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
+  const [inputText, setInputText] = useState('')
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const [attachedPreview, setAttachedPreview] = useState<string | null>(null)
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
+  const [navigating, setNavigating] = useState(false)
+  const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
 
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
@@ -117,90 +128,193 @@ export default function ProjectsPage() {
     if (!authLoading && !user) router.replace('/login')
   }, [user, authLoading, router])
 
+  // Measure input box height → set photo slot width = height (square)
+  useEffect(() => {
+    const el = inputBoxRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      setPhotoSlotWidth(Math.round(entry.contentRect.height))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Phase 2: Async IndexedDB cache (cross-session persistence, no auth dependency)
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    getCachedProjectsList(user.id).then((cached) => {
+      if (cancelled || shownRef.current || !cached) return
+      shownRef.current = true
+      setProjects(cached as ProjectWithSnapshots[])
+      setLoadingProjects(false)
+    })
+    return () => { cancelled = true }
+  }, [user])
+
+  // Phase 3: Supabase fetch (always runs when user is available, refreshes cache)
   useEffect(() => {
     if (!user) return
     const supabase = createClient()
-    const hasCache = _projectsCache !== null
+    let cancelled = false
 
     async function fetchProjects() {
-      const { data: projectRows, error: pErr } = await supabase
-        .from('projects')
-        .select('id, title, cover_url, updated_at, created_at')
-        .eq('user_id', user!.id)
-        .order('created_at', { ascending: false })
+      try {
+        const { data: projectRows, error: pErr } = await supabase
+          .from('projects')
+          .select('id, title, cover_url, updated_at, created_at')
+          .eq('user_id', user!.id)
+          .order('created_at', { ascending: false })
 
-      if (pErr || !projectRows) {
-        console.error('Failed to fetch projects:', pErr)
-        if (!hasCache) setLoadingProjects(false)
-        return
-      }
+        if (cancelled) return
 
-      if (projectRows.length === 0) {
-        _projectsCache = []
-        setProjects([])
+        if (pErr || !projectRows) {
+          console.error('Failed to fetch projects:', pErr)
+          if (!shownRef.current) setLoadingProjects(false)
+          return
+        }
+
+        if (projectRows.length === 0) {
+          cacheProjectsList(user!.id, [])
+          shownRef.current = true
+          setProjects([])
+          setLoadingProjects(false)
+          return
+        }
+
+        // Fetch all snapshots (incremental optimization based on current displayed projects)
+        const currentMap = new Map(projects.map(p => [p.id, p]))
+        const staleIds = projectRows
+          .filter(p => {
+            const cached = currentMap.get(p.id)
+            return !cached || cached.updated_at !== p.updated_at
+          })
+          .map(p => p.id)
+
+        const staleSet = new Set(staleIds)
+        const snapshotMap = new Map<string, { id: string; image_url: string; sort_order: number }[]>()
+        for (const [id, p] of currentMap) {
+          if (!staleSet.has(id)) snapshotMap.set(id, p.snapshots)
+        }
+
+        if (staleIds.length > 0) {
+          const { data: snapshotRows, error: sErr } = await supabase
+            .from('snapshots')
+            .select('id, project_id, image_url, sort_order')
+            .in('project_id', staleIds)
+            .order('sort_order', { ascending: true })
+          if (sErr) console.error('Failed to fetch snapshots:', sErr)
+          for (const s of snapshotRows ?? []) {
+            const list = snapshotMap.get(s.project_id) ?? []
+            list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
+            snapshotMap.set(s.project_id, list)
+          }
+        }
+
+        if (cancelled) return
+
+        // Fetch which projects have completed videos
+        const projectIds = projectRows.map(p => p.id)
+        const videoProjectIds = new Set<string>()
+        if (projectIds.length > 0) {
+          const { data: animRows } = await supabase
+            .from('project_animations')
+            .select('project_id')
+            .in('project_id', projectIds)
+            .eq('status', 'completed')
+          if (animRows) {
+            for (const row of animRows) videoProjectIds.add(row.project_id)
+          }
+        }
+
+        if (cancelled) return
+
+        const result: ProjectWithSnapshots[] = projectRows
+          .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [], hasVideo: videoProjectIds.has(p.id) }))
+          .filter((p) => p.snapshots.length > 0)
+
+        // Patch missing image_urls from IndexedDB cache (upload may not have completed)
+        const missingKeys = result.flatMap(p =>
+          p.snapshots.filter(s => !s.image_url).map(s => `snap:${s.id}`)
+        )
+        let displayResult = result
+        if (missingKeys.length > 0) {
+          const cacheMap = await getCachedImages(missingKeys)
+          if (cacheMap.size > 0) {
+            displayResult = result.map(p => ({
+              ...p,
+              snapshots: p.snapshots.map(s => {
+                const cached = !s.image_url ? cacheMap.get(`snap:${s.id}`) : undefined
+                return cached ? { ...s, image_url: cached } : s
+              }),
+            }))
+          }
+        }
+
+        if (cancelled) return
+        // Cache clean Supabase data (with URLs, no base64)
+        cacheProjectsList(user!.id, result)
+        shownRef.current = true
+        setProjects(displayResult)
         setLoadingProjects(false)
-        return
+      } catch (err) {
+        if (cancelled) return
+        console.error('Failed to fetch projects:', err)
+        // Offline: if cache already showed data, stay on it
+        if (!shownRef.current) setLoadingProjects(false)
       }
-
-      // Incremental: only fetch snapshots for projects whose updated_at changed
-      const cachedMap = new Map(_projectsCache?.map(p => [p.id, p]) ?? [])
-      const staleIds = projectRows
-        .filter(p => {
-          const cached = cachedMap.get(p.id)
-          return !cached || cached.updated_at !== p.updated_at
-        })
-        .map(p => p.id)
-
-      const staleSet = new Set(staleIds)
-      const snapshotMap = new Map<string, { id: string; image_url: string; sort_order: number }[]>()
-      // Carry over cached snapshots only for unchanged projects
-      for (const [id, p] of cachedMap) {
-        if (!staleSet.has(id)) snapshotMap.set(id, p.snapshots)
-      }
-
-      if (staleIds.length > 0) {
-        const { data: snapshotRows, error: sErr } = await supabase
-          .from('snapshots')
-          .select('id, project_id, image_url, sort_order')
-          .in('project_id', staleIds)
-          .order('sort_order', { ascending: true })
-        if (sErr) console.error('Failed to fetch snapshots:', sErr)
-        for (const s of snapshotRows ?? []) {
-          const list = snapshotMap.get(s.project_id) ?? []
-          list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
-          snapshotMap.set(s.project_id, list)
-        }
-      }
-
-      const result: ProjectWithSnapshots[] = projectRows
-        .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [] }))
-        .filter((p) => p.snapshots.length > 0)
-
-      // Patch missing image_urls from IndexedDB cache (upload may not have completed)
-      const missingKeys = result.flatMap(p =>
-        p.snapshots.filter(s => !s.image_url).map(s => `snap:${s.id}`)
-      )
-      let displayResult = result
-      if (missingKeys.length > 0) {
-        const cacheMap = await getCachedImages(missingKeys)
-        if (cacheMap.size > 0) {
-          displayResult = result.map(p => ({
-            ...p,
-            snapshots: p.snapshots.map(s => {
-              const cached = !s.image_url ? cacheMap.get(`snap:${s.id}`) : undefined
-              return cached ? { ...s, image_url: cached } : s
-            }),
-          }))
-        }
-      }
-
-      _projectsCache = result  // Keep clean (Supabase URLs only)
-      setProjects(displayResult)
-      setLoadingProjects(false)
     }
 
     fetchProjects()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
+
+  // Unified create: text only, image only, or both
+  const handleCreate = useCallback(async () => {
+    const hasText = inputText.trim()
+    const hasFile = attachedFile
+    if (!hasText && !hasFile) return
+    if (!user || creating) return
+
+    // Image-only (no text) → original flow
+    if (hasFile && !hasText) {
+      handleCreateProject(hasFile)
+      return
+    }
+
+    setCreating(true)
+    try {
+      let base64: string | undefined
+      if (hasFile) {
+        try { base64 = await compressClientSide(hasFile) }
+        catch {
+          const formData = new FormData()
+          formData.append('file', hasFile)
+          const res = await fetch('/api/upload', { method: 'POST', body: formData })
+          if (res.ok) base64 = (await res.json()).image
+        }
+      }
+
+      const supabase = createClient()
+      const { data: project, error: pErr } = await supabase
+        .from('projects')
+        .insert({ user_id: user.id, title: 'Untitled' })
+        .select('id')
+        .single()
+      if (pErr || !project) throw new Error('Failed to create project')
+
+      if (base64) sessionStorage.setItem('pendingImage', base64)
+      sessionStorage.setItem('pendingPrompt', hasText)
+      setInputText('')
+      setAttachedFile(null)
+      setAttachedPreview(null)
+      router.push(`/projects/${project.id}`)
+    } catch (err) {
+      console.error('Create project error:', err)
+      setCreating(false)
+    }
+  }, [user, creating, router, inputText, attachedFile])
 
   const handleCreateProject = useCallback(async (file: File) => {
     if (!user || creating) return
@@ -297,26 +411,59 @@ export default function ProjectsPage() {
         .mkr-handwrite { font-family: 'Caveat', cursive; }
 
         @keyframes mkr-in {
-          from { opacity: 0; transform: translateY(16px); }
-          to   { opacity: 1; transform: translateY(0); }
+          from { transform: translateY(12px); }
+          to   { transform: translateY(0); }
         }
-        .mkr-row-enter { animation: mkr-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .mkr-row-enter { animation: mkr-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
         .mkr-card {
           cursor: pointer;
-          transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
+          -webkit-user-select: none;
         }
-        .mkr-card:hover  { transform: scale(0.98); }
-        .mkr-card:active { transform: scale(0.96); }
+        .mkr-card img {
+          transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+          transform-origin: center;
+        }
+        .mkr-card:active img,
+        .mkr-card:active .mkr-card-img { transform: scale(0.96); }
 
         .mkr-new-btn {
-          transition: border-color 0.25s, box-shadow 0.25s, transform 0.18s;
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          transition: border-color 0.25s, box-shadow 0.25s, transform 0.18s, opacity 0.15s;
+          user-select: none;
+          -webkit-user-select: none;
         }
         .mkr-new-btn:hover {
           border-color: rgba(217,70,239,0.6) !important;
           box-shadow: 0 0 32px rgba(217,70,239,0.2);
         }
-        .mkr-new-btn:active { transform: scale(0.96); }
+        .mkr-new-btn:active { transform: scale(0.96); opacity: 0.8; }
+
+        .mkr-input-box {
+          transition: border-color 0.25s, box-shadow 0.25s;
+        }
+        .mkr-input-box:focus-within {
+          border-color: rgba(217,70,239,0.35) !important;
+          box-shadow: 0 0 0 1px rgba(217,70,239,0.12);
+        }
+
+        .mkr-create-btn {
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
+          -webkit-user-select: none;
+          transition: background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+        }
+        .mkr-create-btn:hover {
+          background: rgba(217,70,239,0.1) !important;
+          border-color: rgba(217,70,239,0.5) !important;
+          box-shadow: 0 0 20px rgba(217,70,239,0.15);
+        }
+        .mkr-create-btn:active { transform: scale(0.96); }
 
         @keyframes mkr-spin { to { transform: rotate(360deg); } }
         .mkr-spin { animation: mkr-spin 0.9s linear infinite; }
@@ -327,7 +474,7 @@ export default function ProjectsPage() {
         .mkr-more-btn:hover { opacity: 1 !important; }
       `}</style>
 
-      <div className="mkr-page" style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden' }}>
+      <div className={`mkr-page${navigating ? ' page-slide-out' : ''}`} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden' }}>
 
         {/* Ambient glow — center at 40% so top is black, fades to purple below */}
         <div style={{
@@ -344,7 +491,9 @@ export default function ProjectsPage() {
           style={{ display: 'none' }}
           onChange={(e) => {
             const file = e.target.files?.[0]
-            if (file) handleCreateProject(file)
+            if (!file) return
+            setAttachedFile(file)
+            setAttachedPreview(URL.createObjectURL(file))
             e.target.value = ''
           }}
         />
@@ -369,8 +518,9 @@ export default function ProjectsPage() {
             HERO — ~45dvh, fully centered
         ════════════════════════════════ */}
         <div style={{
-          height: '45dvh', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: '0px',
+          paddingTop: '20vh', paddingBottom: '40px',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: '0px',
           position: 'relative', zIndex: 1,
         }}>
           {/* Wordmark row: asterisk icon + Makaron */}
@@ -414,53 +564,116 @@ export default function ProjectsPage() {
             one man studio
           </div>
 
-          {/* New project button */}
-          <div style={{ marginTop: '32px' }}>
-            {creating ? (
-              <button
-                disabled
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  borderRadius: '100px',
-                  border: '1.5px solid rgba(217,70,239,0.35)',
-                  background: 'transparent',
-                  color: 'rgba(217,70,239,0.6)',
-                  padding: '14px 36px',
-                  fontSize: '0.85rem',
-                  letterSpacing: '0.06em',
-                  cursor: 'default',
-                }}
-              >
-                <Spinner size={14} />
-                Creating…
-              </button>
-            ) : (
+          {/* Create input: [photo] + [textarea] */}
+          <div style={{ marginTop: '32px', width: '100%', padding: '0 16px', maxWidth: '480px' }}>
+            <div ref={inputBoxRef} className="mkr-input-box" style={{
+              display: 'flex', gap: 0,
+              borderRadius: 18,
+              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(255,255,255,0.03)',
+              overflow: 'hidden',
+            }}>
+              {/* Left: photo slot — square, width = container height */}
               <label
                 htmlFor="new-project-file-input"
-                className="mkr-new-btn"
                 style={{
-                  display: 'inline-block',
-                  borderRadius: '100px',
-                  border: '1.5px solid rgba(217,70,239,0.35)',
-                  background: 'transparent',
-                  color: 'rgb(217,70,239)',
-                  padding: '14px 36px',
-                  fontSize: '0.85rem',
-                  letterSpacing: '0.06em',
-                  cursor: 'pointer',
-                  fontWeight: 400,
+                  width: photoSlotWidth, flexShrink: 0, alignSelf: 'stretch',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: creating ? 'default' : 'pointer',
+                  borderRight: '1px solid rgba(255,255,255,0.08)',
+                  position: 'relative',
+                  background: attachedPreview ? 'transparent' : 'rgba(217,70,239,0.04)',
                 }}
               >
-                + New project
+                {attachedPreview ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={attachedPreview} alt="attached"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
+                      onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}
+                    />
+                    <div style={{
+                      position: 'absolute', top: 4, right: 4,
+                      width: 18, height: 18, borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.6)', color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.6rem', cursor: 'pointer', zIndex: 1,
+                    }} onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}>✕</div>
+                  </>
+                ) : (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                )}
               </label>
-            )}
+
+              {/* Right: textarea + create */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                <textarea
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFile)) {
+                      e.preventDefault();
+                      handleCreate();
+                    }
+                  }}
+                  placeholder={"Got a pic? Let's glow it up.\nNo pic? I'll cook one up."}
+                  disabled={creating}
+                  rows={3}
+                  style={{
+                    flex: 1, border: 'none', background: 'transparent',
+                    color: '#fff', fontSize: '0.95rem', lineHeight: 1.45,
+                    padding: '12px 14px', paddingBottom: 40,
+                    outline: 'none', resize: 'none',
+                    fontFamily: 'var(--font-geist-sans), sans-serif',
+                    minHeight: 80,
+                  }}
+                />
+                {/* Create button — always visible, inside the box */}
+                <button
+                  className="mkr-create-btn"
+                  onClick={() => {
+                    if (inputText.trim() || attachedFile) handleCreate()
+                    else fileInputRef.current?.click()
+                  }}
+                  disabled={creating}
+                  style={{
+                    position: 'absolute', bottom: 8, right: 8,
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '5px 10px',
+                    borderRadius: '14px',
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(217,70,239,0.9)',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    letterSpacing: '0.03em',
+                    cursor: creating ? 'default' : 'pointer',
+                    fontFamily: 'var(--font-geist-sans), sans-serif',
+                  }}
+                >
+                  {creating ? <Spinner size={12} /> : (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      Create
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* ═══════════════════════════════
             GALLERY SECTION
         ════════════════════════════════ */}
-        <div style={{ position: 'relative', zIndex: 1 }}>
+        <div style={{ position: 'relative', zIndex: 1, marginTop: '8px', maxWidth: isDesktop ? '1232px' : undefined, margin: isDesktop ? '8px auto 0' : undefined }}>
 
           {/* Section divider — only show when projects exist */}
           {!loadingProjects && projects.length > 0 && (
@@ -492,17 +705,19 @@ export default function ProjectsPage() {
           ) : (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: '10px',
+              gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
+              gap: isDesktop ? '14px' : '10px',
               padding: '0 16px 80px',
+              maxWidth: isDesktop ? '1200px' : undefined,
+              margin: isDesktop ? '0 auto' : undefined,
             }}>
               {projects.map((project, i) => (
                 <ProjectCard
                   key={project.id}
                   project={project}
                   index={i}
-                  onClick={() => router.push(`/projects/${project.id}`)}
                   onMore={(e) => openActionSheet(e, project)}
+                  onNavigate={() => setNavigating(true)}
                 />
               ))}
             </div>
@@ -544,7 +759,7 @@ export default function ProjectsPage() {
                   autoFocus
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setRenameMode(false); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleRename(); if (e.key === 'Escape') setRenameMode(false); }}
                   style={{
                     flex: 1, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
                     borderRadius: '10px', padding: '12px 14px', color: '#fff', fontSize: '0.9rem',
@@ -623,29 +838,32 @@ export default function ProjectsPage() {
 function ProjectCard({
   project,
   index,
-  onClick,
   onMore,
+  onNavigate,
 }: {
   project: ProjectWithSnapshots
   index: number
-  onClick: () => void
   onMore: (e: React.MouseEvent) => void
+  onNavigate: () => void
 }) {
   const lastSnap = project.snapshots[project.snapshots.length - 1]
   const [loaded, setLoaded] = useState(false)
 
   return (
-    <div
+    <Link
+      href={`/projects/${project.id}`}
       className="mkr-card mkr-row-enter"
+      onClick={onNavigate}
       style={{
+        display: 'block',
         position: 'relative',
         aspectRatio: '1 / 1',
         borderRadius: '16px',
         overflow: 'hidden',
         background: '#120d1a',
         animationDelay: `${index * 0.06}s`,
+        textDecoration: 'none',
       }}
-      onClick={onClick}
     >
       {/* Placeholder shimmer while image loads */}
       {!loaded && (
@@ -664,10 +882,12 @@ function ProjectCard({
           width: '100%', height: '100%',
           objectFit: 'cover',
           display: 'block',
+          pointerEvents: 'none',
           opacity: loaded ? 1 : 0,
           transition: 'opacity 0.3s',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
         }}
-        loading="lazy"
         onLoad={() => setLoaded(true)}
       />
 
@@ -685,25 +905,66 @@ function ProjectCard({
         pointerEvents: 'none',
       }}>
         <div style={{
-          fontSize: '0.82rem', fontWeight: 500, color: '#fff',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          lineHeight: 1.3,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '6px',
         }}>
-          {project.title}
+          <div style={{
+            fontSize: '0.82rem', fontWeight: 500, color: '#fff',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            lineHeight: 1.3, flex: 1, minWidth: 0,
+          }}>
+            {project.title}
+          </div>
+          <div style={{
+            fontSize: '0.62rem',
+            color: 'rgba(255,255,255,0.45)',
+            flexShrink: 0,
+          }}>
+            {timeAgo(project.updated_at)}
+          </div>
         </div>
-        <div style={{
-          marginTop: '2px',
-          fontSize: '0.62rem',
-          color: 'rgba(255,255,255,0.45)',
-        }}>
-          {timeAgo(project.updated_at)}
-        </div>
+        {/* Badges row */}
+        {(project.snapshots.length > 1 || project.hasVideo) && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            marginTop: '5px',
+          }}>
+            {project.snapshots.length > 1 && (
+              <span style={{
+                background: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(4px)',
+                borderRadius: '6px',
+                padding: '2px 6px',
+                fontSize: '0.68rem',
+                fontWeight: 500,
+                color: 'rgba(255,255,255,0.8)',
+              }}>
+                {project.snapshots.length} snaps
+              </span>
+            )}
+            {project.hasVideo && (
+              <span style={{
+                background: 'rgba(217,70,239,0.4)',
+                backdropFilter: 'blur(4px)',
+                borderRadius: '6px',
+                padding: '2px 6px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+              }}>
+                <svg width="8" height="8" viewBox="0 0 10 10" fill="white">
+                  <polygon points="3,1.5 8.5,5 3,8.5" />
+                </svg>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Top-right more button */}
       <button
         className="mkr-more-btn"
-        onClick={onMore}
+        onClick={(e) => { e.preventDefault(); onMore(e) }}
         style={{
           position: 'absolute', top: '8px', right: '8px',
           background: 'rgba(0,0,0,0.45)',
@@ -724,7 +985,7 @@ function ProjectCard({
       >
         ···
       </button>
-    </div>
+    </Link>
   )
 }
 

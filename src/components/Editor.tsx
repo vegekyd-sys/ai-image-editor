@@ -1,13 +1,29 @@
 'use client';
 
 import { useState, useRef, useCallback, useMemo, useEffect, CSSProperties } from 'react';
-import { Message, Tip, Snapshot, PhotoMetadata } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView from '@/components/AgentChatView';
+import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
 import { cacheImage } from '@/lib/imageCache';
+import { mergeAnnotation } from '@/lib/annotationUtils';
+import { newAnnotationId } from '@/components/AnnotationCanvas';
+import AnimateSheet from '@/components/AnimateSheet';
+import { useIsDesktop } from '@/hooks/useIsDesktop';
+
+export interface AnimationState {
+  imageUrls: string[]
+  prompt: string
+  taskId: string | null
+  videoUrl: string | null
+  status: 'idle' | 'generating_prompt' | 'ready' | 'submitting' | 'polling' | 'done' | 'error'
+  error: string | null
+  duration: number | null  // null = smart mode (API decides 3-15s)
+  pollSeconds: number
+}
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
@@ -97,19 +113,43 @@ async function extractPhotoMetadata(file: File): Promise<PhotoMetadata | undefin
 
 const AGENT_GREETING = 'Hi! 想怎么编辑这张照片？';
 
+/** Get best image representation for API calls: URL if available (tiny payload), else raw image (base64) */
+function getImageForApi(snapshot: Snapshot | undefined): string {
+  return snapshot?.imageUrl || snapshot?.image || '';
+}
+
 /**
- * Ensure an image is a base64 data URL.
- * If already base64, returns as-is. If a URL, fetches and converts.
+ * Compress a base64 image only if it exceeds maxBytes (default 1.8MB).
+ * Used as fallback when URL isn't available yet (e.g. user chats before Supabase upload completes).
+ * Preserves quality: only resizes beyond 2048px, starts at quality 0.92.
  */
-async function ensureBase64(image: string): Promise<string> {
-  if (image.startsWith('data:')) return image;
-  const res = await fetch(image);
-  const blob = await res.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
+async function compressBase64(image: string, maxBytes = 1_800_000): Promise<string> {
+  if (!image || !image.startsWith('data:')) return image;
+  if (image.length * 0.75 < maxBytes) return image;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxDim = 2048;
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+      for (const q of [0.92, 0.85, 0.75, 0.65]) {
+        const result = canvas.toDataURL('image/jpeg', q);
+        if (result.length * 0.75 < maxBytes) { resolve(result); return; }
+      }
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+    img.onerror = () => resolve(image);
+    img.src = image;
   });
 }
 
@@ -143,7 +183,8 @@ interface EditorProps {
   initialMessages?: Message[];
   pendingImage?: string;
   pendingMetadata?: PhotoMetadata;
-  onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number) => void;
+  pendingPrompt?: string;
+  onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
   onUpdateDescription?: (snapshotId: string, description: string) => void;
@@ -151,6 +192,7 @@ interface EditorProps {
   onRenameProject?: (title: string) => void;
   onBack?: () => void;
   onNewProject?: (file: File) => void;
+  initialAnimation?: { videoUrl: string | null; prompt: string; snapshotUrls: string[]; taskId?: string; status: 'completed' | 'processing' } | null;
 }
 
 export default function Editor({
@@ -159,6 +201,7 @@ export default function Editor({
   initialMessages,
   pendingImage,
   pendingMetadata,
+  pendingPrompt,
   onSaveSnapshot,
   onSaveMessage,
   onUpdateTips,
@@ -167,18 +210,68 @@ export default function Editor({
   onRenameProject,
   onBack,
   onNewProject,
+  initialAnimation,
 }: EditorProps = {}) {
+  const isDesktop = useIsDesktop();
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveToast, setSaveToast] = useState(false);
   const [isTipsFetching, setIsTipsFetching] = useState(false);
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
+  // Annotation (paintbrush) mode
+  const [annotationMode, setAnnotationMode] = useState(false);
+  const [annotationTool, setAnnotationTool] = useState<'brush' | 'rect' | 'text'>('brush');
+  const [annotationEntries, setAnnotationEntries] = useState<AnnotationEntry[]>([]);
+  const annotationColor = '#dc2626'; // fixed red for all annotations
+  const [annotationBrushSize, setAnnotationBrushSize] = useState(30); // 0-100 slider
+  // Text editing sub-mode
+  const [textEditPos, setTextEditPos] = useState<{ x: number; y: number } | null>(null);
+  const [textEditValue, setTextEditValue] = useState('');
+  const [textColor, setTextColor] = useState('#ec4899');
+  const [textBgEnabled, setTextBgEnabled] = useState(true);
+  const [showAnimateSheet, setShowAnimateSheet] = useState(() => {
+    // Auto-open if resuming a processing animation
+    return !!(initialAnimation?.status === 'processing' && initialAnimation?.taskId);
+  });
+  // Animation state: lifted from AnimateSheet so it persists across GUI↔CUI switches
+  const [animationState, setAnimationState] = useState<AnimationState | null>(() => {
+    if (initialAnimation) {
+      if (initialAnimation.status === 'completed' && initialAnimation.videoUrl) {
+        return {
+          imageUrls: initialAnimation.snapshotUrls,
+          prompt: initialAnimation.prompt,
+          taskId: null,
+          videoUrl: initialAnimation.videoUrl,
+          status: 'done',
+          error: null,
+          duration: 10,
+          pollSeconds: 0,
+        };
+      }
+      if (initialAnimation.status === 'processing' && initialAnimation.taskId) {
+        return {
+          imageUrls: initialAnimation.snapshotUrls,
+          prompt: initialAnimation.prompt,
+          taskId: initialAnimation.taskId,
+          videoUrl: null,
+          status: 'polling',
+          error: null,
+          duration: 10,
+          pollSeconds: 0,
+        };
+      }
+    }
+    return null;
+  });
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(AGENT_GREETING);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
+  const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
@@ -248,13 +341,22 @@ export default function Editor({
   }, [draftParentIndex, previewingTipIndex, snapshots]);
 
   // Timeline: committed snapshots with the virtual draft inserted right after its parent
+  // + optional video sentinel at the end
   const timeline = useMemo(() => {
     const base = snapshots.map((s) => s.image);
     if (draftImage !== null && draftParentIndex !== null) {
       base.splice(draftParentIndex + 1, 0, draftImage);
     }
+    if (animationState?.status === 'done' && animationState.videoUrl) {
+      base.push('__VIDEO__');
+    }
     return base;
-  }, [snapshots, draftImage, draftParentIndex]);
+  }, [snapshots, draftImage, draftParentIndex, animationState?.status, animationState?.videoUrl]);
+
+  // Video entry: last item in timeline when video is done
+  const hasVideo = animationState?.status === 'done' && !!animationState.videoUrl;
+  const videoTimelineIndex = hasVideo ? timeline.length - 1 : -1;
+  const isViewingVideo = hasVideo && viewIndex === videoTimelineIndex;
 
   // Draft occupies the slot immediately after its parent snapshot
   const isViewingDraft = isDraft && draftParentIndex !== null && viewIndex === draftParentIndex + 1;
@@ -372,6 +474,9 @@ export default function Editor({
 
   // Open CUI with hero animation (canvas → PiP)
   const openCUI = useCallback(() => {
+    // Desktop: CUI panel is always visible, no hero animation needed
+    if (isDesktop) return;
+
     const el = canvasAreaRef.current;
     const src = timeline[viewIndex];
     if (el && src) {
@@ -417,7 +522,7 @@ export default function Editor({
       setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
     }
     setViewMode('cui');
-  }, [timeline, viewIndex]);
+  }, [timeline, viewIndex, isDesktop]);
 
   // Handle PiP tap: hero animation (PiP → canvas), then trigger GUI return
   const handlePipTap = useCallback((pipRect: DOMRect) => {
@@ -458,8 +563,9 @@ export default function Editor({
       timestamp: Date.now(),
     }]);
 
-    const image = tipImage || snapshotsRef.current[viewIndexRef.current]?.image || '';
-    const imageBase64 = image ? await ensureBase64(image) : '';
+    // Prefer URL for API calls — server handles both URL and base64
+    const snapForReaction = snapshotsRef.current[viewIndexRef.current];
+    const imageBase64 = tipImage || getImageForApi(snapForReaction) || '';
 
     try {
       await streamAgent(
@@ -514,8 +620,8 @@ export default function Editor({
     imageInput: string,
     aspectRatio?: string,
   ) => {
-    // Ensure we have base64 for the API
-    const imageBase64 = await ensureBase64(imageInput);
+    // imageInput can be URL (preferred, tiny payload) or base64 — server handles both
+    const imageForApi = imageInput;
 
     // Mark as generating
     setSnapshots((prev) => prev.map((s) => {
@@ -530,7 +636,7 @@ export default function Editor({
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageBase64, editPrompt, aspectRatio }),
+        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio }),
         signal: previewAbortRef.current.signal,
       });
 
@@ -563,12 +669,48 @@ export default function Editor({
     }
   }, [onUpdateTips]);
 
+  // Shared helper: handle a tip SSE event (partial or complete) for a given snapshot
+  const handleTipEvent = useCallback((
+    tip: Tip,
+    snapshotId: string,
+    shouldPreview: (tip: Tip) => boolean,
+    imageBase64ForPreview?: string,
+  ) => {
+    if (!tip.label || !tip.category) return;
+    if (!tip.editPrompt) {
+      // Partial tip: label+desc ready, editPrompt still streaming — show immediately
+      setSnapshots((prev) => prev.map((s) => {
+        if (s.id !== snapshotId) return s;
+        if (s.tips.some(t => t.label === tip.label)) return s;
+        return { ...s, tips: [...s.tips, { ...tip, previewStatus: 'none' }] };
+      }));
+    } else {
+      // Complete tip: upsert by label (updates partial if exists, adds new otherwise)
+      const doPreview = shouldPreview(tip);
+      setSnapshots((prev) => prev.map((s) => {
+        if (s.id !== snapshotId) return s;
+        const idx = s.tips.findIndex(t => t.label === tip.label);
+        if (idx >= 0) {
+          const newTips = [...s.tips];
+          newTips[idx] = { ...newTips[idx], editPrompt: tip.editPrompt, previewStatus: doPreview ? 'pending' : 'none', aspectRatio: tip.aspectRatio };
+          return { ...s, tips: newTips };
+        }
+        return { ...s, tips: [...s.tips, { ...tip, previewStatus: doPreview ? 'pending' : 'none' }] };
+      }));
+      if (doPreview && imageBase64ForPreview) {
+        generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64ForPreview, tip.aspectRatio);
+      }
+    }
+  }, [generatePreviewForTip]);
+
   // Fetch tips via 3 parallel calls to Claude (fast, ~2-3s vs Gemini ~15s)
-  // previewMode: 'full' = all tips get preview; 'selective' = 1 enhance + 1 wild; 'none' = no previews
+  // previewMode: 'full' = all tips get preview; 'none' = no auto-previews
+  // autoPreviewCategory: if set, auto-preview tips in this category (used after commit)
   const fetchTipsForSnapshot = useCallback((
     snapshotId: string,
     imageInput: string,
-    previewMode: 'full' | 'selective' | 'none' = 'full',
+    previewMode: 'full' | 'none' = 'full',
+    autoPreviewCategory?: string,
   ) => {
     setIsTipsFetching(true);
     previewDoneBaselineRef.current = 0;
@@ -579,11 +721,11 @@ export default function Editor({
 
     const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
     let completedCount = 0;
-    const previewGenerated: Record<string, number> = { enhance: 0, wild: 0 };
     const fetchStart = Date.now();
 
     const fetchCategory = async (category: string) => {
-      const imageBase64 = await ensureBase64(imageInput);
+      // imageInput can be URL or base64 — server handles both
+      const imageForApi = imageInput;
       const MAX_RETRIES = 2;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
@@ -591,7 +733,7 @@ export default function Editor({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              image: imageBase64,
+              image: imageForApi,
               category,
               metadata: snapshotsRef.current.find(s => s.id === snapshotId)?.metadata,
             }),
@@ -615,43 +757,11 @@ export default function Editor({
                 if (payload === '[DONE]') break;
                 try {
                   const tip = JSON.parse(payload) as Tip;
-                  if (tip.label && tip.category) {
-                    if (!tip.editPrompt) {
-                      // Partial tip: label+desc ready, editPrompt still streaming — show immediately
-                      setSnapshots((prev) => prev.map((s) => {
-                        if (s.id !== snapshotId) return s;
-                        if (s.tips.some(t => t.label === tip.label)) return s;
-                        return { ...s, tips: [...s.tips, { ...tip, previewStatus: 'none' }] };
-                      }));
-                    } else {
-                      // Complete tip: upsert by label (updates partial if exists, adds new otherwise)
-                      const shouldPreview = (() => {
-                        if (previewMode === 'none') return false;
-                        if (previewMode === 'full') return true;
-                        const cat = tip.category as string;
-                        if ((cat === 'enhance' || cat === 'wild') && previewGenerated[cat] === 0) {
-                          previewGenerated[cat]++;
-                          return true;
-                        }
-                        return false;
-                      })();
-
-                      setSnapshots((prev) => prev.map((s) => {
-                        if (s.id !== snapshotId) return s;
-                        const idx = s.tips.findIndex(t => t.label === tip.label);
-                        if (idx >= 0) {
-                          const newTips = [...s.tips];
-                          newTips[idx] = { ...newTips[idx], editPrompt: tip.editPrompt, previewStatus: shouldPreview ? 'pending' : 'none', aspectRatio: tip.aspectRatio };
-                          return { ...s, tips: newTips };
-                        }
-                        return { ...s, tips: [...s.tips, { ...tip, previewStatus: shouldPreview ? 'pending' : 'none' }] };
-                      }));
-
-                      if (shouldPreview) {
-                        generatePreviewForTip(snapshotId, tip.editPrompt, imageBase64, tip.aspectRatio);
-                      }
-                    }
-                  }
+                  handleTipEvent(tip, snapshotId, (t) => {
+                    if (previewMode === 'full') return true;
+                    if (autoPreviewCategory && t.category === autoPreviewCategory) return true;
+                    return false;
+                  }, imageForApi);
                 } catch { /* skip malformed */ }
               }
             }
@@ -665,6 +775,7 @@ export default function Editor({
       completedCount++;
       if (completedCount === categories.length) {
         setIsTipsFetching(false);
+        setCommittedCategory(null);
         if (onUpdateTips) {
           setSnapshots((prev) => {
             const snap = prev.find(s => s.id === snapshotId);
@@ -704,7 +815,8 @@ export default function Editor({
 
     const doFetch = async () => {
       try {
-        const imageBase64 = await ensureBase64(imageInput);
+        // imageInput can be URL or base64 — server handles both
+        const imageForApi = imageInput;
         const snap = snapshotsRef.current.find(s => s.id === snapshotId);
         const existingLabels = snap?.tips
           .filter(t => t.category === category)
@@ -713,7 +825,7 @@ export default function Editor({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            image: imageBase64,
+            image: imageForApi,
             category,
             count: 2,
             metadata: snap?.metadata,
@@ -739,14 +851,7 @@ export default function Editor({
               if (payload === '[DONE]') break;
               try {
                 const tip = JSON.parse(payload) as Tip;
-                if (tip.label && tip.category && tip.editPrompt) {
-                  tip.previewStatus = 'none';
-                  setSnapshots((prev) => prev.map((s) => {
-                    if (s.id !== snapshotId) return s;
-                    if (s.tips.some(t => t.label === tip.label)) return s;
-                    return { ...s, tips: [...s.tips, tip] };
-                  }));
-                }
+                handleTipEvent(tip, snapshotId, () => false);
               } catch { /* skip malformed */ }
             }
           }
@@ -855,7 +960,7 @@ export default function Editor({
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[]) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string) => {
     // Map timeline index → snapshot index; null means we're at the draft slot
     const snapIdx = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
     let currentImage = snapIdx !== null ? snapshotsRef.current[snapIdx]?.image : undefined;
@@ -866,11 +971,23 @@ export default function Editor({
         || snapshotsRef.current[draftParentIndexRef.current]?.image;
       contextSnapshotIndex = draftParentIndexRef.current;
     }
-    if (!currentImage || !projectId) return;
+    // Fallback to last snapshot when viewing video entry
+    if (!currentImage) {
+      currentImage = snapshotsRef.current[snapshotsRef.current.length - 1]?.image;
+      contextSnapshotIndex = snapshotsRef.current.length - 1;
+    }
+    if (!projectId) return;
+    // Path 2 (text-only): no image is OK — Agent will generate one
+    if (!currentImage && snapshotsRef.current.length > 0) return;
 
-    const imageBase64 = await ensureBase64(currentImage);
-    // Show attached images in the user message bubble
-    addMessage('user', text, undefined, attachedImages?.length ? attachedImages : undefined);
+    // Prefer URL (tiny payload) over base64 for API calls — server handles both
+    // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
+    const snapForApi = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
+    const rawImage = snapForApi ? getImageForApi(snapForApi) : (currentImage || '');
+    const imageForApi = overrideImage
+      || (rawImage.startsWith('data:') ? await compressBase64(rawImage) : rawImage);
+    // Show attached/annotated images in the user message bubble
+    addMessage('user', text, undefined, overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
       id: assistantMsgId,
@@ -879,8 +996,8 @@ export default function Editor({
       timestamp: Date.now(),
     }]);
 
-    // Auto-switch to CUI
-    setViewMode('cui');
+    // Auto-switch to CUI (mobile only — desktop CUI panel is always visible)
+    if (!isDesktop) setViewMode('cui');
     setIsAgentActive(true);
     setAgentStatus('Agent 正在思考...');
     agentAbortRef.current = new AbortController();
@@ -938,13 +1055,12 @@ export default function Editor({
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
-    const originalImageBase64 = originalSnapshot?.image
-      ? await ensureBase64(originalSnapshot.image)
-      : undefined;
+    const rawOriginal = originalSnapshot ? getImageForApi(originalSnapshot) : undefined;
+    const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64(rawOriginal) : rawOriginal;
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageBase64, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
         {
           onStatus: (status) => setAgentStatus(status),
           onNewTurn: () => {
@@ -973,7 +1089,9 @@ export default function Editor({
               messageId: currentMsgId,
             };
             setSnapshots((prev) => [...prev, newSnapshot]);
-            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length);
+            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
+              setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+            });
             cacheImage(`snap:${snapId}`, imageData);
             fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
             setAgentStatus('图片已生成');
@@ -1050,6 +1168,89 @@ export default function Editor({
     }
   }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser]);
 
+  // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
+  const animPromptInFlightRef = useRef(false);
+  const generateAnimationPrompt = useCallback(async () => {
+    const imageUrls = animationState?.imageUrls;
+    if (!projectId || !imageUrls?.length) return;
+    if (isAgentActiveRef.current || animPromptInFlightRef.current) return;
+    animPromptInFlightRef.current = true;
+
+    const n = imageUrls.length;
+    const imageListText = imageUrls.map((_: string, i: number) => `<<<image_${i + 1}>>>`).join('、');
+    const prompt = `[视频动画模式] 为以下 ${n} 张照片创作视频故事脚本（图片引用：${imageListText}）。只输出脚本内容，不需要用户确认。`;
+
+    const userMsgId = generateId();
+    const assistantMsgId = generateId();
+    setMessages((prev) => [
+      ...prev,
+      { id: userMsgId, role: 'user' as const, content: '✨ 帮我把这些照片做成一段视频', timestamp: Date.now() },
+      { id: assistantMsgId, role: 'assistant' as const, content: '', timestamp: Date.now() },
+    ]);
+
+    // Stay in GUI — Agent runs in background
+    setAnimationState(prev => prev ? { ...prev, status: 'generating_prompt', prompt: '' } : prev);
+    setIsAgentActive(true);
+    setAgentStatus('正在创作视频故事...');
+    agentAbortRef.current = new AbortController();
+
+    let scriptText = '';
+    let currentMsgId = assistantMsgId;
+
+    // Use URL for context image (avoid base64 upload overhead)
+    const contextImageUrl = snapshotsRef.current[0]?.imageUrl || snapshotsRef.current[0]?.image || '';
+
+    try {
+      await streamAgent(
+        {
+          prompt,
+          image: contextImageUrl,
+          projectId,
+          animationImageUrls: imageUrls,
+          // Pass URLs directly — Bedrock fetches them server-side (much faster than uploading base64)
+          animationImages: imageUrls,
+        },
+        {
+          onStatus: (s) => setAgentStatus(s),
+          onNewTurn: () => {
+            const newId = generateId();
+            currentMsgId = newId;
+            setMessages((prev) => [...prev, { id: newId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
+          },
+          onContent: (delta) => {
+            scriptText += delta;
+            // Stream to CUI message
+            const id = currentMsgId;
+            setMessages((prev) => prev.map((m) => m.id === id ? { ...m, content: m.content + delta } : m));
+            // Stream to animationState.prompt (shown in AnimateSheet textarea)
+            setAnimationState(prev => prev ? { ...prev, prompt: scriptText } : prev);
+          },
+          onAnimationTask: () => {}, // Agent should not call generate_animation anymore
+          onDone: () => {
+            setAgentStatus('脚本已就绪');
+            setAnimationState(prev => prev ? { ...prev, status: 'ready' } : prev);
+            // Persist messages
+            setMessages((prev) => {
+              const msg = prev.find(m => m.id === assistantMsgId);
+              if (msg?.content) onSaveMessage?.(msg);
+              return prev;
+            });
+          },
+          onError: (msg) => {
+            console.error('Animation prompt generation failed:', msg);
+            setAnimationState(prev => prev ? { ...prev, status: 'error', error: '脚本生成失败，请重试' } : prev);
+          },
+        },
+        agentAbortRef.current.signal,
+      );
+    } catch (err) {
+      console.error('Animation prompt failed:', err);
+      setAnimationState(prev => prev ? { ...prev, status: 'error', error: '脚本生成失败' } : prev);
+    } finally {
+      setIsAgentActive(false);
+      animPromptInFlightRef.current = false;
+    }
+  }, [projectId, animationState?.imageUrls, onSaveMessage]);
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
@@ -1075,16 +1276,27 @@ export default function Editor({
       messageId: assistantMsg.id,
     };
     setSnapshots((prev) => [...prev, newSnapshot]);
-    onSaveSnapshot?.(newSnapshot, snapshots.length);
+    onSaveSnapshot?.(newSnapshot, snapshots.length, (url) => {
+      setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+    });
     cacheImage(`snap:${snapId}`, newSnapshot.image);
 
-    // Clear draft and jump to the newly committed snapshot (appended at end)
-    setViewIndex(snapshots.length); // snapshots.length = index of new snapshot after append
+    // Clear draft and jump to the newly committed snapshot
+    setViewIndex(snapshots.length);
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
+    setCommittedCategory(tip.category as Tip['category']);
 
-    // Fetch new tips — selective preview (1 enhance + 1 wild) after commit
-    fetchTipsForSnapshot(snapId, tip.previewImage, 'selective');
+    // Fetch new tips — auto-preview only the committed tip's category
+    // Use URL if available (fast, ~100 bytes), otherwise compress base64 to avoid ~3MB per request × 4
+    const committedImage = tip.previewImage;
+    if (committedImage.startsWith('http')) {
+      fetchTipsForSnapshot(snapId, committedImage, 'none', tip.category);
+    } else {
+      compressBase64(committedImage, 600_000).then(compressed => {
+        fetchTipsForSnapshot(snapId, compressed, 'none', tip.category);
+      });
+    }
 
     // Trigger agent CUI reaction to the committed tip
     const tipSnapshot = { emoji: tip.emoji, label: tip.label, desc: tip.desc, category: tip.category };
@@ -1113,8 +1325,8 @@ export default function Editor({
       ? (draftParentIndex ?? 0)
       : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0);
 
-    // If tip has no preview yet ('none'), trigger generation only — don't select as draft yet
-    if (!tip.previewImage && (tip.previewStatus === 'none' || !tip.previewStatus)) {
+    // If tip has no preview yet ('none' or 'error'), trigger generation — don't select as draft yet
+    if (!tip.previewImage && (tip.previewStatus === 'none' || tip.previewStatus === 'error' || !tip.previewStatus)) {
       const snap = snapshots[currentSnapIdx];
       if (snap && tip.editPrompt) {
         previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
@@ -1124,7 +1336,7 @@ export default function Editor({
             tips: s.tips.map(t => t.label === tip.label ? { ...t, previewStatus: 'pending' } : t),
           } : s
         ));
-        generatePreviewForTip(snap.id, tip.editPrompt, snap.image, tip.aspectRatio);
+        generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio);
       }
       return; // don't create draft until image is ready
     }
@@ -1154,8 +1366,19 @@ export default function Editor({
     if (!snap) return;
     // Baseline = done count right now, so x/y resets to 0/1 (or 0/N for multi-retry)
     previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
-    generatePreviewForTip(snap.id, tip.editPrompt, snap.image, tip.aspectRatio);
+    generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio);
   }, [isViewingDraft, draftParentIndex, viewIndex, snapshots, generatePreviewForTip]);
+
+  // Generate previews for all tips in a category (triggered by category tab click)
+  const generatePreviewsForCategory = useCallback((category: string) => {
+    const snap = snapshots[tipsSourceIndex];
+    if (!snap) return;
+    const imageForApi = getImageForApi(snap);
+    const pending = snap.tips.filter(t => t.category === category && t.editPrompt && t.previewStatus === 'none');
+    if (pending.length === 0) return;
+    previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
+    pending.forEach(t => generatePreviewForTip(snap.id, t.editPrompt, imageForApi, t.aspectRatio));
+  }, [snapshots, tipsSourceIndex, generatePreviewForTip]);
 
   // Previous image for long-press compare
   const previousImage = useMemo(() => {
@@ -1212,7 +1435,9 @@ export default function Editor({
         const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
         setSnapshots([newSnapshot]);
         snapshotsRef.current = [newSnapshot];
-        fetchTipsForSnapshot(snapId, base64, 'full');
+        // Tips only need to "see" the image, not generate from it — use smaller version
+        const tipsImage = await compressBase64(base64, 600_000);
+        fetchTipsForSnapshot(snapId, tipsImage, 'full');
         tipsStarted = true;
       } catch {
         // HEIC or other format — fall through to server upload
@@ -1234,11 +1459,15 @@ export default function Editor({
       const newSnapshot: Snapshot = { id: snapId, image: base64!, tips: [], messageId: '', metadata };
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
-      onSaveSnapshot?.(newSnapshot, 0);
+      onSaveSnapshot?.(newSnapshot, 0, (url) => {
+        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+      });
       cacheImage(`snap:${snapId}`, base64!);
       // Only start tips if not already started (HEIC path)
       if (!tipsStarted) {
-        fetchTipsForSnapshot(snapId, base64!, 'full');
+        compressBase64(base64!, 600_000).then(compressed => {
+          fetchTipsForSnapshot(snapId, compressed, 'full');
+        });
       }
       // Auto-analyze the uploaded photo
       runAutoAnalysis(snapId, base64!);
@@ -1265,6 +1494,9 @@ export default function Editor({
   }, []);
 
   const pendingHandled = useRef(false);
+  const pendingPromptHandled = useRef(false);
+
+  // Path 1 (image only) or Path 3 (image + prompt): handle pendingImage
   useEffect(() => {
     if (pendingImage && !pendingHandled.current) {
       pendingHandled.current = true;
@@ -1274,13 +1506,88 @@ export default function Editor({
       snapshotsRef.current = [newSnapshot];
       prevTimelineLen.current = 1;
       setViewIndex(0);
-      onSaveSnapshot?.(newSnapshot, 0);
+      onSaveSnapshot?.(newSnapshot, 0, (url) => {
+        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+      });
       cacheImage(`snap:${snapId}`, pendingImage);
-      fetchTipsForSnapshot(snapId, pendingImage);
-      // Auto-analyze the uploaded photo
-      runAutoAnalysis(snapId, pendingImage);
+
+      // Tips only need to "see" the image — use smaller version
+      const tipsImagePromise = compressBase64(pendingImage, 600_000);
+
+      if (pendingPrompt) {
+        // Path 3: image + prompt → CUI with prompt as first message
+        pendingPromptHandled.current = true;
+        // Still fetch tips in background
+        tipsImagePromise.then(img => fetchTipsForSnapshot(snapId, img));
+        // Enter CUI and send the prompt (mobile only — desktop CUI panel is always visible)
+        setTimeout(() => {
+          if (!isDesktop) setViewMode('cui');
+          handleAgentRequest(pendingPrompt);
+        }, 200);
+      } else {
+        // Path 1: image only → original flow
+        tipsImagePromise.then(img => fetchTipsForSnapshot(snapId, img));
+        runAutoAnalysis(snapId, pendingImage);
+      }
     }
-  }, [pendingImage, pendingMetadata, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
+  }, [pendingImage, pendingMetadata, pendingPrompt, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest]);
+
+  // Path 2: text only (no image) → CUI mode, send prompt to Agent
+  useEffect(() => {
+    if (pendingPrompt && !pendingImage && !pendingPromptHandled.current) {
+      pendingPromptHandled.current = true;
+      if (!isDesktop) setViewMode('cui');
+      // Small delay to ensure CUI is mounted
+      setTimeout(() => handleAgentRequest(pendingPrompt), 200);
+    }
+  }, [pendingPrompt, pendingImage, handleAgentRequest, isDesktop]);
+
+  // Pick up late-arriving initialAnimation (from Supabase fetch after cache-init)
+  const animationInitRef = useRef(!!initialAnimation);
+  useEffect(() => {
+    if (animationInitRef.current || !initialAnimation) return;
+    animationInitRef.current = true;
+    if (initialAnimation.status === 'completed' && initialAnimation.videoUrl) {
+      setAnimationState({
+        imageUrls: initialAnimation.snapshotUrls,
+        prompt: initialAnimation.prompt,
+        taskId: null,
+        videoUrl: initialAnimation.videoUrl,
+        status: 'done',
+        error: null, duration: 10, pollSeconds: 0,
+      });
+    } else if (initialAnimation.status === 'processing' && initialAnimation.taskId) {
+      setAnimationState({
+        imageUrls: initialAnimation.snapshotUrls,
+        prompt: initialAnimation.prompt,
+        taskId: initialAnimation.taskId,
+        videoUrl: null,
+        status: 'polling',
+        error: null, duration: 10, pollSeconds: 0,
+      });
+      setShowAnimateSheet(true);
+    }
+  }, [initialAnimation]);
+
+  // Auto-initialize animationState when user swipes to video entry
+  useEffect(() => {
+    if (isViewingVideo && !animationState) {
+      const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+      const imageUrls = allUrls.length <= 7
+        ? allUrls
+        : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
+      setAnimationState({
+        imageUrls,
+        prompt: '',
+        taskId: null,
+        videoUrl: null,
+        status: 'idle',
+        error: null,
+        duration: 10,
+        pollSeconds: 0,
+      });
+    }
+  }, [isViewingVideo, animationState, snapshots]);
 
   // Auto-name existing projects that still have a default title (runs once on mount)
   useEffect(() => {
@@ -1327,7 +1634,7 @@ export default function Editor({
     if (generating > 0) {
       const x = Math.max(0, done - previewDoneBaselineRef.current);
       const y = x + generating;
-      setAgentStatus(`正使用nano banana pro生成图片 ${x}/${y}`);
+      setAgentStatus(`正使用nano banana 2生成图片 ${x}/${y}`);
     } else if (settled === total && !isAgentActive) {
       setAgentStatus(prev => prev.includes('nano banana') ? AGENT_GREETING : prev);
     }
@@ -1346,45 +1653,143 @@ export default function Editor({
   }, [snapshots, tipsSourceIndex, isTipsFetching, triggerPreviewsReadyNotification]);
 
 
+
+  // When animationState transitions to 'done' (video completed), add a CUI message with the video
+  const prevAnimStatusRef = useRef(animationState?.status);
+  useEffect(() => {
+    const prev = prevAnimStatusRef.current;
+    const curr = animationState?.status;
+    prevAnimStatusRef.current = curr;
+    // Regenerate: done → idle — keep sheet open
+    if (prev === 'done' && curr === 'idle') {
+      setShowAnimateSheet(true);
+    }
+    if (prev && prev !== 'done' && curr === 'done' && animationState?.videoUrl) {
+      // Close the sheet — from now on it only shows via isViewingVideo
+      setShowAnimateSheet(false);
+      // Check if a video message already exists (from handleAnimationCUI polling)
+      const alreadyHasVideo = messages.some(m => m.content?.includes('.mp4'));
+      if (!alreadyHasVideo) {
+        const videoMsg: Message = {
+          id: generateId(),
+          role: 'assistant',
+          content: `🎬 视频生成完成！\n${animationState.videoUrl}`,
+          timestamp: Date.now(),
+        };
+        setMessages(prev => [...prev, videoMsg]);
+        onSaveMessage?.(videoMsg);
+        setAgentStatus('视频已生成');
+      }
+      // Auto-navigate to the video timeline entry
+      // timeline length will increase by 1 (video sentinel added), so new last index
+      const newVideoIdx = snapshotsRef.current.length + (draftParentIndexRef.current !== null ? 1 : 0);
+      setViewIndex(newVideoIdx);
+    }
+  }, [animationState?.status, animationState?.videoUrl, messages, onSaveMessage]);
+
+  // Increment pollSeconds while animation is polling (runs even when sheet is closed)
+  useEffect(() => {
+    if (animationState?.status !== 'polling') return;
+    const timer = setInterval(() => {
+      setAnimationState(prev => prev ? { ...prev, pollSeconds: prev.pollSeconds + 1 } : prev);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [animationState?.status]);
+
+  // Update StatusBar with video rendering progress
+  useEffect(() => {
+    if (animationState?.status === 'polling') {
+      const m = Math.floor(animationState.pollSeconds / 60);
+      const s = animationState.pollSeconds % 60;
+      setAgentStatus(`视频渲染中 ${m}:${s.toString().padStart(2, '0')}`);
+    } else if (animationState?.status === 'submitting') {
+      setAgentStatus('提交视频任务...');
+    } else if (animationState?.status === 'generating_prompt') {
+      setAgentStatus('正在写视频脚本...');
+    }
+  }, [animationState?.status, animationState?.pollSeconds]);
+
+  const showSaveToast = useCallback(() => {
+    setSaveToast(true);
+    setTimeout(() => setSaveToast(false), 2000);
+  }, []);
+
   const handleDownload = useCallback(async () => {
+    // Video download — proxy through our API to avoid CORS
+    if (isViewingVideo && animationState?.videoUrl) {
+      const videoSrc = animationState.videoUrl;
+      const filename = `makaron-video-${Date.now()}.mp4`;
+      setIsSaving(true);
+      try {
+        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}`;
+        const res = await fetch(proxyUrl);
+        const blob = await res.blob();
+        const file = new File([blob], filename, { type: 'video/mp4' });
+        // Try native share (iOS/Android) — check canShare first since large videos may be unsupported
+        if (navigator.share && navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+          await navigator.share({ files: [file] });
+          setIsSaving(false);
+          showSaveToast();
+          return;
+        }
+        // Fallback: trigger download via blob URL (works on desktop + iOS when share fails)
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+        setIsSaving(false);
+        showSaveToast();
+      } catch {
+        setIsSaving(false);
+        // Last resort: open video URL directly (iOS will show video player, user can long-press to save)
+        window.open(videoSrc, '_blank');
+      }
+      return;
+    }
+
+    // Image download
     const img = timeline[viewIndex];
     if (!img) return;
     const filename = `ai-edited-${Date.now()}.jpg`;
+    setIsSaving(true);
 
-    // Convert base64 data URL to Blob
     try {
       const res = await fetch(img);
       const blob = await res.blob();
 
-      // Use Web Share API on mobile for Camera Roll access
       if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
         const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
         await navigator.share({ files: [file] });
+        setIsSaving(false);
+        showSaveToast();
         return;
       }
 
-      // Desktop fallback: download link
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
+      setIsSaving(false);
+      showSaveToast();
     } catch {
-      // Final fallback
+      setIsSaving(false);
       const link = document.createElement('a');
       link.href = img;
       link.download = filename;
       link.click();
     }
-  }, [timeline, viewIndex]);
+  }, [timeline, viewIndex, isViewingVideo, animationState?.videoUrl, showSaveToast]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string) => {
     const snapIdx = snapshots.findIndex(s => s.messageId === messageId);
     if (snapIdx >= 0) setViewIndex(timelineFromSnap(snapIdx, draftParentIndex));
-    setViewMode('gui');
-  }, [snapshots, draftParentIndex]);
+    if (!isDesktop) setViewMode('gui');
+  }, [snapshots, draftParentIndex, isDesktop]);
 
   // Track whether we've pushed a CUI history state that hasn't been consumed yet.
   // We need this because setViewMode('gui') can be called via two paths:
@@ -1394,7 +1799,9 @@ export default function Editor({
 
   // Intercept browser/iOS back gesture when CUI is open:
   // push a history state on enter, listen for popstate to go back to GUI.
+  // Desktop: no history management needed (CUI is always visible as side panel)
   useEffect(() => {
+    if (isDesktop) return;
     if (viewMode === 'cui') {
       window.history.pushState({ makaronCui: true }, '');
       hasCuiHistoryState.current = true;
@@ -1411,10 +1818,10 @@ export default function Editor({
       hasCuiHistoryState.current = false;
       window.history.back(); // listener already removed by cleanup above — silently pops
     }
-  }, [viewMode]);
+  }, [viewMode, isDesktop]);
 
   return (
-    <div className="h-dvh bg-black relative overflow-hidden flex flex-col">
+    <div className={`h-dvh bg-black relative overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}>
       <input
         ref={fileInputRef}
         type="file"
@@ -1439,9 +1846,9 @@ export default function Editor({
         }}
       />
 
-      {/* GUI mode */}
-      {viewMode === 'gui' && (
-        <>
+      {/* GUI mode — always visible on desktop, toggled on mobile */}
+      {(isDesktop || viewMode === 'gui') && (
+        <div className={isDesktop ? 'flex-1 min-w-0 flex flex-col relative' : 'contents'}>
           {/* Canvas area (fills remaining space) */}
           <div
             ref={(el) => {
@@ -1454,19 +1861,28 @@ export default function Editor({
             className="flex-1 relative min-h-0 overflow-hidden"
           >
             {timeline.length === 0 ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors"
-                >
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <circle cx="9" cy="9" r="2" />
-                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                  </svg>
-                  <span className="text-lg font-medium">Tap to upload a photo</span>
-                </button>
-              </div>
+              isAgentActive ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-2 border-fuchsia-400 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-white/50 text-sm">AI 正在生成图片...</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors"
+                  >
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="9" cy="9" r="2" />
+                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                    </svg>
+                    <span className="text-lg font-medium">Tap to upload a photo</span>
+                  </button>
+                </div>
+              )
             ) : (
               <ImageCanvas
                 timeline={timeline}
@@ -1477,8 +1893,54 @@ export default function Editor({
                 draftTimelineIndex={draftParentIndex !== null ? draftParentIndex + 1 : undefined}
                 onDismissDraft={dismissDraft}
                 previousImage={previousImage}
+                isDesktop={isDesktop}
+                annotationMode={annotationMode}
+                annotationTool={annotationTool}
+                annotationEntries={annotationEntries}
+                onAddAnnotationEntry={(entry) => setAnnotationEntries(prev => [...prev, entry])}
+                onUpdateAnnotationEntry={(id, data) => setAnnotationEntries(prev => prev.map(e => e.id === id ? { ...e, data: { ...e.data, ...data } } : e))}
+                onDeleteAnnotationEntry={(id) => setAnnotationEntries(prev => prev.filter(e => e.id !== id))}
+                annotationColor={annotationColor}
+                annotationLineWidth={(() => {
+                  const base = 1408;
+                  const t = annotationBrushSize / 100; // 0..1
+                  // Brush: 0.006–0.07, Rect: thinner (0.004–0.035)
+                  const scale = annotationTool === 'rect' ? 0.004 + t * 0.031 : 0.006 + t * 0.064;
+                  return Math.max(4, Math.round(base * scale));
+                })()}
+                onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
+                textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
+                onAnimate={snapshots.length >= 3 ? () => {
+                  if (hasVideo) {
+                    // Video exists — navigate to it
+                    setViewIndex(videoTimelineIndex);
+                    return;
+                  }
+                  if (!animationState) {
+                    const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+                    const imageUrls = allUrls.length <= 7
+                      ? allUrls
+                      : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
+                    setAnimationState({
+                      imageUrls,
+                      prompt: '',
+                      taskId: null,
+                      videoUrl: null,
+                      status: 'idle',
+                      error: null,
+                      duration: 10,
+                      pollSeconds: 0,
+                    });
+                  }
+                  setShowAnimateSheet(true);
+                } : undefined}
+                hasVideo={hasVideo}
+                isVideoEntry={isViewingVideo}
+                videoUrl={animationState?.videoUrl}
               />
             )}
+
+            {/* TODO: Floating text input for annotation text tool — uncomment when text editing flow is ready */}
 
             {/* Top toolbar */}
             {snapshots.length > 0 && (
@@ -1487,7 +1949,7 @@ export default function Editor({
                   {onBack && (
                     <button
                       onClick={onBack}
-                      className="text-white/80 hover:text-white p-2"
+                      className="text-white/80 hover:text-white p-2 cursor-pointer"
                     >
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -1496,21 +1958,54 @@ export default function Editor({
                   )}
                   <button
                     onClick={() => newProjectFileInputRef.current?.click()}
-                    className="text-white/80 hover:text-white p-2"
+                    className="text-white/80 hover:text-white p-2 cursor-pointer"
                   >
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 5v14M5 12h14" />
                     </svg>
                   </button>
+                  {/* Annotation (paintbrush) toggle */}
+                  {!isViewingVideo && timeline.length > 0 && (
+                    <button
+                      onClick={() => {
+                        if (annotationMode) {
+                          setAnnotationMode(false);
+                          setAnnotationEntries([]);
+                        } else {
+                          setAnnotationMode(true);
+                          setAnnotationTool('brush');
+                        }
+                      }}
+                      className={`p-2 cursor-pointer transition-colors ${annotationMode ? 'text-fuchsia-400' : 'text-white/80 hover:text-white'}`}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08" />
+                        <path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {(viewIndex > 0 || isViewingDraft) && (
+                  {(viewIndex > 0 || isViewingDraft || isViewingVideo) && (
                     <button
                       onClick={handleDownload}
-                      className="px-3 py-1.5 rounded-full text-xs font-medium text-white bg-fuchsia-500/20 backdrop-blur-sm border border-fuchsia-500/30"
+                      disabled={isSaving}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all cursor-pointer ${
+                        isSaving
+                          ? 'text-white/50 bg-fuchsia-500/10 border-fuchsia-500/20'
+                          : 'text-white bg-fuchsia-500/20 border-fuchsia-500/30'
+                      }`}
                     >
-                      Save
+                      {isSaving ? (
+                        <span className="flex items-center gap-1.5">
+                          <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Saving
+                        </span>
+                      ) : 'Save'}
                     </button>
                   )}
                 </div>
@@ -1518,51 +2013,169 @@ export default function Editor({
             )}
           </div>
 
-          {/* Bottom bar: Agent status bar (always) + Tips */}
-          {snapshots.length > 0 && (
-            <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
-              <AgentStatusBar
-                statusText={agentStatus}
-                isActive={isAgentActive}
-                onOpenChat={openCUI}
-                isViewingDraft={isViewingDraft}
-              />
-              <TipsBar
-                tips={currentTips}
-                isLoading={isTipsFetching}
-                isEditing={isEditing}
-                onTipClick={handleTipInteraction}
-                onTipCommit={() => commitDraft()}
-                onTipDeselect={dismissDraft}
-                onRetryPreview={handleRetryPreview}
-                previewingIndex={isViewingDraft ? previewingTipIndex : null}
-                onLoadMore={(category) => {
-                  const snap = snapshots[tipsSourceIndex];
-                  if (snap) fetchMoreTipsForCategory(category, snap.id, snap.image);
+          {/* Annotation toolbar — overlays TipsBar like AnimateSheet */}
+          {snapshots.length > 0 && annotationMode && (
+            <div style={{
+              position: isDesktop ? 'absolute' : 'fixed',
+              bottom: 0, left: 0, right: 0,
+              zIndex: 201,
+            }}>
+              <AnnotationToolbar
+                activeTool={annotationTool}
+                onToolChange={(tool) => {
+                  setAnnotationTool(tool);
+                  if (tool === 'text' && !textEditPos) {
+                    setTextEditPos({ x: 704, y: 704 });
+                    setTextEditValue('');
+                  } else if (tool !== 'text') {
+                    setTextEditPos(null);
+                    setTextEditValue('');
+                  }
                 }}
-                loadingMoreCategories={loadingMoreCategories}
+                onUndo={() => setAnnotationEntries(prev => prev.slice(0, -1))}
+                onClear={() => setAnnotationEntries([])}
+                onCancel={() => { setAnnotationMode(false); setAnnotationEntries([]); setTextEditPos(null); }}
+                canUndo={annotationEntries.length > 0}
+                hasEntries={annotationEntries.length > 0}
+                isSending={isAgentActive}
+                onSend={async (text) => {
+                  const baseImage = timeline[viewIndex];
+                  if (!baseImage) return;
+                  const merged = annotationEntries.length > 0
+                    ? await mergeAnnotation(baseImage, annotationEntries)
+                    : baseImage;
+                  const compressed = await compressBase64(merged);
+                  setAnnotationMode(false);
+                  setAnnotationEntries([]);
+                  handleAgentRequest(text || '请根据标注修改图片', undefined, compressed);
+                }}
+                brushSize={annotationBrushSize}
+                onBrushSizeChange={setAnnotationBrushSize}
+                textEditing={!!textEditPos}
+                textColor={textColor}
+                onTextColorChange={setTextColor}
+                textBgEnabled={textBgEnabled}
+                onTextBgToggle={() => setTextBgEnabled(prev => !prev)}
+                onTextDone={() => {
+                  if (textEditPos && textEditValue.trim()) {
+                    const fontSize = Math.round(1408 * 0.05);
+                    setAnnotationEntries(prev => [...prev, {
+                      id: newAnnotationId(),
+                      type: 'text' as const,
+                      color: textColor,
+                      lineWidth: 0,
+                      data: { x: textEditPos.x, y: textEditPos.y, text: textEditValue.trim(), fontSize, textColor, bgColor: textBgEnabled ? '#000' : '' },
+                    }]);
+                  }
+                  setTextEditPos(null);
+                  setTextEditValue('');
+                }}
+                onTextCancel={() => {
+                  setTextEditPos(null);
+                  setTextEditValue('');
+                }}
               />
             </div>
           )}
-        </>
+
+          {/* Bottom bar: tips */}
+          {snapshots.length > 0 && (
+              <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
+                <AgentStatusBar
+                  statusText={agentStatus}
+                  isActive={isAgentActive}
+                  onOpenChat={openCUI}
+                  isViewingDraft={isViewingDraft}
+                  hideChat={isDesktop}
+                />
+                <TipsBar
+                  tips={currentTips}
+                  isLoading={isTipsFetching}
+                  isEditing={isEditing}
+                  onTipClick={handleTipInteraction}
+                  onTipCommit={() => commitDraft()}
+                  onTipDeselect={dismissDraft}
+                  onRetryPreview={handleRetryPreview}
+                  previewingIndex={isViewingDraft ? previewingTipIndex : null}
+                  onLoadMore={(category) => {
+                    const snap = snapshots[tipsSourceIndex];
+                    if (snap) fetchMoreTipsForCategory(category, snap.id, getImageForApi(snap));
+                  }}
+                  onCategorySelect={generatePreviewsForCategory}
+                  loadingMoreCategories={loadingMoreCategories}
+                  isDesktop={isDesktop}
+                  initialCategory={committedCategory ?? undefined}
+                />
+              </div>
+          )}
+
+          {/* Animate Sheet — inside GUI wrapper so it doesn't cover CUI on desktop */}
+          {(showAnimateSheet || isViewingVideo) && projectId && animationState && (
+            <AnimateSheet
+              snapshots={snapshots.filter(s => s.imageUrl || s.image)}
+              projectId={projectId}
+              isDesktop={isDesktop}
+              onClose={() => {
+                setShowAnimateSheet(false);
+                if (isViewingVideo) {
+                  const lastSnapIdx = videoTimelineIndex - 1;
+                  if (lastSnapIdx >= 0) setViewIndex(lastSnapIdx);
+                }
+              }}
+              onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
+              onGeneratePrompt={generateAnimationPrompt}
+              onAbandon={() => {
+                const tid = animationState?.taskId;
+                setAnimationState(prev => prev ? { ...prev, status: 'ready', taskId: null, pollSeconds: 0 } : prev);
+                setAgentStatus(AGENT_GREETING);
+                if (tid && projectId) {
+                  fetch(`/api/animate/${tid}`, { method: 'DELETE' }).catch(() => {});
+                }
+              }}
+              animationState={animationState}
+              onStateChange={(update) => setAnimationState(prev => prev ? { ...prev, ...update } : prev)}
+            />
+          )}
+        </div>
       )}
 
-      {/* CUI mode */}
-      {viewMode === 'cui' && (
+      {/* CUI mode — desktop: side panel (always visible), mobile: fullscreen overlay */}
+      {isDesktop ? (
+        <div className="w-[340px] flex-shrink-0 border-l border-white/[0.08]">
+          <AgentChatView
+            mode="panel"
+            messages={messages}
+            isAgentActive={isAgentActive}
+            agentStatus={agentStatus}
+            currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
+            onSendMessage={(text, imgs) => handleAgentRequest(text, imgs)}
+            onBack={() => {}}
+            onPipTap={() => {}}
+            onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
+            onImageTap={handleImageTap}
+          />
+        </div>
+      ) : viewMode === 'cui' ? (
         <AgentChatView
           messages={messages}
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
-          currentImage={timeline[viewIndex]}
+          currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
           onSendMessage={(text, imgs) => handleAgentRequest(text, imgs)}
-          onBack={() => window.history.back()}
+          onBack={() => {
+            if (snapshots.length === 0 && onBack) {
+              onBack(); // No snapshots (text-only before image generated) → go to projects
+            } else {
+              window.history.back(); // Normal: CUI → GUI
+            }
+          }}
           onPipTap={handlePipTap}
           hidePip={heroAnim !== null}
           onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
         />
-      )}
+      ) : null}
 
       {/* Hero Overlay: animates between canvas rect and PiP rect during GUI↔CUI transition */}
       {heroAnim && (
@@ -1601,6 +2214,24 @@ export default function Editor({
           )}
         </div>
       )}
+
+      {/* Save success toast */}
+      {saveToast && (
+        <div
+          className="fixed top-16 left-1/2 -translate-x-1/2 z-[300] px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-sm text-white text-sm font-medium shadow-lg"
+          style={{ animation: 'fadeInOut 2s ease both' }}
+        >
+          保存成功
+        </div>
+      )}
+      <style>{`
+        @keyframes fadeInOut {
+          0% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+          15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          75% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -1,4 +1,5 @@
-Edit the current photo using a detailed English editPrompt.
+Edit the current photo OR generate a new image from text using a detailed English editPrompt.
+When no photo exists (text-to-image mode), write the editPrompt as a detailed image generation prompt describing the scene, style, lighting, and composition.
 
 --- SKILL PARAMETER ---
 Use `skill` to auto-inject a proven quality template into the prompt. When skill is set,
@@ -36,6 +37,13 @@ Common triggers:
 When useOriginalAsReference=true, Gemini receives:
   Image 1 = current version (edit base — use this for composition, layout, recent changes)
   Image 2 = original photo (reference — use to restore any elements that have drifted: face, colors, background, etc.)
+
+--- RED ANNOTATIONS ---
+The user can draw red marks (freehand lines or rectangles) on the image to point out specific areas.
+When the input image has visible red annotations, the editPrompt MUST reference those marked regions.
+- "Here"/"这里" in the user's message = the red-marked areas
+- Describe the target area by its visual content (e.g. "the building on the left that is circled in red"), not by coordinates
+- The red marks are temporary guides — the output image should NOT contain the red annotations
 
 --- WRITING THE EDITPROMPT ---
 

@@ -8,6 +8,7 @@ export interface AgentStreamCallbacks {
   onNewTurn?: () => void;
   onImage?: (image: string) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
+  onAnimationTask?: (taskId: string) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
 }
@@ -17,6 +18,8 @@ export async function streamAgent(
     prompt: string; image: string; projectId: string;
     originalImage?: string;
     referenceImages?: string[];  // up to 3 user-uploaded reference images
+    animationImageUrls?: string[];  // Supabase Storage URLs for animation mode
+    animationImages?: string[];  // Actual image data (base64 or URL) for Agent vision in animation mode
     analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit';
     tipReaction?: boolean; committedTip?: object; currentTips?: object[];
     tipsTeaser?: boolean; tipsPayload?: object[];
@@ -42,6 +45,7 @@ export async function streamAgent(
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let receivedDone = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -72,10 +76,15 @@ export async function streamAgent(
           case 'tool_call':
             callbacks.onToolCall?.(event.tool, event.input, event.images);
             break;
+          case 'animation_task':
+            callbacks.onAnimationTask?.(event.taskId);
+            break;
           case 'done':
+            receivedDone = true;
             callbacks.onDone?.();
             break;
           case 'error':
+            receivedDone = true;
             callbacks.onError?.(event.message);
             break;
         }
@@ -83,5 +92,10 @@ export async function streamAgent(
         // skip malformed JSON
       }
     }
+  }
+
+  // Stream ended without done/error event (e.g. Vercel timeout, network cut)
+  if (!receivedDone) {
+    callbacks.onError?.('连接中断，请重试');
   }
 }

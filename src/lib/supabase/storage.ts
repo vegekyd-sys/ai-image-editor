@@ -38,13 +38,13 @@ export async function uploadImage(
       })
 
     if (error) {
-      console.error('Storage upload error:', error)
+      console.warn('Storage upload error:', error)
       return null
     }
 
     return getPublicUrl(supabase, path)
   } catch (err) {
-    console.error('uploadImage error:', err)
+    console.warn('uploadImage error:', err)
     return null
   }
 }

@@ -25,9 +25,9 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // getSession() reads from cookie (no network call) — fast for middleware
+  // Using getSession() for performance (reads from cookie, no network round-trip)
   const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
+  const user = session?.user
 
   const { pathname } = request.nextUrl
 

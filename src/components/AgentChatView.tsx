@@ -23,13 +23,13 @@ function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?:
       </button>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2.5">
-          {inputImages && inputImages.length > 0 && (
+          {inputImages && inputImages.filter(img => img && img.length > 10).length > 0 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.25)' }}>
                 传入图片{inputImages.length > 1 ? `（${inputImages.length} 张）` : ''}
               </span>
               <div className="flex gap-2 flex-wrap">
-                {inputImages.map((img, i) => (
+                {inputImages.filter(img => img && img.length > 10).map((img, i) => (
                   <div key={i} className="flex flex-col gap-1">
                     <img
                       src={img}
@@ -86,6 +86,7 @@ interface AgentChatViewProps {
   focusOnOpen?: boolean;
   hidePip?: boolean;
   onInputBarHeight?: (h: number) => void;
+  mode?: 'overlay' | 'panel';
 }
 
 export default function AgentChatView({
@@ -100,6 +101,7 @@ export default function AgentChatView({
   focusOnOpen = false,
   hidePip = false,
   onInputBarHeight,
+  mode = 'overlay',
 }: AgentChatViewProps) {
   const [input, setInput] = useState('');
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
@@ -350,32 +352,37 @@ export default function AgentChatView({
   }, [onImageTap]);
 
 
+  const isPanel = mode === 'panel';
+
   return (
     <div
-      className={`fixed inset-0 z-40 flex flex-col ${
-        isExiting ? 'animate-slide-out-right' : 'animate-slide-in-right'
-      }`}
+      className={isPanel
+        ? 'flex flex-col h-full'
+        : `fixed inset-0 z-40 flex flex-col ${isExiting ? 'animate-slide-out-right' : 'animate-slide-in-right'}`
+      }
       style={{ background: '#0a0a0a' }}
-      onAnimationEnd={handleAnimationEnd}
+      onAnimationEnd={isPanel ? undefined : handleAnimationEnd}
     >
-      {/* ── Back button (absolute overlay, no layout space) ── */}
-      <div
-        ref={headerRef}
-        className="absolute top-0 left-0 z-50 px-3"
-        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
-      >
-        <button
-          onClick={handleBack}
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm hover:bg-white/10 active:bg-white/15 transition-colors"
+      {/* ── Back button (overlay mode only) ── */}
+      {!isPanel && (
+        <div
+          ref={headerRef}
+          className="absolute top-0 left-0 z-50 px-3"
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/80">
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-        </button>
-      </div>
+          <button
+            onClick={handleBack}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm hover:bg-white/10 active:bg-white/15 transition-colors"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/80">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
+      )}
 
-      {/* ── Floating PiP ── */}
-      {currentImage && (
+      {/* ── Floating PiP (overlay mode only) ── */}
+      {!isPanel && currentImage && (
         <div
           className="absolute z-50 rounded-2xl overflow-hidden select-none"
           style={{
@@ -477,7 +484,7 @@ export default function AgentChatView({
       )}
 
       {/* ── Messages ── */}
-      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: `${inputBarH}px` }}>
+      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: isPanel ? '16px' : 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: isPanel ? '0' : `${inputBarH}px` }}>
         {/* Empty state */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 pb-10">
@@ -493,24 +500,24 @@ export default function AgentChatView({
                 <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
               </svg>
             </div>
-            <p className="text-white/25 text-[19px] text-center leading-relaxed max-w-[220px]">
+            <p className={`text-white/25 text-center leading-relaxed max-w-[220px] ${isPanel ? 'text-[14px]' : 'text-[19px]'}`}>
               Tell me what you&apos;d like to do with your photo
             </p>
           </div>
         )}
 
         {/* Message list */}
-        <div className="flex flex-col gap-5">
+        <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
           {messages.map((msg, idx) => (
             <div key={msg.id}>
               {msg.role === 'user' ? (
                 /* User bubble — right-aligned pill */
                 <div className="flex justify-end">
                   <div
-                    className="text-white/90 text-[21px] leading-relaxed max-w-[82%]"
+                    className={`text-white/90 leading-relaxed max-w-[82%] ${isPanel ? 'text-[14px]' : 'text-[21px]'}`}
                     style={{
                       background: '#222222',
-                      borderRadius: '18px 18px 5px 18px',
+                      borderRadius: isPanel ? '14px 14px 4px 14px' : '18px 18px 5px 18px',
                       wordBreak: 'break-word',
                     }}
                   >
@@ -524,32 +531,32 @@ export default function AgentChatView({
                       </div>
                     )}
                     {msg.content && (
-                      <div className="px-4 py-2.5">{msg.content}</div>
+                      <div className={isPanel ? 'px-3 py-2' : 'px-4 py-2.5'}>{msg.content}</div>
                     )}
                   </div>
                 </div>
               ) : (
                 /* Assistant — no bubble, full-width text */
                 <div className="flex flex-col gap-2.5">
-                  <div className="text-[22px] leading-[1.68] pr-2" style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
+                  <div className={`${isPanel ? 'text-[14px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
                     {msg.content && (
                       <div className="markdown-body">
                         <ReactMarkdown
                           key={msg.id}
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            h1: ({ children }) => <h1 className="text-[24px] font-bold mt-3 mb-1">{children}</h1>,
-                            h2: ({ children }) => <h2 className="text-[22px] font-semibold mt-3 mb-1">{children}</h2>,
-                            h3: ({ children }) => <h3 className="text-[21px] font-semibold mt-2 mb-0.5">{children}</h3>,
+                            h1: ({ children }) => <h1 className={`${isPanel ? 'text-[16px]' : 'text-[24px]'} font-bold mt-3 mb-1`}>{children}</h1>,
+                            h2: ({ children }) => <h2 className={`${isPanel ? 'text-[15px]' : 'text-[22px]'} font-semibold mt-3 mb-1`}>{children}</h2>,
+                            h3: ({ children }) => <h3 className={`${isPanel ? 'text-[14px]' : 'text-[21px]'} font-semibold mt-2 mb-0.5`}>{children}</h3>,
                             p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                             strong: ({ children }) => <strong className="font-semibold text-white/95">{children}</strong>,
                             em: ({ children }) => <em className="italic">{children}</em>,
                             del: ({ children }) => <del className="line-through opacity-50">{children}</del>,
                             code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) =>
                               inline ? (
-                                <code className="font-mono text-[18px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
+                                <code className={`font-mono ${isPanel ? 'text-[12px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
                               ) : (
-                                <code className="block font-mono text-[18px] p-3 rounded-xl my-2 overflow-x-auto" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
+                                <code className={`block font-mono ${isPanel ? 'text-[12px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
                               ),
                             pre: ({ children }) => <pre className="my-0">{children}</pre>,
                             ul: ({ children }) => <ul className="list-none pl-3 my-1.5 space-y-0.5">{children}</ul>,
@@ -571,15 +578,30 @@ export default function AgentChatView({
                             ),
                             table: ({ children }) => (
                               <div className="overflow-x-auto my-2">
-                                <table className="text-[20px] border-collapse w-full">{children}</table>
+                                <table className={`${isPanel ? 'text-[13px]' : 'text-[20px]'} border-collapse w-full`}>{children}</table>
                               </div>
                             ),
                             th: ({ children }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
                             td: ({ children }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
                           }}
                         >
-                          {fixMarkdownDelimiters(msg.content)}
+                          {fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, ''))}
                         </ReactMarkdown>
+                        {/* Inline video player for animation results */}
+                        {(() => {
+                          const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
+                          if (!mp4Match) return null;
+                          return (
+                            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden' }}>
+                              <video
+                                src={mp4Match[0]}
+                                controls
+                                playsInline
+                                style={{ width: '100%', display: 'block', maxHeight: isPanel ? 200 : 360, objectFit: 'contain', background: '#000' }}
+                              />
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
 
@@ -601,7 +623,7 @@ export default function AgentChatView({
                         <img
                           src={msg.image}
                           alt="Generated"
-                          className="rounded-2xl max-w-full max-h-[280px] object-contain"
+                          className={`rounded-2xl max-w-full object-contain ${isPanel ? 'max-h-[180px]' : 'max-h-[280px]'}`}
                           style={{ border: '1px solid rgba(255,255,255,0.08)' }}
                         />
                       </button>
@@ -664,8 +686,13 @@ export default function AgentChatView({
 
       <div
         ref={inputBarRef}
-        className="absolute left-0 right-0 px-3"
-        style={{
+        className={isPanel ? 'flex-shrink-0 px-3' : 'absolute left-0 right-0 px-3'}
+        style={isPanel ? {
+          paddingBottom: '12px',
+          paddingTop: '12px',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          zIndex: 20,
+        } : {
           bottom: kbInset > 0 ? `${kbInset}px` : 0,
           paddingBottom: kbInset > 0 ? '8px' : 'max(0.75rem, env(safe-area-inset-bottom))',
           paddingTop: '32px',
@@ -694,8 +721,8 @@ export default function AgentChatView({
               }
             }}
             placeholder="你想怎么修改这张图片？"
-            className="w-full bg-transparent text-[21px] outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden block"
-            style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem', padding: '12px 16px 6px' }}
+            className={`w-full bg-transparent outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden block ${isPanel ? 'text-[14px]' : 'text-[21px]'}`}
+            style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem', padding: isPanel ? '10px 14px 4px' : '12px 16px 6px' }}
           />
 
           {/* Row 2: Toolbar — 📷 | thumbnails | flex-1 spacer | ↑ */}
