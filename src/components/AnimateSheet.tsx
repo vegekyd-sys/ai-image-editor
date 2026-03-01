@@ -92,7 +92,7 @@ export default function AnimateSheet({
       return { label: '✨ AI 正在写脚本...', disabled: true, onClick: () => {} };
     }
     if (!prompt.trim()) {
-      return { label: '✨ 生成脚本', disabled: !canGenerateScript, onClick: handleGenerateScript };
+      return { label: '✨ 自动生成脚本', disabled: !canGenerateScript, onClick: handleGenerateScript };
     }
     return { label: '🎬 生成视频', disabled: !canGenerate, onClick: handleGenerate };
   };
