@@ -83,20 +83,24 @@ export default function VideoResultCard({
           }
 
           return (
-            <div key={anim.id} className="flex-shrink-0 flex items-stretch">
+            <div
+              key={anim.id}
+              className={`flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all ${
+                isSelected
+                  ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
+                  : 'border-white/10'
+              }`}
+              style={{ background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)' }}
+            >
               {/* Main card — click to switch video */}
               <button
                 onClick={() => { if (isCompleted) onSelectVideo(anim.id); }}
-                className={`text-left hover:brightness-110 active:scale-[0.97] border overflow-hidden cursor-pointer ${
-                  isSelected
-                    ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
-                    : 'border-white/10'
-                }`}
+                className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
                 style={{
                   width: cardWidth,
-                  borderRadius: '16px 0 0 16px',
-                  transition: 'filter 0.15s, transform 0.1s, border-color 0.15s',
-                  background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)',
+                  transition: 'filter 0.15s, transform 0.1s',
+                  background: 'transparent',
+                  border: 'none',
                 }}
               >
                 <div className="flex">
@@ -157,27 +161,29 @@ export default function VideoResultCard({
                 </div>
               </button>
 
-              {/* Detail ">" button — always visible, mirrors TipsBar commit button */}
+              {/* Detail ">" button */}
               <button
                 onClick={() => onViewDetail(anim)}
-                className={`flex flex-col items-center justify-center border border-l-0 border-white/10 overflow-hidden cursor-pointer active:scale-95 hover:brightness-110 ${
-                  isSelected ? 'border-fuchsia-500' : ''
-                }`}
+                className="flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
                 style={{
                   width: isDesktop ? 40 : 44,
-                  borderRadius: '0 16px 16px 0',
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'rgba(255,255,255,0.03)',
+                  borderLeft: '1px solid rgba(255,255,255,0.06)',
                   transition: 'transform 0.1s',
+                  border: 'none',
+                  borderLeftWidth: 1,
+                  borderLeftStyle: 'solid',
+                  borderLeftColor: 'rgba(255,255,255,0.06)',
                 }}
               >
                 <svg
                   width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  className="text-white/40"
+                  className={isSelected ? 'text-fuchsia-300' : 'text-white/40'}
                 >
                   <path d="m9 18 6-6-6-6" />
                 </svg>
-                <span className={`text-white/30 font-medium ${isDesktop ? 'text-[9px]' : 'text-[10px]'}`}>
+                <span className={`font-medium ${isDesktop ? 'text-[9px]' : 'text-[10px]'} ${isSelected ? 'text-fuchsia-300/60' : 'text-white/30'}`}>
                   详情
                 </span>
               </button>
