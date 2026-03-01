@@ -1772,6 +1772,7 @@ export default function Editor({
         snapshotUrls: animationState.imageUrls,
         status: 'processing',
         createdAt: new Date().toISOString(),
+        duration: animationState.duration ?? null,
       };
       setAnimations(prev => [newAnim, ...prev]);
       // Close the creation card
@@ -2223,6 +2224,19 @@ export default function Editor({
                   onOpenChat={openCUI}
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
+                  onAnimate={snapshots.length >= 1 ? () => {
+                    if (hasAnyAnimation) {
+                      setViewIndex(videoTimelineIndex);
+                      return;
+                    }
+                    const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+                    const imageUrls = allUrls.length <= 7
+                      ? allUrls
+                      : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
+                    setAnimationState({ imageUrls, prompt: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: 10, pollSeconds: 0 });
+                    setShowAnimateSheet(true);
+                  } : undefined}
+                  hasVideo={hasVideo}
                 />
                 {isViewingVideo ? (
                   <VideoResultCard

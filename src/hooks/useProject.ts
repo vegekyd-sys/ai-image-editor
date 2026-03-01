@@ -4,21 +4,13 @@ import { useRef, useCallback } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
-import { Snapshot, Message, Tip, DbSnapshot, DbMessage } from '@/types'
-
-interface LatestAnimation {
-  videoUrl: string | null
-  prompt: string
-  snapshotUrls: string[]
-  taskId?: string
-  status: 'completed' | 'processing'
-}
+import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation } from '@/types'
 
 interface LoadedProject {
   snapshots: Snapshot[]
   messages: Message[]
   title: string
-  latestAnimation?: LatestAnimation
+  animations: ProjectAnimation[]
 }
 
 const MAX_UPLOAD_ATTEMPTS = 3
@@ -57,12 +49,10 @@ export function useProject(projectId: string, userId: string) {
         .single(),
       supabase
         .from('project_animations')
-        .select('video_url, prompt, snapshot_urls, status, piapi_task_id')
+        .select('id, video_url, prompt, snapshot_urls, status, piapi_task_id, created_at, duration')
         .eq('project_id', projectId)
         .in('status', ['completed', 'processing'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .order('created_at', { ascending: false }),
     ])
 
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
@@ -96,17 +86,19 @@ export function useProject(projectId: string, userId: string) {
       }
     })
 
-    const latestAnimation = animationRes.data
-      ? {
-          videoUrl: (animationRes.data.video_url ?? null) as string | null,
-          prompt: animationRes.data.prompt as string,
-          snapshotUrls: (animationRes.data.snapshot_urls ?? []) as string[],
-          taskId: animationRes.data.piapi_task_id as string | undefined,
-          status: animationRes.data.status as 'completed' | 'processing',
-        }
-      : undefined
+    const animations: ProjectAnimation[] = (animationRes.data ?? []).map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      projectId,
+      taskId: (row.piapi_task_id as string) ?? null,
+      videoUrl: (row.video_url as string) ?? null,
+      prompt: (row.prompt as string) ?? '',
+      snapshotUrls: (row.snapshot_urls as string[]) ?? [],
+      status: row.status as ProjectAnimation['status'],
+      createdAt: row.created_at as string,
+      duration: (row.duration as number) ?? null,
+    }))
 
-    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', latestAnimation }
+    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations }
   }, [projectId])
 
   // --- Write (all fire-and-forget) ---
@@ -182,8 +174,8 @@ export function useProject(projectId: string, userId: string) {
         const supabase = getSupabase()
 
         // Upload base64 preview images to Storage, replace with URLs
-        const tipsForDb = await Promise.all(tips.map(async (t) => {
-          const { previewStatus, ...rest } = t
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const tipsForDb = await Promise.all(tips.map(async ({ previewStatus, ...rest }) => {
 
           // Already a Storage URL — keep it
           if (rest.previewImage && rest.previewImage.startsWith('http')) {
@@ -200,6 +192,7 @@ export function useProject(projectId: string, userId: string) {
             // Skip if already failed too many times
             const attempts = uploadAttemptsRef.current.get(filename) ?? 0
             if (attempts >= MAX_UPLOAD_ATTEMPTS) {
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
               const { previewImage, ...noPreview } = rest
               return noPreview
             }
@@ -211,7 +204,8 @@ export function useProject(projectId: string, userId: string) {
               return { ...rest, previewImage: imageUrl }
             }
             // Upload failed — strip base64 (too large for jsonb)
-            const { previewImage, ...noPreview } = rest
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { previewImage: _stripped, ...noPreview } = rest
             return noPreview
           }
 
@@ -258,7 +252,7 @@ export function useProject(projectId: string, userId: string) {
         console.warn('updateDescription error:', err)
       }
     })
-  }, [projectId])
+  }, [])
 
   const updateTitle = useCallback((title: string) => {
     Promise.resolve().then(async () => {
