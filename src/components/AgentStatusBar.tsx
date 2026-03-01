@@ -6,9 +6,13 @@ interface AgentStatusBarProps {
   onOpenChat: () => void;
   isViewingDraft?: boolean;
   hideChat?: boolean;
+  onAnimate?: () => void;
+  hasVideo?: boolean;
+  snapshotCount?: number;
 }
 
-export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat }: AgentStatusBarProps) {
+export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, onAnimate, hasVideo, snapshotCount = 0 }: AgentStatusBarProps) {
+  const videoLit = snapshotCount > 3 || !!hasVideo;
   // Determine dot color and breathe speed based on state
   const isGeneratingImages = statusText.includes('正使用nano banana');
   const isFetchingTips = statusText.includes('Ready to Suprise');
@@ -70,6 +74,28 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
             }}
           >
             Chat
+          </button>
+        )}
+
+        {/* Video button — right of Chat, lights up when snapshots > 3 or has video */}
+        {onAnimate && (
+          <button
+            onClick={e => { e.stopPropagation(); onAnimate(); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
+            style={videoLit ? {
+              background: 'rgba(192,38,211,0.25)',
+              color: '#e879f9',
+              border: '1px solid rgba(192,38,211,0.4)',
+            } : {
+              background: 'rgba(255,255,255,0.08)',
+              color: 'rgba(255,255,255,0.7)',
+            }}
+          >
+            {/* Play triangle */}
+            <svg width="9" height="10" viewBox="0 0 9 10" fill="currentColor">
+              <path d="M1 1.5L8 5L1 8.5V1.5Z"/>
+            </svg>
+            视频
           </button>
         )}
       </div>

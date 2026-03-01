@@ -2224,6 +2224,7 @@ export default function Editor({
                   onOpenChat={openCUI}
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
+                  snapshotCount={snapshots.length}
                   onAnimate={snapshots.length >= 1 ? () => {
                     if (hasAnyAnimation) {
                       setViewIndex(videoTimelineIndex);
