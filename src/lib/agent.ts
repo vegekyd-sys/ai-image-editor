@@ -179,10 +179,16 @@ function createTools(ctx: AgentContext) {
         question: z.string().optional().describe('Optional focus area for the analysis'),
       }),
       execute: async ({ question }) => {
-        // Compress image for analysis — vision doesn't need full resolution, ~600KB is enough
-        const raw = ctx.currentImage.replace(/^data:image\/\w+;base64,/, '');
-        let buf = Buffer.from(raw, 'base64');
-        // Only compress if larger than 600KB
+        // Resolve image to base64 buffer — handles both URL and base64 input
+        let buf: Buffer;
+        if (ctx.currentImage.startsWith('http')) {
+          const res = await fetch(ctx.currentImage);
+          buf = Buffer.from(await res.arrayBuffer());
+        } else {
+          const raw = ctx.currentImage.replace(/^data:image\/\w+;base64,/, '');
+          buf = Buffer.from(raw, 'base64');
+        }
+        // Compress for analysis — vision doesn't need full resolution, ~600KB is enough
         if (buf.length > 600_000) {
           buf = Buffer.from(await sharp(buf)
             .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
