@@ -2214,7 +2214,7 @@ export default function Editor({
             </div>
           )}
 
-          {/* Bottom bar: tips */}
+          {/* Bottom bar: tips or video results */}
           {snapshots.length > 0 && (
               <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
                 <AgentStatusBar
@@ -2224,27 +2224,71 @@ export default function Editor({
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
                 />
-                <TipsBar
-                  tips={currentTips}
-                  isLoading={isTipsFetching}
-                  isEditing={isEditing}
-                  onTipClick={handleTipInteraction}
-                  onTipCommit={() => commitDraft()}
-                  onTipDeselect={dismissDraft}
-                  onRetryPreview={handleRetryPreview}
-                  previewingIndex={isViewingDraft ? previewingTipIndex : null}
-                  onLoadMore={(category) => {
-                    const snap = snapshots[tipsSourceIndex];
-                    if (snap) fetchMoreTipsForCategory(category, snap.id, getImageForApi(snap));
-                  }}
-                  onCategorySelect={generatePreviewsForCategory}
-                  loadingMoreCategories={loadingMoreCategories}
-                  isDesktop={isDesktop}
-                  initialCategory={committedCategory ?? undefined}
-                  failedCategories={failedCategories}
-                  onRetryCategory={retryFailedCategory}
-                  onRetryAll={retryAllTips}
-                />
+                {isViewingVideo ? (
+                  <VideoResultCard
+                    animations={animations}
+                    selectedVideoId={selectedVideoId}
+                    onSelectVideo={setSelectedVideoId}
+                    onCreateNew={() => {
+                      const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+                      const imageUrls = allUrls.length <= 7
+                        ? allUrls
+                        : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
+                      setAnimationState({
+                        imageUrls,
+                        prompt: '',
+                        taskId: null,
+                        videoUrl: null,
+                        status: 'idle',
+                        error: null,
+                        duration: 10,
+                        pollSeconds: 0,
+                      });
+                      setShowAnimateSheet(true);
+                    }}
+                    onAbandon={(taskId) => {
+                      setAnimations(prev => prev.filter(a => a.taskId !== taskId));
+                      fetch(`/api/animate/${taskId}`, { method: 'DELETE' }).catch(() => {});
+                    }}
+                    onViewDetail={(anim) => {
+                      setDetailAnimation(anim);
+                      setAnimationState({
+                        imageUrls: anim.snapshotUrls,
+                        prompt: anim.prompt,
+                        taskId: anim.taskId,
+                        videoUrl: anim.videoUrl,
+                        status: 'idle',
+                        error: null,
+                        duration: anim.duration ?? null,
+                        pollSeconds: 0,
+                      });
+                      setShowAnimateSheet(true);
+                    }}
+                    isDesktop={isDesktop}
+                  />
+                ) : (
+                  <TipsBar
+                    tips={currentTips}
+                    isLoading={isTipsFetching}
+                    isEditing={isEditing}
+                    onTipClick={handleTipInteraction}
+                    onTipCommit={() => commitDraft()}
+                    onTipDeselect={dismissDraft}
+                    onRetryPreview={handleRetryPreview}
+                    previewingIndex={isViewingDraft ? previewingTipIndex : null}
+                    onLoadMore={(category) => {
+                      const snap = snapshots[tipsSourceIndex];
+                      if (snap) fetchMoreTipsForCategory(category, snap.id, getImageForApi(snap));
+                    }}
+                    onCategorySelect={generatePreviewsForCategory}
+                    loadingMoreCategories={loadingMoreCategories}
+                    isDesktop={isDesktop}
+                    initialCategory={committedCategory ?? undefined}
+                    failedCategories={failedCategories}
+                    onRetryCategory={retryFailedCategory}
+                    onRetryAll={retryAllTips}
+                  />
+                )}
               </div>
           )}
 
@@ -2272,50 +2316,6 @@ export default function Editor({
             />
           )}
 
-          {/* Video Result Card — always visible when viewing video entry */}
-          {isViewingVideo && (
-            <VideoResultCard
-              animations={animations}
-              selectedVideoId={selectedVideoId}
-              onSelectVideo={setSelectedVideoId}
-              onCreateNew={() => {
-                const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-                const imageUrls = allUrls.length <= 7
-                  ? allUrls
-                  : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                setAnimationState({
-                  imageUrls,
-                  prompt: '',
-                  taskId: null,
-                  videoUrl: null,
-                  status: 'idle',
-                  error: null,
-                  duration: 10,
-                  pollSeconds: 0,
-                });
-                setShowAnimateSheet(true);
-              }}
-              onAbandon={(taskId) => {
-                setAnimations(prev => prev.filter(a => a.taskId !== taskId));
-                fetch(`/api/animate/${taskId}`, { method: 'DELETE' }).catch(() => {});
-              }}
-              onViewDetail={(anim) => {
-                setDetailAnimation(anim);
-                setAnimationState({
-                  imageUrls: anim.snapshotUrls,
-                  prompt: anim.prompt,
-                  taskId: anim.taskId,
-                  videoUrl: anim.videoUrl,
-                  status: 'idle',
-                  error: null,
-                  duration: anim.duration ?? null,
-                  pollSeconds: 0,
-                });
-                setShowAnimateSheet(true);
-              }}
-              isDesktop={isDesktop}
-            />
-          )}
         </div>
       )}
 
