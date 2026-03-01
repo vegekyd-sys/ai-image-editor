@@ -521,9 +521,11 @@ export default function ImageCanvas({
               className="w-full h-full object-contain select-none pointer-events-none"
               draggable={false}
             />
+            {/* Dim overlay on the whole image */}
+            <div className="absolute inset-0 pointer-events-none" style={{ background: 'rgba(0,0,0,0.35)' }} />
             {/* Gradient + status overlay */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
-              style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 45%, transparent 100%)' }}
+              style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 45%, transparent 100%)' }}
             >
               <div className="flex flex-col items-center gap-3" style={{ marginBottom: '15%' }}>
                 {/* Spinning ring */}
