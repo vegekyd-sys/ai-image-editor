@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo, useEffect, CSSProperties } from 'react';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry } from '@/types';
+import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -12,7 +12,9 @@ import { cacheImage } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/components/AnnotationCanvas';
 import AnimateSheet from '@/components/AnimateSheet';
+import VideoResultCard from '@/components/VideoResultCard';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
+import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils';
 
 export interface AnimationState {
   imageUrls: string[]
@@ -192,7 +194,7 @@ interface EditorProps {
   onRenameProject?: (title: string) => void;
   onBack?: () => void;
   onNewProject?: (file: File) => void;
-  initialAnimation?: { videoUrl: string | null; prompt: string; snapshotUrls: string[]; taskId?: string; status: 'completed' | 'processing' } | null;
+  initialAnimations?: ProjectAnimation[];
 }
 
 export default function Editor({
@@ -210,15 +212,17 @@ export default function Editor({
   onRenameProject,
   onBack,
   onNewProject,
-  initialAnimation,
+  initialAnimations,
 }: EditorProps = {}) {
   const isDesktop = useIsDesktop();
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
   const [isTipsFetching, setIsTipsFetching] = useState(false);
+  const [failedCategories, setFailedCategories] = useState<Set<Tip['category']>>(new Set());
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
   // Annotation (paintbrush) mode
@@ -233,40 +237,17 @@ export default function Editor({
   const [textEditValue, setTextEditValue] = useState('');
   const [textColor, setTextColor] = useState('#ec4899');
   const [textBgEnabled, setTextBgEnabled] = useState(true);
-  const [showAnimateSheet, setShowAnimateSheet] = useState(() => {
-    // Auto-open if resuming a processing animation
-    return !!(initialAnimation?.status === 'processing' && initialAnimation?.taskId);
-  });
+  const [showAnimateSheet, setShowAnimateSheet] = useState(false);
   // Animation state: lifted from AnimateSheet so it persists across GUI↔CUI switches
-  const [animationState, setAnimationState] = useState<AnimationState | null>(() => {
-    if (initialAnimation) {
-      if (initialAnimation.status === 'completed' && initialAnimation.videoUrl) {
-        return {
-          imageUrls: initialAnimation.snapshotUrls,
-          prompt: initialAnimation.prompt,
-          taskId: null,
-          videoUrl: initialAnimation.videoUrl,
-          status: 'done',
-          error: null,
-          duration: 10,
-          pollSeconds: 0,
-        };
-      }
-      if (initialAnimation.status === 'processing' && initialAnimation.taskId) {
-        return {
-          imageUrls: initialAnimation.snapshotUrls,
-          prompt: initialAnimation.prompt,
-          taskId: initialAnimation.taskId,
-          videoUrl: null,
-          status: 'polling',
-          error: null,
-          duration: 10,
-          pollSeconds: 0,
-        };
-      }
-    }
-    return null;
-  });
+  const [animationState, setAnimationState] = useState<AnimationState | null>(null);
+  // All animations for this project (loaded from DB + newly created)
+  const [animations, setAnimations] = useState<ProjectAnimation[]>(() => initialAnimations ?? []);
+  // Which video is currently selected for canvas playback
+  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  // Whether the result card is showing
+  const [showVideoResult, setShowVideoResult] = useState(false);
+  // Detail mode: which animation to view in AnimateSheet
+  const [detailAnimation, setDetailAnimation] = useState<ProjectAnimation | null>(null);
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
@@ -307,6 +288,8 @@ export default function Editor({
 
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
+  const animationStateRef = useRef(animationState);
+  animationStateRef.current = animationState;
   const viewIndexRef = useRef(viewIndex);
   viewIndexRef.current = viewIndex;
   const draftParentIndexRef = useRef(draftParentIndex);
@@ -318,6 +301,7 @@ export default function Editor({
   const isTipsFetchingRef = useRef(isTipsFetching);
   isTipsFetchingRef.current = isTipsFetching;
   const previewDoneBaselineRef = useRef(0);
+  const lastTipsRequestRef = useRef<{ snapshotId: string; image: string; previewMode: 'full' | 'none'; autoPreviewCategory?: string } | null>(null);
   const pendingTeaserRef = useRef<{ snapshotId: string; tips: Tip[] } | null>(null);
   const isReactionInFlightRef = useRef(false);
   // Track which snapshot's teaser has already been displayed (prevents progress bar from overwriting)
@@ -342,22 +326,27 @@ export default function Editor({
   }, [draftParentIndex, previewingTipIndex, snapshots]);
 
   // Timeline: committed snapshots with the virtual draft inserted right after its parent
-  // + optional video sentinel at the end
+  // + optional video sentinel at the end (when ANY animation exists)
+  const hasAnyAnimation = animations.length > 0;
   const timeline = useMemo(() => {
     const base = snapshots.map((s) => s.image);
     if (draftImage !== null && draftParentIndex !== null) {
       base.splice(draftParentIndex + 1, 0, draftImage);
     }
-    if (animationState?.status === 'done' && animationState.videoUrl) {
+    if (hasAnyAnimation) {
       base.push('__VIDEO__');
     }
     return base;
-  }, [snapshots, draftImage, draftParentIndex, animationState?.status, animationState?.videoUrl]);
+  }, [snapshots, draftImage, draftParentIndex, hasAnyAnimation]);
 
-  // Video entry: last item in timeline when video is done
-  const hasVideo = animationState?.status === 'done' && !!animationState.videoUrl;
-  const videoTimelineIndex = hasVideo ? timeline.length - 1 : -1;
-  const isViewingVideo = hasVideo && viewIndex === videoTimelineIndex;
+  // Video entry: last item in timeline when any animation exists
+  const hasVideo = hasAnyAnimation;
+  const videoTimelineIndex = hasAnyAnimation ? timeline.length - 1 : -1;
+  const isViewingVideo = hasAnyAnimation && viewIndex === videoTimelineIndex;
+  // Currently selected video for canvas playback
+  const currentVideo = selectedVideoId
+    ? animations.find(a => a.id === selectedVideoId)
+    : animations.find(a => a.status === 'completed' && !!a.videoUrl);
 
   // Draft occupies the slot immediately after its parent snapshot
   const isViewingDraft = isDraft && draftParentIndex !== null && viewIndex === draftParentIndex + 1;
@@ -719,16 +708,16 @@ export default function Editor({
     autoPreviewCategory?: string,
   ) => {
     setIsTipsFetching(true);
+    setFailedCategories(new Set());
     previewDoneBaselineRef.current = 0;
     previewAbortRef.current = new AbortController();
+    lastTipsRequestRef.current = { snapshotId, image: imageInput, previewMode, autoPreviewCategory };
     if (!isAgentActiveRef.current) {
       setAgentStatus('正在发现有趣的可能...');
     }
 
     const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
     let completedCount = 0;
-    const fetchStart = Date.now();
-
     const fetchCategory = async (category: string) => {
       // imageInput can be URL or base64 — server handles both
       const imageForApi = imageInput;
@@ -781,6 +770,9 @@ export default function Editor({
           if (attempt < MAX_RETRIES) {
             console.warn(`[tips] ${category} attempt ${attempt + 1} failed, retrying...`, err);
             await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          } else {
+            console.error(`[tips] ${category} all retries exhausted`, err);
+            setFailedCategories(prev => new Set([...prev, category as Tip['category']]));
           }
         }
       }
@@ -794,6 +786,7 @@ export default function Editor({
             const snap = prev.find(s => s.id === snapshotId);
             if (snap?.tips.length) {
               // Only persist complete tips (with editPrompt) — don't save partial streaming stubs
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
               const tipsForDb = snap.tips.filter(t => !!t.editPrompt).map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
               onUpdateTips(snapshotId, tipsForDb);
             }
@@ -816,7 +809,86 @@ export default function Editor({
     };
 
     categories.forEach(cat => fetchCategory(cat));
-  }, [generatePreviewForTip, onUpdateTips, triggerTipsTeaser]);
+  }, [onUpdateTips, triggerTipsTeaser, handleTipEvent]);
+
+  // Retry a single failed category
+  const retryFailedCategory = useCallback((category: Tip['category']) => {
+    const req = lastTipsRequestRef.current;
+    if (!req) return;
+    setFailedCategories(prev => {
+      const next = new Set(prev);
+      next.delete(category);
+      return next;
+    });
+    // Re-run fetchCategory logic for this single category
+    setIsTipsFetching(true);
+    const doRetry = async () => {
+      const MAX_RETRIES = 2;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const res = await fetch('/api/tips', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              image: req.image,
+              category,
+              metadata: snapshotsRef.current.find(s => s.id === req.snapshotId)?.metadata,
+            }),
+          });
+          if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
+
+          const reader = res.body!.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let tipsReceived = 0;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let boundary;
+            while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+              const line = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + 2);
+              if (line.startsWith('data: ')) {
+                const payload = line.slice(6);
+                if (payload === '[DONE]') break;
+                try {
+                  const tip = JSON.parse(payload) as Tip;
+                  handleTipEvent(tip, req.snapshotId, (t) => {
+                    if (req.previewMode === 'full') return true;
+                    if (req.autoPreviewCategory && t.category === req.autoPreviewCategory) return true;
+                    return false;
+                  });
+                  tipsReceived++;
+                } catch { /* skip malformed */ }
+              }
+            }
+          }
+          if (tipsReceived === 0) throw new Error(`Tips ${category}: 0 tips returned`);
+          break;
+        } catch (err) {
+          if (attempt < MAX_RETRIES) {
+            console.warn(`[tips] ${category} retry attempt ${attempt + 1} failed, retrying...`, err);
+            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          } else {
+            console.error(`[tips] ${category} retry all attempts exhausted`, err);
+            setFailedCategories(prev => new Set([...prev, category]));
+          }
+        }
+      }
+      // Check if all categories are done loading
+      setIsTipsFetching(false);
+    };
+    doRetry();
+  }, [handleTipEvent]);
+
+  // Retry all failed categories at once
+  const retryAllTips = useCallback(() => {
+    const req = lastTipsRequestRef.current;
+    if (!req) return;
+    fetchTipsForSnapshot(req.snapshotId, req.image, req.previewMode, req.autoPreviewCategory);
+  }, [fetchTipsForSnapshot]);
 
   // Load more tips of a specific category and append to the given snapshot
   const fetchMoreTipsForCategory = useCallback((
@@ -878,7 +950,7 @@ export default function Editor({
       }
     };
     doFetch();
-  }, []);
+  }, [handleTipEvent]);
 
   // Auto-analyze a snapshot: runs silently in background, stores result in snapshot.description only
   const runAutoAnalysis = useCallback(async (
@@ -1179,7 +1251,7 @@ export default function Editor({
     } finally {
       setIsAgentActive(false);
     }
-  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser]);
+  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage]);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
   // NOTE: no compressBase64 here — annotated image is used as generation base,
@@ -1209,7 +1281,7 @@ export default function Editor({
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
   const animPromptInFlightRef = useRef(false);
   const generateAnimationPrompt = useCallback(async () => {
-    const imageUrls = animationState?.imageUrls;
+    const imageUrls = animationStateRef.current?.imageUrls;
     if (!projectId || !imageUrls?.length) return;
     if (isAgentActiveRef.current || animPromptInFlightRef.current) return;
     animPromptInFlightRef.current = true;
@@ -1288,7 +1360,7 @@ export default function Editor({
       setIsAgentActive(false);
       animPromptInFlightRef.current = false;
     }
-  }, [projectId, animationState?.imageUrls, onSaveMessage]);
+  }, [projectId, onSaveMessage]);
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
@@ -1395,9 +1467,10 @@ export default function Editor({
       setDraftParentIndex(currentSnapIdx);
       setViewIndex(currentSnapIdx + 1);
     }
-  }, [draftParentIndex, viewIndex, snapshots, previewingTipIndex, commitDraft, generatePreviewForTip]);
+  }, [draftParentIndex, viewIndex, snapshots, previewingTipIndex, generatePreviewForTip]);
 
   // Retry a failed preview generation
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleRetryPreview = useCallback((tip: Tip, tipIndex: number) => {
     // Find which snapshot owns this tip (tipsSourceIndex already maps correctly)
     const snap = snapshots[tipsSourceIndex] ?? null;
@@ -1405,7 +1478,7 @@ export default function Editor({
     // Baseline = done count right now, so x/y resets to 0/1 (or 0/N for multi-retry)
     previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
     generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio);
-  }, [isViewingDraft, draftParentIndex, viewIndex, snapshots, generatePreviewForTip]);
+  }, [snapshots, generatePreviewForTip, tipsSourceIndex]);
 
   // Generate previews for all tips in a category (triggered by category tab click)
   const generatePreviewsForCategory = useCallback((category: string) => {
@@ -1445,7 +1518,7 @@ export default function Editor({
   }, []);
 
   const compressAndUpload = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) return;
+    if (!file.type.startsWith('image/') && !isHeicFile(file)) return;
 
     previewAbortRef.current.abort();
     setPreviewingTipIndex(null);
@@ -1464,56 +1537,36 @@ export default function Editor({
     const metadataPromise = extractPhotoMetadata(file);
 
     try {
-      // A1: try client-side compression first (fast), start tips immediately
-      let base64: string | null = null;
-      let tipsStarted = false;
-      try {
-        base64 = await compressClientSide(file);
-        // Start tips generation immediately with client-compressed image (A1)
-        const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
-        setSnapshots([newSnapshot]);
-        snapshotsRef.current = [newSnapshot];
-        // Tips only need to "see" the image, not generate from it — use smaller version
-        const tipsImage = await compressBase64(base64, 600_000);
-        fetchTipsForSnapshot(snapId, tipsImage, 'full');
-        tipsStarted = true;
-      } catch {
-        // HEIC or other format — fall through to server upload
-      }
-
-      if (!base64) {
-        const formData = new FormData();
-        formData.append('file', file);
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        if (!res.ok) throw new Error('Image conversion failed');
-        base64 = (await res.json()).image;
-      }
+      // Convert HEIC to JPEG in browser if needed (Chrome/Firefox can't decode HEIC)
+      const decodable = await ensureDecodableFile(file);
+      const base64 = await compressClientSide(decodable);
       URL.revokeObjectURL(previewUrl);
+
+      // Start tips generation immediately with compressed image
+      const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
+      setSnapshots([newSnapshot]);
+      snapshotsRef.current = [newSnapshot];
+      const tipsImage = await compressBase64(base64, 600_000);
+      fetchTipsForSnapshot(snapId, tipsImage, 'full');
 
       // Attach metadata when available
       const metadata = await metadataPromise;
 
       // Update snapshot image with final base64 + metadata
-      const newSnapshot: Snapshot = { id: snapId, image: base64!, tips: [], messageId: '', metadata };
-      setSnapshots([newSnapshot]);
-      snapshotsRef.current = [newSnapshot];
-      onSaveSnapshot?.(newSnapshot, 0, (url) => {
+      const finalSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '', metadata };
+      setSnapshots([finalSnapshot]);
+      snapshotsRef.current = [finalSnapshot];
+      onSaveSnapshot?.(finalSnapshot, 0, (url) => {
         setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
       });
-      cacheImage(`snap:${snapId}`, base64!);
-      // Only start tips if not already started (HEIC path)
-      if (!tipsStarted) {
-        compressBase64(base64!, 600_000).then(compressed => {
-          fetchTipsForSnapshot(snapId, compressed, 'full');
-        });
-      }
+      cacheImage(`snap:${snapId}`, base64);
       // Auto-analyze the uploaded photo
-      runAutoAnalysis(snapId, base64!);
+      runAutoAnalysis(snapId, base64);
     } catch (err) {
       console.error('Image upload error:', err);
       URL.revokeObjectURL(previewUrl);
     }
-  }, [fetchTipsForSnapshot, onSaveSnapshot]);
+  }, [fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
 
   // Auto-trigger upload when a pending image is passed (new project from projects page)
   // Lock body scroll while editor is mounted to prevent iOS back-navigation jump
@@ -1568,7 +1621,7 @@ export default function Editor({
         runAutoAnalysis(snapId, pendingImage);
       }
     }
-  }, [pendingImage, pendingMetadata, pendingPrompt, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest]);
+  }, [pendingImage, pendingMetadata, pendingPrompt, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
 
   // Path 2: text only (no image) → CUI mode, send prompt to Agent
   useEffect(() => {
@@ -1580,52 +1633,71 @@ export default function Editor({
     }
   }, [pendingPrompt, pendingImage, handleAgentRequest, isDesktop]);
 
-  // Pick up late-arriving initialAnimation (from Supabase fetch after cache-init)
-  const animationInitRef = useRef(!!initialAnimation);
+  // Existing project with no tips on latest snapshot — auto-fetch
+  const autoFetchTriggered = useRef(false);
   useEffect(() => {
-    if (animationInitRef.current || !initialAnimation) return;
-    animationInitRef.current = true;
-    if (initialAnimation.status === 'completed' && initialAnimation.videoUrl) {
-      setAnimationState({
-        imageUrls: initialAnimation.snapshotUrls,
-        prompt: initialAnimation.prompt,
-        taskId: null,
-        videoUrl: initialAnimation.videoUrl,
-        status: 'done',
-        error: null, duration: 10, pollSeconds: 0,
-      });
-    } else if (initialAnimation.status === 'processing' && initialAnimation.taskId) {
-      setAnimationState({
-        imageUrls: initialAnimation.snapshotUrls,
-        prompt: initialAnimation.prompt,
-        taskId: initialAnimation.taskId,
-        videoUrl: null,
-        status: 'polling',
-        error: null, duration: 10, pollSeconds: 0,
-      });
-      setShowAnimateSheet(true);
+    if (autoFetchTriggered.current || pendingImage) return;
+    const lastSnap = snapshots[snapshots.length - 1];
+    if (!lastSnap || lastSnap.tips.length > 0) return;
+    autoFetchTriggered.current = true;
+    const image = getImageForApi(lastSnap);
+    if (!image) return;
+    if (image.startsWith('data:')) {
+      compressBase64(image, 600_000).then(img => fetchTipsForSnapshot(lastSnap.id, img));
+    } else {
+      fetchTipsForSnapshot(lastSnap.id, image);
     }
-  }, [initialAnimation]);
+  }, [snapshots, pendingImage, fetchTipsForSnapshot]);
 
-  // Auto-initialize animationState when user swipes to video entry
+  // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
+  const animationInitRef = useRef((initialAnimations ?? []).length > 0);
   useEffect(() => {
-    if (isViewingVideo && !animationState) {
-      const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-      const imageUrls = allUrls.length <= 7
-        ? allUrls
-        : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-      setAnimationState({
-        imageUrls,
-        prompt: '',
-        taskId: null,
-        videoUrl: null,
-        status: 'idle',
-        error: null,
-        duration: 10,
-        pollSeconds: 0,
-      });
+    if (animationInitRef.current || !initialAnimations?.length) return;
+    animationInitRef.current = true;
+    setAnimations(initialAnimations);
+  }, [initialAnimations]);
+
+  // Show result card when user swipes to video entry
+  const prevIsViewingVideo = useRef(isViewingVideo);
+  useEffect(() => {
+    const wasViewing = prevIsViewingVideo.current;
+    prevIsViewingVideo.current = isViewingVideo;
+    if (isViewingVideo) {
+      setShowVideoResult(true);
+      if (!selectedVideoId) {
+        const latest = animations.find(a => a.status === 'completed' && !!a.videoUrl);
+        if (latest) setSelectedVideoId(latest.id);
+      }
+    } else if (wasViewing) {
+      // Only auto-close when user navigates away from video entry
+      setShowVideoResult(false);
     }
-  }, [isViewingVideo, animationState, snapshots]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isViewingVideo]);
+
+  // Poll all processing animations (runs in Editor, independent of any card)
+  useEffect(() => {
+    const processing = animations.filter(a => a.status === 'processing' && a.taskId);
+    if (processing.length === 0) return;
+    const interval = setInterval(async () => {
+      for (const anim of processing) {
+        try {
+          const res = await fetch(`/api/animate/${anim.taskId}`);
+          const data = await res.json();
+          if (data.status === 'completed' && data.videoUrl) {
+            setAnimations(prev => prev.map(a =>
+              a.id === anim.id ? { ...a, status: 'completed' as const, videoUrl: data.videoUrl } : a
+            ));
+          } else if (data.status === 'failed') {
+            setAnimations(prev => prev.map(a =>
+              a.id === anim.id ? { ...a, status: 'failed' as const } : a
+            ));
+          }
+        } catch { /* ignore poll errors */ }
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [animations]);
 
   // Auto-name existing projects that still have a default title (runs once on mount)
   useEffect(() => {
@@ -1692,60 +1764,74 @@ export default function Editor({
 
 
 
-  // When animationState transitions to 'done' (video completed), add a CUI message with the video
+  // When animationState transitions — handle creation flow lifecycle
   const prevAnimStatusRef = useRef(animationState?.status);
   useEffect(() => {
     const prev = prevAnimStatusRef.current;
     const curr = animationState?.status;
     prevAnimStatusRef.current = curr;
-    // Regenerate: done → idle — keep sheet open
-    if (prev === 'done' && curr === 'idle') {
-      setShowAnimateSheet(true);
-    }
-    if (prev && prev !== 'done' && curr === 'done' && animationState?.videoUrl) {
-      // Close the sheet — from now on it only shows via isViewingVideo
+    // Submitting → polling: add a processing entry to animations array
+    if (prev === 'submitting' && curr === 'polling' && animationState?.taskId) {
+      const newAnim: ProjectAnimation = {
+        id: animationState.taskId,
+        projectId: projectId ?? '',
+        taskId: animationState.taskId,
+        videoUrl: null,
+        prompt: animationState.prompt,
+        snapshotUrls: animationState.imageUrls,
+        status: 'processing',
+        createdAt: new Date().toISOString(),
+      };
+      setAnimations(prev => [newAnim, ...prev]);
+      // Close the creation card — user can leave and continue editing
       setShowAnimateSheet(false);
-      // Check if a video message already exists (from handleAnimationCUI polling)
-      const alreadyHasVideo = messages.some(m => m.content?.includes('.mp4'));
-      if (!alreadyHasVideo) {
-        const videoMsg: Message = {
-          id: generateId(),
-          role: 'assistant',
-          content: `🎬 视频生成完成！\n${animationState.videoUrl}`,
-          timestamp: Date.now(),
-        };
-        setMessages(prev => [...prev, videoMsg]);
-        onSaveMessage?.(videoMsg);
-        setAgentStatus('视频已生成');
-      }
-      // Auto-navigate to the video timeline entry
-      // timeline length will increase by 1 (video sentinel added), so new last index
-      const newVideoIdx = snapshotsRef.current.length + (draftParentIndexRef.current !== null ? 1 : 0);
-      setViewIndex(newVideoIdx);
+      setAnimationState(null);
+      // Show the result card with the new processing entry
+      setShowVideoResult(true);
+      setSelectedVideoId(animationState.taskId);
     }
-  }, [animationState?.status, animationState?.videoUrl, messages, onSaveMessage]);
+  }, [animationState?.status, animationState?.taskId, animationState?.prompt, animationState?.imageUrls, projectId]);
 
-  // Increment pollSeconds while animation is polling (runs even when sheet is closed)
+  // Watch for animations completing — send CUI notification + StatusBar update
+  const prevCompletedIdsRef = useRef<Set<string>>(
+    new Set(animations.filter(a => a.status === 'completed').map(a => a.id))
+  );
   useEffect(() => {
-    if (animationState?.status !== 'polling') return;
-    const timer = setInterval(() => {
-      setAnimationState(prev => prev ? { ...prev, pollSeconds: prev.pollSeconds + 1 } : prev);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [animationState?.status]);
+    const completedIds = new Set(animations.filter(a => a.status === 'completed').map(a => a.id));
+    const newlyCompleted = [...completedIds].filter(id => !prevCompletedIdsRef.current.has(id));
+    prevCompletedIdsRef.current = completedIds;
+    for (const id of newlyCompleted) {
+      const anim = animations.find(a => a.id === id);
+      if (anim?.videoUrl) {
+        setAgentStatus('视频已生成');
+        const alreadyHasVideo = messages.some(m => m.content?.includes(anim.videoUrl!));
+        if (!alreadyHasVideo) {
+          const videoMsg: Message = {
+            id: generateId(),
+            role: 'assistant',
+            content: `🎬 视频生成完成！\n${anim.videoUrl}`,
+            timestamp: Date.now(),
+          };
+          setMessages(prev => [...prev, videoMsg]);
+          onSaveMessage?.(videoMsg);
+        }
+      }
+    }
+  }, [animations, messages, onSaveMessage]);
 
   // Update StatusBar with video rendering progress
   useEffect(() => {
-    if (animationState?.status === 'polling') {
-      const m = Math.floor(animationState.pollSeconds / 60);
-      const s = animationState.pollSeconds % 60;
-      setAgentStatus(`视频渲染中 ${m}:${s.toString().padStart(2, '0')}`);
+    if (animationState?.status === 'generating_prompt') {
+      setAgentStatus('正在写视频脚本...');
     } else if (animationState?.status === 'submitting') {
       setAgentStatus('提交视频任务...');
-    } else if (animationState?.status === 'generating_prompt') {
-      setAgentStatus('正在写视频脚本...');
+    } else {
+      const processingCount = animations.filter(a => a.status === 'processing').length;
+      if (processingCount > 0 && !isAgentActive) {
+        setAgentStatus('视频渲染中...');
+      }
     }
-  }, [animationState?.status, animationState?.pollSeconds]);
+  }, [animationState?.status, animations, isAgentActive]);
 
   const showSaveToast = useCallback(() => {
     setSaveToast(true);
@@ -1754,8 +1840,8 @@ export default function Editor({
 
   const handleDownload = useCallback(async () => {
     // Video download — proxy through our API to avoid CORS
-    if (isViewingVideo && animationState?.videoUrl) {
-      const videoSrc = animationState.videoUrl;
+    if (isViewingVideo && currentVideo?.videoUrl) {
+      const videoSrc = currentVideo.videoUrl;
       const filename = `makaron-video-${Date.now()}.mp4`;
       setIsSaving(true);
       try {
@@ -1820,7 +1906,7 @@ export default function Editor({
       link.download = filename;
       link.click();
     }
-  }, [timeline, viewIndex, isViewingVideo, animationState?.videoUrl, showSaveToast]);
+  }, [timeline, viewIndex, isViewingVideo, currentVideo?.videoUrl, showSaveToast]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string) => {
@@ -1948,33 +2034,32 @@ export default function Editor({
                 })()}
                 onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
                 textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
-                onAnimate={snapshots.length >= 3 ? () => {
-                  if (hasVideo) {
-                    // Video exists — navigate to it
+                onAnimate={snapshots.length >= 1 ? () => {
+                  if (hasAnyAnimation) {
+                    // Animations exist — navigate to video entry (shows result card)
                     setViewIndex(videoTimelineIndex);
                     return;
                   }
-                  if (!animationState) {
-                    const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-                    const imageUrls = allUrls.length <= 7
-                      ? allUrls
-                      : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                    setAnimationState({
-                      imageUrls,
-                      prompt: '',
-                      taskId: null,
-                      videoUrl: null,
-                      status: 'idle',
-                      error: null,
-                      duration: 10,
-                      pollSeconds: 0,
-                    });
-                  }
+                  // No animations yet — open creation card
+                  const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+                  const imageUrls = allUrls.length <= 7
+                    ? allUrls
+                    : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
+                  setAnimationState({
+                    imageUrls,
+                    prompt: '',
+                    taskId: null,
+                    videoUrl: null,
+                    status: 'idle',
+                    error: null,
+                    duration: 10,
+                    pollSeconds: 0,
+                  });
                   setShowAnimateSheet(true);
                 } : undefined}
                 hasVideo={hasVideo}
                 isVideoEntry={isViewingVideo}
-                videoUrl={animationState?.videoUrl}
+                videoUrl={currentVideo?.videoUrl ?? null}
               />
             )}
 
@@ -2157,35 +2242,95 @@ export default function Editor({
                   loadingMoreCategories={loadingMoreCategories}
                   isDesktop={isDesktop}
                   initialCategory={committedCategory ?? undefined}
+                  failedCategories={failedCategories}
+                  onRetryCategory={retryFailedCategory}
+                  onRetryAll={retryAllTips}
                 />
               </div>
           )}
 
-          {/* Animate Sheet — inside GUI wrapper so it doesn't cover CUI on desktop */}
-          {(showAnimateSheet || isViewingVideo) && projectId && animationState && (
+          {/* Animate Sheet (Creation Card or Detail Mode) */}
+          {showAnimateSheet && projectId && animationState && (
             <AnimateSheet
               snapshots={snapshots.filter(s => s.imageUrl || s.image)}
               projectId={projectId}
               isDesktop={isDesktop}
+              mode={detailAnimation ? 'detail' : 'create'}
+              detailAnimation={detailAnimation ?? undefined}
               onClose={() => {
                 setShowAnimateSheet(false);
+                setAnimationState(null);
+                setDetailAnimation(null);
+              }}
+              onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
+              onGeneratePrompt={generateAnimationPrompt}
+              animationState={animationState}
+              onStateChange={(update) => setAnimationState(prev => {
+                const next = prev ? { ...prev, ...update } : prev;
+                if (next) animationStateRef.current = next;
+                return next;
+              })}
+            />
+          )}
+
+          {/* Video Result Card */}
+          {showVideoResult && (
+            <VideoResultCard
+              animations={animations}
+              selectedVideoId={selectedVideoId}
+              onSelectVideo={(id) => {
+                setSelectedVideoId(id);
+                // Navigate to video entry if not already there
+                if (!isViewingVideo && videoTimelineIndex >= 0) {
+                  setViewIndex(videoTimelineIndex);
+                }
+              }}
+              onCreateNew={() => {
+                setShowVideoResult(false);
+                const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+                const imageUrls = allUrls.length <= 7
+                  ? allUrls
+                  : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
+                setAnimationState({
+                  imageUrls,
+                  prompt: '',
+                  taskId: null,
+                  videoUrl: null,
+                  status: 'idle',
+                  error: null,
+                  duration: 10,
+                  pollSeconds: 0,
+                });
+                setShowAnimateSheet(true);
+              }}
+              onAbandon={(taskId) => {
+                setAnimations(prev => prev.filter(a => a.taskId !== taskId));
+                fetch(`/api/animate/${taskId}`, { method: 'DELETE' }).catch(() => {});
+              }}
+              onClose={() => {
+                setShowVideoResult(false);
+                // Navigate back to last snapshot if on video entry
                 if (isViewingVideo) {
                   const lastSnapIdx = videoTimelineIndex - 1;
                   if (lastSnapIdx >= 0) setViewIndex(lastSnapIdx);
                 }
               }}
-              onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
-              onGeneratePrompt={generateAnimationPrompt}
-              onAbandon={() => {
-                const tid = animationState?.taskId;
-                setAnimationState(prev => prev ? { ...prev, status: 'ready', taskId: null, pollSeconds: 0 } : prev);
-                setAgentStatus(AGENT_GREETING);
-                if (tid && projectId) {
-                  fetch(`/api/animate/${tid}`, { method: 'DELETE' }).catch(() => {});
-                }
+              onViewDetail={(anim) => {
+                setDetailAnimation(anim);
+                // Create a dummy animationState for detail mode display
+                setAnimationState({
+                  imageUrls: anim.snapshotUrls,
+                  prompt: anim.prompt,
+                  taskId: anim.taskId,
+                  videoUrl: anim.videoUrl,
+                  status: 'idle',
+                  error: null,
+                  duration: anim.duration ?? null,
+                  pollSeconds: 0,
+                });
+                setShowAnimateSheet(true);
               }}
-              animationState={animationState}
-              onStateChange={(update) => setAnimationState(prev => prev ? { ...prev, ...update } : prev)}
+              isDesktop={isDesktop}
             />
           )}
         </div>
@@ -2246,8 +2391,10 @@ export default function Editor({
         >
           {heroAnim.objectCover ? (
             // Both containers are squares → object-cover always shows the same center crop, no squish
+            /* eslint-disable-next-line @next/next/no-img-element */
             <img src={heroAnim.src} draggable={false} alt="" className="w-full h-full object-cover" />
           ) : (
+            /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={heroAnim.src}
               draggable={false}

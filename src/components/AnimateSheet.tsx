@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Snapshot } from '@/types';
+import { useState, useCallback } from 'react';
+import { Snapshot, ProjectAnimation } from '@/types';
 import type { AnimationState } from '@/components/Editor';
 
 interface AnimateSheetProps {
@@ -10,78 +10,62 @@ interface AnimateSheetProps {
   onClose: () => void;
   onOpenCUI?: () => void;
   onGeneratePrompt?: () => void;
-  onAbandon?: () => void;
   animationState: AnimationState;
   onStateChange: (update: Partial<AnimationState>) => void;
   isDesktop?: boolean;
+  // Detail mode
+  mode?: 'create' | 'detail';
+  detailAnimation?: ProjectAnimation;
 }
 
 export default function AnimateSheet({
-  snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt, onAbandon,
+  snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt,
   animationState, onStateChange, isDesktop,
+  mode = 'create', detailAnimation,
 }: AnimateSheetProps) {
-  const { prompt, status, taskId, videoUrl, error, duration, pollSeconds, imageUrls } = animationState;
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const isDetail = mode === 'detail' && !!detailAnimation;
+  const { prompt, status, error, duration } = animationState;
 
-  // Auto-generate prompt when status is 'idle' — refresh imageUrls from latest snapshots
-  useEffect(() => {
-    if (status !== 'idle') return;
-    // Rebuild imageUrls from current snapshots (may have more than old 4-image limit)
-    const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-    const freshUrls = allUrls.length <= 7
-      ? allUrls
-      : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-    if (freshUrls.length < 2) {
-      onStateChange({ status: 'error', error: '需要至少 2 张已上传的图片才能生成视频。请等待图片上传完成后重试。' });
-      return;
-    }
-    onStateChange({ imageUrls: freshUrls });
+  // Track which snapshot indices are excluded (user deleted from filmstrip)
+  const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set());
+
+  // All snapshots with valid URLs
+  const allSnapshots = snapshots.filter(s => s.imageUrl?.startsWith('http'));
+  // Active images (excluding user-removed ones)
+  const activeSnapshots = allSnapshots.filter((_, i) => !excludedIndices.has(i));
+  const activeUrls = activeSnapshots.map(s => s.imageUrl!);
+
+  const thumbSize = isDesktop ? 72 : 80;
+
+  const handleGenerateScript = useCallback(() => {
+    if (activeUrls.length < 1) return;
+    const urls = activeUrls.length <= 7
+      ? activeUrls
+      : [0, 1, 2, Math.floor(activeUrls.length / 2), activeUrls.length - 3, activeUrls.length - 2, activeUrls.length - 1]
+        .map(i => activeUrls[Math.min(i, activeUrls.length - 1)]);
+    // Update imageUrls + clear error, then trigger generation
+    // Editor uses ref to read latest imageUrls, so this works synchronously
+    onStateChange({ imageUrls: urls, error: null, prompt: '' });
     onGeneratePrompt?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
-
-  // Resume polling on mount if status is 'polling' and we have a taskId
-  useEffect(() => {
-    if (status === 'polling' && taskId) {
-      startPolling(taskId);
-    }
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const startPolling = useCallback((tid: string) => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/animate/${tid}`);
-        const data = await res.json();
-        if (data.status === 'completed' && data.videoUrl) {
-          clearInterval(pollRef.current!);
-          onStateChange({ videoUrl: data.videoUrl, status: 'done' });
-        } else if (data.status === 'failed') {
-          clearInterval(pollRef.current!);
-          onStateChange({ error: '视频生成失败，请重试', status: 'error' });
-        }
-      } catch { /* ignore */ }
-    }, 4000);
-  }, [onStateChange]);
+  }, [activeUrls, onStateChange, onGeneratePrompt]);
 
   const handleGenerate = useCallback(async () => {
-    if (!prompt.trim()) return;
-    onStateChange({ status: 'submitting', error: null });
+    if (!prompt.trim() || activeUrls.length < 1) return;
+    // Ensure imageUrls are up-to-date with active selection
+    const urls = activeUrls.length <= 7
+      ? activeUrls
+      : [0, 1, 2, Math.floor(activeUrls.length / 2), activeUrls.length - 3, activeUrls.length - 2, activeUrls.length - 1]
+        .map(i => activeUrls[Math.min(i, activeUrls.length - 1)]);
+    onStateChange({ imageUrls: urls, status: 'submitting', error: null });
     try {
       const res = await fetch('/api/animate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, imageUrls, prompt: prompt.trim(), duration }),
+        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to create task');
       onStateChange({ taskId: json.taskId, status: 'polling', pollSeconds: 0 });
-      startPolling(json.taskId);
     } catch (err) {
       const raw = String(err);
       const friendly = raw.includes('523') || raw.includes('unreachable') ? '视频服务暂时不可用，请稍后重试'
@@ -89,40 +73,65 @@ export default function AnimateSheet({
         : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
       onStateChange({ error: friendly, status: 'error' });
     }
-  }, [prompt, projectId, imageUrls, duration, onStateChange, startPolling]);
+  }, [prompt, projectId, activeUrls, duration, onStateChange]);
 
-  // pollSeconds is incremented by Editor (persists even when sheet is closed)
+  const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1;
+  const canGenerateScript = activeUrls.length >= 1 && (status === 'idle' || status === 'error' || status === 'ready');
 
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
+  // Detail mode: data from the animation record
+  const detailUrls = detailAnimation?.snapshotUrls ?? [];
+  const detailPrompt = detailAnimation?.prompt ?? '';
+  const detailDuration = detailAnimation?.duration;
+
+  // Smart bottom button logic (create mode only)
+  const getBottomButton = () => {
+    if (status === 'submitting') {
+      return { label: '提交中...', disabled: true, onClick: () => {} };
+    }
+    if (status === 'generating_prompt') {
+      return { label: '✨ AI 正在写脚本...', disabled: true, onClick: () => {} };
+    }
+    if (!prompt.trim()) {
+      return { label: '✨ 生成脚本', disabled: !canGenerateScript, onClick: handleGenerateScript };
+    }
+    return { label: '🎬 生成视频', disabled: !canGenerate, onClick: handleGenerate };
   };
+
+  const bottomBtn = !isDetail ? getBottomButton() : null;
 
   return (
     <>
-      {/* No backdrop — canvas stays fully visible */}
-
-      {/* Sheet — compact, no overlay. Desktop: absolute within GUI; Mobile: fixed full-width */}
       <div style={{
-        position: isDesktop ? 'absolute' : 'fixed',
-        bottom: 0, left: 0, right: 0,
-        maxHeight: isDesktop ? '40%' : '28dvh',
+        position: 'fixed',
+        ...(isDesktop ? {
+          top: 0, right: 0, bottom: 0, width: 340,
+          borderRadius: 0,
+          animation: 'slideLeftSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
+          zIndex: 300,
+          boxShadow: '-8px 0 32px rgba(0,0,0,0.6)',
+        } : {
+          bottom: 0, left: 0, right: 0,
+          maxHeight: '66dvh',
+          borderRadius: '20px 20px 0 0',
+          animation: 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
+          zIndex: 201,
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
+        }),
         background: '#0e0e0e',
-        borderRadius: '20px 20px 0 0',
-        zIndex: 201,
         display: 'flex', flexDirection: 'column',
-        animation: 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
-        boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
       }}>
         <style>{`
           @keyframes slideUpSheet {
             from { transform: translateY(100%); }
             to   { transform: translateY(0); }
           }
+          @keyframes slideLeftSheet {
+            from { transform: translateX(100%); }
+            to   { transform: translateX(0); }
+          }
         `}</style>
 
-        {/* X button — floating fixed in top-right corner of sheet */}
+        {/* X button */}
         <button
           onClick={onClose}
           style={{
@@ -135,224 +144,276 @@ export default function AnimateSheet({
           }}
         >×</button>
 
-        {/* Scrollable content — everything scrolls */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px 16px' }}>
-          <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', marginBottom: 8 }}>生成视频</div>
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 8px' }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff', marginBottom: 10 }}>
+            {isDetail ? '视频详情' : '生成视频'}
+          </div>
 
-          {/* Snapshot filmstrip — @image references */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
-            {snapshots.filter(s => s.imageUrl?.startsWith('http')).map((s, i) => (
-              <div key={s.id} style={{
-                flexShrink: 0, width: 56, height: 56, borderRadius: 10,
-                overflow: 'hidden', background: '#1a1a1a', position: 'relative',
-              }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={s.imageUrl!}
-                  alt={`snapshot ${i + 1}`}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          {/* ─── DETAIL MODE ─── */}
+          {isDetail ? (
+            <>
+              {/* Snapshot filmstrip — read-only, no delete */}
+              <div style={{ display: 'flex', gap: 10, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
+                {detailUrls.map((url, i) => (
+                  <div key={i} style={{
+                    flexShrink: 0, width: thumbSize, height: thumbSize, borderRadius: 12,
+                    overflow: 'hidden', background: '#1a1a1a', position: 'relative',
+                  }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`snapshot ${i + 1}`}
+                      style={{ width: thumbSize, height: thumbSize, objectFit: 'cover', borderRadius: 12, display: 'block' }}
+                    />
+                    <div style={{
+                      position: 'absolute', bottom: 3, right: 4,
+                      fontSize: '0.6rem', color: 'rgba(255,255,255,0.7)',
+                      background: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: '1px 4px',
+                    }}>@{i + 1}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Prompt — read-only */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500, marginBottom: 6 }}>
+                  ✨ 视频故事
+                </div>
+                <div style={{
+                  width: '100%', minHeight: 80,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 12, padding: '10px',
+                  color: 'rgba(255,255,255,0.7)',
+                  fontSize: isDesktop ? '0.88rem' : '0.95rem', lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                }}>
+                  {detailPrompt || '（无脚本）'}
+                </div>
+              </div>
+
+              {/* Duration — static */}
+              <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>时长</div>
+                  <div style={{
+                    padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
+                    borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
+                    fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)',
+                  }}>
+                    {detailDuration != null ? `${detailDuration} 秒` : '智能'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>状态</div>
+                  <div style={{
+                    padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
+                    borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
+                    fontSize: '0.82rem',
+                    color: detailAnimation?.status === 'completed' ? 'rgba(74,222,128,0.9)'
+                      : detailAnimation?.status === 'processing' ? 'rgba(217,70,239,0.9)'
+                      : 'rgba(239,68,68,0.9)',
+                  }}>
+                    {detailAnimation?.status === 'completed' ? '已完成'
+                      : detailAnimation?.status === 'processing' ? '渲染中'
+                      : detailAnimation?.status === 'failed' ? '失败'
+                      : '已放弃'}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* ─── CREATE MODE (original) ─── */
+            <>
+              {/* Snapshot filmstrip — larger thumbnails with delete button */}
+              <div style={{ display: 'flex', gap: 10, marginBottom: 14, overflowX: 'auto', paddingBottom: 4, flexWrap: 'wrap' }}>
+                {allSnapshots.map((s, i) => {
+                  const excluded = excludedIndices.has(i);
+                  if (excluded) return null;
+                  // Compute active index for @reference
+                  const activeIdx = allSnapshots.slice(0, i + 1).filter((_, j) => !excludedIndices.has(j)).length;
+                  return (
+                    <div key={s.id} style={{
+                      flexShrink: 0, width: thumbSize, height: thumbSize, borderRadius: 12,
+                      overflow: 'visible', background: '#1a1a1a', position: 'relative',
+                    }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={s.imageUrl!}
+                        alt={`snapshot ${activeIdx}`}
+                        style={{ width: thumbSize, height: thumbSize, objectFit: 'cover', borderRadius: 12, display: 'block' }}
+                      />
+                      {/* Delete button */}
+                      <button
+                        onClick={() => setExcludedIndices(prev => new Set([...prev, i]))}
+                        style={{
+                          position: 'absolute', top: -6, right: -6, zIndex: 2,
+                          width: 20, height: 20, borderRadius: '50%',
+                          background: 'rgba(0,0,0,0.7)', border: '1px solid rgba(255,255,255,0.2)',
+                          color: 'rgba(255,255,255,0.8)', fontSize: '0.65rem',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          cursor: 'pointer', lineHeight: 1,
+                        }}
+                      >×</button>
+                      {/* @index label */}
+                      <div style={{
+                        position: 'absolute', bottom: 3, right: 4,
+                        fontSize: '0.6rem', color: 'rgba(255,255,255,0.7)',
+                        background: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: '1px 4px',
+                      }}>@{activeIdx}</div>
+                    </div>
+                  );
+                })}
+                {activeSnapshots.length === 0 && (
+                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.8rem', padding: '10px 0' }}>
+                    所有图片已移除
+                  </div>
+                )}
+              </div>
+
+              {/* Prompt section — always visible */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>✨ 视频故事</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {onOpenCUI && !isDesktop && status !== 'idle' && (
+                      <button
+                        onClick={onOpenCUI}
+                        style={{
+                          background: 'none', border: '1px solid rgba(255,255,255,0.15)',
+                          color: 'rgba(255,255,255,0.5)', borderRadius: 8, padding: '3px 10px',
+                          fontSize: '0.7rem', cursor: 'pointer',
+                        }}
+                      >
+                        在 Chat 里看 ↗
+                      </button>
+                    )}
+                    {/* AI generate/rewrite button */}
+                    {status === 'generating_prompt' ? (
+                      <div style={{
+                        border: '1px solid rgba(217,70,239,0.3)',
+                        color: 'rgba(217,70,239,0.7)', borderRadius: 8, padding: '3px 10px',
+                        fontSize: '0.7rem',
+                      }}>
+                        AI 正在写...
+                      </div>
+                    ) : status === 'submitting' ? null : (
+                      prompt.trim() ? (
+                        <button
+                          onClick={handleGenerateScript}
+                          disabled={!canGenerateScript}
+                          style={{
+                            background: 'none', border: '1px solid rgba(217,70,239,0.4)',
+                            color: 'rgba(217,70,239,0.9)', borderRadius: 8, padding: '3px 10px',
+                            fontSize: '0.7rem', cursor: canGenerateScript ? 'pointer' : 'default',
+                            opacity: canGenerateScript ? 1 : 0.4,
+                          }}
+                        >
+                          ✨ {status === 'error' ? 'AI 重试' : 'AI 重写'}
+                        </button>
+                      ) : null
+                    )}
+                  </div>
+                </div>
+                <textarea
+                  value={prompt}
+                  onChange={e => { onStateChange({ prompt: e.target.value }); if (status !== 'ready') onStateChange({ status: 'ready' }); }}
+                  disabled={status === 'generating_prompt'}
+                  placeholder={status === 'generating_prompt' ? 'AI 正在分析照片...' : '描述你的视频故事...'}
+                  style={{
+                    width: '100%', minHeight: 100,
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 12, padding: '10px',
+                    color: status === 'generating_prompt' ? 'rgba(255,255,255,0.4)' : '#fff',
+                    fontSize: isDesktop ? '0.88rem' : '0.95rem', lineHeight: 1.5,
+                    resize: 'none', outline: 'none',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit',
+                  }}
                 />
+              </div>
+
+              {/* Duration + cost */}
+              {status !== 'submitting' && (
+                <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>时长</div>
+                    <select
+                      value={duration ?? 'smart'}
+                      onChange={e => {
+                        const v = e.target.value;
+                        onStateChange({ duration: v === 'smart' ? null : Number(v) });
+                      }}
+                      style={{
+                        width: '100%', background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 8, padding: '7px 10px',
+                        color: '#fff', fontSize: '0.82rem', cursor: 'pointer',
+                      }}
+                    >
+                      <option value={3}>3 秒</option>
+                      <option value={5}>5 秒</option>
+                      <option value={7}>7 秒</option>
+                      <option value={10}>10 秒</option>
+                      <option value={15}>15 秒</option>
+                      <option value="smart">智能</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>费用预估</div>
+                    <div style={{
+                      padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
+                      borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
+                      fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)',
+                    }}>
+                      {duration != null ? `~$${(duration * 0.112).toFixed(2)}` : '按实际时长'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Error */}
+              {status === 'error' && error && (
                 <div style={{
-                  position: 'absolute', bottom: 2, right: 3,
-                  fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)',
-                  background: 'rgba(0,0,0,0.5)', borderRadius: 3, padding: '1px 3px',
-                }}>@{i + 1}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Prompt section */}
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>✨ 视频故事</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {onOpenCUI && (
-                  <button
-                    onClick={onOpenCUI}
-                    style={{
-                      background: 'none', border: '1px solid rgba(255,255,255,0.15)',
-                      color: 'rgba(255,255,255,0.5)', borderRadius: 8, padding: '3px 10px',
-                      fontSize: '0.7rem', cursor: 'pointer',
-                    }}
-                  >
-                    在 Chat 里看 ↗
-                  </button>
-                )}
-                {status === 'ready' && (
-                  <button
-                    onClick={() => onStateChange({ status: 'idle' })}
-                    style={{
-                      background: 'none', border: '1px solid rgba(217,70,239,0.4)',
-                      color: 'rgba(217,70,239,0.9)', borderRadius: 8, padding: '3px 10px',
-                      fontSize: '0.7rem', cursor: 'pointer',
-                    }}
-                  >
-                    AI 重写
-                  </button>
-                )}
-              </div>
-            </div>
-            <textarea
-              value={prompt}
-              onChange={e => { onStateChange({ prompt: e.target.value }); if (status !== 'ready') onStateChange({ status: 'ready' }); }}
-              disabled={status === 'generating_prompt' || status === 'submitting' || status === 'polling'}
-              placeholder={status === 'generating_prompt' ? 'AI 正在分析照片...' : '描述你的视频故事...'}
-              style={{
-                width: '100%', minHeight: 80,
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 12, padding: '10px',
-                color: status === 'generating_prompt' ? 'rgba(255,255,255,0.4)' : '#fff',
-                fontSize: '0.82rem', lineHeight: 1.5,
-                resize: 'none', outline: 'none',
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-              }}
-            />
-          </div>
-
-          {/* Duration + cost */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>时长</div>
-              <select
-                value={duration ?? 'smart'}
-                onChange={e => {
-                  const v = e.target.value
-                  onStateChange({ duration: v === 'smart' ? null : Number(v) })
-                }}
-                disabled={status === 'polling' || status === 'done'}
-                style={{
-                  width: '100%', background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 8, padding: '7px 10px',
-                  color: '#fff', fontSize: '0.82rem', cursor: 'pointer',
-                }}
-              >
-                <option value={3}>3 秒</option>
-                <option value={5}>5 秒</option>
-                <option value={7}>7 秒</option>
-                <option value={10}>10 秒</option>
-                <option value={15}>15 秒</option>
-                <option value="smart">智能</option>
-              </select>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>费用预估</div>
-              <div style={{
-                padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
-                borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
-                fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)',
-              }}>
-                {duration != null ? `~$${(duration * 0.112).toFixed(2)}` : '按实际时长'}
-              </div>
-            </div>
-          </div>
-
-          {/* Generate button */}
-          {(status === 'idle' || status === 'generating_prompt' || status === 'ready' || status === 'error') && (
-            <button
-              onClick={handleGenerate}
-              disabled={!prompt.trim() || status !== 'ready'}
-              style={{
-                width: '100%', padding: '12px',
-                background: !prompt.trim() || status !== 'ready'
-                  ? 'rgba(217,70,239,0.2)'
-                  : 'linear-gradient(135deg, #d946ef, #a855f7)',
-                border: 'none', borderRadius: 12,
-                color: !prompt.trim() || status !== 'ready' ? 'rgba(255,255,255,0.4)' : '#fff',
-                fontSize: '0.9rem', fontWeight: 600,
-                cursor: !prompt.trim() || status !== 'ready' ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {status === 'generating_prompt' ? '✨ AI 正在写脚本...' : '🎬 生成视频'}
-            </button>
-          )}
-
-          {/* Submitting */}
-          {status === 'submitting' && (
-            <div style={{ textAlign: 'center', padding: '12px', color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>
-              提交中...
-            </div>
-          )}
-
-          {/* Polling progress */}
-          {status === 'polling' && (
-            <div style={{
-              background: 'rgba(217,70,239,0.08)',
-              border: '1px solid rgba(217,70,239,0.2)',
-              borderRadius: 12, padding: '14px',
-              textAlign: 'center',
-            }}>
-              <div style={{ color: '#d946ef', fontWeight: 600, marginBottom: 4, fontSize: '0.88rem' }}>渲染中...</div>
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.78rem' }}>
-                已等待 {formatTime(pollSeconds)}，约需 3-5 分钟
-              </div>
-              <div style={{
-                marginTop: 8, height: 3, background: 'rgba(255,255,255,0.1)',
-                borderRadius: 2, overflow: 'hidden',
-              }}>
-                <div style={{
-                  height: '100%', background: '#d946ef',
-                  width: `${Math.min(95, (pollSeconds / 300) * 100)}%`,
-                  transition: 'width 1s linear',
-                }} />
-              </div>
-              <button
-                onClick={onAbandon}
-                style={{
-                  marginTop: 12, padding: '8px 20px',
-                  background: 'none', border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: 10, color: 'rgba(255,255,255,0.4)',
-                  fontSize: '0.78rem', cursor: 'pointer',
-                }}
-              >
-                放弃
-              </button>
-            </div>
-          )}
-
-          {/* Error */}
-          {status === 'error' && error && (
-            <div style={{
-              background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-              borderRadius: 10, padding: '10px', color: 'rgba(239,68,68,0.9)',
-              fontSize: '0.82rem', marginTop: 6,
-            }}>
-              {error}
-            </div>
-          )}
-
-          {/* Done — video is in canvas, show regenerate */}
-          {status === 'done' && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={() => onStateChange({ status: 'idle', prompt: '', taskId: null, videoUrl: null, error: null, pollSeconds: 0 })}
-                style={{
-                  flex: 1, padding: '12px',
-                  background: 'rgba(217,70,239,0.08)',
-                  border: '1px solid rgba(217,70,239,0.2)',
-                  borderRadius: 12, color: '#d946ef',
-                  fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                重新生成视频
-              </button>
-              <button
-                onClick={() => { if (videoUrl) window.open(videoUrl, '_blank'); }}
-                style={{
-                  padding: '12px 16px',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 12, color: 'rgba(255,255,255,0.7)',
-                  fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
-                }}
-              >
-                ↗ 打开
-              </button>
-            </div>
+                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                  borderRadius: 10, padding: '10px', color: 'rgba(239,68,68,0.9)',
+                  fontSize: '0.82rem', marginTop: 6,
+                }}>
+                  {error}
+                </div>
+              )}
+            </>
           )}
         </div>
+
+        {/* Sticky bottom button — create mode only */}
+        {!isDetail && bottomBtn && (
+          <div style={{
+            padding: '12px 16px',
+            paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+            background: '#0e0e0e',
+          }}>
+            <button
+              onClick={bottomBtn.onClick}
+              disabled={bottomBtn.disabled}
+              style={{
+                width: '100%', padding: '14px',
+                background: !bottomBtn.disabled
+                  ? 'linear-gradient(135deg, #d946ef, #a855f7)'
+                  : 'rgba(217,70,239,0.2)',
+                border: 'none', borderRadius: 12,
+                color: !bottomBtn.disabled ? '#fff' : 'rgba(255,255,255,0.4)',
+                fontSize: '0.95rem', fontWeight: 600,
+                cursor: !bottomBtn.disabled ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {bottomBtn.label}
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

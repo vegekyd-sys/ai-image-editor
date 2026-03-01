@@ -75,12 +75,14 @@ export default function ImageCanvas({
   const [naturalDims, setNaturalDims] = useState({ w: 0, h: 0 });
 
   // Reset zoom when entering annotation mode
-  const prevAnnotationMode = useRef(annotationMode);
-  if (annotationMode && !prevAnnotationMode.current) {
-    if (scale !== 1) setScale(1);
-    if (translate.x !== 0 || translate.y !== 0) setTranslate({ x: 0, y: 0 });
+  const [prevAnnotationMode, setPrevAnnotationMode] = useState(false);
+  if (annotationMode && !prevAnnotationMode) {
+    setPrevAnnotationMode(!!annotationMode);
+    setScale(1);
+    setTranslate({ x: 0, y: 0 });
+  } else if (!!annotationMode !== prevAnnotationMode) {
+    setPrevAnnotationMode(!!annotationMode);
   }
-  prevAnnotationMode.current = annotationMode;
 
   // Image loading state
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -212,7 +214,7 @@ export default function ImageCanvas({
         }));
       }
     }
-  }, [scale, isComparing, clearLongPress]);
+  }, [scale, isComparing, clearLongPress, annotationMode]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
@@ -286,7 +288,7 @@ export default function ImageCanvas({
         setAnimDir(null);
       }, 150);
     }
-  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress]);
+  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode]);
 
   const handleClick = useCallback(() => {
     if (skipClick.current) {
@@ -314,7 +316,7 @@ export default function ImageCanvas({
         setIsComparing(true);
       }, 200);
     }
-  }, [previousImage, isVideoEntry, clearLongPress]);
+  }, [previousImage, isVideoEntry, clearLongPress, annotationMode]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!mouseStartPos.current) return;
@@ -390,7 +392,11 @@ export default function ImageCanvas({
   };
 
   const baseImage = timeline[currentIndex];
-  const displayImage = isComparing && previousImage ? previousImage : baseImage;
+  // When viewing __VIDEO__ sentinel with no videoUrl, fallback to last real snapshot
+  const fallbackImage = baseImage === VIDEO_SENTINEL && !videoUrl
+    ? timeline.slice(0, -1).filter(t => t !== VIDEO_SENTINEL).pop() ?? baseImage
+    : baseImage;
+  const displayImage = isComparing && previousImage ? previousImage : fallbackImage;
 
   return (
     <div
@@ -496,7 +502,7 @@ export default function ImageCanvas({
             )}
           </div>
         ) : (
-          /* Image */
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
             ref={imgElRef}
             src={displayImage}
@@ -540,7 +546,7 @@ export default function ImageCanvas({
       )}
 
       {/* Bottom indicators */}
-      {timeline.length > 1 && (
+      {(timeline.length > 1 || onAnimate) && (
         <div className={`absolute left-1/2 -translate-x-1/2 flex items-center z-10 ${isDesktop ? 'bottom-3 gap-2' : 'bottom-20 gap-3'}`}>
           <div className={`flex items-center bg-black/50 backdrop-blur-sm rounded-full ${isDesktop ? 'gap-1 px-2 py-1' : 'gap-1.5 px-3 py-1.5'}`}>
             {timeline.map((entry, i) => {
