@@ -2061,6 +2061,7 @@ export default function Editor({
                 isVideoEntry={isViewingVideo}
                 videoUrl={currentVideo?.videoUrl ?? null}
                 videoProcessing={isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing')}
+                videoPosterImage={snapshots[snapshots.length - 1]?.image}
               />
             )}
 
