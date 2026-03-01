@@ -92,6 +92,13 @@ export default function ImageCanvas({
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoBuffered, setVideoBuffered] = useState(0); // 0-1 progress
+  const [prevVideoUrl, setPrevVideoUrl] = useState(videoUrl);
+  if (prevVideoUrl !== videoUrl) {
+    setPrevVideoUrl(videoUrl);
+    if (videoPlaying) setVideoPlaying(false);
+    if (videoLoading) setVideoLoading(false);
+    if (videoBuffered !== 0) setVideoBuffered(0);
+  }
 
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
