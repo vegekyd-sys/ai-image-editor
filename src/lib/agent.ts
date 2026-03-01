@@ -1,6 +1,7 @@
 import { streamText, generateText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
+import sharp from 'sharp';
 import { generatePreviewImage, generateImageWithReferences } from './gemini';
 import { createKlingTask } from './kling';
 import agentPrompt from './prompts/agent.md';
@@ -178,8 +179,18 @@ function createTools(ctx: AgentContext) {
         question: z.string().optional().describe('Optional focus area for the analysis'),
       }),
       execute: async ({ question }) => {
-        const base64Data = ctx.currentImage.replace(/^data:image\/\w+;base64,/, '');
-        const mimeType = ctx.currentImage.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+        // Compress image for analysis — vision doesn't need full resolution, ~600KB is enough
+        const raw = ctx.currentImage.replace(/^data:image\/\w+;base64,/, '');
+        let buf = Buffer.from(raw, 'base64');
+        // Only compress if larger than 600KB
+        if (buf.length > 600_000) {
+          buf = Buffer.from(await sharp(buf)
+            .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 75 })
+            .toBuffer());
+        }
+        const base64Data = buf.toString('base64');
+        const mimeType = 'image/jpeg';
         return { base64Data, mimeType, question };
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

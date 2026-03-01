@@ -293,8 +293,9 @@ export default function ImageCanvas({
       skipClick.current = false;
       return;
     }
+    if (annotationMode) return;
     if (isDraft) onDismissDraft?.();
-  }, [isDraft, onDismissDraft]);
+  }, [isDraft, onDismissDraft, annotationMode]);
 
   // Desktop: unified mouse handler — mirrors all touch interactions
   // (long-press compare + swipe navigate, same logic as touch handlers)
@@ -302,7 +303,7 @@ export default function ImageCanvas({
   const mouseDidDrag = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (annotationMode || e.button !== 0 || isVideoEntry) return;
+    if (annotationMode || e.button !== 0 || isVideoEntry) { mouseStartPos.current = null; return; }
     mouseStartPos.current = { x: e.clientX, y: e.clientY };
     mouseDidDrag.current = false;
 

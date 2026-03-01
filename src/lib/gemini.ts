@@ -889,14 +889,19 @@ async function* streamTipsByCategoryOpenRouter(
     ? ''
     : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
 
+  // creative/wild use Flash High reasoning for better creativity; enhance/captions use minimal for speed
+  const useHighReasoning = category === 'creative' || category === 'wild';
+  const reasoning = useHighReasoning ? { effort: 'high' } : { effort: 'minimal' };
+
   const t0 = Date.now();
-  tlog(`[tips:openrouter:${category}] fetch start`);
+  tlog(`[tips:openrouter:${category}] fetch start (reasoning: ${reasoning.effort})`);
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
       model: OPENROUTER_MODEL,
       stream: true,
+      reasoning,
       messages: [
         { role: 'system', content: systemPrompt },
         {
