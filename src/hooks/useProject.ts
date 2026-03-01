@@ -49,7 +49,7 @@ export function useProject(projectId: string, userId: string) {
         .single(),
       supabase
         .from('project_animations')
-        .select('id, video_url, prompt, snapshot_urls, status, piapi_task_id, created_at, duration')
+        .select('id, video_url, prompt, snapshot_urls, status, piapi_task_id, created_at')
         .eq('project_id', projectId)
         .in('status', ['completed', 'processing'])
         .order('created_at', { ascending: false }),
@@ -95,7 +95,6 @@ export function useProject(projectId: string, userId: string) {
       snapshotUrls: (row.snapshot_urls as string[]) ?? [],
       status: row.status as ProjectAnimation['status'],
       createdAt: row.created_at as string,
-      duration: (row.duration as number) ?? null,
     }))
 
     return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations }
