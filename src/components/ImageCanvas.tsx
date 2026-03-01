@@ -27,6 +27,7 @@ interface ImageCanvasProps {
   hasVideo?: boolean;
   isVideoEntry?: boolean;
   videoUrl?: string | null;
+  videoProcessing?: boolean; // true when rendering but no videoUrl yet
   isDesktop?: boolean;
   annotationMode?: boolean;
   annotationTool?: 'brush' | 'rect' | 'text';
@@ -43,7 +44,7 @@ interface ImageCanvasProps {
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
-  hasVideo, isVideoEntry, videoUrl, isDesktop,
+  hasVideo, isVideoEntry, videoUrl, videoProcessing, isDesktop,
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
@@ -510,19 +511,61 @@ export default function ImageCanvas({
             )}
           </div>
         ) : (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            ref={imgElRef}
-            src={displayImage}
-            alt="preview"
-            className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
-              animDir === 'left' ? 'opacity-0 -translate-x-8' :
-              animDir === 'right' ? 'opacity-0 translate-x-8' :
-              imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
-            }`}
-            draggable={false}
-            onLoad={() => { setImageLoaded(true); updateImageRect(); }}
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              ref={imgElRef}
+              src={displayImage}
+              alt="preview"
+              className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
+                animDir === 'left' ? 'opacity-0 -translate-x-8' :
+                animDir === 'right' ? 'opacity-0 translate-x-8' :
+                imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
+              }`}
+              draggable={false}
+              onLoad={() => { setImageLoaded(true); updateImageRect(); }}
+            />
+            {/* Video processing overlay */}
+            {isVideoEntry && !videoUrl && videoProcessing && imageLoaded && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 50%, transparent 100%)' }}
+              >
+                <div className="flex flex-col items-center gap-3 mb-8">
+                  {/* Animated ring */}
+                  <div className="relative w-16 h-16 flex items-center justify-center">
+                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 64 64" fill="none">
+                      <circle cx="32" cy="32" r="28" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
+                      <circle cx="32" cy="32" r="28" stroke="url(#renderGrad)" strokeWidth="3"
+                        strokeLinecap="round" strokeDasharray="88 88"
+                        style={{ animation: 'renderSpin 1.6s linear infinite', transformOrigin: '32px 32px' }}
+                      />
+                      <defs>
+                        <linearGradient id="renderGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#d946ef" />
+                          <stop offset="100%" stopColor="#a855f7" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    {/* Film icon in center */}
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="2" width="20" height="20" rx="2.18" />
+                      <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-white font-semibold text-[15px] tracking-wide">视频渲染中</span>
+                    <span className="text-white/45 text-[12px]">通常需要 3–5 分钟</span>
+                  </div>
+                </div>
+                <style>{`
+                  @keyframes renderSpin {
+                    from { transform: rotate(0deg); }
+                    to   { transform: rotate(360deg); }
+                  }
+                `}</style>
+              </div>
+            )}
+          </>
         )}
 
         {/* Annotation overlay */}

@@ -2060,6 +2060,7 @@ export default function Editor({
                 hasVideo={hasVideo}
                 isVideoEntry={isViewingVideo}
                 videoUrl={currentVideo?.videoUrl ?? null}
+                videoProcessing={isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing')}
               />
             )}
 
