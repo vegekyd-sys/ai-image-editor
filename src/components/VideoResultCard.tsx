@@ -191,16 +191,16 @@ export default function VideoResultCard({
           );
         })}
 
-        {/* "+ 新视频" dashed card — mirrors TipsBar "更多" button */}
+        {/* "+ 新视频" dashed card — wider than TipsBar "更多" */}
         <button
           onClick={onCreateNew}
-          className={`flex-shrink-0 rounded-2xl border border-dashed border-fuchsia-500/30 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform cursor-pointer ${isDesktop ? 'w-[44px] h-[64px]' : 'w-[52px] h-[72px]'}`}
-          style={{ background: 'rgba(217,70,239,0.06)' }}
+          className={`flex-shrink-0 rounded-2xl border border-dashed border-fuchsia-500/30 flex flex-row items-center justify-center gap-1.5 active:scale-95 transition-transform cursor-pointer px-4 ${isDesktop ? 'h-[64px]' : 'h-[72px]'}`}
+          style={{ background: 'rgba(217,70,239,0.06)', minWidth: isDesktop ? 80 : 90 }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="text-fuchsia-400/50">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="text-fuchsia-400/60">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          <span className="text-[9px] font-medium text-fuchsia-400/60">新视频</span>
+          <span className={`font-medium text-fuchsia-400/70 ${isDesktop ? 'text-[11px]' : 'text-[12px]'}`}>新视频</span>
         </button>
 
         {/* Empty state */}
@@ -211,6 +211,13 @@ export default function VideoResultCard({
             还没有视频
           </div>
         )}
+      </div>
+
+      {/* Bottom spacer row — matches TipsBar category toolbar height (~32px) */}
+      <div className="flex items-center justify-center py-2">
+        <span className={`text-white/20 tracking-wide font-medium ${isDesktop ? 'text-[10px]' : 'text-[11px]'}`}>
+          视频 · {all.length} 个
+        </span>
       </div>
     </div>
   );
