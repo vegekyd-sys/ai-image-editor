@@ -114,7 +114,7 @@ export default function AnimateSheet({
           maxHeight: '66dvh',
           borderRadius: '20px 20px 0 0',
           animation: 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
-          zIndex: 201,
+          zIndex: 202,
           boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
         }),
         background: '#0e0e0e',
@@ -186,7 +186,7 @@ export default function AnimateSheet({
                   border: '1px solid rgba(255,255,255,0.08)',
                   borderRadius: 12, padding: '10px',
                   color: 'rgba(255,255,255,0.7)',
-                  fontSize: isDesktop ? '0.88rem' : '0.95rem', lineHeight: 1.5,
+                  fontSize: isDesktop ? '0.88rem' : '1.05rem', lineHeight: 1.6,
                   whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 }}>
                   {detailPrompt || '（无脚本）'}
@@ -327,7 +327,7 @@ export default function AnimateSheet({
                     border: '1px solid rgba(255,255,255,0.1)',
                     borderRadius: 12, padding: '10px',
                     color: status === 'generating_prompt' ? 'rgba(255,255,255,0.4)' : '#fff',
-                    fontSize: isDesktop ? '0.88rem' : '0.95rem', lineHeight: 1.5,
+                    fontSize: isDesktop ? '0.88rem' : '1.05rem', lineHeight: 1.6,
                     resize: 'none', outline: 'none',
                     boxSizing: 'border-box',
                     fontFamily: 'inherit',

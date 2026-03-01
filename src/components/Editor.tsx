@@ -244,8 +244,6 @@ export default function Editor({
   const [animations, setAnimations] = useState<ProjectAnimation[]>(() => initialAnimations ?? []);
   // Which video is currently selected for canvas playback
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
-  // Whether the result card is showing
-  const [showVideoResult, setShowVideoResult] = useState(false);
   // Detail mode: which animation to view in AnimateSheet
   const [detailAnimation, setDetailAnimation] = useState<ProjectAnimation | null>(null);
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
@@ -313,6 +311,8 @@ export default function Editor({
   const previewsNotifiedRef = useRef<Set<string>>(
     new Set(initialSnapshots?.map(s => s.id) ?? [])
   );
+  // Flag: navigate to video entry on next render after submitting animation
+  const pendingNavigateToVideoRef = useRef(false);
 
   // Draft mode: draftParentIndex !== null means a virtual draft entry exists in timeline
   const isDraft = draftParentIndex !== null;
@@ -1657,20 +1657,11 @@ export default function Editor({
     setAnimations(initialAnimations);
   }, [initialAnimations]);
 
-  // Show result card when user swipes to video entry
-  const prevIsViewingVideo = useRef(isViewingVideo);
+  // Auto-select latest completed video when entering video entry
   useEffect(() => {
-    const wasViewing = prevIsViewingVideo.current;
-    prevIsViewingVideo.current = isViewingVideo;
-    if (isViewingVideo) {
-      setShowVideoResult(true);
-      if (!selectedVideoId) {
-        const latest = animations.find(a => a.status === 'completed' && !!a.videoUrl);
-        if (latest) setSelectedVideoId(latest.id);
-      }
-    } else if (wasViewing) {
-      // Only auto-close when user navigates away from video entry
-      setShowVideoResult(false);
+    if (isViewingVideo && !selectedVideoId) {
+      const latest = animations.find(a => a.status === 'completed' && !!a.videoUrl);
+      if (latest) setSelectedVideoId(latest.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isViewingVideo]);
@@ -1783,14 +1774,22 @@ export default function Editor({
         createdAt: new Date().toISOString(),
       };
       setAnimations(prev => [newAnim, ...prev]);
-      // Close the creation card — user can leave and continue editing
+      // Close the creation card
       setShowAnimateSheet(false);
       setAnimationState(null);
-      // Show the result card with the new processing entry
-      setShowVideoResult(true);
       setSelectedVideoId(animationState.taskId);
+      // Navigate to video entry on next render (timeline hasn't updated yet)
+      pendingNavigateToVideoRef.current = true;
     }
   }, [animationState?.status, animationState?.taskId, animationState?.prompt, animationState?.imageUrls, projectId]);
+
+  // Navigate to video entry after submitting animation (deferred to next render when timeline is updated)
+  useEffect(() => {
+    if (pendingNavigateToVideoRef.current && videoTimelineIndex >= 0) {
+      pendingNavigateToVideoRef.current = false;
+      setViewIndex(videoTimelineIndex);
+    }
+  }, [videoTimelineIndex]);
 
   // Watch for animations completing — send CUI notification + StatusBar update
   const prevCompletedIdsRef = useRef<Set<string>>(
@@ -2273,20 +2272,13 @@ export default function Editor({
             />
           )}
 
-          {/* Video Result Card */}
-          {showVideoResult && (
+          {/* Video Result Card — always visible when viewing video entry */}
+          {isViewingVideo && (
             <VideoResultCard
               animations={animations}
               selectedVideoId={selectedVideoId}
-              onSelectVideo={(id) => {
-                setSelectedVideoId(id);
-                // Navigate to video entry if not already there
-                if (!isViewingVideo && videoTimelineIndex >= 0) {
-                  setViewIndex(videoTimelineIndex);
-                }
-              }}
+              onSelectVideo={setSelectedVideoId}
               onCreateNew={() => {
-                setShowVideoResult(false);
                 const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
                 const imageUrls = allUrls.length <= 7
                   ? allUrls
@@ -2307,17 +2299,8 @@ export default function Editor({
                 setAnimations(prev => prev.filter(a => a.taskId !== taskId));
                 fetch(`/api/animate/${taskId}`, { method: 'DELETE' }).catch(() => {});
               }}
-              onClose={() => {
-                setShowVideoResult(false);
-                // Navigate back to last snapshot if on video entry
-                if (isViewingVideo) {
-                  const lastSnapIdx = videoTimelineIndex - 1;
-                  if (lastSnapIdx >= 0) setViewIndex(lastSnapIdx);
-                }
-              }}
               onViewDetail={(anim) => {
                 setDetailAnimation(anim);
-                // Create a dummy animationState for detail mode display
                 setAnimationState({
                   imageUrls: anim.snapshotUrls,
                   prompt: anim.prompt,
