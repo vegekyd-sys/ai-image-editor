@@ -16,7 +16,7 @@ function tlog(msg: string) {
 
 // ── Provider & Model Config ─────────────────────────────────────
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
-const PROVIDER = (process.env.AI_PROVIDER || 'google') as 'google' | 'openrouter';
+const PROVIDER = (process.env.AI_PROVIDER || 'openrouter') as 'google' | 'openrouter';
 
 // Image generation model — override with IMAGE_MODEL env var
 const MODEL = process.env.IMAGE_MODEL || 'gemini-3-pro-image-preview';
@@ -411,9 +411,10 @@ export async function generatePreviewImage(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
+  thinkingEffort?: 'minimal' | 'high',
 ): Promise<string | null> {
   if (PROVIDER === 'openrouter') {
-    return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio);
+    return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio, thinkingEffort);
   } else {
     return generatePreviewImageGoogle(imageBase64, editPrompt, aspectRatio);
   }
@@ -466,6 +467,7 @@ async function generatePreviewImageOpenRouter(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
+  thinkingEffort?: 'minimal' | 'high',
 ): Promise<string | null> {
   // Text-only generation (no input image) uses a different system prompt
   const isTextToImage = !imageBase64;
@@ -485,6 +487,7 @@ async function generatePreviewImageOpenRouter(
     stream: false,
     modalities: ['image', 'text'],
     temperature: 1.0,
+    reasoning: { effort: thinkingEffort || 'minimal' },
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
@@ -494,6 +497,7 @@ async function generatePreviewImageOpenRouter(
     body.image_config = { aspect_ratio: aspectRatio };
   }
 
+  console.log(`[OpenRouter] generatePreview reasoning=${thinkingEffort || 'minimal'}`);
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
     headers: openrouterHeaders(),
@@ -540,6 +544,7 @@ export async function generateImageWithReferences(
   images: ImageReference[],
   editPrompt: string,
   aspectRatio?: string,
+  thinkingEffort?: 'minimal' | 'high',
 ): Promise<string | null> {
   // Build a prompt that labels each image by its role
   const imageLabels = images
@@ -548,7 +553,7 @@ export async function generateImageWithReferences(
   const fullPrompt = `${imageLabels}\n\n${editPrompt}`;
 
   const urls = images.map(img => img.url);
-  const result = await generateWithMultipleImages(urls, fullPrompt, true);
+  const result = await generateWithMultipleImages(urls, fullPrompt, true, thinkingEffort);
 
   if (result.image) {
     console.log('✅ [generateImageWithReferences] multi-image generation succeeded');
@@ -559,7 +564,7 @@ export async function generateImageWithReferences(
   console.warn('⚠️ [generateImageWithReferences] multi-image failed, falling back to single image');
   const base = images[0].url;
   return PROVIDER === 'openrouter'
-    ? generatePreviewImageOpenRouter(base, editPrompt, aspectRatio)
+    ? generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort)
     : generatePreviewImageGoogle(base, editPrompt, aspectRatio);
 }
 
@@ -569,9 +574,10 @@ export async function generateWithMultipleImages(
   images: string[],       // base64 data URLs
   prompt: string,
   wantImage: boolean,
+  thinkingEffort?: 'minimal' | 'high',
 ): Promise<{ text?: string; image?: string }> {
   if (PROVIDER === 'openrouter') {
-    return generateMultiImageOpenRouter(images, prompt, wantImage);
+    return generateMultiImageOpenRouter(images, prompt, wantImage, thinkingEffort);
   } else {
     return generateMultiImageGoogle(images, prompt, wantImage);
   }
@@ -624,6 +630,7 @@ async function generateMultiImageOpenRouter(
   images: string[],
   prompt: string,
   wantImage: boolean,
+  thinkingEffort?: 'minimal' | 'high',
 ): Promise<{ text?: string; image?: string }> {
   const content: Array<Record<string, unknown>> = [];
 
@@ -636,11 +643,13 @@ async function generateMultiImageOpenRouter(
     model: OPENROUTER_MODEL,
     stream: false,
     temperature: 1.0,
+    reasoning: { effort: thinkingEffort || 'minimal' },
     messages: [
       { role: 'user', content },
     ],
   };
 
+  console.log(`[OpenRouter] generateMultiImage reasoning=${thinkingEffort || 'minimal'}`);
   if (wantImage) {
     body.modalities = ['image', 'text'];
   }
