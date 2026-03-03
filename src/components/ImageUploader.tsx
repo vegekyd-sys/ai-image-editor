@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
+import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils';
 
 interface ImageUploaderProps {
   onImageSelect: (base64: string) => void;
@@ -40,8 +41,9 @@ export default function ImageUploader({ onImageSelect, disabled }: ImageUploader
 
   const handleFile = useCallback(
     async (file: File) => {
-      if (!file.type.startsWith('image/')) return;
-      const base64 = await compressImage(file);
+      if (!file.type.startsWith('image/') && !isHeicFile(file)) return;
+      const decodable = await ensureDecodableFile(file);
+      const base64 = await compressImage(decodable);
       onImageSelect(base64);
     },
     [onImageSelect]

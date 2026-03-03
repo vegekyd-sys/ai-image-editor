@@ -18,6 +18,9 @@ interface TipsBarProps {
   loadingMoreCategories?: Set<Tip['category']>;
   isDesktop?: boolean;
   initialCategory?: Tip['category'];
+  failedCategories?: Set<Tip['category']>;
+  onRetryCategory?: (category: Tip['category']) => void;
+  onRetryAll?: () => void;
 }
 
 function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
@@ -34,6 +37,7 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
         {isStorageUrl && !imgLoaded && (
           <div className="absolute inset-0 bg-white/5 animate-pulse" />
         )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={tip.previewImage}
           alt=""
@@ -74,7 +78,7 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
   );
 }
 
-export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipCommit, onTipDeselect, onRetryPreview, previewingIndex, onLoadMore, onCategorySelect, loadingMoreCategories, isDesktop, initialCategory }: TipsBarProps) {
+export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipCommit, onTipDeselect, onRetryPreview, previewingIndex, onLoadMore, onCategorySelect, loadingMoreCategories, isDesktop, initialCategory, failedCategories, onRetryCategory, onRetryAll }: TipsBarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tipRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [activeCategory, setActiveCategory] = useState<Tip['category']>('enhance');
@@ -389,24 +393,46 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
             </div>
           </div>
         )}
+
+        {/* All tips failed — retry button */}
+        {!hasTips && !isLoading && !!failedCategories?.size && (
+          <button
+            onClick={onRetryAll}
+            className="flex-shrink-0 mx-auto flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/10 active:scale-95 transition-transform cursor-pointer"
+            style={{ background: 'rgba(255,255,255,0.05)' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/50">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M21 21v-5h-5" />
+            </svg>
+            <span className="text-[13px] text-white/60">重新加载修图建议</span>
+          </button>
+        )}
       </div>
 
       {/* Category toolbar — always visible, driven by CATEGORIES config */}
       <div className="flex">
         {CATEGORIES.map(({ id, label, activeText }) => {
           const enabled = enabledCategories.has(id);
+          const isFailed = !enabled && !!failedCategories?.has(id as Tip['category']);
           const isActive = enabled && activeCategory === id;
           return (
             <button
               key={id}
-              onClick={() => { if (!enabled) return; scrollToCategory(id); onCategorySelect?.(id as Tip['category']); }}
+              onClick={() => {
+                if (isFailed) { onRetryCategory?.(id as Tip['category']); return; }
+                if (!enabled) return;
+                scrollToCategory(id); onCategorySelect?.(id as Tip['category']);
+              }}
               className="flex-1 flex items-center justify-center py-2 transition-opacity cursor-pointer"
               style={{
-                color: isActive ? activeText : enabled ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.14)',
-                pointerEvents: enabled ? 'auto' : 'none',
+                color: isFailed ? 'rgba(239,68,68,0.6)' : isActive ? activeText : enabled ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.14)',
+                pointerEvents: enabled || isFailed ? 'auto' : 'none',
               }}
             >
-              <span className={`text-[11px] tracking-wide ${isActive ? 'font-semibold' : 'font-medium'}`}>{label}</span>
+              <span className={`text-[11px] tracking-wide ${isActive ? 'font-semibold' : 'font-medium'}`}>{isFailed ? `${label} ↻` : label}</span>
             </button>
           );
         })}

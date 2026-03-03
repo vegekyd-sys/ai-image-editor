@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
 import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Snapshot, Message, Tip, PhotoMetadata } from '@/types'
+import { Snapshot, Message, Tip, PhotoMetadata, ProjectAnimation } from '@/types'
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
 import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
@@ -31,7 +31,7 @@ export default function ProjectPage() {
     const sync = getCachedProjectDataSync(projectId)
     return sync ? sync.title : '未命名'
   })
-  const [initialAnimation, setInitialAnimation] = useState<{ videoUrl: string | null; prompt: string; snapshotUrls: string[]; taskId?: string; status: 'completed' | 'processing' } | null>(null)
+  const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
   const [pendingImage] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     const pending = sessionStorage.getItem('pendingImage')
@@ -112,14 +112,14 @@ export default function ProjectPage() {
     if (!user || !projectId) return
     let cancelled = false
 
-    loadProject().then(async ({ snapshots, messages, title, latestAnimation }) => {
+    loadProject().then(async ({ snapshots, messages, title, animations }) => {
       if (cancelled) return
       // Always update project cache with fresh Supabase data
       cacheProjectData(projectId, snapshots, messages, title)
 
       // Always set animation data (even if already showing from cache)
-      if (latestAnimation) {
-        setInitialAnimation(latestAnimation)
+      if (animations.length > 0) {
+        setInitialAnimations(animations)
       }
 
       if (shownRef.current) {
@@ -232,7 +232,7 @@ export default function ProjectPage() {
       onRenameProject={updateTitle}
       onBack={() => router.push('/projects')}
       onNewProject={handleNewProject}
-      initialAnimation={initialAnimation}
+      initialAnimations={initialAnimations}
     />
     </div>
   )

@@ -1,4 +1,4 @@
-import { streamText, generateText, tool, stepCountIs } from 'ai';
+import { streamText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
@@ -93,11 +93,11 @@ function createTools(ctx: AgentContext) {
           ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
           : editPrompt;
 
-        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference}\neditPrompt:\n${editPrompt}\n`);
+        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} thinking=high\neditPrompt:\n${editPrompt}\n`);
 
+        // CUI agent always uses Flash High reasoning for best quality
         let result: string | null;
         if (hasReference && useOriginalAsReference && hasOriginal) {
-          // Multi-image mode: current + original + user reference(s)
           const refs = ctx.referenceImages!;
           console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
           result = await generateImageWithReferences(
@@ -106,11 +106,9 @@ function createTools(ctx: AgentContext) {
               { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
               ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
             ],
-            finalPrompt,
-            aspectRatio,
+            finalPrompt, aspectRatio, 'high',
           );
         } else if (hasReference) {
-          // Multi-image mode: current base + user reference image(s)
           const refs = ctx.referenceImages!;
           console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
           result = await generateImageWithReferences(
@@ -118,24 +116,20 @@ function createTools(ctx: AgentContext) {
               { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
               ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
             ],
-            finalPrompt,
-            aspectRatio,
+            finalPrompt, aspectRatio, 'high',
           );
         } else if (useOriginalAsReference && hasOriginal) {
-          // Two-image mode: current as edit base, original as reference
           console.log('📸 Two-image mode (original as reference)');
           result = await generateImageWithReferences(
             [
               { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
               { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
             ],
-            finalPrompt,
-            aspectRatio,
+            finalPrompt, aspectRatio, 'high',
           );
         } else {
-          // Single-image mode (default): keeps Gemini in edit-in-place mode
           console.log('📸 Single-image mode');
-          result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio);
+          result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'high');
         }
 
         if (!result) {

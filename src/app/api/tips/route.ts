@@ -7,14 +7,13 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-
     const { image, category, metadata, count = 2, existingLabels } = await req.json();
 
     if (!image || !category) {

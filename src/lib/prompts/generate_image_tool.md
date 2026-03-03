@@ -44,6 +44,7 @@ When the input image has visible red annotations, the editPrompt MUST reference 
 - "Here"/"这里" in the user's message = the red-marked areas
 - Describe the target area by its visual content (e.g. "the building on the left that is circled in red"), not by coordinates
 - The red marks are temporary guides — the output image should NOT contain the red annotations
+- **Always call analyze_image first** when annotations are present — this lets you see exactly what the marks are pointing at before generating
 
 --- WRITING THE EDITPROMPT ---
 

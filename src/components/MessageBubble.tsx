@@ -19,6 +19,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         }`}
       >
         {message.image && (
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={message.image}
             alt="uploaded"

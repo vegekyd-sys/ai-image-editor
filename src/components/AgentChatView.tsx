@@ -32,6 +32,7 @@ function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?:
               <div className="flex gap-2 flex-wrap">
                 {inputImages.filter(img => img && img.length > 10).map((img, i) => (
                   <div key={i} className="flex flex-col gap-1">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={img}
                       alt={`Input ${i + 1} to Gemini`}
@@ -413,6 +414,7 @@ export default function AgentChatView({
           onPointerUp={onPipPointerUp}
           onPointerCancel={onPipPointerUp}
         >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={currentImage}
             alt="Current photo"
@@ -621,6 +623,7 @@ export default function AgentChatView({
                         onClick={() => handleInlineImageClick(msg.id)}
                         className="block mt-3 active:opacity-75 transition-opacity"
                       >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={msg.image}
                           alt="Generated"

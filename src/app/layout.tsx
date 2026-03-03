@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Image Editor",
+  title: "Makaron - one man studio",
   description: "AI-powered image editor - chat to edit your photos",
 };
 

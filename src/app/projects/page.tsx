@@ -7,6 +7,7 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cacheProjectsList } from '@/lib/imageCache'
+import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils'
 
 interface ProjectWithSnapshots {
   id: string
@@ -270,52 +271,6 @@ export default function ProjectsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
-  // Unified create: text only, image only, or both
-  const handleCreate = useCallback(async () => {
-    const hasText = inputText.trim()
-    const hasFile = attachedFile
-    if (!hasText && !hasFile) return
-    if (!user || creating) return
-
-    // Image-only (no text) → original flow
-    if (hasFile && !hasText) {
-      handleCreateProject(hasFile)
-      return
-    }
-
-    setCreating(true)
-    try {
-      let base64: string | undefined
-      if (hasFile) {
-        try { base64 = await compressClientSide(hasFile) }
-        catch {
-          const formData = new FormData()
-          formData.append('file', hasFile)
-          const res = await fetch('/api/upload', { method: 'POST', body: formData })
-          if (res.ok) base64 = (await res.json()).image
-        }
-      }
-
-      const supabase = createClient()
-      const { data: project, error: pErr } = await supabase
-        .from('projects')
-        .insert({ user_id: user.id, title: 'Untitled' })
-        .select('id')
-        .single()
-      if (pErr || !project) throw new Error('Failed to create project')
-
-      if (base64) sessionStorage.setItem('pendingImage', base64)
-      sessionStorage.setItem('pendingPrompt', hasText)
-      setInputText('')
-      setAttachedFile(null)
-      setAttachedPreview(null)
-      router.push(`/projects/${project.id}`)
-    } catch (err) {
-      console.error('Create project error:', err)
-      setCreating(false)
-    }
-  }, [user, creating, router, inputText, attachedFile])
-
   const handleCreateProject = useCallback(async (file: File) => {
     if (!user || creating) return
     setCreating(true)
@@ -369,13 +324,17 @@ export default function ProjectsPage() {
 
       let base64: string
       try {
-        base64 = await compressClientSide(file)
+        const decodable = await ensureDecodableFile(file)
+        base64 = await compressClientSide(decodable)
       } catch {
+        // Client-side HEIC conversion failed — fallback to server-side (macOS sips)
+        console.warn('[HEIC] client conversion failed, trying server fallback')
         const formData = new FormData()
         formData.append('file', file)
-        const res = await fetch('/api/upload', { method: 'POST', body: formData })
-        if (!res.ok) throw new Error('Image conversion failed')
-        base64 = (await res.json()).image
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+        if (!uploadRes.ok) throw new Error('Server HEIC conversion failed')
+        const { image } = await uploadRes.json()
+        base64 = image
       }
 
       const supabase = createClient()
@@ -394,6 +353,57 @@ export default function ProjectsPage() {
       setCreating(false)
     }
   }, [user, creating, router])
+
+  // Unified create: text only, image only, or both
+  const handleCreate = useCallback(async () => {
+    const hasText = inputText.trim()
+    const hasFile = attachedFile
+    if (!hasText && !hasFile) return
+    if (!user || creating) return
+
+    // Image-only (no text) → original flow
+    if (hasFile && !hasText) {
+      handleCreateProject(hasFile)
+      return
+    }
+
+    setCreating(true)
+    try {
+      let base64: string | undefined
+      if (hasFile) {
+        try {
+          const decodable = await ensureDecodableFile(hasFile)
+          base64 = await compressClientSide(decodable)
+        } catch {
+          console.warn('[HEIC] client conversion failed, trying server fallback')
+          const formData = new FormData()
+          formData.append('file', hasFile)
+          const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+          if (!uploadRes.ok) throw new Error('Server HEIC conversion failed')
+          const { image } = await uploadRes.json()
+          base64 = image
+        }
+      }
+
+      const supabase = createClient()
+      const { data: project, error: pErr } = await supabase
+        .from('projects')
+        .insert({ user_id: user.id, title: 'Untitled' })
+        .select('id')
+        .single()
+      if (pErr || !project) throw new Error('Failed to create project')
+
+      if (base64) sessionStorage.setItem('pendingImage', base64)
+      sessionStorage.setItem('pendingPrompt', hasText)
+      setInputText('')
+      setAttachedFile(null)
+      setAttachedPreview(null)
+      router.push(`/projects/${project.id}`)
+    } catch (err) {
+      console.error('Create project error:', err)
+      setCreating(false)
+    }
+  }, [user, creating, router, inputText, attachedFile, handleCreateProject])
 
   if (authLoading || !user) {
     return (
@@ -489,12 +499,28 @@ export default function ProjectsPage() {
           type="file"
           accept="image/*"
           style={{ display: 'none' }}
-          onChange={(e) => {
+          onChange={async (e) => {
             const file = e.target.files?.[0]
             if (!file) return
-            setAttachedFile(file)
-            setAttachedPreview(URL.createObjectURL(file))
             e.target.value = ''
+            if (isHeicFile(file)) {
+              // HEIC not renderable by browser — convert first, then preview
+              setAttachedFile(file)
+              setAttachedPreview(null) // show spinner while converting
+              try {
+                const decodable = await ensureDecodableFile(file)
+                setAttachedFile(decodable)
+                setAttachedPreview(URL.createObjectURL(decodable))
+              } catch (err) {
+                console.warn('[HEIC preview] conversion failed, will retry on create:', err)
+                // Keep file attached — conversion will be retried in handleCreateProject
+                // Show a placeholder preview via canvas fallback (won't work for HEIC, but signals file is attached)
+                setAttachedPreview('heic-pending')
+              }
+            } else {
+              setAttachedFile(file)
+              setAttachedPreview(URL.createObjectURL(file))
+            }
           }}
         />
 
@@ -582,10 +608,10 @@ export default function ProjectsPage() {
                   cursor: creating ? 'default' : 'pointer',
                   borderRight: '1px solid rgba(255,255,255,0.08)',
                   position: 'relative',
-                  background: attachedPreview ? 'transparent' : 'rgba(217,70,239,0.04)',
+                  background: attachedPreview ? 'transparent' : attachedFile ? 'rgba(217,70,239,0.08)' : 'rgba(217,70,239,0.04)',
                 }}
               >
-                {attachedPreview ? (
+                {attachedPreview && attachedPreview !== 'heic-pending' ? (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -593,6 +619,24 @@ export default function ProjectsPage() {
                       style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
                       onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}
                     />
+                    <div style={{
+                      position: 'absolute', top: 4, right: 4,
+                      width: 18, height: 18, borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.6)', color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.6rem', cursor: 'pointer', zIndex: 1,
+                    }} onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}>✕</div>
+                  </>
+                ) : attachedFile && !attachedPreview ? (
+                  /* HEIC converting — show spinner */
+                  <Spinner size={16} />
+                ) : attachedFile ? (
+                  /* HEIC conversion failed — show file icon with close button */
+                  <>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14,2 14,8 20,8" />
+                    </svg>
                     <div style={{
                       position: 'absolute', top: 4, right: 4,
                       width: 18, height: 18, borderRadius: '50%',

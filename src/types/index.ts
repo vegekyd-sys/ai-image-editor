@@ -95,3 +95,15 @@ export interface DbMessage {
   has_image: boolean;
   created_at: string;
 }
+
+export interface ProjectAnimation {
+  id: string;
+  projectId: string;
+  taskId: string | null;
+  videoUrl: string | null;
+  prompt: string;
+  snapshotUrls: string[];
+  status: 'processing' | 'completed' | 'failed' | 'abandoned';
+  duration?: number | null;
+  createdAt: string;
+}

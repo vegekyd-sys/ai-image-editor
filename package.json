@@ -38,6 +38,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "jsonwebtoken": "^9.0.3",
+    "playwright": "^1.58.2",
     "raw-loader": "^4.0.2",
     "tailwindcss": "^4",
     "typescript": "^5"

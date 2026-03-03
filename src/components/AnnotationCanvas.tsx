@@ -109,8 +109,12 @@ export default function AnnotationCanvas({
 
   useEffect(() => { redraw(); }, [redraw]);
 
-  // Deselect when tool changes
-  useEffect(() => { setSelectedId(null); }, [activeTool]);
+  // Deselect when tool changes (render-time state adjustment)
+  const [prevActiveTool, setPrevActiveTool] = useState(activeTool);
+  if (activeTool !== prevActiveTool) {
+    setPrevActiveTool(activeTool);
+    setSelectedId(null);
+  }
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     const { x, y } = toCanvasCoords(e.clientX, e.clientY);
@@ -146,7 +150,7 @@ export default function AnnotationCanvas({
     } else if (activeTool === 'rect') {
       drawingRef.current = { mode: 'rect', sx: x, sy: y, cx: x, cy: y };
     }
-  }, [activeTool, toCanvasCoords, hitTest, entries]);
+  }, [activeTool, toCanvasCoords, hitTest, entries, onStartTextEdit]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!drawingRef.current) return;
@@ -231,10 +235,9 @@ export default function AnnotationCanvas({
       {selectedId && (() => {
         const sel = entries.find(en => en.id === selectedId);
         if (!sel || (sel.type !== 'rect' && sel.type !== 'text')) return null;
-        const el = canvasRef.current;
-        if (!el) return null;
-        const scaleX = el.clientWidth / el.width;
-        const scaleY = el.clientHeight / el.height;
+        if (!naturalWidth || !naturalHeight) return null;
+        const scaleX = imageRect.w / naturalWidth;
+        const scaleY = imageRect.h / naturalHeight;
         let bx: number, by: number;
         if (sel.type === 'rect') {
           const d = sel.data as RectData;
@@ -260,27 +263,21 @@ export default function AnnotationCanvas({
       })()}
 
       {/* Text editing preview — shows live what text will look like */}
-      {textEditing && textEditing.text && (() => {
-        const el = canvasRef.current;
-        if (!el) return null;
-        const scaleX = el.clientWidth / el.width;
-        const scaleY = el.clientHeight / el.height;
-        return (
-          <div
-            className="absolute pointer-events-none font-bold text-[14px] px-1.5 py-0.5 rounded"
-            style={{
-              left: textEditing.x * scaleX,
-              top: (textEditing.y - 20) * scaleY,
-              color: textEditing.textColor,
-              background: textEditing.bgColor || 'transparent',
-              whiteSpace: 'nowrap',
-              border: '1px dashed rgba(255,255,255,0.4)',
-            }}
-          >
-            {textEditing.text}
-          </div>
-        );
-      })()}
+      {textEditing && textEditing.text && naturalWidth > 0 && naturalHeight > 0 && (
+        <div
+          className="absolute pointer-events-none font-bold text-[14px] px-1.5 py-0.5 rounded"
+          style={{
+            left: textEditing.x * (imageRect.w / naturalWidth),
+            top: (textEditing.y - 20) * (imageRect.h / naturalHeight),
+            color: textEditing.textColor,
+            background: textEditing.bgColor || 'transparent',
+            whiteSpace: 'nowrap',
+            border: '1px dashed rgba(255,255,255,0.4)',
+          }}
+        >
+          {textEditing.text}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Message } from '@/types';
 
 // Lightweight markdown renderer — handles **bold**, *italic*, `code`, bullet lists, headers
