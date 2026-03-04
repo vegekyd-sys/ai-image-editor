@@ -79,19 +79,18 @@ const CATEGORY_CN: Record<TipCategory, string> = {
   captions: 'captions（创意文案）',
 };
 
+function withLocale(prompt: string, locale?: string): string {
+  if (locale === 'en') return `${prompt}\n\nReply in English.`;
+  return `${prompt}\n\nReply in Chinese.`;
+}
+
 function buildCategorySystemPrompt(category: TipCategory, count: number = 2, locale?: string): string {
-  if (locale === 'en') {
-    const labelNoteEn = category === 'captions'
-      ? 'label must be 3-6 English words, start with action verb, include scene/location context.'
-      : 'label must be 3-6 English words, start with action verb.';
-    return `You are a photo editing expert. Analyze the image and generate ${count} ${category} edit suggestions.
-${labelNoteEn} desc must be in English (under 20 words). editPrompt in English, highly specific.`;
-  }
   const labelNote = category === 'captions'
-    ? 'label必须用中文3-6字，动词开头，并尽量包含地点/场景等具体信息（如"迪士尼海报"、"梯田旁白"、"纽约胶片"）。'
-    : 'label必须用中文3-6字，动词开头。';
-  return `你是图片编辑建议专家。分析图片后生成${count}条${CATEGORY_CN[category]}编辑建议。
-${labelNote}editPrompt用英文，极其具体。`;
+    ? 'label: 2-3 words, include scene/style context.'
+    : 'label: 2-3 words.';
+  const base = `Photo editing expert. Analyze the image and generate ${count} ${category} edit suggestions.
+${labelNote} desc: under 20 words. editPrompt: English, highly specific.`;
+  return withLocale(base, locale);
 }
 
 // Prompt templates bundled via webpack asset/source
@@ -123,11 +122,8 @@ const TIPS_SCHEMA = {
   },
 };
 
-const JSON_FORMAT_SUFFIX = `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字。格式：
-[{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild|captions"}, ...]`;
-
-const JSON_FORMAT_SUFFIX_EN = `\n\nReply STRICTLY in JSON array format, output only JSON, no other text. Format:
-[{"emoji":"1 emoji","label":"3-6 word English label, start with action verb","desc":"Under 20 word English description","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild|captions"}, ...]`;
+const JSON_FORMAT_SUFFIX = `\n\nOutput strictly as JSON array, no other text:
+[{"emoji":"emoji","label":"2-3 word label","desc":"short description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
 
 // ── Image Content Helpers ────────────────────────────────────────
 
@@ -865,7 +861,7 @@ async function* streamTipsByCategoryGoogle(
   }
 
   const isEn = locale === 'en';
-  const promptSuffix = supportsStructuredOutput ? '' : (isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX);
+  const promptSuffix = supportsStructuredOutput ? '' : JSON_FORMAT_SUFFIX;
   const stream = await getAI().models.generateContentStream({
     model: MODEL,
     contents: [
@@ -933,7 +929,7 @@ async function* streamTipsByCategoryOpenRouter(
             toImageContent(imageBase64),
             {
               type: 'text',
-              text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX}`,
+              text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${JSON_FORMAT_SUFFIX}`,
             },
           ],
         },
@@ -989,7 +985,7 @@ async function* streamTipsByCategoryBedrock(
         role: 'user',
         content: [
           { type: 'image', image: dataUrl },
-          { type: 'text', text: `${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX}` },
+          { type: 'text', text: `${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${JSON_FORMAT_SUFFIX}` },
         ],
       },
     ],

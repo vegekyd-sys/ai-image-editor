@@ -217,9 +217,10 @@ function createTools(ctx: AgentContext) {
 // Agent runner – async generator yielding SSE events
 // ---------------------------------------------------------------------------
 
-/** Append an English reply instruction to any prompt when locale is 'en'. */
+/** Append a language reply instruction to any prompt based on locale. */
 export function withLocale(prompt: string, locale?: string): string {
-  return locale === 'en' ? `${prompt}\n\nReply in English.` : prompt;
+  if (locale === 'en') return `${prompt}\n\nReply in English.`;
+  return `${prompt}\n\nReply in Chinese.`;
 }
 
 // Used for initial upload analysis
@@ -380,8 +381,8 @@ export async function* runMakaronAgent(
 // Tips Skill: generate tips text using Claude (fast, ~2-3s vs Gemini ~15s)
 // ---------------------------------------------------------------------------
 
-const TIPS_JSON_FORMAT = `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字：
-[{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild"}, ...]`;
+const TIPS_JSON_FORMAT = `\n\nOutput strictly as JSON array, no other text:
+[{"emoji":"emoji","label":"2-3 word label","desc":"short description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
 
 const TIPS_PROMPTS: Record<'enhance' | 'creative' | 'wild' | 'captions', string> = {
   enhance: enhancePrompt,
@@ -441,12 +442,12 @@ const TIPS_CATEGORY_INFO: Record<'enhance' | 'creative' | 'wild' | 'captions', {
   },
 };
 
-function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild' | 'captions'): string {
+function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild' | 'captions', locale?: string): string {
   const info = TIPS_CATEGORY_INFO[category];
   const labelNote = category === 'captions'
-    ? 'label必须用中文3-6字，动词开头，并尽量包含地点/场景等具体信息（如"迪士尼海报"、"梯田旁白"、"纽约胶片"）。'
-    : 'label必须用中文3-6字，动词开头。';
-  return `你是图片编辑建议专家。分析图片后生成2条${info.cn}编辑建议。${labelNote}editPrompt用英文，极其具体。
+    ? 'label: 2-3 words, include scene/style context.'
+    : 'label: 2-3 words.';
+  const base = `Photo editing expert. Analyze image and generate 2 ${category} edit suggestions. ${labelNote} editPrompt in English, highly specific.
 
 ${info.definition}
 
@@ -471,16 +472,18 @@ ${info.rules}
 "Clean up the scene like a professional photographer would before shooting: remove any object that draws attention away from the main subject but adds no compositional value. Replace cleaned areas with natural-looking continuation of the scene."
 
 2个tip必须选不同方向。结尾加"Do NOT add any text, watermarks, or borders."`;
+  return withLocale(base, locale);
 }
 
 export async function* streamTipsWithClaude(
   imageBase64: string,
   category: 'enhance' | 'creative' | 'wild' | 'captions',
   metadata?: { takenAt?: string; location?: string },
+  locale?: string,
 ): AsyncGenerator<Tip> {
   const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const template = TIPS_PROMPTS[category];
-  const systemPrompt = buildTipsSystemPrompt(category);
+  const systemPrompt = buildTipsSystemPrompt(category, locale);
 
   // Build metadata context string
   const metaLines: string[] = [];

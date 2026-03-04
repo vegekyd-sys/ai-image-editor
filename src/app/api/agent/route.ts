@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
             }
             const desc = (description as string) || '';
             const namePrompt = withLocale(
-              `根据以下照片描述，用2-4个中文词起一个简洁的项目名（如"咖啡下午茶"、"都市街头"、"猫咪日常"）：${desc}。只输出名称，不加任何标点或解释。`,
+              `根据以下照片描述，起一个简洁的项目名（2-4个词）：${desc}。只输出名称，不加任何标点或解释。`,
               locale,
             );
             for await (const event of runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale })) {
