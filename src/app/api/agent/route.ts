@@ -18,6 +18,8 @@ export async function POST(req: NextRequest) {
     const { prompt, image, originalImage, referenceImages, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips } = await req.json();
+    const locale = req.cookies.get('locale')?.value ?? 'zh';
+    const isEn = locale === 'en';
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
       return new Response(
@@ -47,8 +49,10 @@ export async function POST(req: NextRequest) {
             const tipsSummary = (tipsPayload as { category: string; emoji: string; label: string; desc: string }[])
               .map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`)
               .join('\n');
-            const teaserPrompt = `以下是为一张照片生成的6条编辑建议：\n${tipsSummary}\n\n选出最有趣的1条，用一句话（15字以内）勾起用户好奇心，用"试试..."开头。只输出这句话。`;
-            for await (const event of runMakaronAgent(teaserPrompt, '', projectId, { tipReactionOnly: true })) {
+            const teaserPrompt = isEn
+              ? `Here are 6 edit suggestions for a photo:\n${tipsSummary}\n\nPick the most interesting one and write a single teaser sentence (under 15 words) starting with "Try...". Output only that sentence.`
+              : `以下是为一张照片生成的6条编辑建议：\n${tipsSummary}\n\n选出最有趣的1条，用一句话（15字以内）勾起用户好奇心，用"试试..."开头。只输出这句话。`;
+            for await (const event of runMakaronAgent(teaserPrompt, '', projectId, { tipReactionOnly: true, locale })) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             }
             return;
@@ -62,8 +66,10 @@ export async function POST(req: NextRequest) {
               return;
             }
             const desc = (description as string) || '';
-            const namePrompt = `根据以下照片描述，用2-4个中文词起一个简洁的项目名（如"咖啡下午茶"、"都市街头"、"猫咪日常"）：${desc}。只输出名称，不加任何标点或解释。`;
-            for await (const event of runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true })) {
+            const namePrompt = isEn
+              ? `Based on this photo description, give a concise project name (2-4 words, e.g. "Afternoon Coffee", "City Street", "Daily Cat"): ${desc}. Output only the name, no punctuation or explanation.`
+              : `根据以下照片描述，用2-4个中文词起一个简洁的项目名（如"咖啡下午茶"、"都市街头"、"猫咪日常"）：${desc}。只输出名称，不加任何标点或解释。`;
+            for await (const event of runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale })) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             }
             return;
@@ -80,8 +86,10 @@ export async function POST(req: NextRequest) {
             const tipsSummary = tips
               .map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`)
               .join('\n');
-            const readyPrompt = `以下${tips.length}条修图建议的预览图已全部生成完毕：\n${tipsSummary}\n\n用1-2句中文告诉用户预览已就绪、可以滑动TipsBar看看。可以点评其中一个有趣的。语气像朋友聊天，不要用"我"开头。`;
-            for await (const event of runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true })) {
+            const readyPrompt = isEn
+              ? `All ${tips.length} edit suggestion previews are ready:\n${tipsSummary}\n\nIn 1-2 sentences, tell the user the previews are ready and they can scroll the TipsBar. Comment on one interesting one. Friendly tone, don't start with "I".`
+              : `以下${tips.length}条修图建议的预览图已全部生成完毕：\n${tipsSummary}\n\n用1-2句中文告诉用户预览已就绪、可以滑动TipsBar看看。可以点评其中一个有趣的。语气像朋友聊天，不要用"我"开头。`;
+            for await (const event of runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true, locale })) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             }
             return;
@@ -97,17 +105,21 @@ export async function POST(req: NextRequest) {
             const tip = committedTip as { emoji: string; label: string; desc: string; category: string };
             const siblings = (currentTips ?? []) as { emoji: string; label: string; desc: string; category: string }[];
             const siblingContext = siblings.length > 0
-              ? `\n\nTipsBar 里还有这些可以试的：\n${siblings.map(t => `- ${t.emoji} ${t.label}（${t.category}）`).join('\n')}`
+              ? isEn
+                ? `\n\nOther TipsBar suggestions available:\n${siblings.map(t => `- ${t.emoji} ${t.label} (${t.category})`).join('\n')}`
+                : `\n\nTipsBar 里还有这些可以试的：\n${siblings.map(t => `- ${t.emoji} ${t.label}（${t.category}）`).join('\n')}`
               : '';
-            const reactionPrompt = `用户刚刚通过TipsBar确认了编辑操作：\n${tip.emoji} ${tip.label}（${tip.category}）：${tip.desc}${siblingContext}\n\n用1-2句中文自然地回应，像朋友聊天。如果提下一步，必须从上面的TipsBar建议里挑一个具体推荐。禁止以"我"开头，禁止照抄tip名称。`;
-            for await (const event of runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true })) {
+            const reactionPrompt = isEn
+              ? `The user just confirmed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}${siblingContext}\n\nReact naturally in 1-2 sentences, like a friend chatting. If suggesting next steps, pick a specific recommendation from the TipsBar suggestions above. Don't start with "I", don't copy tip names verbatim.`
+              : `用户刚刚通过TipsBar确认了编辑操作：\n${tip.emoji} ${tip.label}（${tip.category}）：${tip.desc}${siblingContext}\n\n用1-2句中文自然地回应，像朋友聊天。如果提下一步，必须从上面的TipsBar建议里挑一个具体推荐。禁止以"我"开头，禁止照抄tip名称。`;
+            for await (const event of runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true, locale })) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             }
             return;
           }
 
           // Normal agent request
-          for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined })) {
+          for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale })) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
           }
         } catch (err) {

@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Snapshot, ProjectAnimation } from '@/types';
 import type { AnimationState } from '@/components/Editor';
+import { useLocale } from '@/lib/i18n';
 
 interface AnimateSheetProps {
   snapshots: Snapshot[];
@@ -23,6 +24,7 @@ export default function AnimateSheet({
   animationState, onStateChange, isDesktop,
   mode = 'create', detailAnimation,
 }: AnimateSheetProps) {
+  const { t } = useLocale();
   const isDetail = mode === 'detail' && !!detailAnimation;
   const { prompt, status, error, duration } = animationState;
 
@@ -68,8 +70,8 @@ export default function AnimateSheet({
       onStateChange({ taskId: json.taskId, status: 'polling', pollSeconds: 0 });
     } catch (err) {
       const raw = String(err);
-      const friendly = raw.includes('523') || raw.includes('unreachable') ? '视频服务暂时不可用，请稍后重试'
-        : raw.includes('500') || raw.includes('502') || raw.includes('503') ? '视频服务出错，请稍后重试'
+      const friendly = raw.includes('523') || raw.includes('unreachable') ? t('animate.errUnavailable')
+        : raw.includes('500') || raw.includes('502') || raw.includes('503') ? t('animate.errFailed')
         : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
       onStateChange({ error: friendly, status: 'error' });
     }
@@ -86,15 +88,15 @@ export default function AnimateSheet({
   // Smart bottom button logic (create mode only)
   const getBottomButton = () => {
     if (status === 'submitting') {
-      return { label: '提交中...', disabled: true, onClick: () => {} };
+      return { label: t('animate.submitting'), disabled: true, onClick: () => {} };
     }
     if (status === 'generating_prompt') {
-      return { label: '✨ AI 正在写脚本...', disabled: true, onClick: () => {} };
+      return { label: t('animate.aiWriting'), disabled: true, onClick: () => {} };
     }
     if (!prompt.trim()) {
-      return { label: '✨ 自动生成脚本', disabled: !canGenerateScript, onClick: handleGenerateScript };
+      return { label: t('animate.autoScript'), disabled: !canGenerateScript, onClick: handleGenerateScript };
     }
-    return { label: '🎬 生成视频', disabled: !canGenerate, onClick: handleGenerate };
+    return { label: t('animate.generateVideo'), disabled: !canGenerate, onClick: handleGenerate };
   };
 
   const bottomBtn = !isDetail ? getBottomButton() : null;
@@ -147,7 +149,7 @@ export default function AnimateSheet({
         {/* Scrollable content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 8px' }}>
           <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff', marginBottom: 10 }}>
-            {isDetail ? '视频详情' : '生成视频'}
+            {isDetail ? t('animate.detailTitle') : t('animate.title')}
           </div>
 
           {/* ─── DETAIL MODE ─── */}
@@ -178,7 +180,7 @@ export default function AnimateSheet({
               {/* Prompt — read-only */}
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500, marginBottom: 6 }}>
-                  ✨ 视频故事
+                  {t('animate.storyLabel')}
                 </div>
                 <div style={{
                   width: '100%', minHeight: 80,
@@ -189,24 +191,24 @@ export default function AnimateSheet({
                   fontSize: isDesktop ? '0.88rem' : '1.05rem', lineHeight: 1.6,
                   whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 }}>
-                  {detailPrompt || '（无脚本）'}
+                  {detailPrompt || t('animate.noScript')}
                 </div>
               </div>
 
               {/* Duration — static */}
               <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
                 <div>
-                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>时长</div>
+                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{t('animate.duration')}</div>
                   <div style={{
                     padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
                     borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
                     fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)',
                   }}>
-                    {detailDuration != null ? `${detailDuration} 秒` : '智能'}
+                    {detailDuration != null ? t('animate.seconds', detailDuration) : t('animate.smart')}
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>状态</div>
+                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{t('animate.status')}</div>
                   <div style={{
                     padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
                     borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
@@ -215,10 +217,10 @@ export default function AnimateSheet({
                       : detailAnimation?.status === 'processing' ? 'rgba(217,70,239,0.9)'
                       : 'rgba(239,68,68,0.9)',
                   }}>
-                    {detailAnimation?.status === 'completed' ? '已完成'
-                      : detailAnimation?.status === 'processing' ? '渲染中'
-                      : detailAnimation?.status === 'failed' ? '失败'
-                      : '已放弃'}
+                    {detailAnimation?.status === 'completed' ? t('video.completed')
+                      : detailAnimation?.status === 'processing' ? t('video.rendering')
+                      : detailAnimation?.status === 'failed' ? t('video.failed')
+                      : t('video.abandoned')}
                   </div>
                 </div>
               </div>
@@ -267,7 +269,7 @@ export default function AnimateSheet({
                 })}
                 {activeSnapshots.length === 0 && (
                   <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.8rem', padding: '10px 0' }}>
-                    所有图片已移除
+                    {t('animate.allImagesRemoved')}
                   </div>
                 )}
               </div>
@@ -275,7 +277,7 @@ export default function AnimateSheet({
               {/* Prompt section — always visible */}
               <div style={{ marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>✨ 视频故事</div>
+                  <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>{t('animate.storyLabel')}</div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {onOpenCUI && !isDesktop && status !== 'idle' && (
                       <button
@@ -286,7 +288,7 @@ export default function AnimateSheet({
                           fontSize: '0.7rem', cursor: 'pointer',
                         }}
                       >
-                        在 Chat 里看 ↗
+                        {t('chat.viewInChat')}
                       </button>
                     )}
                     {/* AI generate/rewrite button */}
@@ -296,7 +298,7 @@ export default function AnimateSheet({
                         color: 'rgba(217,70,239,0.7)', borderRadius: 8, padding: '3px 10px',
                         fontSize: '0.7rem',
                       }}>
-                        AI 正在写...
+                        {t('animate.aiWritingShort')}
                       </div>
                     ) : status === 'submitting' ? null : (
                       prompt.trim() ? (
@@ -310,7 +312,7 @@ export default function AnimateSheet({
                             opacity: canGenerateScript ? 1 : 0.4,
                           }}
                         >
-                          ✨ {status === 'error' ? 'AI 重试' : 'AI 重写'}
+                          ✨ {status === 'error' ? t('animate.aiRetry') : t('animate.aiRewrite')}
                         </button>
                       ) : null
                     )}
@@ -320,7 +322,7 @@ export default function AnimateSheet({
                   value={prompt}
                   onChange={e => { onStateChange({ prompt: e.target.value }); if (status !== 'ready') onStateChange({ status: 'ready' }); }}
                   disabled={status === 'generating_prompt'}
-                  placeholder={status === 'generating_prompt' ? 'AI 正在分析照片...' : '描述你的视频故事...'}
+                  placeholder={status === 'generating_prompt' ? t('animate.aiAnalyzing') : t('animate.storyPlaceholder')}
                   style={{
                     width: '100%', minHeight: 100,
                     background: 'rgba(255,255,255,0.06)',
@@ -339,7 +341,7 @@ export default function AnimateSheet({
               {status !== 'submitting' && (
                 <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>时长</div>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{t('animate.duration')}</div>
                     <select
                       value={duration ?? 'smart'}
                       onChange={e => {
@@ -353,22 +355,20 @@ export default function AnimateSheet({
                         color: '#fff', fontSize: '0.82rem', cursor: 'pointer',
                       }}
                     >
-                      <option value={3}>3 秒</option>
-                      <option value={5}>5 秒</option>
-                      <option value={7}>7 秒</option>
-                      <option value={10}>10 秒</option>
-                      <option value={15}>15 秒</option>
-                      <option value="smart">智能</option>
+                      {([3, 5, 7, 10, 15] as const).map(s => (
+                        <option key={s} value={s}>{t('animate.seconds', s)}</option>
+                      ))}
+                      <option value="smart">{t('animate.smart')}</option>
                     </select>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>费用预估</div>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{t('animate.costEstimate')}</div>
                     <div style={{
                       padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
                       borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
                       fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)',
                     }}>
-                      {duration != null ? `~$${(duration * 0.112).toFixed(2)}` : '按实际时长'}
+                      {duration != null ? `~$${(duration * 0.112).toFixed(2)}` : t('animate.costByDuration')}
                     </div>
                   </div>
                 </div>

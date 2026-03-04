@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
       });
     }
     const { image, category, metadata, count = 2, existingLabels } = await req.json();
+    const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!image || !category) {
       return new Response(JSON.stringify({ error: 'image and category are required' }), {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const tip of streamTipsByCategory(image, category, metadata, count, existingLabels)) {
+          for await (const tip of streamTipsByCategory(image, category, metadata, count, existingLabels, locale)) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(tip)}\n\n`));
           }
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));

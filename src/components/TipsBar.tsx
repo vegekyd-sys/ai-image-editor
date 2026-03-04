@@ -1,6 +1,7 @@
-'use client';
+'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useLocale } from '@/lib/i18n';
 import { Tip } from '@/types';
 import { CATEGORIES } from '@/lib/categories';
 
@@ -79,6 +80,7 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
 }
 
 export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipCommit, onTipDeselect, onRetryPreview, previewingIndex, onLoadMore, onCategorySelect, loadingMoreCategories, isDesktop, initialCategory, failedCategories, onRetryCategory, onRetryAll }: TipsBarProps) {
+  const { t } = useLocale();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tipRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [activeCategory, setActiveCategory] = useState<Tip['category']>('enhance');
@@ -335,7 +337,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                     </svg>
                     {/* Label */}
                     <span className="text-fuchsia-200 text-[10px] font-semibold tracking-wide leading-tight text-center relative z-10 whitespace-nowrap">
-                      继续编辑
+                      {t('tips.continueEditing')}
                     </span>
                   </button>
                 </div>
@@ -356,7 +358,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="opacity-50">
                         <path d="M12 5v14M5 12h14" />
                       </svg>
-                      <span className="text-[9px] font-medium" style={{ color: meta.activeText, opacity: 0.7 }}>更多</span>
+                      <span className="text-[9px] font-medium" style={{ color: meta.activeText, opacity: 0.7 }}>{t('tips.more')}</span>
                     </>
                   )}
                 </button>
@@ -407,7 +409,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
               <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
               <path d="M21 21v-5h-5" />
             </svg>
-            <span className="text-[13px] text-white/60">重新加载修图建议</span>
+            <span className="text-[13px] text-white/60">{t('tips.reload')}</span>
           </button>
         )}
       </div>

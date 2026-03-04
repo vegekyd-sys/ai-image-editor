@@ -5,12 +5,13 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message } from '@/types';
 import { compressImageFile } from '@/lib/imageUtils';
-
-const INPUT_IMAGE_LABELS = ['当前图（编辑基础）', '原图（人脸参考）'];
+import { useLocale } from '@/lib/i18n';
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?: string[] }) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
+  const inputImageLabels = [t('chat.currentImage'), t('chat.originalImage')];
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}>
       <button
@@ -18,16 +19,16 @@ function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?:
         className="w-full flex items-center justify-between px-3 py-2 text-left active:opacity-70 transition-opacity"
       >
         <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          📋 发给 Gemini 的 prompt
+          {t('chat.promptCard')}
         </span>
-        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? '收起 ▲' : '展开 ▼'}</span>
+        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? t('chat.collapse') : t('chat.expand')}</span>
       </button>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2.5">
           {inputImages && inputImages.filter(img => img && img.length > 10).length > 0 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                传入图片{inputImages.length > 1 ? `（${inputImages.length} 张）` : ''}
+                {t('chat.inputImages')}{inputImages.length > 1 ? `（${inputImages.length}）` : ''}
               </span>
               <div className="flex gap-2 flex-wrap">
                 {inputImages.filter(img => img && img.length > 10).map((img, i) => (
@@ -46,7 +47,7 @@ function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?:
                     />
                     {inputImages.length > 1 && (
                       <span className="text-[9px] text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                        {INPUT_IMAGE_LABELS[i] ?? `图 ${i + 1}`}
+                        {inputImageLabels[i] ?? `${t('chat.imageLabel')} ${i + 1}`}
                       </span>
                     )}
                   </div>
@@ -105,6 +106,7 @@ export default function AgentChatView({
   onInputBarHeight,
   mode = 'overlay',
 }: AgentChatViewProps) {
+  const { t } = useLocale();
   const [input, setInput] = useState('');
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isExiting, setIsExiting] = useState(false);
@@ -711,7 +713,7 @@ export default function AgentChatView({
                 handleSubmit();
               }
             }}
-            placeholder="你想怎么修改这张图片？"
+            placeholder={t('chat.placeholder')}
             className={`w-full bg-transparent outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden block ${isPanel ? 'text-[14px]' : 'text-[21px]'}`}
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem', padding: isPanel ? '10px 14px 4px' : '12px 16px 6px' }}
           />

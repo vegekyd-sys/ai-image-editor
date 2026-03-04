@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import type { AnnotationEntry } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
+import { useLocale } from '@/lib/i18n';
 
 const VIDEO_SENTINEL = '__VIDEO__';
 
@@ -50,6 +51,7 @@ export default function ImageCanvas({
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
 }: ImageCanvasProps) {
+  const { t } = useLocale();
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const swiping = useRef(false);
@@ -549,8 +551,8 @@ export default function ImageCanvas({
                   </svg>
                 </div>
                 <div className="flex flex-col items-center gap-1.5">
-                  <span className="text-white font-semibold tracking-wide" style={{ fontSize: '1rem' }}>视频渲染中</span>
-                  <span className="text-white/40 text-[12px]">通常需要 3–5 分钟</span>
+                  <span className="text-white font-semibold tracking-wide" style={{ fontSize: '1rem' }}>{t('canvas.videoRendering')}</span>
+                  <span className="text-white/40 text-[12px]">{t('canvas.usuallyTakes')}</span>
                 </div>
               </div>
             </div>
@@ -630,7 +632,7 @@ export default function ImageCanvas({
                     onAnimate();
                   }
                 }}
-                title="生成视频"
+                title={t('canvas.generateVideo')}
                 className={`ml-0.5 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
                   isDesktop ? 'w-5 h-5' : 'ml-1 w-6 h-6'
                 } ${

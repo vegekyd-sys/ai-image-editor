@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ProjectAnimation } from '@/types';
+import { useLocale } from '@/lib/i18n';
 
 function ElapsedTimer({ since }: { since: string }) {
   const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - new Date(since).getTime()) / 1000));
@@ -18,16 +19,6 @@ function ElapsedTimer({ since }: { since: string }) {
   return <span>{mins}:{secs.toString().padStart(2, '0')}</span>;
 }
 
-/** Extract a short title from the video prompt (first meaningful segment, max ~12 chars) */
-function videoTitle(prompt: string, index: number): string {
-  if (!prompt.trim()) return `视频 ${index + 1}`;
-  // Take first line, strip markdown/special chars, truncate
-  const firstLine = prompt.split('\n').find(l => l.trim())?.trim() || '';
-  const clean = firstLine.replace(/^[#*\->]+\s*/, '').replace(/<<<[^>]*>>>/g, '').trim();
-  if (!clean) return `视频 ${index + 1}`;
-  return clean.length > 14 ? clean.slice(0, 13) + '…' : clean;
-}
-
 interface VideoResultCardProps {
   animations: ProjectAnimation[];
   selectedVideoId: string | null;
@@ -41,6 +32,18 @@ interface VideoResultCardProps {
 export default function VideoResultCard({
   animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onViewDetail, isDesktop,
 }: VideoResultCardProps) {
+  const { t } = useLocale();
+
+  /** Extract a short title from the video prompt (first meaningful segment, max ~12 chars) */
+  function videoTitle(prompt: string, index: number): string {
+    if (!prompt.trim()) return t('video.title', index + 1);
+    // Take first line, strip markdown/special chars, truncate
+    const firstLine = prompt.split('\n').find(l => l.trim())?.trim() || '';
+    const clean = firstLine.replace(/^[#*\->]+\s*/, '').replace(/<<<[^>]*>>>/g, '').trim();
+    if (!clean) return t('video.title', index + 1);
+    return clean.length > 14 ? clean.slice(0, 13) + '…' : clean;
+  }
+
   const completed = animations.filter(a => a.status === 'completed' && a.videoUrl);
   const processing = animations.filter(a => a.status === 'processing');
   const failed = animations.filter(a => a.status === 'failed');
@@ -73,13 +76,13 @@ export default function VideoResultCard({
           // Status line
           let statusText: React.ReactNode;
           if (isCompleted) {
-            statusText = anim.duration ? `${anim.duration}s · 已完成` : '已完成';
+            statusText = anim.duration ? `${anim.duration}s · ${t('video.completed')}` : t('video.completed');
           } else if (isProcessing) {
-            statusText = <><ElapsedTimer since={anim.createdAt} /> 渲染中</>;
+            statusText = <><ElapsedTimer since={anim.createdAt} /> {t('video.rendering')}</>;
           } else if (isFailed) {
-            statusText = '失败';
+            statusText = t('video.failed');
           } else {
-            statusText = '已放弃';
+            statusText = t('video.abandoned');
           }
 
           return (
@@ -154,7 +157,7 @@ export default function VideoResultCard({
                         className="text-white/30 mt-0.5 cursor-pointer underline"
                         style={{ fontSize: '0.56rem' }}
                       >
-                        放弃
+                        {t('video.abandon')}
                       </span>
                     )}
                   </div>
@@ -184,7 +187,7 @@ export default function VideoResultCard({
                   <path d="m9 18 6-6-6-6" />
                 </svg>
                 <span className={`font-medium ${isDesktop ? 'text-[9px]' : 'text-[10px]'} ${isSelected ? 'text-fuchsia-300/60' : 'text-white/30'}`}>
-                  详情
+                  {t('video.detail')}
                 </span>
               </button>
             </div>
@@ -200,7 +203,7 @@ export default function VideoResultCard({
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="text-fuchsia-400/60">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          <span className={`font-medium text-fuchsia-400/70 ${isDesktop ? 'text-[11px]' : 'text-[12px]'}`}>新视频</span>
+          <span className={`font-medium text-fuchsia-400/70 ${isDesktop ? 'text-[11px]' : 'text-[12px]'}`}>{t('video.newVideo')}</span>
         </button>
 
         {/* Empty state */}
@@ -208,7 +211,7 @@ export default function VideoResultCard({
           <div className={`flex-shrink-0 rounded-2xl border border-white/5 flex items-center justify-center text-white/20 ${isDesktop ? 'w-[176px] h-[64px] text-[11px]' : 'w-[200px] h-[72px] text-[12px]'}`}
             style={{ background: 'rgba(255,255,255,0.02)' }}
           >
-            还没有视频
+            {t('video.noVideos')}
           </div>
         )}
       </div>
@@ -216,7 +219,7 @@ export default function VideoResultCard({
       {/* Bottom spacer row — matches TipsBar category toolbar height (~32px) */}
       <div className="flex items-center justify-center py-2">
         <span className={`text-white/20 tracking-wide font-medium ${isDesktop ? 'text-[10px]' : 'text-[11px]'}`}>
-          视频 · {all.length} 个
+          {t('video.count', all.length)}
         </span>
       </div>
     </div>

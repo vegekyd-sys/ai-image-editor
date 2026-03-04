@@ -119,6 +119,9 @@ const TIPS_SCHEMA = {
 const JSON_FORMAT_SUFFIX = `\n\n请严格以JSON数组格式回复，只输出JSON，不要其他文字。格式：
 [{"emoji":"1个emoji","label":"中文3-6字动词开头","desc":"中文10-25字短描述","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild|captions"}, ...]`;
 
+const JSON_FORMAT_SUFFIX_EN = `\n\nReply STRICTLY in JSON array format, output only JSON, no other text. Format:
+[{"emoji":"1 emoji","label":"3-6 word English label, start with action verb","desc":"Under 20 word English description","editPrompt":"Detailed English editing prompt (MUST be in English)","category":"enhance|creative|wild|captions"}, ...]`;
+
 // ── Image Content Helpers ────────────────────────────────────────
 
 /** Build OpenRouter image content — uses URL directly if HTTP(S), else data URL */
@@ -778,6 +781,7 @@ export async function* streamTipsByCategory(
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
   existingLabels?: string[],
+  locale?: string,
 ): AsyncGenerator<Tip> {
   if (process.env.MOCK_AI === 'true') {
     const mockTips: Record<string, Tip[]> = {
@@ -807,11 +811,11 @@ export async function* streamTipsByCategory(
   }
 
   if (TIPS_PROVIDER === 'bedrock') {
-    yield* streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels);
+    yield* streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale);
   } else if (TIPS_PROVIDER === 'openrouter') {
-    yield* streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels);
+    yield* streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale);
   } else {
-    yield* streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels);
+    yield* streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale);
   }
 }
 
@@ -822,6 +826,7 @@ async function* streamTipsByCategoryGoogle(
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
   existingLabels?: string[],
+  locale?: string,
 ): AsyncGenerator<Tip> {
   const resolved = await ensureBase64Server(imageBase64);
   const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
@@ -852,8 +857,8 @@ async function* streamTipsByCategoryGoogle(
     config.responseSchema = TIPS_SCHEMA;
   }
 
-  const promptSuffix = supportsStructuredOutput ? '' : JSON_FORMAT_SUFFIX;
-
+  const isEn = locale === 'en';
+  const promptSuffix = supportsStructuredOutput ? '' : (isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX);
   const stream = await getAI().models.generateContentStream({
     model: MODEL,
     contents: [
@@ -862,7 +867,7 @@ async function* streamTipsByCategoryGoogle(
         parts: [
           { inlineData: { mimeType, data: base64Data } },
           {
-            text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${promptSuffix}`,
+            text: `${isEn ? 'IMPORTANT: You MUST output ALL "label" and "desc" fields in English only.\n\n' : ''}${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${promptSuffix}`,
           },
         ],
       },
@@ -880,7 +885,9 @@ async function* streamTipsByCategoryOpenRouter(
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
   existingLabels?: string[],
+  locale?: string,
 ): AsyncGenerator<Tip> {
+  const isEn = locale === 'en';
   const template = getPromptTemplate(category);
   const systemPrompt = buildCategorySystemPrompt(category, count);
   const metaLines: string[] = [];
@@ -919,7 +926,7 @@ async function* streamTipsByCategoryOpenRouter(
             toImageContent(imageBase64),
             {
               type: 'text',
-              text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${JSON_FORMAT_SUFFIX}`,
+              text: `${isEn ? 'IMPORTANT: You MUST output ALL "label" and "desc" fields in English only.\n\n' : ''}${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX}`,
             },
           ],
         },
@@ -944,7 +951,9 @@ async function* streamTipsByCategoryBedrock(
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
   existingLabels?: string[],
+  locale?: string,
 ): AsyncGenerator<Tip> {
+  const isEn = locale === 'en';
   // Bedrock (ai SDK) needs data URL for image — ensure conversion
   const dataUrl = imageBase64.startsWith('http')
     ? (await ensureBase64Server(imageBase64))
@@ -973,7 +982,7 @@ async function* streamTipsByCategoryBedrock(
         role: 'user',
         content: [
           { type: 'image', image: dataUrl },
-          { type: 'text', text: `${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${JSON_FORMAT_SUFFIX}` },
+          { type: 'text', text: `${isEn ? 'IMPORTANT: You MUST output ALL "label" and "desc" fields in English only.\n\n' : ''}${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX}` },
         ],
       },
     ],

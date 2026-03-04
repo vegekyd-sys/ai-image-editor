@@ -1,5 +1,7 @@
 'use client';
 
+import { useLocale } from '@/lib/i18n';
+
 interface AgentStatusBarProps {
   statusText: string;
   isActive: boolean;
@@ -12,10 +14,11 @@ interface AgentStatusBarProps {
 }
 
 export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, onAnimate, hasVideo, snapshotCount = 0 }: AgentStatusBarProps) {
+  const { t } = useLocale();
   const videoLit = snapshotCount > 3 && !hasVideo;
   // Determine dot color and breathe speed based on state
   const isGeneratingImages = statusText.includes('正使用nano banana');
-  const isFetchingTips = statusText.includes('Ready to Suprise');
+  const isFetchingTips = statusText === t('status.generatingTips');
 
   let dotColor: string;
   let breatheDuration: string;
@@ -56,7 +59,7 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
 
         {/* Status / greeting text */}
         <div className="flex-1 text-white/50 text-[13px] truncate">
-          {isViewingDraft ? '喜欢这个效果？你想怎么修改告诉我 👉🏻' : statusText}
+          {isViewingDraft ? t('statusbar.likeEffect') : statusText}
         </div>
 
         {/* Chat button (hidden on desktop where CUI panel is always visible) */}

@@ -15,6 +15,7 @@ import AnimateSheet from '@/components/AnimateSheet';
 import VideoResultCard from '@/components/VideoResultCard';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils';
+import { useLocale } from '@/lib/i18n';
 
 export interface AnimationState {
   imageUrls: string[]
@@ -113,7 +114,7 @@ async function extractPhotoMetadata(file: File): Promise<PhotoMetadata | undefin
   }
 }
 
-const AGENT_GREETING = 'Hi! 想怎么编辑这张照片？';
+// t('editor.greeting') is now locale-aware via t('editor.greeting') in the component
 
 /** Get best image representation for API calls: URL if available (tiny payload), else raw image (base64) */
 function getImageForApi(snapshot: Snapshot | undefined): string {
@@ -215,6 +216,7 @@ export default function Editor({
   initialAnimations,
 }: EditorProps = {}) {
   const isDesktop = useIsDesktop();
+  const { t } = useLocale();
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -249,7 +251,7 @@ export default function Editor({
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
-  const [agentStatus, setAgentStatus] = useState(AGENT_GREETING);
+  const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
@@ -713,7 +715,7 @@ export default function Editor({
     previewAbortRef.current = new AbortController();
     lastTipsRequestRef.current = { snapshotId, image: imageInput, previewMode, autoPreviewCategory };
     if (!isAgentActiveRef.current) {
-      setAgentStatus('正在发现有趣的可能...');
+      setAgentStatus(t('status.thinking'));
     }
 
     const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
@@ -802,7 +804,7 @@ export default function Editor({
               triggerTipsTeaser(snapshotId, snap.tips);
             }
           } else if (!isAgentActiveRef.current) {
-            setAgentStatus(AGENT_GREETING);
+            setAgentStatus(t('editor.greeting'));
           }
         }, 100);
       }
@@ -961,7 +963,7 @@ export default function Editor({
     if (!projectId) return;
 
     setIsAgentActive(true);
-    setAgentStatus('分析图片中...');
+    setAgentStatus(t('status.analyzingImage'));
     agentAbortRef.current = new AbortController();
 
     let description = '';
@@ -1002,7 +1004,7 @@ export default function Editor({
               onUpdateDescription?.(snapshotId, description);
               // Append a hint about tips being generated, then persist the CUI message
               if (isInitial && msgId) {
-                const suffix = '\n\n正在为你想一些好玩的修图点子~';
+                const suffix = t('editor.tipsSuffix');
                 setMessages((prev) => {
                   const msg = prev.find(m => m.id === msgId);
                   if (msg) {
@@ -1023,7 +1025,7 @@ export default function Editor({
             if (!isTipsFetchingRef.current) {
               const snap = snapshotsRef.current.find(s => s.id === snapshotId);
               if (!snap || snap.tips.length === 0) {
-                setAgentStatus(AGENT_GREETING);
+                setAgentStatus(t('editor.greeting'));
               }
             }
           },
@@ -1084,7 +1086,7 @@ export default function Editor({
     // Auto-switch to CUI (mobile only — desktop CUI panel is always visible)
     if (!isDesktop) setViewMode('cui');
     setIsAgentActive(true);
-    setAgentStatus('Agent 正在思考...');
+    setAgentStatus(t('editor.agentThinking'));
     agentAbortRef.current = new AbortController();
 
     // Mutable local var so onNewTurn can point content to a fresh message
@@ -1179,7 +1181,7 @@ export default function Editor({
             });
             cacheImage(`snap:${snapId}`, imageData);
             fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
-            setAgentStatus('图片已生成');
+            setAgentStatus(t('status.imageGenerated'));
             const id = currentMsgId;
             // Attach the last captured editPrompt and input images to the image message
             const capturedPrompt = lastEditPromptRef.current;
@@ -1205,7 +1207,7 @@ export default function Editor({
             }
           },
           onDone: () => {
-            setAgentStatus('完成');
+            setAgentStatus(t('editor.done'));
             // Persist all assistant messages created in this agent run
             setMessages((prev) => {
               const toSave = prev.filter(m => agentMsgIds.includes(m.id) && m.content);
@@ -1226,7 +1228,7 @@ export default function Editor({
                 pendingTeaserRef.current = null;
                 setTimeout(() => triggerTipsTeaser(pendingTeaser.snapshotId, pendingTeaser.tips), 400);
               } else {
-                setTimeout(() => setAgentStatus(AGENT_GREETING), 2000);
+                setTimeout(() => setAgentStatus(t('editor.greeting')), 2000);
               }
             }
           },
@@ -1294,14 +1296,14 @@ export default function Editor({
     const assistantMsgId = generateId();
     setMessages((prev) => [
       ...prev,
-      { id: userMsgId, role: 'user' as const, content: '✨ 帮我把这些照片做成一段视频', timestamp: Date.now() },
+      { id: userMsgId, role: 'user' as const, content: t('editor.makeVideo'), timestamp: Date.now() },
       { id: assistantMsgId, role: 'assistant' as const, content: '', timestamp: Date.now() },
     ]);
 
     // Stay in GUI — Agent runs in background
     setAnimationState(prev => prev ? { ...prev, status: 'generating_prompt', prompt: '' } : prev);
     setIsAgentActive(true);
-    setAgentStatus('正在创作视频故事...');
+    setAgentStatus(t('status.creatingStory'));
     agentAbortRef.current = new AbortController();
 
     let scriptText = '';
@@ -1337,7 +1339,7 @@ export default function Editor({
           },
           onAnimationTask: () => {}, // Agent should not call generate_animation anymore
           onDone: () => {
-            setAgentStatus('脚本已就绪');
+            setAgentStatus(t('status.scriptDone'));
             setAnimationState(prev => prev ? { ...prev, status: 'ready' } : prev);
             // Persist messages
             setMessages((prev) => {
@@ -1348,14 +1350,14 @@ export default function Editor({
           },
           onError: (msg) => {
             console.error('Animation prompt generation failed:', msg);
-            setAnimationState(prev => prev ? { ...prev, status: 'error', error: '脚本生成失败，请重试' } : prev);
+            setAnimationState(prev => prev ? { ...prev, status: 'error', error: t('status.scriptFailedRetry') } : prev);
           },
         },
         agentAbortRef.current.signal,
       );
     } catch (err) {
       console.error('Animation prompt failed:', err);
-      setAnimationState(prev => prev ? { ...prev, status: 'error', error: '脚本生成失败' } : prev);
+      setAnimationState(prev => prev ? { ...prev, status: 'error', error: t('status.scriptFailed') } : prev);
     } finally {
       setIsAgentActive(false);
       animPromptInFlightRef.current = false;
@@ -1722,7 +1724,7 @@ export default function Editor({
 
     if (isTipsFetching) {
       if (teaserSnapshotRef.current !== snap.id) {
-        setAgentStatus('正在生成修图建议 Ready to Suprise');
+        setAgentStatus(t('status.generatingTips'));
       }
       return;
     }
@@ -1737,7 +1739,7 @@ export default function Editor({
       const y = x + generating;
       setAgentStatus(`正使用nano banana 2生成图片 ${x}/${y}`);
     } else if (settled === total && !isAgentActive) {
-      setAgentStatus(prev => prev.includes('nano banana') ? AGENT_GREETING : prev);
+      setAgentStatus(prev => prev.includes('nano banana') ? t('editor.greeting') : prev);
     }
   }, [snapshots, tipsSourceIndex, isAgentActive, isTipsFetching]);
 
@@ -1803,13 +1805,13 @@ export default function Editor({
     for (const id of newlyCompleted) {
       const anim = animations.find(a => a.id === id);
       if (anim?.videoUrl) {
-        setAgentStatus('视频已生成');
+        setAgentStatus(t('status.videoDone'));
         const alreadyHasVideo = messages.some(m => m.content?.includes(anim.videoUrl!));
         if (!alreadyHasVideo) {
           const videoMsg: Message = {
             id: generateId(),
             role: 'assistant',
-            content: `🎬 视频生成完成！\n${anim.videoUrl}`,
+            content: `🎬 ${t('status.videoDone')}！\n${anim.videoUrl}`,
             timestamp: Date.now(),
           };
           setMessages(prev => [...prev, videoMsg]);
@@ -1822,13 +1824,13 @@ export default function Editor({
   // Update StatusBar with video rendering progress
   useEffect(() => {
     if (animationState?.status === 'generating_prompt') {
-      setAgentStatus('正在写视频脚本...');
+      setAgentStatus(t('status.writingScript'));
     } else if (animationState?.status === 'submitting') {
-      setAgentStatus('提交视频任务...');
+      setAgentStatus(t('status.submittingVideo'));
     } else {
       const processingCount = animations.filter(a => a.status === 'processing').length;
       if (processingCount > 0 && !isAgentActive) {
-        setAgentStatus('视频渲染中...');
+        setAgentStatus(t('status.videoRenderingEllipsis'));
       }
     }
   }, [animationState?.status, animations, isAgentActive]);
@@ -2420,7 +2422,7 @@ export default function Editor({
           className="fixed top-16 left-1/2 -translate-x-1/2 z-[300] px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-sm text-white text-sm font-medium shadow-lg"
           style={{ animation: 'fadeInOut 2s ease both' }}
         >
-          保存成功
+          {t('misc.saveSuccess')}
         </div>
       )}
       <style>{`

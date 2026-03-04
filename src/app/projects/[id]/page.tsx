@@ -29,7 +29,7 @@ export default function ProjectPage() {
   })
   const [initialTitle, setInitialTitle] = useState<string>(() => {
     const sync = getCachedProjectDataSync(projectId)
-    return sync ? sync.title : '未命名'
+    return sync ? sync.title : 'Untitled'
   })
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
   const [pendingImage] = useState<string | null>(() => {

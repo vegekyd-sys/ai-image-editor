@@ -227,7 +227,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[] },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -279,11 +279,13 @@ export async function* runMakaronAgent(
     userContent = analysisOnly ? analysisPrompt : prompt;
   }
 
+  const systemPrompt = getAgentSystemPrompt();
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = (streamText as any)({
       model: MODEL,
-      system: getAgentSystemPrompt(),
+      system: systemPrompt,
       messages: [{ role: 'user', content: userContent }],
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
@@ -300,11 +302,14 @@ export async function* runMakaronAgent(
 
       // ── Tool call ───────────────────────────────────────────────────────────
       if (event.type === 'tool-call') {
+        const isEnLocale = options?.locale === 'en';
         if (event.toolName === 'analyze_image') {
           const q = (event.input as { question?: string }).question;
-          yield { type: 'status', text: q ? `分析图片：${q.slice(0, 25)}` : '分析图片' };
+          yield { type: 'status', text: isEnLocale
+            ? (q ? `Analyzing image: ${q.slice(0, 30)}` : 'Analyzing image')
+            : (q ? `分析图片：${q.slice(0, 25)}` : '分析图片') };
         } else if (event.toolName === 'generate_image') {
-          yield { type: 'status', text: '生成图片中...' };
+          yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {

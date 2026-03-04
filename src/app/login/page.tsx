@@ -3,27 +3,26 @@
 import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { useLocale, LocaleToggle } from '@/lib/i18n'
 
-const ERROR_MESSAGES: Record<string, string> = {
-  'Invalid login credentials': '邮箱或密码错误',
-  'Email not confirmed': '请先验证邮箱',
-  'User already registered': '该邮箱已注册，请直接登录',
-  'Password should be at least 6 characters': '密码至少需要 6 个字符',
-  'Unable to validate email address: invalid format': '邮箱格式不正确',
-  'Email rate limit exceeded': '操作过于频繁，请稍后再试',
-  'For security purposes, you can only request this after 60 seconds.': '请等待 60 秒后再试',
-}
-
-function translateError(msg: string): string {
-  return ERROR_MESSAGES[msg] || msg
+const ERROR_KEY_MAP: Record<string, string> = {
+  'Invalid login credentials': 'auth.err.invalidCredentials',
+  'Email not confirmed': 'auth.err.emailNotConfirmed',
+  'User already registered': 'auth.err.alreadyRegistered',
+  'Password should be at least 6 characters': 'auth.err.passwordTooShort',
+  'Unable to validate email address: invalid format': 'auth.err.invalidEmail',
+  'Email rate limit exceeded': 'auth.err.rateLimited',
+  'For security purposes, you can only request this after 60 seconds.': 'auth.err.wait60s',
 }
 
 export default function LoginPage() {
+  const { t } = useLocale()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isRegister, setIsRegister] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [errorKey, setErrorKey] = useState<string>('')
+  const [errorRaw, setErrorRaw] = useState<string>('')
   const supabaseRef = useRef<SupabaseClient | null>(null)
 
   function getSupabase() {
@@ -35,30 +34,35 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
+    setErrorKey('')
+    setErrorRaw('')
     setLoading(true)
 
     try {
       if (isRegister) {
         const { error } = await getSupabase().auth.signUp({ email, password })
         if (error) {
-          setError(translateError(error.message))
+          const key = ERROR_KEY_MAP[error.message]
+          if (key) setErrorKey(key); else setErrorRaw(error.message)
           return
         }
       } else {
         const { error } = await getSupabase().auth.signInWithPassword({ email, password })
         if (error) {
-          setError(translateError(error.message))
+          const key = ERROR_KEY_MAP[error.message]
+          if (key) setErrorKey(key); else setErrorRaw(error.message)
           return
         }
       }
       window.location.href = '/'
     } catch {
-      setError('网络错误，请重试')
+      setErrorKey('auth.networkError')
     } finally {
       setLoading(false)
     }
   }
+
+  const errorMsg = errorKey ? t(errorKey as Parameters<typeof t>[0]) : errorRaw
 
   return (
     <>
@@ -67,6 +71,11 @@ export default function LoginPage() {
       .mkr-handwrite { font-family: 'Caveat', cursive; }
     `}</style>
     <div className="min-h-dvh bg-black flex items-center justify-center px-6">
+      {/* Language toggle — top right */}
+      <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 10 }}>
+        <LocaleToggle />
+      </div>
+
       <div className="w-full max-w-sm">
         {/* Wordmark row: asterisk icon + Makaron */}
         <div className="flex items-center justify-center gap-3 mb-1">
@@ -106,7 +115,7 @@ export default function LoginPage() {
           <div>
             <input
               type="email"
-              placeholder="邮箱"
+              placeholder={t('auth.email')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -117,7 +126,7 @@ export default function LoginPage() {
           <div>
             <input
               type="password"
-              placeholder="密码"
+              placeholder={t('auth.password')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -126,8 +135,8 @@ export default function LoginPage() {
             />
           </div>
 
-          {error && (
-            <p className="text-red-400 text-sm text-center">{error}</p>
+          {errorMsg && (
+            <p className="text-red-400 text-sm text-center">{errorMsg}</p>
           )}
 
           <button
@@ -141,17 +150,17 @@ export default function LoginPage() {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
             )}
-            {isRegister ? '注册' : '登录'}
+            {isRegister ? t('auth.register') : t('auth.login')}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-white/40">
-          {isRegister ? '已有账号？' : '没有账号？'}
+          {isRegister ? t('auth.hasAccount') : t('auth.noAccount')}
           <button
-            onClick={() => { setIsRegister(!isRegister); setError('') }}
+            onClick={() => { setIsRegister(!isRegister); setErrorKey(''); setErrorRaw('') }}
             className="text-fuchsia-400 hover:text-fuchsia-300 ml-1"
           >
-            {isRegister ? '去登录' : '注册'}
+            {isRegister ? t('auth.goLogin') : t('auth.register')}
           </button>
         </p>
       </div>
