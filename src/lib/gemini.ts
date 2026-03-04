@@ -80,12 +80,18 @@ const CATEGORY_CN: Record<TipCategory, string> = {
 };
 
 function buildCategorySystemPrompt(category: TipCategory, count: number = 2, locale?: string): string {
+  if (locale === 'en') {
+    const labelNoteEn = category === 'captions'
+      ? 'label must be 3-6 English words, start with action verb, include scene/location context.'
+      : 'label must be 3-6 English words, start with action verb.';
+    return `You are a photo editing expert. Analyze the image and generate ${count} ${category} edit suggestions.
+${labelNoteEn} desc must be in English (under 20 words). editPrompt in English, highly specific.`;
+  }
   const labelNote = category === 'captions'
     ? 'label必须用中文3-6字，动词开头，并尽量包含地点/场景等具体信息（如"迪士尼海报"、"梯田旁白"、"纽约胶片"）。'
     : 'label必须用中文3-6字，动词开头。';
-  const base = `你是图片编辑建议专家。分析图片后生成${count}条${CATEGORY_CN[category]}编辑建议。
+  return `你是图片编辑建议专家。分析图片后生成${count}条${CATEGORY_CN[category]}编辑建议。
 ${labelNote}editPrompt用英文，极其具体。`;
-  return locale === 'en' ? `${base}\n\nOutput all label and desc fields in English.` : base;
 }
 
 // Prompt templates bundled via webpack asset/source
@@ -868,7 +874,7 @@ async function* streamTipsByCategoryGoogle(
         parts: [
           { inlineData: { mimeType, data: base64Data } },
           {
-            text: `${isEn ? 'IMPORTANT: You MUST output ALL "label" and "desc" fields in English only.\n\n' : ''}${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${promptSuffix}`,
+            text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${promptSuffix}`,
           },
         ],
       },
@@ -927,7 +933,7 @@ async function* streamTipsByCategoryOpenRouter(
             toImageContent(imageBase64),
             {
               type: 'text',
-              text: `${isEn ? 'IMPORTANT: You MUST output ALL "label" and "desc" fields in English only.\n\n' : ''}${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX}`,
+              text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX}`,
             },
           ],
         },
@@ -983,7 +989,7 @@ async function* streamTipsByCategoryBedrock(
         role: 'user',
         content: [
           { type: 'image', image: dataUrl },
-          { type: 'text', text: `${isEn ? 'IMPORTANT: You MUST output ALL "label" and "desc" fields in English only.\n\n' : ''}${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX}` },
+          { type: 'text', text: `${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${isEn ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX}` },
         ],
       },
     ],
