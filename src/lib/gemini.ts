@@ -125,7 +125,7 @@ const TIPS_SCHEMA = {
 };
 
 const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON：
-[{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"(MUST be English, 100-200 words) Detailed English editing instructions...","category":"enhance|creative|wild|captions"}, ...]`;
+[{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"(MUST be in English) Detailed English editing instructions...","category":"enhance|creative|wild|captions"}, ...]`;
 
 const JSON_FORMAT_SUFFIX_EN = `\n\nOutput as JSON array only, no other text:
 [{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
