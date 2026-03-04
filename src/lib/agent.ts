@@ -477,7 +477,9 @@ ${info.rules}
 "Clean up the scene like a professional photographer would before shooting: remove any object that draws attention away from the main subject but adds no compositional value. Replace cleaned areas with natural-looking continuation of the scene."
 
 2个tip必须选不同方向。结尾加"Do NOT add any text, watermarks, or borders."`;
-  return withLocale(base, locale);
+  // No withLocale — language of label/desc controlled by TIPS_JSON_FORMAT per locale.
+  // editPrompt must ALWAYS be English regardless of locale.
+  return base;
 }
 
 export async function* streamTipsWithClaude(
@@ -488,7 +490,7 @@ export async function* streamTipsWithClaude(
 ): AsyncGenerator<Tip> {
   const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const template = TIPS_PROMPTS[category];
-  const systemPrompt = buildTipsSystemPrompt(category, locale);
+  const systemPrompt = buildTipsSystemPrompt(category);
 
   // Build metadata context string
   const metaLines: string[] = [];
