@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { InferenceClient } from '@huggingface/inference';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const HF_TOKEN = process.env.HF_TOKEN;
 
@@ -24,10 +24,17 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'HF_TOKEN not configured' }, { status: 500 });
     }
 
-    // Convert base64/dataurl to Blob
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(base64Data, 'base64');
-    const blob = new Blob([buffer], { type: 'image/jpeg' });
+    // Convert image (URL or base64 dataurl) to Uint8Array for Blob
+    let imgBytes: Uint8Array;
+    if (image.startsWith('http')) {
+      const res = await fetch(image);
+      imgBytes = new Uint8Array(await res.arrayBuffer());
+    } else {
+      const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+      const buf = Buffer.from(base64Data, 'base64');
+      imgBytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    }
+    const blob = new Blob([imgBytes as BlobPart], { type: 'image/jpeg' });
 
     const client = new InferenceClient(HF_TOKEN);
     const result = await client.imageToImage({
@@ -38,8 +45,8 @@ export async function POST(req: NextRequest) {
     });
 
     // result is a Blob — convert to base64
-    const arrayBuf = await result.arrayBuffer();
-    const resultBase64 = `data:image/jpeg;base64,${Buffer.from(arrayBuf).toString('base64')}`;
+    const resultBuf = Buffer.from(await result.arrayBuffer());
+    const resultBase64 = `data:image/jpeg;base64,${resultBuf.toString('base64')}`;
 
     return Response.json({ image: resultBase64 });
   } catch (error) {
