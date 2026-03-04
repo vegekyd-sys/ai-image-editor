@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head><title>HEIC Test</title></head>
+<body style="font-family:monospace;padding:20px">
+<h2>HEIC → JPEG Browser Conversion Test</h2>
+<input type="file" id="file" accept=".heic,.heif,image/*">
+<pre id="log"></pre>
+<img id="result" style="max-width:400px;display:none">
+<script type="module">
+import heic2any from 'https://esm.sh/heic2any@0.0.4';
+
+const log = (msg) => { document.getElementById('log').textContent += msg + '\n'; console.log(msg); };
+
+document.getElementById('file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  log(`File: ${file.name} (${(file.size/1024).toFixed(0)} KB, type: ${file.type})`);
+
+  const isHeic = file.type === 'image/heic' || file.type === 'image/heif' || /\.(heic|heif)$/i.test(file.name);
+  log(`Is HEIC: ${isHeic}`);
+
+  if (isHeic) {
+    log('Converting HEIC → JPEG with heic2any...');
+    const start = Date.now();
+    try {
+      const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+      const jpegBlob = Array.isArray(result) ? result[0] : result;
+      log(`✅ Conversion done in ${Date.now()-start}ms, JPEG size: ${(jpegBlob.size/1024).toFixed(0)} KB`);
+
+      const url = URL.createObjectURL(jpegBlob);
+      const img = document.getElementById('result');
+      img.src = url;
+      img.style.display = 'block';
+      log('Image displayed below ↓');
+    } catch (err) {
+      log(`❌ Error: ${err.message}`);
+    }
+  } else {
+    log('Not HEIC, showing directly...');
+    const url = URL.createObjectURL(file);
+    const img = document.getElementById('result');
+    img.src = url;
+    img.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>

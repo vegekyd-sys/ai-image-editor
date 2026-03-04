@@ -79,35 +79,35 @@ export function useLocale(): LocaleContextValue {
   return ctx;
 }
 
-/** Standalone locale toggle button — renders "EN" or "中" */
+/** Locale selector — shows current language, allows switching via dropdown */
 export function LocaleToggle({ className }: { className?: string }) {
   const { locale, setLocale } = useLocale();
   return (
-    <button
-      onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
+    <select
+      value={locale}
+      onChange={(e) => setLocale(e.target.value as 'zh' | 'en')}
       className={className}
       style={{
-        background: 'none',
+        background: 'rgba(0,0,0,0.6)',
         border: '1px solid rgba(255,255,255,0.15)',
         borderRadius: '6px',
-        color: 'rgba(255,255,255,0.45)',
+        color: 'rgba(255,255,255,0.5)',
         fontSize: '0.65rem',
         letterSpacing: '0.06em',
         padding: '3px 8px',
         cursor: 'pointer',
-        transition: 'color 0.2s, border-color 0.2s',
         fontFamily: 'inherit',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.color = 'rgba(255,255,255,0.8)';
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.color = 'rgba(255,255,255,0.45)';
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+        outline: 'none',
+        appearance: 'none',
+        WebkitAppearance: 'none',
+        paddingRight: '20px',
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(255,255,255,0.35)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`,
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'right 6px center',
       }}
     >
-      {locale === 'zh' ? 'EN' : '中'}
-    </button>
+      <option value="zh" style={{ background: '#111', color: '#fff' }}>中文</option>
+      <option value="en" style={{ background: '#111', color: '#fff' }}>English</option>
+    </select>
   );
 }

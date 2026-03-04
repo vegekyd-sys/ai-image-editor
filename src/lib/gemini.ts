@@ -79,7 +79,14 @@ const CATEGORY_CN: Record<TipCategory, string> = {
   captions: 'captions（创意文案）',
 };
 
-function buildCategorySystemPrompt(category: TipCategory, count: number = 2): string {
+function buildCategorySystemPrompt(category: TipCategory, count: number = 2, locale?: string): string {
+  if (locale === 'en') {
+    const labelNoteEn = category === 'captions'
+      ? 'label must be 3-6 English words, start with action verb, include location/scene details (e.g. "Add Parisian Café Vibe", "Overlay Neon Sign Text").'
+      : 'label must be 3-6 English words, start with action verb.';
+    return `You are a photo editing suggestion expert. Analyze the image and generate ${count} ${category} edit suggestions.
+${labelNoteEn} desc must be in English (under 20 words). editPrompt in English, highly specific.`;
+  }
   const labelNote = category === 'captions'
     ? 'label必须用中文3-6字，动词开头，并尽量包含地点/场景等具体信息（如"迪士尼海报"、"梯田旁白"、"纽约胶片"）。'
     : 'label必须用中文3-6字，动词开头。';
@@ -832,7 +839,7 @@ async function* streamTipsByCategoryGoogle(
   const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
   const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
   const template = getPromptTemplate(category);
-  const systemPrompt = buildCategorySystemPrompt(category, count);
+  const systemPrompt = buildCategorySystemPrompt(category, count, locale);
   const metaLines: string[] = [];
   if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
   if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
@@ -889,7 +896,7 @@ async function* streamTipsByCategoryOpenRouter(
 ): AsyncGenerator<Tip> {
   const isEn = locale === 'en';
   const template = getPromptTemplate(category);
-  const systemPrompt = buildCategorySystemPrompt(category, count);
+  const systemPrompt = buildCategorySystemPrompt(category, count, locale);
   const metaLines: string[] = [];
   if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
   if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
@@ -959,7 +966,7 @@ async function* streamTipsByCategoryBedrock(
     ? (await ensureBase64Server(imageBase64))
     : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const template = getPromptTemplate(category);
-  const systemPrompt = buildCategorySystemPrompt(category, count);
+  const systemPrompt = buildCategorySystemPrompt(category, count, locale);
   const metaLines: string[] = [];
   if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
   if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);

@@ -105,6 +105,14 @@ const en = {
   'canvas.usuallyTakes': 'Usually takes 3–5 minutes',
   'canvas.generateVideo': 'Generate video',
 
+  // Annotation toolbar
+  'annotation.placeholder': 'How should I edit the marked area?',
+  'annotation.defaultPrompt': 'Edit the image based on my annotations',
+
+  // Editor inline UI
+  'editor.generatingImage': 'AI is generating image...',
+  'editor.errorRetry': 'Something went wrong, please retry',
+
   // Editor inline strings
   'editor.greeting': 'Hi! How would you like to edit this photo?',
   'editor.tipsSuffix': '\n\nComing up with some fun edit ideas...',

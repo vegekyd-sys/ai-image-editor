@@ -1237,7 +1237,7 @@ export default function Editor({
             const id = currentMsgId;
             setMessages((prev) => {
               const updated = prev.map((m) =>
-                m.id === id ? { ...m, content: m.content || `出错了，请重试` } : m
+                m.id === id ? { ...m, content: m.content || t('editor.errorRetry') } : m
               );
               // Persist whatever content we have
               const toSave = updated.filter(m => agentMsgIds.includes(m.id) && m.content);
@@ -1268,7 +1268,7 @@ export default function Editor({
     setAnnotationMode(false);
     setAnnotationEntries([]);
     setAnnotationUndoStack([]);
-    handleAgentRequest(text || '请根据标注修改图片', referenceImages, merged);
+    handleAgentRequest(text || t('annotation.defaultPrompt'), referenceImages, merged);
   };
 
   // CUI send: if annotations exist, merge them; otherwise normal chat
@@ -1991,7 +1991,7 @@ export default function Editor({
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-8 h-8 border-2 border-fuchsia-400 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-white/50 text-sm">AI 正在生成图片...</span>
+                    <span className="text-white/50 text-sm">{t('editor.generatingImage')}</span>
                   </div>
                 </div>
               ) : (

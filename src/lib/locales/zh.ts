@@ -105,6 +105,14 @@ const zh = {
   'canvas.usuallyTakes': '通常需要 3–5 分钟',
   'canvas.generateVideo': '生成视频',
 
+  // Annotation toolbar
+  'annotation.placeholder': '你想对标记的地方怎么改...',
+  'annotation.defaultPrompt': '请根据标注修改图片',
+
+  // Editor inline UI
+  'editor.generatingImage': 'AI 正在生成图片...',
+  'editor.errorRetry': '出错了，请重试',
+
   // Editor inline strings
   'editor.greeting': 'Hi! 想怎么编辑这张照片？',
   'editor.tipsSuffix': '\n\n正在为你想一些好玩的修图点子~',

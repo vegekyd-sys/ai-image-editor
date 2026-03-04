@@ -17,6 +17,18 @@ printf 'value' | npx vercel env add NAME production --force
 printf 'value' | npx vercel env add NAME preview --force
 ```
 
+## i18n（多语言，2026-03-04）
+
+**架构**：自定义 i18n，无第三方库。`src/lib/i18n.tsx`（LocaleProvider + useLocale + LocaleToggle）+ `src/lib/locales/zh.ts` + `src/lib/locales/en.ts`（~90 keys）。
+
+**语言切换**：localStorage + cookie 双写。客户端用 `useLocale().t(key)` 读翻译；服务端 API 路由用 `req.cookies.get('locale')` 读语言（无需前端透传）。切换按钮在登录页右上角和项目列表页 Sign out 旁。
+
+**Tips 英文**：`/api/tips` 读 cookie locale → `streamTipsByCategory(... locale)` → 在用户消息**最前面**插入 `IMPORTANT: You MUST output ALL "label" and "desc" fields in English only.`（必须放最前，放末尾会被中文 analysisStep 覆盖）。
+
+**CUI 回复语言**：`agent.md` 改为 `Reply in the same language the user writes in.`（原来是 `Speak Chinese to the user.`）。这利用 LLM 自然语言跟随能力，用户说中文回中文，说英文回英文。AI-initiated 消息（teaser/reaction/analysis）通过 `api/agent/route.ts` 的 `isEn` 显式控制（中英文两套 prompt）。
+
+**已翻译组件**：layout, login, projects, projects/[id], Editor, AgentStatusBar, AgentChatView, TipsBar, ImageCanvas, AnimateSheet, VideoResultCard。
+
 ## Current Status
 
 Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。当前生图和 tips 均走 OpenRouter `gemini-3.1-flash-image-preview`（从 `gemini-3-pro-image-preview` 切换，2026-02-27）。tips/preview 缩略图不走 MOCK_AI（已关闭）。

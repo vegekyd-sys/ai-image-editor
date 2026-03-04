@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { compressImageFile } from '@/lib/imageUtils';
+import { useLocale } from '@/lib/i18n';
 
 export const ANNOTATION_COLOR = '#dc2626';
 
@@ -37,6 +38,7 @@ export default function AnnotationToolbar({
   canUndo, canRedo, onSend, isSending, hasEntries,
   brushSize, onBrushSizeChange, isDesktop,
 }: AnnotationToolbarProps) {
+  const { t } = useLocale();
   const [input, setInput] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -148,7 +150,7 @@ export default function AnnotationToolbar({
                 setAttachedImage(null);
               }
             }}
-            placeholder="你想对标记的地方怎么改..."
+            placeholder={t('annotation.placeholder')}
             disabled={isSending}
             className="flex-1 min-w-0 bg-transparent text-[15px] outline-none border-none leading-relaxed resize-none overflow-hidden block"
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '5rem', padding: 0 }}
