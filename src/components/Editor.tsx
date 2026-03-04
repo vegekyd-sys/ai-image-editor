@@ -943,7 +943,7 @@ export default function Editor({
               if (payload === '[DONE]') break;
               try {
                 const tip = JSON.parse(payload) as Tip;
-                handleTipEvent(tip, snapshotId, () => false);
+                handleTipEvent(tip, snapshotId, () => true);
               } catch { /* skip malformed */ }
             }
           }
