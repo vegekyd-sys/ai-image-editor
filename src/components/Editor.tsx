@@ -1790,9 +1790,9 @@ export default function Editor({
     if (generating > 0) {
       const x = Math.max(0, done - previewDoneBaselineRef.current);
       const y = x + generating;
-      setAgentStatus(`正使用nano banana 2生成图片 ${x}/${y}`);
+      setAgentStatus(t('status.generatingPreviews', x, y));
     } else if (settled === total && !isAgentActive) {
-      setAgentStatus(prev => prev.includes('nano banana') ? t('editor.greeting') : prev);
+      setAgentStatus(prev => prev === t('status.generatingPreviews', 0, 0) || prev.includes('previews') || prev.includes('预览') ? t('editor.greeting') : prev);
     }
   }, [snapshots, tipsSourceIndex, isAgentActive, isTipsFetching]);
 

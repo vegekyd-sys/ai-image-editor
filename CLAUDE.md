@@ -50,6 +50,27 @@ printf 'value' | npx vercel env add NAME preview --force
 - `ANALYSIS_PROMPT_INITIAL/POSTEDIT`：保持中文 base + `withLocale`（分析场景中文 base 可靠）
 - `agent.md`：`[User request — detect language and reply in same language]` 标签让 CUI 对话跟随用户输入语言
 
+## 视角旋转 Camera Rotate（2026-03-04，Demo）
+
+**功能**：3D 虚拟相机控制，调整 Azimuth（方位角 0-360°，8 方向）+ Elevation（仰角 -30~60°，4 级）+ Distance（距离 0.6~1.4，3 级）= 96 种视角组合，生成新视角图片。
+
+**模型**：`fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA`（基于 `Qwen/Qwen-Image-Edit-2511`），通过 HuggingFace Inference SDK + fal.ai provider 调用。Prompt 格式 `<sks> {azimuth} {elevation} {distance}`（如 `<sks> front-right quarter view eye-level shot medium shot`）。
+
+**架构**：
+- `src/lib/camera-utils.ts` — 视角参数映射 + `buildCameraPrompt()` + `CameraState` 接口
+- `src/components/CameraControl3D.tsx` — React Three Fiber 3D 场景（网格 + 图片纹理 + 相机模型 + 3 个可拖拽把手），`dynamic` SSR-off 加载
+- `src/components/CameraPanel.tsx` — 浮动面板（与 AnnotationToolbar 一致样式/拖拽逻辑），3D 预览 + sliders + 方向按钮 + Cancel/Generate
+- `src/app/api/rotate/route.ts` — 接收 image（URL 或 base64）+ prompt，调 fal.ai，返回 base64
+- Editor.tsx — 画笔旁加相机按钮（互斥），Generate 后 commit 为新 snapshot + 拉 tips
+
+**依赖**：`three` + `@react-three/fiber` + `@react-three/drei` + `@huggingface/inference`
+
+**环境变量**：`HF_TOKEN`（HuggingFace API token），已配 preview。
+
+**速度**：本地测试 ~25s，CLI 冷启动 ~148s。`maxDuration=300`。
+
+**参考项目**：`camilocbarrera/-Qwen-Image-Edit-2511-Multiple-Angles-LoRA` — Next.js + R3F + fal.ai，同技术栈。
+
 ## Current Status
 
 Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。当前生图和 tips 均走 OpenRouter `gemini-3.1-flash-image-preview`（从 `gemini-3-pro-image-preview` 切换，2026-02-27）。tips/preview 缩略图不走 MOCK_AI（已关闭）。

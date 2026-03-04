@@ -17,7 +17,7 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
   const { t } = useLocale();
   const videoLit = snapshotCount > 3 && !hasVideo;
   // Determine dot color and breathe speed based on state
-  const isGeneratingImages = statusText.includes('正使用nano banana');
+  const isGeneratingImages = statusText.includes('previews') || statusText.includes('预览');
   const isFetchingTips = statusText === t('status.generatingTips');
 
   let dotColor: string;

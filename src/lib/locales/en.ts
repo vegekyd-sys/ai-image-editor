@@ -119,6 +119,9 @@ const en = {
   'editor.agentThinking': 'Agent is thinking...',
   'editor.makeVideo': '✨ Turn these photos into a video for me',
 
+  // Preview generation
+  'status.generatingPreviews': (done: number, total: number) => `Generating previews ${done}/${total}`,
+
   // Misc
   'misc.toolUse': 'Tool use',
   'misc.error': 'Error',

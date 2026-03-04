@@ -119,6 +119,9 @@ const zh = {
   'editor.agentThinking': 'Agent 正在思考...',
   'editor.makeVideo': '✨ 帮我把这些照片做成一段视频',
 
+  // Preview generation
+  'status.generatingPreviews': (done: number, total: number) => `正在生成预览图 ${done}/${total}`,
+
   // Misc
   'misc.toolUse': '工具调用',
   'misc.error': '错误',
