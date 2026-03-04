@@ -80,18 +80,12 @@ const CATEGORY_CN: Record<TipCategory, string> = {
 };
 
 function buildCategorySystemPrompt(category: TipCategory, count: number = 2, locale?: string): string {
-  if (locale === 'en') {
-    const labelNoteEn = category === 'captions'
-      ? 'label must be 3-6 English words, start with action verb, include location/scene details (e.g. "Add Parisian Café Vibe", "Overlay Neon Sign Text").'
-      : 'label must be 3-6 English words, start with action verb.';
-    return `You are a photo editing suggestion expert. Analyze the image and generate ${count} ${category} edit suggestions.
-${labelNoteEn} desc must be in English (under 20 words). editPrompt in English, highly specific.`;
-  }
   const labelNote = category === 'captions'
     ? 'label必须用中文3-6字，动词开头，并尽量包含地点/场景等具体信息（如"迪士尼海报"、"梯田旁白"、"纽约胶片"）。'
     : 'label必须用中文3-6字，动词开头。';
-  return `你是图片编辑建议专家。分析图片后生成${count}条${CATEGORY_CN[category]}编辑建议。
+  const base = `你是图片编辑建议专家。分析图片后生成${count}条${CATEGORY_CN[category]}编辑建议。
 ${labelNote}editPrompt用英文，极其具体。`;
+  return locale === 'en' ? `${base}\n\nOutput all label and desc fields in English.` : base;
 }
 
 // Prompt templates bundled via webpack asset/source

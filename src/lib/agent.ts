@@ -217,13 +217,16 @@ function createTools(ctx: AgentContext) {
 // Agent runner – async generator yielding SSE events
 // ---------------------------------------------------------------------------
 
+/** Append an English reply instruction to any prompt when locale is 'en'. */
+export function withLocale(prompt: string, locale?: string): string {
+  return locale === 'en' ? `${prompt}\n\nReply in English.` : prompt;
+}
+
 // Used for initial upload analysis
 const ANALYSIS_PROMPT_INITIAL = `描述这张照片里的内容，1-2句，语气像朋友分享。直接从主体开始说（"一个..."/"画面里..."）。禁止用"我来看看"/"让我看一下"等任何铺垫语。`;
-const ANALYSIS_PROMPT_INITIAL_EN = `Describe what's in this photo in 1-2 sentences, like sharing with a friend. Start directly with the subject (e.g. "A girl...", "In the shot..."). No preamble like "Let me see" or "I can see".`;
 
 // Used for post-edit analysis — acknowledges the edit context
 const ANALYSIS_PROMPT_POSTEDIT = `P完图了，看看效果。以"P完之后，"开头，用1句话描述一下现在这张图的整体效果和氛围。禁止用"我来看看"等铺垫语，直接说结果。`;
-const ANALYSIS_PROMPT_POSTEDIT_EN = `Here's the edited result. In 1 sentence starting with "After the edit,", describe the overall effect and mood. No preamble, just the result.`;
 
 export async function* runMakaronAgent(
   prompt: string,
@@ -247,10 +250,10 @@ export async function* runMakaronAgent(
   const analysisOnly = options?.analysisOnly ?? false;
   const tipReactionOnly = options?.tipReactionOnly ?? false;
   const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : 10;
-  const isEn = options?.locale === 'en';
-  const analysisPrompt = options?.analysisContext === 'post-edit'
-    ? (isEn ? ANALYSIS_PROMPT_POSTEDIT_EN : ANALYSIS_PROMPT_POSTEDIT)
-    : (isEn ? ANALYSIS_PROMPT_INITIAL_EN : ANALYSIS_PROMPT_INITIAL);
+  const analysisPrompt = withLocale(
+    options?.analysisContext === 'post-edit' ? ANALYSIS_PROMPT_POSTEDIT : ANALYSIS_PROMPT_INITIAL,
+    options?.locale,
+  );
 
   // Determine which tools to expose
   // tipReactionOnly: no tools (text-only response)
