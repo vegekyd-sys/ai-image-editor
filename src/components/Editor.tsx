@@ -13,9 +13,11 @@ import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/components/AnnotationCanvas';
 import AnimateSheet from '@/components/AnimateSheet';
 import VideoResultCard from '@/components/VideoResultCard';
+import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils';
 import { useLocale } from '@/lib/i18n';
+import type { CameraState } from '@/lib/camera-utils';
 
 export interface AnimationState {
   imageUrls: string[]
@@ -240,6 +242,9 @@ export default function Editor({
   const [textColor, setTextColor] = useState('#ec4899');
   const [textBgEnabled, setTextBgEnabled] = useState(true);
   const [showAnimateSheet, setShowAnimateSheet] = useState(false);
+  // Camera rotation panel
+  const [showCameraPanel, setShowCameraPanel] = useState(false);
+  const [isRotating, setIsRotating] = useState(false);
   // Animation state: lifted from AnimateSheet so it persists across GUI↔CUI switches
   const [animationState, setAnimationState] = useState<AnimationState | null>(null);
   // All animations for this project (loaded from DB + newly created)
@@ -1138,7 +1143,7 @@ export default function Editor({
       ? `[用户上传了 ${attachedImages.length} 张参考图，已自动传给 generate_image 工具使用]\n\n`
       : '';
 
-    const fullPrompt = `${snapshotWarning}${metaContext}${descriptionContext}${tipsContext}${historyContext}${refContext}[当前请求]\n${text}`;
+    const fullPrompt = `${snapshotWarning}${metaContext}${descriptionContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
@@ -1419,6 +1424,52 @@ export default function Editor({
       .map(t => ({ emoji: t.emoji, label: t.label, desc: t.desc, category: t.category }));
     setTimeout(() => triggerTipCommitReaction(tipSnapshot, tipImg, siblings), 200);
   }, [draftParentIndex, previewingTipIndex, snapshots, addMessage, fetchTipsForSnapshot, onSaveSnapshot, triggerTipCommitReaction]);
+
+  // Camera rotation: generate rotated view and commit as new snapshot
+  const handleCameraGenerate = useCallback(async (camera: CameraState, prompt: string) => {
+    const currentSnap = snapshots[snapshots.length - 1];
+    if (!currentSnap) return;
+    const image = getImageForApi(currentSnap);
+    if (!image) return;
+
+    setIsRotating(true);
+    try {
+      const res = await fetch('/api/rotate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image, prompt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+
+      // Commit as new snapshot
+      const snapId = generateId();
+      const newSnapshot: Snapshot = {
+        id: snapId,
+        image: data.image,
+        tips: [],
+        messageId: '',
+      };
+      setSnapshots(prev => [...prev, newSnapshot]);
+      onSaveSnapshot?.(newSnapshot, snapshots.length, (url) => {
+        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+      });
+      cacheImage(`snap:${snapId}`, data.image);
+      setViewIndex(snapshots.length);
+      setShowCameraPanel(false);
+
+      // Fetch tips for the new snapshot
+      if (data.image.startsWith('http')) {
+        fetchTipsForSnapshot(snapId, data.image);
+      } else {
+        compressBase64(data.image, 600_000).then(img => fetchTipsForSnapshot(snapId, img));
+      }
+    } catch (err) {
+      console.error('Camera rotate error:', err);
+    } finally {
+      setIsRotating(false);
+    }
+  }, [snapshots, onSaveSnapshot, fetchTipsForSnapshot]);
 
   // Click tip:
   //   - First click (no draft) → create draft
@@ -2100,6 +2151,7 @@ export default function Editor({
                           setAnnotationEntries([]);
                           setAnnotationUndoStack([]);
                         } else {
+                          setShowCameraPanel(false);
                           setAnnotationMode(true);
                           setAnnotationTool('brush');
                         }
@@ -2109,6 +2161,27 @@ export default function Editor({
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08" />
                         <path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z" />
+                      </svg>
+                    </button>
+                  )}
+                  {/* Camera rotation toggle */}
+                  {!isViewingVideo && timeline.length > 0 && (
+                    <button
+                      onClick={() => {
+                        if (showCameraPanel) {
+                          setShowCameraPanel(false);
+                        } else {
+                          setAnnotationMode(false);
+                          setAnnotationEntries([]);
+                          setAnnotationUndoStack([]);
+                          setShowCameraPanel(true);
+                        }
+                      }}
+                      className={`p-2 cursor-pointer transition-colors ${showCameraPanel ? 'text-fuchsia-400' : 'text-white/80 hover:text-white'}`}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                        <circle cx="12" cy="13" r="4" />
                       </svg>
                     </button>
                   )}
@@ -2215,6 +2288,29 @@ export default function Editor({
                   setTextEditPos(null);
                   setTextEditValue('');
                 }}
+              />
+            </div>
+          )}
+
+          {/* Camera rotation panel — same position as AnnotationToolbar */}
+          {snapshots.length > 0 && showCameraPanel && (
+            <div style={isDesktop ? {
+              position: 'absolute',
+              top: 56, left: 12,
+              zIndex: 201,
+            } : {
+              position: 'fixed',
+              bottom: 0, left: 0, right: 0,
+              zIndex: 201,
+              maxWidth: 400,
+              margin: '0 auto',
+            }}>
+              <CameraPanel
+                imageUrl={snapshots[snapshots.length - 1]?.image || ''}
+                isDesktop={isDesktop}
+                isGenerating={isRotating}
+                onGenerate={handleCameraGenerate}
+                onCancel={() => setShowCameraPanel(false)}
               />
             </div>
           )}
