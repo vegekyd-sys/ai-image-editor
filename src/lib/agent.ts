@@ -381,8 +381,11 @@ export async function* runMakaronAgent(
 // Tips Skill: generate tips text using Claude (fast, ~2-3s vs Gemini ~15s)
 // ---------------------------------------------------------------------------
 
-const TIPS_JSON_FORMAT = `\n\nOutput strictly as JSON array, no other text:
-[{"emoji":"emoji","label":"2-3 word label","desc":"short description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
+const TIPS_JSON_FORMAT_ZH = `\n\n以JSON数组格式输出，只输出JSON：
+[{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
+
+const TIPS_JSON_FORMAT_EN = `\n\nOutput as JSON array only, no other text:
+[{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
 
 const TIPS_PROMPTS: Record<'enhance' | 'creative' | 'wild' | 'captions', string> = {
   enhance: enhancePrompt,
@@ -497,7 +500,7 @@ export async function* streamTipsWithClaude(
 
 基于分析，给出2条${category}编辑建议。以下是详细规范（必须遵循）：
 
-${template}${TIPS_JSON_FORMAT}`;
+${template}${locale === 'en' ? TIPS_JSON_FORMAT_EN : TIPS_JSON_FORMAT_ZH}`;
 
   const { textStream } = streamText({
     model: MODEL,

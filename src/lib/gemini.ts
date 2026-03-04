@@ -122,8 +122,15 @@ const TIPS_SCHEMA = {
   },
 };
 
-const JSON_FORMAT_SUFFIX = `\n\nOutput strictly as JSON array, no other text:
-[{"emoji":"emoji","label":"2-3 word label","desc":"short description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
+const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON：
+[{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
+
+const JSON_FORMAT_SUFFIX_EN = `\n\nOutput as JSON array only, no other text:
+[{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
+
+function getJsonFormatSuffix(locale?: string) {
+  return locale === 'en' ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX_ZH;
+}
 
 // ── Image Content Helpers ────────────────────────────────────────
 
@@ -861,7 +868,7 @@ async function* streamTipsByCategoryGoogle(
   }
 
   const isEn = locale === 'en';
-  const promptSuffix = supportsStructuredOutput ? '' : JSON_FORMAT_SUFFIX;
+  const promptSuffix = supportsStructuredOutput ? '' : getJsonFormatSuffix(locale);
   const stream = await getAI().models.generateContentStream({
     model: MODEL,
     contents: [
@@ -929,7 +936,7 @@ async function* streamTipsByCategoryOpenRouter(
             toImageContent(imageBase64),
             {
               type: 'text',
-              text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${JSON_FORMAT_SUFFIX}`,
+              text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${getJsonFormatSuffix(locale)}`,
             },
           ],
         },
@@ -985,7 +992,7 @@ async function* streamTipsByCategoryBedrock(
         role: 'user',
         content: [
           { type: 'image', image: dataUrl },
-          { type: 'text', text: `${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${JSON_FORMAT_SUFFIX}` },
+          { type: 'text', text: `${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${getJsonFormatSuffix(locale)}` },
         ],
       },
     ],
