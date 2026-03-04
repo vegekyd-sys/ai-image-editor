@@ -1427,10 +1427,12 @@ export default function Editor({
 
   // Camera rotation: generate rotated view and commit as new snapshot
   const handleCameraGenerate = useCallback(async (camera: CameraState, prompt: string) => {
+    console.log('[Camera] handleCameraGenerate called', { prompt, snapshotCount: snapshots.length });
     const currentSnap = snapshots[snapshots.length - 1];
-    if (!currentSnap) return;
+    if (!currentSnap) { console.error('[Camera] no snapshot'); return; }
     const image = getImageForApi(currentSnap);
-    if (!image) return;
+    if (!image) { console.error('[Camera] no image for API'); return; }
+    console.log('[Camera] image type:', image.startsWith('http') ? 'URL' : 'base64', 'length:', image.length);
 
     setIsRotating(true);
     try {

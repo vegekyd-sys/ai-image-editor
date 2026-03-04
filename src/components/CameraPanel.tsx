@@ -236,7 +236,7 @@ export default function CameraPanel({
               Cancel
             </button>
             <button
-              onClick={() => onGenerate(camera, prompt)}
+              onClick={(e) => { e.stopPropagation(); console.log('Camera Generate clicked'); onGenerate(camera, prompt); }}
               disabled={isGenerating}
               className="flex-1 h-9 rounded-xl text-[13px] font-medium cursor-pointer bg-fuchsia-500 text-white hover:bg-fuchsia-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
