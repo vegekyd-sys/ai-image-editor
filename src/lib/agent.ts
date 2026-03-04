@@ -217,10 +217,12 @@ function createTools(ctx: AgentContext) {
 // Agent runner – async generator yielding SSE events
 // ---------------------------------------------------------------------------
 
-/** Append a language reply instruction to any prompt based on locale. */
+/** Append a language reply instruction to any prompt based on locale.
+ *  Only appends when locale is explicitly set — undefined means no override. */
 export function withLocale(prompt: string, locale?: string): string {
   if (locale === 'en') return `${prompt}\n\nReply in English.`;
-  return `${prompt}\n\nReply in Chinese.`;
+  if (locale === 'zh') return `${prompt}\n\nReply in Chinese.`;
+  return prompt;
 }
 
 // Used for initial upload analysis

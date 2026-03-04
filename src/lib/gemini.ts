@@ -81,7 +81,8 @@ const CATEGORY_CN: Record<TipCategory, string> = {
 
 function withLocale(prompt: string, locale?: string): string {
   if (locale === 'en') return `${prompt}\n\nReply in English.`;
-  return `${prompt}\n\nReply in Chinese.`;
+  if (locale === 'zh') return `${prompt}\n\nReply in Chinese.`;
+  return prompt;
 }
 
 function buildCategorySystemPrompt(category: TipCategory, count: number = 2, locale?: string): string {
