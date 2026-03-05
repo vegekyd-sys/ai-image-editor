@@ -2159,7 +2159,7 @@ export default function Editor({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {(viewIndex > 0 || isViewingDraft || isViewingVideo) && (
+                  {snapshots.length > 0 && (
                     <button
                       onClick={handleDownload}
                       disabled={isSaving}
