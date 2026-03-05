@@ -101,6 +101,7 @@ const en = {
   'statusbar.likeEffect': 'Like this effect? Tell me how to adjust it 👉🏻',
 
   // Canvas
+  'canvas.loading': 'Loading...',
   'canvas.videoRendering': 'Video rendering',
   'canvas.usuallyTakes': 'Usually takes 3–5 minutes',
   'canvas.generateVideo': 'Generate video',

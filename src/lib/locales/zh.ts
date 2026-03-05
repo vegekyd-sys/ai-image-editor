@@ -101,6 +101,7 @@ const zh = {
   'statusbar.likeEffect': '喜欢这个效果？你想怎么修改告诉我 👉🏻',
 
   // Canvas
+  'canvas.loading': '加载中...',
   'canvas.videoRendering': '视频渲染中',
   'canvas.usuallyTakes': '通常需要 3–5 分钟',
   'canvas.generateVideo': '生成视频',

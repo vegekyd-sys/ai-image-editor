@@ -4,6 +4,8 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { generatePreviewImage, generateImageWithReferences } from './gemini';
 import { createKlingTask } from './kling';
+import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
+import { InferenceClient } from '@huggingface/inference';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -96,44 +98,54 @@ function createTools(ctx: AgentContext) {
         console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} thinking=high\neditPrompt:\n${editPrompt}\n`);
 
         // CUI agent always uses Flash High reasoning for best quality
-        let result: string | null;
-        if (hasReference && useOriginalAsReference && hasOriginal) {
-          const refs = ctx.referenceImages!;
-          console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
-          result = await generateImageWithReferences(
-            [
-              { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
-              { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
-              ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
-            ],
-            finalPrompt, aspectRatio, 'high',
-          );
-        } else if (hasReference) {
-          const refs = ctx.referenceImages!;
-          console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
-          result = await generateImageWithReferences(
-            [
-              { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
-              ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
-            ],
-            finalPrompt, aspectRatio, 'high',
-          );
-        } else if (useOriginalAsReference && hasOriginal) {
-          console.log('📸 Two-image mode (original as reference)');
-          result = await generateImageWithReferences(
-            [
-              { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
-              { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
-            ],
-            finalPrompt, aspectRatio, 'high',
-          );
-        } else {
-          console.log('📸 Single-image mode');
-          result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'high');
+        // Retry once on failure (transient API errors, rate limits, etc.)
+        let result: string | null = null;
+        const MAX_ATTEMPTS = 2;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          if (hasReference && useOriginalAsReference && hasOriginal) {
+            const refs = ctx.referenceImages!;
+            if (attempt === 1) console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
+            result = await generateImageWithReferences(
+              [
+                { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
+                { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
+                ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
+              ],
+              finalPrompt, aspectRatio, 'high',
+            );
+          } else if (hasReference) {
+            const refs = ctx.referenceImages!;
+            if (attempt === 1) console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
+            result = await generateImageWithReferences(
+              [
+                { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
+                ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
+              ],
+              finalPrompt, aspectRatio, 'high',
+            );
+          } else if (useOriginalAsReference && hasOriginal) {
+            if (attempt === 1) console.log('📸 Two-image mode (original as reference)');
+            result = await generateImageWithReferences(
+              [
+                { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
+                { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
+              ],
+              finalPrompt, aspectRatio, 'high',
+            );
+          } else {
+            if (attempt === 1) console.log('📸 Single-image mode');
+            result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'high');
+          }
+
+          if (result) break;
+          if (attempt < MAX_ATTEMPTS) {
+            console.warn(`⚠️ [generate_image] attempt ${attempt} returned null, retrying...`);
+          }
         }
 
         if (!result) {
-          return { success: false as const, message: 'Image generation failed. Try a different prompt.' };
+          console.error('❌ [generate_image] all attempts failed');
+          return { success: false as const, message: 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.' };
         }
         ctx.currentImage = result;
         ctx.generatedImages.push(result);
@@ -207,6 +219,66 @@ function createTools(ctx: AgentContext) {
             },
           ],
         };
+      },
+    }),
+
+    rotate_camera: tool({
+      description: `Rotate the virtual camera around the subject to show a different perspective/angle.
+Use this when the user wants to see the image from a different viewpoint — e.g. "show from the side", "bird's eye view", "rotate left", "show the back", "zoom in".
+This uses Qwen Image Edit to regenerate the image from the requested camera angle.
+
+Parameters:
+- azimuth: horizontal rotation (0=front, 45=front-right, 90=right, 135=back-right, 180=back, 225=back-left, 270=left, 315=front-left)
+- elevation: vertical angle (-30=low angle, 0=eye level, 30=elevated, 60=high angle)
+- distance: zoom (0.6=close-up, 1.0=medium, 1.4=wide shot)`,
+      inputSchema: z.object({
+        azimuth: z.number().min(0).max(360).describe('Horizontal rotation degrees (0=front, 90=right, 180=back, 270=left)'),
+        elevation: z.number().min(-30).max(60).describe('Vertical angle degrees (-30=low, 0=eye level, 30=elevated, 60=high)'),
+        distance: z.number().min(0.6).max(1.4).describe('Zoom distance (0.6=close-up, 1.0=medium, 1.4=wide)'),
+      }),
+      execute: async ({ azimuth, elevation, distance }) => {
+        const image = ctx.currentImage;
+        if (!image) return { success: false as const, message: 'No image available' };
+
+        const hfToken = process.env.HF_TOKEN;
+        if (!hfToken) return { success: false as const, message: 'HF_TOKEN not configured' };
+
+        const prompt = buildCameraPrompt(azimuth, elevation, distance);
+
+        try {
+          // Convert image to Blob (URL or base64)
+          let imgBytes: Uint8Array;
+          if (image.startsWith('http')) {
+            const res = await fetch(image);
+            imgBytes = new Uint8Array(await res.arrayBuffer());
+          } else {
+            const raw = image.replace(/^data:image\/\w+;base64,/, '');
+            const buf = Buffer.from(raw, 'base64');
+            imgBytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+          }
+          const blob = new Blob([imgBytes as BlobPart], { type: 'image/jpeg' });
+
+          const client = new InferenceClient(hfToken);
+          const result = await client.imageToImage({
+            provider: 'fal-ai',
+            model: 'fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA',
+            inputs: blob,
+            parameters: { prompt },
+          });
+
+          const resultBuf = Buffer.from(await result.arrayBuffer());
+          const resultBase64 = `data:image/jpeg;base64,${resultBuf.toString('base64')}`;
+
+          ctx.currentImage = resultBase64;
+          ctx.generatedImages.push(resultBase64);
+
+          const azName = AZIMUTH_MAP[snapToNearest(azimuth, AZIMUTH_STEPS)];
+          const elName = ELEVATION_MAP[snapToNearest(elevation, ELEVATION_STEPS)];
+          const dsName = DISTANCE_MAP[snapToNearest(distance, DISTANCE_STEPS)];
+          return { success: true as const, message: `Camera rotated: ${azName}, ${elName}, ${dsName}` };
+        } catch (e) {
+          return { success: false as const, message: e instanceof Error ? e.message : String(e) };
+        }
       },
     }),
 
@@ -319,6 +391,8 @@ export async function* runMakaronAgent(
             : (q ? `分析图片：${q.slice(0, 25)}` : '分析图片') };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
+        } else if (event.toolName === 'rotate_camera') {
+          yield { type: 'status', text: isEnLocale ? 'Rotating camera...' : '旋转相机中...' };
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
@@ -341,6 +415,15 @@ export async function* runMakaronAgent(
 
       // ── Tool result — flush generated images + animation task ───────────────
       if (event.type === 'tool-result') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const toolName = (event as any).toolName as string | undefined;
+
+        // Detect generate_image failure: tool was called but no new image produced
+        if (toolName === 'generate_image' && imagesSent === ctx.generatedImages.length) {
+          const isEn = options?.locale === 'en';
+          yield { type: 'status', text: isEn ? 'Image generation failed' : '图片生成失败' };
+        }
+
         while (imagesSent < ctx.generatedImages.length) {
           yield { type: 'image', image: ctx.generatedImages[imagesSent] };
           imagesSent++;

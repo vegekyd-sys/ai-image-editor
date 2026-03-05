@@ -17,7 +17,7 @@ import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils';
 import { useLocale } from '@/lib/i18n';
-import type { CameraState } from '@/lib/camera-utils';
+import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 
 export interface AnimationState {
   imageUrls: string[]
@@ -336,7 +336,7 @@ export default function Editor({
   // + optional video sentinel at the end (when ANY animation exists)
   const hasAnyAnimation = animations.length > 0;
   const timeline = useMemo(() => {
-    const base = snapshots.map((s) => s.image);
+    const base = snapshots.map((s) => s.image || s.imageUrl || '');
     if (draftImage !== null && draftParentIndex !== null) {
       base.splice(draftParentIndex + 1, 0, draftImage);
     }
@@ -1425,53 +1425,16 @@ export default function Editor({
     setTimeout(() => triggerTipCommitReaction(tipSnapshot, tipImg, siblings), 200);
   }, [draftParentIndex, previewingTipIndex, snapshots, addMessage, fetchTipsForSnapshot, onSaveSnapshot, triggerTipCommitReaction]);
 
-  // Camera rotation: generate rotated view and commit as new snapshot
-  const handleCameraGenerate = useCallback(async (camera: CameraState, prompt: string) => {
-    console.log('[Camera] handleCameraGenerate called', { prompt, snapshotCount: snapshots.length });
-    const currentSnap = snapshots[snapshots.length - 1];
-    if (!currentSnap) { console.error('[Camera] no snapshot'); return; }
-    const image = getImageForApi(currentSnap);
-    if (!image) { console.error('[Camera] no image for API'); return; }
-    console.log('[Camera] image type:', image.startsWith('http') ? 'URL' : 'base64', 'length:', image.length);
+  // Camera rotation: route through Agent so CUI shows tool_call + result
+  const handleCameraGenerate = useCallback((_camera: CameraState, _prompt: string) => {
+    const azName = AZIMUTH_MAP[snapToNearest(_camera.azimuth, AZIMUTH_STEPS)];
+    const elName = ELEVATION_MAP[snapToNearest(_camera.elevation, ELEVATION_STEPS)];
+    const dsName = DISTANCE_MAP[snapToNearest(_camera.distance, DISTANCE_STEPS)];
 
-    setIsRotating(true);
-    try {
-      const res = await fetch('/api/rotate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image, prompt }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-
-      // Commit as new snapshot
-      const snapId = generateId();
-      const newSnapshot: Snapshot = {
-        id: snapId,
-        image: data.image,
-        tips: [],
-        messageId: '',
-      };
-      setSnapshots(prev => [...prev, newSnapshot]);
-      onSaveSnapshot?.(newSnapshot, snapshots.length, (url) => {
-        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
-      });
-      cacheImage(`snap:${snapId}`, data.image);
-      setViewIndex(snapshots.length);
-      setShowCameraPanel(false);
-
-      // Fetch tips for the new snapshot
-      if (data.image.startsWith('http')) {
-        fetchTipsForSnapshot(snapId, data.image);
-      } else {
-        compressBase64(data.image, 600_000).then(img => fetchTipsForSnapshot(snapId, img));
-      }
-    } catch (err) {
-      console.error('Camera rotate error:', err);
-    } finally {
-      setIsRotating(false);
-    }
-  }, [snapshots, onSaveSnapshot, fetchTipsForSnapshot]);
+    // Close panel and send to Agent
+    setShowCameraPanel(false);
+    handleAgentRequest(`Rotate the camera to: ${azName}, ${elName}, ${dsName}`);
+  }, [handleAgentRequest]);
 
   // Click tip:
   //   - First click (no draft) → create draft
@@ -2182,8 +2145,14 @@ export default function Editor({
                       className={`p-2 cursor-pointer transition-colors ${showCameraPanel ? 'text-fuchsia-400' : 'text-white/80 hover:text-white'}`}
                     >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                        <circle cx="12" cy="13" r="4" />
+                        {/* Camera body */}
+                        <path d="M15 16H9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2z" />
+                        <circle cx="12" cy="11.5" r="1.5" />
+                        {/* Rotate arrow */}
+                        <path d="M20 8a8.5 8.5 0 0 0-3-3.5" />
+                        <path d="M20 8l-2.5-.5L18 10" />
+                        <path d="M4 16a8.5 8.5 0 0 0 3 3.5" />
+                        <path d="M4 16l2.5.5L6 14" />
                       </svg>
                     </button>
                   )}
@@ -2294,12 +2263,15 @@ export default function Editor({
             </div>
           )}
 
-          {/* Camera rotation panel — same position as AnnotationToolbar */}
+          {/* Camera rotation panel — centered in GUI area */}
           {snapshots.length > 0 && showCameraPanel && (
             <div style={isDesktop ? {
               position: 'absolute',
-              top: 56, left: 12,
+              top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
               zIndex: 201,
+              maxWidth: 720,
+              width: '90%',
             } : {
               position: 'fixed',
               bottom: 0, left: 0, right: 0,
@@ -2308,9 +2280,9 @@ export default function Editor({
               margin: '0 auto',
             }}>
               <CameraPanel
-                imageUrl={snapshots[snapshots.length - 1]?.image || ''}
+                imageUrl={timeline[viewIndex] || ''}
                 isDesktop={isDesktop}
-                isGenerating={isRotating}
+                isGenerating={isAgentActive}
                 onGenerate={handleCameraGenerate}
                 onCancel={() => setShowCameraPanel(false)}
               />

@@ -91,8 +91,9 @@ function buildCategorySystemPrompt(category: TipCategory, count: number = 2): st
     : 'label: 2-3 words.';
   // No withLocale here — language of label/desc is controlled by getJsonFormatSuffix(locale)
   // in the user message. editPrompt must ALWAYS be English regardless of locale.
-  return `Photo editing expert. Analyze the image and generate ${count} ${category} edit suggestions.
-${labelNote} desc: under 20 words. editPrompt: English, highly specific.`;
+  return `Photo editing expert. Generate ${count} ${category} edit suggestions.
+${labelNote} desc: under 20 words.
+IMPORTANT: Every tip MUST include "editPrompt" — detailed English editing instructions. Tips missing editPrompt are invalid.`;
 }
 
 // Prompt templates bundled via webpack asset/source
@@ -124,11 +125,11 @@ const TIPS_SCHEMA = {
   },
 };
 
-const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON：
-[{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"(MUST be in English) Detailed English editing instructions...","category":"enhance|creative|wild|captions"}, ...]`;
+const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON。每条必须包含editPrompt字段（英文详细编辑指令）：
+[{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
 
-const JSON_FORMAT_SUFFIX_EN = `\n\nOutput as JSON array only, no other text:
-[{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
+const JSON_FORMAT_SUFFIX_EN = `\n\nOutput as JSON array only, no other text. Every tip MUST include editPrompt (detailed English instructions):
+[{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"FIRST: Clean up the scene... [detailed English editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
 
 function getJsonFormatSuffix(locale?: string) {
   return locale === 'en' ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX_ZH;
@@ -700,6 +701,49 @@ async function generateMultiImageOpenRouter(
 // ── Streaming All Tips (single call for all 6) ─────────────────
 // Faster than 3 parallel calls — one API round trip, streams tips incrementally
 
+// ── EditPrompt Retry Wrapper ─────────────────────────────────────
+// Wraps a tips stream: if any tips come through without editPrompt, generates it separately.
+// This handles cases where the model omits editPrompt from the JSON output.
+
+async function* withEditPromptRetry(
+  tipsStream: AsyncGenerator<Tip>,
+  imageBase64: string,
+  category: TipCategory,
+  label: string,
+): AsyncGenerator<Tip> {
+  const completedLabels = new Set<string>();
+  const partialTips = new Map<string, Tip>(); // label → most recent partial tip
+
+  for await (const tip of tipsStream) {
+    if (tip.editPrompt) {
+      completedLabels.add(tip.label);
+      partialTips.delete(tip.label);
+    } else if (tip.label && !completedLabels.has(tip.label)) {
+      partialTips.set(tip.label, tip);
+    }
+    yield tip;
+  }
+
+  // Retry: generate editPrompt for partial tips that never received a complete version
+  if (partialTips.size > 0) {
+    tlog(`[tips:${label}] ⚠️ ${partialTips.size} tips missing editPrompt, generating separately...`);
+    const entries = [...partialTips.values()];
+    const results = await Promise.allSettled(
+      entries.map(t => generateEditPromptForTip(imageBase64, t))
+    );
+    for (let i = 0; i < entries.length; i++) {
+      const result = results[i];
+      if (result.status === 'fulfilled' && result.value) {
+        tlog(`[tips:${label}] ✅ editPrompt retry OK for "${entries[i].label}" (${result.value.length} chars)`);
+        yield { ...entries[i], editPrompt: result.value };
+      } else {
+        const reason = result.status === 'rejected' ? result.reason?.message : 'null result';
+        tlog(`[tips:${label}] ❌ editPrompt retry FAILED for "${entries[i].label}": ${reason}`);
+      }
+    }
+  }
+}
+
 // ── Fast Tips Phase 1: emoji+label+desc+category only (no editPrompt) ──────
 // Very short prompt → ~3s to first result (vs 8-10s with full .md templates)
 
@@ -887,7 +931,10 @@ async function* streamTipsByCategoryGoogle(
     config,
   });
 
-  yield* parseIncrementalTipsFromStream(streamToTextIterator(stream), `google:${category}`, category);
+  yield* withEditPromptRetry(
+    parseIncrementalTipsFromStream(streamToTextIterator(stream), `google:${category}`, category),
+    imageBase64, category, `google:${category}`,
+  );
 }
 
 // --- OpenRouter Provider ---
@@ -952,7 +999,10 @@ async function* streamTipsByCategoryOpenRouter(
   }
 
   tlog(`[tips:openrouter:${category}] headers received at +${Date.now() - t0}ms`);
-  yield* parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`), `or:${category}`, category);
+  yield* withEditPromptRetry(
+    parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`), `or:${category}`, category),
+    imageBase64, category, `or:${category}`,
+  );
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
 }
 
@@ -1001,7 +1051,10 @@ async function* streamTipsByCategoryBedrock(
   });
 
   tlog(`[tips:bedrock:${category}] streamText ready at +${Date.now() - t0}ms`);
-  yield* parseIncrementalTipsFromStream(result.textStream, `bedrock:${category}`, category);
+  yield* withEditPromptRetry(
+    parseIncrementalTipsFromStream(result.textStream, `bedrock:${category}`, category),
+    imageBase64, category, `bedrock:${category}`,
+  );
   tlog(`[tips:bedrock:${category}] done at +${Date.now() - t0}ms`);
 }
 
@@ -1124,6 +1177,14 @@ async function* parseIncrementalTipsFromStream(
                 emittedLabels.add(tip.label);
                 yield tip;
                 tipsEmitted = objectsFound;
+              } else if (tip.label && tip.category && !tip.editPrompt) {
+                // Complete JSON but missing editPrompt — log warning, emit as partial
+                // (withEditPromptRetry will fill it in)
+                tlog(`[tips:${label}] ⚠️ complete object MISSING editPrompt for "${tip.label}" at +${Date.now() - t0}ms`);
+                if (!emittedLabels.has(tip.label)) {
+                  yield { ...tip, editPrompt: '' };
+                }
+                tipsEmitted = objectsFound;
               }
             } catch { /* skip malformed */ }
           }
@@ -1156,10 +1217,14 @@ async function* parseIncrementalTipsFromStream(
     if (arrStart >= 0 && arrEnd > arrStart) {
       const arr = JSON.parse(cleaned.slice(arrStart, arrEnd + 1)) as Tip[];
       for (const tip of arr) {
-        if (tip.label && tip.editPrompt && tip.category && !emittedLabels.has(tip.label)) {
-          tlog(`[tips:${label}] fallback recovered tip "${tip.label}"`);
+        if (tip.label && tip.category && !emittedLabels.has(tip.label)) {
+          if (tip.editPrompt) {
+            tlog(`[tips:${label}] fallback recovered tip "${tip.label}"`);
+          } else {
+            tlog(`[tips:${label}] fallback recovered tip "${tip.label}" (NO editPrompt — retry will fill in)`);
+          }
           emittedLabels.add(tip.label);
-          yield tip;
+          yield { ...tip, editPrompt: tip.editPrompt || '' };
         }
       }
     }
