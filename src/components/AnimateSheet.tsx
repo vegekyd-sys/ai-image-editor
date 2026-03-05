@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Snapshot, ProjectAnimation } from '@/types';
 import type { AnimationState } from '@/components/Editor';
 import { useLocale } from '@/lib/i18n';
@@ -11,33 +11,77 @@ interface AnimateSheetProps {
   onClose: () => void;
   onOpenCUI?: () => void;
   onGeneratePrompt?: () => void;
+  onPreviewImage?: (snapshotId: string) => void;
   animationState: AnimationState;
   onStateChange: (update: Partial<AnimationState>) => void;
   isDesktop?: boolean;
-  // Detail mode
   mode?: 'create' | 'detail';
   detailAnimation?: ProjectAnimation;
 }
 
 export default function AnimateSheet({
-  snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt,
+  snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt, onPreviewImage,
   animationState, onStateChange, isDesktop,
   mode = 'create', detailAnimation,
 }: AnimateSheetProps) {
   const { t } = useLocale();
   const isDetail = mode === 'detail' && !!detailAnimation;
-  const { prompt, status, error, duration } = animationState;
+  const { prompt, userHint, status, error, duration } = animationState;
 
-  // Track which snapshot indices are excluded (user deleted from filmstrip)
   const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set());
+  const [selectedThumbId, setSelectedThumbId] = useState<string | null>(null);
 
-  // All snapshots with valid URLs
   const allSnapshots = snapshots.filter(s => s.imageUrl?.startsWith('http'));
-  // Active images (excluding user-removed ones)
   const activeSnapshots = allSnapshots.filter((_, i) => !excludedIndices.has(i));
   const activeUrls = activeSnapshots.map(s => s.imageUrl!);
 
-  const thumbSize = isDesktop ? 72 : 80;
+  // ── Drag-to-dismiss (mobile only) ──
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const dragStartY = useRef<number | null>(null);
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [entryAnimDone, setEntryAnimDone] = useState(false);
+
+  // Mark entry animation as done after it plays
+  useEffect(() => {
+    if (isDesktop) { setEntryAnimDone(true); return; }
+    const timer = setTimeout(() => setEntryAnimDone(true), 350);
+    return () => clearTimeout(timer);
+  }, [isDesktop]);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (isDesktop) return;
+    dragStartY.current = e.touches[0].clientY;
+    setIsDragging(true);
+  }, [isDesktop]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (dragStartY.current === null) return;
+    const dy = e.touches[0].clientY - dragStartY.current;
+    // Only allow dragging down
+    setDragY(Math.max(0, dy));
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (dragStartY.current === null) return;
+    if (dragY > 120) {
+      onClose();
+    } else {
+      setDragY(0);
+    }
+    dragStartY.current = null;
+    setIsDragging(false);
+  }, [dragY, onClose]);
+
+  // Auto-resize textarea
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = Math.max(80, el.scrollHeight) + 'px';
+    }
+  }, [prompt]);
 
   const handleGenerateScript = useCallback(() => {
     if (activeUrls.length < 1) return;
@@ -45,15 +89,12 @@ export default function AnimateSheet({
       ? activeUrls
       : [0, 1, 2, Math.floor(activeUrls.length / 2), activeUrls.length - 3, activeUrls.length - 2, activeUrls.length - 1]
         .map(i => activeUrls[Math.min(i, activeUrls.length - 1)]);
-    // Update imageUrls + clear error, then trigger generation
-    // Editor uses ref to read latest imageUrls, so this works synchronously
     onStateChange({ imageUrls: urls, error: null, prompt: '' });
     onGeneratePrompt?.();
   }, [activeUrls, onStateChange, onGeneratePrompt]);
 
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || activeUrls.length < 1) return;
-    // Ensure imageUrls are up-to-date with active selection
     const urls = activeUrls.length <= 7
       ? activeUrls
       : [0, 1, 2, Math.floor(activeUrls.length / 2), activeUrls.length - 3, activeUrls.length - 2, activeUrls.length - 1]
@@ -75,17 +116,15 @@ export default function AnimateSheet({
         : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
       onStateChange({ error: friendly, status: 'error' });
     }
-  }, [prompt, projectId, activeUrls, duration, onStateChange]);
+  }, [prompt, projectId, activeUrls, duration, onStateChange, t]);
 
   const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1;
   const canGenerateScript = activeUrls.length >= 1 && (status === 'idle' || status === 'error' || status === 'ready');
 
-  // Detail mode: data from the animation record
   const detailUrls = detailAnimation?.snapshotUrls ?? [];
   const detailPrompt = detailAnimation?.prompt ?? '';
   const detailDuration = detailAnimation?.duration;
 
-  // Smart bottom button logic (create mode only)
   const getBottomButton = () => {
     if (status === 'submitting') {
       return { label: t('animate.submitting'), disabled: true, onClick: () => {} };
@@ -100,248 +139,357 @@ export default function AnimateSheet({
   };
 
   const bottomBtn = !isDetail ? getBottomButton() : null;
+  const thumbSize = isDesktop ? 56 : 64;
 
   return (
     <>
-      <div style={{
+      <style>{`
+        @keyframes slideUpSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes slideLeftSheet { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        .animate-sheet-thumb { transition: transform 0.15s, box-shadow 0.15s; }
+        .animate-sheet-thumb:active { transform: scale(0.93); }
+      `}</style>
+
+      <div ref={sheetRef} style={{
         position: 'fixed',
         ...(isDesktop ? {
           top: 0, right: 0, bottom: 0, width: 340,
           borderRadius: 0,
           animation: 'slideLeftSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
           zIndex: 300,
-          boxShadow: '-8px 0 32px rgba(0,0,0,0.6)',
         } : {
           bottom: 0, left: 0, right: 0,
-          maxHeight: '66dvh',
-          borderRadius: '20px 20px 0 0',
-          animation: 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
+          maxHeight: '72dvh',
+          borderRadius: '24px 24px 0 0',
+          animation: !entryAnimDone ? 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both' : 'none',
           zIndex: 202,
-          boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
+          transform: entryAnimDone ? `translateY(${dragY}px)` : undefined,
+          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }),
-        background: '#0e0e0e',
+        background: 'linear-gradient(180deg, #141416 0%, #0c0c0e 100%)',
+        boxShadow: isDesktop ? '-12px 0 40px rgba(0,0,0,0.7)' : '0 -12px 40px rgba(0,0,0,0.7)',
         display: 'flex', flexDirection: 'column',
+        border: isDesktop ? 'none' : undefined,
+        borderTop: isDesktop ? undefined : '1px solid rgba(255,255,255,0.06)',
       }}>
-        <style>{`
-          @keyframes slideUpSheet {
-            from { transform: translateY(100%); }
-            to   { transform: translateY(0); }
-          }
-          @keyframes slideLeftSheet {
-            from { transform: translateX(100%); }
-            to   { transform: translateX(0); }
-          }
-        `}</style>
 
-        {/* X button */}
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute', top: 8, right: 12, zIndex: 1,
-            background: 'rgba(0,0,0,0.4)', border: 'none', borderRadius: '50%',
-            color: 'rgba(255,255,255,0.6)', fontSize: '1.1rem',
-            width: 28, height: 28,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer',
-          }}
-        >×</button>
+        {/* Handle bar (mobile, drag-to-dismiss) / Header */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{ padding: isDesktop ? '16px 20px 0' : '0 20px', position: 'relative', touchAction: isDesktop ? undefined : 'none' }}
+        >
+          {!isDesktop && (
+            <div style={{
+              width: 36, height: 4, borderRadius: 2,
+              background: 'rgba(255,255,255,0.15)',
+              margin: '10px auto 12px',
+              cursor: 'grab',
+            }} />
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{
+              fontSize: isDesktop ? '0.95rem' : '1rem',
+              fontWeight: 700, color: '#fff',
+              letterSpacing: '-0.01em',
+            }}>
+              {isDetail ? t('animate.detailTitle') : t('animate.title')}
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '50%',
+                color: 'rgba(255,255,255,0.5)', fontSize: '1rem',
+                width: 30, height: 30,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
 
         {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 8px' }}>
-          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff', marginBottom: 10 }}>
-            {isDetail ? t('animate.detailTitle') : t('animate.title')}
-          </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px 8px' }}>
 
           {/* ─── DETAIL MODE ─── */}
           {isDetail ? (
             <>
-              {/* Snapshot filmstrip — read-only, no delete */}
-              <div style={{ display: 'flex', gap: 10, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
+              {/* Filmstrip — read-only */}
+              <div style={{
+                display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4,
+              }}>
                 {detailUrls.map((url, i) => (
-                  <div key={i} style={{
-                    flexShrink: 0, width: thumbSize, height: thumbSize, borderRadius: 12,
-                    overflow: 'hidden', background: '#1a1a1a', position: 'relative',
+                  <div key={i} className="animate-sheet-thumb" style={{
+                    flexShrink: 0, width: thumbSize, height: thumbSize, borderRadius: 10,
+                    overflow: 'hidden', background: 'rgba(255,255,255,0.04)', position: 'relative',
+                    border: '1px solid rgba(255,255,255,0.08)',
                   }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={url}
-                      alt={`snapshot ${i + 1}`}
-                      style={{ width: thumbSize, height: thumbSize, objectFit: 'cover', borderRadius: 12, display: 'block' }}
-                    />
+                    <img src={url} alt={`snapshot ${i + 1}`}
+                      style={{ width: thumbSize, height: thumbSize, objectFit: 'cover', display: 'block' }} />
                     <div style={{
-                      position: 'absolute', bottom: 3, right: 4,
-                      fontSize: '0.6rem', color: 'rgba(255,255,255,0.7)',
-                      background: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: '1px 4px',
+                      position: 'absolute', bottom: 2, right: 3,
+                      fontSize: '0.55rem', color: 'rgba(255,255,255,0.8)',
+                      background: 'rgba(0,0,0,0.6)', borderRadius: 3, padding: '0px 4px',
+                      fontWeight: 600, letterSpacing: '0.02em',
                     }}>@{i + 1}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Prompt — read-only */}
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500, marginBottom: 6 }}>
+              {/* Script — read-only */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{
+                  fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)',
+                  fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>
                   {t('animate.storyLabel')}
                 </div>
                 <div style={{
-                  width: '100%', minHeight: 80,
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 12, padding: '10px',
-                  color: 'rgba(255,255,255,0.7)',
-                  fontSize: isDesktop ? '0.88rem' : '1.05rem', lineHeight: 1.6,
+                  width: '100%', minHeight: 72,
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: 14, padding: '12px 14px',
+                  color: 'rgba(255,255,255,0.65)',
+                  fontSize: isDesktop ? '0.85rem' : '0.95rem', lineHeight: 1.65,
                   whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 }}>
                   {detailPrompt || t('animate.noScript')}
                 </div>
               </div>
 
-              {/* Duration — static */}
-              <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{t('animate.duration')}</div>
-                  <div style={{
-                    padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
-                    borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
-                    fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)',
-                  }}>
-                    {detailDuration != null ? t('animate.seconds', detailDuration) : t('animate.smart')}
-                  </div>
+              {/* Duration + Status pills */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{
+                  padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
+                  borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
+                }}>
+                  {detailDuration != null ? t('animate.seconds', detailDuration) : t('animate.smart')}
                 </div>
-                <div>
-                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{t('animate.status')}</div>
-                  <div style={{
-                    padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
-                    borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
-                    fontSize: '0.82rem',
-                    color: detailAnimation?.status === 'completed' ? 'rgba(74,222,128,0.9)'
-                      : detailAnimation?.status === 'processing' ? 'rgba(217,70,239,0.9)'
-                      : 'rgba(239,68,68,0.9)',
-                  }}>
-                    {detailAnimation?.status === 'completed' ? t('video.completed')
-                      : detailAnimation?.status === 'processing' ? t('video.rendering')
-                      : detailAnimation?.status === 'failed' ? t('video.failed')
-                      : t('video.abandoned')}
-                  </div>
+                <div style={{
+                  padding: '6px 12px', borderRadius: 8,
+                  border: '1px solid',
+                  fontSize: '0.78rem', fontWeight: 500,
+                  ...(detailAnimation?.status === 'completed'
+                    ? { color: 'rgba(74,222,128,0.9)', borderColor: 'rgba(74,222,128,0.2)', background: 'rgba(74,222,128,0.06)' }
+                    : detailAnimation?.status === 'processing'
+                    ? { color: 'rgba(217,70,239,0.9)', borderColor: 'rgba(217,70,239,0.2)', background: 'rgba(217,70,239,0.06)' }
+                    : { color: 'rgba(239,68,68,0.9)', borderColor: 'rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.06)' }),
+                }}>
+                  {detailAnimation?.status === 'completed' ? t('video.completed')
+                    : detailAnimation?.status === 'processing' ? t('video.rendering')
+                    : detailAnimation?.status === 'failed' ? t('video.failed')
+                    : t('video.abandoned')}
                 </div>
               </div>
             </>
           ) : (
-            /* ─── CREATE MODE (original) ─── */
+            /* ─── CREATE MODE ─── */
             <>
-              {/* Snapshot filmstrip — larger thumbnails with delete button */}
-              <div style={{ display: 'flex', gap: 10, marginBottom: 14, overflowX: 'auto', paddingBottom: 4, flexWrap: 'wrap' }}>
+              {/* Filmstrip — clickable thumbnails with delete */}
+              <div style={{
+                display: 'flex', gap: 8, marginBottom: 16,
+                overflowX: 'auto', paddingBottom: 4,
+                scrollbarWidth: 'none',
+              }}>
                 {allSnapshots.map((s, i) => {
                   const excluded = excludedIndices.has(i);
                   if (excluded) return null;
-                  // Compute active index for @reference
                   const activeIdx = allSnapshots.slice(0, i + 1).filter((_, j) => !excludedIndices.has(j)).length;
                   return (
                     <div key={s.id} style={{
-                      flexShrink: 0, width: thumbSize, height: thumbSize, borderRadius: 12,
-                      overflow: 'visible', background: '#1a1a1a', position: 'relative',
+                      flexShrink: 0, position: 'relative',
                     }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={s.imageUrl!}
-                        alt={`snapshot ${activeIdx}`}
-                        style={{ width: thumbSize, height: thumbSize, objectFit: 'cover', borderRadius: 12, display: 'block' }}
-                      />
+                      <button
+                        className="animate-sheet-thumb"
+                        onClick={() => { setSelectedThumbId(s.id); onPreviewImage?.(s.id); }}
+                        style={{
+                          width: thumbSize, height: thumbSize, borderRadius: 10,
+                          overflow: 'hidden', background: 'rgba(255,255,255,0.04)',
+                          border: selectedThumbId === s.id ? '2.5px solid rgba(217,70,239,0.9)' : '1.5px solid rgba(255,255,255,0.1)',
+                          boxShadow: selectedThumbId === s.id ? '0 0 8px rgba(217,70,239,0.3)' : 'none',
+                          cursor: 'pointer', padding: 0, display: 'block',
+                          transition: 'border-color 0.15s, box-shadow 0.15s',
+                        }}
+                        onMouseEnter={e => { if (selectedThumbId !== s.id) e.currentTarget.style.borderColor = 'rgba(217,70,239,0.5)'; }}
+                        onMouseLeave={e => { if (selectedThumbId !== s.id) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={s.imageUrl!}
+                          alt={`snapshot ${activeIdx}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
+                        />
+                      </button>
                       {/* Delete button */}
                       <button
                         onClick={() => setExcludedIndices(prev => new Set([...prev, i]))}
                         style={{
-                          position: 'absolute', top: -6, right: -6, zIndex: 2,
-                          width: 20, height: 20, borderRadius: '50%',
-                          background: 'rgba(0,0,0,0.7)', border: '1px solid rgba(255,255,255,0.2)',
-                          color: 'rgba(255,255,255,0.8)', fontSize: '0.65rem',
+                          position: 'absolute', top: -5, right: -5, zIndex: 2,
+                          width: 18, height: 18, borderRadius: '50%',
+                          background: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.15)',
+                          color: 'rgba(255,255,255,0.7)', fontSize: '0.6rem',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           cursor: 'pointer', lineHeight: 1,
                         }}
-                      >×</button>
+                      >&times;</button>
                       {/* @index label */}
                       <div style={{
-                        position: 'absolute', bottom: 3, right: 4,
-                        fontSize: '0.6rem', color: 'rgba(255,255,255,0.7)',
-                        background: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: '1px 4px',
+                        position: 'absolute', bottom: 2, right: 3,
+                        fontSize: '0.55rem', color: 'rgba(255,255,255,0.8)',
+                        background: 'rgba(0,0,0,0.6)', borderRadius: 3, padding: '0px 4px',
+                        fontWeight: 600, letterSpacing: '0.02em', pointerEvents: 'none',
                       }}>@{activeIdx}</div>
                     </div>
                   );
                 })}
                 {activeSnapshots.length === 0 && (
-                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.8rem', padding: '10px 0' }}>
+                  <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.8rem', padding: '12px 0' }}>
                     {t('animate.allImagesRemoved')}
                   </div>
                 )}
               </div>
 
-              {/* Prompt section — always visible */}
+              {/* Image count + action badges */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14,
+                flexWrap: 'wrap',
+              }}>
+                <span style={{
+                  fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
+                  background: 'rgba(255,255,255,0.04)',
+                  padding: '3px 8px', borderRadius: 6,
+                }}>
+                  {t('animate.imageCount', activeSnapshots.length)}
+                </span>
+                {onOpenCUI && !isDesktop && status !== 'idle' && (
+                  <button
+                    onClick={onOpenCUI}
+                    style={{
+                      background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+                      color: 'rgba(255,255,255,0.4)', borderRadius: 6, padding: '3px 8px',
+                      fontSize: '0.7rem', cursor: 'pointer',
+                    }}
+                  >
+                    {t('chat.viewInChat')}
+                  </button>
+                )}
+                {/* AI rewrite button */}
+                {status === 'generating_prompt' ? (
+                  <span style={{
+                    fontSize: '0.7rem', color: 'rgba(217,70,239,0.7)',
+                    background: 'linear-gradient(90deg, rgba(217,70,239,0.08) 0%, rgba(168,85,247,0.12) 50%, rgba(217,70,239,0.08) 100%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 2s linear infinite',
+                    padding: '3px 8px', borderRadius: 6,
+                  }}>
+                    {t('animate.aiWritingShort')}
+                  </span>
+                ) : status !== 'submitting' && prompt.trim() ? (
+                  <button
+                    onClick={handleGenerateScript}
+                    disabled={!canGenerateScript}
+                    style={{
+                      background: 'none', border: '1px solid rgba(217,70,239,0.3)',
+                      color: 'rgba(217,70,239,0.8)', borderRadius: 6, padding: '3px 8px',
+                      fontSize: '0.7rem', cursor: canGenerateScript ? 'pointer' : 'default',
+                      opacity: canGenerateScript ? 1 : 0.4,
+                    }}
+                  >
+                    {status === 'error' ? t('animate.aiRetry') : t('animate.aiRewrite')}
+                  </button>
+                ) : null}
+              </div>
+
+              {/* User hint — optional requirements */}
               <div style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>{t('animate.storyLabel')}</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {onOpenCUI && !isDesktop && status !== 'idle' && (
-                      <button
-                        onClick={onOpenCUI}
-                        style={{
-                          background: 'none', border: '1px solid rgba(255,255,255,0.15)',
-                          color: 'rgba(255,255,255,0.5)', borderRadius: 8, padding: '3px 10px',
-                          fontSize: '0.7rem', cursor: 'pointer',
-                        }}
-                      >
-                        {t('chat.viewInChat')}
-                      </button>
-                    )}
-                    {/* AI generate/rewrite button */}
-                    {status === 'generating_prompt' ? (
-                      <div style={{
-                        border: '1px solid rgba(217,70,239,0.3)',
-                        color: 'rgba(217,70,239,0.7)', borderRadius: 8, padding: '3px 10px',
-                        fontSize: '0.7rem',
-                      }}>
-                        {t('animate.aiWritingShort')}
-                      </div>
-                    ) : status === 'submitting' ? null : (
-                      prompt.trim() ? (
-                        <button
-                          onClick={handleGenerateScript}
-                          disabled={!canGenerateScript}
-                          style={{
-                            background: 'none', border: '1px solid rgba(217,70,239,0.4)',
-                            color: 'rgba(217,70,239,0.9)', borderRadius: 8, padding: '3px 10px',
-                            fontSize: '0.7rem', cursor: canGenerateScript ? 'pointer' : 'default',
-                            opacity: canGenerateScript ? 1 : 0.4,
-                          }}
-                        >
-                          ✨ {status === 'error' ? t('animate.aiRetry') : t('animate.aiRewrite')}
-                        </button>
-                      ) : null
-                    )}
-                  </div>
+                <div style={{
+                  fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
+                  fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
+                }}>
+                  {t('animate.hintLabel')}
+                </div>
+                <input
+                  type="text"
+                  value={userHint}
+                  onChange={e => onStateChange({ userHint: e.target.value })}
+                  placeholder={t('animate.hintPlaceholder')}
+                  disabled={status === 'generating_prompt' || status === 'submitting'}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 10, padding: '9px 12px',
+                    color: '#fff',
+                    fontSize: isDesktop ? '0.82rem' : '0.9rem',
+                    outline: 'none', boxSizing: 'border-box',
+                    fontFamily: 'inherit',
+                    transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => (e.currentTarget.style.borderColor = 'rgba(217,70,239,0.4)')}
+                  onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
+                />
+              </div>
+
+              {/* Script textarea — auto-resizes */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{
+                  fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
+                  fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
+                }}>
+                  {t('animate.storyLabel')}
                 </div>
                 <textarea
+                  ref={textareaRef}
                   value={prompt}
-                  onChange={e => { onStateChange({ prompt: e.target.value }); if (status !== 'ready') onStateChange({ status: 'ready' }); }}
+                  onChange={e => {
+                    onStateChange({ prompt: e.target.value });
+                    if (status !== 'ready') onStateChange({ status: 'ready' });
+                  }}
                   disabled={status === 'generating_prompt'}
                   placeholder={status === 'generating_prompt' ? t('animate.aiAnalyzing') : t('animate.storyPlaceholder')}
                   style={{
-                    width: '100%', minHeight: 100,
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 12, padding: '10px',
+                    width: '100%', minHeight: 80,
+                    background: status === 'generating_prompt'
+                      ? 'linear-gradient(90deg, rgba(217,70,239,0.04) 0%, rgba(168,85,247,0.08) 50%, rgba(217,70,239,0.04) 100%)'
+                      : 'rgba(255,255,255,0.04)',
+                    backgroundSize: '200% 100%',
+                    animation: status === 'generating_prompt' ? 'shimmer 2s linear infinite' : 'none',
+                    border: '1px solid',
+                    borderColor: status === 'generating_prompt' ? 'rgba(217,70,239,0.2)' : 'rgba(255,255,255,0.08)',
+                    borderRadius: 14, padding: '12px 14px',
                     color: status === 'generating_prompt' ? 'rgba(255,255,255,0.4)' : '#fff',
-                    fontSize: isDesktop ? '0.88rem' : '1.05rem', lineHeight: 1.6,
+                    fontSize: isDesktop ? '0.85rem' : '0.95rem', lineHeight: 1.65,
                     resize: 'none', outline: 'none',
                     boxSizing: 'border-box',
                     fontFamily: 'inherit',
+                    transition: 'border-color 0.2s, background 0.2s',
+                    overflow: 'hidden',
+                  }}
+                  onFocus={e => {
+                    if (status !== 'generating_prompt') e.currentTarget.style.borderColor = 'rgba(217,70,239,0.4)';
+                  }}
+                  onBlur={e => {
+                    if (status !== 'generating_prompt') e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
                   }}
                 />
               </div>
 
-              {/* Duration + cost */}
+              {/* Duration + cost row */}
               {status !== 'submitting' && (
-                <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{t('animate.duration')}</div>
+                    <div style={{
+                      fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
+                      fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
+                    }}>{t('animate.duration')}</div>
                     <select
                       value={duration ?? 'smart'}
                       onChange={e => {
@@ -349,10 +497,11 @@ export default function AnimateSheet({
                         onStateChange({ duration: v === 'smart' ? null : Number(v) });
                       }}
                       style={{
-                        width: '100%', background: 'rgba(255,255,255,0.06)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: 8, padding: '7px 10px',
+                        width: '100%', background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 10, padding: '9px 12px',
                         color: '#fff', fontSize: '0.82rem', cursor: 'pointer',
+                        outline: 'none',
                       }}
                     >
                       {([3, 5, 7, 10, 15] as const).map(s => (
@@ -362,11 +511,14 @@ export default function AnimateSheet({
                     </select>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{t('animate.costEstimate')}</div>
                     <div style={{
-                      padding: '7px 10px', background: 'rgba(255,255,255,0.04)',
-                      borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
-                      fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)',
+                      fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
+                      fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
+                    }}>{t('animate.costEstimate')}</div>
+                    <div style={{
+                      padding: '9px 12px', background: 'rgba(255,255,255,0.03)',
+                      borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
+                      fontSize: '0.82rem', color: 'rgba(255,255,255,0.4)',
                     }}>
                       {duration != null ? `~$${(duration * 0.112).toFixed(2)}` : t('animate.costByDuration')}
                     </div>
@@ -377,9 +529,9 @@ export default function AnimateSheet({
               {/* Error */}
               {status === 'error' && error && (
                 <div style={{
-                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-                  borderRadius: 10, padding: '10px', color: 'rgba(239,68,68,0.9)',
-                  fontSize: '0.82rem', marginTop: 6,
+                  background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+                  borderRadius: 12, padding: '10px 14px', color: 'rgba(239,68,68,0.85)',
+                  fontSize: '0.82rem', marginTop: 4,
                 }}>
                   {error}
                 </div>
@@ -391,10 +543,9 @@ export default function AnimateSheet({
         {/* Sticky bottom button — create mode only */}
         {!isDetail && bottomBtn && (
           <div style={{
-            padding: '12px 16px',
-            paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-            borderTop: '1px solid rgba(255,255,255,0.06)',
-            background: '#0e0e0e',
+            padding: '14px 20px',
+            paddingBottom: 'max(14px, env(safe-area-inset-bottom))',
+            borderTop: '1px solid rgba(255,255,255,0.04)',
           }}>
             <button
               onClick={bottomBtn.onClick}
@@ -402,13 +553,19 @@ export default function AnimateSheet({
               style={{
                 width: '100%', padding: '14px',
                 background: !bottomBtn.disabled
-                  ? 'linear-gradient(135deg, #d946ef, #a855f7)'
-                  : 'rgba(217,70,239,0.2)',
-                border: 'none', borderRadius: 12,
-                color: !bottomBtn.disabled ? '#fff' : 'rgba(255,255,255,0.4)',
-                fontSize: '0.95rem', fontWeight: 600,
+                  ? 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)'
+                  : 'rgba(255,255,255,0.06)',
+                border: 'none', borderRadius: 14,
+                color: !bottomBtn.disabled ? '#fff' : 'rgba(255,255,255,0.25)',
+                fontSize: '0.95rem', fontWeight: 700,
                 cursor: !bottomBtn.disabled ? 'pointer' : 'not-allowed',
+                letterSpacing: '-0.01em',
+                transition: 'opacity 0.15s, transform 0.1s',
+                boxShadow: !bottomBtn.disabled ? '0 4px 20px rgba(217,70,239,0.3)' : 'none',
               }}
+              onMouseDown={e => { if (!bottomBtn.disabled) e.currentTarget.style.transform = 'scale(0.98)'; }}
+              onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
             >
               {bottomBtn.label}
             </button>

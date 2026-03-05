@@ -22,6 +22,7 @@ import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEP
 export interface AnimationState {
   imageUrls: string[]
   prompt: string
+  userHint: string
   taskId: string | null
   videoUrl: string | null
   status: 'idle' | 'generating_prompt' | 'ready' | 'submitting' | 'polling' | 'done' | 'error'
@@ -218,7 +219,7 @@ export default function Editor({
   initialAnimations,
 }: EditorProps = {}) {
   const isDesktop = useIsDesktop();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1150,11 +1151,20 @@ export default function Editor({
     const rawOriginal = originalSnapshot ? getImageForApi(originalSnapshot) : undefined;
     const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64(rawOriginal) : rawOriginal;
 
+    const _agentT0 = performance.now();
+    let _genStartTime = 0;
     try {
       await streamAgent(
         { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
         {
-          onStatus: (status) => setAgentStatus(status),
+          onStatus: (status) => {
+            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
+            console.log(`⏱️ [agent] status="${status}" at +${elapsed}s`);
+            if (status.includes('生成图片') || status.includes('Generating image')) {
+              _genStartTime = performance.now();
+            }
+            setAgentStatus(status);
+          },
           onNewTurn: () => {
             const newId = generateId();
             currentMsgId = newId;
@@ -1173,6 +1183,9 @@ export default function Editor({
             ));
           },
           onImage: (imageData) => {
+            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
+            const genDuration = _genStartTime ? ((performance.now() - _genStartTime) / 1000).toFixed(1) : '?';
+            console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (Gemini took ${genDuration}s, image ${(imageData.length / 1024).toFixed(0)}KB)`);
             const snapId = generateId();
             const newSnapshot: Snapshot = {
               id: snapId,
@@ -1205,6 +1218,8 @@ export default function Editor({
             pendingAnalysisRef.current.push({ id: snapId, image: imageData });
           },
           onToolCall: (tool, input, images) => {
+            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
+            console.log(`⏱️ [agent] tool_call="${tool}" at +${elapsed}s`, tool === 'generate_image' ? `editPrompt="${(input.editPrompt as string)?.slice(0, 80)}..."` : '');
             // Capture editPrompt and input images from generate_image calls
             if (tool === 'generate_image' && typeof input.editPrompt === 'string') {
               lastEditPromptRef.current = input.editPrompt;
@@ -1212,6 +1227,8 @@ export default function Editor({
             }
           },
           onDone: () => {
+            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
+            console.log(`⏱️ [agent] DONE total ${elapsed}s`);
             setAgentStatus(t('editor.done'));
             // Persist all assistant messages created in this agent run
             setMessages((prev) => {
@@ -1294,8 +1311,11 @@ export default function Editor({
     animPromptInFlightRef.current = true;
 
     const n = imageUrls.length;
-    const imageListText = imageUrls.map((_: string, i: number) => `<<<image_${i + 1}>>>`).join('、');
-    const prompt = `[视频动画模式] 为以下 ${n} 张照片创作视频故事脚本（图片引用：${imageListText}）。只输出脚本内容，不需要用户确认。`;
+    const userHint = animationStateRef.current?.userHint?.trim() || '';
+    const imageListText = imageUrls.map((_: string, i: number) => `<<<image_${i + 1}>>>`).join(', ');
+    const langInstr = locale === 'en' ? 'Write the script in English.' : '用中文写脚本。';
+    const hintLine = userHint ? `\nUser requirements: ${userHint}` : '';
+    const prompt = `[视频动画模式] Create a video story script for the following ${n} photos (image refs: ${imageListText}). Output only the script, no confirmation needed. ${langInstr}${hintLine}`;
 
     const userMsgId = generateId();
     const assistantMsgId = generateId();
@@ -1367,7 +1387,7 @@ export default function Editor({
       setIsAgentActive(false);
       animPromptInFlightRef.current = false;
     }
-  }, [projectId, onSaveMessage]);
+  }, [projectId, onSaveMessage, locale, t]);
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
@@ -2066,6 +2086,7 @@ export default function Editor({
                   setAnimationState({
                     imageUrls,
                     prompt: '',
+                    userHint: '',
                     taskId: null,
                     videoUrl: null,
                     status: 'idle',
@@ -2308,7 +2329,7 @@ export default function Editor({
                     const imageUrls = allUrls.length <= 7
                       ? allUrls
                       : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                    setAnimationState({ imageUrls, prompt: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: 10, pollSeconds: 0 });
+                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: 10, pollSeconds: 0 });
                     setShowAnimateSheet(true);
                   } : undefined}
                   hasVideo={hasVideo}
@@ -2326,6 +2347,7 @@ export default function Editor({
                       setAnimationState({
                         imageUrls,
                         prompt: '',
+                        userHint: '',
                         taskId: null,
                         videoUrl: null,
                         status: 'idle',
@@ -2344,6 +2366,7 @@ export default function Editor({
                       setAnimationState({
                         imageUrls: anim.snapshotUrls,
                         prompt: anim.prompt,
+                        userHint: '',
                         taskId: anim.taskId,
                         videoUrl: anim.videoUrl,
                         status: 'idle',
@@ -2396,6 +2419,13 @@ export default function Editor({
               }}
               onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
               onGeneratePrompt={generateAnimationPrompt}
+              onPreviewImage={(snapshotId) => {
+                const idx = snapshots.findIndex(s => s.id === snapshotId);
+                if (idx >= 0) {
+                  const tIdx = timelineFromSnap(idx, draftParentIndex);
+                  setViewIndex(tIdx);
+                }
+              }}
               animationState={animationState}
               onStateChange={(update) => setAnimationState(prev => {
                 const next = prev ? { ...prev, ...update } : prev;
