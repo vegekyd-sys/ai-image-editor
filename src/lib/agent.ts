@@ -11,6 +11,7 @@ import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
+import nijiPrompt from './prompts/niji.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import type { Tip } from '@/types';
 
@@ -111,7 +112,7 @@ function createTools(ctx: AgentContext) {
                 { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
                 ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
               ],
-              finalPrompt, aspectRatio, 'high',
+              finalPrompt, aspectRatio, 'minimal',
             );
           } else if (hasReference) {
             const refs = ctx.referenceImages!;
@@ -121,7 +122,7 @@ function createTools(ctx: AgentContext) {
                 { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
                 ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
               ],
-              finalPrompt, aspectRatio, 'high',
+              finalPrompt, aspectRatio, 'minimal',
             );
           } else if (useOriginalAsReference && hasOriginal) {
             if (attempt === 1) console.log('📸 Two-image mode (original as reference)');
@@ -130,11 +131,11 @@ function createTools(ctx: AgentContext) {
                 { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
                 { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
               ],
-              finalPrompt, aspectRatio, 'high',
+              finalPrompt, aspectRatio, 'minimal',
             );
           } else {
             if (attempt === 1) console.log('📸 Single-image mode');
-            result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'high');
+            result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'minimal');
           }
 
           if (result) break;
