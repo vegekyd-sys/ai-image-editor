@@ -11,7 +11,6 @@ import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
-import nijiPrompt from './prompts/niji.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import type { Tip } from '@/types';
 
@@ -96,7 +95,8 @@ function createTools(ctx: AgentContext) {
           ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
           : editPrompt;
 
-        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} thinking=high\neditPrompt:\n${editPrompt}\n`);
+        const t0 = Date.now();
+        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} thinking=high\neditPrompt: ${editPrompt.slice(0, 200)}\nfinalPrompt length: ${finalPrompt.length} chars\n`);
 
         // CUI agent always uses Flash High reasoning for best quality
         // Retry once on failure (transient API errors, rate limits, etc.)
@@ -145,9 +145,10 @@ function createTools(ctx: AgentContext) {
         }
 
         if (!result) {
-          console.error('❌ [generate_image] all attempts failed');
+          console.error(`❌ [generate_image] all attempts failed after ${((Date.now() - t0) / 1000).toFixed(1)}s`);
           return { success: false as const, message: 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.' };
         }
+        console.log(`✅ [generate_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB)`);
         ctx.currentImage = result;
         ctx.generatedImages.push(result);
         return { success: true as const, message: 'Image generated successfully and shown to the user.' };
@@ -322,6 +323,8 @@ export async function* runMakaronAgent(
   const allTools = createTools(ctx);
   let imagesSent = 0;
   let stepCount = 0;
+  let toolCallStartTime = 0;
+  const agentStartTime = Date.now();
 
   const analysisOnly = options?.analysisOnly ?? false;
   const tipReactionOnly = options?.tipReactionOnly ?? false;
@@ -384,6 +387,8 @@ export async function* runMakaronAgent(
 
       // ── Tool call ───────────────────────────────────────────────────────────
       if (event.type === 'tool-call') {
+        toolCallStartTime = Date.now();
+        console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
         const isEnLocale = options?.locale === 'en';
         if (event.toolName === 'analyze_image') {
           const q = (event.input as { question?: string }).question;
@@ -418,6 +423,8 @@ export async function* runMakaronAgent(
       if (event.type === 'tool-result') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const toolName = (event as any).toolName as string | undefined;
+        const toolDuration = toolCallStartTime ? ((Date.now() - toolCallStartTime) / 1000).toFixed(1) : '?';
+        console.log(`⏱️ [agent] tool-result "${toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (tool took ${toolDuration}s)`);
 
         // Detect generate_image failure: tool was called but no new image produced
         if (toolName === 'generate_image' && imagesSent === ctx.generatedImages.length) {
@@ -457,8 +464,10 @@ export async function* runMakaronAgent(
       imagesSent++;
     }
 
+    console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
     yield { type: 'done' };
   } catch (err) {
+    console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${err instanceof Error ? err.message : String(err)}`);
     yield { type: 'error', message: err instanceof Error ? err.message : String(err) };
   }
 }
