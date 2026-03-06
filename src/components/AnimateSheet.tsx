@@ -296,8 +296,7 @@ export default function AnimateSheet({
               {/* Filmstrip — clickable thumbnails with delete */}
               <div style={{
                 display: 'flex', gap: 8, marginBottom: 16,
-                overflowX: 'auto', paddingBottom: 4,
-                scrollbarWidth: 'none',
+                flexWrap: 'wrap', paddingBottom: 4,
               }}>
                 {allSnapshots.map((s, i) => {
                   const excluded = excludedIndices.has(i);

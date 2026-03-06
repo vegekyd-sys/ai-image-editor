@@ -61,9 +61,9 @@ export default function VideoResultCard({
         }
       `}</style>
 
-      {/* Video pill grid — wraps instead of horizontal scroll */}
+      {/* Horizontal pill carousel — mirrors TipsBar layout exactly */}
       <div
-        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 flex-wrap ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
+        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
       >
         {all.map((anim, idx) => {
           const isSelected = anim.id === selectedVideoId;
