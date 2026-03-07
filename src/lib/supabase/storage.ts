@@ -65,10 +65,13 @@ export function getPublicUrl(supabase: SupabaseClient, path: string): string {
  * Replaces /object/public/ with /render/image/public/ and appends
  * width/quality params.
  */
-export function getThumbnailUrl(url: string, width = 200, quality = 60): string {
+export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
-  return url.replace(
+  const base = url.replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
-  ) + `?width=${width}&quality=${quality}`
+  )
+  const params = [`width=${width}`, `quality=${quality}`]
+  if (height) params.push(`height=${height}`, 'resize=cover')
+  return base + '?' + params.join('&')
 }

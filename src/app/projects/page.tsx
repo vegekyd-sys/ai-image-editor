@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cacheProjectsList } from '@/lib/imageCache'
 import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
+import { getThumbnailUrl } from '@/lib/supabase/storage'
 
 interface ProjectWithSnapshots {
   id: string
@@ -921,11 +922,12 @@ function ProjectCard({
         }} />
       )}
 
-      {/* Full-bleed photo */}
+      {/* Full-bleed photo — use Supabase transform for smaller thumbnails */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={lastSnap.image_url}
+        src={getThumbnailUrl(lastSnap.image_url, 400, 50, 400)}
         alt={project.title}
+        fetchPriority={index < 4 ? 'high' : undefined}
         style={{
           width: '100%', height: '100%',
           objectFit: 'cover',
