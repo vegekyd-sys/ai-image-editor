@@ -30,22 +30,44 @@ export async function middleware(request: NextRequest) {
   const user = session?.user
 
   const { pathname } = request.nextUrl
+  const activated = request.cookies.get('mkr_activated')?.value === '1'
 
-  // Logged-in user visiting /login → redirect to /projects
-  if (user && pathname === '/login') {
+  // Not logged in — only /login is accessible
+  if (!user) {
+    if (pathname !== '/login') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+    return supabaseResponse
+  }
+
+  // Logged in below this point
+
+  // /login → redirect based on activation status
+  if (pathname === '/login') {
     const url = request.nextUrl.clone()
-    url.pathname = '/projects'
+    url.pathname = activated ? '/projects' : '/activate'
     return NextResponse.redirect(url)
   }
 
-  // Not logged in visiting protected routes → redirect to /login
-  if (!user && pathname !== '/login') {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+  // /activate — accessible when logged in
+  if (pathname === '/activate') {
+    // Already activated → skip to projects
+    if (activated) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/projects'
+      return NextResponse.redirect(url)
+    }
+    return supabaseResponse
   }
 
-  // Note: / now creates a new project and redirects to /projects/[id] (client-side)
+  // All other routes — require activation
+  if (!activated) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/activate'
+    return NextResponse.redirect(url)
+  }
 
   return supabaseResponse
 }

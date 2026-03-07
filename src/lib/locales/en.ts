@@ -15,6 +15,17 @@ const en = {
   'auth.err.invalidEmail': 'Invalid email format',
   'auth.err.rateLimited': 'Too many attempts, please try again later',
   'auth.err.wait60s': 'Please wait 60 seconds before trying again',
+  'auth.err.invalidInviteCode': 'Invalid or expired invite code',
+  'auth.err.inviteCodeRequired': 'Invite code is required for new accounts',
+  'auth.inviteCodePlaceholder': 'Enter invite code',
+  'auth.activate': 'Activate',
+  'auth.activated': 'Activated!',
+  'auth.noInviteCode': "Don't have an invite code?",
+  'auth.joinWaitlist': 'Join waitlist',
+  'auth.waitlistSuccess': 'You\'re on the list!',
+  'auth.waitlistSuccessDesc': 'We\'ll send you an invite code soon.',
+  'auth.createAccount': 'Create your account',
+  'auth.back': 'Back',
 
   // Project management
   'project.untitled': 'Untitled',
@@ -108,6 +119,14 @@ const en = {
   'canvas.videoRendering': 'Video rendering',
   'canvas.usuallyTakes': 'Usually takes 3–5 minutes',
   'canvas.generateVideo': 'Generate video',
+  'canvas.layerTool': 'Layers',
+  'canvas.layering': 'Separating layers...',
+  'canvas.layerLabel': (n: number) => `Layer ${n}`,
+  'canvas.resetLayers': 'Reset',
+  'canvas.layerFailed': 'Layer split failed',
+  'canvas.layerEmpty': 'No layers available',
+  'canvas.layerDelete': 'Delete layer',
+  'canvas.layerResize': 'Drag to resize',
 
   // Annotation toolbar
   'annotation.placeholder': 'How should I edit the marked area?',

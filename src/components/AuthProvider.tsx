@@ -43,6 +43,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
           if (error || !validatedUser) {
             // Session cookie exists but JWT is expired/invalid — force re-login
             console.warn('[Auth] Session invalid, forcing re-login:', error?.message)
+            document.cookie = 'mkr_activated=; path=/; max-age=0'
             supabase.auth.signOut().then(() => {
               window.location.href = '/login'
             })
@@ -60,6 +61,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   const signOut = useCallback(async () => {
     clearUserCache()
+    document.cookie = 'mkr_activated=; path=/; max-age=0'
     await getSupabase().auth.signOut()
     window.location.href = '/login'
   }, [])

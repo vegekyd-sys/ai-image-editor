@@ -591,7 +591,7 @@ export default function ProjectsPage() {
             color: 'rgba(217,70,239,0.65)',
             fontWeight: 400,
           }}>
-            one man studio
+            one man creative studio
           </div>
 
           {/* Create input: [photo] + [textarea] */}

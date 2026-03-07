@@ -15,6 +15,17 @@ const zh = {
   'auth.err.invalidEmail': '邮箱格式不正确',
   'auth.err.rateLimited': '操作过于频繁，请稍后再试',
   'auth.err.wait60s': '请等待 60 秒后再试',
+  'auth.err.invalidInviteCode': '邀请码无效或已过期',
+  'auth.err.inviteCodeRequired': '新账号需要邀请码',
+  'auth.inviteCodePlaceholder': '输入邀请码',
+  'auth.activate': '激活',
+  'auth.activated': '激活成功！',
+  'auth.noInviteCode': '还没有邀请码？',
+  'auth.joinWaitlist': '加入等待',
+  'auth.waitlistSuccess': '已加入等待名单！',
+  'auth.waitlistSuccessDesc': '我们会尽快给你发送邀请码。',
+  'auth.createAccount': '创建账号',
+  'auth.back': '返回',
 
   // Project management
   'project.untitled': '未命名',
@@ -108,6 +119,14 @@ const zh = {
   'canvas.videoRendering': '视频渲染中',
   'canvas.usuallyTakes': '通常需要 3–5 分钟',
   'canvas.generateVideo': '生成视频',
+  'canvas.layerTool': '分层',
+  'canvas.layering': '正在拆分图层...',
+  'canvas.layerLabel': (n: number) => `图层 ${n}`,
+  'canvas.resetLayers': '重置位置',
+  'canvas.layerFailed': '分层失败',
+  'canvas.layerEmpty': '没有可用图层',
+  'canvas.layerDelete': '删除图层',
+  'canvas.layerResize': '拖动缩放',
 
   // Annotation toolbar
   'annotation.placeholder': '你想对标记的地方怎么改...',
