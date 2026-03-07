@@ -75,6 +75,8 @@ printf 'value' | npx vercel env add NAME preview --force
 
 Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。当前生图和 tips 均走 OpenRouter `gemini-3.1-flash-image-preview`（从 `gemini-3-pro-image-preview` 切换，2026-02-27）。tips/preview 缩略图不走 MOCK_AI（已关闭）。
 
+**项目列表页性能优化（2026-03-08）**：缩略图用 Supabase Image Transformations（`/render/image/` + `width=400&height=400&resize=cover&quality=50`），自动转 WebP ~16KB/张（原图 ~1.7MB），总传输 31.2MB→2MB（-94%），LCP 1553→1091ms（-30%）。首屏 4 张 `fetchPriority="high"`。需 Pro 计划 + Dashboard 开启 Image Transformations。
+
 **模型对比测试结论（2026-03-01，v66-v71）**：生图确认用 `gemini-3.1-flash-image-preview`（reasoning: minimal），速度 ~19s，质量与 Pro 持平。Tips 创意用 Pro 或 Flash High 均可（均分 8.0 持平），Flash Min 出 tips 创意太差（5.3）。Flash High thinking 对生图无帮助（反而 2.6x 更慢）。详细数据见 `progress.md` 模型对比章节。`scripts/batch-test-compare.mjs` 为多模型对比测试工具。
 
 **模型切换 gemini-3.1-flash-image-preview（2026-02-27）**：`IMAGE_MODEL` 环境变量控制生图模型（默认 `gemini-3-pro-image-preview`），tips 和生图共用同一模型。切换后 tips 速度从 20+s 首 tip 降至 ~3-5s 全部出齐（4x 提速）。新模型额外能力：输出分辨率控制（512px/1K/2K/4K）、超宽比例（1:4/4:1/1:8/8:1）、Thinking 级别（minimal/high）、图片搜索 Grounding、更多参考图（10 物品+4 人物）。
@@ -225,7 +227,7 @@ Key components in `src/components/`:
 
 - **Supabase Auth**: Email + Password, middleware 路由保护, API 路由 401 校验
 - **Supabase 区域**: `ap-northeast-1`（东京），项目 ref `sdyrtztrjgmmpnirswxt`（2026-02-24 从悉尼 `ap-southeast-2` 迁移）
-- **Supabase Storage**: `images` bucket, 路径 `{userId}/{projectId}/{filename}`, 公开读
+- **Supabase Storage**: `images` bucket, 路径 `{userId}/{projectId}/{filename}`, 公开读。**Image Transformations 已开启**（Pro 计划），`getThumbnailUrl()` 用 `/render/image/` 路径生成缩略图（400x400 WebP ~16KB，原图 ~1.7MB）
 - **Database**: `projects`, `snapshots`（image_url + tips jsonb）, `messages`, `project_images`（预留）, `project_animations`, 全部 RLS 保护
 - **`useProject` hook**: 核心持久化，所有写入 fire-and-forget（`Promise.resolve().then(async ...)`），错误只 console.error
 - **Auth**: `AuthProvider` → `useAuth()` hook, server-side `createClient()` for API routes
