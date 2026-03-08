@@ -17,6 +17,7 @@ import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils';
 import { useLocale } from '@/lib/i18n';
+import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 
 export interface AnimationState {
@@ -256,6 +257,7 @@ export default function Editor({
   const [detailAnimation, setDetailAnimation] = useState<ProjectAnimation | null>(null);
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
+  const [draftFullLoaded, setDraftFullLoaded] = useState(false);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
@@ -325,19 +327,48 @@ export default function Editor({
   // Draft mode: draftParentIndex !== null means a virtual draft entry exists in timeline
   const isDraft = draftParentIndex !== null;
 
-  // Draft image is computed from the selected tip's preview (or parent image as fallback)
-  const draftImage = useMemo(() => {
+  // Draft image: show thumbnail immediately (already cached from TipsBar), upgrade to full when loaded
+  const draftFullUrl = useMemo(() => {
     if (draftParentIndex === null || previewingTipIndex === null) return null;
     const parentTips = snapshots[draftParentIndex]?.tips ?? [];
     const tip = parentTips[previewingTipIndex];
     return tip?.previewImage || snapshots[draftParentIndex]?.image || null;
   }, [draftParentIndex, previewingTipIndex, snapshots]);
 
+  const draftImage = useMemo(() => {
+    if (!draftFullUrl) return null;
+    // base64 or non-URL: use directly (no loading needed)
+    if (!draftFullUrl.startsWith('http')) return draftFullUrl;
+    // Full image loaded: high-quality WebP (no visible downscale)
+    if (draftFullLoaded) return getOptimizedUrl(draftFullUrl);
+    // Not loaded yet: small proportional thumbnail (contain = keeps original aspect ratio)
+    return getThumbnailUrl(draftFullUrl, 144, 60, 144, 'contain');
+  }, [draftFullUrl, draftFullLoaded]);
+
+  // Preload full draft image and flip flag when done
+  useEffect(() => {
+    if (!draftFullUrl || !draftFullUrl.startsWith('http')) return;
+    setDraftFullLoaded(false);
+    const img = new Image();
+    img.src = getOptimizedUrl(draftFullUrl);
+    img.onload = () => setDraftFullLoaded(true);
+  }, [draftFullUrl]);
+
   // Timeline: committed snapshots with the virtual draft inserted right after its parent
   // + optional video sentinel at the end (when ANY animation exists)
   const hasAnyAnimation = animations.length > 0;
   const timeline = useMemo(() => {
-    const base = snapshots.map((s) => s.image || s.imageUrl || '');
+    const base = snapshots.map((s, i) => {
+      // base64 from IndexedDB cache — use directly, no network cost
+      if (s.image && !s.image.startsWith('http')) return s.image;
+      // URL (first load from DB, or imageUrl fallback)
+      const url = s.image || s.imageUrl || '';
+      if (!url) return '';
+      // Current snapshot and neighbors: high-quality WebP (PNG→WebP, no visible downscale).
+      // Distant snapshots: lightweight thumbnail (user not viewing).
+      if (Math.abs(i - viewIndex) <= 1) return getOptimizedUrl(url);
+      return getThumbnailUrl(url, 800, 75);
+    });
     if (draftImage !== null && draftParentIndex !== null) {
       base.splice(draftParentIndex + 1, 0, draftImage);
     }
@@ -345,7 +376,24 @@ export default function Editor({
       base.push('__VIDEO__');
     }
     return base;
-  }, [snapshots, draftImage, draftParentIndex, hasAnyAnimation]);
+  }, [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex]);
+
+  // Preload optimized images for nearby snapshots (±2) so swipe feels instant
+  useEffect(() => {
+    [viewIndex - 2, viewIndex - 1, viewIndex + 1, viewIndex + 2]
+      .filter(i => i >= 0 && i < snapshots.length)
+      .forEach(i => {
+        const s = snapshots[i];
+        if (!s) return;
+        // Already base64 cached — no preload needed
+        if (s.image && !s.image.startsWith('http')) return;
+        const url = s.imageUrl || s.image;
+        if (url) {
+          const img = new Image();
+          img.src = getOptimizedUrl(url);
+        }
+      });
+  }, [viewIndex, snapshots]);
 
   // Video entry: last item in timeline when any animation exists
   const hasVideo = hasAnyAnimation;
@@ -1413,9 +1461,6 @@ export default function Editor({
       messageId: assistantMsg.id,
     };
     setSnapshots((prev) => [...prev, newSnapshot]);
-    onSaveSnapshot?.(newSnapshot, snapshots.length, (url) => {
-      setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
-    });
     cacheImage(`snap:${snapId}`, newSnapshot.image);
 
     // Clear draft and jump to the newly committed snapshot
@@ -1423,6 +1468,11 @@ export default function Editor({
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
     setCommittedCategory(tip.category as Tip['category']);
+
+    // Wait for Supabase upload → use URL for tips (tiny payload vs 2MB+ base64 x4)
+    onSaveSnapshot?.(newSnapshot, snapshots.length, (url) => {
+      setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+    });
 
     // Fetch new tips — auto-preview only the committed tip's category
     // Use URL if available (fast, ~100 bytes), otherwise compress base64 to avoid ~3MB per request × 4
@@ -1531,13 +1581,16 @@ export default function Editor({
 
   // Previous image for long-press compare
   const previousImage = useMemo(() => {
+    let img: string | undefined;
     if (isViewingDraft && draftParentIndex !== null) {
-      // Viewing draft: "before" = parent snapshot's image
-      return snapshots[draftParentIndex]?.image;
+      img = snapshots[draftParentIndex]?.image;
+    } else {
+      const snapIdx = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
+      img = snapIdx > 0 ? snapshots[snapIdx - 1]?.image : undefined;
     }
-    // Normal mode: map timeline index to snapshot index, then get previous snapshot
-    const snapIdx = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
-    return snapIdx > 0 ? snapshots[snapIdx - 1]?.image : undefined;
+    // URL images: route through optimized path (same quality as canvas)
+    if (img && img.startsWith('http')) return getOptimizedUrl(img);
+    return img;
   }, [isViewingDraft, draftParentIndex, snapshots, viewIndex]);
 
   // Dismiss draft: remove virtual draft entry, return to parent
@@ -2052,6 +2105,7 @@ export default function Editor({
                 onIndexChange={handleIndexChange}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
+                isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
                 draftTimelineIndex={draftParentIndex !== null ? draftParentIndex + 1 : undefined}
                 onDismissDraft={dismissDraft}
                 previousImage={previousImage}

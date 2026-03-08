@@ -21,6 +21,7 @@ interface ImageCanvasProps {
   onIndexChange: (index: number) => void;
   isEditing: boolean;
   isDraft?: boolean;
+  isDraftLoading?: boolean;
   draftTimelineIndex?: number;
   onDismissDraft?: () => void;
   previousImage?: string;
@@ -45,7 +46,7 @@ interface ImageCanvasProps {
 
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
-  isDraft, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
+  isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
   hasVideo, isVideoEntry, videoUrl, videoProcessing, videoPosterImage, isDesktop,
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
@@ -441,9 +442,17 @@ export default function ImageCanvas({
           transformOrigin: 'center center',
         } : undefined}
       >
-        {/* Grey placeholder while loading */}
-        {!isVideoEntry && !imageLoaded && (
+        {/* Grey placeholder while loading (skip for drafts — they show a low-res thumbnail instead) */}
+        {!isVideoEntry && !imageLoaded && !isDraftLoading && (
           <div className="absolute inset-0 bg-zinc-900 animate-pulse" />
+        )}
+
+        {/* Draft loading shimmer: low-res thumbnail visible underneath, shimmer overlay on top */}
+        {isDraftLoading && (
+          <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-[shimmer_1.5s_ease-in-out_infinite]" />
+            <style>{`@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
+          </div>
         )}
 
         {/* Video entry */}

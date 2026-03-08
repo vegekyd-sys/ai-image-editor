@@ -65,13 +65,25 @@ export function getPublicUrl(supabase: SupabaseClient, path: string): string {
  * Replaces /object/public/ with /render/image/public/ and appends
  * width/quality params.
  */
-export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number): string {
+/** High-quality image via Image Transformations — triggers PNG→WebP format negotiation.
+ *  width=2000 triggers the transform pipeline without visible downscale
+ *  (our uploads are max 2048px, 2.3% smaller is imperceptible). quality=95 is visually lossless. */
+export function getOptimizedUrl(url: string, quality = 95): string {
+  if (!url || !url.includes('/storage/v1/object/public/')) return url
+  const base = url.replace(
+    '/storage/v1/object/public/',
+    '/storage/v1/render/image/public/',
+  )
+  return base + `?width=2000&quality=${quality}`
+}
+
+export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
   const base = url.replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
   )
   const params = [`width=${width}`, `quality=${quality}`]
-  if (height) params.push(`height=${height}`, 'resize=cover')
+  if (height) params.push(`height=${height}`, `resize=${resize}`)
   return base + '?' + params.join('&')
 }

@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { Message } from '@/types';
 import { compressImageFile } from '@/lib/imageUtils';
 import { useLocale } from '@/lib/i18n';
+import { getThumbnailUrl } from '@/lib/supabase/storage';
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?: string[] }) {
@@ -627,7 +628,7 @@ export default function AgentChatView({
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={msg.image}
+                          src={msg.image.startsWith('http') ? getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75) : msg.image}
                           alt="Generated"
                           className={`rounded-2xl max-w-full object-contain ${isPanel ? 'max-h-[180px]' : 'max-h-[280px]'}`}
                           style={{ border: '1px solid rgba(255,255,255,0.08)' }}

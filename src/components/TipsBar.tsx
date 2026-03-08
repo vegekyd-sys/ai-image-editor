@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useLocale } from '@/lib/i18n';
 import { Tip } from '@/types';
 import { CATEGORIES } from '@/lib/categories';
+import { getThumbnailUrl } from '@/lib/supabase/storage';
 
 interface TipsBarProps {
   tips: Tip[];
@@ -33,6 +34,10 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
   const isStorageUrl = tip.previewImage?.startsWith('http') ?? false;
 
   if (tip.previewStatus === 'done' && tip.previewImage) {
+    // Use tiny thumbnail for the 72x72 TipsBar display; full image loads on click (canvas draft)
+    const displayUrl = isStorageUrl
+      ? getThumbnailUrl(tip.previewImage, 144, 60, 144)
+      : tip.previewImage;
     return (
       <div className="w-full h-full relative">
         {isStorageUrl && !imgLoaded && (
@@ -40,7 +45,7 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
         )}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={tip.previewImage}
+          src={displayUrl}
           alt=""
           className={`w-full h-full object-cover ${isStorageUrl && !imgLoaded ? 'opacity-0' : ''}`}
           loading="lazy"

@@ -6,6 +6,7 @@ import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
+import sharp from 'sharp';
 import fs from 'fs';
 
 const LOG_FILE = '/tmp/tips-timing.log';
@@ -133,6 +134,17 @@ const JSON_FORMAT_SUFFIX_EN = `\n\nOutput as JSON array only, no other text. Eve
 
 function getJsonFormatSuffix(locale?: string) {
   return locale === 'en' ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX_ZH;
+}
+
+// ── Image Format Helpers ─────────────────────────────────────────
+
+/** Convert any image data URL to JPEG (quality 95). Pass-through if already JPEG or HTTP URL. */
+async function ensureJpeg(dataUrl: string): Promise<string> {
+  if (!dataUrl.startsWith('data:image/') || dataUrl.startsWith('data:image/jpeg')) return dataUrl;
+  const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+  const buf = Buffer.from(base64, 'base64');
+  const jpegBuf = await sharp(buf).jpeg({ quality: 95 }).toBuffer();
+  return `data:image/jpeg;base64,${jpegBuf.toString('base64')}`;
 }
 
 // ── Image Content Helpers ────────────────────────────────────────
@@ -298,7 +310,8 @@ async function* chatStreamGoogle(
     for (const part of chunkParts) {
       if (part.inlineData?.data) {
         const mime = part.inlineData.mimeType || 'image/png';
-        yield { type: 'image', image: `data:${mime};base64,${part.inlineData.data}` };
+        const raw = `data:${mime};base64,${part.inlineData.data}`;
+        yield { type: 'image', image: await ensureJpeg(raw) };
       } else if (part.text) {
         yield { type: 'content', text: part.text };
       }
@@ -377,7 +390,7 @@ async function* chatStreamOpenRouter(
       for (const img of choice.images) {
         const url = img.image_url?.url || img.url;
         if (url) {
-          yield { type: 'image', image: url };
+          yield { type: 'image', image: await ensureJpeg(url) };
         }
       }
     }
@@ -473,7 +486,7 @@ async function generatePreviewImageGoogle(
   for (const part of parts) {
     if (part.inlineData?.data) {
       const mime = part.inlineData.mimeType || 'image/png';
-      return `data:${mime};base64,${part.inlineData.data}`;
+      return ensureJpeg(`data:${mime};base64,${part.inlineData.data}`);
     }
   }
   return null;
@@ -539,7 +552,7 @@ async function generatePreviewImageOpenRouter(
       const url = img.image_url?.url || img.url;
       if (url) {
         console.log(`[OpenRouter] Got image, url length: ${url.length}`);
-        return url;
+        return ensureJpeg(url);
       }
     }
   }
@@ -633,7 +646,7 @@ async function generateMultiImageGoogle(
   for (const part of resultParts) {
     if (part.inlineData?.data) {
       const mime = part.inlineData.mimeType || 'image/png';
-      image = `data:${mime};base64,${part.inlineData.data}`;
+      image = await ensureJpeg(`data:${mime};base64,${part.inlineData.data}`);
     } else if (part.text) {
       text = (text || '') + part.text;
     }
@@ -691,7 +704,7 @@ async function generateMultiImageOpenRouter(
   if (choice.images && Array.isArray(choice.images)) {
     for (const img of choice.images) {
       const url = img.image_url?.url || img.url;
-      if (url) { image = url; break; }
+      if (url) { image = await ensureJpeg(url); break; }
     }
   }
 
