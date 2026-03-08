@@ -1262,8 +1262,7 @@ export default function Editor({
                 editInputImages: capturedInputImages ?? undefined,
               } : m
             ));
-            // Queue auto-analysis of the new snapshot after this agent run finishes
-            pendingAnalysisRef.current.push({ id: snapId, image: imageData });
+            // Post-edit analysis removed — description will be computed on demand if user chats with Agent
           },
           onToolCall: (tool, input, images) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
@@ -1284,14 +1283,9 @@ export default function Editor({
               toSave.forEach(m => onSaveMessage?.(m));
               return prev;
             });
-            // After a short delay, run auto-analysis on any newly generated snapshots
-            const pending = [...pendingAnalysisRef.current];
+            // Clear any pending analysis refs (post-edit analysis removed)
             pendingAnalysisRef.current = [];
-            if (pending.length > 0) {
-              setTimeout(() => {
-                pending.forEach(({ id, image }) => runAutoAnalysis(id, image, 'post-edit'));
-              }, 800);
-            } else {
+            {
               // Drain pending teaser or reset to greeting
               const pendingTeaser = pendingTeaserRef.current;
               if (pendingTeaser) {
