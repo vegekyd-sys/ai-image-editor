@@ -68,7 +68,7 @@ const en = {
   'chat.collapse': 'Collapse ▲',
   'chat.inputImages': 'Input images',
   'chat.imageLabel': 'img',
-  'chat.placeholder': 'How would you like to edit this image?',
+  'chat.placeholder': 'How would you like to edit?',
   'chat.viewInChat': 'View in Chat ↗',
   'chat.editImage': 'Edit image',
 
@@ -116,6 +116,7 @@ const en = {
 
   // Canvas
   'canvas.loading': 'Loading...',
+  'canvas.videoExpired': 'Video link expired',
   'canvas.videoRendering': 'Video rendering',
   'canvas.usuallyTakes': 'Usually takes 3–5 minutes',
   'canvas.generateVideo': 'Generate video',

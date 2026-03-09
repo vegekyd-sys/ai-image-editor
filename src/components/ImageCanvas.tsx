@@ -97,9 +97,11 @@ export default function ImageCanvas({
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoBuffered, setVideoBuffered] = useState(0); // 0-1 progress
+  const [videoError, setVideoError] = useState(false);
   const [prevVideoUrl, setPrevVideoUrl] = useState(videoUrl);
   if (prevVideoUrl !== videoUrl) {
     setPrevVideoUrl(videoUrl);
+    setVideoError(false);
     if (videoPlaying) setVideoPlaying(false);
     if (videoLoading) setVideoLoading(false);
     if (videoBuffered !== 0) setVideoBuffered(0);
@@ -475,6 +477,7 @@ export default function ImageCanvas({
               onEnded={() => setVideoPlaying(false)}
               onWaiting={() => setVideoLoading(true)}
               onCanPlay={() => setVideoLoading(false)}
+              onError={() => setVideoError(true)}
               onProgress={() => {
                 const v = videoRef.current;
                 if (v && v.buffered.length > 0 && v.duration) {
@@ -500,8 +503,16 @@ export default function ImageCanvas({
                 </div>
               </div>
             )}
+            {/* Video error overlay */}
+            {videoError && (
+              <div className="absolute inset-0 flex items-center justify-center z-10">
+                <div className="bg-black/60 backdrop-blur-sm rounded-2xl px-6 py-4 text-center">
+                  <p className="text-white/80 text-sm">{t('canvas.videoExpired')}</p>
+                </div>
+              </div>
+            )}
             {/* Play button overlay */}
-            {!videoPlaying && !videoLoading && (
+            {!videoPlaying && !videoLoading && !videoError && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();

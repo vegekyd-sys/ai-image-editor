@@ -77,6 +77,36 @@ export function getOptimizedUrl(url: string, quality = 95): string {
   return base + `?width=2000&quality=${quality}`
 }
 
+/**
+ * Upload a video binary to Supabase Storage.
+ * Returns the public URL on success, null on failure.
+ */
+export async function uploadVideo(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+  animationId: string,
+  buffer: Uint8Array,
+): Promise<string | null> {
+  try {
+    const path = `${userId}/${projectId}/videos/${animationId}.mp4`
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(path, buffer, {
+        contentType: 'video/mp4',
+        upsert: true,
+      })
+    if (error) {
+      console.warn('Video upload error:', error)
+      return null
+    }
+    return getPublicUrl(supabase, path)
+  } catch (err) {
+    console.warn('uploadVideo error:', err)
+    return null
+  }
+}
+
 export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
   const base = url.replace(

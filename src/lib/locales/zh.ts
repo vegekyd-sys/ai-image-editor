@@ -116,6 +116,7 @@ const zh = {
 
   // Canvas
   'canvas.loading': '加载中...',
+  'canvas.videoExpired': '视频链接已过期',
   'canvas.videoRendering': '视频渲染中',
   'canvas.usuallyTakes': '通常需要 3–5 分钟',
   'canvas.generateVideo': '生成视频',
