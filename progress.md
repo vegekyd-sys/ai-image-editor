@@ -3116,3 +3116,43 @@ T+60s     第一个 preview 返回
 3. `quality` 单独使用不触发转换管线
 4. `loadProject` 把 `image_url` 赋给 `s.image`，首次加载时 timeline 需判断 `!s.image.startsWith('http')`
 5. CDN 缓存会按首次请求的 Accept 头缓存格式，JS fetch（不带 Accept: image/webp）会缓存 PNG，`<img>` 标签正常
+
+---
+
+## 待上线功能（2026-03-10，dev 分支）
+
+### StatusBar 通知系统重构 — "See" 按钮导航
+
+**问题**：用户在 draft 模式或其他 snapshot 时，Agent 生成新图片或视频完成后，StatusBar 通知被背景进度（tips/preview 生成）或 draft 固定文案（"喜欢这个效果？"）覆盖，用户看不到。
+
+**方案**：用 `pendingNotification` state 替代之前的 sticky ref 临时方案。
+
+**机制**：
+- `pendingNotification: { text: string; targetIndex: number } | null`
+- Agent 生图时，如果用户在 draft 或非目标 snapshot → 设置 notification
+- 视频完成时始终设置 notification
+- AgentStatusBar 文案优先级：**notification > draft 提示 > 普通 status**
+- notification 激活时 Chat 按钮左边显示 fuchsia 高亮 **"See"** 按钮
+- 点击 "See" → 退出 draft + 跳转目标 snapshot + 清除 notification
+- 用户手动滑到目标 snapshot → notification 自动清除
+
+**改动文件**：
+- `AgentStatusBar.tsx`：新增 `notification` + `onSeeNotification` props，"See" 按钮渲染
+- `Editor.tsx`：删除 sticky 机制（`stickyStatusUntilRef`/`isStickyActive`/`setAgentStatusSticky`），新增 `pendingNotification` state + `handleSeeNotification` + auto-clear useEffect
+
+**状态**：代码完成，Vercel preview 构建通过，未完成浏览器端测试。
+
+### CUI 内联图片比例修复
+
+**问题**：CUI 聊天中的内联图片从服务器重新加载后变成接近正方形，丢失原始比例。
+
+**原因**：`getThumbnailUrl(url, 680, 75)` 只传 width 不传 height，Supabase 用 fill 模式不保持比例。
+
+**修复**：加 `height=2000, resize='contain'`，在 680px 宽度框内等比缩放。
+
+```diff
+- getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75)
++ getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75, 2000, 'contain')
+```
+
+**状态**：代码完成，未测试。

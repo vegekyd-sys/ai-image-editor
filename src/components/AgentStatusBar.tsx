@@ -11,9 +11,11 @@ interface AgentStatusBarProps {
   onAnimate?: () => void;
   hasVideo?: boolean;
   snapshotCount?: number;
+  notification?: { text: string } | null;
+  onSeeNotification?: () => void;
 }
 
-export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, onAnimate, hasVideo, snapshotCount = 0 }: AgentStatusBarProps) {
+export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, onAnimate, hasVideo, snapshotCount = 0, notification, onSeeNotification }: AgentStatusBarProps) {
   const { t } = useLocale();
   const videoLit = snapshotCount > 3 && !hasVideo;
   // Determine dot color and breathe speed based on state
@@ -22,7 +24,10 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
 
   let dotColor: string;
   let breatheDuration: string;
-  if (isActive) {
+  if (notification) {
+    dotColor = '#e879f9'; // fuchsia-400 — important notification
+    breatheDuration = '1s';
+  } else if (isActive) {
     dotColor = '#e879f9'; // fuchsia-400
     breatheDuration = '1s';
   } else if (isGeneratingImages) {
@@ -35,6 +40,11 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
     dotColor = '#a78bfa'; // violet-400
     breatheDuration = '2.8s';
   }
+
+  // Display text priority: notification > draft hint > normal status
+  const displayText = notification ? notification.text
+    : isViewingDraft ? t('statusbar.likeEffect')
+    : statusText;
 
   return (
     <>
@@ -58,16 +68,31 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
         />
 
         {/* Status / greeting text */}
-        <div className="flex-1 text-white/50 text-[13px] truncate">
-          {isViewingDraft ? t('statusbar.likeEffect') : statusText}
+        <div className={`flex-1 text-[13px] truncate ${notification ? 'text-white/80' : 'text-white/50'}`}>
+          {displayText}
         </div>
+
+        {/* "See" button — shown when there's a pending notification */}
+        {notification && onSeeNotification && (
+          <button
+            onClick={e => { e.stopPropagation(); onSeeNotification(); }}
+            className="px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
+            style={{
+              background: 'rgba(192,38,211,0.25)',
+              color: '#e879f9',
+              border: '1px solid rgba(192,38,211,0.4)',
+            }}
+          >
+            See
+          </button>
+        )}
 
         {/* Chat button (hidden on desktop where CUI panel is always visible) */}
         {!hideChat && (
           <button
             onClick={e => { e.stopPropagation(); onOpenChat(); }}
             className="px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
-            style={isViewingDraft ? {
+            style={isViewingDraft && !notification ? {
               background: 'rgba(192,38,211,0.25)',
               color: '#e879f9',
               border: '1px solid rgba(192,38,211,0.4)',

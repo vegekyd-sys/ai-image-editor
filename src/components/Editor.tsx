@@ -312,6 +312,9 @@ export default function Editor({
   const lastTipsRequestRef = useRef<{ snapshotId: string; image: string; previewMode: 'full' | 'none'; autoPreviewCategory?: string } | null>(null);
   const pendingTeaserRef = useRef<{ snapshotId: string; tips: Tip[] } | null>(null);
   const isReactionInFlightRef = useRef(false);
+  // Pending notification: shown when image/video is generated while user is on a different snapshot or draft.
+  // Displays notification text + "See" button in StatusBar to navigate to the new snapshot.
+  const [pendingNotification, setPendingNotification] = useState<{ text: string; targetIndex: number } | null>(null);
   // Track which snapshot's teaser has already been displayed (prevents progress bar from overwriting)
   const teaserSnapshotRef = useRef<string | null>(null);
   // Track if we've already triggered auto-naming this session (only once per new project)
@@ -424,6 +427,27 @@ export default function Editor({
     }
     prevTimelineLen.current = timeline.length;
   }
+
+  // Auto-clear pending notification when user navigates to the target snapshot
+  useEffect(() => {
+    if (!pendingNotification) return;
+    const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
+    if (snapIdx === pendingNotification.targetIndex) {
+      setPendingNotification(null);
+    }
+  }, [viewIndex, pendingNotification, draftParentIndex]);
+
+  // "See" button handler — exit draft if needed, jump to target snapshot
+  const handleSeeNotification = useCallback(() => {
+    if (!pendingNotification) return;
+    // Exit draft mode
+    if (draftParentIndex !== null) {
+      setPreviewingTipIndex(null);
+      setDraftParentIndex(null);
+    }
+    setViewIndex(pendingNotification.targetIndex);
+    setPendingNotification(null);
+  }, [pendingNotification, draftParentIndex]);
 
   // Trigger a one-sentence teaser about the tips shown in StatusBar
   const triggerTipsTeaser = useCallback(async (snapshotId: string, tips: Tip[]) => {
@@ -1248,6 +1272,11 @@ export default function Editor({
             cacheImage(`snap:${snapId}`, imageData);
             fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
             setAgentStatus(t('status.imageGenerated'));
+            // If user is not on the new snapshot (e.g. viewing draft or earlier snapshot), show "See" button
+            const newSnapIdx = snapshotsRef.current.length; // index after setSnapshots adds it
+            if (draftParentIndexRef.current !== null || viewIndexRef.current !== newSnapIdx) {
+              setPendingNotification({ text: t('status.imageGenerated'), targetIndex: newSnapIdx });
+            }
             const id = currentMsgId;
             // Attach the last captured editPrompt and input images to the image message
             const capturedPrompt = lastEditPromptRef.current;
@@ -1889,6 +1918,9 @@ export default function Editor({
       const anim = animations.find(a => a.id === id);
       if (anim?.videoUrl) {
         setAgentStatus(t('status.videoDone'));
+        // Show "See" button to navigate to video — target is last snapshot (video appears after it)
+        const lastSnapIdx = snapshotsRef.current.length - 1;
+        setPendingNotification({ text: t('status.videoDone'), targetIndex: lastSnapIdx });
         const alreadyHasVideo = messages.some(m => m.content?.includes(anim.videoUrl!));
         if (!alreadyHasVideo) {
           const videoMsg: Message = {
@@ -1905,6 +1937,7 @@ export default function Editor({
   }, [animations, messages, onSaveMessage]);
 
   // Update StatusBar with video rendering progress
+  // (yields to sticky status for the else branch — active user actions like generating_prompt/submitting override)
   useEffect(() => {
     if (animationState?.status === 'generating_prompt') {
       setAgentStatus(t('status.writingScript'));
@@ -2368,6 +2401,8 @@ export default function Editor({
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
                   snapshotCount={snapshots.length}
+                  notification={pendingNotification}
+                  onSeeNotification={handleSeeNotification}
                   onAnimate={snapshots.length >= 1 ? () => {
                     if (hasAnyAnimation) {
                       setViewIndex(videoTimelineIndex);
