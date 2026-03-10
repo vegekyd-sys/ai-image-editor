@@ -3156,3 +3156,27 @@ T+60s     第一个 preview 返回
 ```
 
 **状态**：代码完成，未测试。
+
+---
+
+## 项目页导航 Prefetch 阻塞修复（2026-03-10）
+
+**问题**：首次登录后点击项目卡片，黑屏 20+ 秒才进入编辑器。
+
+**根因**：Next.js `<Link>` 默认 `prefetch={true}`，项目列表页 40+ 个卡片 → 80+ 个 RSC prefetch 请求（每个项目 2 轮）。浏览器 HTTP/2 同域名并发上限被占满，点击后真正的导航 RSC 请求排在队列末尾，等所有 prefetch 完成后才开始。
+
+**Chrome DevTools 实测数据**：
+
+| 指标 | 修复前 | 修复后 |
+|------|--------|--------|
+| RSC 请求数 | 21 个（20 prefetch + 1 导航） | 1 个（仅导航） |
+| 导航 RSC 耗时 | 排队等 ~21s 才开始 | 559ms 完成 |
+| 编辑器加载 | 30s 超时未完成 | 15s 内完成 |
+
+**修复**：`projects/page.tsx` ProjectCard 的 `<Link>` 加 `prefetch={false}`。
+
+**其他同批修复**：
+- PiP 默认位置改右下角（`AgentChatView.tsx` pipCorner `'bl'` → `'br'`）
+- Hero 动画终点同步改右下角（`Editor.tsx` openCUI toRect）
+- 项目页语言切换移到左上角固定位置
+- 项目页输入框支持拖拽图片（dragenter/dragover/drop handlers）

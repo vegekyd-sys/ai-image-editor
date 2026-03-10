@@ -575,7 +575,7 @@ export default function Editor({
       setHeroAnim({
         src,
         fromRect,
-        toRect: { l: PIP_M, t: window.innerHeight - (cuiInputBarH.current + 8) - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE },
+        toRect: { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - (cuiInputBarH.current + 8) - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE },
         fromImg: coverRect(side, side, ar), // unused (objectCover=true)
         toImg:   coverRect(PIP_SIZE, PIP_SIZE, ar), // unused
         fromRadius: '0px', toRadius: '16px',
@@ -586,7 +586,7 @@ export default function Editor({
         // By this frame CUI has mounted and ResizeObserver has fired —
         // recompute toRect with the accurate input bar height
         const PIP_BOTTOM = cuiInputBarH.current - 32 + 4; // mirror AgentChatView: inputBarH - gradient(32) + 4
-        const toRect = { l: PIP_M, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+        const toRect = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
         setHeroAnim(p => p ? { ...p, toRect, active: true } : null);
       }));
       setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);

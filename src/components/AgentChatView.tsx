@@ -145,7 +145,7 @@ export default function AgentChatView({
 
   const [pipSizeIndex, setPipSizeIndex] = useState<number>(1); // default lg
   const PIP = PIP_SIZES[pipSizeIndex];
-  const [pipCorner, setPipCorner] = useState<PipCorner>('bl');
+  const [pipCorner, setPipCorner] = useState<PipCorner>('br');
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
   const [pipHidden, setPipHidden] = useState(false);
   const [pipHiddenEdge, setPipHiddenEdge] = useState<'left' | 'right'>('right');

@@ -90,6 +90,8 @@ export default function ProjectsPage() {
 
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const dragCounterRef = useRef(0)
 
   const openActionSheet = useCallback((e: React.MouseEvent, project: ProjectWithSnapshots) => {
     e.stopPropagation()
@@ -408,6 +410,30 @@ export default function ProjectsPage() {
     }
   }, [user, creating, router, inputText, attachedFile, handleCreateProject])
 
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current = 0
+    setDragOver(false)
+    if (creating) return
+    const file = e.dataTransfer.files?.[0]
+    if (!file || !file.type.startsWith('image/')) return
+    if (isHeicFile(file)) {
+      setAttachedFile(file)
+      setAttachedPreview(null)
+      try {
+        const decodable = await ensureDecodableFile(file)
+        setAttachedFile(decodable)
+        setAttachedPreview(URL.createObjectURL(decodable))
+      } catch (err) {
+        console.warn('[HEIC preview] conversion failed:', err)
+        setAttachedPreview('heic-pending')
+      }
+    } else {
+      setAttachedFile(file)
+      setAttachedPreview(URL.createObjectURL(file))
+    }
+  }, [creating])
+
   if (authLoading || !user) {
     return (
       <div style={{ height: '100dvh', background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -527,9 +553,13 @@ export default function ProjectsPage() {
           }}
         />
 
-        {/* Top-right controls: language toggle + sign out */}
-        <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 10, display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Top-left: language toggle (fixed) */}
+        <div style={{ position: 'fixed', top: '20px', left: '20px', zIndex: 10 }}>
           <LocaleToggle />
+        </div>
+
+        {/* Top-right: sign out */}
+        <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 10, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             onClick={() => signOut()}
             style={{
@@ -597,13 +627,22 @@ export default function ProjectsPage() {
 
           {/* Create input: [photo] + [textarea] */}
           <div style={{ marginTop: '32px', width: '100%', padding: '0 16px', maxWidth: '480px' }}>
-            <div ref={inputBoxRef} className="mkr-input-box" style={{
-              display: 'flex', gap: 0,
-              borderRadius: 18,
-              border: '1px solid rgba(255,255,255,0.1)',
-              background: 'rgba(255,255,255,0.03)',
-              overflow: 'hidden',
-            }}>
+            <div
+              ref={inputBoxRef}
+              className="mkr-input-box"
+              onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+              onDragLeave={(e) => { e.preventDefault(); dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragOver(false) } }}
+              onDrop={handleDrop}
+              style={{
+                display: 'flex', gap: 0,
+                borderRadius: 18,
+                border: dragOver ? '1px solid rgba(217,70,239,0.6)' : '1px solid rgba(255,255,255,0.1)',
+                background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(255,255,255,0.03)',
+                overflow: 'hidden',
+                transition: 'border-color 0.2s, background 0.2s',
+              }}
+            >
               {/* Left: photo slot — square, width = container height */}
               <label
                 htmlFor="new-project-file-input"
@@ -901,6 +940,7 @@ function ProjectCard({
   return (
     <Link
       href={`/projects/${project.id}`}
+      prefetch={false}
       className="mkr-card mkr-row-enter"
       onClick={onNavigate}
       style={{
