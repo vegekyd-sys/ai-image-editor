@@ -553,13 +553,9 @@ export default function ProjectsPage() {
           }}
         />
 
-        {/* Top-left: language toggle (fixed) */}
-        <div style={{ position: 'fixed', top: '20px', left: '20px', zIndex: 10 }}>
+        {/* Top bar: language toggle (left) + sign out (right) */}
+        <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
           <LocaleToggle />
-        </div>
-
-        {/* Top-right: sign out */}
-        <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 10, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             onClick={() => signOut()}
             style={{

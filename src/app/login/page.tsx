@@ -181,7 +181,7 @@ export default function LoginPage() {
       }} />
 
       {/* Language toggle */}
-      <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 10 }}>
+      <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10 }}>
         <LocaleToggle />
       </div>
 
