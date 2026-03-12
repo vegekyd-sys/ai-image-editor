@@ -240,11 +240,11 @@ export default function LoginPage() {
               <button
                 onClick={handleInviteSubmit}
                 disabled={inviteLoading || !inviteCode.trim()}
-                className="w-full py-3.5 rounded-xl font-medium text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3.5 rounded-xl font-medium text-white transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 style={{
                   background: inviteCode.trim()
                     ? 'linear-gradient(to right, #c026d3, #9333ea)'
-                    : 'rgba(255,255,255,0.08)',
+                    : 'rgba(255,255,255,0.18)',
                   boxShadow: inviteCode.trim() ? '0 0 20px rgba(192,38,211,0.2)' : 'none',
                 }}
               >

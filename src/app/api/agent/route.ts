@@ -105,12 +105,8 @@ export async function POST(req: NextRequest) {
               return;
             }
             const tip = committedTip as { emoji: string; label: string; desc: string; category: string };
-            const siblings = (currentTips ?? []) as { emoji: string; label: string; desc: string; category: string }[];
-            const siblingContext = siblings.length > 0
-              ? `\n\nOther TipsBar suggestions:\n${siblings.map(t => `- ${t.emoji} ${t.label} (${t.category})`).join('\n')}`
-              : '';
             const reactionPrompt = withLocale(
-              `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}${siblingContext}\n\nReact naturally in 1-2 sentences, like a friend. If suggesting next steps, pick a specific one from the TipsBar suggestions above. Don't start with "I", don't copy tip names verbatim.`,
+              `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}\n\nReact naturally in 1 sentence, like a friend. Then in 1 short sentence, inspire what direction they could explore next with this photo (e.g. mood, lighting, story element) — but do NOT recommend specific tips. Don't start with "I".`,
               locale,
             );
             for await (const event of runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true, locale })) {

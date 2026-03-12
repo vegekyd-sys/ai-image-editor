@@ -1768,6 +1768,8 @@ export default function Editor({
   useEffect(() => {
     if (animationInitRef.current || !initialAnimations?.length) return;
     animationInitRef.current = true;
+    // Sync prevCompletedIdsRef so existing completed animations aren't treated as "newly completed"
+    prevCompletedIdsRef.current = new Set(initialAnimations.filter(a => a.status === 'completed').map(a => a.id));
     setAnimations(initialAnimations);
   }, [initialAnimations]);
 

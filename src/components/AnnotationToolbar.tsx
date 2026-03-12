@@ -141,19 +141,26 @@ export default function AnnotationToolbar({
             ref={inputRef}
             value={input}
             rows={1}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              // Auto-resize: reset height then set to scrollHeight
+              e.target.style.height = 'auto';
+              e.target.style.height = e.target.scrollHeight + 'px';
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && canSend) {
                 e.preventDefault();
                 onSend(input.trim(), attachedImage || undefined);
                 setInput('');
                 setAttachedImage(null);
+                // Reset height after send
+                e.currentTarget.style.height = 'auto';
               }
             }}
             placeholder={t('annotation.placeholder')}
             disabled={isSending}
-            className="flex-1 min-w-0 bg-transparent text-[15px] outline-none border-none leading-relaxed resize-none overflow-hidden block"
-            style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '5rem', padding: 0 }}
+            className="flex-1 min-w-0 bg-transparent text-[15px] outline-none border-none leading-relaxed resize-none overflow-y-auto block"
+            style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: 'calc(1.625em * 4 + 2px)', padding: 0 }}
           />
           <button
             onClick={() => { if (canSend) { onSend(input.trim(), attachedImage || undefined); setInput(''); setAttachedImage(null); } }}
