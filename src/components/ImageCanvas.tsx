@@ -669,92 +669,61 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Controls overlay */}
+            {/* Time badge — bottom-right, fades with controls */}
             {!videoError && (
               <div
-                className={`absolute bottom-0 left-0 right-0 z-20 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.18) 70%, transparent 100%)' }}
-                onPointerDown={(e) => e.stopPropagation()}
+                className={`absolute z-20 pointer-events-none transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
+                style={{ bottom: 14, right: 10 }}
+              >
+                <span
+                  className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
+                  style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}
+                >
+                  {formatTime(videoCurrentTime)}<span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>{formatTime(videoDuration)}
+                </span>
+              </div>
+            )}
+
+            {/* Seek bar — sits at canvas/tips boundary (bottom-0), always visible */}
+            {!videoError && (
+              <div
+                ref={seekBarRef}
+                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer"
+                style={{ height: 20, touchAction: 'none' }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  seekDragging.current = true;
+                  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                  doSeek(e.clientX);
+                  resetControlsTimer();
+                }}
+                onPointerMove={(e) => {
+                  if (!seekDragging.current) return;
+                  doSeek(e.clientX);
+                }}
+                onPointerUp={(e) => {
+                  seekDragging.current = false;
+                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                }}
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Seek bar */}
-                <div className="px-3 pt-3 pb-1">
-                  <div
-                    ref={seekBarRef}
-                    className="relative h-[18px] flex items-center cursor-pointer"
-                    style={{ touchAction: 'none' }}
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      seekDragging.current = true;
-                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                      doSeek(e.clientX);
-                      resetControlsTimer();
-                    }}
-                    onPointerMove={(e) => {
-                      if (!seekDragging.current) return;
-                      doSeek(e.clientX);
-                    }}
-                    onPointerUp={(e) => {
-                      seekDragging.current = false;
-                      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-                    }}
-                  >
-                    {/* Track background */}
-                    <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-white/20" />
-                    {/* Buffer track */}
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-white/35 left-0"
-                      style={{ width: `${videoBuffered * 100}%` }}
-                    />
-                    {/* Play progress */}
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-fuchsia-500 left-0"
-                      style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }}
-                    />
-                    {/* Seek handle */}
-                    <div
-                      className="absolute top-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-md"
-                      style={{
-                        left: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%`,
-                        transform: 'translate(-50%, -50%)',
-                      }}
-                    />
-                  </div>
+                {/* 2px visual track at very bottom */}
+                <div className="absolute bottom-0 left-0 right-0" style={{ height: 2 }}>
+                  <div className="absolute inset-0 bg-white/12" />
+                  <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${videoBuffered * 100}%` }} />
+                  <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }} />
                 </div>
-
-                {/* Controls row */}
-                <div className="flex items-center gap-2.5 px-3 pb-4">
-                  {/* Play/Pause */}
-                  <button
-                    className="w-8 h-8 flex items-center justify-center text-white cursor-pointer active:scale-90 transition-transform"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (videoPlaying) { videoRef.current?.pause(); }
-                      else { setVideoLoading(true); videoRef.current?.play(); }
-                    }}
-                  >
-                    {videoPlaying ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                        <rect x="5" y="4" width="4" height="16" rx="1" />
-                        <rect x="15" y="4" width="4" height="16" rx="1" />
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 10 10" fill="white">
-                        <polygon points="2,1 9,5 2,9" />
-                      </svg>
-                    )}
-                  </button>
-                  {/* Time */}
-                  <span className="text-white/70 tabular-nums select-none" style={{ fontSize: '0.69rem' }}>
-                    {formatTime(videoCurrentTime)}
-                    <span className="text-white/35 mx-0.5">/</span>
-                    {formatTime(videoDuration)}
-                  </span>
-                  {/* Buffer status dot (only while buffering) */}
-                  {videoLoading && !videoPlaying && (
-                    <span className="text-white/40 ml-auto" style={{ fontSize: '0.6rem' }}>缓冲中…</span>
-                  )}
-                </div>
+                {/* Subtle handle dot */}
+                <div
+                  className="absolute rounded-full bg-white/45"
+                  style={{
+                    width: 6, height: 6,
+                    bottom: -2,
+                    left: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%`,
+                    transform: 'translateX(-50%)',
+                  }}
+                />
               </div>
             )}
           </div>
