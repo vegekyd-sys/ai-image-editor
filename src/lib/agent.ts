@@ -2,7 +2,7 @@ import { streamText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
-import { generatePreviewImage, generateImageWithReferences } from './gemini';
+import { generatePreviewImage, generateImageWithReferences, ensureJpeg } from './gemini';
 import { createKlingTask } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
@@ -269,7 +269,8 @@ Parameters:
           });
 
           const resultBuf = Buffer.from(await result.arrayBuffer());
-          const resultBase64 = `data:image/jpeg;base64,${resultBuf.toString('base64')}`;
+          const rawBase64 = `data:image/png;base64,${resultBuf.toString('base64')}`;
+          const resultBase64 = await ensureJpeg(rawBase64);
 
           ctx.currentImage = resultBase64;
           ctx.generatedImages.push(resultBase64);

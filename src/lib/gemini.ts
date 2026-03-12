@@ -139,7 +139,7 @@ function getJsonFormatSuffix(locale?: string) {
 // ── Image Format Helpers ─────────────────────────────────────────
 
 /** Convert any image data URL to JPEG (quality 95). Pass-through if already JPEG or HTTP URL. */
-async function ensureJpeg(dataUrl: string): Promise<string> {
+export async function ensureJpeg(dataUrl: string): Promise<string> {
   if (!dataUrl.startsWith('data:image/') || dataUrl.startsWith('data:image/jpeg')) return dataUrl;
   const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
   const buf = Buffer.from(base64, 'base64');

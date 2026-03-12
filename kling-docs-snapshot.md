@@ -1,0 +1,745 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - link [ref=e6] [cursor=pointer]:
+          - /url: https://app.klingai.com/global
+          - img [ref=e7]
+        - generic [ref=e9]:
+          - link "Quick Start" [ref=e10] [cursor=pointer]:
+            - /url: /global/quickstart
+          - link "Blog" [ref=e11] [cursor=pointer]:
+            - /url: /global/blog
+      - link "Create now" [ref=e13] [cursor=pointer]:
+        - /url: https://app.klingai.com/global
+        - button "Create now" [ref=e14]:
+          - generic [ref=e15]: Create now
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - generic [ref=e19]: Kling VIDEO 3.0 Omni Model User Guide
+        - generic [ref=e20]: "VIDEO 3.0 Omni: All-in-One Multimodal Input, Voice-Driven Characters, Direct Audio-Visual Output, and Storyboarding Building on the Kling VIDEO O1 and Kling VIDEO 2.6, the Kling 3.0 Model Series leverage a deeply integrated unified model training framework, achieving more native multimodal input and output. It combines Native Audio with Element Consistency Control, and breaks through duration limits."
+        - generic [ref=e21]:
+          - img [ref=e22]
+          - generic [ref=e24]: Kling AI
+          - generic [ref=e25]: Feb 6, 2026
+          - generic [ref=e26]: 11 min read
+      - generic [ref=e27]:
+        - generic [ref=e29]:
+          - generic [ref=e32]:
+            - paragraph [ref=e33]
+            - generic [ref=e34]:
+              - generic [ref=e35]: 🎬
+              - generic [ref=e36]:
+                - paragraph [ref=e37]:
+                  - strong [ref=e39]: "VIDEO 3.0 Omni: All-in-One Multimodal Input, Voice-Driven Characters, Direct Audio-Visual Output, and Storyboarding"
+                - paragraph [ref=e40]:
+                  - strong [ref=e42]: Building on the Kling VIDEO O1 and Kling VIDEO 2.6, the Kling 3.0 Model Series leverage a deeply integrated unified model training framework, achieving more native multimodal input and output. It combines Native Audio with Element Consistency Control, and breaks through duration limits.
+                - paragraph [ref=e43]:
+                  - strong [ref=e45]: While supporting longer video generation (15s), the Kling 3.0 Model Series enables native audio-visual output and provides highly flexible storyboard control and more precise semantic response accuracy, bringing life to AI-generated visual content. Based on the next-generation unified multimodal large model, the Kling VIDEO 2.6 model has been upgraded to VIDEO 3.0, and the Kling VIDEO O1 model has been upgraded to VIDEO 3.0 Omni, bringing a comprehensive evolution in control and narrative power.
+                - paragraph [ref=e46]:
+                  - strong [ref=e47]: 🚀 To find out more, refer to 👉
+                  - link "Kling VIDEO 3.0 Model User Guide" [ref=e48] [cursor=pointer]:
+                    - /url: https://app.klingai.com/global/quickstart/klingai-video-3-model-user-guide
+                    - strong [ref=e49]: Kling VIDEO 3.0 Model User Guide
+            - heading "Kling VIDEO 3.0 Omni Capabilities Upgrade:" [level=1] [ref=e50]:
+              - strong [ref=e52]: "Kling VIDEO 3.0 Omni Capabilities Upgrade:"
+            - figure [ref=e53]:
+              - table [ref=e54]:
+                - rowgroup [ref=e60]:
+                  - row "Capabilities Kling VIDEO O1 Kling VIDEO 3.0 Omni" [ref=e61]:
+                    - cell "Capabilities" [ref=e62]:
+                      - paragraph [ref=e63]:
+                        - strong [ref=e65]: Capabilities
+                    - cell "Kling VIDEO O1" [ref=e66]:
+                      - paragraph [ref=e67]:
+                        - strong [ref=e69]: Kling VIDEO O1
+                    - cell "Kling VIDEO 3.0 Omni" [ref=e70]:
+                      - paragraph [ref=e71]:
+                        - strong [ref=e73]: Kling VIDEO 3.0 Omni
+                  - row "Text-to-Video No Native Audio, No Multi-shot ✅ Supports Native Audio and Multi-shot" [ref=e74]:
+                    - cell "Text-to-Video" [ref=e75]:
+                      - paragraph [ref=e76]: Text-to-Video
+                    - cell "No Native Audio, No Multi-shot" [ref=e77]:
+                      - paragraph [ref=e78]: No Native Audio, No Multi-shot
+                    - cell "✅ Supports Native Audio and Multi-shot" [ref=e79]:
+                      - paragraph [ref=e80]:
+                        - strong [ref=e82]: ✅ Supports Native Audio and Multi-shot
+                  - row "Image-to-Video" [ref=e83]:
+                    - cell "Image-to-Video" [ref=e84]:
+                      - paragraph [ref=e85]: Image-to-Video
+                  - row "Start & End Frames-to-Video" [ref=e86]:
+                    - cell "Start & End Frames-to-Video" [ref=e87]:
+                      - paragraph [ref=e88]: Start & End Frames-to-Video
+                  - row "Multi-image Reference" [ref=e89]:
+                    - cell "Multi-image Reference" [ref=e90]:
+                      - paragraph [ref=e91]: Multi-image Reference
+                  - row "Element Reference" [ref=e92]:
+                    - cell "Element Reference" [ref=e93]:
+                      - paragraph [ref=e94]: Element Reference
+                  - row "Video Element Reference Not supported ✅ Supports uploading/recording video elements" [ref=e95]:
+                    - cell "Video Element Reference" [ref=e96]:
+                      - paragraph [ref=e97]: Video Element Reference
+                    - cell "Not supported" [ref=e98]:
+                      - paragraph [ref=e99]: Not supported
+                    - cell "✅ Supports uploading/recording video elements" [ref=e100]:
+                      - paragraph [ref=e101]:
+                        - strong [ref=e103]: ✅ Supports uploading/recording video elements
+                  - row "Added Element Voice Control Not supported ✅ Supports adding voice to elements" [ref=e104]:
+                    - cell "Added Element Voice Control" [ref=e105]:
+                      - paragraph [ref=e106]: Added Element Voice Control
+                    - cell "Not supported" [ref=e107]:
+                      - paragraph [ref=e108]: Not supported
+                    - cell "✅ Supports adding voice to elements" [ref=e109]:
+                      - paragraph [ref=e110]:
+                        - strong [ref=e112]: ✅ Supports adding voice to elements
+                  - row "Video Duration Up to 10s ✅ Up to 15s" [ref=e113]:
+                    - cell "Video Duration" [ref=e114]:
+                      - paragraph [ref=e115]: Video Duration
+                    - cell "Up to 10s" [ref=e116]:
+                      - paragraph [ref=e117]: Up to 10s
+                    - cell "✅ Up to 15s" [ref=e118]:
+                      - paragraph [ref=e119]:
+                        - strong [ref=e121]: ✅ Up to 15s
+            - heading "Kling VIDEO 3.0 Omni New Capabilities Guide" [level=1] [ref=e122]:
+              - strong [ref=e124]: Kling VIDEO 3.0 Omni New Capabilities Guide
+            - paragraph [ref=e125]: Kling VIDEO 3.0 Omni enhances its understanding of input images and videos at the underlying level, enabling you to create elements using multi-angle images or a video featuring characters. By referencing images or elements, Kling 3.0 Omni can, like a human director, remember your main characters, items, and scenes. Regardless of how the camera moves, the element's features remain consistent, ensuring every frame is accurate and coherent.
+            - paragraph [ref=e126]: More importantly, Kling VIDEO 3.0 Omni possesses powerful harmonious integration capabilities. You can freely combine multiple elements or mix elements with reference images. In complex group scenes or interactive scenarios, the model can independently lock and maintain the features of each character or item. No matter how dramatically the scene changes, VIDEO 3.0 Omni ensures that each "main character" maintains industrial-grade consistency in every shot.
+            - 'heading "1. All-in-One Reference 3.0: Enhanced Consistency, More Responsive and Dynamic" [level=2] [ref=e127]':
+              - strong [ref=e129]: "1. All-in-One Reference 3.0: Enhanced Consistency, More Responsive and Dynamic"
+            - paragraph [ref=e130]:
+              - img [ref=e132] [cursor=pointer]
+            - paragraph [ref=e133]: Building on the capabilities of VIDEO O1 and leveraging the deep semantic understanding of the unified model, the images, videos, elements, and text you upload are all treated as prompts by VIDEO 3.0 Omni. The VIDEO 3.0 Omni Model breaks through modality limitations, comprehensively understanding any combination of photo, video, or element you upload, and accurately generating various video details.
+            - paragraph [ref=e134]: At the same time, compared to O1, VIDEO 3.0 Omni's reference-based generation has seen a significant improvement in element consistency. The model's responsiveness to text prompts has also drastically increased, resulting in fewer visual distortions. The overall output is more responsive, dynamic, and consistently high-quality, with each generation producing a mature, highly usable work.
+            - paragraph [ref=e135]:
+              - strong [ref=e137]: Showcases
+            - figure [ref=e138]:
+              - table [ref=e139]:
+                - rowgroup [ref=e144]:
+                  - row "Element/Reference Image Text Description Outputs" [ref=e145]:
+                    - cell "Element/Reference Image" [ref=e146]:
+                      - paragraph [ref=e147]:
+                        - strong [ref=e149]: Element/Reference Image
+                    - cell "Text Description" [ref=e150]:
+                      - paragraph [ref=e151]:
+                        - strong [ref=e153]: Text Description
+                    - cell "Outputs" [ref=e154]:
+                      - paragraph [ref=e155]:
+                        - strong [ref=e157]: Outputs
+                  - row "@Kling Lipstick @Image Pure black background. In the darkness, a river of color—matching the @Kling Lipstick shade—streaks across, leaving a rich, flawless trail. The trail then \"comes alive,\" flowing like liquid and elegantly spreading and blending on the surface to form patterned designs @Image. The color river then gathers into the lipstick bullet of @Kling Lipstick resting on water. Soft water surrounds it with budding flowers that slowly bloom, gentle ripples forming across the surface. 视频缩略图 播放视频" [ref=e158]:
+                    - cell "@Kling Lipstick @Image" [ref=e159]:
+                      - paragraph [ref=e160]: "@Kling Lipstick"
+                      - paragraph [ref=e161]:
+                        - generic [ref=e162]:
+                          - img [ref=e163] [cursor=pointer]
+                          - img [ref=e164] [cursor=pointer]
+                          - img [ref=e165] [cursor=pointer]
+                          - img [ref=e166] [cursor=pointer]
+                      - paragraph [ref=e167]: "@Image"
+                      - paragraph [ref=e168]:
+                        - img [ref=e170] [cursor=pointer]
+                    - cell "Pure black background. In the darkness, a river of color—matching the @Kling Lipstick shade—streaks across, leaving a rich, flawless trail. The trail then \"comes alive,\" flowing like liquid and elegantly spreading and blending on the surface to form patterned designs @Image. The color river then gathers into the lipstick bullet of @Kling Lipstick resting on water. Soft water surrounds it with budding flowers that slowly bloom, gentle ripples forming across the surface." [ref=e171]:
+                      - paragraph [ref=e172]: Pure black background. In the darkness, a river of color—matching the @Kling Lipstick shade—streaks across, leaving a rich, flawless trail. The trail then "comes alive," flowing like liquid and elegantly spreading and blending on the surface to form patterned designs @Image.
+                      - paragraph [ref=e173]: The color river then gathers into the lipstick bullet of @Kling Lipstick resting on water. Soft water surrounds it with budding flowers that slowly bloom, gentle ripples forming across the surface.
+                    - cell "视频缩略图 播放视频" [ref=e174]:
+                      - generic [ref=e176] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e177]
+                  - 'row "@Boxer A @Boxer B Scene-Rooftop Shot 1 (2s): Wide shot, @Boxer A and @Boxer B face off in the center of the rooftop, feet apart in a boxing stance. Shot 2 (2s): Both move in, testing each other up close: @Boxer A throws a quick punch, @Boxer B sidesteps and blocks. Shot 3 (3s): @Boxer A continues the attack, landing a punch on @Boxer B''s head, and @Boxer B retaliates. Shot 4 (4s): Wide shot, the two boxers continue their intense fight. Shot 5 (2s): A bird''s-eye view of the scene shows the two separated and having stopped fighting. 视频缩略图 播放视频" [ref=e178]':
+                    - cell "@Boxer A @Boxer B Scene-Rooftop" [ref=e179]:
+                      - paragraph [ref=e180]:
+                        - img [ref=e182] [cursor=pointer]
+                      - paragraph [ref=e183]: "@Boxer A"
+                      - paragraph [ref=e184]:
+                        - img [ref=e186] [cursor=pointer]
+                      - paragraph [ref=e187]: "@Boxer B"
+                      - paragraph [ref=e188]:
+                        - img [ref=e190] [cursor=pointer]
+                      - paragraph [ref=e191]: Scene-Rooftop
+                    - 'cell "Shot 1 (2s): Wide shot, @Boxer A and @Boxer B face off in the center of the rooftop, feet apart in a boxing stance. Shot 2 (2s): Both move in, testing each other up close: @Boxer A throws a quick punch, @Boxer B sidesteps and blocks. Shot 3 (3s): @Boxer A continues the attack, landing a punch on @Boxer B''s head, and @Boxer B retaliates. Shot 4 (4s): Wide shot, the two boxers continue their intense fight. Shot 5 (2s): A bird''s-eye view of the scene shows the two separated and having stopped fighting." [ref=e192]':
+                      - paragraph [ref=e193]: "Shot 1 (2s): Wide shot, @Boxer A and @Boxer B face off in the center of the rooftop, feet apart in a boxing stance."
+                      - paragraph [ref=e194]: "Shot 2 (2s): Both move in, testing each other up close: @Boxer A throws a quick punch, @Boxer B sidesteps and blocks."
+                      - paragraph [ref=e195]: "Shot 3 (3s): @Boxer A continues the attack, landing a punch on @Boxer B's head, and @Boxer B retaliates."
+                      - paragraph [ref=e196]: "Shot 4 (4s): Wide shot, the two boxers continue their intense fight."
+                      - paragraph [ref=e197]: "Shot 5 (2s): A bird's-eye view of the scene shows the two separated and having stopped fighting."
+                    - cell "视频缩略图 播放视频" [ref=e198]:
+                      - generic [ref=e200] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e201]
+                  - row "@Male Protagonist @Female Protagonist Long take. On a windy day in an Icelandic mountain range, @Male Protagonist says with a barely contained smile, \"Do you think our wedding is too simple—like there's no one here to bless us?\" The camera circles the subjects to reveal @Female Protagonist standing opposite, smiling and replying, \"The wind—the wind is their blessing to us.\" Cinematic, handheld feel. 视频缩略图 播放视频 From Kling AI Creative Partner @FOS" [ref=e202]:
+                    - cell "@Male Protagonist @Female Protagonist" [ref=e203]:
+                      - paragraph [ref=e204]: "@Male Protagonist"
+                      - paragraph [ref=e205]:
+                        - generic [ref=e206]:
+                          - img [ref=e207] [cursor=pointer]
+                          - img [ref=e208] [cursor=pointer]
+                          - img [ref=e209] [cursor=pointer]
+                      - paragraph [ref=e210]: "@Female Protagonist"
+                      - paragraph [ref=e211]:
+                        - generic [ref=e212]:
+                          - img [ref=e213] [cursor=pointer]
+                          - img [ref=e214] [cursor=pointer]
+                      - paragraph [ref=e215]:
+                        - generic [ref=e216]:
+                          - img [ref=e217] [cursor=pointer]
+                          - img [ref=e218] [cursor=pointer]
+                    - cell "Long take. On a windy day in an Icelandic mountain range, @Male Protagonist says with a barely contained smile, \"Do you think our wedding is too simple—like there's no one here to bless us?\" The camera circles the subjects to reveal @Female Protagonist standing opposite, smiling and replying, \"The wind—the wind is their blessing to us.\" Cinematic, handheld feel." [ref=e219]:
+                      - paragraph [ref=e220]: Long take. On a windy day in an Icelandic mountain range, @Male Protagonist says with a barely contained smile, "Do you think our wedding is too simple—like there's no one here to bless us?"
+                      - paragraph [ref=e221]: The camera circles the subjects to reveal @Female Protagonist standing opposite, smiling and replying, "The wind—the wind is their blessing to us."
+                      - paragraph [ref=e222]: Cinematic, handheld feel.
+                    - cell "视频缩略图 播放视频 From Kling AI Creative Partner @FOS" [ref=e223]:
+                      - paragraph [ref=e224]
+                      - generic [ref=e226] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e227]
+                      - paragraph [ref=e228]: From Kling AI Creative Partner @FOS
+            - 'heading "2. Elements 3.0: Video-Character Reference with Visual & Audio Capture" [level=2] [ref=e229]':
+              - strong [ref=e231]: "2. Elements 3.0: Video-Character Reference with Visual & Audio Capture"
+            - paragraph [ref=e232]:
+              - generic [ref=e233]:
+                - strong [ref=e234]: 3.0 Omni adds "Voice" to the element
+                - text: ", allowing you to bind a unique voice to a character, ensuring they not only \"look the same\" but also \"sound the same\" across different videos, scenes, and shots. Whether it's speech, dialogue, or narration, 3.0 Omni ensures the voice perfectly matches the character's personality, creating truly reusable"
+                - strong [ref=e235]: "\"Character Assets with Voice\""
+                - text: .
+            - paragraph [ref=e236]
+            - paragraph [ref=e237]:
+              - strong [ref=e239]: Element building now supports video character reference for consistency across visual and audio characteristics
+            - paragraph [ref=e240]
+            - paragraph [ref=e241]:
+              - generic [ref=e242]:
+                - text: Simply upload or record a 3-8 second video featuring the character, and the model will extract core
+                - strong [ref=e243]: character traits
+                - text: and the
+                - strong [ref=e244]: original voice
+                - text: ", perfectly preserving the appearance and the entire likeliness. On the app, experience the thrill of becoming the character of your story simply by recording yourself. Whether you're traveling across galaxies or performing in a short drama, the model is able to achieve maximum consistency with video reference for the character. If you don't like the original voice, you can upload a clear voice recording to modify it."
+            - paragraph [ref=e245]:
+              - img [ref=e247] [cursor=pointer]
+            - figure [ref=e248]:
+              - table [ref=e249]:
+                - rowgroup [ref=e254]:
+                  - row "Element/Reference Image Prompt Outputs" [ref=e255]:
+                    - cell "Element/Reference Image" [ref=e256]:
+                      - paragraph [ref=e257]:
+                        - strong [ref=e259]: Element/Reference Image
+                    - cell "Prompt" [ref=e260]:
+                      - paragraph [ref=e261]:
+                        - strong [ref=e263]: Prompt
+                    - cell "Outputs" [ref=e264]:
+                      - paragraph [ref=e265]:
+                        - strong [ref=e267]: Outputs
+                  - 'row "@Grace 视频缩略图 播放视频 @Alan 视频缩略图 播放视频 @Samoyed @Image Shot 1 (3s): Mid-shot, background @Image. @Grace sits on the sofa eating cookies as @Alan walks in holding @Samoyed. @Samoyed lunges for the cookie in @Grace''s hand. @Grace says, “Hey! Watch your dog!” Shot 2 (2s): @Alan sits beside her, pulling the leash and lifting @Samoyed. Close-up, @Alan says, “He just likes cookies more than me.” Shot 3 (3s): Close-up, @Grace smiles and says, “Well, he has good taste at least.” 视频缩略图 播放视频" [ref=e268]':
+                    - cell "@Grace 视频缩略图 播放视频 @Alan 视频缩略图 播放视频 @Samoyed @Image" [ref=e269]:
+                      - paragraph [ref=e270]: "@Grace"
+                      - generic [ref=e272] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e273]
+                      - paragraph [ref=e274]: "@Alan"
+                      - generic [ref=e276] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e277]
+                      - paragraph [ref=e278]: "@Samoyed"
+                      - paragraph [ref=e279]:
+                        - generic [ref=e280]:
+                          - img [ref=e281] [cursor=pointer]
+                          - img [ref=e282] [cursor=pointer]
+                          - img [ref=e283] [cursor=pointer]
+                      - paragraph [ref=e284]: "@Image"
+                      - paragraph [ref=e285]:
+                        - img [ref=e286] [cursor=pointer]
+                    - 'cell "Shot 1 (3s): Mid-shot, background @Image. @Grace sits on the sofa eating cookies as @Alan walks in holding @Samoyed. @Samoyed lunges for the cookie in @Grace''s hand. @Grace says, “Hey! Watch your dog!” Shot 2 (2s): @Alan sits beside her, pulling the leash and lifting @Samoyed. Close-up, @Alan says, “He just likes cookies more than me.” Shot 3 (3s): Close-up, @Grace smiles and says, “Well, he has good taste at least.”" [ref=e287]':
+                      - paragraph [ref=e288]: "Shot 1 (3s): Mid-shot, background @Image. @Grace sits on the sofa eating cookies as @Alan walks in holding @Samoyed. @Samoyed lunges for the cookie in @Grace's hand. @Grace says, “Hey! Watch your dog!” Shot 2 (2s): @Alan sits beside her, pulling the leash and lifting @Samoyed. Close-up, @Alan says, “He just likes cookies more than me.” Shot 3 (3s): Close-up, @Grace smiles and says, “Well, he has good taste at least.”"
+                    - cell "视频缩略图 播放视频" [ref=e289]:
+                      - paragraph [ref=e290]
+                      - generic [ref=e292] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e293]
+                  - 'row "@Shirt Boy 视频缩略图 播放视频 @Image1 Mid-shot, front view: @Shirt Boy walks down the slope and sits by the pole in @image. Close-up, face: @Shirt Boy leans against the pole and says, “Today''s wind feels softer than yesterday… even the grass feels gentle.” Cinematic look @image1. Side close-up, face: @Shirt Boy closes his eyes as sunlight softly falls on his face. Top-down shot: @Shirt Boy lies back, grass covering his shirt, arms behind his head, gazing at the blue sky, saying, “I hope this kind of summer never ends.” 视频缩略图 播放视频" [ref=e294]':
+                    - cell "@Shirt Boy 视频缩略图 播放视频 @Image1" [ref=e295]:
+                      - paragraph [ref=e296]: "@Shirt Boy"
+                      - generic [ref=e298] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e299]
+                      - paragraph [ref=e300]: "@Image1"
+                      - paragraph [ref=e301]:
+                        - img [ref=e303] [cursor=pointer]
+                    - 'cell "Mid-shot, front view: @Shirt Boy walks down the slope and sits by the pole in @image. Close-up, face: @Shirt Boy leans against the pole and says, “Today''s wind feels softer than yesterday… even the grass feels gentle.” Cinematic look @image1. Side close-up, face: @Shirt Boy closes his eyes as sunlight softly falls on his face. Top-down shot: @Shirt Boy lies back, grass covering his shirt, arms behind his head, gazing at the blue sky, saying, “I hope this kind of summer never ends.”" [ref=e304]':
+                      - paragraph [ref=e305]: "Mid-shot, front view: @Shirt Boy walks down the slope and sits by the pole in @image."
+                      - paragraph [ref=e306]: "Close-up, face: @Shirt Boy leans against the pole and says, “Today's wind feels softer than yesterday… even the grass feels gentle.” Cinematic look @image1. Side close-up, face: @Shirt Boy closes his eyes as sunlight softly falls on his face. Top-down shot: @Shirt Boy lies back, grass covering his shirt, arms behind his head, gazing at the blue sky, saying, “I hope this kind of summer never ends.”"
+                    - cell "视频缩略图 播放视频" [ref=e307]:
+                      - generic [ref=e309] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e310]
+            - paragraph [ref=e311]:
+              - strong [ref=e313]: Character-Based Multi-Image Elements Support Adding Voice
+            - paragraph [ref=e314]: VIDEO O1 supports creating multi-angle multi-image elements. In the new VIDEO 3.0 Omni, while creating multi-image elements, you can also upload a voice recording of ≥3s to extract the voice tone, giving the silent subject its own voice. This enables more precise lip-syncing and expression-driven performance, creating a more compelling audio-visual experience.
+            - paragraph [ref=e315]:
+              - img [ref=e317] [cursor=pointer]
+            - figure [ref=e318]:
+              - table [ref=e319]:
+                - rowgroup [ref=e324]:
+                  - row "Element/Reference Image Prompt Outputs" [ref=e325]:
+                    - cell "Element/Reference Image" [ref=e326]:
+                      - paragraph [ref=e327]:
+                        - strong [ref=e329]: Element/Reference Image
+                    - cell "Prompt" [ref=e330]:
+                      - paragraph [ref=e331]:
+                        - strong [ref=e333]: Prompt
+                    - cell "Outputs" [ref=e334]:
+                      - paragraph [ref=e335]:
+                        - strong [ref=e337]: Outputs
+                  - 'row "@Little Scholar @Reference Image Shot 1 (3s): Close-up on the comedy open-mic stage @Reference Image, with a large retro neon \"KLING\" sign in the background. Warm golden backlight outlines the scene. The camera follows the performer as they walk to the microphone, lightly adjusting its height. Shot 2 (4s): Mid-close shot of @Little Scholar, who says, “我居然输给了 Kid，他上过几天班呀，教大家如何快乐上班” Shot 3 (4s): @Little Scholar with a restrained, slight smile, naturally pausing, saying, “你听听，花 5 分钟，论证了这么个伪命题” Shot 4 (2s): Switch to the audience laughing loudly. 视频缩略图 播放视频" [ref=e338]':
+                    - cell "@Little Scholar @Reference Image" [ref=e339]:
+                      - paragraph [ref=e340]: "@Little Scholar"
+                      - paragraph [ref=e341]:
+                        - generic [ref=e342]:
+                          - img [ref=e343] [cursor=pointer]
+                          - img [ref=e344] [cursor=pointer]
+                          - img [ref=e345] [cursor=pointer]
+                          - img [ref=e346] [cursor=pointer]
+                      - paragraph [ref=e347]: "@Reference Image"
+                      - paragraph [ref=e348]:
+                        - img [ref=e349] [cursor=pointer]
+                    - 'cell "Shot 1 (3s): Close-up on the comedy open-mic stage @Reference Image, with a large retro neon \"KLING\" sign in the background. Warm golden backlight outlines the scene. The camera follows the performer as they walk to the microphone, lightly adjusting its height. Shot 2 (4s): Mid-close shot of @Little Scholar, who says, “我居然输给了 Kid，他上过几天班呀，教大家如何快乐上班” Shot 3 (4s): @Little Scholar with a restrained, slight smile, naturally pausing, saying, “你听听，花 5 分钟，论证了这么个伪命题” Shot 4 (2s): Switch to the audience laughing loudly." [ref=e350]':
+                      - paragraph [ref=e351]:
+                        - generic [ref=e352]:
+                          - text: "Shot 1 (3s): Close-up on the comedy open-mic stage @Reference Image, with a large retro neon \"KLING\" sign in the background. Warm golden backlight outlines the scene. The camera follows the performer as they walk to the microphone, lightly adjusting its height. Shot 2 (4s): Mid-close shot of @Little Scholar, who says, “"
+                          - strong [ref=e353]: 我居然输给了 Kid，他上过几天班呀，教大家如何快乐上班
+                          - text: "” Shot 3 (4s): @Little Scholar with a restrained, slight smile, naturally pausing, saying, “"
+                          - strong [ref=e354]: 你听听，花 5 分钟，论证了这么个伪命题
+                          - text: "” Shot 4 (2s): Switch to the audience laughing loudly."
+                    - cell "视频缩略图 播放视频" [ref=e355]:
+                      - paragraph [ref=e356]
+                      - paragraph [ref=e357]
+                      - generic [ref=e359] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e360]
+                  - row "@Explorer Audio @Explorer is live, welcoming everyone to her world. She says, \"Do you know what the most interesting thing in the world is? It's going on an adventure with me! The next stop is the Atlantic Ocean!\" Cut to a panoramic view of the Atlantic, where @Explorer is steering through a storm. 视频缩略图 播放视频" [ref=e361]:
+                    - cell "@Explorer Audio" [ref=e362]:
+                      - paragraph [ref=e363]: "@Explorer"
+                      - paragraph [ref=e364]:
+                        - generic [ref=e365]:
+                          - img [ref=e366] [cursor=pointer]
+                          - img [ref=e367] [cursor=pointer]
+                          - img [ref=e368] [cursor=pointer]
+                      - paragraph [ref=e369]: Audio
+                      - paragraph [ref=e370]
+                    - cell "@Explorer is live, welcoming everyone to her world. She says, \"Do you know what the most interesting thing in the world is? It's going on an adventure with me! The next stop is the Atlantic Ocean!\" Cut to a panoramic view of the Atlantic, where @Explorer is steering through a storm." [ref=e371]:
+                      - paragraph [ref=e372]: "@Explorer is live, welcoming everyone to her world. She says, \"Do you know what the most interesting thing in the world is? It's going on an adventure with me! The next stop is the Atlantic Ocean!\" Cut to a panoramic view of the Atlantic, where @Explorer is steering through a storm."
+                    - cell "视频缩略图 播放视频" [ref=e373]:
+                      - generic [ref=e375] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e376]
+                  - 'row "@Sculpture @Image Top-down wide shot: @Sculpture stands at the center of @image. Mid-shot, side view: The camera circles around @Sculpture once. Close-up: @Sculpture''s hand moves slightly. Close-up, face: @Sculpture says, “I''m back.” 视频缩略图 播放视频" [ref=e377]':
+                    - cell "@Sculpture @Image" [ref=e378]:
+                      - paragraph [ref=e379]: "@Sculpture"
+                      - paragraph [ref=e380]:
+                        - generic [ref=e381]:
+                          - img [ref=e382] [cursor=pointer]
+                          - img [ref=e383] [cursor=pointer]
+                          - img [ref=e384] [cursor=pointer]
+                      - paragraph [ref=e385]: "@Image"
+                      - paragraph [ref=e386]:
+                        - img [ref=e388] [cursor=pointer]
+                    - 'cell "Top-down wide shot: @Sculpture stands at the center of @image. Mid-shot, side view: The camera circles around @Sculpture once. Close-up: @Sculpture''s hand moves slightly. Close-up, face: @Sculpture says, “I''m back.”" [ref=e389]':
+                      - paragraph [ref=e390]: "Top-down wide shot: @Sculpture stands at the center of @image."
+                      - paragraph [ref=e391]: "Mid-shot, side view: The camera circles around @Sculpture once."
+                      - paragraph [ref=e392]: "Close-up: @Sculpture's hand moves slightly. Close-up, face: @Sculpture says, “I'm back.”"
+                    - cell "视频缩略图 播放视频" [ref=e393]:
+                      - generic [ref=e395] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e396]
+            - paragraph [ref=e397]:
+              - strong [ref=e399]: Elements Creation
+            - figure [ref=e400]:
+              - table [ref=e401]:
+                - rowgroup [ref=e406]:
+                  - row "Record Video to Create a Character Element (App Only)" [ref=e407]:
+                    - cell "Record Video to Create a Character Element (App Only)" [ref=e408]:
+                      - paragraph [ref=e409]:
+                        - strong [ref=e411]: Record Video to Create a Character Element (App Only)
+                  - row "Tap to record a character video and enter the recording process to start creating a video subject. Follow on-screen guidance to complete voice recording and multi-angle capture. Fill in the subject's voice tone, name, and description to complete creation." [ref=e412]:
+                    - cell "Tap to record a character video and enter the recording process to start creating a video subject." [ref=e413]:
+                      - paragraph [ref=e414]: Tap to record a character video and enter the recording process to start creating a video subject.
+                    - cell "Follow on-screen guidance to complete voice recording and multi-angle capture." [ref=e415]:
+                      - paragraph [ref=e416]: Follow on-screen guidance to complete voice recording and multi-angle capture.
+                    - cell "Fill in the subject's voice tone, name, and description to complete creation." [ref=e417]:
+                      - paragraph [ref=e418]: Fill in the subject's voice tone, name, and description to complete creation.
+                  - row "kim image" [ref=e419]:
+                    - cell "kim image" [ref=e420]:
+                      - paragraph [ref=e421]:
+                        - img "kim image" [ref=e423] [cursor=pointer]
+                    - cell [ref=e424]:
+                      - paragraph [ref=e425]:
+                        - img [ref=e427] [cursor=pointer]
+                    - cell [ref=e428]:
+                      - paragraph [ref=e429]:
+                        - img [ref=e431] [cursor=pointer]
+                  - row "Upload Video to Create a Character Element" [ref=e432]:
+                    - cell "Upload Video to Create a Character Element" [ref=e433]:
+                      - paragraph [ref=e434]:
+                        - strong [ref=e436]: Upload Video to Create a Character Element
+                  - row "Upload a video to start creating the subject. Trim the video to an appropriate length; clips with multi-angle character views are recommended. Fill in the subject's voice tone, name, and description to complete creation." [ref=e437]:
+                    - cell "Upload a video to start creating the subject." [ref=e438]:
+                      - paragraph [ref=e439]: Upload a video to start creating the subject.
+                    - cell "Trim the video to an appropriate length; clips with multi-angle character views are recommended." [ref=e440]:
+                      - paragraph [ref=e441]: Trim the video to an appropriate length; clips with multi-angle character views are recommended.
+                    - cell "Fill in the subject's voice tone, name, and description to complete creation." [ref=e442]:
+                      - paragraph [ref=e443]: Fill in the subject's voice tone, name, and description to complete creation.
+                  - row "kim image kim image kim image" [ref=e444]:
+                    - cell "kim image" [ref=e445]:
+                      - paragraph [ref=e446]:
+                        - generic [ref=e447]:
+                          - img [ref=e448] [cursor=pointer]
+                          - img "kim image" [ref=e449] [cursor=pointer]
+                    - cell "kim image" [ref=e450]:
+                      - paragraph [ref=e451]:
+                        - generic [ref=e452]:
+                          - img [ref=e453] [cursor=pointer]
+                          - img "kim image" [ref=e454] [cursor=pointer]
+                    - cell "kim image" [ref=e455]:
+                      - paragraph [ref=e456]:
+                        - generic [ref=e457]:
+                          - img [ref=e458] [cursor=pointer]
+                          - img "kim image" [ref=e459] [cursor=pointer]
+                  - row "Bind a Voice to Character-Based Multi-Image Subjects" [ref=e460]:
+                    - cell "Bind a Voice to Character-Based Multi-Image Subjects" [ref=e461]:
+                      - paragraph [ref=e462]:
+                        - strong [ref=e464]: Bind a Voice to Character-Based Multi-Image Subjects
+                  - row ". kim image" [ref=e465]:
+                    - cell ". kim image" [ref=e466]:
+                      - paragraph [ref=e467]:
+                        - generic [ref=e468]:
+                          - img [ref=e469] [cursor=pointer]
+                          - text: .
+                          - img "kim image" [ref=e470] [cursor=pointer]
+                  - row "After uploading a front-facing reference image, a voice selection option appears for character subjects. You can upload a video to extract a voice or choose an existing one. Once created, the voice is bound to the subject and does not need to be specified again in the input field." [ref=e471]:
+                    - cell "After uploading a front-facing reference image, a voice selection option appears for character subjects. You can upload a video to extract a voice or choose an existing one. Once created, the voice is bound to the subject and does not need to be specified again in the input field." [ref=e472]:
+                      - list [ref=e473]:
+                        - listitem [ref=e474]: After uploading a front-facing reference image, a voice selection option appears for character subjects.
+                        - listitem [ref=e475]: You can upload a video to extract a voice or choose an existing one.
+                        - listitem [ref=e476]: Once created, the voice is bound to the subject and does not need to be specified again in the input field.
+            - 'heading "3. Storyboard Narration 3.0: Free Duration, Custom Shots, 15s Generation with Precise Control" [level=2] [ref=e477]':
+              - strong [ref=e479]: "3. Storyboard Narration 3.0: Free Duration, Custom Shots, 15s Generation with Precise Control"
+            - paragraph [ref=e480]:
+              - img [ref=e482] [cursor=pointer]
+            - paragraph [ref=e483]:
+              - img [ref=e485] [cursor=pointer]
+            - paragraph [ref=e486]: In VIDEO O1, you can freely generate between 3-10 seconds. In VIDEO 3.0 and 3.0 Omni, we've maintained the free duration control and introduced native Custom Multi-Shot capabilities, increasing the single-generation duration to 15 seconds.
+            - paragraph [ref=e487]: Now, you can have precise control at the shot level, specifying the duration, framing, angle, narrative content, camera movement, and more, ensuring smooth transitions between shots.
+            - paragraph [ref=e488]: With a single generation, you can create a well-paced, structurally complete multi-shot narrative, making every second of the video perfectly align with your vision.
+            - paragraph [ref=e489]:
+              - strong [ref=e491]: Showcases
+            - figure [ref=e492]:
+              - table [ref=e493]:
+                - rowgroup [ref=e498]:
+                  - row "Element/Reference Image Prompt Outputs" [ref=e499]:
+                    - cell "Element/Reference Image" [ref=e500]:
+                      - paragraph [ref=e501]:
+                        - strong [ref=e503]: Element/Reference Image
+                    - cell "Prompt" [ref=e504]:
+                      - paragraph [ref=e505]:
+                        - strong [ref=e507]: Prompt
+                    - cell "Outputs" [ref=e508]:
+                      - paragraph [ref=e509]:
+                        - strong [ref=e511]: Outputs
+                  - 'row "视频缩略图 播放视频 @Mike 视频缩略图 播放视频 @Cindy @Image Shot 1 (1s): Mike and Cindy sit face to face on the seats of an old green train, the train moving forward. Shot 2 (2s): Cut to a close-up of Cindy''s profile. She rests her chin on her hand, looking out the window, asking, \"Where are we about to go?\" Shot 3 (3s): Cut to a close-up of Mike''s face. He looks at Cindy and says, \"We are about to go to a place where it is summer all year round.\" Shot 4 (2s): Cut to Cindy turning around, looking at Mike, smiling and nodding, saying, \"I love summer.\" Shot 5 (2s): Cut to a wide shot of the two facing each other, smiling at one another. 视频缩略图 播放视频" [ref=e512]':
+                    - cell "视频缩略图 播放视频 @Mike 视频缩略图 播放视频 @Cindy @Image" [ref=e513]:
+                      - generic [ref=e515] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e516]
+                      - paragraph [ref=e517]: "@Mike"
+                      - generic [ref=e519] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e520]
+                      - paragraph [ref=e521]: "@Cindy"
+                      - paragraph [ref=e522]:
+                        - img [ref=e523] [cursor=pointer]
+                      - paragraph [ref=e524]: "@Image"
+                    - 'cell "Shot 1 (1s): Mike and Cindy sit face to face on the seats of an old green train, the train moving forward. Shot 2 (2s): Cut to a close-up of Cindy''s profile. She rests her chin on her hand, looking out the window, asking, \"Where are we about to go?\" Shot 3 (3s): Cut to a close-up of Mike''s face. He looks at Cindy and says, \"We are about to go to a place where it is summer all year round.\" Shot 4 (2s): Cut to Cindy turning around, looking at Mike, smiling and nodding, saying, \"I love summer.\" Shot 5 (2s): Cut to a wide shot of the two facing each other, smiling at one another." [ref=e525]':
+                      - paragraph [ref=e526]: "Shot 1 (1s): Mike and Cindy sit face to face on the seats of an old green train, the train moving forward."
+                      - paragraph [ref=e527]: "Shot 2 (2s): Cut to a close-up of Cindy's profile. She rests her chin on her hand, looking out the window, asking, \"Where are we about to go?\""
+                      - paragraph [ref=e528]: "Shot 3 (3s): Cut to a close-up of Mike's face. He looks at Cindy and says, \"We are about to go to a place where it is summer all year round.\""
+                      - paragraph [ref=e529]: "Shot 4 (2s): Cut to Cindy turning around, looking at Mike, smiling and nodding, saying, \"I love summer.\""
+                      - paragraph [ref=e530]: "Shot 5 (2s): Cut to a wide shot of the two facing each other, smiling at one another."
+                    - cell "视频缩略图 播放视频" [ref=e531]:
+                      - generic [ref=e533] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e534]
+                  - 'row "@Element1 @Element2 Shot 1 (3s): Wide shot. A neon-lit street corner late at night, wet pavement reflecting lights. @Element1 leans against a red phone booth, smoking, with strong motion blur. Shot 2 (2s): Cut to close-up. @Element1''s profile is half-hidden in shadow. He looks down and asks, “You still haven''t decided which road to take?” Shot 3 (4s): Cut to close-up of @Element2—lips and swaying earrings. She flips a coin and says, “I heard there''s a place where people never ask for directions.” Shot 4 (3s): Cut to mid-shot. @Element1 lets out a self-mocking smile, exhales smoke that obscures his face, and says, “A place like that must be lonely.” Shot 5 (3s): Cut to long shot. @Element1 and @Element2 face each other, blurred headlights flowing between them. City noise drops to silence as they slowly fade into the glow. 视频缩略图 播放视频" [ref=e535]':
+                    - cell "@Element1 @Element2" [ref=e536]:
+                      - paragraph [ref=e537]: "@Element1"
+                      - paragraph [ref=e538]:
+                        - img [ref=e540] [cursor=pointer]
+                      - paragraph [ref=e541]: "@Element2"
+                      - paragraph [ref=e542]:
+                        - img [ref=e544] [cursor=pointer]
+                    - 'cell "Shot 1 (3s): Wide shot. A neon-lit street corner late at night, wet pavement reflecting lights. @Element1 leans against a red phone booth, smoking, with strong motion blur. Shot 2 (2s): Cut to close-up. @Element1''s profile is half-hidden in shadow. He looks down and asks, “You still haven''t decided which road to take?” Shot 3 (4s): Cut to close-up of @Element2—lips and swaying earrings. She flips a coin and says, “I heard there''s a place where people never ask for directions.” Shot 4 (3s): Cut to mid-shot. @Element1 lets out a self-mocking smile, exhales smoke that obscures his face, and says, “A place like that must be lonely.” Shot 5 (3s): Cut to long shot. @Element1 and @Element2 face each other, blurred headlights flowing between them. City noise drops to silence as they slowly fade into the glow." [ref=e545]':
+                      - paragraph [ref=e546]: "Shot 1 (3s): Wide shot. A neon-lit street corner late at night, wet pavement reflecting lights. @Element1 leans against a red phone booth, smoking, with strong motion blur."
+                      - paragraph [ref=e547]: "Shot 2 (2s): Cut to close-up. @Element1's profile is half-hidden in shadow. He looks down and asks, “You still haven't decided which road to take?”"
+                      - paragraph [ref=e548]: "Shot 3 (4s): Cut to close-up of @Element2—lips and swaying earrings. She flips a coin and says, “I heard there's a place where people never ask for directions.”"
+                      - paragraph [ref=e549]: "Shot 4 (3s): Cut to mid-shot. @Element1 lets out a self-mocking smile, exhales smoke that obscures his face, and says, “A place like that must be lonely.”"
+                      - paragraph [ref=e550]: "Shot 5 (3s): Cut to long shot. @Element1 and @Element2 face each other, blurred headlights flowing between them. City noise drops to silence as they slowly fade into the glow."
+                    - cell "视频缩略图 播放视频" [ref=e551]:
+                      - generic [ref=e553] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e554]
+                  - row [ref=e555]:
+                    - cell "@Image @Goro @Kaiko" [ref=e556]:
+                      - paragraph [ref=e557]: "@Image"
+                      - paragraph [ref=e558]:
+                        - img [ref=e560] [cursor=pointer]
+                      - paragraph [ref=e561]: "@Goro"
+                      - paragraph [ref=e562]:
+                        - img [ref=e564] [cursor=pointer]
+                      - paragraph [ref=e565]: "@Kaiko"
+                      - paragraph [ref=e566]:
+                        - img [ref=e568] [cursor=pointer]
+                      - paragraph [ref=e569]
+                    - cell [ref=e570]:
+                      - paragraph [ref=e571]: "[00:00 - 00:02] Medium shot:"
+                      - paragraph [ref=e572]: "@Goro, gestures emphatically with a lit cigarette walking towards a locker, smoke curling around his hand as he punctuates each beat of his point. Audio: The faint, organic crackle of the cigarette tip under his words."
+                      - paragraph [ref=e573]: "[00:02 - 00:04] Close-up:"
+                      - paragraph [ref=e574]: "@Goro weathered face fills the frame—eyes wide, intensity sharpened, jaw working as he speaks like he's carving the truth into the air. Audio: Cigarette crackle continues; room tone low and tight."
+                      - paragraph [ref=e575]: "[00:04 - 00:06] Cutaway:"
+                      - paragraph [ref=e576]: "@Kaiko, a young woman with a blonde buzzcut and a scar on her eyebrow, looks down at her athletic-taped hands—stoic, absorbing, refusing to react. Audio: Crackle softens slightly; her breath is barely audible."
+                      - paragraph [ref=e577]: "[00:06 - 00:08] Close-up: Goro's mouth forms the word “pop”—a small puff of white smoke escapes on the consonant. Audio: A tiny smoke-breath exhale overlays the cigarette's crackle."
+                      - paragraph [ref=e578]: "[00:08 - 00:10] Medium shot:"
+                      - paragraph [ref=e579]: "@Goro leans his back against a row of dented industrial metal lockers, crossing his arms while still holding the cigarette—settling into authority, like the room belongs to him.— Goro:“You opened it—pop—and heat hit your face. Now? Wax paper. Burger sweats, gets soggy. Bun dissolves into meat. Mush of good intentions. No boundary. No definition.”"
+                      - paragraph [ref=e580]: "@Image"
+                    - cell "视频缩略图 播放视频 From Kling AI Creative Partner @Nigel Watson" [ref=e581]:
+                      - generic [ref=e583] [cursor=pointer]:
+                        - generic:
+                          - img "视频缩略图"
+                          - img "播放视频" [ref=e584]
+                      - paragraph [ref=e585]
+                      - paragraph [ref=e586]: From Kling AI Creative Partner @Nigel Watson
+                      - paragraph [ref=e587]
+            - heading "VIDEO 3.0 Omni Model Pricing" [level=1] [ref=e588]:
+              - strong [ref=e590]: VIDEO 3.0 Omni Model Pricing
+            - paragraph [ref=e591]: VIDEO 3.0 Omni currently supports 1080p and 720p modes. The Credits required for using VIDEO 3.0 Omni depend on your input and the video length. Whether or not a video is provided will affect the generation cost.
+            - paragraph [ref=e592]
+            - figure [ref=e593]:
+              - table [ref=e594]:
+                - rowgroup [ref=e601]:
+                  - row "No Video Input With Video Input" [ref=e602]:
+                    - cell [ref=e603]:
+                      - paragraph [ref=e604]
+                    - cell "No Video Input" [ref=e605]:
+                      - paragraph [ref=e606]:
+                        - strong [ref=e608]: No Video Input
+                    - cell "With Video Input" [ref=e609]:
+                      - paragraph [ref=e610]:
+                        - strong [ref=e612]: With Video Input
+                  - row "1080p 720p 1080p 720p" [ref=e613]:
+                    - cell [ref=e614]:
+                      - paragraph [ref=e615]
+                    - cell "1080p" [ref=e616]:
+                      - paragraph [ref=e617]:
+                        - strong [ref=e619]: 1080p
+                    - cell "720p" [ref=e620]:
+                      - paragraph [ref=e621]:
+                        - strong [ref=e623]: 720p
+                    - cell "1080p" [ref=e624]:
+                      - paragraph [ref=e625]:
+                        - strong [ref=e627]: 1080p
+                    - cell "720p" [ref=e628]:
+                      - paragraph [ref=e629]:
+                        - strong [ref=e631]: 720p
+                  - row "Native Audio On 12 Credits/s 9 Credits/s Not Supported Yet Not Supported Yet" [ref=e632]:
+                    - cell "Native Audio On" [ref=e633]:
+                      - paragraph [ref=e634]:
+                        - strong [ref=e636]: Native Audio On
+                    - cell "12 Credits/s" [ref=e637]:
+                      - paragraph [ref=e638]:
+                        - strong [ref=e640]: 12 Credits/s
+                    - cell "9 Credits/s" [ref=e641]:
+                      - paragraph [ref=e642]:
+                        - strong [ref=e644]: 9 Credits/s
+                    - cell "Not Supported Yet" [ref=e645]:
+                      - paragraph [ref=e646]: Not Supported Yet
+                    - cell "Not Supported Yet" [ref=e647]:
+                      - paragraph [ref=e648]: Not Supported Yet
+                  - row "Native Audio Off 8 Credits/s 6 Credits/s 16 Credits/s 12 Credits/s" [ref=e649]:
+                    - cell "Native Audio Off" [ref=e650]:
+                      - paragraph [ref=e651]:
+                        - strong [ref=e653]: Native Audio Off
+                    - cell "8 Credits/s" [ref=e654]:
+                      - paragraph [ref=e655]:
+                        - strong [ref=e657]: 8 Credits/s
+                    - cell "6 Credits/s" [ref=e658]:
+                      - paragraph [ref=e659]:
+                        - strong [ref=e661]: 6 Credits/s
+                    - cell "16 Credits/s" [ref=e662]:
+                      - paragraph [ref=e663]:
+                        - strong [ref=e665]: 16 Credits/s
+                    - cell "12 Credits/s" [ref=e666]:
+                      - paragraph [ref=e667]:
+                        - strong [ref=e669]: 12 Credits/s
+            - heading "FAQ" [level=1] [ref=e670]:
+              - strong [ref=e672]: FAQ
+            - paragraph [ref=e673]:
+              - strong [ref=e675]: Supported Input Materials
+            - list [ref=e676]:
+              - listitem [ref=e677]:
+                - generic [ref=e678]:
+                  - strong [ref=e679]: Images
+                  - text: ": You can upload up to 7 images with a width and height of at least 300 px, file size ≤ 10MB, and formats .jpg / .jpeg / .png."
+              - listitem [ref=e680]:
+                - generic [ref=e681]:
+                  - strong [ref=e682]: Videos
+                  - text: ": You can upload one video with a duration between 3s and 10s, file size ≤ 200MB, and resolution ≤ 2k."
+              - listitem [ref=e683]:
+                - strong [ref=e685]: "Elements:"
+                - list [ref=e686]:
+                  - listitem [ref=e687]: "1. You can upload/use AI-generated images from multiple perspectives (up to 4) and combine them into one subject, providing richer reference information for the model. When the subject is a character type, you can also upload a 5-30s single-person speech audio (recommended: clean background noise, moderate speech speed, neutral voice with consistent emotion and style) to bind a voice tone to the character."
+                  - listitem [ref=e688]: 2. You can upload a 3-8s video clip of a single character to create a more vivid and informative video character element. The voice in the video can be bound as the character's voice tone.
+            - paragraph [ref=e689]:
+              - generic [ref=e690]:
+                - strong [ref=e691]: Note
+                - text: ": When a video is provided, a total of up to 4 images/elements can be uploaded. If no video is provided, up to 7 images/elements can be uploaded."
+            - paragraph [ref=e692]:
+              - strong [ref=e694]: Video Editing, Prompt Transformation, and Other Features
+            - paragraph [ref=e695]:
+              - text: The video editing, prompt transformation, and other features in 3.0 Omni function the same as in O1. For details, refer to the
+              - link "KLING VIDEO O1 User Guide" [ref=e696] [cursor=pointer]:
+                - /url: https://app.klingai.com/global/quickstart/klingai-video-o1-user-guide
+                - generic [ref=e697]: KLING VIDEO O1 User Guide
+          - generic [ref=e698]:
+            - generic [ref=e699]:
+              - generic [ref=e700]: table-of-contents
+              - generic [ref=e701]:
+                - generic [ref=e703] [cursor=pointer]: "Kling VIDEO 3.0 Omni Capabilities Upgrade:"
+                - generic [ref=e704]:
+                  - generic [ref=e705] [cursor=pointer]: Kling VIDEO 3.0 Omni New Capabilities Guide
+                  - generic [ref=e706]:
+                    - generic [ref=e708] [cursor=pointer]: "1. All-in-One Reference 3.0: Enhanced Consistency, More Responsive and Dynamic"
+                    - generic [ref=e710] [cursor=pointer]: "2. Elements 3.0: Video-Character Reference with Visual & Audio Capture"
+                    - generic [ref=e712] [cursor=pointer]: "3. Storyboard Narration 3.0: Free Duration, Custom Shots, 15s Generation with Precise Control"
+                - generic [ref=e714] [cursor=pointer]: VIDEO 3.0 Omni Model Pricing
+                - generic [ref=e716] [cursor=pointer]: FAQ
+            - generic [ref=e717]:
+              - link [ref=e718] [cursor=pointer]:
+                - /url: https://discord.com/invite/8tj8YjSzKr
+                - img [ref=e719]
+              - link [ref=e721] [cursor=pointer]:
+                - /url: https://x.com/intent/post?url=https%3A%2F%2Fapp.klingai.com%2Fglobal%2Fquickstart%2Fklingai-video-3-omni-model-user-guide&title=Kling%20VIDEO%203.0%20Omni%20Model%20User%20Guide
+                - img [ref=e722]
+              - link [ref=e724] [cursor=pointer]:
+                - /url: https://www.tiktok.com/@klingai_official
+                - img [ref=e725]
+              - link [ref=e727] [cursor=pointer]:
+                - /url: https://www.instagram.com/klingai_official
+                - img [ref=e728]
+              - link [ref=e730] [cursor=pointer]:
+                - /url: https://www.producthunt.com/products/kling-ai-4
+                - img [ref=e731]
+            - generic [ref=e736]:
+              - generic [ref=e737]: Featured
+              - link "Kling IMAGE 3.0 Omni User Guide Feb 6, 2026" [ref=e738] [cursor=pointer]:
+                - /url: /global/quickstart/klingai-image-3-omni-user-guide
+                - img [ref=e739]
+                - generic [ref=e740]:
+                  - generic [ref=e741]: Kling IMAGE 3.0 Omni User Guide
+                  - generic [ref=e742]: Feb 6, 2026
+              - link "Kling Element Library User Guide Feb 5, 2026" [ref=e743] [cursor=pointer]:
+                - /url: /global/quickstart/klingai-element-library-3-user-guide
+                - img [ref=e744]
+                - generic [ref=e745]:
+                  - generic [ref=e746]: Kling Element Library User Guide
+                  - generic [ref=e747]: Feb 5, 2026
+              - link "KLING VIDEO O1 User Guide Dec 15, 2025" [ref=e748] [cursor=pointer]:
+                - /url: /global/quickstart/klingai-video-o1-user-guide
+                - img [ref=e749]
+                - generic [ref=e750]:
+                  - generic [ref=e751]: KLING VIDEO O1 User Guide
+                  - generic [ref=e752]: Dec 15, 2025
+        - generic [ref=e754]:
+          - heading "You might also like" [level=2] [ref=e756]
+          - generic [ref=e757]:
+            - link "KLING O1 User Guide (Image O1) KLING O1 User Guide (Image O1) Dec 30, 2025" [ref=e758] [cursor=pointer]:
+              - /url: /global/quickstart/klingai-image-o1-user-guide
+              - img "KLING O1 User Guide (Image O1)" [ref=e760]
+              - generic [ref=e761]:
+                - heading "KLING O1 User Guide (Image O1)" [level=3] [ref=e762]
+                - paragraph [ref=e763]: Dec 30, 2025
+            - link "Kling AI Avatar 2.0 User Guide Kling AI Avatar 2.0 User Guide Dec 5, 2025" [ref=e764] [cursor=pointer]:
+              - /url: /global/quickstart/kling-ai-avatar-2-user-guide
+              - img "Kling AI Avatar 2.0 User Guide" [ref=e766]
+              - generic [ref=e767]:
+                - heading "Kling AI Avatar 2.0 User Guide" [level=3] [ref=e768]
+                - paragraph [ref=e769]: Dec 5, 2025
+            - link "KLING VIDEO 2.6 User Guide KLING VIDEO 2.6 User Guide Dec 16, 2025" [ref=e770] [cursor=pointer]:
+              - /url: /global/quickstart/klingai-video-26-audio-user-guide
+              - img "KLING VIDEO 2.6 User Guide" [ref=e772]
+              - generic [ref=e773]:
+                - heading "KLING VIDEO 2.6 User Guide" [level=3] [ref=e774]
+                - paragraph [ref=e775]: Dec 16, 2025
+            - link "Motion Control Motion Control Mar 5, 2026" [ref=e776] [cursor=pointer]:
+              - /url: /global/quickstart/motion-control-user-guide
+              - img "Motion Control" [ref=e778]
+              - generic [ref=e779]:
+                - heading "Motion Control" [level=3] [ref=e780]
+                - paragraph [ref=e781]: Mar 5, 2026
+    - generic [ref=e784]:
+      - img "Kling AI Logo" [ref=e786]
+      - generic [ref=e787]:
+        - generic [ref=e788]:
+          - heading "Creative Studio" [level=3] [ref=e789] [cursor=pointer]
+          - generic [ref=e790]:
+            - paragraph [ref=e791]:
+              - link "AI Tools" [ref=e792] [cursor=pointer]:
+                - /url: https://app.klingai.com/global
+            - paragraph [ref=e793]:
+              - generic [ref=e794] [cursor=pointer]: Mobile App
+        - generic [ref=e795]:
+          - heading "API Platform" [level=3] [ref=e796] [cursor=pointer]
+          - paragraph [ref=e798]:
+            - link "API Platform" [ref=e799] [cursor=pointer]:
+              - /url: https://kling-home.staging.kuaishou.com/global/dev
+        - generic [ref=e800]:
+          - heading "About Us" [level=3] [ref=e801] [cursor=pointer]
+          - generic [ref=e802]:
+            - paragraph [ref=e803]:
+              - link "Quick Start" [ref=e804] [cursor=pointer]:
+                - /url: https://docs.qingque.cn/d/home/eZQBGvsEtlGCz5-IhhQP3S-eM?identityId=2CYV3VL6EGS
+            - paragraph [ref=e805]:
+              - link "Talent Network" [ref=e806] [cursor=pointer]:
+                - /url: https://app.klingai.com/global/future-partner/customer
+            - paragraph [ref=e807]:
+              - link "Affiliate Program" [ref=e808] [cursor=pointer]:
+                - /url: https://app.klingai.com/global/commission-share
+            - paragraph [ref=e809]:
+              - link "Contact Us support@klingai.com" [ref=e810] [cursor=pointer]:
+                - /url: mailto:support@klingai.com
+      - generic [ref=e812]:
+        - link [ref=e813] [cursor=pointer]:
+          - /url: https://discord.com/invite/8tj8YjSzKr
+          - img [ref=e814]
+        - link [ref=e816] [cursor=pointer]:
+          - /url: https://x.com/Kling_ai
+          - img [ref=e817]
+        - link [ref=e819] [cursor=pointer]:
+          - /url: https://www.tiktok.com/@klingai_official
+          - img [ref=e820]
+        - link [ref=e822] [cursor=pointer]:
+          - /url: https://www.instagram.com/klingai_official
+          - img [ref=e823]
+        - link [ref=e825] [cursor=pointer]:
+          - /url: https://www.producthunt.com/products/kling-ai-4
+          - img [ref=e826]
+  - img
+  - img

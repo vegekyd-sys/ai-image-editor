@@ -146,6 +146,7 @@ const en = {
   // Preview generation
   'status.generatingPreviews': (done: number, total: number) => `Generating previews ${done}/${total}`,
 
+
   // Misc
   'misc.toolUse': 'Tool use',
   'misc.error': 'Error',

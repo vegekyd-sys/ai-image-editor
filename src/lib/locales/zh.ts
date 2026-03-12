@@ -146,6 +146,7 @@ const zh = {
   // Preview generation
   'status.generatingPreviews': (done: number, total: number) => `正在生成预览图 ${done}/${total}`,
 
+
   // Misc
   'misc.toolUse': '工具调用',
   'misc.error': '错误',
