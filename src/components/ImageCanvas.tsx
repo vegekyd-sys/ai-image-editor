@@ -314,41 +314,88 @@ export default function ImageCanvas({
   }, [isDraft, onDismissDraft, annotationMode]);
 
   // Desktop: unified mouse handler — mirrors all touch interactions
-  // (long-press compare + swipe navigate, same logic as touch handlers)
+  // (pan when zoomed, long-press compare, swipe navigate, double-click reset zoom)
   const mouseStartPos = useRef<{ x: number; y: number } | null>(null);
   const mouseDidDrag = useRef(false);
+  const mousePanning = useRef(false);
+  const lastMousePos = useRef({ x: 0, y: 0 });
+  const lastClickTime = useRef(0);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (annotationMode || e.button !== 0 || isVideoEntry) { mouseStartPos.current = null; return; }
     mouseStartPos.current = { x: e.clientX, y: e.clientY };
     mouseDidDrag.current = false;
 
-    // Long press → compare (same as touch)
+    if (scale > 1) {
+      // Pan mode when zoomed (same as touch)
+      mousePanning.current = true;
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+    }
+
+    // Long press → compare (works at any zoom level, same as touch)
     if (previousImage) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
+        mousePanning.current = false; // stop panning when comparing
       }, 200);
     }
-  }, [previousImage, isVideoEntry, clearLongPress, annotationMode]);
+  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!mouseStartPos.current) return;
     const dx = Math.abs(e.clientX - mouseStartPos.current.x);
     const dy = Math.abs(e.clientY - mouseStartPos.current.y);
+
     if (dx > 8 || dy > 8) {
       mouseDidDrag.current = true;
       clearLongPress();
       if (isComparing) setIsComparing(false);
     }
-  }, [clearLongPress, isComparing]);
+
+    // Pan when zoomed (same as touch)
+    if (mousePanning.current && scale > 1) {
+      const panDx = e.clientX - lastMousePos.current.x;
+      const panDy = e.clientY - lastMousePos.current.y;
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+      setTranslate(prev => ({
+        x: prev.x + panDx / scale,
+        y: prev.y + panDy / scale,
+      }));
+    }
+  }, [clearLongPress, isComparing, scale]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     clearLongPress();
     if (isComparing) { setIsComparing(false); mouseStartPos.current = null; skipClick.current = true; return; }
 
+    // End pan — only skip click if finger actually moved (same as touch)
+    if (mousePanning.current) {
+      mousePanning.current = false;
+      const panDx = Math.abs(e.clientX - mouseStartPos.current!.x);
+      const panDy = Math.abs(e.clientY - mouseStartPos.current!.y);
+      if (panDx > 5 || panDy > 5) {
+        skipClick.current = true;
+        mouseStartPos.current = null;
+        return;
+      }
+      // Barely moved — fall through to double-click check
+    }
+
+    // Double-click detection → reset zoom (same as touch double-tap)
+    const now = Date.now();
+    if (now - lastClickTime.current < 300) {
+      lastClickTime.current = 0;
+      setScale(1);
+      setTranslate({ x: 0, y: 0 });
+      skipClick.current = true;
+      mouseStartPos.current = null;
+      return;
+    }
+    lastClickTime.current = now;
+
     // Swipe detection (same threshold as touch: 40px horizontal, must exceed vertical)
-    if (mouseStartPos.current && mouseDidDrag.current) {
+    if (mouseStartPos.current && mouseDidDrag.current && scale <= 1) {
       const deltaX = e.clientX - mouseStartPos.current.x;
       const deltaY = e.clientY - mouseStartPos.current.y;
       if (Math.abs(deltaX) >= SWIPE_THRESHOLD && Math.abs(deltaX) > Math.abs(deltaY)) {
@@ -363,7 +410,7 @@ export default function ImageCanvas({
       }
     }
     mouseStartPos.current = null;
-  }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange]);
+  }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange, scale]);
 
   // Desktop: trackpad pinch-to-zoom (ctrl+wheel) + horizontal swipe (deltaX) → switch snapshot
   const wheelCooldown = useRef(false);
@@ -403,9 +450,11 @@ export default function ImageCanvas({
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
-  // Desktop: keyboard left/right arrow keys → switch snapshot
+  // Desktop: keyboard left/right arrow keys → switch snapshot (skip when focused on input/textarea)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
       if (e.key === 'ArrowLeft' && currentIndex > 0) {
         setAnimDir('right');
         setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
