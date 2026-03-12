@@ -98,6 +98,13 @@ export default function ImageCanvas({
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoBuffered, setVideoBuffered] = useState(0); // 0-1 progress
   const [videoError, setVideoError] = useState(false);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [showControls, setShowControls] = useState(true);
+  const videoPlayingRef = useRef(false);
+  const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seekBarRef = useRef<HTMLDivElement>(null);
+  const seekDragging = useRef(false);
   const [prevVideoUrl, setPrevVideoUrl] = useState(videoUrl);
   if (prevVideoUrl !== videoUrl) {
     setPrevVideoUrl(videoUrl);
@@ -105,6 +112,9 @@ export default function ImageCanvas({
     if (videoPlaying) setVideoPlaying(false);
     if (videoLoading) setVideoLoading(false);
     if (videoBuffered !== 0) setVideoBuffered(0);
+    if (videoCurrentTime !== 0) setVideoCurrentTime(0);
+    if (videoDuration !== 0) setVideoDuration(0);
+    if (!showControls) setShowControls(true);
   }
 
   // Prevent click after handled touch gestures
@@ -476,6 +486,38 @@ export default function ImageCanvas({
     }, 150);
   }, [currentIndex, onIndexChange]);
 
+  // Video helpers
+  function formatTime(s: number) {
+    if (!s || !isFinite(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+  }
+
+  const resetControlsTimer = useCallback(() => {
+    if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current);
+    setShowControls(true);
+    if (videoPlayingRef.current) {
+      controlsHideTimer.current = setTimeout(() => setShowControls(false), 3000);
+    }
+  }, []);
+
+  const doSeek = useCallback((clientX: number) => {
+    const bar = seekBarRef.current;
+    const v = videoRef.current;
+    if (!bar || !v) return;
+    const dur = v.duration;
+    if (!dur || !isFinite(dur)) return;
+    const rect = bar.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    v.currentTime = pct * dur;
+    setVideoCurrentTime(pct * dur);
+  }, []);
+
+  // Non-Supabase video URLs (Kling CDN etc.) are proxied to avoid CORS and expiry issues
+  const effectiveVideoUrl = videoUrl && !videoUrl.includes('supabase.co')
+    ? `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`
+    : videoUrl;
+
   const getLabel = (index: number) => {
     // Video entry
     if (timeline[index] === VIDEO_SENTINEL) return 'Video';
@@ -542,77 +584,177 @@ export default function ImageCanvas({
 
         {/* Video entry */}
         {isVideoEntry && videoUrl ? (
-          <div className="relative w-full h-full flex items-center justify-center">
+          <div
+            className="relative w-full h-full flex items-center justify-center"
+            onPointerMove={resetControlsTimer}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!showControls) { resetControlsTimer(); return; }
+              if (videoPlaying) { videoRef.current?.pause(); }
+              else { setVideoLoading(true); videoRef.current?.play(); }
+            }}
+          >
             <video
-              key={videoUrl}
+              key={effectiveVideoUrl}
               ref={videoRef}
-              src={videoUrl}
+              src={effectiveVideoUrl ?? undefined}
               playsInline
-              preload="auto"
+              preload="metadata"
               poster={(() => { const prev = timeline[timeline.length - 2]; return prev && prev !== '__VIDEO__' ? prev : undefined; })()}
-              className={`w-full h-full object-contain select-none pointer-events-auto transition-all duration-150 ${
+              className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
                 animDir === 'left' ? 'opacity-0 -translate-x-8' :
                 animDir === 'right' ? 'opacity-0 translate-x-8' :
                 'opacity-100 translate-x-0'
               }`}
-              onPlay={() => { setVideoPlaying(true); setVideoLoading(false); }}
-              onPause={() => setVideoPlaying(false)}
-              onEnded={() => setVideoPlaying(false)}
+              onPlay={() => {
+                setVideoPlaying(true); setVideoLoading(false);
+                videoPlayingRef.current = true;
+                resetControlsTimer();
+              }}
+              onPause={() => {
+                setVideoPlaying(false);
+                videoPlayingRef.current = false;
+                if (controlsHideTimer.current) { clearTimeout(controlsHideTimer.current); controlsHideTimer.current = null; }
+                setShowControls(true);
+              }}
+              onEnded={() => {
+                setVideoPlaying(false);
+                videoPlayingRef.current = false;
+                if (controlsHideTimer.current) { clearTimeout(controlsHideTimer.current); controlsHideTimer.current = null; }
+                setShowControls(true);
+              }}
               onWaiting={() => setVideoLoading(true)}
               onCanPlay={() => setVideoLoading(false)}
               onError={() => setVideoError(true)}
+              onTimeUpdate={() => {
+                const v = videoRef.current;
+                if (v) setVideoCurrentTime(v.currentTime);
+              }}
+              onLoadedMetadata={() => {
+                const v = videoRef.current;
+                if (v && isFinite(v.duration)) setVideoDuration(v.duration);
+              }}
               onProgress={() => {
                 const v = videoRef.current;
                 if (v && v.buffered.length > 0 && v.duration) {
                   setVideoBuffered(v.buffered.end(v.buffered.length - 1) / v.duration);
                 }
               }}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (videoPlaying) {
-                  videoRef.current?.pause();
-                }
-              }}
             />
-            {/* Loading indicator — shows during buffering */}
-            {videoLoading && (
-              <div className="absolute bottom-0 left-0 right-0 z-10">
-                <div style={{ height: 3, background: 'rgba(255,255,255,0.1)' }}>
-                  <div style={{
-                    height: '100%', background: 'rgba(217,70,239,0.8)',
-                    width: `${Math.round(videoBuffered * 100)}%`,
-                    transition: 'width 0.3s',
-                  }} />
-                </div>
+
+            {/* Buffering spinner (mid-playback) */}
+            {videoLoading && videoPlaying && (
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
+                <div className="w-10 h-10 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               </div>
             )}
+
             {/* Video error overlay */}
             {videoError && (
-              <div className="absolute inset-0 flex items-center justify-center z-10">
+              <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
                 <div className="bg-black/60 backdrop-blur-sm rounded-2xl px-6 py-4 text-center">
                   <p className="text-white/80 text-sm">{t('canvas.videoExpired')}</p>
                 </div>
               </div>
             )}
-            {/* Play button overlay */}
-            {!videoPlaying && !videoLoading && !videoError && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setVideoLoading(true);
-                  videoRef.current?.play();
-                }}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center z-10 active:scale-95 transition-transform"
-              >
-                <svg width="22" height="22" viewBox="0 0 10 10" fill="white">
-                  <polygon points="3,1 9,5 3,9" />
-                </svg>
-              </button>
+
+            {/* Center play button (paused, controls visible, no error) */}
+            {!videoPlaying && !videoLoading && !videoError && showControls && (
+              <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+                <div className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+                  <svg width="22" height="22" viewBox="0 0 10 10" fill="white">
+                    <polygon points="3,1 9,5 3,9" />
+                  </svg>
+                </div>
+              </div>
             )}
-            {/* Buffering spinner when loading during playback */}
-            {videoLoading && videoPlaying && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-                <div className="w-10 h-10 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+
+            {/* Controls overlay */}
+            {!videoError && (
+              <div
+                className={`absolute bottom-0 left-0 right-0 z-20 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.18) 70%, transparent 100%)' }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Seek bar */}
+                <div className="px-3 pt-3 pb-1">
+                  <div
+                    ref={seekBarRef}
+                    className="relative h-[18px] flex items-center cursor-pointer"
+                    style={{ touchAction: 'none' }}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      seekDragging.current = true;
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                      doSeek(e.clientX);
+                      resetControlsTimer();
+                    }}
+                    onPointerMove={(e) => {
+                      if (!seekDragging.current) return;
+                      doSeek(e.clientX);
+                    }}
+                    onPointerUp={(e) => {
+                      seekDragging.current = false;
+                      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                    }}
+                  >
+                    {/* Track background */}
+                    <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-white/20" />
+                    {/* Buffer track */}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-white/35 left-0"
+                      style={{ width: `${videoBuffered * 100}%` }}
+                    />
+                    {/* Play progress */}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-fuchsia-500 left-0"
+                      style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }}
+                    />
+                    {/* Seek handle */}
+                    <div
+                      className="absolute top-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-md"
+                      style={{
+                        left: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Controls row */}
+                <div className="flex items-center gap-2.5 px-3 pb-4">
+                  {/* Play/Pause */}
+                  <button
+                    className="w-8 h-8 flex items-center justify-center text-white cursor-pointer active:scale-90 transition-transform"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (videoPlaying) { videoRef.current?.pause(); }
+                      else { setVideoLoading(true); videoRef.current?.play(); }
+                    }}
+                  >
+                    {videoPlaying ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                        <rect x="5" y="4" width="4" height="16" rx="1" />
+                        <rect x="15" y="4" width="4" height="16" rx="1" />
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 10 10" fill="white">
+                        <polygon points="2,1 9,5 2,9" />
+                      </svg>
+                    )}
+                  </button>
+                  {/* Time */}
+                  <span className="text-white/70 tabular-nums select-none" style={{ fontSize: '0.69rem' }}>
+                    {formatTime(videoCurrentTime)}
+                    <span className="text-white/35 mx-0.5">/</span>
+                    {formatTime(videoDuration)}
+                  </span>
+                  {/* Buffer status dot (only while buffering) */}
+                  {videoLoading && !videoPlaying && (
+                    <span className="text-white/40 ml-auto" style={{ fontSize: '0.6rem' }}>缓冲中…</span>
+                  )}
+                </div>
               </div>
             )}
           </div>

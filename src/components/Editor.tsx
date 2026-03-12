@@ -1965,7 +1965,7 @@ export default function Editor({
       const filename = `makaron-video-${Date.now()}.mp4`;
       setIsSaving(true);
       try {
-        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}`;
+        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}&download=1`;
         const res = await fetch(proxyUrl);
         const blob = await res.blob();
         const file = new File([blob], filename, { type: 'video/mp4' });
