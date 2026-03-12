@@ -365,10 +365,22 @@ export default function ImageCanvas({
     mouseStartPos.current = null;
   }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange]);
 
-  // Desktop: trackpad two-finger horizontal swipe (wheel deltaX) → switch snapshot
+  // Desktop: trackpad pinch-to-zoom (ctrl+wheel) + horizontal swipe (deltaX) → switch snapshot
   const wheelCooldown = useRef(false);
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    // Only handle horizontal scroll (trackpad swipe), ignore vertical/pinch
+  const handleWheel = useCallback((e: WheelEvent) => {
+    // Pinch-to-zoom: trackpad pinch fires wheel with ctrlKey + deltaY
+    if (e.ctrlKey && !isVideoEntry && !annotationMode) {
+      e.preventDefault();
+      const zoomFactor = 1 - e.deltaY * 0.01;
+      setScale(prev => {
+        const next = Math.min(5, Math.max(1, prev * zoomFactor));
+        if (next <= 1.05) { setTranslate({ x: 0, y: 0 }); return 1; }
+        return next;
+      });
+      return;
+    }
+
+    // Horizontal scroll (trackpad swipe) → switch snapshot
     if (Math.abs(e.deltaX) < 30 || Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
     if (wheelCooldown.current) return;
     wheelCooldown.current = true;
@@ -381,6 +393,29 @@ export default function ImageCanvas({
       setAnimDir('right');
       setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
     }
+  }, [currentIndex, timeline.length, onIndexChange, isVideoEntry, annotationMode]);
+
+  // Attach native wheel listener (non-passive) so preventDefault works for pinch-to-zoom
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
+
+  // Desktop: keyboard left/right arrow keys → switch snapshot
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        setAnimDir('right');
+        setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
+      } else if (e.key === 'ArrowRight' && currentIndex < timeline.length - 1) {
+        setAnimDir('left');
+        setTimeout(() => { onIndexChange(currentIndex + 1); setAnimDir(null); }, 150);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentIndex, timeline.length, onIndexChange]);
 
   const goTo = useCallback((index: number) => {
@@ -424,7 +459,6 @@ export default function ImageCanvas({
       onMouseUp={handleMouseUp}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
       onClick={handleClick}
     >
       {isEditing && (
