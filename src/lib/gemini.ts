@@ -879,12 +879,19 @@ export async function* streamTipsByCategory(
     return;
   }
 
-  if (TIPS_PROVIDER === 'bedrock') {
-    yield* streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale);
-  } else if (TIPS_PROVIDER === 'openrouter') {
-    yield* streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale);
-  } else {
-    yield* streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale);
+  const source = TIPS_PROVIDER === 'bedrock'
+    ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale)
+    : TIPS_PROVIDER === 'openrouter'
+      ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale)
+      : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale);
+
+  // Cap output: AI sometimes returns more tips than requested.
+  // Track all unique labels (partial + complete) to enforce the limit.
+  const labels = new Set<string>();
+  for await (const tip of source) {
+    if (tip.label && !labels.has(tip.label) && labels.size >= count) continue;
+    if (tip.label) labels.add(tip.label);
+    yield tip;
   }
 }
 

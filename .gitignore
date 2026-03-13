@@ -62,3 +62,6 @@ next-env.d.ts
 # playwright mcp
 .playwright-mcp/
 test-kling.mjs
+
+# Screenshots (Playwright / Chrome DevTools)
+/screenshots/

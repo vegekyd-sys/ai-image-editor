@@ -30,7 +30,9 @@ export async function middleware(request: NextRequest) {
   const user = session?.user
 
   const { pathname } = request.nextUrl
-  const activated = request.cookies.get('mkr_activated')?.value === '1'
+  // Local dev: skip invite-code activation gate
+  const isDev = process.env.NODE_ENV === 'development'
+  const activated = isDev || request.cookies.get('mkr_activated')?.value === '1'
 
   // Not logged in — only /login is accessible
   if (!user) {

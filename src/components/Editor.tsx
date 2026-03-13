@@ -1270,7 +1270,9 @@ export default function Editor({
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
             cacheImage(`snap:${snapId}`, imageData);
-            fetchTipsForSnapshot(snapId, imageData, 'none'); // CUI edit: text only, no auto-preview
+            const isFirstSnapshot = snapshotsRef.current.length <= 1;
+            fetchTipsForSnapshot(snapId, imageData, isFirstSnapshot ? 'full' : 'none');
+            autoFetchTriggered.current = true; // Prevent auto-fetch effect from double-fetching
             setAgentStatus(t('status.imageGenerated'));
             // If user is not on the new snapshot (e.g. viewing draft or earlier snapshot), show "See" button
             const newSnapIdx = snapshotsRef.current.length; // index after setSnapshots adds it
@@ -1291,7 +1293,11 @@ export default function Editor({
                 editInputImages: capturedInputImages ?? undefined,
               } : m
             ));
-            // Post-edit analysis removed — description will be computed on demand if user chats with Agent
+            // Auto-name project after first image generation (text-to-image projects have no description)
+            if (!hasTriggeredNamingRef.current && (!initialTitle || initialTitle === 'Untitled' || initialTitle === '未命名' || initialTitle === '未命名项目')) {
+              hasTriggeredNamingRef.current = true;
+              triggerProjectNaming(text);
+            }
           },
           onToolCall: (tool, input, images) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
@@ -1346,7 +1352,7 @@ export default function Editor({
     } finally {
       setIsAgentActive(false);
     }
-  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage]);
+  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
   // NOTE: no compressBase64 here — annotated image is used as generation base,

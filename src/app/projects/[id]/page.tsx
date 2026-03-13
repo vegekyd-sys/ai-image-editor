@@ -50,10 +50,12 @@ export default function ProjectPage() {
     if (p) sessionStorage.removeItem('pendingPrompt')
     return p
   })
-  // If memory cache has data, start loaded=true — no spinner at all
+  // If memory cache has data WITH snapshots, start loaded=true — no spinner at all
+  // Empty snapshots (e.g. new text-to-image project whose upload was still in-flight) don't count
   const [loaded, setLoaded] = useState(() => {
     if (typeof window === 'undefined') return false
-    return getCachedProjectDataSync(projectId) !== null
+    const sync = getCachedProjectDataSync(projectId)
+    return sync !== null && (sync.snapshots as Snapshot[]).length > 0
   })
   // Tracks whether we've already shown content (cache or Supabase) to avoid double-set
   const shownRef = useRef(loaded)
@@ -94,6 +96,8 @@ export default function ProjectPage() {
     let cancelled = false
     getCachedProjectData(projectId).then(async (cached) => {
       if (!cached || cancelled || shownRef.current) return
+      // Skip empty-snapshot caches (e.g. text-to-image project where upload was in-flight)
+      if ((cached.snapshots as Snapshot[]).length === 0) return
       const patched = await patchFromImageCache(cached.snapshots as Snapshot[])
       if (cancelled || shownRef.current) return
       shownRef.current = true
