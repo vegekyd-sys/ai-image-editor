@@ -56,6 +56,34 @@ body {
   scrollbar-width: none;
 }
 
+/* Dark thin scrollbar for all scrollable areas in the editor */
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* Hide scrollbar on textareas (auto-resize handles overflow) */
+textarea::-webkit-scrollbar {
+  display: none;
+}
+textarea {
+  scrollbar-width: none;
+}
+
 /* Editor page slide-in from right */
 @keyframes page-slide-in {
   from { transform: translateX(100%); }
