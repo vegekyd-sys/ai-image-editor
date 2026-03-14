@@ -86,7 +86,7 @@ interface AgentChatViewProps {
   onSendMessage: (text: string, attachedImages?: string[]) => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
-  onImageTap: (messageId: string) => void;
+  onImageTap: (messageId: string, rect?: DOMRect, imgSrc?: string, aspectRatio?: number) => void;
   focusOnOpen?: boolean;
   hidePip?: boolean;
   onInputBarHeight?: (h: number) => void;
@@ -110,7 +110,6 @@ export default function AgentChatView({
   const { t } = useLocale();
   const [input, setInput] = useState('');
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
-  const [isExiting, setIsExiting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -143,7 +142,7 @@ export default function AgentChatView({
   const PIP_PEEK = 28;        // px visible when hidden at right edge
   const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 
-  const [pipSizeIndex, setPipSizeIndex] = useState<number>(1); // default lg
+  const [pipSizeIndex, setPipSizeIndex] = useState<number>(0); // default sm
   const PIP = PIP_SIZES[pipSizeIndex];
   const [pipCorner, setPipCorner] = useState<PipCorner>('br');
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
@@ -170,7 +169,7 @@ export default function AgentChatView({
     return { bottom: b, right: m };
   }
 
-  const handleBack = useCallback(() => setIsExiting(true), []);
+  const handleBack = useCallback(() => onBack(), [onBack]);
 
   const onPipPointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
@@ -347,13 +346,12 @@ export default function AgentChatView({
     setAttachedImages([]);
   }, [input, attachedImages, isAgentActive, onSendMessage]);
 
-  const handleAnimationEnd = useCallback(() => {
-    if (isExiting) onBack();
-  }, [isExiting, onBack]);
-
-  const handleInlineImageClick = useCallback((messageId: string) => {
-    setIsExiting(true);
-    onImageTap(messageId);
+  const handleInlineImageClick = useCallback((messageId: string, e?: React.MouseEvent) => {
+    const imgEl = e?.currentTarget?.querySelector('img') as HTMLImageElement | null;
+    const rect = imgEl?.getBoundingClientRect();
+    const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
+      ? imgEl.naturalWidth / imgEl.naturalHeight : undefined;
+    onImageTap(messageId, rect ?? undefined, imgEl?.src, ar);
   }, [onImageTap]);
 
 
@@ -363,10 +361,9 @@ export default function AgentChatView({
     <div
       className={isPanel
         ? 'flex flex-col h-full'
-        : `fixed inset-0 z-40 flex flex-col ${isExiting ? 'animate-slide-out-right' : 'animate-slide-in-right'}`
+        : 'flex flex-col h-full'
       }
       style={{ background: '#0a0a0a' }}
-      onAnimationEnd={isPanel ? undefined : handleAnimationEnd}
     >
       {/* ── Back button (overlay mode only) ── */}
       {!isPanel && (
@@ -623,7 +620,7 @@ export default function AgentChatView({
                     {/* Inline generated image */}
                     {msg.image && (
                       <button
-                        onClick={() => handleInlineImageClick(msg.id)}
+                        onClick={(e) => handleInlineImageClick(msg.id, e)}
                         className="block mt-3 active:opacity-75 transition-opacity"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}

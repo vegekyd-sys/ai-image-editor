@@ -42,6 +42,9 @@ interface ImageCanvasProps {
   annotationLineWidth?: number;
   onStartTextEdit?: (canvasX: number, canvasY: number) => void;
   textEditing?: { x: number; y: number; text: string; textColor: string; bgColor: string } | null;
+  pullDownActive?: boolean;
+  onPullDown?: (progress: number) => void;
+  onPullDownEnd?: (committed: boolean) => void;
 }
 
 export default function ImageCanvas({
@@ -51,6 +54,7 @@ export default function ImageCanvas({
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
+  pullDownActive, onPullDown, onPullDownEnd,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -116,6 +120,13 @@ export default function ImageCanvas({
     if (videoDuration !== 0) setVideoDuration(0);
     if (!showControls) setShowControls(true);
   }
+
+  // Pull-down gesture (mobile only: shrink canvas → PiP)
+  const isPullDown = useRef(false);
+  const pullDownStartY = useRef(0);
+  const PULL_ACTIVATE = 20;   // px vertical before activating
+  const PULL_MAX = 300;        // px for progress=1
+  const PULL_COMMIT = 0.3;     // release threshold
 
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
@@ -227,6 +238,23 @@ export default function ImageCanvas({
         if (isComparing) setIsComparing(false);
       }
 
+      // Pull-down gesture detection (mobile only, scale===1, not panning/pinching/video/draft/annotation/desktop)
+      const rawDy = touch.clientY - touchStartY.current;
+      const rawDx = Math.abs(touch.clientX - touchStartX.current);
+      if (!isPullDown.current && !isPanning.current && !isPinching.current
+        && !isVideoEntry && !isDesktop && !annotationMode
+        && scale === 1 && onPullDown
+        && rawDy > PULL_ACTIVATE && rawDy > rawDx * 2) {
+        isPullDown.current = true;
+        pullDownStartY.current = touchStartY.current + PULL_ACTIVATE;
+        swiping.current = false;
+      }
+      if (isPullDown.current && onPullDown) {
+        const progress = Math.max(0, Math.min(1, (touch.clientY - pullDownStartY.current) / PULL_MAX));
+        onPullDown(progress);
+        return;
+      }
+
       // Pan when zoomed
       if (isPanning.current && scale > 1) {
         const panDx = touch.clientX - lastPanPos.current.x;
@@ -238,11 +266,21 @@ export default function ImageCanvas({
         }));
       }
     }
-  }, [scale, isComparing, clearLongPress, annotationMode]);
+  }, [scale, isComparing, clearLongPress, annotationMode, isVideoEntry, isDraft, isDesktop, onPullDown]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
     clearLongPress();
+
+    // End pull-down gesture
+    if (isPullDown.current) {
+      const finalDy = e.changedTouches[0].clientY - pullDownStartY.current;
+      const progress = Math.max(0, Math.min(1, finalDy / PULL_MAX));
+      isPullDown.current = false;
+      skipClick.current = true;
+      onPullDownEnd?.(progress >= PULL_COMMIT);
+      return;
+    }
 
     // End comparing
     if (isComparing) {
@@ -312,7 +350,7 @@ export default function ImageCanvas({
         setAnimDir(null);
       }, 150);
     }
-  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode]);
+  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode, onPullDownEnd]);
 
   const handleClick = useCallback(() => {
     if (skipClick.current) {
@@ -779,6 +817,7 @@ export default function ImageCanvas({
             src={displayImage}
             alt="preview"
             className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
+              pullDownActive ? 'opacity-0' :
               animDir === 'left' ? 'opacity-0 -translate-x-8' :
               animDir === 'right' ? 'opacity-0 translate-x-8' :
               imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
