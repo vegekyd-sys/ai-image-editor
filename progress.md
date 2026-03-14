@@ -3180,3 +3180,84 @@ T+60s     第一个 preview 返回
 - Hero 动画终点同步改右下角（`Editor.tsx` openCUI toRect）
 - 项目页语言切换移到左上角固定位置
 - 项目页输入框支持拖拽图片（dragenter/dragover/drop handlers）
+
+---
+
+## 文生图项目修复 + Tips 数量截断（2026-03-13）
+
+本次修复 3 个独立 bug，全部围绕文生图（text-to-image）场景。
+
+### Bug 1：文生图项目没有标题
+
+**问题**：文生图项目创建后标题一直是 "Untitled"。
+
+**根因**：项目命名依赖 `snapshot.description`（图片分析结果），但文生图项目没有上传图片 → 没有 auto-analysis → 没有 description → 永远不触发命名。
+
+**修复**：`Editor.tsx` `onImage` 回调里，Agent 生图成功后，如果项目还是 Untitled，用用户的 prompt（`text` 参数）触发 `triggerProjectNaming`。
+
+**测试验证**：
+- "一只柴犬站在东京塔前面" → "Shiba at Tokyo Tower"
+- "海边日落下的猫咒师" → "Sunset Cat Sorcerer"
+- "雪山上的独狼" → "Wolf on Snowy Peak"
+- "竹林中打太极的熊猫" → "Panda Tai Chi Forest"
+- "火星上的宇航员" → "Mars Astronaut Explorer"
+- "雨中的日本神社" → "Rainy Shrine Japan"
+
+### Bug 2：新建项目退出后重进无数据
+
+**问题**：文生图项目创建后退出，第一次重新进入显示空白（无图片、无对话），第二次进入才正常。
+
+**根因链**：
+1. 创建项目 → Effect 2 运行 `loadProject()` → 此时 snapshot 火忘式上传还没完成 → `cacheProjectData` 缓存了空 snapshots `[]`
+2. 第一次重进 → `getCachedProjectDataSync` 拿到空 snapshots → `loaded=true`, `shownRef.current=true` → Editor 渲染空状态
+3. Effect 2 从 Supabase 拿到真实数据 → 但 `shownRef.current` 已 true → 直接 return，不更新 UI
+4. 只是悄悄 `cacheProjectData` 更新了缓存
+5. 第二次重进 → 拿到更新后的缓存 → 正常显示
+
+**修复**（`projects/[id]/page.tsx`）：
+- 同步缓存只在 `snapshots.length > 0` 时才标记 `loaded=true`
+- IndexedDB 异步缓存同理，空 snapshots 直接跳过
+- 这样 Supabase fetch（Effect 2）成为权威数据源
+
+### Bug 3：Tips 每分类超过 2 个
+
+**问题**：Tips 应该每分类 2 个（enhance/creative/wild/captions × 2 = 8），实际经常出现 3-4 个。
+
+**根因**：两层问题叠加——
+1. **后端**：AI 模型不严格遵守 `Generate 2 tips` 指令，有时返回 3-4 个。`parseIncrementalTipsFromStream` 是纯 JSON 解析器不管数量，全部 yield
+2. **前端双重请求**：`onImage` 调 `fetchTipsForSnapshot(snapId, imageData, 'none')` 后，auto-fetch effect 检测到 `lastSnap.tips.length === 0` 又调一次 → 每次 2 个 × 2 次 = 4 个
+
+**修复**：
+- **后端截断**（`gemini.ts`）：在 `streamTipsByCategory`（唯一公共出口）加 6 行截断循环，用 `Set<label>` 追踪，达到 `count` 后 skip 多余 tip。同一 label 的 partial→complete 更新不受影响
+- **前端防双重**（`Editor.tsx`）：`onImage` 里设 `autoFetchTriggered.current = true`，阻止 auto-fetch effect 重复请求
+
+### 附带修复：Preview 模式
+
+**问题**：修复双重请求后，文生图场景 tips 不再自动生成 preview 缩略图。
+
+**根因**：之前是第二次请求（auto-fetch effect 默认 `'full'`）负责生成 preview，第一次（`onImage` 里 `'none'`）不生成。阻止第二次后 preview 也没了。
+
+**修复**：`onImage` 里判断 `isFirstSnapshot`（`snapshotsRef.current.length <= 1`），首个 snapshot 用 `'full'` 模式自动生成 preview，后续 CUI 编辑保持 `'none'`。
+
+### 本地开发环境修复
+
+**问题**：本地 `npm run dev` 无法登录测试，因为邀请码验证需要 `SUPABASE_SERVICE_ROLE_KEY`（只在 Vercel 上配了），`/activate` 页面直接 500 → sign out → 死循环。
+
+**修复**：`middleware.ts` 加 `const isDev = process.env.NODE_ENV === 'development'`，本地跳过 `mkr_activated` cookie 检查。
+
+### 踩坑记录
+
+- **Turbopack 不一定热更新 server-side 代码**：改了 `gemini.ts`（server-side module）后，必须重启 `npm run dev` 才能确保新代码生效。多次以为截断没生效，实际是旧代码在跑。
+- **截断位置选择**：最初把 `maxCount` 塞进 `withEditPromptRetry`，既丑又违反单一职责。最终放在 `streamTipsByCategory`（唯一公共出口），6 行代码覆盖所有 provider + mock。
+
+### 改动清单
+
+| 文件 | 改动 |
+|------|------|
+| `src/middleware.ts` | `isDev` 跳过 activate |
+| `src/components/Editor.tsx` | `onImage` 触发命名 + `autoFetchTriggered` + `isFirstSnapshot` preview 模式 |
+| `src/app/projects/[id]/page.tsx` | 空 snapshots 缓存不算 loaded |
+| `src/lib/gemini.ts` | `streamTipsByCategory` label Set 截断 |
+| `.gitignore` | `/screenshots/` |
+
+**Preview 部署**：`ai-image-editor-jvtrh2e8k-vegekyd-sys-projects.vercel.app`
