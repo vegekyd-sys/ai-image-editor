@@ -296,9 +296,10 @@ export default function Editor({
 
   // ── Pull-down gesture (GUI → CUI) ─────────────────────────────
   const [pullProgress, setPullProgress] = useState<number | null>(null); // null=inactive, 0-1=gesture
+  const [pullDelta, setPullDelta] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 }); // finger offset
   const pullStartRect = useRef<{ l: number; t: number; w: number; h: number } | null>(null);
   const pullTransitioning = useRef(false); // true during CSS-driven animation (release / Chat button)
-  const cuiSkipSlideInRef = useRef(false); // skip AgentChatView slide-in after pull-down commit
+  const pullCommitted = useRef(false);     // commit decision (ref to avoid flash between render cycles)
   // ────────────────────────────────────────────────────────────────
 
   const snapshotsRef = useRef(snapshots);
@@ -624,7 +625,7 @@ export default function Editor({
   }, [timeline, viewIndex]);
 
   // ── Pull-down gesture callbacks ──────────────────────────────────
-  const handlePullDown = useCallback((progress: number) => {
+  const handlePullDown = useCallback((dx: number, dy: number, progress: number) => {
     if (pullTransitioning.current) return;
     // First call: capture canvas image rect for PiP overlay
     if (pullProgress === null) {
@@ -643,33 +644,39 @@ export default function Editor({
         };
       }
     }
+    setPullDelta({ dx, dy });
     setPullProgress(progress);
   }, [pullProgress]);
 
   const handlePullDownEnd = useCallback((committed: boolean) => {
     if (pullTransitioning.current) return;
     pullTransitioning.current = true;
+    pullCommitted.current = committed;
     if (committed) {
-      // Animate PiP to corner, then switch to CUI (skip slide-in since pull-down provided the transition)
+      // Step 1: PiP flies to corner (300ms CSS transition)
       setPullProgress(1);
       setTimeout(() => {
-        cuiSkipSlideInRef.current = true;
+        // Step 2: PiP arrived → mount CUI with normal slide-in
         setViewMode('cui');
-        pullTransitioning.current = false;
-        // Keep overlay visible during CUI fade-in to cover PiP transition
+        // Keep pullTransitioning=true so overlay stays at PiP corner (not free-drag)
+        // Step 3: Keep overlay during CUI slide-in, then cleanup everything
         setTimeout(() => {
-          cuiSkipSlideInRef.current = false;
+          pullTransitioning.current = false;
           setPullProgress(null);
+          setPullDelta({ dx: 0, dy: 0 });
           pullStartRect.current = null;
-        }, 400);
-      }, 320);
+          pullCommitted.current = false;
+        }, 300);
+      }, 350);
     } else {
-      // Snap back
+      // Snap back to original position
       setPullProgress(0);
       setTimeout(() => {
         setPullProgress(null);
+        setPullDelta({ dx: 0, dy: 0 });
         pullStartRect.current = null;
         pullTransitioning.current = false;
+        pullCommitted.current = false;
       }, 320);
     }
   }, []);
@@ -2094,10 +2101,39 @@ export default function Editor({
   }, [timeline, viewIndex, isViewingVideo, currentVideo?.videoUrl, showSaveToast]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
-  const handleImageTap = useCallback((messageId: string) => {
+  const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
     const snapIdx = snapshots.findIndex(s => s.messageId === messageId);
-    if (snapIdx >= 0) setViewIndex(timelineFromSnap(snapIdx, draftParentIndex));
-    if (!isDesktop) setViewMode('gui');
+    if (snapIdx < 0) return;
+    const snap = snapshots[snapIdx];
+    const src = imgSrc || snap?.image || snap?.imageUrl || '';
+    setViewIndex(timelineFromSnap(snapIdx, draftParentIndex));
+
+    if (!isDesktop) {
+      const cr = lastCanvasRect.current;
+      if (imgRect && cr && src) {
+        // Compute actual image position within canvas (object-contain)
+        const imgEl = canvasAreaRef.current?.querySelector('img');
+        const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
+          ? imgEl.naturalWidth / imgEl.naturalHeight : lastImageAR.current;
+        const imgInCanvas = containRect(cr.w, cr.h, ar);
+        const toRect = { l: cr.l + imgInCanvas.l, t: cr.t + imgInCanvas.t, w: imgInCanvas.w, h: imgInCanvas.h };
+        const fromRect = { l: imgRect.left, t: imgRect.top, w: imgRect.width, h: imgRect.height };
+        const dummy = { l: 0, t: 0, w: 0, h: 0 };
+        setHeroAnim({
+          src,
+          fromRect, toRect,
+          fromImg: dummy, toImg: dummy,
+          fromRadius: '16px', toRadius: '0px',
+          active: false,
+          objectCover: true,
+        });
+        requestAnimationFrame(() => requestAnimationFrame(() =>
+          setHeroAnim(p => p ? { ...p, active: true } : null)
+        ));
+        setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
+      }
+      setViewMode('gui');
+    }
   }, [snapshots, draftParentIndex, isDesktop]);
 
   // Track whether we've pushed a CUI history state that hasn't been consumed yet.
@@ -2168,6 +2204,7 @@ export default function Editor({
               }
             }}
             className="flex-1 relative min-h-0 overflow-hidden"
+            style={heroAnim ? { opacity: 0 } : undefined}
           >
             {timeline.length === 0 ? (
               isAgentActive ? (
@@ -2626,12 +2663,11 @@ export default function Editor({
           onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
-          skipSlideIn={cuiSkipSlideInRef.current}
         />
       ) : null}
 
-      {/* Pull-down dim overlay (fixed div, works even when GUI wrapper is display:contents) */}
-      {!isDesktop && pullProgress !== null && (
+      {/* Pull-down dim overlay + "Entering Chat" hint */}
+      {!isDesktop && pullProgress !== null && (<>
         <div
           className="fixed inset-0 z-30 bg-black pointer-events-none"
           style={{
@@ -2639,44 +2675,68 @@ export default function Editor({
             transition: pullTransitioning.current ? 'opacity 300ms ease' : 'none',
           }}
         />
-      )}
+        <div
+          className="fixed inset-x-0 z-30 pointer-events-none flex items-center justify-center"
+          style={{
+            top: lastCanvasRect.current ? lastCanvasRect.current.t : 0,
+            height: lastCanvasRect.current ? lastCanvasRect.current.h : '50%',
+            opacity: Math.max(0, Math.pow(pullProgress, 2) * 0.7),
+            transition: pullTransitioning.current ? 'opacity 300ms ease' : 'none',
+          }}
+        >
+          <p className="text-white text-lg font-medium text-center leading-relaxed tracking-wider whitespace-pre-line">
+            {locale === 'zh' ? '进入聊天\n继续编辑' : 'Entering Chat\nContinue Editing'}
+          </p>
+        </div>
+      </>)}
 
-      {/* Pull-down PiP overlay: canvas image flies from its position to PiP corner */}
+      {/* Pull-down PiP overlay: canvas image follows finger freely, animates to PiP on release */}
       {pullProgress !== null && pullStartRect.current && (() => {
         const from = pullStartRect.current!;
         const PIP_SIZE = 116, PIP_M = 14;
         const PIP_BOTTOM = cuiInputBarH.current - 32 + 4;
-        const to = {
-          l: window.innerWidth - PIP_M - PIP_SIZE,
-          t: window.innerHeight - PIP_BOTTOM - PIP_SIZE,
-          w: PIP_SIZE, h: PIP_SIZE,
-        };
         const p = pullProgress;
-        const lerp = (a: number, b: number) => a + (b - a) * p;
         const isTransitioning = pullTransitioning.current;
-        // When fully committed (p>=1), use right+bottom positioning (matches CUI PiP exactly)
-        const atEnd = p >= 0.99;
+
+        // PiP target position
+        const pipL = (typeof window !== 'undefined' ? window.innerWidth : 390) - PIP_M - PIP_SIZE;
+        const pipT = (typeof window !== 'undefined' ? window.innerHeight : 844) - PIP_BOTTOM - PIP_SIZE;
+
+        // Compute current position: free-drag during gesture, target on release
+        let l: number, t: number, w: number, h: number, r: number;
+        if (isTransitioning) {
+          // Animating to target (commit → PiP corner, cancel → original)
+          const committed = pullCommitted.current;
+          l = committed ? pipL : from.l;
+          t = committed ? pipT : from.t;
+          w = committed ? PIP_SIZE : from.w;
+          h = committed ? PIP_SIZE : from.h;
+          r = committed ? 16 : 0;
+        } else {
+          // Free-drag: follow finger with proportional shrink
+          const scale = 1 - p * 0.5; // 1.0 → 0.5
+          w = from.w * scale;
+          h = from.h * scale;
+          const cx = from.l + from.w / 2 + pullDelta.dx;
+          const cy = from.t + from.h / 2 + pullDelta.dy;
+          l = cx - w / 2;
+          t = cy - h / 2;
+          r = p * 16;
+        }
+
         return (
           <div
             className="fixed pointer-events-none z-[100] overflow-hidden"
-            style={atEnd ? {
-              right: PIP_M,
-              bottom: PIP_BOTTOM,
-              width: PIP_SIZE,
-              height: PIP_SIZE,
-              borderRadius: 16,
-              boxShadow: '0 6px 24px rgba(0,0,0,0.55)',
-              border: '1.5px solid rgba(255,255,255,0.14)',
-            } : {
-              left: lerp(from.l, to.l),
-              top: lerp(from.t, to.t),
-              width: lerp(from.w, to.w),
-              height: lerp(from.h, to.h),
-              borderRadius: lerp(0, 16),
-              boxShadow: `0 ${6 * p}px ${24 * p}px rgba(0,0,0,${0.55 * p})`,
-              border: p > 0.1 ? '1.5px solid rgba(255,255,255,0.14)' : 'none',
+            style={{
+              left: l,
+              top: t,
+              width: w,
+              height: h,
+              borderRadius: r,
+              boxShadow: isTransitioning && p >= 0.5 ? '0 6px 24px rgba(0,0,0,0.55)' : `0 ${6 * p}px ${24 * p}px rgba(0,0,0,${0.55 * p})`,
+              border: (p > 0.1 || isTransitioning) ? '1.5px solid rgba(255,255,255,0.14)' : 'none',
               transition: isTransitioning
-                ? `left 300ms cubic-bezier(0.4,0,0.2,1), top 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1), box-shadow 300ms ease`
+                ? 'left 300ms cubic-bezier(0.4,0,0.2,1), top 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1), box-shadow 300ms ease'
                 : 'none',
             } as CSSProperties}
           >

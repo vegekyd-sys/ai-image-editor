@@ -86,7 +86,7 @@ interface AgentChatViewProps {
   onSendMessage: (text: string, attachedImages?: string[]) => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
-  onImageTap: (messageId: string) => void;
+  onImageTap: (messageId: string, rect?: DOMRect, imgSrc?: string) => void;
   focusOnOpen?: boolean;
   hidePip?: boolean;
   onInputBarHeight?: (h: number) => void;
@@ -380,9 +380,12 @@ export default function AgentChatView({
     if (isExiting) onBack();
   }, [isExiting, onBack]);
 
-  const handleInlineImageClick = useCallback((messageId: string) => {
+  const handleInlineImageClick = useCallback((messageId: string, e?: React.MouseEvent) => {
+    const imgEl = e?.currentTarget?.querySelector('img') as HTMLImageElement | null;
+    const rect = imgEl?.getBoundingClientRect();
+    const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight) ? imgEl.naturalWidth / imgEl.naturalHeight : undefined;
     setIsExiting(true);
-    onImageTap(messageId);
+    onImageTap(messageId, rect ?? undefined, imgEl?.src);
   }, [onImageTap]);
 
 
@@ -653,7 +656,7 @@ export default function AgentChatView({
                     {/* Inline generated image */}
                     {msg.image && (
                       <button
-                        onClick={() => handleInlineImageClick(msg.id)}
+                        onClick={(e) => handleInlineImageClick(msg.id, e)}
                         className="block mt-3 active:opacity-75 transition-opacity"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
