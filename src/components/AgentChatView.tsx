@@ -91,6 +91,7 @@ interface AgentChatViewProps {
   hidePip?: boolean;
   onInputBarHeight?: (h: number) => void;
   mode?: 'overlay' | 'panel';
+  skipSlideIn?: boolean;
 }
 
 export default function AgentChatView({
@@ -106,11 +107,14 @@ export default function AgentChatView({
   hidePip = false,
   onInputBarHeight,
   mode = 'overlay',
+  skipSlideIn = false,
 }: AgentChatViewProps) {
   const { t } = useLocale();
   const [input, setInput] = useState('');
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isExiting, setIsExiting] = useState(false);
+  // Capture skipSlideIn at mount time — ignore prop changes after mount
+  const [mountedWithSkip] = useState(skipSlideIn);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -119,7 +123,7 @@ export default function AgentChatView({
   const scrollStartY = useRef<number | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
-  const [inputBarH, setInputBarH] = useState(80);
+  const [inputBarH, setInputBarH] = useState(96);
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
   const [kbInset, setKbInset] = useState(0);
   useEffect(() => {
@@ -143,7 +147,7 @@ export default function AgentChatView({
   const PIP_PEEK = 28;        // px visible when hidden at right edge
   const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 
-  const [pipSizeIndex, setPipSizeIndex] = useState<number>(1); // default lg
+  const [pipSizeIndex, setPipSizeIndex] = useState<number>(0); // default sm (116px)
   const PIP = PIP_SIZES[pipSizeIndex];
   const [pipCorner, setPipCorner] = useState<PipCorner>('br');
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
@@ -295,15 +299,40 @@ export default function AgentChatView({
     return () => ro.disconnect();
   }, [onInputBarHeight]);
 
-  const isFirstScrollRef = useRef(true);
+  // On mount: keep scroll pinned to bottom until content stabilizes (images loading etc.)
   useEffect(() => {
-    if (isFirstScrollRef.current) {
-      isFirstScrollRef.current = false;
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
-    } else {
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    // Watch for height changes (image loads, lazy content) and re-pin to bottom
+    const ro = new ResizeObserver(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    // Observe the scroll content (not the container)
+    const content = el.firstElementChild;
+    if (content) ro.observe(content);
+    // Stop pinning after content stabilizes (longer for videos)
+    const timer = setTimeout(() => ro.disconnect(), 2000);
+    return () => { ro.disconnect(); clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-scroll ONLY when AI is actively streaming content (not on mount or status changes)
+  const prevMsgCountRef = useRef(messages.length);
+  const prevLastMsgLenRef = useRef(0);
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1];
+    const msgCountChanged = messages.length !== prevMsgCountRef.current;
+    const lastMsgGrew = lastMsg?.role === 'assistant' && lastMsg.content.length > prevLastMsgLenRef.current;
+
+    prevMsgCountRef.current = messages.length;
+    prevLastMsgLenRef.current = lastMsg?.content?.length ?? 0;
+
+    // Only scroll when AI is actively outputting (new assistant message or content growing)
+    if (isAgentActive && (msgCountChanged || lastMsgGrew)) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, agentStatus]);
+  }, [messages, isAgentActive]);
 
   useEffect(() => {
     if (!focusOnOpen) return;
@@ -404,7 +433,7 @@ export default function AgentChatView({
                 }
               : pipFloatPos
                 ? { left: pipFloatPos.x, top: pipFloatPos.y, transition: 'none' }
-                : { ...pipCornerStyle(pipCorner), transition: 'left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), right 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }
+                : { ...pipCornerStyle(pipCorner), transition: mountedWithSkip ? 'none' : 'left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), right 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }
             ),
             boxShadow: '0 6px 24px rgba(0,0,0,0.55)',
             border: '1.5px solid rgba(255,255,255,0.14)',
@@ -598,12 +627,13 @@ export default function AgentChatView({
                           const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
                           if (!mp4Match) return null;
                           return (
-                            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden' }}>
+                            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', aspectRatio: '4/3', maxHeight: isPanel ? 200 : 360, background: '#000' }}>
                               <video
                                 src={mp4Match[0]}
                                 controls
                                 playsInline
-                                style={{ width: '100%', display: 'block', maxHeight: isPanel ? 200 : 360, objectFit: 'contain', background: '#000' }}
+                                preload="metadata"
+                                style={{ width: '100%', height: '100%', display: 'block', objectFit: 'contain' }}
                               />
                             </div>
                           );

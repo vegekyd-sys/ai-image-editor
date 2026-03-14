@@ -294,6 +294,13 @@ export default function Editor({
   const [heroAnim, setHeroAnim] = useState<HeroAnim | null>(null);
   // ────────────────────────────────────────────────────────────────
 
+  // ── Pull-down gesture (GUI → CUI) ─────────────────────────────
+  const [pullProgress, setPullProgress] = useState<number | null>(null); // null=inactive, 0-1=gesture
+  const pullStartRect = useRef<{ l: number; t: number; w: number; h: number } | null>(null);
+  const pullTransitioning = useRef(false); // true during CSS-driven animation (release / Chat button)
+  const cuiSkipSlideInRef = useRef(false); // skip AgentChatView slide-in after pull-down commit
+  // ────────────────────────────────────────────────────────────────
+
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
   const animationStateRef = useRef(animationState);
@@ -558,7 +565,7 @@ export default function Editor({
         ? imgEl.naturalWidth / imgEl.naturalHeight
         : 1;
       lastImageAR.current = ar;
-      const PIP_SIZE = 200, PIP_M = 14;
+      const PIP_SIZE = 116, PIP_M = 14;
       // Start hero at the 1:1 center-crop square of the canvas image.
       // Both from and to are squares → animation is pure position+size, no crop change.
       const imgBounds = containRect(cr.width, cr.height, ar);
@@ -615,6 +622,58 @@ export default function Editor({
       setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
     }
   }, [timeline, viewIndex]);
+
+  // ── Pull-down gesture callbacks ──────────────────────────────────
+  const handlePullDown = useCallback((progress: number) => {
+    if (pullTransitioning.current) return;
+    // First call: capture canvas image rect for PiP overlay
+    if (pullProgress === null) {
+      const el = canvasAreaRef.current;
+      if (el) {
+        const cr = el.getBoundingClientRect();
+        const imgEl = el.querySelector('img');
+        const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
+          ? imgEl.naturalWidth / imgEl.naturalHeight : 1;
+        lastImageAR.current = ar;
+        const imgBounds = containRect(cr.width, cr.height, ar);
+        pullStartRect.current = {
+          l: cr.left + imgBounds.l,
+          t: cr.top + imgBounds.t,
+          w: imgBounds.w, h: imgBounds.h,
+        };
+      }
+    }
+    setPullProgress(progress);
+  }, [pullProgress]);
+
+  const handlePullDownEnd = useCallback((committed: boolean) => {
+    if (pullTransitioning.current) return;
+    pullTransitioning.current = true;
+    if (committed) {
+      // Animate PiP to corner, then switch to CUI (skip slide-in since pull-down provided the transition)
+      setPullProgress(1);
+      setTimeout(() => {
+        cuiSkipSlideInRef.current = true;
+        setViewMode('cui');
+        pullTransitioning.current = false;
+        // Keep overlay visible during CUI fade-in to cover PiP transition
+        setTimeout(() => {
+          cuiSkipSlideInRef.current = false;
+          setPullProgress(null);
+          pullStartRect.current = null;
+        }, 400);
+      }, 320);
+    } else {
+      // Snap back
+      setPullProgress(0);
+      setTimeout(() => {
+        setPullProgress(null);
+        pullStartRect.current = null;
+        pullTransitioning.current = false;
+      }, 320);
+    }
+  }, []);
+  // ────────────────────────────────────────────────────────────────
 
   // Trigger a 1-2 sentence CUI reaction after user commits a tip in the GUI
   const triggerTipCommitReaction = useCallback(async (
@@ -2096,8 +2155,8 @@ export default function Editor({
         }}
       />
 
-      {/* GUI mode — always visible on desktop, toggled on mobile */}
-      {(isDesktop || viewMode === 'gui') && (
+      {/* GUI mode — always visible on desktop, toggled on mobile (also during pull-down) */}
+      {(isDesktop || viewMode === 'gui' || pullProgress !== null) && (
         <div className={isDesktop ? 'flex-1 min-w-0 flex flex-col relative' : 'contents'}>
           {/* Canvas area (fills remaining space) */}
           <div
@@ -2190,6 +2249,9 @@ export default function Editor({
                 videoUrl={currentVideo?.videoUrl ?? null}
                 videoProcessing={isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing')}
                 videoPosterImage={snapshots[snapshots.length - 1]?.image}
+                pullDownActive={pullProgress !== null}
+                onPullDown={handlePullDown}
+                onPullDownEnd={handlePullDownEnd}
               />
             )}
 
@@ -2560,12 +2622,74 @@ export default function Editor({
             }
           }}
           onPipTap={handlePipTap}
-          hidePip={heroAnim !== null}
+          hidePip={heroAnim !== null || pullProgress !== null}
           onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
+          skipSlideIn={cuiSkipSlideInRef.current}
         />
       ) : null}
+
+      {/* Pull-down dim overlay (fixed div, works even when GUI wrapper is display:contents) */}
+      {!isDesktop && pullProgress !== null && (
+        <div
+          className="fixed inset-0 z-30 bg-black pointer-events-none"
+          style={{
+            opacity: pullProgress * 0.8,
+            transition: pullTransitioning.current ? 'opacity 300ms ease' : 'none',
+          }}
+        />
+      )}
+
+      {/* Pull-down PiP overlay: canvas image flies from its position to PiP corner */}
+      {pullProgress !== null && pullStartRect.current && (() => {
+        const from = pullStartRect.current!;
+        const PIP_SIZE = 116, PIP_M = 14;
+        const PIP_BOTTOM = cuiInputBarH.current - 32 + 4;
+        const to = {
+          l: window.innerWidth - PIP_M - PIP_SIZE,
+          t: window.innerHeight - PIP_BOTTOM - PIP_SIZE,
+          w: PIP_SIZE, h: PIP_SIZE,
+        };
+        const p = pullProgress;
+        const lerp = (a: number, b: number) => a + (b - a) * p;
+        const isTransitioning = pullTransitioning.current;
+        // When fully committed (p>=1), use right+bottom positioning (matches CUI PiP exactly)
+        const atEnd = p >= 0.99;
+        return (
+          <div
+            className="fixed pointer-events-none z-[100] overflow-hidden"
+            style={atEnd ? {
+              right: PIP_M,
+              bottom: PIP_BOTTOM,
+              width: PIP_SIZE,
+              height: PIP_SIZE,
+              borderRadius: 16,
+              boxShadow: '0 6px 24px rgba(0,0,0,0.55)',
+              border: '1.5px solid rgba(255,255,255,0.14)',
+            } : {
+              left: lerp(from.l, to.l),
+              top: lerp(from.t, to.t),
+              width: lerp(from.w, to.w),
+              height: lerp(from.h, to.h),
+              borderRadius: lerp(0, 16),
+              boxShadow: `0 ${6 * p}px ${24 * p}px rgba(0,0,0,${0.55 * p})`,
+              border: p > 0.1 ? '1.5px solid rgba(255,255,255,0.14)' : 'none',
+              transition: isTransitioning
+                ? `left 300ms cubic-bezier(0.4,0,0.2,1), top 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1), box-shadow 300ms ease`
+                : 'none',
+            } as CSSProperties}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={timeline[viewIndex]}
+              draggable={false}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          </div>
+        );
+      })()}
 
       {/* Hero Overlay: animates between canvas rect and PiP rect during GUI↔CUI transition */}
       {heroAnim && (

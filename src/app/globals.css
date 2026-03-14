@@ -137,8 +137,15 @@ body {
   to { transform: translateX(100%); }
 }
 .animate-slide-in-right {
-  animation: slideInRight 0.3s ease-out forwards;
+  animation: slideInRight 0.2s ease-out forwards;
 }
 .animate-slide-out-right {
   animation: slideOutRight 0.3s ease-in forwards;
+}
+@keyframes fadeInFast {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in-fast {
+  animation: fadeInFast 0.3s ease-out forwards;
 }
