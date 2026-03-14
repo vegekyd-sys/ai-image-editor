@@ -17,12 +17,22 @@ function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?:
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left active:opacity-70 transition-opacity"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left active:opacity-70 transition-opacity"
       >
-        <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        {/* Reference image thumbnail in collapsed header */}
+        {!open && inputImages?.[0] && inputImages[0].length > 10 && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={inputImages[0]}
+            alt=""
+            className="w-7 h-7 rounded-md object-cover flex-shrink-0"
+            style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+          />
+        )}
+        <span className="text-[11px] font-medium flex-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
           {t('chat.promptCard')}
         </span>
-        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? t('chat.collapse') : t('chat.expand')}</span>
+        <span className="text-[11px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? t('chat.collapse') : t('chat.expand')}</span>
       </button>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2.5">
@@ -84,13 +94,15 @@ interface AgentChatViewProps {
   agentStatus: string;
   currentImage?: string;
   onSendMessage: (text: string, attachedImages?: string[]) => void;
+  onAbort?: () => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
-  onImageTap: (messageId: string, rect?: DOMRect, imgSrc?: string, aspectRatio?: number) => void;
+  onImageTap: (messageId: string, rect?: DOMRect, imgSrc?: string) => void;
   focusOnOpen?: boolean;
   hidePip?: boolean;
   onInputBarHeight?: (h: number) => void;
   mode?: 'overlay' | 'panel';
+  skipSlideIn?: boolean;
 }
 
 export default function AgentChatView({
@@ -99,6 +111,7 @@ export default function AgentChatView({
   agentStatus,
   currentImage,
   onSendMessage,
+  onAbort,
   onBack,
   onPipTap,
   onImageTap,
@@ -106,10 +119,14 @@ export default function AgentChatView({
   hidePip = false,
   onInputBarHeight,
   mode = 'overlay',
+  skipSlideIn = false,
 }: AgentChatViewProps) {
   const { t } = useLocale();
   const [input, setInput] = useState('');
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
+  const [isExiting, setIsExiting] = useState(false);
+  // Capture skipSlideIn at mount time — ignore prop changes after mount
+  const [mountedWithSkip] = useState(skipSlideIn);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -118,7 +135,7 @@ export default function AgentChatView({
   const scrollStartY = useRef<number | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
-  const [inputBarH, setInputBarH] = useState(80);
+  const [inputBarH, setInputBarH] = useState(96);
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
   const [kbInset, setKbInset] = useState(0);
   useEffect(() => {
@@ -142,7 +159,7 @@ export default function AgentChatView({
   const PIP_PEEK = 28;        // px visible when hidden at right edge
   const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 
-  const [pipSizeIndex, setPipSizeIndex] = useState<number>(0); // default sm
+  const [pipSizeIndex, setPipSizeIndex] = useState<number>(0); // default sm (116px)
   const PIP = PIP_SIZES[pipSizeIndex];
   const [pipCorner, setPipCorner] = useState<PipCorner>('br');
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
@@ -169,7 +186,7 @@ export default function AgentChatView({
     return { bottom: b, right: m };
   }
 
-  const handleBack = useCallback(() => onBack(), [onBack]);
+  const handleBack = useCallback(() => setIsExiting(true), []);
 
   const onPipPointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
@@ -294,15 +311,40 @@ export default function AgentChatView({
     return () => ro.disconnect();
   }, [onInputBarHeight]);
 
-  const isFirstScrollRef = useRef(true);
+  // On mount: keep scroll pinned to bottom until content stabilizes (images loading etc.)
   useEffect(() => {
-    if (isFirstScrollRef.current) {
-      isFirstScrollRef.current = false;
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
-    } else {
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    // Watch for height changes (image loads, lazy content) and re-pin to bottom
+    const ro = new ResizeObserver(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    // Observe the scroll content (not the container)
+    const content = el.firstElementChild;
+    if (content) ro.observe(content);
+    // Stop pinning after content stabilizes (longer for videos)
+    const timer = setTimeout(() => ro.disconnect(), 2000);
+    return () => { ro.disconnect(); clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-scroll ONLY when AI is actively streaming content (not on mount or status changes)
+  const prevMsgCountRef = useRef(messages.length);
+  const prevLastMsgLenRef = useRef(0);
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1];
+    const msgCountChanged = messages.length !== prevMsgCountRef.current;
+    const lastMsgGrew = lastMsg?.role === 'assistant' && lastMsg.content.length > prevLastMsgLenRef.current;
+
+    prevMsgCountRef.current = messages.length;
+    prevLastMsgLenRef.current = lastMsg?.content?.length ?? 0;
+
+    // Only scroll when AI is actively outputting (new assistant message or content growing)
+    if (isAgentActive && (msgCountChanged || lastMsgGrew)) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, agentStatus]);
+  }, [messages, isAgentActive]);
 
   useEffect(() => {
     if (!focusOnOpen) return;
@@ -346,12 +388,16 @@ export default function AgentChatView({
     setAttachedImages([]);
   }, [input, attachedImages, isAgentActive, onSendMessage]);
 
+  const handleAnimationEnd = useCallback(() => {
+    if (isExiting) onBack();
+  }, [isExiting, onBack]);
+
   const handleInlineImageClick = useCallback((messageId: string, e?: React.MouseEvent) => {
     const imgEl = e?.currentTarget?.querySelector('img') as HTMLImageElement | null;
     const rect = imgEl?.getBoundingClientRect();
-    const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
-      ? imgEl.naturalWidth / imgEl.naturalHeight : undefined;
-    onImageTap(messageId, rect ?? undefined, imgEl?.src, ar);
+    const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight) ? imgEl.naturalWidth / imgEl.naturalHeight : undefined;
+    setIsExiting(true);
+    onImageTap(messageId, rect ?? undefined, imgEl?.src);
   }, [onImageTap]);
 
 
@@ -361,9 +407,10 @@ export default function AgentChatView({
     <div
       className={isPanel
         ? 'flex flex-col h-full'
-        : 'flex flex-col h-full'
+        : `fixed inset-0 z-40 flex flex-col ${isExiting ? 'animate-slide-out-right' : 'animate-slide-in-right'}`
       }
       style={{ background: '#0a0a0a' }}
+      onAnimationEnd={isPanel ? undefined : handleAnimationEnd}
     >
       {/* ── Back button (overlay mode only) ── */}
       {!isPanel && (
@@ -401,7 +448,7 @@ export default function AgentChatView({
                 }
               : pipFloatPos
                 ? { left: pipFloatPos.x, top: pipFloatPos.y, transition: 'none' }
-                : { ...pipCornerStyle(pipCorner), transition: 'left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), right 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }
+                : { ...pipCornerStyle(pipCorner), transition: mountedWithSkip ? 'none' : 'left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), right 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }
             ),
             boxShadow: '0 6px 24px rgba(0,0,0,0.55)',
             border: '1.5px solid rgba(255,255,255,0.14)',
@@ -595,12 +642,13 @@ export default function AgentChatView({
                           const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
                           if (!mp4Match) return null;
                           return (
-                            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden' }}>
+                            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', aspectRatio: '4/3', maxHeight: isPanel ? 200 : 360, background: '#000' }}>
                               <video
                                 src={mp4Match[0]}
                                 controls
                                 playsInline
-                                style={{ width: '100%', display: 'block', maxHeight: isPanel ? 200 : 360, objectFit: 'contain', background: '#000' }}
+                                preload="metadata"
+                                style={{ width: '100%', height: '100%', display: 'block', objectFit: 'contain' }}
                               />
                             </div>
                           );
@@ -621,13 +669,13 @@ export default function AgentChatView({
                     {msg.image && (
                       <button
                         onClick={(e) => handleInlineImageClick(msg.id, e)}
-                        className="block mt-3 active:opacity-75 transition-opacity"
+                        className="block w-full mt-3 active:opacity-75 transition-opacity"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={msg.image.startsWith('http') ? getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75, 2000, 'contain') : msg.image}
                           alt="Generated"
-                          className={`rounded-2xl max-w-full object-contain ${isPanel ? 'max-h-[180px]' : 'max-h-[280px]'}`}
+                          className="rounded-2xl w-full"
                           style={{ border: '1px solid rgba(255,255,255,0.08)' }}
                         />
                       </button>
@@ -759,21 +807,33 @@ export default function AgentChatView({
             {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Send button */}
-            <button
-              onClick={handleSubmit}
-              disabled={isAgentActive || (!input.trim() && attachedImages.length === 0)}
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
-              style={{
-                background: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#c026d3' : 'rgba(255,255,255,0.08)',
-                color: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#fff' : 'rgba(255,255,255,0.25)',
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="19" x2="12" y2="5" />
-                <polyline points="5 12 12 5 19 12" />
-              </svg>
-            </button>
+            {/* Send / Stop button */}
+            {isAgentActive && onAbort ? (
+              <button
+                onClick={onAbort}
+                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
+                style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                  <rect x="1" y="1" width="10" height="10" rx="2" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={!input.trim() && attachedImages.length === 0}
+                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+                style={{
+                  background: (input.trim() || attachedImages.length > 0) ? '#c026d3' : 'rgba(255,255,255,0.08)',
+                  color: (input.trim() || attachedImages.length > 0) ? '#fff' : 'rgba(255,255,255,0.25)',
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5" />
+                  <polyline points="5 12 12 5 19 12" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </div>

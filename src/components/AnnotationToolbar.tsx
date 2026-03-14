@@ -159,7 +159,7 @@ export default function AnnotationToolbar({
             }}
             placeholder={t('annotation.placeholder')}
             disabled={isSending}
-            className="flex-1 min-w-0 bg-transparent text-[15px] outline-none border-none leading-relaxed resize-none overflow-y-auto block"
+            className="flex-1 min-w-0 bg-transparent text-[15px] outline-none border-none leading-relaxed resize-none overflow-y-auto hide-scrollbar block"
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: 'calc(1.625em * 4 + 2px)', padding: 0 }}
           />
           <button

@@ -63,7 +63,7 @@ const en = {
   // Agent chat
   'chat.currentImage': 'Current image (edit base)',
   'chat.originalImage': 'Original (face reference)',
-  'chat.promptCard': '📋 Prompt sent to Gemini',
+  'chat.promptCard': 'Prompt sent to nano banana 2',
   'chat.expand': 'Expand ▼',
   'chat.collapse': 'Collapse ▲',
   'chat.inputImages': 'Input images',

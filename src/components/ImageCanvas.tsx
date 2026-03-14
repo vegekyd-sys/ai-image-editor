@@ -43,7 +43,7 @@ interface ImageCanvasProps {
   onStartTextEdit?: (canvasX: number, canvasY: number) => void;
   textEditing?: { x: number; y: number; text: string; textColor: string; bgColor: string } | null;
   pullDownActive?: boolean;
-  onPullDown?: (progress: number) => void;
+  onPullDown?: (dx: number, dy: number, progress: number) => void;
   onPullDownEnd?: (committed: boolean) => void;
 }
 
@@ -121,8 +121,9 @@ export default function ImageCanvas({
     if (!showControls) setShowControls(true);
   }
 
-  // Pull-down gesture (mobile only: shrink canvas → PiP)
+  // Pull-down gesture (mobile only: free-drag like iOS Photos dismiss)
   const isPullDown = useRef(false);
+  const pullDownStartX = useRef(0);
   const pullDownStartY = useRef(0);
   const PULL_ACTIVATE = 20;   // px vertical before activating
   const PULL_MAX = 300;        // px for progress=1
@@ -246,12 +247,16 @@ export default function ImageCanvas({
         && scale === 1 && onPullDown
         && rawDy > PULL_ACTIVATE && rawDy > rawDx * 2) {
         isPullDown.current = true;
+        pullDownStartX.current = touchStartX.current;
         pullDownStartY.current = touchStartY.current + PULL_ACTIVATE;
         swiping.current = false;
       }
       if (isPullDown.current && onPullDown) {
-        const progress = Math.max(0, Math.min(1, (touch.clientY - pullDownStartY.current) / PULL_MAX));
-        onPullDown(progress);
+        const dx = touch.clientX - pullDownStartX.current;
+        const dy = touch.clientY - pullDownStartY.current;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const progress = Math.max(0, Math.min(1, dist / PULL_MAX));
+        onPullDown(dx, dy, progress);
         return;
       }
 
@@ -274,8 +279,10 @@ export default function ImageCanvas({
 
     // End pull-down gesture
     if (isPullDown.current) {
+      const finalDx = e.changedTouches[0].clientX - pullDownStartX.current;
       const finalDy = e.changedTouches[0].clientY - pullDownStartY.current;
-      const progress = Math.max(0, Math.min(1, finalDy / PULL_MAX));
+      const dist = Math.sqrt(finalDx * finalDx + finalDy * finalDy);
+      const progress = Math.max(0, Math.min(1, dist / PULL_MAX));
       isPullDown.current = false;
       skipClick.current = true;
       onPullDownEnd?.(progress >= PULL_COMMIT);
@@ -817,7 +824,7 @@ export default function ImageCanvas({
             src={displayImage}
             alt="preview"
             className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
-              pullDownActive ? 'opacity-0' :
+              pullDownActive ? 'opacity-[0.15] grayscale' :
               animDir === 'left' ? 'opacity-0 -translate-x-8' :
               animDir === 'right' ? 'opacity-0 translate-x-8' :
               imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'

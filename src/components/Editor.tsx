@@ -294,11 +294,12 @@ export default function Editor({
   const [heroAnim, setHeroAnim] = useState<HeroAnim | null>(null);
   // ────────────────────────────────────────────────────────────────
 
-  // ── GUI↔CUI transition (single CUI instance + translateX) ──────
-  const [cuiOffset, setCuiOffset] = useState(100);          // 0=visible, 100=hidden (right)
-  const cuiTransition = useRef(false);                       // true → CSS transition active
-  const [pullPipRect, setPullPipRect] = useState<{ l: number; t: number; w: number; h: number } | null>(null);
-  const pullStartRect = useRef<{ l: number; t: number; w: number; h: number } | null>(null); // canvas rect at pull start
+  // ── Pull-down gesture (GUI → CUI) ─────────────────────────────
+  const [pullProgress, setPullProgress] = useState<number | null>(null); // null=inactive, 0-1=gesture
+  const [pullDelta, setPullDelta] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 }); // finger offset
+  const pullStartRect = useRef<{ l: number; t: number; w: number; h: number } | null>(null);
+  const pullTransitioning = useRef(false); // true during CSS-driven animation (release / Chat button)
+  const pullCommitted = useRef(false);     // commit decision (ref to avoid flash between render cycles)
   // ────────────────────────────────────────────────────────────────
 
   const snapshotsRef = useRef(snapshots);
@@ -549,47 +550,59 @@ export default function Editor({
     }
   }, [projectId, onRenameProject]);
 
-  // Open CUI — Chat button tap
+  // Open CUI with hero animation (canvas → PiP)
   const openCUI = useCallback(() => {
+    // Desktop: CUI panel is always visible, no hero animation needed
     if (isDesktop) return;
-    if (cuiTransition.current) return;
 
-    // Capture canvas rect for flying PiP
     const el = canvasAreaRef.current;
-    if (el) {
+    const src = timeline[viewIndex];
+    if (el && src) {
       const cr = el.getBoundingClientRect();
+      lastCanvasRect.current = { l: cr.left, t: cr.top, w: cr.width, h: cr.height };
+      // Read natural AR from the loaded img element in canvas (synchronous)
       const imgEl = el.querySelector('img');
-      const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
-        ? imgEl.naturalWidth / imgEl.naturalHeight : 1;
+      const ar = (imgEl && imgEl.naturalWidth && imgEl.naturalHeight)
+        ? imgEl.naturalWidth / imgEl.naturalHeight
+        : 1;
       lastImageAR.current = ar;
+      const PIP_SIZE = 116, PIP_M = 14;
+      // Start hero at the 1:1 center-crop square of the canvas image.
+      // Both from and to are squares → animation is pure position+size, no crop change.
       const imgBounds = containRect(cr.width, cr.height, ar);
-      pullStartRect.current = {
-        l: cr.left + imgBounds.l,
-        t: cr.top + imgBounds.t,
-        w: imgBounds.w, h: imgBounds.h,
+      const side = Math.min(imgBounds.w, imgBounds.h);
+      const sqX = (imgBounds.w - side) / 2;
+      const sqY = (imgBounds.h - side) / 2;
+      const fromRect = {
+        l: cr.left + imgBounds.l + sqX,
+        t: cr.top  + imgBounds.t + sqY,
+        w: side, h: side,
       };
-      setPullPipRect({
-        l: cr.left + imgBounds.l,
-        t: cr.top + imgBounds.t,
-        w: imgBounds.w, h: imgBounds.h,
+      // toRect uses a placeholder — will be corrected in the second rAF after
+      // CUI mounts and ResizeObserver updates cuiInputBarH.current with real height
+      setHeroAnim({
+        src,
+        fromRect,
+        toRect: { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - (cuiInputBarH.current + 8) - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE },
+        fromImg: coverRect(side, side, ar), // unused (objectCover=true)
+        toImg:   coverRect(PIP_SIZE, PIP_SIZE, ar), // unused
+        fromRadius: '0px', toRadius: '16px',
+        objectCover: true,
+        active: false,
       });
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        // By this frame CUI has mounted and ResizeObserver has fired —
+        // recompute toRect with the accurate input bar height
+        const PIP_BOTTOM = cuiInputBarH.current - 32 + 4; // mirror AgentChatView: inputBarH - gradient(32) + 4
+        const toRect = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+        setHeroAnim(p => p ? { ...p, toRect, active: true } : null);
+      }));
+      setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
     }
+    setViewMode('cui');
+  }, [timeline, viewIndex, isDesktop]);
 
-    // Mount CUI first (99 < 100 triggers hybrid mount), then animate slide-in
-    setCuiOffset(99);
-    cuiTransition.current = true;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      setCuiOffset(0);
-    }));
-    setTimeout(() => {
-      setViewMode('cui');
-      setPullPipRect(null);
-      pullStartRect.current = null;
-      cuiTransition.current = false;
-    }, 320);
-  }, [isDesktop]);
-
-  // Handle PiP tap: hero animation (PiP → canvas) + CUI slide-out → GUI
+  // Handle PiP tap: hero animation (PiP → canvas), then trigger GUI return
   const handlePipTap = useCallback((pipRect: DOMRect) => {
     const cr = lastCanvasRect.current;
     const src = timeline[viewIndex];
@@ -607,22 +620,15 @@ export default function Editor({
       requestAnimationFrame(() => requestAnimationFrame(() =>
         setHeroAnim(p => p ? { ...p, active: true } : null)
       ));
-      // Slide CUI out simultaneously with hero animation
-      cuiTransition.current = true;
-      setCuiOffset(100);
-      setTimeout(() => {
-        setHeroAnim(null);
-        setViewMode('gui');
-        cuiTransition.current = false;
-      }, HERO_DURATION + 120);
+      setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
     }
   }, [timeline, viewIndex]);
 
   // ── Pull-down gesture callbacks ──────────────────────────────────
-  const handlePullDown = useCallback((progress: number) => {
-    if (cuiTransition.current) return;
+  const handlePullDown = useCallback((dx: number, dy: number, progress: number) => {
+    if (pullTransitioning.current) return;
     // First call: capture canvas image rect for PiP overlay
-    if (!pullPipRect) {
+    if (pullProgress === null) {
       const el = canvasAreaRef.current;
       if (el) {
         const cr = el.getBoundingClientRect();
@@ -631,38 +637,46 @@ export default function Editor({
           ? imgEl.naturalWidth / imgEl.naturalHeight : 1;
         lastImageAR.current = ar;
         const imgBounds = containRect(cr.width, cr.height, ar);
-        const rect = {
+        pullStartRect.current = {
           l: cr.left + imgBounds.l,
           t: cr.top + imgBounds.t,
           w: imgBounds.w, h: imgBounds.h,
         };
-        pullStartRect.current = rect;
-        setPullPipRect(rect);
       }
     }
-    // Move CUI in sync (no transition, follow finger)
-    // Clamp to max 99 so hybrid mount keeps CUI in DOM during gesture
-    cuiTransition.current = false;
-    setCuiOffset(Math.min(99, (1 - progress) * 100));
-  }, [pullPipRect]);
+    setPullDelta({ dx, dy });
+    setPullProgress(progress);
+  }, [pullProgress]);
 
   const handlePullDownEnd = useCallback((committed: boolean) => {
-    if (cuiTransition.current) return;
-    cuiTransition.current = true;
+    if (pullTransitioning.current) return;
+    pullTransitioning.current = true;
+    pullCommitted.current = committed;
     if (committed) {
-      setCuiOffset(0);
+      // Step 1: PiP flies to corner (300ms CSS transition)
+      setPullProgress(1);
       setTimeout(() => {
+        // Step 2: PiP arrived → mount CUI with normal slide-in
         setViewMode('cui');
-        setPullPipRect(null);
-        pullStartRect.current = null;
-        cuiTransition.current = false;
-      }, 320);
+        // Keep pullTransitioning=true so overlay stays at PiP corner (not free-drag)
+        // Step 3: Keep overlay during CUI slide-in, then cleanup everything
+        setTimeout(() => {
+          pullTransitioning.current = false;
+          setPullProgress(null);
+          setPullDelta({ dx: 0, dy: 0 });
+          pullStartRect.current = null;
+          pullCommitted.current = false;
+        }, 300);
+      }, 350);
     } else {
-      setCuiOffset(100);
+      // Snap back to original position
+      setPullProgress(0);
       setTimeout(() => {
-        setPullPipRect(null);
+        setPullProgress(null);
+        setPullDelta({ dx: 0, dy: 0 });
         pullStartRect.current = null;
-        cuiTransition.current = false;
+        pullTransitioning.current = false;
+        pullCommitted.current = false;
       }, 320);
     }
   }, []);
@@ -1164,6 +1178,7 @@ export default function Editor({
         agentAbortRef.current.signal,
       );
     } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
       console.error('[runAutoAnalysis] error:', err);
     } finally {
       setIsAgentActive(false);
@@ -1214,7 +1229,7 @@ export default function Editor({
     }]);
 
     // Auto-switch to CUI (mobile only — desktop CUI panel is always visible)
-    if (!isDesktop) { setCuiOffset(0); setViewMode('cui'); }
+    if (!isDesktop) setViewMode('cui');
     setIsAgentActive(true);
     setAgentStatus(t('editor.agentThinking'));
     agentAbortRef.current = new AbortController();
@@ -1236,7 +1251,7 @@ export default function Editor({
     // Large context model (1M tokens) — no need to truncate aggressively
     const recentMessages = messages
       .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
-      .slice(-30)
+      .slice(-200)
       .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 500)}`)
       .join('\n');
     const historyContext = recentMessages
@@ -1400,11 +1415,28 @@ export default function Editor({
         agentAbortRef.current.signal,
       );
     } catch (err) {
+      if ((err as Error).name === 'AbortError') return; // User cancelled — handled by handleAgentAbort
       console.error('Agent request failed:', err);
     } finally {
       setIsAgentActive(false);
     }
   }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
+
+  // Abort the current agent request and discard its partial response
+  const handleAgentAbort = useCallback(() => {
+    agentAbortRef.current.abort();
+    setIsAgentActive(false);
+    setAgentStatus(t('editor.greeting'));
+    // Remove the last empty/partial assistant message (the one being streamed)
+    setMessages(prev => {
+      // Find the last assistant message — if it has no meaningful content, remove it
+      const lastIdx = prev.length - 1;
+      if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+        return prev.slice(0, lastIdx);
+      }
+      return prev;
+    });
+  }, []);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
   // NOTE: no compressBase64 here — annotated image is used as generation base,
@@ -1784,7 +1816,7 @@ export default function Editor({
         tipsImagePromise.then(img => fetchTipsForSnapshot(snapId, img));
         // Enter CUI and send the prompt (mobile only — desktop CUI panel is always visible)
         setTimeout(() => {
-          if (!isDesktop) { setCuiOffset(0); setViewMode('cui'); }
+          if (!isDesktop) setViewMode('cui');
           handleAgentRequest(pendingPrompt);
         }, 200);
       } else {
@@ -1799,7 +1831,7 @@ export default function Editor({
   useEffect(() => {
     if (pendingPrompt && !pendingImage && !pendingPromptHandled.current) {
       pendingPromptHandled.current = true;
-      if (!isDesktop) { setCuiOffset(0); setViewMode('cui'); }
+      if (!isDesktop) setViewMode('cui');
       // Small delay to ensure CUI is mounted
       setTimeout(() => handleAgentRequest(pendingPrompt), 200);
     }
@@ -2086,20 +2118,21 @@ export default function Editor({
     }
   }, [timeline, viewIndex, isViewingVideo, currentVideo?.videoUrl, showSaveToast]);
 
-  // CUI: tap inline image → hero fly animation → switch to GUI at that index
-  const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string, aspectRatio?: number) => {
+  // CUI: tap inline image → find snapshot → switch to GUI at that index
+  const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
     const snapIdx = snapshots.findIndex(s => s.messageId === messageId);
     if (snapIdx < 0) return;
     const snap = snapshots[snapIdx];
-    // Use the CUI img's actual src (already loaded/cached) for smooth hero animation
     const src = imgSrc || snap?.image || snap?.imageUrl || '';
     setViewIndex(timelineFromSnap(snapIdx, draftParentIndex));
 
     if (!isDesktop) {
       const cr = lastCanvasRect.current;
       if (imgRect && cr && src) {
-        const ar = aspectRatio || lastImageAR.current;
         // Compute actual image position within canvas (object-contain)
+        const imgEl = canvasAreaRef.current?.querySelector('img');
+        const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
+          ? imgEl.naturalWidth / imgEl.naturalHeight : lastImageAR.current;
         const imgInCanvas = containRect(cr.w, cr.h, ar);
         const toRect = { l: cr.l + imgInCanvas.l, t: cr.t + imgInCanvas.t, w: imgInCanvas.w, h: imgInCanvas.h };
         const fromRect = { l: imgRect.left, t: imgRect.top, w: imgRect.width, h: imgRect.height };
@@ -2115,31 +2148,21 @@ export default function Editor({
         requestAnimationFrame(() => requestAnimationFrame(() =>
           setHeroAnim(p => p ? { ...p, active: true } : null)
         ));
-        // Slide CUI out + hero fly simultaneously
-        cuiTransition.current = true;
-        setCuiOffset(100);
-        setTimeout(() => {
-          setHeroAnim(null);
-          setViewMode('gui');
-          cuiTransition.current = false;
-        }, HERO_DURATION + 120);
-      } else {
-        // No rect available → plain slide-out
-        cuiTransition.current = true;
-        setCuiOffset(100);
-        setTimeout(() => {
-          setViewMode('gui');
-          cuiTransition.current = false;
-        }, 320);
+        setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
       }
+      setViewMode('gui');
     }
   }, [snapshots, draftParentIndex, isDesktop]);
 
   // Track whether we've pushed a CUI history state that hasn't been consumed yet.
+  // We need this because setViewMode('gui') can be called via two paths:
+  //   1. popstate (history.back) → state already consumed, don't back() again
+  //   2. direct call (e.g. handleImageTap) → orphaned state, must clean up
   const hasCuiHistoryState = useRef(false);
 
   // Intercept browser/iOS back gesture when CUI is open:
-  // push a history state on enter, listen for popstate to trigger slide-out.
+  // push a history state on enter, listen for popstate to go back to GUI.
+  // Desktop: no history management needed (CUI is always visible as side panel)
   useEffect(() => {
     if (isDesktop) return;
     if (viewMode === 'cui') {
@@ -2147,22 +2170,16 @@ export default function Editor({
       hasCuiHistoryState.current = true;
       const handlePop = () => {
         hasCuiHistoryState.current = false;
-        // Instantly unmount CUI — no transition, no animation.
-        // iOS gesture provides its own slide animation.
-        // With no-transform fix (cuiOffset=0 → no CSS transform), the CUI is a plain
-        // fixed element that iOS can composite correctly. Removing it from the DOM
-        // immediately lets the live page show only GUI underneath iOS's gesture snapshot.
-        cuiTransition.current = false;
-        setCuiOffset(100);
         setViewMode('gui');
       };
       window.addEventListener('popstate', handlePop);
       return () => window.removeEventListener('popstate', handlePop);
     }
-    // viewMode is 'gui': if a CUI state was pushed but not consumed, pop it
+    // viewMode is 'gui': if a CUI state was pushed but not consumed (e.g. handleImageTap
+    // called setViewMode('gui') directly), pop it now so iOS back swipe goes to /projects.
     if (hasCuiHistoryState.current) {
       hasCuiHistoryState.current = false;
-      window.history.back();
+      window.history.back(); // listener already removed by cleanup above — silently pops
     }
   }, [viewMode, isDesktop]);
 
@@ -2192,16 +2209,9 @@ export default function Editor({
         }}
       />
 
-      {/* GUI mode — always rendered (CUI overlays it on mobile) */}
-      <div
-        className={isDesktop ? 'flex-1 min-w-0 flex flex-col relative' : 'flex flex-col flex-1 min-h-0 relative'}
-        style={!isDesktop && (cuiOffset < 100 || cuiTransition.current) ? {
-          // Quadratic curve: dims fast at the start of pull-down
-          // cuiOffset=100→1.0, 90→0.81, 80→0.64, 50→0.25, 0→0.2
-          opacity: Math.max(0.2, Math.pow(cuiOffset / 100, 2)),
-          transition: cuiTransition.current ? 'opacity 300ms ease' : 'none',
-        } : undefined}
-      >
+      {/* GUI mode — always visible on desktop, toggled on mobile (also during pull-down) */}
+      {(isDesktop || viewMode === 'gui' || pullProgress !== null) && (
+        <div className={isDesktop ? 'flex-1 min-w-0 flex flex-col relative' : 'contents'}>
           {/* Canvas area (fills remaining space) */}
           <div
             ref={(el) => {
@@ -2294,7 +2304,7 @@ export default function Editor({
                 videoUrl={currentVideo?.videoUrl ?? null}
                 videoProcessing={isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing')}
                 videoPosterImage={snapshots[snapshots.length - 1]?.image}
-                pullDownActive={pullPipRect !== null}
+                pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
               />
@@ -2615,7 +2625,7 @@ export default function Editor({
                 setAnimationState(null);
                 setDetailAnimation(null);
               }}
-              onOpenCUI={() => { if (!isDesktop) { setCuiOffset(0); setViewMode('cui'); } }}
+              onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
               onGeneratePrompt={generateAnimationPrompt}
               onPreviewImage={(snapshotId) => {
                 const idx = snapshots.findIndex(s => s.id === snapshotId);
@@ -2634,8 +2644,9 @@ export default function Editor({
           )}
 
         </div>
+      )}
 
-      {/* CUI — desktop: side panel, mobile: hybrid mount (only in DOM during CUI or transition) */}
+      {/* CUI mode — desktop: side panel (always visible), mobile: fullscreen overlay */}
       {isDesktop ? (
         <div className="w-[340px] flex-shrink-0 border-l border-white/[0.08]">
           <AgentChatView
@@ -2645,79 +2656,107 @@ export default function Editor({
             agentStatus={agentStatus}
             currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
             onSendMessage={handleCuiSend}
+            onAbort={handleAgentAbort}
             onBack={() => {}}
             onPipTap={() => {}}
             onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
             onImageTap={handleImageTap}
           />
         </div>
-      ) : (viewMode === 'cui' || cuiOffset < 100) ? (
-        <div
-          className="fixed inset-0 z-40"
-          style={{
-            // Only apply transform when CUI is not fully visible.
-            // transform: translateX(0%) creates a new compositing layer that breaks
-            // iOS Safari back gesture (shows two CUI layers instead of CUI + GUI).
-            // Without transform, the element is a plain position:fixed — same as production.
-            ...(cuiOffset > 0 ? { transform: `translateX(${cuiOffset}%)` } : {}),
-            transition: cuiTransition.current ? 'transform 300ms cubic-bezier(0.4,0,0.2,1)' : 'none',
-            pointerEvents: cuiOffset === 0 ? 'auto' : 'none',
+      ) : viewMode === 'cui' ? (
+        <AgentChatView
+          messages={messages}
+          isAgentActive={isAgentActive}
+          agentStatus={agentStatus}
+          currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
+          onSendMessage={handleCuiSend}
+          onAbort={handleAgentAbort}
+          onBack={() => {
+            if (snapshots.length === 0 && onBack) {
+              onBack(); // No snapshots (text-only before image generated) → go to projects
+            } else {
+              window.history.back(); // Normal: CUI → GUI
+            }
           }}
-        >
-          <AgentChatView
-            messages={messages}
-            isAgentActive={isAgentActive}
-            agentStatus={agentStatus}
-            currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
-            onSendMessage={handleCuiSend}
-            onBack={() => {
-              if (snapshots.length === 0 && onBack) {
-                onBack();
-                return;
-              }
-              cuiTransition.current = true;
-              setCuiOffset(100);
-              setTimeout(() => {
-                setViewMode('gui');
-                cuiTransition.current = false;
-              }, 320);
-            }}
-            onPipTap={handlePipTap}
-            hidePip={pullPipRect !== null || heroAnim !== null}
-            onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
-            onImageTap={handleImageTap}
-            focusOnOpen={viewMode === 'cui' && isViewingDraft}
-          />
-        </div>
+          onPipTap={handlePipTap}
+          hidePip={heroAnim !== null || pullProgress !== null}
+          onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
+          onImageTap={handleImageTap}
+          focusOnOpen={isViewingDraft}
+        />
       ) : null}
 
-      {/* PiP floating overlay — during pull-down or Chat button transition */}
-      {pullPipRect && pullStartRect.current && (() => {
+      {/* Pull-down dim overlay + "Entering Chat" hint */}
+      {!isDesktop && pullProgress !== null && (<>
+        <div
+          className="fixed inset-0 z-30 bg-black pointer-events-none"
+          style={{
+            opacity: pullProgress * 0.8,
+            transition: pullTransitioning.current ? 'opacity 300ms ease' : 'none',
+          }}
+        />
+        <div
+          className="fixed inset-x-0 z-30 pointer-events-none flex items-center justify-center"
+          style={{
+            top: lastCanvasRect.current ? lastCanvasRect.current.t : 0,
+            height: lastCanvasRect.current ? lastCanvasRect.current.h : '50%',
+            opacity: Math.max(0, Math.pow(pullProgress, 2) * 0.7),
+            transition: pullTransitioning.current ? 'opacity 300ms ease' : 'none',
+          }}
+        >
+          <p className="text-white text-lg font-medium text-center leading-relaxed tracking-wider whitespace-pre-line">
+            {locale === 'zh' ? '进入聊天\n继续编辑' : 'Entering Chat\nContinue Editing'}
+          </p>
+        </div>
+      </>)}
+
+      {/* Pull-down PiP overlay: canvas image follows finger freely, animates to PiP on release */}
+      {pullProgress !== null && pullStartRect.current && (() => {
         const from = pullStartRect.current!;
         const PIP_SIZE = 116, PIP_M = 14;
         const PIP_BOTTOM = cuiInputBarH.current - 32 + 4;
-        const to = {
-          l: typeof window !== 'undefined' ? window.innerWidth - PIP_M - PIP_SIZE : 0,
-          t: typeof window !== 'undefined' ? window.innerHeight - PIP_BOTTOM - PIP_SIZE : 0,
-          w: PIP_SIZE, h: PIP_SIZE,
-        };
-        // cuiOffset: 100=GUI, 0=CUI fully visible → p = 1 - cuiOffset/100
-        const p = Math.max(0, Math.min(1, 1 - cuiOffset / 100));
-        const lerp = (a: number, b: number) => a + (b - a) * p;
-        const isTransitioning = cuiTransition.current;
+        const p = pullProgress;
+        const isTransitioning = pullTransitioning.current;
+
+        // PiP target position
+        const pipL = (typeof window !== 'undefined' ? window.innerWidth : 390) - PIP_M - PIP_SIZE;
+        const pipT = (typeof window !== 'undefined' ? window.innerHeight : 844) - PIP_BOTTOM - PIP_SIZE;
+
+        // Compute current position: free-drag during gesture, target on release
+        let l: number, t: number, w: number, h: number, r: number;
+        if (isTransitioning) {
+          // Animating to target (commit → PiP corner, cancel → original)
+          const committed = pullCommitted.current;
+          l = committed ? pipL : from.l;
+          t = committed ? pipT : from.t;
+          w = committed ? PIP_SIZE : from.w;
+          h = committed ? PIP_SIZE : from.h;
+          r = committed ? 16 : 0;
+        } else {
+          // Free-drag: follow finger with proportional shrink
+          const scale = 1 - p * 0.5; // 1.0 → 0.5
+          w = from.w * scale;
+          h = from.h * scale;
+          const cx = from.l + from.w / 2 + pullDelta.dx;
+          const cy = from.t + from.h / 2 + pullDelta.dy;
+          l = cx - w / 2;
+          t = cy - h / 2;
+          r = p * 16;
+        }
+
         return (
           <div
             className="fixed pointer-events-none z-[100] overflow-hidden"
             style={{
-              left: lerp(from.l, to.l),
-              top: lerp(from.t, to.t),
-              width: lerp(from.w, to.w),
-              height: lerp(from.h, to.h),
-              borderRadius: lerp(0, 16),
-              boxShadow: `0 ${6 * p}px ${24 * p}px rgba(0,0,0,${0.55 * p})`,
-              border: p > 0.1 ? '1.5px solid rgba(255,255,255,0.14)' : 'none',
+              left: l,
+              top: t,
+              width: w,
+              height: h,
+              borderRadius: r,
+              boxShadow: isTransitioning && p >= 0.5 ? '0 6px 24px rgba(0,0,0,0.55)' : `0 ${6 * p}px ${24 * p}px rgba(0,0,0,${0.55 * p})`,
+              border: (p > 0.1 || isTransitioning) ? '1.5px solid rgba(255,255,255,0.14)' : 'none',
               transition: isTransitioning
-                ? `left 300ms cubic-bezier(0.4,0,0.2,1), top 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1), box-shadow 300ms ease`
+                ? 'left 300ms cubic-bezier(0.4,0,0.2,1), top 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1), box-shadow 300ms ease'
                 : 'none',
             } as CSSProperties}
           >
