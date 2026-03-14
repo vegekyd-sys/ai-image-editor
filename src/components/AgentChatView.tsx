@@ -17,12 +17,22 @@ function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?:
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left active:opacity-70 transition-opacity"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left active:opacity-70 transition-opacity"
       >
-        <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        {/* Reference image thumbnail in collapsed header */}
+        {!open && inputImages?.[0] && inputImages[0].length > 10 && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={inputImages[0]}
+            alt=""
+            className="w-7 h-7 rounded-md object-cover flex-shrink-0"
+            style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+          />
+        )}
+        <span className="text-[11px] font-medium flex-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
           {t('chat.promptCard')}
         </span>
-        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? t('chat.collapse') : t('chat.expand')}</span>
+        <span className="text-[11px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? t('chat.collapse') : t('chat.expand')}</span>
       </button>
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2.5">
@@ -84,6 +94,7 @@ interface AgentChatViewProps {
   agentStatus: string;
   currentImage?: string;
   onSendMessage: (text: string, attachedImages?: string[]) => void;
+  onAbort?: () => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
   onImageTap: (messageId: string, rect?: DOMRect, imgSrc?: string) => void;
@@ -100,6 +111,7 @@ export default function AgentChatView({
   agentStatus,
   currentImage,
   onSendMessage,
+  onAbort,
   onBack,
   onPipTap,
   onImageTap,
@@ -657,13 +669,13 @@ export default function AgentChatView({
                     {msg.image && (
                       <button
                         onClick={(e) => handleInlineImageClick(msg.id, e)}
-                        className="block mt-3 active:opacity-75 transition-opacity"
+                        className="block w-full mt-3 active:opacity-75 transition-opacity"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={msg.image.startsWith('http') ? getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75, 2000, 'contain') : msg.image}
                           alt="Generated"
-                          className={`rounded-2xl max-w-full object-contain ${isPanel ? 'max-h-[180px]' : 'max-h-[280px]'}`}
+                          className="rounded-2xl w-full"
                           style={{ border: '1px solid rgba(255,255,255,0.08)' }}
                         />
                       </button>
@@ -795,21 +807,33 @@ export default function AgentChatView({
             {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Send button */}
-            <button
-              onClick={handleSubmit}
-              disabled={isAgentActive || (!input.trim() && attachedImages.length === 0)}
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
-              style={{
-                background: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#c026d3' : 'rgba(255,255,255,0.08)',
-                color: (input.trim() || attachedImages.length > 0) && !isAgentActive ? '#fff' : 'rgba(255,255,255,0.25)',
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="19" x2="12" y2="5" />
-                <polyline points="5 12 12 5 19 12" />
-              </svg>
-            </button>
+            {/* Send / Stop button */}
+            {isAgentActive && onAbort ? (
+              <button
+                onClick={onAbort}
+                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
+                style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                  <rect x="1" y="1" width="10" height="10" rx="2" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={!input.trim() && attachedImages.length === 0}
+                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+                style={{
+                  background: (input.trim() || attachedImages.length > 0) ? '#c026d3' : 'rgba(255,255,255,0.08)',
+                  color: (input.trim() || attachedImages.length > 0) ? '#fff' : 'rgba(255,255,255,0.25)',
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5" />
+                  <polyline points="5 12 12 5 19 12" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </div>

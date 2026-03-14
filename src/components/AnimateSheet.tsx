@@ -222,7 +222,7 @@ export default function AnimateSheet({
             <>
               {/* Filmstrip — read-only */}
               <div style={{
-                display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4,
+                display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16,
               }}>
                 {detailUrls.map((url, i) => (
                   <div key={i} className="animate-sheet-thumb" style={{
