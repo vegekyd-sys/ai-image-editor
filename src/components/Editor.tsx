@@ -1178,6 +1178,7 @@ export default function Editor({
         agentAbortRef.current.signal,
       );
     } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
       console.error('[runAutoAnalysis] error:', err);
     } finally {
       setIsAgentActive(false);
@@ -1250,7 +1251,7 @@ export default function Editor({
     // Large context model (1M tokens) — no need to truncate aggressively
     const recentMessages = messages
       .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
-      .slice(-30)
+      .slice(-200)
       .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 500)}`)
       .join('\n');
     const historyContext = recentMessages
@@ -1414,11 +1415,28 @@ export default function Editor({
         agentAbortRef.current.signal,
       );
     } catch (err) {
+      if ((err as Error).name === 'AbortError') return; // User cancelled — handled by handleAgentAbort
       console.error('Agent request failed:', err);
     } finally {
       setIsAgentActive(false);
     }
   }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
+
+  // Abort the current agent request and discard its partial response
+  const handleAgentAbort = useCallback(() => {
+    agentAbortRef.current.abort();
+    setIsAgentActive(false);
+    setAgentStatus(t('editor.greeting'));
+    // Remove the last empty/partial assistant message (the one being streamed)
+    setMessages(prev => {
+      // Find the last assistant message — if it has no meaningful content, remove it
+      const lastIdx = prev.length - 1;
+      if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+        return prev.slice(0, lastIdx);
+      }
+      return prev;
+    });
+  }, []);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
   // NOTE: no compressBase64 here — annotated image is used as generation base,
@@ -2638,6 +2656,7 @@ export default function Editor({
             agentStatus={agentStatus}
             currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
             onSendMessage={handleCuiSend}
+            onAbort={handleAgentAbort}
             onBack={() => {}}
             onPipTap={() => {}}
             onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
@@ -2651,6 +2670,7 @@ export default function Editor({
           agentStatus={agentStatus}
           currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
           onSendMessage={handleCuiSend}
+          onAbort={handleAgentAbort}
           onBack={() => {
             if (snapshots.length === 0 && onBack) {
               onBack(); // No snapshots (text-only before image generated) → go to projects
