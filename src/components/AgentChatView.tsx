@@ -644,7 +644,7 @@ export default function AgentChatView({
                           return (
                             <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', aspectRatio: '4/3', maxHeight: isPanel ? 200 : 360, background: '#000' }}>
                               <video
-                                src={mp4Match[0]}
+                                src={`${mp4Match[0]}#t=0.1`}
                                 controls
                                 playsInline
                                 preload="metadata"
