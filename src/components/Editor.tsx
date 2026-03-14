@@ -1178,6 +1178,7 @@ export default function Editor({
         agentAbortRef.current.signal,
       );
     } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
       console.error('[runAutoAnalysis] error:', err);
     } finally {
       setIsAgentActive(false);
@@ -1414,6 +1415,7 @@ export default function Editor({
         agentAbortRef.current.signal,
       );
     } catch (err) {
+      if ((err as Error).name === 'AbortError') return; // User cancelled — handled by handleAgentAbort
       console.error('Agent request failed:', err);
     } finally {
       setIsAgentActive(false);
