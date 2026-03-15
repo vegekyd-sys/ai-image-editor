@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
+import { flushSync } from 'react-dom';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
@@ -2189,15 +2190,14 @@ export default function Editor({
       }
       const handlePop = () => {
         hasCuiHistoryState.current = false;
-        setViewMode('gui');
-        // Force Safari to repaint after iOS back-swipe gesture
-        // Safari keeps showing a stale visual snapshot for ~2s after popstate;
-        // toggling a GPU compositing property forces an immediate recomposite.
+        // flushSync forces React to render synchronously — DOM updates
+        // before the next line, giving Safari no chance to show stale frames.
+        flushSync(() => setViewMode('gui'));
+        // Force layout reflow + repaint so Safari's compositor picks up the new DOM
+        document.body.offsetHeight;           // force reflow
+        document.body.style.opacity = '0.999';
         requestAnimationFrame(() => {
-          document.body.style.transform = 'translateZ(0)';
-          requestAnimationFrame(() => {
-            document.body.style.transform = '';
-          });
+          document.body.style.opacity = '';
         });
       };
       window.addEventListener('popstate', handlePop);
