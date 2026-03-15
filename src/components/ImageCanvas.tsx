@@ -573,7 +573,7 @@ export default function ImageCanvas({
     const editNum = (draftTimelineIndex !== undefined && index > draftTimelineIndex)
       ? index - 1
       : index;
-    return `Edit ${editNum}`;
+    return `Snap ${editNum}`;
   };
 
   const baseImage = timeline[currentIndex];
@@ -862,83 +862,45 @@ export default function ImageCanvas({
         </div>
       )}
 
-      {/* Bottom indicators */}
+      {/* Timeline indicators — bottom of canvas, capsule pill */}
       {(timeline.length > 1 || onAnimate) && (
-        <div className={`absolute left-1/2 -translate-x-1/2 flex items-center z-10 ${isDesktop ? 'bottom-3 gap-2' : 'bottom-20 gap-3'}`}>
-          <div className={`flex items-center bg-black/50 backdrop-blur-sm rounded-full ${isDesktop ? 'gap-1 px-2 py-1' : 'gap-1.5 px-3 py-1.5'}`}>
-            {timeline.map((entry, i) => {
-              // Skip the video sentinel in dot rendering — it has its own dot below
-              if (entry === VIDEO_SENTINEL) return null;
-              return (
+        <div className={`absolute left-1/2 -translate-x-1/2 flex items-center justify-center z-10 ${isDesktop ? 'bottom-3' : 'bottom-3'}`}>
+          <div className={`flex items-center rounded-full ${isDesktop ? 'gap-1.5 px-3 py-1.5' : 'gap-[5px] px-[10px] py-[5px]'}`}
+            style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+          >
+            {timeline.map((entry, i) => (
+              entry === VIDEO_SENTINEL ? (
                 <button
                   key={i}
                   onClick={() => goTo(i)}
-                  className={`rounded-full transition-all cursor-pointer ${
+                  className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-5 h-5 hover:opacity-80' : 'w-3 h-3'}`}
+                  style={{ color: i === currentIndex ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
+                >
+                  <svg width={isDesktop ? "11" : "8"} height={isDesktop ? "11" : "8"} viewBox="0 0 8 8" fill="currentColor">
+                    <polygon points="2,1 7,4 2,7" />
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  key={i}
+                  onClick={() => goTo(i)}
+                  className={`transition-all cursor-pointer ${
                     i === currentIndex
-                      ? isDesktop ? 'w-3.5 h-1.5 bg-white' : 'w-5 h-2 bg-white'
-                      : isDesktop ? 'w-1.5 h-1.5 bg-white/40' : 'w-2 h-2 bg-white/40'
+                      ? isDesktop ? 'w-5 h-2 rounded-full bg-white/70 hover:bg-white/90' : 'w-3 h-1 rounded-full bg-white/70'
+                      : isDesktop ? 'w-2 h-2 rounded-full bg-white/25 hover:bg-white/40' : 'w-1 h-1 rounded-full bg-white/25'
                   }`}
                 />
-              );
-            })}
-            {/* Animate button — right side of timeline dots */}
-            {onAnimate && !isDraft && (
-              <button
-                onClick={() => {
-                  if (hasVideo) {
-                    const videoIdx = timeline.indexOf(VIDEO_SENTINEL);
-                    if (videoIdx >= 0) goTo(videoIdx);
-                  } else if (onAnimate) {
-                    onAnimate();
-                  }
-                }}
-                title={t('canvas.generateVideo')}
-                className={`ml-0.5 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
-                  isDesktop ? 'w-5 h-5' : 'ml-1 w-6 h-6'
-                } ${
-                  isVideoEntry
-                    ? 'bg-fuchsia-500'
-                    : 'bg-fuchsia-500/80 hover:bg-fuchsia-500'
-                }`}
-                style={{ flexShrink: 0 }}
-              >
-                <svg width={isDesktop ? "8" : "10"} height={isDesktop ? "8" : "10"} viewBox="0 0 10 10" fill="white">
-                  <polygon points="3,2 8,5 3,8" />
-                </svg>
-              </button>
-            )}
+              )
+            ))}
+            <span className={`font-medium whitespace-nowrap ${isDesktop ? 'text-xs ml-2' : 'text-[10px] ml-1'}`}
+              style={{ color: 'rgba(255,255,255,0.4)' }}
+            >
+              {getLabel(currentIndex)}
+            </span>
           </div>
-          <span className={`text-white/80 font-medium bg-black/50 backdrop-blur-sm rounded-full whitespace-nowrap ${isDesktop ? 'text-[10px] px-2 py-1' : 'text-xs px-3 py-1.5'}`}>
-            {getLabel(currentIndex)}
-          </span>
         </div>
       )}
 
-      {/* Arrow buttons (desktop) */}
-      {timeline.length > 1 && (
-        <>
-          {currentIndex > 0 && (
-            <button
-              onClick={() => goTo(currentIndex - 1)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10 cursor-pointer"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-            </button>
-          )}
-          {currentIndex < timeline.length - 1 && (
-            <button
-              onClick={() => goTo(currentIndex + 1)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white/70 hover:bg-black/60 hover:text-white flex items-center justify-center z-10 cursor-pointer"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
-          )}
-        </>
-      )}
     </div>
   );
 }
