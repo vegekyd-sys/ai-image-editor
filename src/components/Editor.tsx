@@ -551,6 +551,8 @@ export default function Editor({
   }, [projectId, onRenameProject]);
 
   // Open CUI with hero animation (canvas → PiP)
+  // Key: pushState BEFORE switching viewMode so Safari's back-swipe snapshot
+  // shows GUI (full canvas + PiP overlay) instead of CUI.
   const openCUI = useCallback(() => {
     // Desktop: CUI panel is always visible, no hero animation needed
     if (isDesktop) return;
@@ -568,7 +570,6 @@ export default function Editor({
       lastImageAR.current = ar;
       const PIP_SIZE = 116, PIP_M = 14;
       // Start hero at the 1:1 center-crop square of the canvas image.
-      // Both from and to are squares → animation is pure position+size, no crop change.
       const imgBounds = containRect(cr.width, cr.height, ar);
       const side = Math.min(imgBounds.w, imgBounds.h);
       const sqX = (imgBounds.w - side) / 2;
@@ -578,27 +579,42 @@ export default function Editor({
         t: cr.top  + imgBounds.t + sqY,
         w: side, h: side,
       };
-      // toRect uses a placeholder — will be corrected in the second rAF after
-      // CUI mounts and ResizeObserver updates cuiInputBarH.current with real height
+      const pipTarget = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - (cuiInputBarH.current + 8) - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
       setHeroAnim({
         src,
         fromRect,
-        toRect: { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - (cuiInputBarH.current + 8) - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE },
-        fromImg: coverRect(side, side, ar), // unused (objectCover=true)
-        toImg:   coverRect(PIP_SIZE, PIP_SIZE, ar), // unused
+        toRect: pipTarget,
+        fromImg: coverRect(side, side, ar),
+        toImg:   coverRect(PIP_SIZE, PIP_SIZE, ar),
         fromRadius: '0px', toRadius: '16px',
         objectCover: true,
         active: false,
       });
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        // By this frame CUI has mounted and ResizeObserver has fired —
-        // recompute toRect with the accurate input bar height
-        const PIP_BOTTOM = cuiInputBarH.current - 32 + 4; // mirror AgentChatView: inputBarH - gradient(32) + 4
-        const toRect = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
-        setHeroAnim(p => p ? { ...p, toRect, active: true } : null);
+        setHeroAnim(p => p ? { ...p, active: true } : null);
       }));
-      setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
+
+      // After hero animation completes:
+      // 1. pushState while GUI is still in DOM (Safari snapshots this frame: canvas + PiP overlay)
+      // 2. Then switch to CUI
+      setTimeout(() => {
+        // pushState now — GUI canvas is visible, hero overlay shows PiP in corner
+        // This is the frame Safari will cache for the back-swipe gesture
+        window.history.pushState({ makaronCui: true }, '');
+        hasCuiHistoryState.current = true;
+        // Next frame: switch to CUI, hero overlay will be cleaned up
+        requestAnimationFrame(() => {
+          setViewMode('cui');
+          // Recompute PiP position with accurate input bar height
+          const PIP_BOTTOM = cuiInputBarH.current - 32 + 4;
+          const toRect = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+          setHeroAnim(p => p ? { ...p, toRect } : null);
+          setTimeout(() => setHeroAnim(null), 120);
+        });
+      }, HERO_DURATION);
+      return;
     }
+    // Fallback: no canvas element, skip animation
     setViewMode('cui');
   }, [timeline, viewIndex, isDesktop]);
 
@@ -2166,8 +2182,11 @@ export default function Editor({
   useEffect(() => {
     if (isDesktop) return;
     if (viewMode === 'cui') {
-      window.history.pushState({ makaronCui: true }, '');
-      hasCuiHistoryState.current = true;
+      // pushState may already have been called by openCUI (for Safari snapshot timing)
+      if (!hasCuiHistoryState.current) {
+        window.history.pushState({ makaronCui: true }, '');
+        hasCuiHistoryState.current = true;
+      }
       const handlePop = () => {
         hasCuiHistoryState.current = false;
         setViewMode('gui');
