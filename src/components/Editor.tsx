@@ -552,25 +552,28 @@ export default function Editor({
   }, [projectId, onRenameProject]);
 
   // Open CUI with hero animation (canvas → PiP)
-  // Key: pushState BEFORE switching viewMode so Safari's back-swipe snapshot
-  // shows GUI (full canvas + PiP overlay) instead of CUI.
+  // pushState BEFORE hero animation starts — at that moment the DOM shows
+  // the clean GUI canvas in full screen. Safari snapshots this frame for
+  // the iOS back-swipe gesture, so the "underneath" layer looks correct.
   const openCUI = useCallback(() => {
-    // Desktop: CUI panel is always visible, no hero animation needed
     if (isDesktop) return;
+
+    // pushState NOW while GUI canvas is in full view — this is the frame
+    // Safari will show as the "underneath" layer during iOS back-swipe
+    window.history.pushState({ makaronCui: true }, '');
+    hasCuiHistoryState.current = true;
 
     const el = canvasAreaRef.current;
     const src = timeline[viewIndex];
     if (el && src) {
       const cr = el.getBoundingClientRect();
       lastCanvasRect.current = { l: cr.left, t: cr.top, w: cr.width, h: cr.height };
-      // Read natural AR from the loaded img element in canvas (synchronous)
       const imgEl = el.querySelector('img');
       const ar = (imgEl && imgEl.naturalWidth && imgEl.naturalHeight)
         ? imgEl.naturalWidth / imgEl.naturalHeight
         : 1;
       lastImageAR.current = ar;
       const PIP_SIZE = 116, PIP_M = 14;
-      // Start hero at the 1:1 center-crop square of the canvas image.
       const imgBounds = containRect(cr.width, cr.height, ar);
       const side = Math.min(imgBounds.w, imgBounds.h);
       const sqX = (imgBounds.w - side) / 2;
@@ -595,23 +598,13 @@ export default function Editor({
         setHeroAnim(p => p ? { ...p, active: true } : null);
       }));
 
-      // After hero animation completes:
-      // 1. pushState while GUI is still in DOM (Safari snapshots this frame: canvas + PiP overlay)
-      // 2. Then switch to CUI
+      // After hero animation completes → switch to CUI
       setTimeout(() => {
-        // pushState now — GUI canvas is visible, hero overlay shows PiP in corner
-        // This is the frame Safari will cache for the back-swipe gesture
-        window.history.pushState({ makaronCui: true }, '');
-        hasCuiHistoryState.current = true;
-        // Next frame: switch to CUI, hero overlay will be cleaned up
-        requestAnimationFrame(() => {
-          setViewMode('cui');
-          // Recompute PiP position with accurate input bar height
-          const PIP_BOTTOM = cuiInputBarH.current - 32 + 4;
-          const toRect = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
-          setHeroAnim(p => p ? { ...p, toRect } : null);
-          setTimeout(() => setHeroAnim(null), 120);
-        });
+        setViewMode('cui');
+        const PIP_BOTTOM = cuiInputBarH.current - 32 + 4;
+        const toRect = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+        setHeroAnim(p => p ? { ...p, toRect } : null);
+        setTimeout(() => setHeroAnim(null), 120);
       }, HERO_DURATION);
       return;
     }
