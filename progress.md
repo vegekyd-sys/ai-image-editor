@@ -3261,3 +3261,78 @@ T+60s     第一个 preview 返回
 | `.gitignore` | `/screenshots/` |
 
 **Preview 部署**：`ai-image-editor-jvtrh2e8k-vegekyd-sys-projects.vercel.app`
+
+---
+
+## iOS Back-Swipe + Pull-Down 动画修复（2026-03-15）
+
+### 问题
+1. **PiP 到达右下角时左右闪动**：heroAnim overlay 和真实 PiP 位置公式不一致（差 36px），加上 PiP 有 bounce transition
+2. **Pull-down 右滑返回时图片不在 canvas 位置**：Safari back-swipe 底层预览显示 PiP 在手指拖拽位置，而非 canvas 主图位置
+
+### Safari Back-Swipe 快照机制（实验验证）
+
+通过一系列实验确定了 Safari 的快照行为：
+
+**实验 1：Chat 路径 HERO_DURATION 改为 2s**
+- 结果：右滑返回仍显示 canvas 主图
+- 结论：快照不是 pushState 时刻的截图，跟动画时长无关
+
+**实验 2：Chat 路径 heroAnim fromRect 强制移到左上角 (0,0)**
+- 结果：右滑返回仍显示 canvas 主图（不是左上角）
+- 结论：Safari 快照**不包含 heroAnim overlay**
+
+**实验 3：Pull-down 路径各种 pushState 时机**
+- flushSync 清除 overlay 后 pushState → 仍显示拖拽位置
+- rAF x1/x2 延迟后 pushState → 仍显示拖拽位置
+- 结论：pushState 时机无法控制 Safari 快照
+
+**最终结论**：Safari 快照 ≈ `setViewMode('cui')` 导致 GUI 卸载那一帧的 DOM 渲染。Chat 路径之所以正确，是因为 heroAnim 的 fromRect 恰好在 canvas 图片位置——视觉上"看起来"就是 canvas 主图。Pull-down 的 fromRect 在手指拖拽位置，所以快照显示错误。
+
+### 修复方案
+
+**核心思路**：pushState 在 pull 手势**第一帧**调用（此时无任何 overlay，DOM = 干净 GUI canvas），而不是在 commit 时才调用。
+
+**Pull-down 流程变为**：
+1. 手指开始下拉 → `handlePullDown` 第一次调用 → pushState（DOM = 干净 canvas）→ pull overlay 开始渲染
+2. 拖拽中 — GUI 在底下（被 dim overlay 盖住），PiP 跟手
+3. 放手 commit — 清除 pull overlay → `startHeroToCUI(手指释放位置)` → heroAnim 飞到 PiP → CUI 挂载
+4. 放手 cancel — PiP 飞回原位 → `history.back()`（清理 pushState）
+
+**Chat 流程不变**：`openCUI` → `startHeroToCUI(canvas 位置)` → pushState + heroAnim + setViewMode
+
+**统一动画函数 `startHeroToCUI(fromRect, fromRadius)`**：
+- Chat 和 pull-down 共用，唯一区别是 fromRect 来源
+- 用 `if (!hasCuiHistoryState.current)` 判断是否需要 pushState（pull-down 已在手势开始时 push 过）
+- heroAnim placeholder toRect → rAF x2 后用真实 inputBarH 修正 → 启动动画 → HERO_DURATION+120ms 清除
+
+### PiP 到达抖动修复
+
+**问题 1：位置公式不一致**
+- heroAnim 目标：`t = innerHeight - (cuiInputBarH + 8) - PIP_SIZE`（旧公式）
+- 真实 PiP 位置：`PIP_BOTTOM_OFFSET = inputBarH - 32 + 4`（AgentChatView）
+- 差了 36px → 动画"掉下来"
+- 修复：统一用 `cuiInputBarH - 32 + 4` 公式（但最终用 rAF x2 修正，不再需要手动对齐）
+
+**问题 2：PiP bounce transition**
+- CUI 挂载时真实 PiP 虽然 opacity:0（hidePip=true），但 position 从"无"到 `bottom:b, right:m` 触发了 0.35s bounce transition（`cubic-bezier(0.34, 1.56, 0.64, 1)`）
+- heroAnim 清除后 PiP 变 opacity:1，此时 bounce 未结束 → 左右闪动
+- 修复：`hidePip` 为 true 时 PiP transition 设为 `none`（AgentChatView.tsx）
+
+### 尝试过但失败/放弃的方案
+
+| 方案 | 结果 |
+|------|------|
+| Chat 动画完成后再 setViewMode('cui')（setTimeout HERO_DURATION） | PiP 位置修正导致二次 transition → 右跳 |
+| 去掉 toRect 二次修正 | 仍有微小偏差 |
+| 恢复旧版时序（CUI 立即挂载 + rAF x2 修正 toRect） | 正确，采用 |
+| Pull-down commit 用 canvas 位置作 fromRect | 修复了 Safari 但失去了"从手指位置飞到 PiP"的连续感 |
+| Pull-down 开始时立即 setViewMode('cui') 卸载 GUI | ImageCanvas 卸载导致手势丢失 |
+| Pull-down 开始时卸载 GUI + 保留 DOM（opacity:0） | `contents` 布局不支持 opacity，改 flex 后可行但流程复杂 |
+
+### 改动清单
+
+| 文件 | 改动 |
+|------|------|
+| `src/components/Editor.tsx` | `startHeroToCUI` 共用函数提取；`handlePullDown` 第一帧 pushState；`handlePullDownEnd` committed 用 startHeroToCUI；cancel 用 history.back() |
+| `src/components/AgentChatView.tsx` | PiP transition: `hidePip` 时设为 `none` 防止 bounce |
