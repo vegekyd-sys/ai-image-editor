@@ -558,13 +558,15 @@ export default function Editor({
     const src = timeline[viewIndex];
     if (!src) { setViewMode('cui'); return; }
 
-    window.history.pushState({ makaronCui: true }, '');
-    hasCuiHistoryState.current = true;
+    // pushState if not already done (pull-down pushes at gesture start)
+    if (!hasCuiHistoryState.current) {
+      window.history.pushState({ makaronCui: true }, '');
+      hasCuiHistoryState.current = true;
+    }
 
     const PIP_SIZE = 116, PIP_M = 14;
     const ar = lastImageAR.current;
-    // toRect uses a placeholder — will be corrected in the second rAF after
-    // CUI mounts and ResizeObserver updates cuiInputBarH.current with real height
+    // toRect placeholder — corrected in rAF x2 after CUI mounts
     setHeroAnim({
       src,
       fromRect,
@@ -576,8 +578,6 @@ export default function Editor({
       active: false,
     });
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      // By this frame CUI has mounted and ResizeObserver has fired —
-      // recompute toRect with the accurate input bar height
       const PIP_BOTTOM = cuiInputBarH.current - 32 + 4;
       const toRect = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
       setHeroAnim(p => p ? { ...p, toRect, active: true } : null);
@@ -636,11 +636,13 @@ export default function Editor({
   // ── Pull-down gesture callbacks ──────────────────────────────────
   const handlePullDown = useCallback((dx: number, dy: number, progress: number) => {
     if (pullTransitioning.current) return;
-    // First call: capture canvas image rect for PiP overlay
+    // First call: capture canvas rect + pushState BEFORE overlay renders.
+    // Safari snapshots this frame (clean GUI canvas) for iOS back-swipe.
     if (pullProgress === null) {
       const el = canvasAreaRef.current;
       if (el) {
         const cr = el.getBoundingClientRect();
+        lastCanvasRect.current = { l: cr.left, t: cr.top, w: cr.width, h: cr.height };
         const imgEl = el.querySelector('img');
         const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
           ? imgEl.naturalWidth / imgEl.naturalHeight : 1;
@@ -652,6 +654,9 @@ export default function Editor({
           w: imgBounds.w, h: imgBounds.h,
         };
       }
+      // pushState while DOM is clean canvas (no overlay yet)
+      window.history.pushState({ makaronCui: true }, '');
+      hasCuiHistoryState.current = true;
     }
     setPullDelta({ dx, dy });
     setPullProgress(progress);
@@ -659,6 +664,8 @@ export default function Editor({
 
   const handlePullDownEnd = useCallback((committed: boolean) => {
     if (pullTransitioning.current) return;
+    pullTransitioning.current = true;
+    pullCommitted.current = committed;
 
     if (committed) {
       // Compute current drag position (same math as pull overlay render)
@@ -677,22 +684,19 @@ export default function Editor({
         fromL = 0; fromT = 0; fromW = 116; fromH = 116;
       }
 
-      // Immediately clear pull overlay — heroAnim takes over
-      setPullProgress(null);
-      setPullDelta({ dx: 0, dy: 0 });
+      // Clear pull overlay, then fly from release position to PiP (shared with Chat)
       pullStartRect.current = null;
       pullTransitioning.current = false;
       pullCommitted.current = false;
+      setPullProgress(null);
+      setPullDelta({ dx: 0, dy: 0 });
 
-      // Delegate to shared hero animation (same as Chat button)
       startHeroToCUI(
         { l: fromL, t: fromT, w: fromW, h: fromH },
         `${p * 16}px`,
       );
     } else {
-      // Snap back to original position
-      pullTransitioning.current = true;
-      pullCommitted.current = false;
+      // Snap back to original position, then pop history state
       setPullProgress(0);
       setTimeout(() => {
         setPullProgress(null);
@@ -700,6 +704,11 @@ export default function Editor({
         pullStartRect.current = null;
         pullTransitioning.current = false;
         pullCommitted.current = false;
+        // Pop the history state pushed at pull start
+        if (hasCuiHistoryState.current) {
+          hasCuiHistoryState.current = false;
+          window.history.back();
+        }
       }, 320);
     }
   }, [startHeroToCUI, pullProgress, pullDelta]);
@@ -2243,7 +2252,7 @@ export default function Editor({
         }}
       />
 
-      {/* GUI mode — always visible on desktop, toggled on mobile (also during pull-down) */}
+      {/* GUI mode — always visible on desktop, toggled on mobile (also during pull-down for gesture tracking) */}
       {(isDesktop || viewMode === 'gui' || pullProgress !== null) && (
         <div className={isDesktop ? 'flex-1 min-w-0 flex flex-col relative' : 'contents'}>
           {/* Canvas area (fills remaining space) */}
