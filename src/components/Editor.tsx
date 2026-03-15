@@ -2171,6 +2171,15 @@ export default function Editor({
       const handlePop = () => {
         hasCuiHistoryState.current = false;
         setViewMode('gui');
+        // Force Safari to repaint after iOS back-swipe gesture
+        // Safari keeps showing a stale visual snapshot for ~2s after popstate;
+        // toggling a GPU compositing property forces an immediate recomposite.
+        requestAnimationFrame(() => {
+          document.body.style.transform = 'translateZ(0)';
+          requestAnimationFrame(() => {
+            document.body.style.transform = '';
+          });
+        });
       };
       window.addEventListener('popstate', handlePop);
       return () => window.removeEventListener('popstate', handlePop);
