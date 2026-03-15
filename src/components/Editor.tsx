@@ -552,65 +552,64 @@ export default function Editor({
   }, [projectId, onRenameProject]);
 
   // Open CUI with hero animation (canvas → PiP)
-  // pushState BEFORE hero animation starts — at that moment the DOM shows
-  // the clean GUI canvas in full screen. Safari snapshots this frame for
-  // the iOS back-swipe gesture, so the "underneath" layer looks correct.
-  const openCUI = useCallback(() => {
-    if (isDesktop) return;
+  // Shared hero animation: fly fromRect → PiP corner, then mount CUI.
+  // Used by both Chat button (openCUI) and pull-down gesture commit.
+  const startHeroToCUI = useCallback((fromRect: { l: number; t: number; w: number; h: number }, fromRadius: string) => {
+    const src = timeline[viewIndex];
+    if (!src) { setViewMode('cui'); return; }
 
-    // pushState NOW while GUI canvas is in full view — this is the frame
-    // Safari will show as the "underneath" layer during iOS back-swipe
     window.history.pushState({ makaronCui: true }, '');
     hasCuiHistoryState.current = true;
 
+    const PIP_SIZE = 116, PIP_M = 14;
+    const ar = lastImageAR.current;
+    // toRect uses a placeholder — will be corrected in the second rAF after
+    // CUI mounts and ResizeObserver updates cuiInputBarH.current with real height
+    setHeroAnim({
+      src,
+      fromRect,
+      toRect: { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - (cuiInputBarH.current + 8) - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE },
+      fromImg: coverRect(fromRect.w, fromRect.h, ar),
+      toImg:   coverRect(PIP_SIZE, PIP_SIZE, ar),
+      fromRadius, toRadius: '16px',
+      objectCover: true,
+      active: false,
+    });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      // By this frame CUI has mounted and ResizeObserver has fired —
+      // recompute toRect with the accurate input bar height
+      const PIP_BOTTOM = cuiInputBarH.current - 32 + 4;
+      const toRect = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
+      setHeroAnim(p => p ? { ...p, toRect, active: true } : null);
+    }));
+    setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
+    setViewMode('cui');
+  }, [timeline, viewIndex]);
+
+  // Chat button → open CUI with hero animation
+  const openCUI = useCallback(() => {
+    if (isDesktop) return;
     const el = canvasAreaRef.current;
-    const src = timeline[viewIndex];
-    if (el && src) {
+    if (el) {
       const cr = el.getBoundingClientRect();
       lastCanvasRect.current = { l: cr.left, t: cr.top, w: cr.width, h: cr.height };
       const imgEl = el.querySelector('img');
       const ar = (imgEl && imgEl.naturalWidth && imgEl.naturalHeight)
-        ? imgEl.naturalWidth / imgEl.naturalHeight
-        : 1;
+        ? imgEl.naturalWidth / imgEl.naturalHeight : 1;
       lastImageAR.current = ar;
-      const PIP_SIZE = 116, PIP_M = 14;
       const imgBounds = containRect(cr.width, cr.height, ar);
       const side = Math.min(imgBounds.w, imgBounds.h);
       const sqX = (imgBounds.w - side) / 2;
       const sqY = (imgBounds.h - side) / 2;
-      const fromRect = {
+      startHeroToCUI({
         l: cr.left + imgBounds.l + sqX,
         t: cr.top  + imgBounds.t + sqY,
         w: side, h: side,
-      };
-      const pipTarget = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - (cuiInputBarH.current + 8) - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
-      setHeroAnim({
-        src,
-        fromRect,
-        toRect: pipTarget,
-        fromImg: coverRect(side, side, ar),
-        toImg:   coverRect(PIP_SIZE, PIP_SIZE, ar),
-        fromRadius: '0px', toRadius: '16px',
-        objectCover: true,
-        active: false,
-      });
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        setHeroAnim(p => p ? { ...p, active: true } : null);
-      }));
-
-      // After hero animation completes → switch to CUI
-      setTimeout(() => {
-        setViewMode('cui');
-        const PIP_BOTTOM = cuiInputBarH.current - 32 + 4;
-        const toRect = { l: window.innerWidth - PIP_M - PIP_SIZE, t: window.innerHeight - PIP_BOTTOM - PIP_SIZE, w: PIP_SIZE, h: PIP_SIZE };
-        setHeroAnim(p => p ? { ...p, toRect } : null);
-        setTimeout(() => setHeroAnim(null), 120);
-      }, HERO_DURATION);
-      return;
+      }, '0px');
+    } else {
+      startHeroToCUI({ l: 0, t: 0, w: 116, h: 116 }, '0px');
     }
-    // Fallback: no canvas element, skip animation
-    setViewMode('cui');
-  }, [timeline, viewIndex, isDesktop]);
+  }, [isDesktop, startHeroToCUI]);
 
   // Handle PiP tap: hero animation (PiP → canvas), then trigger GUI return
   const handlePipTap = useCallback((pipRect: DOMRect) => {
@@ -660,26 +659,40 @@ export default function Editor({
 
   const handlePullDownEnd = useCallback((committed: boolean) => {
     if (pullTransitioning.current) return;
-    pullTransitioning.current = true;
-    pullCommitted.current = committed;
+
     if (committed) {
-      // Step 1: PiP flies to corner (300ms CSS transition)
-      setPullProgress(1);
-      setTimeout(() => {
-        // Step 2: PiP arrived → mount CUI with normal slide-in
-        setViewMode('cui');
-        // Keep pullTransitioning=true so overlay stays at PiP corner (not free-drag)
-        // Step 3: Keep overlay during CUI slide-in, then cleanup everything
-        setTimeout(() => {
-          pullTransitioning.current = false;
-          setPullProgress(null);
-          setPullDelta({ dx: 0, dy: 0 });
-          pullStartRect.current = null;
-          pullCommitted.current = false;
-        }, 300);
-      }, 350);
+      // Compute current drag position (same math as pull overlay render)
+      const from = pullStartRect.current;
+      const p = pullProgress ?? 0;
+      let fromL: number, fromT: number, fromW: number, fromH: number;
+      if (from) {
+        const scale = 1 - p * 0.5;
+        fromW = from.w * scale;
+        fromH = from.h * scale;
+        const cx = from.l + from.w / 2 + pullDelta.dx;
+        const cy = from.t + from.h / 2 + pullDelta.dy;
+        fromL = cx - fromW / 2;
+        fromT = cy - fromH / 2;
+      } else {
+        fromL = 0; fromT = 0; fromW = 116; fromH = 116;
+      }
+
+      // Immediately clear pull overlay — heroAnim takes over
+      setPullProgress(null);
+      setPullDelta({ dx: 0, dy: 0 });
+      pullStartRect.current = null;
+      pullTransitioning.current = false;
+      pullCommitted.current = false;
+
+      // Delegate to shared hero animation (same as Chat button)
+      startHeroToCUI(
+        { l: fromL, t: fromT, w: fromW, h: fromH },
+        `${p * 16}px`,
+      );
     } else {
       // Snap back to original position
+      pullTransitioning.current = true;
+      pullCommitted.current = false;
       setPullProgress(0);
       setTimeout(() => {
         setPullProgress(null);
@@ -689,7 +702,7 @@ export default function Editor({
         pullCommitted.current = false;
       }, 320);
     }
-  }, []);
+  }, [startHeroToCUI, pullProgress, pullDelta]);
   // ────────────────────────────────────────────────────────────────
 
   // Trigger a 1-2 sentence CUI reaction after user commits a tip in the GUI
