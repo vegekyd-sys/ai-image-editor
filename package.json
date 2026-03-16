@@ -6,12 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "mcp": "npx tsx --require ./md-loader.cjs mcp-server.ts --stdio",
+    "mcp:http": "npx tsx --require ./md-loader.cjs mcp-server.ts"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^4.0.63",
     "@google/genai": "^1.40.0",
     "@huggingface/inference": "^4.13.14",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@supabase/ssr": "^0.8.0",
@@ -22,6 +25,7 @@
     "@vladmandic/face-api": "^1.7.15",
     "ai": "^6.0.96",
     "canvas": "^3.2.1",
+    "dotenv": "^17.3.1",
     "exifr": "^7.1.3",
     "heic2any": "^0.0.4",
     "next": "16.1.6",

@@ -6,6 +6,8 @@ import { generatePreviewImage, generateImageWithReferences, ensureJpeg } from '.
 import { createKlingTask } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
+import { editImage } from './skills/edit-image';
+import { rotateCamera } from './skills/rotate-camera';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -86,72 +88,15 @@ function createTools(ctx: AgentContext) {
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       }),
       execute: async ({ editPrompt, skill, useOriginalAsReference, aspectRatio }) => {
-        const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
-        const hasReference = !!ctx.referenceImages?.length;
-
-        // Inject skill template if provided
-        const skillTemplate = skill ? SKILL_PROMPTS[skill] : null;
-        const finalPrompt = skillTemplate
-          ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
-          : editPrompt;
-
-        const t0 = Date.now();
-        console.log(`\n🎨 [generate_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} thinking=high\neditPrompt: ${editPrompt.slice(0, 200)}\nfinalPrompt length: ${finalPrompt.length} chars\n`);
-
-        // CUI agent always uses Flash High reasoning for best quality
-        // Retry once on failure (transient API errors, rate limits, etc.)
-        let result: string | null = null;
-        const MAX_ATTEMPTS = 2;
-        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-          if (hasReference && useOriginalAsReference && hasOriginal) {
-            const refs = ctx.referenceImages!;
-            if (attempt === 1) console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
-            result = await generateImageWithReferences(
-              [
-                { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
-                { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
-                ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
-              ],
-              finalPrompt, aspectRatio, 'minimal',
-            );
-          } else if (hasReference) {
-            const refs = ctx.referenceImages!;
-            if (attempt === 1) console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
-            result = await generateImageWithReferences(
-              [
-                { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
-                ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
-              ],
-              finalPrompt, aspectRatio, 'minimal',
-            );
-          } else if (useOriginalAsReference && hasOriginal) {
-            if (attempt === 1) console.log('📸 Two-image mode (original as reference)');
-            result = await generateImageWithReferences(
-              [
-                { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
-                { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
-              ],
-              finalPrompt, aspectRatio, 'minimal',
-            );
-          } else {
-            if (attempt === 1) console.log('📸 Single-image mode');
-            result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'minimal');
-          }
-
-          if (result) break;
-          if (attempt < MAX_ATTEMPTS) {
-            console.warn(`⚠️ [generate_image] attempt ${attempt} returned null, retrying...`);
-          }
+        const skillResult = await editImage(
+          { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS },
+          { currentImage: ctx.currentImage, originalImage: ctx.originalImage, referenceImages: ctx.referenceImages },
+        );
+        if (skillResult.image) {
+          ctx.currentImage = skillResult.image;
+          ctx.generatedImages.push(skillResult.image);
         }
-
-        if (!result) {
-          console.error(`❌ [generate_image] all attempts failed after ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-          return { success: false as const, message: 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.' };
-        }
-        console.log(`✅ [generate_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB)`);
-        ctx.currentImage = result;
-        ctx.generatedImages.push(result);
-        return { success: true as const, message: 'Image generated successfully and shown to the user.' };
+        return { success: skillResult.success as true, message: skillResult.message };
       },
     }),
 
@@ -239,49 +184,15 @@ Parameters:
         distance: z.number().min(0.6).max(1.4).describe('Zoom distance (0.6=close-up, 1.0=medium, 1.4=wide)'),
       }),
       execute: async ({ azimuth, elevation, distance }) => {
-        const image = ctx.currentImage;
-        if (!image) return { success: false as const, message: 'No image available' };
-
-        const hfToken = process.env.HF_TOKEN;
-        if (!hfToken) return { success: false as const, message: 'HF_TOKEN not configured' };
-
-        const prompt = buildCameraPrompt(azimuth, elevation, distance);
-
-        try {
-          // Convert image to Blob (URL or base64)
-          let imgBytes: Uint8Array;
-          if (image.startsWith('http')) {
-            const res = await fetch(image);
-            imgBytes = new Uint8Array(await res.arrayBuffer());
-          } else {
-            const raw = image.replace(/^data:image\/\w+;base64,/, '');
-            const buf = Buffer.from(raw, 'base64');
-            imgBytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-          }
-          const blob = new Blob([imgBytes as BlobPart], { type: 'image/jpeg' });
-
-          const client = new InferenceClient(hfToken);
-          const result = await client.imageToImage({
-            provider: 'fal-ai',
-            model: 'fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA',
-            inputs: blob,
-            parameters: { prompt },
-          });
-
-          const resultBuf = Buffer.from(await result.arrayBuffer());
-          const rawBase64 = `data:image/png;base64,${resultBuf.toString('base64')}`;
-          const resultBase64 = await ensureJpeg(rawBase64);
-
-          ctx.currentImage = resultBase64;
-          ctx.generatedImages.push(resultBase64);
-
-          const azName = AZIMUTH_MAP[snapToNearest(azimuth, AZIMUTH_STEPS)];
-          const elName = ELEVATION_MAP[snapToNearest(elevation, ELEVATION_STEPS)];
-          const dsName = DISTANCE_MAP[snapToNearest(distance, DISTANCE_STEPS)];
-          return { success: true as const, message: `Camera rotated: ${azName}, ${elName}, ${dsName}` };
-        } catch (e) {
-          return { success: false as const, message: e instanceof Error ? e.message : String(e) };
+        const skillResult = await rotateCamera(
+          { azimuth, elevation, distance },
+          { currentImage: ctx.currentImage },
+        );
+        if (skillResult.image) {
+          ctx.currentImage = skillResult.image;
+          ctx.generatedImages.push(skillResult.image);
         }
+        return { success: skillResult.success as true, message: skillResult.message };
       },
     }),
 
