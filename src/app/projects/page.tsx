@@ -10,6 +10,7 @@ import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cach
 import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
+import RollingTagline from '@/components/RollingTagline'
 
 interface ProjectWithSnapshots {
   id: string
@@ -611,14 +612,8 @@ export default function ProjectsPage() {
           </div>
 
           {/* Subtitle */}
-          <div className="mkr-handwrite" style={{
-            marginTop: '4px',
-            fontSize: '1.15rem',
-            letterSpacing: '0.02em',
-            color: 'rgba(217,70,239,0.65)',
-            fontWeight: 400,
-          }}>
-            one man creative studio
+          <div style={{ marginTop: '4px' }}>
+            <RollingTagline className="text-[1.25rem] tracking-wide" />
           </div>
 
           {/* Create input: [photo] + [textarea] */}

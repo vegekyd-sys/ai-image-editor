@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
+import RollingTagline from '@/components/RollingTagline'
 
 const ERROR_KEY_MAP: Record<string, string> = {
   'Invalid login credentials': 'auth.err.invalidCredentials',
@@ -204,13 +205,8 @@ export default function LoginPage() {
             Makaron
           </div>
         </div>
-        <div className="mkr-handwrite text-center mb-10" style={{
-          fontSize: '1rem',
-          letterSpacing: '0.02em',
-          color: 'rgba(217,70,239,0.65)',
-          fontWeight: 400,
-        }}>
-          one man creative studio
+        <div className="text-center mb-10">
+          <RollingTagline className="text-[1.15rem] tracking-wide" />
         </div>
 
         {/* ══════ LANDING VIEW ══════ */}

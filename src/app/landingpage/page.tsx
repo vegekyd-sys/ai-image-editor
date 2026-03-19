@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useLocale, LocaleToggle } from "@/lib/i18n";
+import RollingTagline from "@/components/RollingTagline";
 
 const Sparkle = ({ size = 28, className = "" }: { size?: number; className?: string }) => (
   <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" className={className}>
@@ -15,6 +16,10 @@ const Sparkle = ({ size = 28, className = "" }: { size?: number; className?: str
     ))}
   </svg>
 );
+
+/* ── Rolling word animation ─────────────────────────────────────
+   Two-slot crossfade: outgoing word blurs + drifts up while
+   incoming word rises from below with a soft spring.            */
 
 const GlassButton = ({ children, primary = false, href = "/login" }: { children: React.ReactNode; primary?: boolean; href?: string }) => (
   <Link
@@ -40,7 +45,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-x-hidden max-w-[1440px] mx-auto">
+    <div className="relative min-h-screen bg-black text-white overflow-hidden max-w-[1440px] mx-auto">
       {/* eslint-disable-next-line @next/next/no-css-tags */}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');`}</style>
       {/* Language toggle */}
@@ -49,19 +54,22 @@ export default function LandingPage() {
       </div>
 
       {/* ─── Hero ─── */}
-      <section className="relative lg:min-h-screen flex flex-col lg:flex-row items-center lg:items-start">
+      <section className="relative flex flex-col items-center">
         {/* Glow */}
-        <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 lg:left-[400px] lg:translate-x-0 w-[600px] h-[500px] rounded-full bg-[radial-gradient(ellipse,#d946ef22_0%,transparent_70%)]" />
+        <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
 
         {/* Text */}
-        <div className="relative z-10 flex flex-col items-center lg:items-start text-center lg:text-left pt-16 lg:pt-[251px] px-6 lg:pl-[194px] lg:pr-0 max-w-[660px]">
+        <div className="relative z-10 flex flex-col items-center text-center pt-16 lg:pt-24 px-6 max-w-[660px]">
           <Sparkle size={28} />
           <h1 className="mt-4 text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]">
             Makaron
           </h1>
-          <p className="mt-3 font-[Caveat,cursive] text-2xl lg:text-[32px] text-[#d946ef]">
-            {t('landing.tagline')}
+
+          {/* Rolling tagline */}
+          <p className="mt-3 leading-tight">
+            <RollingTagline className="text-2xl lg:text-[32px]" />
           </p>
+
           <p className="mt-6 text-[15px] lg:text-lg text-[#a1a1aa] leading-relaxed max-w-[480px]">
             {t('landing.heroDesc1')}
             <br />
@@ -73,18 +81,42 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Phone mockup */}
-        <div className="relative z-10 mt-10 lg:mt-0 lg:absolute lg:right-[240px] lg:top-[60px] flex-shrink-0">
-          <div className="w-[260px] lg:w-[380px] aspect-[9/19.5] rounded-[32px] lg:rounded-[44px] border-2 border-[#333] bg-[#111] p-1.5 lg:p-2">
-            <div className="w-full h-full rounded-[26px] lg:rounded-[36px] overflow-hidden bg-black">
-              <img
-                src="/landing/phone-screenshot.jpg"
-                alt="Makaron App"
-                className="w-full h-full object-cover"
-              />
+        {/* ── Device mockups — overlapping composition ── */}
+        <div className="relative z-10 mt-14 lg:mt-20 w-full max-w-[1000px] px-5 lg:px-8">
+          {/* Desktop browser — main, centered */}
+          <div className="relative rounded-xl border border-white/10 bg-[#0d0d0d] overflow-hidden shadow-[0_20px_80px_-12px_rgba(217,70,239,.12)]">
+            {/* Browser chrome bar */}
+            <div className="flex items-center gap-1.5 px-4 py-2.5 bg-[#161616] border-b border-white/6">
+              <span className="w-[10px] h-[10px] rounded-full bg-[#ff5f57]/80" />
+              <span className="w-[10px] h-[10px] rounded-full bg-[#febc2e]/80" />
+              <span className="w-[10px] h-[10px] rounded-full bg-[#28c840]/80" />
+              <div className="ml-4 flex-1 max-w-[280px] h-[22px] rounded-md bg-white/5 border border-white/8 flex items-center justify-center">
+                <span className="text-[10px] text-white/30 tracking-wide">makaron.app</span>
+              </div>
+            </div>
+            <img
+              src="/landing/desktop-screenshot.jpg"
+              alt="Makaron Desktop"
+              className="w-full block"
+            />
+          </div>
+
+          {/* Phone — overlapping bottom-left, floating above */}
+          <div className="absolute -bottom-12 -left-3 lg:left-4 lg:-bottom-16 w-[140px] lg:w-[220px] z-20">
+            <div className="aspect-[9/19.5] rounded-[20px] lg:rounded-[30px] border-2 border-white/15 bg-[#0d0d0d] p-[3px] lg:p-[5px] shadow-[0_16px_60px_-8px_rgba(0,0,0,.9)]">
+              <div className="w-full h-full rounded-[17px] lg:rounded-[25px] overflow-hidden bg-black">
+                <img
+                  src="/landing/phone-screenshot.jpg"
+                  alt="Makaron Mobile"
+                  className="w-full h-full object-cover"
+                />
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Extra bottom space for the floating phone */}
+        <div className="h-16 lg:h-24" />
       </section>
 
       {/* ─── Statement ─── */}
