@@ -7,6 +7,9 @@ scripts/serve*
 *.jpg
 *.jpeg
 *.png
+!public/landing/*.jpg
+!public/landing/*.jpeg
+!public/landing/*.png
 *.heic
 *.HEIC
 progress.md
