@@ -25,13 +25,15 @@ export interface EditImageInput {
   aspectRatio?: string;
   /** Pre-loaded skill prompt templates (from webpack). If omitted, loads from disk. */
   skillPrompts?: Record<string, string>;
+  /** User's preferred model override ('gemini' | 'qwen') — bypasses default routing */
+  preferredModel?: string;
 }
 
 export async function editImage(
   input: EditImageInput,
   ctx: SkillContext,
 ): Promise<SkillResult> {
-  const { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts } = input;
+  const { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts, preferredModel } = input;
   const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
   const hasReference = !!ctx.referenceImages?.length;
 
@@ -81,7 +83,7 @@ export async function editImage(
       );
     } else {
       if (attempt === 1) console.log('📸 Single-image mode');
-      result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'minimal', skill);
+      result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'minimal', skill, preferredModel);
     }
 
     if (result) break;

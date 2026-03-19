@@ -25,6 +25,7 @@ export async function streamAgent(
     tipsTeaser?: boolean; tipsPayload?: object[];
     nameProject?: boolean; description?: string;
     previewsReady?: boolean; readyTips?: object[];
+    preferredModel?: string;
   },
   callbacks: AgentStreamCallbacks,
   signal?: AbortSignal,

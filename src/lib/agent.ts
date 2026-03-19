@@ -40,6 +40,8 @@ interface AgentContext {
   generatedImages: string[];
   /** Which model was used for the last image generation */
   lastUsedModel?: string;
+  /** User's preferred model override ('gemini' | 'qwen') */
+  preferredModel?: string;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
   /** PiAPI task ID set by generate_animation tool, emitted as animation_task event */
@@ -91,7 +93,7 @@ function createTools(ctx: AgentContext) {
       }),
       execute: async ({ editPrompt, skill, useOriginalAsReference, aspectRatio }) => {
         const skillResult = await editImage(
-          { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS },
+          { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: ctx.preferredModel },
           { currentImage: ctx.currentImage, originalImage: ctx.originalImage, referenceImages: ctx.referenceImages },
         );
         if (skillResult.image) {
@@ -224,7 +226,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: string },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -233,6 +235,7 @@ export async function* runMakaronAgent(
     projectId,
     generatedImages: [],
     animationImageUrls: options?.animationImageUrls,
+    preferredModel: options?.preferredModel,
   };
 
   const allTools = createTools(ctx);

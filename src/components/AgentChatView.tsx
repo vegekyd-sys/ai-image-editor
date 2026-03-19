@@ -89,6 +89,8 @@ function fixMarkdownDelimiters(text: string): string {
   );
 }
 
+export type PreferredModel = 'auto' | 'gemini' | 'qwen';
+
 interface AgentChatViewProps {
   messages: Message[];
   isAgentActive: boolean;
@@ -104,6 +106,8 @@ interface AgentChatViewProps {
   onInputBarHeight?: (h: number) => void;
   mode?: 'overlay' | 'panel';
   skipSlideIn?: boolean;
+  preferredModel?: PreferredModel;
+  onModelChange?: (model: PreferredModel) => void;
 }
 
 export default function AgentChatView({
@@ -121,6 +125,8 @@ export default function AgentChatView({
   onInputBarHeight,
   mode = 'overlay',
   skipSlideIn = false,
+  preferredModel = 'auto',
+  onModelChange,
 }: AgentChatViewProps) {
   const { t } = useLocale();
   const [input, setInput] = useState('');
@@ -761,7 +767,7 @@ export default function AgentChatView({
               }
             }}
             placeholder={t('chat.placeholder')}
-            className={`w-full bg-transparent outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-hidden block ${isPanel ? 'text-[14px]' : 'text-[21px]'}`}
+            className={`w-full bg-transparent outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-y-auto block ${isPanel ? 'text-[14px]' : 'text-[21px]'}`}
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem', padding: isPanel ? '10px 14px 4px' : '12px 16px 6px' }}
           />
 
@@ -782,6 +788,32 @@ export default function AgentChatView({
                 <polyline points="21 15 16 10 5 21"/>
               </svg>
             </button>
+
+            {/* Model selector pill */}
+            {onModelChange && (
+              <button
+                onClick={() => {
+                  const cycle: PreferredModel[] = ['auto', 'gemini', 'qwen'];
+                  const next = cycle[(cycle.indexOf(preferredModel) + 1) % cycle.length];
+                  onModelChange(next);
+                }}
+                className="h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
+                style={{
+                  padding: '0 10px',
+                  background: preferredModel === 'auto' ? 'rgba(255,255,255,0.06)' : preferredModel === 'qwen' ? 'rgba(16,185,129,0.15)' : 'rgba(59,130,246,0.15)',
+                  border: `1px solid ${preferredModel === 'auto' ? 'rgba(255,255,255,0.08)' : preferredModel === 'qwen' ? 'rgba(16,185,129,0.3)' : 'rgba(59,130,246,0.3)'}`,
+                }}
+              >
+                <span style={{
+                  fontSize: 8,
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  color: preferredModel === 'auto' ? 'rgba(255,255,255,0.35)' : preferredModel === 'qwen' ? 'rgba(16,185,129,0.85)' : 'rgba(59,130,246,0.85)',
+                }}>
+                  {preferredModel === 'auto' ? 'AUTO' : preferredModel === 'qwen' ? 'QWEN' : 'GEMINI'}
+                </span>
+              </button>
+            )}
 
             {/* Attached image thumbnails */}
             {attachedImages.map((img, i) => (
