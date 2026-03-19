@@ -787,6 +787,7 @@ export default function Editor({
     editPrompt: string,
     imageInput: string,
     aspectRatio?: string,
+    category?: string,
   ) => {
     // imageInput can be URL (preferred, tiny payload) or base64 — server handles both
     const imageForApi = imageInput;
@@ -804,7 +805,7 @@ export default function Editor({
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio }),
+        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category }),
         signal: previewAbortRef.current.signal,
       });
 
@@ -870,7 +871,7 @@ export default function Editor({
         const snap = snapshotsRef.current.find(s => s.id === snapshotId);
         const imageForPreview = getImageForApi(snap);
         if (imageForPreview) {
-          generatePreviewForTip(snapshotId, tip.editPrompt, imageForPreview, tip.aspectRatio);
+          generatePreviewForTip(snapshotId, tip.editPrompt, imageForPreview, tip.aspectRatio, tip.category);
         }
       }
     }
@@ -1246,10 +1247,11 @@ export default function Editor({
 
     // Prefer URL (tiny payload) over base64 for API calls — server handles both
     // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
+    // Use 3MB limit (not 1.8MB) — agent generates images, aggressive compression destroys quality
     const snapForApi = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     const rawImage = snapForApi ? getImageForApi(snapForApi) : (currentImage || '');
     const imageForApi = overrideImage
-      || (rawImage.startsWith('data:') ? await compressBase64(rawImage) : rawImage);
+      || (rawImage.startsWith('data:') ? await compressBase64(rawImage, 3_000_000) : rawImage);
     // Show attached/annotated images in the user message bubble
     addMessage('user', text, undefined, overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
     const assistantMsgId = generateId();
@@ -1320,7 +1322,7 @@ export default function Editor({
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
     const rawOriginal = originalSnapshot ? getImageForApi(originalSnapshot) : undefined;
-    const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64(rawOriginal) : rawOriginal;
+    const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64(rawOriginal, 3_000_000) : rawOriginal;
 
     const _agentT0 = performance.now();
     let _genStartTime = 0;
@@ -1353,10 +1355,10 @@ export default function Editor({
               m.id === id ? { ...m, content: m.content + delta } : m
             ));
           },
-          onImage: (imageData) => {
+          onImage: (imageData, usedModel) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
             const genDuration = _genStartTime ? ((performance.now() - _genStartTime) / 1000).toFixed(1) : '?';
-            console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (Gemini took ${genDuration}s, image ${(imageData.length / 1024).toFixed(0)}KB)`);
+            console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (${usedModel || 'gemini'} took ${genDuration}s, image ${(imageData.length / 1024).toFixed(0)}KB)`);
             const snapId = generateId();
             const newSnapshot: Snapshot = {
               id: snapId,
@@ -1389,6 +1391,7 @@ export default function Editor({
                 ...m,
                 image: imageData,
                 editPrompt: capturedPrompt ?? undefined,
+                editModel: usedModel ?? undefined,
                 editInputImages: capturedInputImages ?? undefined,
               } : m
             ));
@@ -1679,7 +1682,7 @@ export default function Editor({
             tips: s.tips.map(t => t.label === tip.label ? { ...t, previewStatus: 'pending' } : t),
           } : s
         ));
-        generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio);
+        generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio, tip.category);
       }
       return; // don't create draft until image is ready
     }
@@ -1710,7 +1713,7 @@ export default function Editor({
     if (!snap) return;
     // Baseline = done count right now, so x/y resets to 0/1 (or 0/N for multi-retry)
     previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
-    generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio);
+    generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio, tip.category);
   }, [snapshots, generatePreviewForTip, tipsSourceIndex]);
 
   // Generate previews for all tips in a category (triggered by category tab click)
@@ -1721,7 +1724,7 @@ export default function Editor({
     const pending = snap.tips.filter(t => t.category === category && t.editPrompt && t.previewStatus === 'none');
     if (pending.length === 0) return;
     previewDoneBaselineRef.current = snap.tips.filter(t => t.previewStatus === 'done').length;
-    pending.forEach(t => generatePreviewForTip(snap.id, t.editPrompt, imageForApi, t.aspectRatio));
+    pending.forEach(t => generatePreviewForTip(snap.id, t.editPrompt, imageForApi, t.aspectRatio, t.category));
   }, [snapshots, tipsSourceIndex, generatePreviewForTip]);
 
   // Previous image for long-press compare

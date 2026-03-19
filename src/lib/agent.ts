@@ -38,6 +38,8 @@ interface AgentContext {
   projectId: string;
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
+  /** Which model was used for the last image generation */
+  lastUsedModel?: string;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
   /** PiAPI task ID set by generate_animation tool, emitted as animation_task event */
@@ -48,7 +50,7 @@ export type AgentStreamEvent =
   | { type: 'status'; text: string }
   | { type: 'content'; text: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
-  | { type: 'image'; image: string }
+  | { type: 'image'; image: string; usedModel?: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
   | { type: 'animation_task'; taskId: string }  // emitted when generate_animation tool creates a PiAPI task
   | { type: 'done' }
@@ -95,6 +97,7 @@ function createTools(ctx: AgentContext) {
         if (skillResult.image) {
           ctx.currentImage = skillResult.image;
           ctx.generatedImages.push(skillResult.image);
+          if (skillResult.usedModel) ctx.lastUsedModel = skillResult.usedModel;
         }
         return { success: skillResult.success as true, message: skillResult.message };
       },
@@ -345,7 +348,7 @@ export async function* runMakaronAgent(
         }
 
         while (imagesSent < ctx.generatedImages.length) {
-          yield { type: 'image', image: ctx.generatedImages[imagesSent] };
+          yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel };
           imagesSent++;
         }
         if (ctx.animationTaskId) {
@@ -372,7 +375,7 @@ export async function* runMakaronAgent(
 
     // Flush remaining images
     while (imagesSent < ctx.generatedImages.length) {
-      yield { type: 'image', image: ctx.generatedImages[imagesSent] };
+      yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel };
       imagesSent++;
     }
 

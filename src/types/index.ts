@@ -4,6 +4,7 @@ export interface Message {
   content: string;
   image?: string;        // base64 data URL
   editPrompt?: string;   // the English editPrompt sent to generate_image (for transparency)
+  editModel?: string;    // which model generated the image ('gemini' | 'qwen')
   editInputImages?: string[]; // images passed to Gemini as input (1 = normal, 2 = face restoration)
   timestamp: number;
   projectId?: string;

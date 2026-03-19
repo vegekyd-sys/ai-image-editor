@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { generatePreviewImage, generateImageWithReferences } from '../gemini';
+import { generatePreviewImage, generateImageWithReferences, lastUsedModel } from '../gemini';
 import type { SkillContext, SkillResult } from './index';
 
 // Lazy-loaded skill prompts from disk (for standalone MCP server / non-webpack environments)
@@ -81,7 +81,7 @@ export async function editImage(
       );
     } else {
       if (attempt === 1) console.log('📸 Single-image mode');
-      result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'minimal');
+      result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'minimal', skill);
     }
 
     if (result) break;
@@ -98,6 +98,6 @@ export async function editImage(
     };
   }
 
-  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB)`);
-  return { success: true, message: 'Image generated successfully.', image: result };
+  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${lastUsedModel}`);
+  return { success: true, message: 'Image generated successfully.', image: result, usedModel: lastUsedModel };
 }

@@ -8,4 +8,5 @@ export interface SkillResult {
   success: boolean;
   message: string;
   image?: string;              // base64 result image (data URL)
+  usedModel?: string;          // which model generated ('gemini' | 'qwen')
 }

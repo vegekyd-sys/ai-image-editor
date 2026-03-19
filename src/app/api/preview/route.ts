@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { image, editPrompt, aspectRatio } = await req.json();
+    const { image, editPrompt, aspectRatio, category } = await req.json();
 
     if (!image || !editPrompt) {
       return new Response(
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const previewImage = await generatePreviewImage(image, editPrompt, aspectRatio);
+    const previewImage = await generatePreviewImage(image, editPrompt, aspectRatio, undefined, category);
 
     if (!previewImage) {
       return new Response(

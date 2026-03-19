@@ -9,10 +9,11 @@ import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
-function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?: string[] }) {
+function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const inputImageLabels = [t('chat.currentImage'), t('chat.originalImage')];
+  const modelLabel = editModel === 'qwen' ? 'qwen edit' : 'nano banana 2';
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}>
       <button
@@ -30,7 +31,7 @@ function EditPromptCard({ prompt, inputImages }: { prompt: string; inputImages?:
           />
         )}
         <span className="text-[11px] font-medium flex-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          {t('chat.promptCard')}
+          {t('chat.promptCard').replace(/nano banana 2|qwen edit/gi, modelLabel)}
         </span>
         <span className="text-[11px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? t('chat.collapse') : t('chat.expand')}</span>
       </button>
@@ -683,7 +684,7 @@ export default function AgentChatView({
 
                     {/* editPrompt card — collapsible */}
                     {msg.editPrompt && (
-                      <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} />
+                      <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
                   </div>
 
