@@ -184,6 +184,32 @@ function buildWorkflow(imageName: string, prompt: string, seed?: number): Record
 }
 
 // ---------------------------------------------------------------------------
+// Rotate workflow (Multiple-Angles-LoRA)
+// ---------------------------------------------------------------------------
+
+function buildRotateWorkflow(imageName: string, prompt: string, seed?: number): Record<string, unknown> {
+  const actualSeed = seed ?? Math.floor(Math.random() * 999999);
+  const loraName = process.env.COMFYUI_ANGLES_LORA || 'qwen-image-edit-2511-multiple-angles-lora.safetensors';
+  return {
+    '1': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: CHECKPOINT() } },
+    '2': { class_type: 'LoraLoaderModelOnly', inputs: { model: ['1', 0], lora_name: loraName, strength_model: 1.0 } },
+    '4': { class_type: 'LoadImage', inputs: { image: imageName } },
+    '5': {
+      class_type: 'QwenImageIntegratedKSampler',
+      inputs: {
+        model: ['2', 0], clip: ['1', 1], vae: ['1', 2], image1: ['4', 0],
+        positive_prompt: prompt, negative_prompt: '',
+        generation_mode: '\u56fe\u751f\u56fe image-to-image',
+        batch_size: 1, width: 0, height: 0, seed: actualSeed,
+        steps: 4, cfg: 1.0, sampler_name: 'euler', scheduler: 'simple',
+        denoise: 1.0, auraflow_shift: 3.0, cfg_norm_strength: 1.0,
+      },
+    },
+    '6': { class_type: 'SaveImage', inputs: { images: ['5', 0], filename_prefix: 'api_rotate' } },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -218,6 +244,37 @@ export async function generateWithQwen(
     return result;
   } catch (e) {
     console.error(`[comfyui-qwen] Error after ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
+ * Camera rotation using ComfyUI with Multiple-Angles-LoRA.
+ * Prompt must be in <sks> format from buildCameraPrompt().
+ */
+export async function generateWithQwenRotate(
+  image: string,
+  sksPrompt: string,
+): Promise<string | null> {
+  const url = getComfyUrl();
+  if (!url) return null;
+
+  const t0 = Date.now();
+  console.log(`[comfyui-qwen] Starting rotate, prompt: ${sksPrompt}`);
+
+  try {
+    const buf = await resolveImageToBuffer(image);
+    const filename = `input_rotate_${Date.now()}.png`;
+    const uploadedName = await uploadImage(buf, filename);
+
+    const workflow = buildRotateWorkflow(uploadedName, sksPrompt);
+    const outputImg = await submitAndPoll(workflow);
+    const result = await downloadImage(outputImg);
+
+    console.log(`[comfyui-qwen] Rotate done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    return result;
+  } catch (e) {
+    console.error(`[comfyui-qwen] Rotate error after ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e instanceof Error ? e.message : e);
     return null;
   }
 }

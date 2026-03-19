@@ -17,13 +17,26 @@ export async function rotateCamera(
   const image = ctx.currentImage;
   if (!image) return { success: false, message: 'No image available' };
 
-  const hfToken = process.env.HF_TOKEN;
-  if (!hfToken) return { success: false, message: 'HF_TOKEN not configured' };
-
   const prompt = buildCameraPrompt(azimuth, elevation, distance);
+  const azName = AZIMUTH_MAP[snapToNearest(azimuth, AZIMUTH_STEPS)];
+  const elName = ELEVATION_MAP[snapToNearest(elevation, ELEVATION_STEPS)];
+  const dsName = DISTANCE_MAP[snapToNearest(distance, DISTANCE_STEPS)];
+
+  // ComfyUI Qwen primary (vast.ai, ~10s)
+  if (process.env.COMFYUI_QWEN_URL) {
+    const { generateWithQwenRotate } = await import('../comfyui-qwen');
+    const result = await generateWithQwenRotate(image, prompt);
+    if (result) {
+      return { success: true, message: `Camera rotated: ${azName}, ${elName}, ${dsName}`, image: result };
+    }
+    console.log('[rotate] ComfyUI failed, falling back to fal.ai...');
+  }
+
+  // fal.ai fallback
+  const hfToken = process.env.HF_TOKEN;
+  if (!hfToken) return { success: false, message: 'Neither COMFYUI_QWEN_URL nor HF_TOKEN configured' };
 
   try {
-    // Convert image to Blob (URL or base64)
     let imgBytes: Uint8Array;
     if (image.startsWith('http')) {
       const res = await fetch(image);
@@ -47,9 +60,6 @@ export async function rotateCamera(
     const rawBase64 = `data:image/png;base64,${resultBuf.toString('base64')}`;
     const resultBase64 = await ensureJpeg(rawBase64);
 
-    const azName = AZIMUTH_MAP[snapToNearest(azimuth, AZIMUTH_STEPS)];
-    const elName = ELEVATION_MAP[snapToNearest(elevation, ELEVATION_STEPS)];
-    const dsName = DISTANCE_MAP[snapToNearest(distance, DISTANCE_STEPS)];
     return { success: true, message: `Camera rotated: ${azName}, ${elName}, ${dsName}`, image: resultBase64 };
   } catch (e) {
     return { success: false, message: e instanceof Error ? e.message : String(e) };
