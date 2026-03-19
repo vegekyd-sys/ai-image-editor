@@ -6,7 +6,7 @@ import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimatio
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
-import AgentChatView from '@/components/AgentChatView';
+import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
 import { cacheImage } from '@/lib/imageCache';
@@ -261,6 +261,7 @@ export default function Editor({
   const [draftFullLoaded, setDraftFullLoaded] = useState(false);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
+  const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
@@ -1328,7 +1329,7 @@ export default function Editor({
     let _genStartTime = 0;
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}) },
         {
           onStatus: (status) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
@@ -2707,6 +2708,8 @@ export default function Editor({
             onPipTap={() => {}}
             onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
             onImageTap={handleImageTap}
+            preferredModel={preferredModel}
+            onModelChange={setPreferredModel}
           />
         </div>
       ) : viewMode === 'cui' ? (
@@ -2729,6 +2732,8 @@ export default function Editor({
           onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
+          preferredModel={preferredModel}
+          onModelChange={setPreferredModel}
         />
       ) : null}
 
