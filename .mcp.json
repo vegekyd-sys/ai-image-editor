@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "pencil": {
+      "command": "/Applications/Pencil.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "args": ["-app", "desktop"]
+    },
+    "makaron": {
+      "command": "npx",
+      "args": ["tsx", "--require", "./md-loader.cjs", "mcp-server.ts", "--stdio"]
+    }
+  }
+}

@@ -34,14 +34,21 @@ export async function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV === 'development'
   const activated = isDev || request.cookies.get('mkr_activated')?.value === '1'
 
-  // Not logged in — only /login is accessible
+  // Not logged in — /login, /landingpage, / are accessible; others → landing page
   if (!user) {
-    if (pathname !== '/login') {
+    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/mcp') {
       const url = request.nextUrl.clone()
-      url.pathname = '/login'
+      url.pathname = '/landingpage'
       return NextResponse.redirect(url)
     }
     return supabaseResponse
+  }
+
+  // Logged in — / → projects
+  if (pathname === '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = activated ? '/projects' : '/activate'
+    return NextResponse.redirect(url)
   }
 
   // Logged in below this point

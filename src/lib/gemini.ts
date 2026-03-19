@@ -436,17 +436,54 @@ async function* chatStreamOpenRouter(
 
 // ── Stateless Preview Image Generation ──────────────────────────
 
+/** Which model was used for the last generatePreviewImage call */
+export let lastUsedModel: 'gemini' | 'qwen' = 'gemini';
+
 export async function generatePreviewImage(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
   thinkingEffort?: 'minimal' | 'high',
+  category?: string,
 ): Promise<string | null> {
-  if (PROVIDER === 'openrouter') {
-    return generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio, thinkingEffort);
-  } else {
-    return generatePreviewImageGoogle(imageBase64, editPrompt, aspectRatio);
+  // Enhance → Qwen primary (better at lighting/tones), Gemini fallback
+  if (category === 'enhance' && process.env.COMFYUI_QWEN_URL) {
+    const { generateWithQwen } = await import('./comfyui-qwen');
+    const qwenResult = await generateWithQwen(imageBase64, editPrompt);
+    if (qwenResult) {
+      lastUsedModel = 'qwen';
+      return qwenResult;
+    }
+    console.log('[FALLBACK] Qwen failed for enhance, trying Gemini...');
   }
+
+  // Gemini primary
+  let result: string | null;
+  if (PROVIDER === 'openrouter') {
+    result = await generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio, thinkingEffort);
+  } else {
+    result = await generatePreviewImageGoogle(imageBase64, editPrompt, aspectRatio);
+  }
+
+  if (result) {
+    lastUsedModel = 'gemini';
+    return result;
+  }
+
+  // Qwen fallback when Gemini returns null (refusal/error)
+  if (process.env.COMFYUI_QWEN_URL) {
+    console.log('[FALLBACK] Gemini returned null, trying Qwen...');
+    const { generateWithQwen } = await import('./comfyui-qwen');
+    result = await generateWithQwen(imageBase64, editPrompt);
+    if (result) {
+      lastUsedModel = 'qwen';
+      console.log('[FALLBACK] Qwen succeeded');
+      return result;
+    }
+  }
+
+  lastUsedModel = 'gemini';
+  return null;
 }
 
 async function generatePreviewImageGoogle(
@@ -482,14 +519,31 @@ async function generatePreviewImageGoogle(
   });
 
   const parts = result.candidates?.[0]?.content?.parts;
-  if (!parts) return null;
+  if (!parts) {
+    console.warn('[Google] No parts in response — model returned empty');
+    return null;
+  }
+  let text = '';
+  let image: string | null = null;
   for (const part of parts) {
     if (part.inlineData?.data) {
       const mime = part.inlineData.mimeType || 'image/png';
-      return ensureJpeg(`data:${mime};base64,${part.inlineData.data}`);
+      image = await ensureJpeg(`data:${mime};base64,${part.inlineData.data}`);
+    } else if (part.text) {
+      text += part.text;
     }
   }
-  return null;
+  if (text) {
+    console.log(`[Google] Text in response (${text.length} chars): ${text.slice(0, 300)}`);
+  }
+  if (image) {
+    const inputLen = imageBase64?.length ?? 0;
+    const outputLen = image.length;
+    console.log(`[Google] Image generated: input=${(inputLen/1024).toFixed(0)}KB output=${(outputLen/1024).toFixed(0)}KB ratio=${(outputLen/inputLen*100).toFixed(0)}%`);
+  } else {
+    console.warn('[Google] No image in response parts');
+  }
+  return image;
 }
 
 async function generatePreviewImageOpenRouter(
@@ -546,17 +600,24 @@ async function generatePreviewImageOpenRouter(
     return null;
   }
 
+  // Log text content (may contain refusal or explanation)
+  if (choice.content) {
+    console.log(`[OpenRouter] Text in response (${choice.content.length} chars): ${choice.content.slice(0, 300)}`);
+  }
+
   // Extract image from response
   if (choice.images && Array.isArray(choice.images)) {
     for (const img of choice.images) {
       const url = img.image_url?.url || img.url;
       if (url) {
-        console.log(`[OpenRouter] Got image, url length: ${url.length}`);
+        const outputLen = url.length;
+        const inputLen = imageBase64?.length ?? 0;
+        console.log(`[OpenRouter] Image generated: input=${(inputLen/1024).toFixed(0)}KB output=${(outputLen/1024).toFixed(0)}KB ratio=${inputLen ? (outputLen/inputLen*100).toFixed(0) : '?'}%`);
         return ensureJpeg(url);
       }
     }
   }
-  console.error('[OpenRouter] No image in response, content:', (choice.content || '').slice(0, 100));
+  console.warn('[OpenRouter] No image in response, content:', (choice.content || '').slice(0, 100));
   return null;
 }
 
@@ -584,6 +645,9 @@ export async function generateImageWithReferences(
   const urls = images.map(img => img.url);
   const result = await generateWithMultipleImages(urls, fullPrompt, true, thinkingEffort);
 
+  if (result.text) {
+    console.log(`[generateImageWithReferences] model text: ${result.text.slice(0, 300)}`);
+  }
   if (result.image) {
     console.log('✅ [generateImageWithReferences] multi-image generation succeeded');
     return result.image;
@@ -638,7 +702,10 @@ async function generateMultiImageGoogle(
   });
 
   const resultParts = result.candidates?.[0]?.content?.parts;
-  if (!resultParts) return {};
+  if (!resultParts) {
+    console.warn('[Google-Multi] No parts in response — model returned empty');
+    return {};
+  }
 
   let text: string | undefined;
   let image: string | undefined;
@@ -651,6 +718,10 @@ async function generateMultiImageGoogle(
       text = (text || '') + part.text;
     }
   }
+
+  if (text) console.log(`[Google-Multi] Text (${text.length} chars): ${text.slice(0, 300)}`);
+  if (image) console.log(`[Google-Multi] Image generated: ${(image.length/1024).toFixed(0)}KB`);
+  else if (wantImage) console.warn('[Google-Multi] No image in response');
 
   return { text, image };
 }
@@ -701,12 +772,17 @@ async function generateMultiImageOpenRouter(
   const text: string | undefined = choice.content || undefined;
   let image: string | undefined;
 
+  if (text) console.log(`[OpenRouter-Multi] Text (${text.length} chars): ${text.slice(0, 300)}`);
+
   if (choice.images && Array.isArray(choice.images)) {
     for (const img of choice.images) {
       const url = img.image_url?.url || img.url;
       if (url) { image = await ensureJpeg(url); break; }
     }
   }
+
+  if (image) console.log(`[OpenRouter-Multi] Image generated: ${(image.length/1024).toFixed(0)}KB`);
+  else if (wantImage) console.warn('[OpenRouter-Multi] No image in response');
 
   return { text, image };
 }

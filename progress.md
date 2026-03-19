@@ -3336,3 +3336,147 @@ T+60s     第一个 preview 返回
 |------|------|
 | `src/components/Editor.tsx` | `startHeroToCUI` 共用函数提取；`handlePullDown` 第一帧 pushState；`handlePullDownEnd` committed 用 startHeroToCUI；cancel 用 history.back() |
 | `src/components/AgentChatView.tsx` | PiP transition: `hidePip` 时设为 `none` 防止 bounce |
+
+## CUI 生图画质下降排查（2026-03-19）
+
+### 问题
+用户在 CUI 聊天编辑图片时，有时得到一张跟原图一样但画质更低的图片，且没有失败提示。累积多次后画质明显下降。
+
+### 排查过程
+
+**API 直接测试**（`scripts/test-gemini-response.mjs`）：
+
+| 图片 | Prompt | Gemini 返回 |
+|------|--------|------------|
+| 亲密合照 | 敏感编辑 prompt | 空响应（completion_tokens=0，无图无文字）|
+| 亲密合照 | 安全 enhance prompt | 空响应（Gemini 完全拒绝处理该图）|
+| 人物照 | 敏感 prompt | 生成全新图片（554KB，完全不同）|
+
+空响应场景代码处理正确（return null → 重试 → 失败提示）。
+
+**代码链路追踪发现两个问题**：
+
+1. **compressBase64 阈值过低（主因）**：`handleAgentRequest` 用默认 `compressBase64(rawImage)`（1.8MB 限制）。2048px JPEG 0.92 ≈ 2-3MB → 触发压缩 → quality 降到 0.75 甚至 0.6。当 Gemini 基于这个低质量版本"编辑"（或原样返回），结果就是一张更低质量的图。`originalImage`（人脸参考）也被同样压缩。
+2. **Supabase URL 空窗期**：snapshot 创建到 URL 可用有 1-5 秒。此时 `getImageForApi()` 返回 base64 而非 URL → 走压缩路径。多轮 Agent 对话（上一轮生图还没上传完就开始下一轮）最容易命中。
+
+### 修复
+
+**`src/components/Editor.tsx`**：
+- `handleAgentRequest` 的 `imageForApi`：`compressBase64(rawImage)` → `compressBase64(rawImage, 3_000_000)`
+- `originalImageBase64`：同样从默认 1.8MB → 3MB
+- 效果：绝大多数图片不再触发降 quality，保持 0.92
+
+**`src/lib/gemini.ts`** — 生图路径加详细日志：
+- `generatePreviewImageGoogle`：改 `responseModalities: ['TEXT', 'IMAGE']`，log 文字回复 + 图片输入/输出大小
+- `generatePreviewImageOpenRouter`：log 文字回复 + 输入/输出大小比
+- `generateMultiImageGoogle` / `generateMultiImageOpenRouter`：log 文字和图片
+- `generateImageWithReferences`：log 模型文字
+- 日志格式：`[OpenRouter] Image generated: input=XXXkb output=XXXkb ratio=XXX%`
+
+### 待确认
+- Gemini 是否真的会返回未编辑的原图（ratio ≈ 100%）需要日志数据确认
+- 如果确认，需要决定检测方式（用户否决了像素相似度检测，因为小幅编辑会误杀）
+
+---
+
+## Multi-Model 策略：Gemini + Qwen Edit AIO（2026-03-19）
+
+### 背景
+Gemini 对某些内容（如性感、暴露场景）静默拒绝（返回 200 OK 但无图片无文字）。同时 enhance 类 tips 的光影/通透处理 Qwen 更稳定。引入 Qwen Edit AIO（ComfyUI on vast.ai RTX 5090）作为 enhance 主力 + 全场景 fallback。
+
+### Gemini vs Qwen 对比测试（80 张，3 轮）
+
+**测试工具**：`ai-image-editor-black/scripts/compare-with-gemini.mjs`
+- 读取主项目 batch-test 的 results.json（含 editPrompt + Gemini 编辑结果）
+- 用相同 editPrompt + 原图调 Qwen ComfyUI 生图
+- 生成 HTML 对比报告（3 列：原图 | Gemini | Qwen），每对独立打分
+
+**第一轮 v42（30 张，enhance/creative/wild）**：
+
+| Category | N | Gemini | Qwen | Winner |
+|----------|---|--------|------|--------|
+| enhance | 9 | 7.4 | **8.0** | Qwen +0.6 |
+| creative | 10 | 7.0 | **7.5** | Qwen +0.5 |
+| wild | 11 | **7.7** | 6.6 | Gemini +1.1 |
+
+**第二轮 v60（10 张，captions）**：
+
+| Category | N | Gemini | Qwen | Winner |
+|----------|---|--------|------|--------|
+| captions | 10 | **7.9** | 7.0 | Gemini +0.9 |
+
+**第三轮 v81（40 张，4 类全跑，新图不重复）**：
+
+| Category | N | Gemini | Qwen | Winner |
+|----------|---|--------|------|--------|
+| enhance | 10 | 7.2 | 7.4 | Tie |
+| creative | 10 | **7.8** | 6.9 | Gemini +0.9 |
+| wild | 10 | **8.0** | 7.1 | Gemini +0.9 |
+| captions | 10 | **8.0** | 7.1 | Gemini +0.9 |
+
+**合并 3 轮总计（80 张）**：
+
+| Category | N | Gemini | Qwen | Winner |
+|----------|---|--------|------|--------|
+| enhance | 19 | 7.3 | **7.7** | **Qwen +0.4** |
+| creative | 20 | 7.4 | 7.2 | Tie |
+| wild | 21 | **7.9** | 6.9 | **Gemini +1.0** |
+| captions | 20 | **8.0** | 7.0 | **Gemini +1.0** |
+| **TOTAL** | **80** | **7.6** | **7.2** | Gemini +0.4 |
+
+胜负：Gemini wins 36 | Tie 30 | Qwen wins 14
+
+### Gemini 拒绝场景验证
+
+测试图：图书馆情侣亲密照（性感内容），4 个 prompt（enhance/creative/wild/captions）：
+- **Gemini**：4/4 全部静默拒绝（200 OK，无图片无文字）
+- **Qwen**：4/4 全部成功生成，效果良好
+
+### 结论 & 路由策略
+
+| 分类 | 策略 | 原因 |
+|------|------|------|
+| enhance | **Qwen 优先**，Gemini fallback | Qwen 光影/通透更稳（7.7 vs 7.3），无 6 分低谷 |
+| creative | Gemini 优先，Qwen fallback | Gemini 精细道具更好（7.4 vs 7.2） |
+| wild | Gemini 优先，Qwen fallback | Gemini 夸张变形明显更强（7.9 vs 6.9） |
+| captions | Gemini 优先，Qwen fallback | Gemini 文字渲染强很多（8.0 vs 7.0） |
+| Gemini 拒绝 | 自动 fallback Qwen | 7.2 均分远好于无图 |
+
+### 实现
+
+**新建** `src/lib/comfyui-qwen.ts`：
+- ComfyUI 客户端（upload → workflow → poll → download）
+- `generateWithQwen(image, prompt)` 公开接口
+- `isQwenAvailable()` 检查 `COMFYUI_QWEN_URL` 是否配置
+- OOM 自动恢复（freeVram + retry）
+
+**修改** `src/lib/gemini.ts` — `generatePreviewImage()` 加路由：
+```
+enhance + COMFYUI_QWEN_URL → Qwen primary → Gemini fallback
+其他分类 → Gemini primary → Qwen fallback（Gemini 返回 null 时）
+```
+- 新增 `category` 参数（第 5 个）
+- 新增 `lastUsedModel` 导出（`'gemini' | 'qwen'`）
+
+**修改** `src/lib/skills/edit-image.ts`：传 skill 作为 category，返回 `usedModel`
+
+**修改** `src/app/api/preview/route.ts`：接收并转发 category
+
+**修改** `src/components/Editor.tsx`：
+- `generatePreviewForTip` 加 category 参数，5 个调用点全部传 `tip.category`
+- `onImage` 回调捕获 `usedModel`，存到 `msg.editModel`
+
+**CUI Prompt Card 动态模型名**：
+- Gemini → "Prompt sent to nano banana 2"
+- Qwen → "Prompt sent to qwen edit"
+- 数据流：editImage usedModel → agent ctx → SSE image event → msg.editModel → EditPromptCard
+
+**环境变量**：`COMFYUI_QWEN_URL`（vast.ai Cloudflare tunnel），`COMFYUI_CHECKPOINT`（可选）
+
+### Qwen 模型参数
+- Checkpoint: `Qwen-Rapid-AIO-NSFW-v23.safetensors`
+- Node: `QwenImageIntegratedKSampler`
+- Steps: 4, CFG: 1.0, Sampler: euler, Scheduler: simple
+- Denoise: 1.0, AuraFlow shift: 3.0
+- 自然语言 prompt（无需 danbooru tag 翻译）
+- 速度：~10s/张（RTX 5090 on vast.ai）
