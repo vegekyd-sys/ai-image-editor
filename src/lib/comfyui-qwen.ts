@@ -214,6 +214,63 @@ function buildRotateWorkflow(imageName: string, prompt: string, seed?: number): 
 // ---------------------------------------------------------------------------
 
 /**
+ * Multi-image edit using QwenImageIntegratedKSampler's native image1-5 inputs.
+ * Uploads up to 3 images, injects extra LoadImage nodes for image2/image3.
+ * Returns base64 JPEG or null on failure.
+ */
+export async function generateWithQwenMulti(
+  images: Array<{ url: string; role: string }>,
+  prompt: string,
+): Promise<string | null> {
+  if (images.length === 0) return null;
+  if (images.length === 1) return generateWithQwen(images[0].url, prompt);
+
+  const url = getComfyUrl();
+  if (!url) {
+    console.warn('[comfyui-qwen] Not configured (COMFYUI_QWEN_URL not set)');
+    return null;
+  }
+
+  const t0 = Date.now();
+  const capped = images.slice(0, 3); // KSampler supports image1-5, use up to 3
+  console.log(`[comfyui-qwen] Starting multi-image edit (${capped.length} images), prompt: ${prompt.slice(0, 120)}...`);
+
+  try {
+    // Upload all images in parallel
+    const uploadedNames = await Promise.all(
+      capped.map(async (img, i) => {
+        const buf = await resolveImageToBuffer(img.url);
+        const filename = `input_multi_${Date.now()}_${i}.png`;
+        const name = await uploadImage(buf, filename);
+        console.log(`[comfyui-qwen] Uploaded image${i + 1} (${img.role}): ${(buf.length / 1024).toFixed(0)}KB`);
+        return name;
+      }),
+    );
+
+    // Build base workflow with first image
+    const workflow = buildWorkflow(uploadedNames[0], prompt);
+
+    // Inject extra LoadImage nodes and wire image2/image3 into KSampler
+    for (let i = 1; i < uploadedNames.length; i++) {
+      const nodeId = String(10 + i); // 11, 12, ...
+      workflow[nodeId] = { class_type: 'LoadImage', inputs: { image: uploadedNames[i] } };
+      // Wire into KSampler node '5' as image2, image3, etc.
+      const ksampler = workflow['5'] as { inputs: Record<string, unknown> };
+      ksampler.inputs[`image${i + 1}`] = [nodeId, 0];
+    }
+
+    const outputImg = await submitAndPoll(workflow);
+    const result = await downloadImage(outputImg);
+
+    console.log(`[comfyui-qwen] Multi done in ${((Date.now() - t0) / 1000).toFixed(1)}s, result ${(result.length / 1024).toFixed(0)}KB`);
+    return result;
+  } catch (e) {
+    console.error(`[comfyui-qwen] Multi error after ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
  * Edit an image using ComfyUI Qwen Edit AIO.
  * Returns base64 JPEG or null on failure.
  */
