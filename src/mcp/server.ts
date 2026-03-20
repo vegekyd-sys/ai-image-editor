@@ -64,9 +64,9 @@ Skills:
 - wild: Exaggerate existing objects in the photo
 - captions: Add photorealistic text overlays
 
-Input image can be a local file path (stdio), URL, or base64 data URL.`,
+Input image can be a local file path (stdio), URL, or base64 data URL. Omit image for text-to-image generation.`,
     {
-      image: z.string().describe('Input image: local file path, URL, or base64 data URL'),
+      image: z.string().optional().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('English editing instructions describing what to change'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).optional().describe('Activate a skill template for structured editing'),
       model: z.enum(['gemini', 'qwen', 'pony', 'wai']).optional().describe('Preferred model. enhance→qwen recommended. Gemini refused→retry with qwen. pony/wai=txt2img only.'),
@@ -77,7 +77,7 @@ Input image can be a local file path (stdio), URL, or base64 data URL.`,
     },
     async (params) => {
       try {
-        const image = resolveImage(params.image);
+        const image = params.image ? resolveImage(params.image) : undefined;
         const result = await editImage(
           {
             editPrompt: params.editPrompt,

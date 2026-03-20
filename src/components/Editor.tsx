@@ -1501,8 +1501,8 @@ export default function Editor({
 
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
   const animPromptInFlightRef = useRef(false);
-  const generateAnimationPrompt = useCallback(async () => {
-    const imageUrls = animationStateRef.current?.imageUrls;
+  const generateAnimationPrompt = useCallback(async (overrideImageUrls?: string[]) => {
+    const imageUrls = overrideImageUrls || animationStateRef.current?.imageUrls;
     if (!projectId || !imageUrls?.length) return;
     if (isAgentActiveRef.current || animPromptInFlightRef.current) return;
     animPromptInFlightRef.current = true;

@@ -54,7 +54,7 @@ export async function editImage(
     const refs = ctx.referenceImages!;
     console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
     references = [
-      { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
+      { url: ctx.currentImage!,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
       { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
       ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
     ];
@@ -62,13 +62,13 @@ export async function editImage(
     const refs = ctx.referenceImages!;
     console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
     references = [
-      { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
+      { url: ctx.currentImage!, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
       ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
     ];
   } else if (useOriginalAsReference && hasOriginal) {
     console.log('📸 Two-image mode (original as reference)');
     references = [
-      { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
+      { url: ctx.currentImage!,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
       { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
     ];
   } else {

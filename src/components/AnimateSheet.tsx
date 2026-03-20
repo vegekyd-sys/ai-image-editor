@@ -10,7 +10,7 @@ interface AnimateSheetProps {
   projectId: string;
   onClose: () => void;
   onOpenCUI?: () => void;
-  onGeneratePrompt?: () => void;
+  onGeneratePrompt?: (imageUrls: string[]) => void;
   onPreviewImage?: (snapshotId: string) => void;
   animationState: AnimationState;
   onStateChange: (update: Partial<AnimationState>) => void;
@@ -90,7 +90,7 @@ export default function AnimateSheet({
       : [0, 1, 2, Math.floor(activeUrls.length / 2), activeUrls.length - 3, activeUrls.length - 2, activeUrls.length - 1]
         .map(i => activeUrls[Math.min(i, activeUrls.length - 1)]);
     onStateChange({ imageUrls: urls, error: null, prompt: '' });
-    onGeneratePrompt?.();
+    onGeneratePrompt?.(urls);
   }, [activeUrls, onStateChange, onGeneratePrompt]);
 
   const handleGenerate = useCallback(async () => {

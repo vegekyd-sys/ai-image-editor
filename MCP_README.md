@@ -12,9 +12,10 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `image` | string | ✅ | 输入图片：本地文件路径（stdio 模式）、URL、或 base64 data URL |
+| `image` | string | | 输入图片：本地文件路径（stdio 模式）、URL、或 base64 data URL。省略则为文生图模式 |
 | `editPrompt` | string | ✅ | 英文编辑指令 |
 | `skill` | string | | `enhance` / `creative` / `wild` / `captions` |
+| `model` | string | | 指定生图模型：`gemini`（默认）/ `qwen` / `pony` / `wai`，见下方说明 |
 | `originalImage` | string | | 原图（人脸修复参考） |
 | `referenceImages` | string[] | | 参考图数组（最多 3 张） |
 | `useOriginalAsReference` | boolean | | 是否用原图做参考 |
@@ -25,6 +26,14 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 - `creative` — 添加与场景有因果关系的趣味元素
 - `wild` — 夸张变形画面中已有的物品
 - `captions` — 添加写实风格的文字叠加
+
+**Model 说明：**
+- `gemini`（默认）— Gemini Flash，img2img + txt2img + 多参考图，质量最稳定
+- `qwen` — Qwen Edit via ComfyUI，img2img + txt2img，enhance 类推荐，Gemini 内容审核拒绝时可用 qwen 重试
+- `pony` — Pony SDXL via ComfyUI，**仅 txt2img**（无输入图片的纯文生图，anime 风格）
+- `wai` — WAI-Illustrious SDXL via ComfyUI，**仅 txt2img**（illustrious 风格）
+
+不指定 model 时自动路由：enhance 优先 qwen，其余优先 gemini，失败自动 fallback 到另一个模型。
 
 ### `makaron_rotate_camera`
 
@@ -38,6 +47,18 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 | `azimuth` | number | ✅ | 水平旋转 0-360°（0=正面, 90=右侧, 180=背面, 270=左侧） |
 | `elevation` | number | ✅ | 俯仰角 -30~60°（0=平视, 60=俯视） |
 | `distance` | number | ✅ | 距离 0.6~1.4（0.6=特写, 1.0=中景, 1.4=远景） |
+
+---
+
+## 鉴权
+
+线上 HTTP endpoint 需要 Bearer token 鉴权。所有请求必须带 `Authorization` header：
+
+```
+Authorization: Bearer <MCP_API_KEY>
+```
+
+未携带或 token 不匹配会返回 `401 Unauthorized`。本地 stdio 模式无需鉴权。
 
 ---
 
@@ -57,7 +78,10 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const client = new Client({ name: 'my-app', version: '1.0.0' });
 await client.connect(
-  new StreamableHTTPClientTransport(new URL('https://www.makaron.app/api/mcp'))
+  new StreamableHTTPClientTransport(
+    new URL('https://www.makaron.app/api/mcp'),
+    { requestInit: { headers: { Authorization: 'Bearer <MCP_API_KEY>' } } }
+  )
 );
 
 // 编辑图片
@@ -94,18 +118,21 @@ const rotated = await client.callTool({
 curl -X POST https://www.makaron.app/api/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
+  -H 'Authorization: Bearer <MCP_API_KEY>' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 
 # List tools
 curl -X POST https://www.makaron.app/api/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
+  -H 'Authorization: Bearer <MCP_API_KEY>' \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 
 # Call tool
 curl -X POST https://www.makaron.app/api/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
+  -H 'Authorization: Bearer <MCP_API_KEY>' \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"makaron_edit_image","arguments":{"image":"https://example.com/photo.jpg","editPrompt":"Add sunglasses"}}}'
 ```
 
