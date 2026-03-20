@@ -2,7 +2,7 @@ import { streamText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
-import { generatePreviewImage, generateImageWithReferences, ensureJpeg } from './gemini';
+import type { ModelId } from './models/types';
 import { createKlingTask } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
@@ -39,9 +39,9 @@ interface AgentContext {
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
   /** Which model was used for the last image generation */
-  lastUsedModel?: string;
-  /** User's preferred model override ('gemini' | 'qwen') */
-  preferredModel?: string;
+  lastUsedModel?: ModelId;
+  /** User's preferred model override */
+  preferredModel?: ModelId;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
   /** PiAPI task ID set by generate_animation tool, emitted as animation_task event */
@@ -88,12 +88,15 @@ function createTools(ctx: AgentContext) {
       inputSchema: z.object({
         editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, write only the direction — template rules are auto-injected.'),
         skill: z.enum(['enhance', 'creative', 'wild', 'captions']).optional().describe('Activate a skill template. See tool description for routing rules.'),
+        model: z.enum(['gemini', 'qwen', 'pony', 'wai']).optional().describe('Choose the best model. pony/wai for anime/二次元 text-to-image. qwen for NSFW or enhance. Default: auto-route.'),
         useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       }),
-      execute: async ({ editPrompt, skill, useOriginalAsReference, aspectRatio }) => {
+      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio }) => {
+        // Priority: UI selector > agent tool param > auto-route
+        const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
-          { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: ctx.preferredModel },
+          { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: resolvedModel },
           { currentImage: ctx.currentImage, originalImage: ctx.originalImage, referenceImages: ctx.referenceImages },
         );
         if (skillResult.image) {
@@ -226,7 +229,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: string },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,

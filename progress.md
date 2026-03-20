@@ -3480,3 +3480,84 @@ enhance + COMFYUI_QWEN_URL → Qwen primary → Gemini fallback
 - Denoise: 1.0, AuraFlow shift: 3.0
 - 自然语言 prompt（无需 danbooru tag 翻译）
 - 速度：~10s/张（RTX 5090 on vast.ai）
+
+---
+
+## Multi-Model Architecture Refactor（2026-03-20）
+
+### 背景
+Qwen fallback 是临时做法，模型路由逻辑散布在 gemini.ts（嵌套 if-else）、edit-image.ts（透传）、agent.ts（context 级别）多处。全局 `lastUsedModel` 状态、6 参数的 `generatePreviewImage()` 函数、缺少类型安全。需要接入 Pony/WAI，需要干净的多模型架构。
+
+### 架构：model-router.ts 唯一入口
+
+**新建 8 个文件**：
+- `src/lib/models/types.ts` — `ModelId`, `ModelBackend`, `GenerateImageRequest/Result`
+- `src/lib/models/gemini.ts` — 包装现有 OpenRouter/Google 函数
+- `src/lib/models/qwen.ts` — 包装 `comfyui-qwen.ts`
+- `src/lib/models/pony.ts` — Pony SDXL txt2img + danbooru 翻译
+- `src/lib/models/wai.ts` — WAI-Illustrious SDXL txt2img + 翻译
+- `src/lib/models/index.ts` — Backend 注册表
+- `src/lib/model-router.ts` — `generateImage()` + `resolveModelChain()` + `failedModels` 追踪
+- `src/lib/comfyui-sdxl.ts` — Pony/WAI 共用 ComfyUI SDXL 函数（从 black 项目移植）
+
+**修改文件**：
+- `gemini.ts` — 删除 `generatePreviewImage` + `lastUsedModel`，导出内部函数
+- `edit-image.ts` — 4 分支 if-else → 单个 `generateImage()` 调用
+- `skills/index.ts` — `usedModel` 类型改为 `ModelId`
+- `agent.ts` — `generate_image` tool 加 `model` 参数（`z.enum(['gemini','qwen','pony','wai'])`）
+- `AgentChatView.tsx` — prompt card 模型名映射（pony→"pony anime", wai→"wai illustrious"）；UI selector 保持 auto/gemini/qwen 三项
+- `/api/preview/route.ts` — 改用 `generateImage()`
+- `agent.md` — 加模型选择指令 + content refusal recovery + "nano banana"=gemini
+
+**复制 prompt 模板**：`pony_translate.md`, `wai_translate.md`（从 black 项目）
+
+### Model Chain Resolution
+```
+explicit model → [model, ...fallbacks]
+multi-ref      → [gemini, qwen]
+text-to-image  → [gemini, qwen]
+enhance        → [qwen, gemini]
+default        → [gemini, qwen]
+```
+
+### Agent 模型选择指令（agent.md）
+1. 用户显式指定模型 → 直接用（含 "nano banana"=gemini）
+2. 二次元/anime/动漫 → `model: 'pony'`（txt2img only）
+3. NSFW/Gemini 拒绝 → `model: 'qwen'`
+4. 否则 → 不传 model（auto-route）
+5. **Content refusal recovery**：收到 "Gemini refused" → 直接 `model: 'qwen'` 重试，**不重写 prompt**
+
+### Pony 质量优化
+- **Score tags**：自动追加 `score_9, score_8_up, score_7_up`（除非已有）
+- **Eye fix positive**：`beautiful detailed eyes, perfect symmetrical eyes, detailed pupils`
+- **Eye fix negative**：`bad eyes, asymmetrical eyes, mismatched pupils, extra pupils, ugly eyes, cross-eyed, uneven eyes`
+
+### Gemini Fallback 问题（已知限制）
+- Gemini 对 NSFW 图片确定性拒绝，model-router 自动 fallback Qwen
+- 但 Qwen 用 Gemini 格式的复杂 prompt（换场景+保脸）会生成不相关图片
+- 根因：Qwen 指令跟随能力弱，用 Gemini 的 prompt 只抓关键词
+- Agent 层面：收到失败后会重写 prompt 重试，每次都先浪费 ~15s 在 Gemini 上
+- 修复：`editImage()` 失败时检查 `failedModels.includes('gemini')` → 告诉 Agent 直接用 qwen
+
+### Phase 1 测试结果（回归）
+| Case | 结果 | 证据 |
+|------|------|------|
+| Tips Preview enhance | ✅ | 8 个 /api/preview 全部 200，走 model-router |
+| Tips Preview creative/wild | ✅ | 同上 |
+| Agent 普通生图 | ✅ | `IMAGE received (gemini)` 19s |
+| Agent enhance 自动路由 | ✅ | chain `['qwen','gemini']` |
+| Model Selector=QWEN | ✅ | `IMAGE received (qwen)` 19s，UI 显示 "qwen edit" |
+| Model Selector=GEMINI | ✅ | chain 强制 gemini |
+| Gemini fallback | ✅ | chain 包含 fallback |
+| Multi-ref | ✅ | references → geminiBackend |
+| Camera Rotation | ✅ | 独立路径不受影响 |
+| MCP | ✅ | tools/list 返回 edit_image + rotate_camera |
+| Model Selector 循环 | ✅ | AUTO→GEMINI→QWEN→PONY→WAI→AUTO |
+
+### Phase 2 测试结果（Pony）
+| Case | 结果 | 证据 |
+|------|------|------|
+| Pony txt2img | ✅ | "画二次元猫娘，用pony模型" → `IMAGE received (pony)` 13s，308KB |
+| Agent 自动选 pony | ✅ | Agent 识别"二次元"+"用pony" → 传 `model: 'pony'` |
+| Danbooru 翻译 | ✅ | 自然语言 → Grok-3 翻译 → ComfyUI SDXL 生图 |
+| 图片质量 | ✅ | 猫耳+女仆装+猫，二次元风格正确 |

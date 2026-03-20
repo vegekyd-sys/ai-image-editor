@@ -1,3 +1,5 @@
+import type { ModelId } from '../models/types';
+
 export interface SkillContext {
   currentImage: string;        // Supabase URL or base64 data URL
   originalImage?: string;      // original photo (for face restoration reference)
@@ -8,5 +10,5 @@ export interface SkillResult {
   success: boolean;
   message: string;
   image?: string;              // base64 result image (data URL)
-  usedModel?: string;          // which model generated ('gemini' | 'qwen')
+  usedModel?: ModelId;         // which model generated the image
 }

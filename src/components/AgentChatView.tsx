@@ -13,7 +13,8 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const inputImageLabels = [t('chat.currentImage'), t('chat.originalImage')];
-  const modelLabel = editModel === 'qwen' ? 'qwen edit' : 'nano banana 2';
+  const modelLabels: Record<string, string> = { qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious' };
+  const modelLabel = modelLabels[editModel || ''] || 'nano banana 2';
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}>
       <button
@@ -89,7 +90,7 @@ function fixMarkdownDelimiters(text: string): string {
   );
 }
 
-export type PreferredModel = 'auto' | 'gemini' | 'qwen';
+export type PreferredModel = 'auto' | 'gemini' | 'qwen' | 'pony' | 'wai';
 
 interface AgentChatViewProps {
   messages: Message[];
@@ -800,17 +801,23 @@ export default function AgentChatView({
                 className="h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
                 style={{
                   padding: '0 10px',
-                  background: preferredModel === 'auto' ? 'rgba(255,255,255,0.06)' : preferredModel === 'qwen' ? 'rgba(16,185,129,0.15)' : 'rgba(59,130,246,0.15)',
-                  border: `1px solid ${preferredModel === 'auto' ? 'rgba(255,255,255,0.08)' : preferredModel === 'qwen' ? 'rgba(16,185,129,0.3)' : 'rgba(59,130,246,0.3)'}`,
+                  background: preferredModel === 'auto' ? 'rgba(255,255,255,0.06)'
+                    : preferredModel === 'qwen' ? 'rgba(16,185,129,0.15)'
+                    : 'rgba(59,130,246,0.15)',
+                  border: `1px solid ${preferredModel === 'auto' ? 'rgba(255,255,255,0.08)'
+                    : preferredModel === 'qwen' ? 'rgba(16,185,129,0.3)'
+                    : 'rgba(59,130,246,0.3)'}`,
                 }}
               >
                 <span style={{
                   fontSize: 8,
                   fontWeight: 600,
                   letterSpacing: '0.02em',
-                  color: preferredModel === 'auto' ? 'rgba(255,255,255,0.35)' : preferredModel === 'qwen' ? 'rgba(16,185,129,0.85)' : 'rgba(59,130,246,0.85)',
+                  color: preferredModel === 'auto' ? 'rgba(255,255,255,0.35)'
+                    : preferredModel === 'qwen' ? 'rgba(16,185,129,0.85)'
+                    : 'rgba(59,130,246,0.85)',
                 }}>
-                  {preferredModel === 'auto' ? 'AUTO' : preferredModel === 'qwen' ? 'QWEN' : 'GEMINI'}
+                  {preferredModel === 'auto' ? 'AUTO' : preferredModel.toUpperCase()}
                 </span>
               </button>
             )}

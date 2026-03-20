@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { generatePreviewImage } from '@/lib/gemini';
+import { generateImage } from '@/lib/model-router';
 
 export const maxDuration = 120;
 
@@ -32,9 +32,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const previewImage = await generatePreviewImage(image, editPrompt, aspectRatio, undefined, category);
+    const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category });
 
-    if (!previewImage) {
+    if (!result.image) {
       return new Response(
         JSON.stringify({ error: 'Failed to generate preview' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     }
 
     return new Response(
-      JSON.stringify({ image: previewImage }),
+      JSON.stringify({ image: result.image }),
       { headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {

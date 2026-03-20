@@ -179,6 +179,11 @@ No test framework is configured.
 - `IMAGE_MODEL` — 生图模型 ID（默认 `gemini-3-pro-image-preview`），tips 和生图共用。当前线上 `gemini-3.1-flash-image-preview`
 - `OPENROUTER_API_KEY` — Required when `AI_PROVIDER=openrouter`
 - `MOCK_AI` — Set to `'true'` to mock all AI calls in `gemini.ts` (chat returns mock text, tips returns hardcoded 6 tips, preview returns original image). 不需要测试 AI 功能时使用，节省 Gemini API 费用。仅在 `.env.local` 中设置，Vercel 线上不设置。
+- `COMFYUI_QWEN_URL` — Qwen Edit AIO ComfyUI 服务器（vast.ai Cloudflare tunnel）
+- `COMFYUI_PONY_URL` — Pony SDXL ComfyUI 服务器（txt2img anime）
+- `COMFYUI_PONY_MODEL` — Pony checkpoint 名（默认 `fucktasticAnimePony_v22`）
+- `COMFYUI_WAI_URL` — WAI-Illustrious SDXL ComfyUI 服务器（txt2img）
+- `COMFYUI_WAI_CHECKPOINT` — WAI checkpoint 名（默认 `waiIllustriousSDXL_v160.safetensors`）
 
 ## Architecture
 
@@ -211,21 +216,34 @@ Key components in `src/components/`:
 
 ### AI Layer
 
-`src/lib/gemini.ts` is the core orchestration module:
-- **Dual provider support**: Google Gemini SDK or OpenRouter HTTP proxy, selected by `AI_PROVIDER` env var（用于生图）
-- **Tips provider 独立**: `TIPS_PROVIDER` env var 控制（`bedrock` 默认 / `openrouter` / `google`），与生图 provider 解耦
-- **Image content helpers**: `toImageContent(image)` 统一构建 OpenRouter 图片内容（HTTP URL 直传，base64 fallback）；`ensureBase64Server(image)` 服务端 fetch URL 转 base64（Google SDK `inlineData` 需要）
-- **Session management**: In-memory `Map<projectId, Session>` with 30-minute TTL auto-cleanup, keyed by project ID
-- **`chatStreamWithModel`**: Async generator yielding `{type: 'content'|'image'|'done'}` chunks
-- **`streamTips`**: Analyzes uploaded image against prompt templates, yields parsed Tip objects incrementally
-- **`generatePreviewImage`**: Stateless one-shot image editing for thumbnail previews
-- **Prompt templates**: Loaded from `src/lib/prompts/*.md` files (cached in production). Three-question self-check framework for each category.
+**Multi-Model Router（2026-03-20 重构）**：`src/lib/model-router.ts` 是所有生图的唯一入口。`generateImage(req)` 根据请求解析模型链，按顺序尝试，自动 fallback。
 
-`src/lib/agent.ts` is the Makaron Agent module (Claude Agent SDK):
-- **MCP tools**: `generate_image` (calls Gemini via `generatePreviewImage`) and `analyze_image` (returns image content block for Sonnet's native vision)
-- **`runMakaronAgent`**: Async generator yielding SSE events (`status`, `content`, `image`, `tool_call`, `done`, `error`)
-- **Multi-turn context**: Editor prepends recent 6 messages to the prompt for conversation continuity
-- **System prompt**: `src/lib/prompts/agent.md` — workflow: vague requests → analyze first, explicit requests → generate directly
+**模型后端**（`src/lib/models/`）：
+| 模型 | 文件 | 能力 | 条件 |
+|------|------|------|------|
+| Gemini | `models/gemini.ts` | img2img + txt2img + multi-ref | 始终可用 |
+| Qwen | `models/qwen.ts` | img2img + txt2img | `COMFYUI_QWEN_URL` 已设 |
+| Pony | `models/pony.ts` | txt2img only（anime，自动 danbooru 翻译） | `COMFYUI_PONY_URL` 已设 |
+| WAI | `models/wai.ts` | txt2img only（illustrious） | `COMFYUI_WAI_URL` 已设 |
+
+**路由规则**：显式指定 > enhance→qwen优先 > 默认→gemini优先。所有链路都含 fallback（gemini↔qwen 互为 fallback）。`failedModels` 追踪哪些模型失败，Gemini content refusal 时告知 Agent 直接用 qwen 重试。
+
+**Pony 质量优化**：自动追加 `score_9, score_8_up, score_7_up` + eye fix tags（positive + negative）。
+
+`src/lib/gemini.ts` — Tips 生成 + Chat 会话管理（保留）:
+- **Dual provider**: Google SDK / OpenRouter，`AI_PROVIDER` env var
+- **Tips provider**: `TIPS_PROVIDER`（`openrouter` 默认 / `bedrock` / `google`）
+- **`streamTips`**: 图片分析 + prompt 模板 → 逐 tip 流式输出
+- **Prompt templates**: `src/lib/prompts/*.md`（enhance, creative, wild, captions, pony_translate, wai_translate）
+
+`src/lib/agent.ts` — Makaron Agent（Claude Sonnet via Bedrock）:
+- **Tools**: `generate_image`（`model` 参数选模型）、`analyze_image`、`rotate_camera`、`generate_animation`
+- **Model selection**: Agent 根据 agent.md 指令选模型（anime→pony, NSFW→qwen, 用户指定→直接用）
+- **`runMakaronAgent`**: Async generator yielding SSE events
+- **System prompt**: `src/lib/prompts/agent.md`
+
+`src/lib/comfyui-qwen.ts` — Qwen Edit AIO ComfyUI 客户端（img2img + rotate）
+`src/lib/comfyui-sdxl.ts` — Pony/WAI 共用 SDXL ComfyUI 函数（txt2img + danbooru 翻译）
 
 ### Persistence Layer
 

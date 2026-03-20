@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { generatePreviewImage, generateImageWithReferences, lastUsedModel } from '../gemini';
+import { generateImage } from '../model-router';
+import type { ModelId } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
 
 // Lazy-loaded skill prompts from disk (for standalone MCP server / non-webpack environments)
@@ -25,8 +26,8 @@ export interface EditImageInput {
   aspectRatio?: string;
   /** Pre-loaded skill prompt templates (from webpack). If omitted, loads from disk. */
   skillPrompts?: Record<string, string>;
-  /** User's preferred model override ('gemini' | 'qwen') — bypasses default routing */
-  preferredModel?: string;
+  /** User's preferred model override — bypasses default routing */
+  preferredModel?: ModelId;
 }
 
 export async function editImage(
@@ -45,61 +46,72 @@ export async function editImage(
     : editPrompt;
 
   const t0 = Date.now();
-  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference}\neditPrompt: ${editPrompt.slice(0, 200)}\nfinalPrompt length: ${finalPrompt.length} chars\n`);
+  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} model=${preferredModel ?? 'auto'}\neditPrompt: ${editPrompt.slice(0, 200)}\nfinalPrompt length: ${finalPrompt.length} chars\n`);
+
+  // Build references array for multi-image mode
+  let references: { url: string; role: string }[] | undefined;
+  if (hasReference && useOriginalAsReference && hasOriginal) {
+    const refs = ctx.referenceImages!;
+    console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
+    references = [
+      { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
+      { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
+      ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
+    ];
+  } else if (hasReference) {
+    const refs = ctx.referenceImages!;
+    console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
+    references = [
+      { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
+      ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
+    ];
+  } else if (useOriginalAsReference && hasOriginal) {
+    console.log('📸 Two-image mode (original as reference)');
+    references = [
+      { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
+      { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
+    ];
+  } else {
+    console.log('📸 Single-image mode');
+  }
 
   let result: string | null = null;
+  let usedModel: ModelId = 'gemini';
+  let lastFailedModels: ModelId[] | undefined;
   const MAX_ATTEMPTS = 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    if (hasReference && useOriginalAsReference && hasOriginal) {
-      const refs = ctx.referenceImages!;
-      if (attempt === 1) console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
-      result = await generateImageWithReferences(
-        [
-          { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
-          { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
-          ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
-        ],
-        finalPrompt, aspectRatio, 'minimal',
-      );
-    } else if (hasReference) {
-      const refs = ctx.referenceImages!;
-      if (attempt === 1) console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
-      result = await generateImageWithReferences(
-        [
-          { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
-          ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
-        ],
-        finalPrompt, aspectRatio, 'minimal',
-      );
-    } else if (useOriginalAsReference && hasOriginal) {
-      if (attempt === 1) console.log('📸 Two-image mode (original as reference)');
-      result = await generateImageWithReferences(
-        [
-          { url: ctx.currentImage,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
-          { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
-        ],
-        finalPrompt, aspectRatio, 'minimal',
-      );
-    } else {
-      if (attempt === 1) console.log('📸 Single-image mode');
-      result = await generatePreviewImage(ctx.currentImage, finalPrompt, aspectRatio, 'minimal', skill, preferredModel);
-    }
+    const genResult = await generateImage({
+      image: references ? undefined : ctx.currentImage,
+      prompt: finalPrompt,
+      model: preferredModel,
+      category: skill,
+      aspectRatio,
+      thinkingEffort: 'minimal',
+      references,
+    });
+
+    result = genResult.image;
+    usedModel = genResult.model;
+    lastFailedModels = genResult.failedModels;
 
     if (result) break;
     if (attempt < MAX_ATTEMPTS) {
-      console.warn(`⚠️ [edit_image] attempt ${attempt} returned null, retrying...`);
+      console.warn(`⚠️ [edit_image] attempt ${attempt} returned null (failedModels=${genResult.failedModels}), retrying...`);
     }
   }
 
   if (!result) {
-    console.error(`❌ [edit_image] all attempts failed after ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    const geminiRefused = lastFailedModels?.includes('gemini');
+    console.error(`❌ [edit_image] all attempts failed after ${((Date.now() - t0) / 1000).toFixed(1)}s, failedModels=${lastFailedModels}`);
     return {
       success: false,
-      message: 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.',
+      message: geminiRefused
+        ? 'Image generation failed — Gemini refused this content. Retry with model: "qwen" to bypass content restrictions.'
+        : 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.',
     };
   }
 
-  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${lastUsedModel}`);
-  return { success: true, message: 'Image generated successfully.', image: result, usedModel: lastUsedModel };
+  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel}`);
+  return { success: true, message: 'Image generated successfully.', image: result, usedModel };
 }

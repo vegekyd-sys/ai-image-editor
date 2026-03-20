@@ -119,6 +119,19 @@ When the user wants to create a video from their snapshots (animation mode), you
 
 **When reacting to a committed tip** (tipReactionOnly mode): 1-2 sentences, friendly, don't repeat the tip name.
 
+## Model Selection
+
+The `generate_image` tool has an optional `model` parameter. Use it when appropriate:
+
+- **User explicitly requests a model** (e.g. "用qwen", "use gemini", "qwen模型", "用nano banana") → pass that exact `model` value. Note: "nano banana" = gemini
+- **User asks for anime/二次元/动漫 style** → `model: 'pony'` (text-to-image only, auto-translates to danbooru tags)
+- **NSFW or sensitive content that Gemini refuses** → `model: 'qwen'`
+- **Otherwise** → don't pass `model` (auto-routes: enhance→qwen, others→gemini with fallback)
+
+**Important**: pony and wai are text-to-image ONLY — they cannot edit existing photos. For editing, use gemini or qwen.
+
+**Content refusal recovery**: If `generate_image` returns a message mentioning "Gemini refused", immediately retry with `model: 'qwen'` and the SAME editPrompt. Do NOT rewrite the prompt — Gemini refusal is about the image content, not the prompt. Just switch model.
+
 ## Reference Image (User-Uploaded)
 
 When the user attaches a reference image (e.g. a photo of a person, object, or style), it is automatically passed to `generate_image` as **Image 2** alongside the current photo. You do not need to explicitly handle it — just write the `editPrompt` describing what to do with it (e.g. "add the person from Image 2 into the scene").

@@ -81,11 +81,22 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* ── Device mockups — overlapping composition ── */}
-        <div className="relative z-10 mt-14 lg:mt-20 w-full max-w-[1000px] px-5 lg:px-8">
-          {/* Desktop browser — main, centered */}
+        {/* ── Device mockups ── */}
+        {/* Mobile: phone only, centered */}
+        <div className="relative z-10 mt-10 flex justify-center lg:hidden px-6">
+          <div className="w-[220px]">
+            <div className="aspect-[9/19.5] rounded-[24px] border-2 border-white/15 bg-[#0d0d0d] p-[4px] shadow-[0_16px_60px_-8px_rgba(0,0,0,.9)]">
+              <div className="w-full h-full rounded-[20px] overflow-hidden bg-black">
+                <img src="/landing/phone-screenshot.jpg" alt="Makaron Mobile" className="w-full h-full object-cover" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop: browser + phone overlapping */}
+        <div className="relative z-10 mt-20 w-full max-w-[1000px] px-8 hidden lg:block">
+          {/* Desktop browser */}
           <div className="relative rounded-xl border border-white/10 bg-[#0d0d0d] overflow-hidden shadow-[0_20px_80px_-12px_rgba(217,70,239,.12)]">
-            {/* Browser chrome bar */}
             <div className="flex items-center gap-1.5 px-4 py-2.5 bg-[#161616] border-b border-white/6">
               <span className="w-[10px] h-[10px] rounded-full bg-[#ff5f57]/80" />
               <span className="w-[10px] h-[10px] rounded-full bg-[#febc2e]/80" />
@@ -94,29 +105,22 @@ export default function LandingPage() {
                 <span className="text-[10px] text-white/30 tracking-wide">makaron.app</span>
               </div>
             </div>
-            <img
-              src="/landing/desktop-screenshot.jpg"
-              alt="Makaron Desktop"
-              className="w-full block"
-            />
+            <div className="relative w-full bg-[#0d0d0d]" style={{ aspectRatio: "1920/1005" }}>
+              <img src="/landing/desktop-screenshot.jpg" alt="Makaron Desktop" className="w-full block" />
+            </div>
           </div>
-
-          {/* Phone — overlapping bottom-left, floating above */}
-          <div className="absolute -bottom-12 -left-3 lg:left-4 lg:-bottom-16 w-[140px] lg:w-[220px] z-20">
-            <div className="aspect-[9/19.5] rounded-[20px] lg:rounded-[30px] border-2 border-white/15 bg-[#0d0d0d] p-[3px] lg:p-[5px] shadow-[0_16px_60px_-8px_rgba(0,0,0,.9)]">
-              <div className="w-full h-full rounded-[17px] lg:rounded-[25px] overflow-hidden bg-black">
-                <img
-                  src="/landing/phone-screenshot.jpg"
-                  alt="Makaron Mobile"
-                  className="w-full h-full object-cover"
-                />
+          {/* Phone — overlapping bottom-left */}
+          <div className="absolute -bottom-16 left-4 w-[220px] z-20">
+            <div className="aspect-[9/19.5] rounded-[30px] border-2 border-white/15 bg-[#0d0d0d] p-[5px] shadow-[0_16px_60px_-8px_rgba(0,0,0,.9)]">
+              <div className="w-full h-full rounded-[25px] overflow-hidden bg-black">
+                <img src="/landing/phone-screenshot.jpg" alt="Makaron Mobile" className="w-full h-full object-cover" />
               </div>
             </div>
           </div>
         </div>
 
         {/* Extra bottom space for the floating phone */}
-        <div className="h-16 lg:h-24" />
+        <div className="h-4 lg:h-24" />
       </section>
 
       {/* ─── Statement ─── */}

@@ -17,7 +17,7 @@ function tlog(msg: string) {
 
 // ── Provider & Model Config ─────────────────────────────────────
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
-const PROVIDER = (process.env.AI_PROVIDER || 'openrouter') as 'google' | 'openrouter';
+export const PROVIDER = (process.env.AI_PROVIDER || 'openrouter') as 'google' | 'openrouter';
 
 // Image generation model — override with IMAGE_MODEL env var
 const MODEL = process.env.IMAGE_MODEL || 'gemini-3-pro-image-preview';
@@ -436,59 +436,9 @@ async function* chatStreamOpenRouter(
 
 // ── Stateless Preview Image Generation ──────────────────────────
 
-/** Which model was used for the last generatePreviewImage call */
-export let lastUsedModel: 'gemini' | 'qwen' = 'gemini';
+// generatePreviewImage and lastUsedModel removed — use model-router.ts instead
 
-export async function generatePreviewImage(
-  imageBase64: string,
-  editPrompt: string,
-  aspectRatio?: string,
-  thinkingEffort?: 'minimal' | 'high',
-  category?: string,
-  preferredModel?: string,
-): Promise<string | null> {
-  // User explicitly chose a model → use it directly
-  if (preferredModel === 'qwen' && process.env.COMFYUI_QWEN_URL) {
-    const { generateWithQwen } = await import('./comfyui-qwen');
-    const result = await generateWithQwen(imageBase64, editPrompt);
-    if (result) { lastUsedModel = 'qwen'; return result; }
-    console.log('[FALLBACK] Qwen (forced) failed, trying Gemini...');
-  } else if (preferredModel === 'gemini') {
-    // Skip Qwen-primary for enhance, go straight to Gemini
-  } else {
-    // Auto mode: Enhance → Qwen primary
-    if (category === 'enhance' && process.env.COMFYUI_QWEN_URL) {
-      const { generateWithQwen } = await import('./comfyui-qwen');
-      const qwenResult = await generateWithQwen(imageBase64, editPrompt);
-      if (qwenResult) { lastUsedModel = 'qwen'; return qwenResult; }
-      console.log('[FALLBACK] Qwen failed for enhance, trying Gemini...');
-    }
-  }
-
-  // Gemini
-  if (preferredModel !== 'qwen') {
-    let result: string | null;
-    if (PROVIDER === 'openrouter') {
-      result = await generatePreviewImageOpenRouter(imageBase64, editPrompt, aspectRatio, thinkingEffort);
-    } else {
-      result = await generatePreviewImageGoogle(imageBase64, editPrompt, aspectRatio);
-    }
-    if (result) { lastUsedModel = 'gemini'; return result; }
-  }
-
-  // Qwen fallback when Gemini returns null (refusal/error)
-  if (process.env.COMFYUI_QWEN_URL && preferredModel !== 'gemini') {
-    console.log('[FALLBACK] Gemini returned null, trying Qwen...');
-    const { generateWithQwen } = await import('./comfyui-qwen');
-    const result = await generateWithQwen(imageBase64, editPrompt);
-    if (result) { lastUsedModel = 'qwen'; console.log('[FALLBACK] Qwen succeeded'); return result; }
-  }
-
-  lastUsedModel = 'gemini';
-  return null;
-}
-
-async function generatePreviewImageGoogle(
+export async function generatePreviewImageGoogle(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
@@ -548,7 +498,7 @@ async function generatePreviewImageGoogle(
   return image;
 }
 
-async function generatePreviewImageOpenRouter(
+export async function generatePreviewImageOpenRouter(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
