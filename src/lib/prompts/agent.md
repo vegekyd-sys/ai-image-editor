@@ -123,10 +123,9 @@ When the user wants to create a video from their snapshots (animation mode), you
 
 The `generate_image` tool has an optional `model` parameter. Use it when appropriate:
 
-- **User explicitly requests a model** (e.g. "用qwen", "use gemini", "qwen模型", "用nano banana") → pass that exact `model` value. Note: "nano banana" = gemini
-- **User asks for anime/二次元/动漫 style** → `model: 'pony'` (text-to-image only, auto-translates to danbooru tags)
+- **User explicitly requests a model** (e.g. "用qwen", "use gemini", "用pony", "pony模型", "用nano banana") → pass that exact `model` value. Note: "nano banana" = gemini, pony/wai = text-to-image only (auto-translates to danbooru tags)
 - **NSFW or sensitive content that Gemini refuses** → `model: 'qwen'`
-- **Otherwise** → don't pass `model` (auto-routes: enhance→qwen, others→gemini with fallback)
+- **Otherwise** → don't pass `model` (auto-routes: enhance→qwen, others→gemini with fallback). Do NOT auto-detect anime style to route to pony — only use pony/wai when user explicitly asks for it.
 
 **Important**: pony and wai are text-to-image ONLY — they cannot edit existing photos. For editing, use gemini or qwen.
 

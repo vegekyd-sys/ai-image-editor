@@ -41,8 +41,8 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 | 加创意元素（趣味物件） | `creative` | 自动 | 强制 gemini + skill；失败→qwen 无 skill 重试 |
 | 夸张变形/脑洞大开 | `wild` | 自动 | 强制 gemini + skill；失败→qwen 无 skill 重试 |
 | 加文字/字幕/标题 | `captions` | 自动 | 强制 gemini + skill；失败→qwen 无 skill 重试 |
-| 二次元/anime 生图 | 省略 | `pony`/`wai` | 仅 txt2img，Danbooru tag 自动翻译 |
-| 写实文生图 | 省略 | 省略 | gemini→qwen 自动 fallback |
+| 文生图（默认） | 省略 | 省略 | gemini→qwen 自动 fallback |
+| 二次元/anime 文生图 | 省略 | `pony`/`wai` | 需显式指定 model，仅 txt2img，Danbooru tag 自动翻译 |
 | NSFW/敏感内容编辑 | 省略 | `qwen` | Gemini 会拒绝，直接指定 qwen |
 | 不确定 | 省略 | 省略 | 自动路由 + fallback |
 
