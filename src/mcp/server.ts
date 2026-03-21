@@ -98,10 +98,10 @@ Input image can be a local file path (stdio), URL, or base64 data URL. Omit imag
         const result = await editImage(
           {
             editPrompt: wrappedPrompt,
-            skill: params.skill,
-            preferredModel: params.model,
-            useOriginalAsReference: params.useOriginalAsReference,
-            aspectRatio: params.aspectRatio,
+            skill: params.skill ?? undefined,
+            preferredModel: params.model ?? undefined,
+            useOriginalAsReference: params.useOriginalAsReference ?? undefined,
+            aspectRatio: params.aspectRatio ?? undefined,
           },
           ctx,
         );
