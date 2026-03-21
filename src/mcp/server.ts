@@ -58,45 +58,61 @@ export function createMakaronMcpServer() {
     'makaron_edit_image',
     `Edit or generate an image using AI. Supports skill templates for different editing styles.
 
-Skills:
-- enhance: Professional photo enhancement (cinematic lighting, color grading, depth of field)
-- creative: Add playful elements causally linked to the scene
-- wild: Exaggerate existing objects in the photo
-- captions: Add photorealistic text overlays
+## Recommended skill + model combinations
 
+| Use case | skill | model | Notes |
+|----------|-------|-------|-------|
+| Enhance/beautify/color grade | enhance | (auto) | Best quality with qwen, auto-routed |
+| Add creative fun elements | creative | (auto) | Gemini handles .md templates well |
+| Exaggerate/surreal transform | wild | (auto) | Gemini handles .md templates well |
+| Add text/captions/titles | captions | (auto) | Gemini handles .md templates well |
+| Anime/二次元 generation | (omit) | pony or wai | txt2img only, no input image |
+| Realistic text-to-image | (omit) | (auto) | gemini→qwen auto fallback |
+| NSFW/sensitive editing | (omit) | qwen | Gemini will refuse |
+| Not sure | (omit) | (auto) | Auto routing with fallback |
+
+When skill is omitted, editPrompt is sent directly. When skill is set, a structured .md template is injected to guide the AI.
 Input image can be a local file path (stdio), URL, or base64 data URL. Omit image for text-to-image generation.`,
     {
-      image: z.string().optional().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
+      image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('English editing instructions describing what to change'),
-      skill: z.enum(['enhance', 'creative', 'wild', 'captions']).optional().describe('Activate a skill template for structured editing'),
-      model: z.enum(['gemini', 'qwen', 'pony', 'wai']).optional().describe('Preferred model. enhance→qwen recommended. Gemini refused→retry with qwen. pony/wai=txt2img only.'),
-      originalImage: z.string().optional().describe('Original photo URL/base64 for face restoration reference'),
-      referenceImages: z.array(z.string()).optional().describe('Additional reference images (up to 3)'),
-      useOriginalAsReference: z.boolean().optional().describe('Use originalImage as reference for face/color restoration'),
-      aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
+      skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
+      model: z.enum(['gemini', 'qwen', 'pony', 'wai']).nullish().describe('Preferred model. enhance→qwen recommended. Gemini refused→retry with qwen. pony/wai=txt2img only.'),
+      originalImage: z.string().nullish().describe('Original photo URL/base64 for face restoration reference'),
+      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3)'),
+      useOriginalAsReference: z.boolean().nullish().describe('Use originalImage as reference for face/color restoration'),
+      aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
     },
     async (params) => {
       try {
         const image = params.image ? resolveImage(params.image) : undefined;
+        // MCP callers may send simple/Chinese instructions — wrap to ensure image generation
+        const wrappedPrompt = `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
+
+        const ctx = {
+          currentImage: image,
+          originalImage: params.originalImage ? resolveImage(params.originalImage) : undefined,
+          referenceImages: params.referenceImages?.map(resolveImage),
+        };
+
         const result = await editImage(
           {
-            editPrompt: params.editPrompt,
+            editPrompt: wrappedPrompt,
             skill: params.skill,
             preferredModel: params.model,
             useOriginalAsReference: params.useOriginalAsReference,
             aspectRatio: params.aspectRatio,
           },
-          {
-            currentImage: image,
-            originalImage: params.originalImage ? resolveImage(params.originalImage) : undefined,
-            referenceImages: params.referenceImages?.map(resolveImage),
-          },
+          ctx,
         );
 
         if (!result.success || !result.image) {
           return { content: [{ type: 'text' as const, text: result.message }] };
         }
-        return formatResult(result.image, result.message, 'edit');
+        const msg = result.usedModel
+          ? `${result.message} (model: ${result.usedModel})`
+          : result.message;
+        return formatResult(result.image, msg, 'edit');
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP edit_image error]', msg);

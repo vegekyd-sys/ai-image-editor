@@ -38,8 +38,13 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
     const backend = getBackend(modelId);
     if (!backend?.canHandle(req)) continue;
 
+    // On fallback: swap to fallbackPrompt (clean, no skill template) for models that can't digest .md
+    const effectiveReq = (modelId !== chain[0] && req.fallbackPrompt)
+      ? { ...req, prompt: req.fallbackPrompt, fallbackPrompt: undefined }
+      : req;
+
     try {
-      const image = await backend.generate(req);
+      const image = await backend.generate(effectiveReq);
       if (image) {
         const fallbackUsed = modelId !== chain[0];
         if (fallbackUsed) console.log(`[model-router] Fallback: ${chain[0]} → ${modelId}`);

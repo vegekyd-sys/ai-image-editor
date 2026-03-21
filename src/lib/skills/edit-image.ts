@@ -39,13 +39,16 @@ export async function editImage(
   const hasReference = !!ctx.referenceImages?.length;
 
   // Inject skill template if provided
+  // Qwen can't digest creative/wild/captions .md templates — only enhance works well
+  const qwenIncompatibleSkill = preferredModel === 'qwen' && skill && skill !== 'enhance';
   const prompts = skillPrompts ?? loadSkillPromptsFromDisk();
-  const skillTemplate = skill ? prompts[skill] : null;
+  const skillTemplate = (skill && !qwenIncompatibleSkill) ? prompts[skill] : null;
   const finalPrompt = skillTemplate
     ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
     : editPrompt;
 
   const t0 = Date.now();
+  if (qwenIncompatibleSkill) console.log(`⚠️ [edit_image] Skipping ${skill} template for qwen (incompatible)`);
   console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} model=${preferredModel ?? 'auto'}\neditPrompt: ${editPrompt.slice(0, 200)}\nfinalPrompt length: ${finalPrompt.length} chars\n`);
 
   // Build references array for multi-image mode
@@ -89,6 +92,7 @@ export async function editImage(
       aspectRatio,
       thinkingEffort: 'minimal',
       references,
+      fallbackPrompt: skillTemplate ? editPrompt : undefined,
     });
 
     result = genResult.image;

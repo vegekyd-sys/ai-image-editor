@@ -33,7 +33,22 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 - `pony` — Pony SDXL via ComfyUI，**仅 txt2img**（无输入图片的纯文生图，anime 风格）
 - `wai` — WAI-Illustrious SDXL via ComfyUI，**仅 txt2img**（illustrious 风格）
 
-不指定 model 时自动路由：enhance 优先 qwen，其余优先 gemini，失败自动 fallback 到另一个模型。
+**Skill → Model 路由（MCP 层自动处理）：**
+
+| 场景 | skill | model | MCP 内部行为 |
+|------|-------|-------|-------------|
+| 美化/增强/调色/通透感 | `enhance` | 自动 | model-router 已 enhance 优先 qwen |
+| 加创意元素（趣味物件） | `creative` | 自动 | 强制 gemini + skill；失败→qwen 无 skill 重试 |
+| 夸张变形/脑洞大开 | `wild` | 自动 | 强制 gemini + skill；失败→qwen 无 skill 重试 |
+| 加文字/字幕/标题 | `captions` | 自动 | 强制 gemini + skill；失败→qwen 无 skill 重试 |
+| 二次元/anime 生图 | 省略 | `pony`/`wai` | 仅 txt2img，Danbooru tag 自动翻译 |
+| 写实文生图 | 省略 | 省略 | gemini→qwen 自动 fallback |
+| NSFW/敏感内容编辑 | 省略 | `qwen` | Gemini 会拒绝，直接指定 qwen |
+| 不确定 | 省略 | 省略 | 自动路由 + fallback |
+
+**为什么 creative/wild/captions 强制走 gemini？** 这些 skill 会注入结构化 `.md` 模板指导 AI 生图。Qwen 无法消化中文 `.md` 模板（除 enhance 外效果极差），所以 MCP 层强制先走 gemini。如果 gemini 失败（如内容审核拒绝），则去掉 skill 用 qwen 的干净 editPrompt 重试。
+
+显式指定 `model` 参数时，MCP 不做强制路由，直接用指定模型。
 
 ### `makaron_rotate_camera`
 

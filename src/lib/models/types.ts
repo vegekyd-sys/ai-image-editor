@@ -8,6 +8,7 @@ export interface GenerateImageRequest {
   aspectRatio?: string;
   thinkingEffort?: 'minimal' | 'high';
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
+  fallbackPrompt?: string;  // clean prompt without skill template — used when falling back to a model that can't digest .md templates
 }
 
 export interface GenerateImageResult {
