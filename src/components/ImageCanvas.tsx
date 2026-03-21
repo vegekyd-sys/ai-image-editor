@@ -566,14 +566,13 @@ export default function ImageCanvas({
   const getLabel = (index: number) => {
     // Video entry
     if (timeline[index] === VIDEO_SENTINEL) return 'Video';
-    if (index === 0) return 'Original';
     // isDraft=true means we're currently viewing the draft slot
     if (isDraft) return 'Draft';
-    // Adjust edit number: snapshots after the draft slot have a +1 offset in timeline index
+    // 1-based index matching <<<image_N>>> convention
     const editNum = (draftTimelineIndex !== undefined && index > draftTimelineIndex)
-      ? index - 1
-      : index;
-    return `Snap ${editNum}`;
+      ? index
+      : index + 1;
+    return `@${editNum}`;
   };
 
   const baseImage = timeline[currentIndex];

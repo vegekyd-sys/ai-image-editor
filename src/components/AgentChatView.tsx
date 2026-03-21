@@ -7,6 +7,8 @@ import { Message } from '@/types';
 import { compressImageFile } from '@/lib/imageUtils';
 import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
+import { Snapshot } from '@/types';
+import ImageRefChip from '@/components/ImageRefChip';
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -90,6 +92,75 @@ function fixMarkdownDelimiters(text: string): string {
   );
 }
 
+
+/** Shared Markdown renderer to avoid duplicating component overrides.
+ *  <<<image_N>>> tokens are converted to `IMG_REF_N` inline code before parsing,
+ *  then the `code` component renders ImageRefChip for matching tokens. */
+function MarkdownBlock({ text, isPanel, snapshots }: { text: string; isPanel: boolean; snapshots?: Snapshot[] }) {
+  // Replace <<<image_N>>> with inline code `IMG_REF_N` so markdown structure stays intact
+  const processed = snapshots
+    ? text.replace(/<<<image_(\d+)>>>/g, '`IMG_REF_$1`')
+    : text;
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        h1: ({ children }) => <h1 className={`${isPanel ? 'text-[16px]' : 'text-[24px]'} font-bold mt-3 mb-1`}>{children}</h1>,
+        h2: ({ children }) => <h2 className={`${isPanel ? 'text-[15px]' : 'text-[22px]'} font-semibold mt-3 mb-1`}>{children}</h2>,
+        h3: ({ children }) => <h3 className={`${isPanel ? 'text-[14px]' : 'text-[21px]'} font-semibold mt-2 mb-0.5`}>{children}</h3>,
+        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+        strong: ({ children }) => <strong className="font-semibold text-white/95">{children}</strong>,
+        em: ({ children }) => <em className="italic">{children}</em>,
+        del: ({ children }) => <del className="line-through opacity-50">{children}</del>,
+        code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) => {
+          // Intercept IMG_REF_N tokens → render ImageRefChip (check regardless of inline flag)
+          if (snapshots) {
+            const str = String(children);
+            const m = str.match(/^IMG_REF_(\d+)$/);
+            if (m) {
+              const idx = parseInt(m[1]) - 1;
+              return <ImageRefChip index={idx} snapshot={snapshots[idx]} />;
+            }
+          }
+          return inline ? (
+            <code className={`font-mono ${isPanel ? 'text-[12px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
+          ) : (
+            <code className={`block font-mono ${isPanel ? 'text-[12px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
+          );
+        },
+        pre: ({ children }) => <pre className="my-0">{children}</pre>,
+        ul: ({ children }) => <ul className="list-none pl-3 my-1.5 space-y-0.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-none pl-3 my-1.5 space-y-0.5 [counter-reset:item]">{children}</ol>,
+        li: ({ children, ordered }: { children?: React.ReactNode; ordered?: boolean }) => (
+          <li className={`flex gap-2 ${ordered ? '[counter-increment:item]' : ''}`}>
+            <span className="flex-shrink-0 mt-[3px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              {ordered ? <span className="font-mono text-[18px] before:content-[counter(item,decimal)_'.']" /> : '•'}
+            </span>
+            <span>{children}</span>
+          </li>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="pl-3 my-2" style={{ borderLeft: '2px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)' }}>{children}</blockquote>
+        ),
+        hr: () => <hr className="my-3" style={{ borderColor: 'rgba(255,255,255,0.08)' }} />,
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" style={{ color: 'rgba(192,38,211,0.85)' }}>{children}</a>
+        ),
+        table: ({ children }) => (
+          <div className="overflow-x-auto my-2">
+            <table className={`${isPanel ? 'text-[13px]' : 'text-[20px]'} border-collapse w-full`}>{children}</table>
+          </div>
+        ),
+        th: ({ children }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
+        td: ({ children }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
+      }}
+    >
+      {processed}
+    </ReactMarkdown>
+  );
+}
+
 export type PreferredModel = 'auto' | 'gemini' | 'qwen' | 'pony' | 'wai';
 
 interface AgentChatViewProps {
@@ -107,6 +178,7 @@ interface AgentChatViewProps {
   onInputBarHeight?: (h: number) => void;
   mode?: 'overlay' | 'panel';
   skipSlideIn?: boolean;
+  snapshots?: Snapshot[];
   preferredModel?: PreferredModel;
   onModelChange?: (model: PreferredModel) => void;
 }
@@ -126,10 +198,18 @@ export default function AgentChatView({
   onInputBarHeight,
   mode = 'overlay',
   skipSlideIn = false,
+  snapshots = [],
   preferredModel = 'auto',
   onModelChange,
 }: AgentChatViewProps) {
   const { t } = useLocale();
+
+  // Find 1-based snapshot index by messageId (for @N badge on inline images)
+  const getSnapshotIndex = useCallback((messageId: string): number | null => {
+    const idx = snapshots.findIndex(s => s.messageId === messageId);
+    return idx >= 0 ? idx + 1 : null;
+  }, [snapshots]);
+
   const [input, setInput] = useState('');
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isExiting, setIsExiting] = useState(false);
@@ -599,52 +679,12 @@ export default function AgentChatView({
                   <div className={`${isPanel ? 'text-[14px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
                     {msg.content && (
                       <div className="markdown-body">
-                        <ReactMarkdown
+                        <MarkdownBlock
                           key={msg.id}
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            h1: ({ children }) => <h1 className={`${isPanel ? 'text-[16px]' : 'text-[24px]'} font-bold mt-3 mb-1`}>{children}</h1>,
-                            h2: ({ children }) => <h2 className={`${isPanel ? 'text-[15px]' : 'text-[22px]'} font-semibold mt-3 mb-1`}>{children}</h2>,
-                            h3: ({ children }) => <h3 className={`${isPanel ? 'text-[14px]' : 'text-[21px]'} font-semibold mt-2 mb-0.5`}>{children}</h3>,
-                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                            strong: ({ children }) => <strong className="font-semibold text-white/95">{children}</strong>,
-                            em: ({ children }) => <em className="italic">{children}</em>,
-                            del: ({ children }) => <del className="line-through opacity-50">{children}</del>,
-                            code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) =>
-                              inline ? (
-                                <code className={`font-mono ${isPanel ? 'text-[12px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
-                              ) : (
-                                <code className={`block font-mono ${isPanel ? 'text-[12px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
-                              ),
-                            pre: ({ children }) => <pre className="my-0">{children}</pre>,
-                            ul: ({ children }) => <ul className="list-none pl-3 my-1.5 space-y-0.5">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-none pl-3 my-1.5 space-y-0.5 [counter-reset:item]">{children}</ol>,
-                            li: ({ children, ordered }: { children?: React.ReactNode; ordered?: boolean }) => (
-                              <li className={`flex gap-2 ${ordered ? '[counter-increment:item]' : ''}`}>
-                                <span className="flex-shrink-0 mt-[3px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                  {ordered ? <span className="font-mono text-[18px] before:content-[counter(item,decimal)_'.']" /> : '•'}
-                                </span>
-                                <span>{children}</span>
-                              </li>
-                            ),
-                            blockquote: ({ children }) => (
-                              <blockquote className="pl-3 my-2" style={{ borderLeft: '2px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)' }}>{children}</blockquote>
-                            ),
-                            hr: () => <hr className="my-3" style={{ borderColor: 'rgba(255,255,255,0.08)' }} />,
-                            a: ({ href, children }) => (
-                              <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" style={{ color: 'rgba(192,38,211,0.85)' }}>{children}</a>
-                            ),
-                            table: ({ children }) => (
-                              <div className="overflow-x-auto my-2">
-                                <table className={`${isPanel ? 'text-[13px]' : 'text-[20px]'} border-collapse w-full`}>{children}</table>
-                              </div>
-                            ),
-                            th: ({ children }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
-                            td: ({ children }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
-                          }}
-                        >
-                          {fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, ''))}
-                        </ReactMarkdown>
+                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, ''))}
+                          isPanel={isPanel}
+                          snapshots={snapshots}
+                        />
                         {/* Inline video player for animation results */}
                         {(() => {
                           const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
@@ -674,20 +714,28 @@ export default function AgentChatView({
                     )}
 
                     {/* Inline generated image */}
-                    {msg.image && (
-                      <button
-                        onClick={(e) => handleInlineImageClick(msg.id, e)}
-                        className="block w-full mt-3 active:opacity-75 transition-opacity"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={msg.image.startsWith('http') ? getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75, 2000, 'contain') : msg.image}
-                          alt="Generated"
-                          className="rounded-2xl w-full"
-                          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
-                        />
-                      </button>
-                    )}
+                    {msg.image && (() => {
+                      const snapIdx = getSnapshotIndex(msg.id);
+                      return (
+                        <button
+                          onClick={(e) => handleInlineImageClick(msg.id, e)}
+                          className="block w-full mt-3 active:opacity-75 transition-opacity relative"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={msg.image.startsWith('http') ? getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75, 2000, 'contain') : msg.image}
+                            alt="Generated"
+                            className="rounded-2xl w-full"
+                            style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+                          />
+                          {snapIdx !== null && (
+                            <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur text-white text-xs font-medium px-1.5 py-0.5 rounded-md">
+                              @{snapIdx}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })()}
 
                     {/* editPrompt card — collapsible */}
                     {msg.editPrompt && (

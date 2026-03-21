@@ -140,6 +140,7 @@ export function useProject(projectId: string, userId: string) {
           tips: snapshot.tips,
           message_id: snapshot.messageId,
           sort_order: sortOrder,
+          ...(snapshot.description ? { description: snapshot.description } : {}),
         }, { onConflict: 'id' })
 
         if (error) console.warn('saveSnapshot error:', error)

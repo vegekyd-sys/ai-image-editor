@@ -46,6 +46,10 @@ interface AgentContext {
   animationImageUrls?: string[];
   /** PiAPI task ID set by generate_animation tool, emitted as animation_task event */
   animationTaskId?: string;
+  /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<image_1>>> */
+  snapshotImages: string[];
+  /** 0-based index of the snapshot the user is currently viewing */
+  currentSnapshotIndex: number;
 }
 
 export type AgentStreamEvent =
@@ -91,20 +95,45 @@ function createTools(ctx: AgentContext) {
         model: z.enum(['gemini', 'qwen', 'pony', 'wai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
+        image_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<image_1>>> = 1, <<<image_2>>> = 2, ...). Omit to edit the current snapshot. Use when user references a previous version.'),
+        reference_image_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<image_1>>> and <<<image_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from image_1 and the background from image_2". The editPrompt should describe how to combine them (e.g. "Place the person from Image 2 into the scene of Image 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio }) => {
+      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, image_index, reference_image_indices }) => {
+        // Resolve which image to edit — image_index overrides currentImage
+        let editTarget = ctx.currentImage;
+        if (image_index !== undefined) {
+          const idx = image_index - 1;
+          if (idx < 0 || idx >= ctx.snapshotImages.length) {
+            return { success: false as const, message: `Invalid image_index ${image_index}. Available: 1-${ctx.snapshotImages.length}` };
+          }
+          editTarget = ctx.snapshotImages[idx];
+        }
+
+        // Resolve reference images from snapshot indices — merge with user-uploaded references
+        let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
+        if (reference_image_indices?.length) {
+          for (const refIdx of reference_image_indices) {
+            const idx = refIdx - 1;
+            if (idx >= 0 && idx < ctx.snapshotImages.length) {
+              resolvedRefs.push(ctx.snapshotImages[idx]);
+            }
+          }
+        }
+
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
           { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: resolvedModel },
-          { currentImage: ctx.currentImage, originalImage: ctx.originalImage, referenceImages: ctx.referenceImages },
+          { currentImage: editTarget, originalImage: ctx.originalImage, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
         if (skillResult.image) {
           ctx.currentImage = skillResult.image;
+          ctx.snapshotImages.push(skillResult.image); // Append as <<<image_N+1>>>
           ctx.generatedImages.push(skillResult.image);
           if (skillResult.usedModel) ctx.lastUsedModel = skillResult.usedModel;
         }
-        return { success: skillResult.success as true, message: skillResult.message };
+        const indexInfo = skillResult.image ? ` Now <<<image_${ctx.snapshotImages.length}>>>.` : '';
+        return { success: skillResult.success as true, message: skillResult.message + indexInfo };
       },
     }),
 
@@ -135,18 +164,28 @@ function createTools(ctx: AgentContext) {
     }),
 
     analyze_image: tool({
-      description: 'See and analyze the current photo. Returns the image so you can view it directly with your vision capabilities.',
+      description: 'See and analyze a photo. Returns the image so you can view it directly with your vision capabilities. Use image_index to look at any snapshot in the timeline.',
       inputSchema: z.object({
         question: z.string().optional().describe('Optional focus area for the analysis'),
+        image_index: z.number().optional().describe('1-based index of the snapshot to analyze (<<<image_1>>> = 1, etc.). Omit to analyze the current image.'),
       }),
-      execute: async ({ question }) => {
+      execute: async ({ question, image_index }) => {
+        // Resolve which image to analyze
+        let imageSource = ctx.currentImage;
+        if (image_index !== undefined) {
+          const idx = image_index - 1;
+          if (idx >= 0 && idx < ctx.snapshotImages.length) {
+            imageSource = ctx.snapshotImages[idx];
+          }
+        }
+
         // Resolve image to base64 buffer — handles both URL and base64 input
         let buf: Buffer;
-        if (ctx.currentImage.startsWith('http')) {
-          const res = await fetch(ctx.currentImage);
+        if (imageSource.startsWith('http')) {
+          const res = await fetch(imageSource);
           buf = Buffer.from(await res.arrayBuffer());
         } else {
-          const raw = ctx.currentImage.replace(/^data:image\/\w+;base64,/, '');
+          const raw = imageSource.replace(/^data:image\/\w+;base64,/, '');
           buf = Buffer.from(raw, 'base64');
         }
         // Compress for analysis — vision doesn't need full resolution, ~600KB is enough
@@ -229,7 +268,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -239,6 +278,8 @@ export async function* runMakaronAgent(
     generatedImages: [],
     animationImageUrls: options?.animationImageUrls,
     preferredModel: options?.preferredModel,
+    snapshotImages: options?.snapshotImages ?? [currentImage],
+    currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
   };
 
   const allTools = createTools(ctx);
@@ -323,12 +364,31 @@ export async function* runMakaronAgent(
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
-          const inp = event.input as { useOriginalAsReference?: boolean };
-          const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== ctx.currentImage;
+          const inp = event.input as { useOriginalAsReference?: boolean; image_index?: number; reference_image_indices?: number[] };
+          // Resolve the actual edit target (respects image_index)
+          let displayTarget = ctx.currentImage;
+          if (inp.image_index !== undefined) {
+            const idx = inp.image_index - 1;
+            if (idx >= 0 && idx < ctx.snapshotImages.length) {
+              displayTarget = ctx.snapshotImages[idx];
+            }
+          }
+          // Resolve reference images from snapshot indices
+          const snapshotRefs: string[] = [];
+          if (inp.reference_image_indices?.length) {
+            for (const refIdx of inp.reference_image_indices) {
+              const idx = refIdx - 1;
+              if (idx >= 0 && idx < ctx.snapshotImages.length) {
+                snapshotRefs.push(ctx.snapshotImages[idx]);
+              }
+            }
+          }
+          const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
           toolCallImages = [
-            ctx.currentImage,
+            displayTarget,
             ...(twoImageMode ? [ctx.originalImage!] : []),
             ...(ctx.referenceImages ?? []),
+            ...snapshotRefs,
           ];
         }
         yield {

@@ -1318,7 +1318,22 @@ export default function Editor({
       ? `[用户上传了 ${attachedImages.length} 张参考图，已自动传给 generate_image 工具使用]\n\n`
       : '';
 
-    const fullPrompt = `${snapshotWarning}${metaContext}${descriptionContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
+    // Build image index for multi-snapshot navigation — only when >1 snapshot
+    const snapshotIndexContext = snapshotsRef.current.length > 1
+      ? `[图片索引 / Image Index — ${snapshotsRef.current.length} snapshots]\n${snapshotsRef.current.map((s, i) => {
+          const desc = i === 0
+            ? (s.description || '原图 / Original upload')
+            : (s.description || '(use analyze_image to see this snapshot)');
+          const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
+          return `<<<image_${i + 1}>>>${marker} — ${desc}`;
+        }).join('\n')}\n\n`
+      : '';
+
+    const annotationWarning = overrideImage
+      ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use image_index to switch to another snapshot. Call analyze_image first (without image_index) to see the annotations, then generate_image (without image_index) to edit.\n\n`
+      : '';
+
+    const fullPrompt = `${annotationWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
@@ -1329,7 +1344,7 @@ export default function Editor({
     let _genStartTime = 0;
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotsRef.current.map(s => getImageForApi(s)), currentSnapshotIndex: contextSnapshotIndex },
         {
           onStatus: (status) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
@@ -1361,16 +1376,21 @@ export default function Editor({
             const genDuration = _genStartTime ? ((performance.now() - _genStartTime) / 1000).toFixed(1) : '?';
             console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (${usedModel || 'gemini'} took ${genDuration}s, image ${(imageData.length / 1024).toFixed(0)}KB)`);
             const snapId = generateId();
+            const editDesc = lastEditPromptRef.current
+              ? `[agent] ${lastEditPromptRef.current.slice(0, 100)}`
+              : undefined;
             const newSnapshot: Snapshot = {
               id: snapId,
               image: imageData,
               tips: [],
               messageId: currentMsgId,
+              description: editDesc,
             };
             setSnapshots((prev) => [...prev, newSnapshot]);
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
+            if (editDesc) onUpdateDescription?.(snapId, editDesc);
             cacheImage(`snap:${snapId}`, imageData);
             const isFirstSnapshot = snapshotsRef.current.length <= 1;
             fetchTipsForSnapshot(snapId, imageData, isFirstSnapshot ? 'full' : 'none');
@@ -1603,14 +1623,17 @@ export default function Editor({
 
     // Create new committed snapshot from the draft image
     const snapId = generateId();
+    const tipDesc = `[${tip.category}] ${tip.emoji} ${tip.label}: ${tip.desc}`;
     const newSnapshot: Snapshot = {
       id: snapId,
       image: tip.previewImage,
       tips: [],
       messageId: assistantMsg.id,
+      description: tipDesc,
     };
     setSnapshots((prev) => [...prev, newSnapshot]);
     cacheImage(`snap:${snapId}`, newSnapshot.image);
+    onUpdateDescription?.(snapId, tipDesc);
 
     // Clear draft and jump to the newly committed snapshot
     setViewIndex(snapshots.length);
@@ -2708,6 +2731,7 @@ export default function Editor({
             onPipTap={() => {}}
             onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
             onImageTap={handleImageTap}
+            snapshots={snapshots}
             preferredModel={preferredModel}
             onModelChange={setPreferredModel}
           />
@@ -2732,6 +2756,7 @@ export default function Editor({
           onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
+          snapshots={snapshots}
           preferredModel={preferredModel}
           onModelChange={setPreferredModel}
         />
