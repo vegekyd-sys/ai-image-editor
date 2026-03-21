@@ -66,8 +66,8 @@ export function createMakaronMcpServer() {
 | Add creative fun elements | creative | (auto) | Gemini handles .md templates well |
 | Exaggerate/surreal transform | wild | (auto) | Gemini handles .md templates well |
 | Add text/captions/titles | captions | (auto) | Gemini handles .md templates well |
-| Anime/二次元 generation | (omit) | pony or wai | txt2img only, no input image |
-| Realistic text-to-image | (omit) | (auto) | gemini→qwen auto fallback |
+| Text-to-image (default) | (omit) | (auto) | gemini→qwen auto fallback |
+| Anime/二次元 txt2img | (omit) | pony or wai | ONLY when user explicitly asks. txt2img only |
 | NSFW/sensitive editing | (omit) | qwen | Gemini will refuse |
 | Not sure | (omit) | (auto) | Auto routing with fallback |
 
@@ -77,7 +77,7 @@ Input image can be a local file path (stdio), URL, or base64 data URL. Omit imag
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('English editing instructions describing what to change'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(['gemini', 'qwen', 'pony', 'wai']).nullish().describe('Preferred model. enhance→qwen recommended. Gemini refused→retry with qwen. pony/wai=txt2img only.'),
+      model: z.enum(['gemini', 'qwen', 'pony', 'wai']).nullish().describe('Only pass when user explicitly requests a model. enhance→qwen recommended. Gemini refused→retry with qwen. pony/wai=txt2img only, user must explicitly ask.'),
       originalImage: z.string().nullish().describe('Original photo URL/base64 for face restoration reference'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3)'),
       useOriginalAsReference: z.boolean().nullish().describe('Use originalImage as reference for face/color restoration'),
