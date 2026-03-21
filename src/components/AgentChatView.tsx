@@ -556,7 +556,7 @@ export default function AgentChatView({
             className="w-full h-full object-cover pointer-events-none"
             draggable={false}
           />
-          {/* Editing badge — only when visible */}
+          {/* @N badge — only when visible */}
           {!pipHidden && (
             <div
               className="absolute top-0 left-0 px-1.5 py-0.5 text-[10px] font-medium tracking-wide pointer-events-none"
@@ -567,7 +567,7 @@ export default function AgentChatView({
                 backdropFilter: 'blur(4px)',
               }}
             >
-              Editing
+              @{snapshots.length || 1}
             </div>
           )}
           {/* Resize handle — bottom-right corner, cycles PIP size */}
