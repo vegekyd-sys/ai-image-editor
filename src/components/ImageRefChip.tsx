@@ -14,23 +14,22 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const chipRef = useRef<HTMLSpanElement>(null);
+  const isTouchDevice = useRef(false);
 
   const imgSrc = snapshot?.imageUrl || snapshot?.image;
   const thumbUrl = imgSrc && imgSrc.startsWith('http')
     ? getThumbnailUrl(imgSrc, 40, 60, 40, 'cover')
     : undefined;
   const previewUrl = imgSrc && imgSrc.startsWith('http')
-    ? getThumbnailUrl(imgSrc, 300, 80, 300, 'cover')
-    : imgSrc; // fallback to base64 for preview
+    ? getThumbnailUrl(imgSrc, 400, 90, 400, 'cover')
+    : imgSrc;
 
   const updatePosition = useCallback(() => {
     if (!chipRef.current) return;
     const rect = chipRef.current.getBoundingClientRect();
     const pw = Math.min(300, window.innerWidth * 0.6);
-    // Position above the chip, centered on chip
     const chipCenter = rect.left + rect.width / 2;
     let left = chipCenter - pw / 2;
-    // Clamp to viewport with padding
     if (left < 8) left = 8;
     if (left + pw > window.innerWidth - 8) left = window.innerWidth - 8 - pw;
     setPopoverStyle({
@@ -42,12 +41,7 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
     });
   }, []);
 
-  const handleShow = useCallback(() => {
-    updatePosition();
-    setShowPreview(true);
-  }, [updatePosition]);
-
-  // Close on outside click / scroll (mobile)
+  // Close on outside tap / scroll (mobile)
   useEffect(() => {
     if (!showPreview) return;
     const close = () => setShowPreview(false);
@@ -69,9 +63,13 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
         role="button"
         tabIndex={0}
         className="inline-flex items-center gap-1 bg-white/10 hover:bg-white/20 rounded-md px-1.5 py-0.5 text-xs font-medium text-white/80 transition-colors cursor-pointer"
-        onMouseEnter={handleShow}
-        onMouseLeave={() => setShowPreview(false)}
-        onClick={() => { if (showPreview) setShowPreview(false); else handleShow(); }}
+        onTouchStart={() => { isTouchDevice.current = true; }}
+        onMouseEnter={() => { if (!isTouchDevice.current) { updatePosition(); setShowPreview(true); } }}
+        onMouseLeave={() => { if (!isTouchDevice.current) setShowPreview(false); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (showPreview) { setShowPreview(false); } else { updatePosition(); setShowPreview(true); }
+        }}
       >
         {thumbUrl && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -80,16 +78,19 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
         @{index + 1}
       </span>
       {showPreview && previewUrl && (
-        <div
+        <span
           className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
-          style={popoverStyle}
+          style={{ ...popoverStyle, display: 'block' }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={previewUrl} alt="" className="w-full h-auto" />
-          <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md">
+          <img src={previewUrl} alt="" style={{ width: '100%', height: 'auto', display: 'block' }} />
+          <span
+            className="bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md"
+            style={{ position: 'absolute', bottom: 8, left: 8 }}
+          >
             @{index + 1}
           </span>
-        </div>
+        </span>
       )}
     </span>
   );

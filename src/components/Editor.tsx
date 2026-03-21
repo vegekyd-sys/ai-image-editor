@@ -1333,7 +1333,13 @@ export default function Editor({
       ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use image_index to switch to another snapshot. Call analyze_image first (without image_index) to see the annotations, then generate_image (without image_index) to edit.\n\n`
       : '';
 
-    const fullPrompt = `${annotationWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
+    // When viewing a draft/preview (tip not yet committed), warn agent to edit the current image directly
+    const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
+    const draftWarning = isDraftMode
+      ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). The image passed to you is this draft preview — edit it directly. Do NOT use image_index to switch to another snapshot.\n\n`
+      : '';
+
+    const fullPrompt = `${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
