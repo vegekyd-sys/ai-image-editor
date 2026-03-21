@@ -11,6 +11,7 @@ interface ImageRefChipProps {
 
 export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
   const [showPreview, setShowPreview] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const chipRef = useRef<HTMLSpanElement>(null);
@@ -23,6 +24,11 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
   const previewUrl = imgSrc && imgSrc.startsWith('http')
     ? getThumbnailUrl(imgSrc, 400, 90, 400, 'cover')
     : imgSrc;
+
+  // Reset loaded state when preview closes
+  useEffect(() => {
+    if (!showPreview) setImgLoaded(false);
+  }, [showPreview]);
 
   const updatePosition = useCallback(() => {
     if (!chipRef.current) return;
@@ -82,16 +88,33 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
           className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
           style={{ ...popoverStyle, display: 'block' }}
         >
+          {/* Loading placeholder */}
+          {!imgLoaded && (
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', aspectRatio: '1', background: '#111' }}>
+              <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <span className="text-white/30 text-xs">@{index + 1}</span>
+                <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.5)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              </span>
+            </span>
+          )}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={previewUrl} alt="" style={{ width: '100%', height: 'auto', display: 'block' }} />
-          <span
-            className="bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md"
-            style={{ position: 'absolute', bottom: 8, left: 8 }}
-          >
-            @{index + 1}
-          </span>
+          <img
+            src={previewUrl}
+            alt=""
+            onLoad={() => setImgLoaded(true)}
+            style={{ width: '100%', height: 'auto', display: imgLoaded ? 'block' : 'none' }}
+          />
+          {imgLoaded && (
+            <span
+              className="bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md"
+              style={{ position: 'absolute', bottom: 8, left: 8 }}
+            >
+              @{index + 1}
+            </span>
+          )}
         </span>
       )}
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </span>
   );
 }
