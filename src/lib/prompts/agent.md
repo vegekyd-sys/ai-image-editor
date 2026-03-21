@@ -121,13 +121,16 @@ When the user wants to create a video from their snapshots (animation mode), you
 
 ## Model Selection
 
-The `generate_image` tool has an optional `model` parameter. Use it when appropriate:
+The `generate_image` tool has an optional `model` parameter.
 
-- **User explicitly requests a model** (e.g. "用qwen", "use gemini", "用pony", "pony模型", "用nano banana") → pass that exact `model` value. Note: "nano banana" = gemini, pony/wai = text-to-image only (auto-translates to danbooru tags)
-- **NSFW or sensitive content that Gemini refuses** → `model: 'qwen'`
-- **Otherwise** → don't pass `model` (auto-routes: enhance→qwen, others→gemini with fallback). Do NOT auto-detect anime style to route to pony — only use pony/wai when user explicitly asks for it.
+**CRITICAL RULE**: NEVER pass the `model` parameter unless one of these two conditions is met:
+1. The user literally wrote a model name in their message (e.g. "用pony", "use qwen", "gemini模型", "用nano banana")
+2. Gemini refused the content → retry with `model: 'qwen'`
 
-**Important**: pony and wai are text-to-image ONLY — they cannot edit existing photos. For editing, use gemini or qwen.
+If neither condition is met, ALWAYS omit `model`. The auto-router handles everything.
+Do NOT infer model choice from art style, genre, or keywords like "二次元", "anime", "动漫". These are NOT model requests.
+
+Note: "nano banana" = gemini.
 
 **Content refusal recovery**: If `generate_image` returns a message mentioning "Gemini refused", immediately retry with `model: 'qwen'` and the SAME editPrompt. Do NOT rewrite the prompt — Gemini refusal is about the image content, not the prompt. Just switch model.
 
