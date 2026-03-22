@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ProjectAnimation } from '@/types';
 import { useLocale } from '@/lib/i18n';
 
@@ -52,6 +52,12 @@ export default function VideoResultCard({
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
 
+  // Auto-scroll selected pill into view when selection changes
+  const selectedPillRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    selectedPillRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }, [selectedVideoId]);
+
   return (
     <div className="flex flex-col">
       <style>{`
@@ -88,6 +94,7 @@ export default function VideoResultCard({
           return (
             <div
               key={anim.id}
+              ref={isSelected ? selectedPillRef : undefined}
               className={`flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all ${
                 isSelected
                   ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
