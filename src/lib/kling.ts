@@ -147,6 +147,22 @@ export function filterAndRemapImages(
   return { filteredImages, finalPrompt }
 }
 
+/**
+ * Parse Shot durations from script and return total seconds.
+ * Matches: "Shot 1 (2s):", "Shot 2 (3.5s):", "镜头1 (2s):" etc.
+ * Returns undefined if no shots found (let caller decide fallback).
+ */
+export function parseTotalDuration(script: string): number | undefined {
+  const matches = script.matchAll(/(?:Shot|镜头|分镜)\s*\d+\s*\((\d+(?:\.\d+)?)(?:s|秒)\)/gi)
+  let total = 0
+  let found = false
+  for (const m of matches) {
+    total += parseFloat(m[1])
+    found = true
+  }
+  return found ? Math.round(total) : undefined
+}
+
 // ---------------------------------------------------------------------------
 // Unified animation task submission — single code path for GUI and CUI
 // ---------------------------------------------------------------------------
@@ -169,6 +185,9 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
   // Filter to only referenced images and remap indices sequentially
   const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, imageUrls)
 
+  // Resolve duration: explicit > parsed from script shots > undefined (Kling decides)
+  const resolvedDuration = duration ?? parseTotalDuration(finalPrompt)
+
   // Create video task — default Kling direct (v3-omni), ANIMATE_PROVIDER=piapi to fallback
   const usePiAPI = process.env.ANIMATE_PROVIDER === 'piapi'
   let taskId: string
@@ -178,7 +197,7 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
     taskId = await createKlingTaskPiAPI({
       prompt: finalPrompt.replace(/<<<image_(\d+)>>>/g, '@image_$1'),
       images: filteredImages,
-      duration: duration ?? 10,
+      duration: resolvedDuration ?? 10,
       aspect_ratio: aspectRatio ?? '9:16',
       enable_audio: true,
       version: '3.0',
@@ -187,7 +206,7 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
     taskId = await createKlingTask({
       prompt: finalPrompt,
       images: filteredImages,
-      duration: duration ?? undefined,
+      duration: resolvedDuration,
       aspect_ratio: aspectRatio,
     })
   }
