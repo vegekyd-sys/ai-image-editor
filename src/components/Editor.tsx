@@ -1599,6 +1599,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
     let scriptText = '';
     let currentMsgId = assistantMsgId;
+    const agentMsgIds: string[] = [assistantMsgId];
 
     // Use URL for context image (avoid base64 upload overhead)
     const contextImageUrl = snapshotsRef.current[0]?.imageUrl || snapshotsRef.current[0]?.image || '';
@@ -1618,6 +1619,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           onNewTurn: () => {
             const newId = generateId();
             currentMsgId = newId;
+            agentMsgIds.push(newId);
             setMessages((prev) => [...prev, { id: newId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
           },
           onContent: (delta) => {
@@ -1632,10 +1634,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           onDone: () => {
             setAgentStatus(t('status.scriptDone'));
             setAnimationState(prev => prev ? { ...prev, status: 'ready' } : prev);
-            // Persist messages
+            // Persist all assistant messages from this run
             setMessages((prev) => {
-              const msg = prev.find(m => m.id === assistantMsgId);
-              if (msg?.content) onSaveMessage?.(msg);
+              const toSave = prev.filter(m => agentMsgIds.includes(m.id) && m.content);
+              toSave.forEach(m => onSaveMessage?.(m));
               return prev;
             });
           },
