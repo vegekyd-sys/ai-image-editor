@@ -1437,6 +1437,23 @@ export default function Editor({
               lastEditInputImagesRef.current = images ?? null;
             }
           },
+          onAnimationTask: (taskId) => {
+            // CUI-initiated video: add to animations array and start polling
+            const urls = snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!);
+            const newAnim: ProjectAnimation = {
+              id: taskId,
+              projectId: projectId ?? '',
+              taskId,
+              videoUrl: null,
+              prompt: '',
+              snapshotUrls: urls.slice(0, 7),
+              status: 'processing',
+              createdAt: new Date().toISOString(),
+            };
+            setAnimations(prev => [newAnim, ...prev]);
+            setSelectedVideoId(taskId);
+            pendingNavigateToVideoRef.current = true;
+          },
           onDone: () => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
             console.log(`⏱️ [agent] DONE total ${elapsed}s`);
@@ -1535,10 +1552,23 @@ export default function Editor({
 
     const n = imageUrls.length;
     const userHint = animationStateRef.current?.userHint?.trim() || '';
-    const imageListText = imageUrls.map((_: string, i: number) => `<<<image_${i + 1}>>>`).join(', ');
-    const langInstr = locale === 'en' ? 'Write the script in English.' : '用中文写脚本。';
+    const langInstr = 'Write the script in English (Kling works best with English prompts).';
     const hintLine = userHint ? `\nUser requirements: ${userHint}` : '';
-    const prompt = `[视频动画模式] Create a video story script for the following ${n} photos (image refs: ${imageListText}). Output only the script, no confirmation needed. ${langInstr}${hintLine}`;
+
+    // Build Image Index with descriptions so Agent can pick images intelligently
+    const imageIndex = snapshotsRef.current.map((s, i) => {
+      const desc = i === 0
+        ? (s.description || 'Original upload')
+        : (s.description || '(no description)');
+      return `<<<image_${i + 1}>>> — ${desc}`;
+    }).join('\n');
+
+    const prompt = `[视频动画模式] Create a video story script from the following ${n} snapshots. ${langInstr}${hintLine}
+
+[Image Index — ${n} snapshots]
+${imageIndex}
+
+Select the best 3-7 images for a compelling video. You do NOT need to use all images or follow their order — pick the ones that create the strongest narrative arc. Output only the script, no confirmation needed.`;
 
     const userMsgId = generateId();
     const assistantMsgId = generateId();

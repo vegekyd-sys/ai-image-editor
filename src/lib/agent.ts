@@ -3,7 +3,7 @@ import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
 import type { ModelId } from './models/types';
-import { createKlingTask } from './kling';
+import { submitAnimationTask } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
@@ -14,6 +14,7 @@ import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
+import animatePrompt from './prompts/animate.md';
 import type { Tip } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -138,25 +139,30 @@ function createTools(ctx: AgentContext) {
     }),
 
     generate_animation: tool({
-      description: 'Create a 10-second animation video from the project snapshots using Kling AI. Only available when the user is in animation mode (animationImageUrls exist). Call this AFTER you have written the story script and the user has confirmed.',
+      description: 'Create a video from project snapshots using Kling AI. Uses snapshot URLs from the image index. Max 7 images. Call after writing the story script. Duration: 3/5/7/10/15s or omit for smart mode.',
       inputSchema: z.object({
-        story_prompt: z.string().describe('The cinematic story prompt in Chinese, with <<<image_1>>>, <<<image_2>>> etc. referencing each snapshot'),
-        duration: z.number().optional().describe('Duration in seconds: 5 or 10. Default 10.'),
+        story_prompt: z.string().describe('The cinematic story script in English, with <<<image_1>>>, <<<image_2>>> etc. referencing each snapshot. Shot-by-shot format with camera movement, emotion, and sound hints.'),
+        duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
       }),
       execute: async ({ story_prompt, duration }) => {
-        const imageUrls = ctx.animationImageUrls;
+        // GUI animation mode: use animationImageUrls; CUI mode: fallback to snapshotImages URLs
+        let imageUrls = ctx.animationImageUrls;
         if (!imageUrls?.length) {
-          return { success: false as const, message: '没有可用的图片 URL，无法生成动画。' };
+          imageUrls = ctx.snapshotImages.filter(img => img.startsWith('http'));
+        }
+        if (!imageUrls?.length) {
+          return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
-          const taskId = await createKlingTask({
+          // Same code path as GUI: filter/remap images, provider selection, DB persist
+          const { taskId } = await submitAnimationTask({
+            projectId: ctx.projectId,
             prompt: story_prompt,
-            images: imageUrls.slice(0, 7),
-            duration: duration ?? 10,
-            aspect_ratio: '9:16',
+            imageUrls,
+            duration,
           });
           ctx.animationTaskId = taskId;
-          return { success: true as const, taskId, message: '视频生成任务已创建！大约需要 3-5 分钟，生成完成后会直接显示在这里。' };
+          return { success: true as const, taskId, message: 'Video generation task created! It takes about 3–5 minutes. The result will appear here when done.' };
         } catch (e) {
           return { success: false as const, message: String(e) };
         }
@@ -299,14 +305,10 @@ export async function* runMakaronAgent(
   // Determine which tools to expose
   // tipReactionOnly: no tools (text-only response)
   // analysisOnly: only analyze_image (agent uses tool to see the photo)
-  // animation mode: generate_animation + analyze_image (no image generation)
-  // normal chat: all tools
-  const hasAnimationImages = !!options?.animationImageUrls?.length;
+  // normal chat / animation: all tools (agent.md controls behavior)
   const tools = tipReactionOnly ? undefined : analysisOnly
     ? { analyze_image: allTools.analyze_image }
-    : hasAnimationImages
-      ? { generate_animation: allTools.generate_animation, analyze_image: allTools.analyze_image }
-      : allTools;
+    : allTools;
 
   // Build user message content — animation mode includes all snapshot images as visual content
   const animImages = options?.animationImages;
@@ -326,7 +328,11 @@ export async function* runMakaronAgent(
     userContent = analysisOnly ? analysisPrompt : prompt;
   }
 
-  const systemPrompt = getAgentSystemPrompt();
+  // Append animate.md rules when in video mode (GUI or CUI)
+  const isVideoMode = !!animImages?.length || prompt.includes('视频') || prompt.includes('video') || prompt.includes('Video');
+  const systemPrompt = isVideoMode
+    ? `${getAgentSystemPrompt()}\n\n${animatePrompt}`
+    : getAgentSystemPrompt();
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

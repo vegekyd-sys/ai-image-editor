@@ -456,9 +456,10 @@ export default function AnimateSheet({
                   placeholder={status === 'generating_prompt' ? t('animate.aiAnalyzing') : t('animate.storyPlaceholder')}
                   style={{
                     width: '100%', minHeight: 80,
-                    background: status === 'generating_prompt'
+                    backgroundColor: status === 'generating_prompt' ? 'transparent' : 'rgba(255,255,255,0.04)',
+                    backgroundImage: status === 'generating_prompt'
                       ? 'linear-gradient(90deg, rgba(217,70,239,0.04) 0%, rgba(168,85,247,0.08) 50%, rgba(217,70,239,0.04) 100%)'
-                      : 'rgba(255,255,255,0.04)',
+                      : 'none',
                     backgroundSize: '200% 100%',
                     animation: status === 'generating_prompt' ? 'shimmer 2s linear infinite' : 'none',
                     border: '1px solid',

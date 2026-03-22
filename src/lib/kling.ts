@@ -111,3 +111,103 @@ export async function getKlingTask(taskId: string): Promise<KlingTaskResult> {
     error: data?.task_status_msg || undefined,
   }
 }
+
+/**
+ * Filter images to only those referenced in the script (<<<image_N>>>),
+ * and remap indices to be sequential (e.g. image_1, image_5, image_9 → image_1, image_2, image_3).
+ * Returns the filtered image list and the remapped prompt.
+ */
+export function filterAndRemapImages(
+  prompt: string,
+  imageUrls: string[],
+  maxImages = 7,
+): { filteredImages: string[]; finalPrompt: string } {
+  const refs = [...new Set(
+    Array.from(prompt.matchAll(/<<<image_(\d+)>>>/g), m => Number(m[1]))
+  )].sort((a, b) => a - b)
+
+  let filteredImages: string[]
+  let finalPrompt: string
+
+  if (refs.length > 0) {
+    filteredImages = refs.map(n => imageUrls[n - 1]).filter((img): img is string => !!img)
+    finalPrompt = prompt
+    refs.forEach((origIdx, newIdx) => {
+      finalPrompt = finalPrompt.replaceAll(`<<<image_${origIdx}>>>`, `<<<image_${newIdx + 1}>>>`)
+    })
+  } else {
+    filteredImages = imageUrls
+    finalPrompt = prompt
+  }
+
+  if (filteredImages.length > maxImages) {
+    filteredImages = filteredImages.slice(0, maxImages)
+  }
+
+  return { filteredImages, finalPrompt }
+}
+
+// ---------------------------------------------------------------------------
+// Unified animation task submission — single code path for GUI and CUI
+// ---------------------------------------------------------------------------
+
+export interface SubmitAnimationInput {
+  projectId: string
+  prompt: string
+  imageUrls: string[]
+  duration?: number
+  aspectRatio?: string
+}
+
+/**
+ * Submit a video animation task: filter/remap images, call Kling (or PiAPI),
+ * persist to DB. Both the API route and the Agent tool call this.
+ */
+export async function submitAnimationTask(input: SubmitAnimationInput): Promise<{ taskId: string; animationId: string }> {
+  const { projectId, prompt, imageUrls, duration, aspectRatio } = input
+
+  // Filter to only referenced images and remap indices sequentially
+  const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, imageUrls)
+
+  // Create video task — default Kling direct (v3-omni), ANIMATE_PROVIDER=piapi to fallback
+  const usePiAPI = process.env.ANIMATE_PROVIDER === 'piapi'
+  let taskId: string
+
+  if (usePiAPI) {
+    const { createKlingTask: createKlingTaskPiAPI } = await import('./piapi')
+    taskId = await createKlingTaskPiAPI({
+      prompt: finalPrompt.replace(/<<<image_(\d+)>>>/g, '@image_$1'),
+      images: filteredImages,
+      duration: duration ?? 10,
+      aspect_ratio: aspectRatio ?? '9:16',
+      enable_audio: true,
+      version: '3.0',
+    })
+  } else {
+    taskId = await createKlingTask({
+      prompt: finalPrompt,
+      images: filteredImages,
+      duration: duration ?? undefined,
+      aspect_ratio: aspectRatio,
+    })
+  }
+
+  // Persist to DB
+  const { createClient } = await import('@/lib/supabase/server')
+  const supabase = await createClient()
+  const { data: animation, error } = await supabase
+    .from('project_animations')
+    .insert({
+      project_id: projectId,
+      piapi_task_id: taskId,
+      status: 'processing',
+      prompt: finalPrompt,
+      snapshot_urls: filteredImages,
+    })
+    .select('id')
+    .single()
+
+  if (error) throw error
+
+  return { taskId, animationId: animation.id }
+}
