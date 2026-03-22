@@ -1439,20 +1439,32 @@ export default function Editor({
           },
           onAnimationTask: (taskId) => {
             // CUI-initiated video: add to animations array and start polling
-            const urls = snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!);
+            const urls = snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
             const newAnim: ProjectAnimation = {
               id: taskId,
               projectId: projectId ?? '',
               taskId,
               videoUrl: null,
               prompt: '',
-              snapshotUrls: urls.slice(0, 7),
+              snapshotUrls: urls,
               status: 'processing',
               createdAt: new Date().toISOString(),
             };
             setAnimations(prev => [newAnim, ...prev]);
             setSelectedVideoId(taskId);
             pendingNavigateToVideoRef.current = true;
+            // Trigger polling status so StatusBar shows "Video rendering M:SS"
+            setAnimationState({
+              imageUrls: urls,
+              status: 'polling',
+              prompt: '',
+              userHint: '',
+              taskId,
+              videoUrl: null,
+              error: null,
+              duration: null,
+              pollSeconds: 0,
+            });
           },
           onDone: () => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);

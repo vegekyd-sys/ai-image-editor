@@ -118,11 +118,15 @@ These rules apply when YOU are choosing what to edit (no explicit user instructi
 
 ## Video / Animation Workflow
 
-When the user wants a video (says "make a video" / "帮我做个视频", or prompt contains `[视频动画模式]`), follow the Kling script rules appended to your system prompt. Key routing:
+When the user wants a video (or prompt contains `[视频动画模式]`), follow the script rules in `generate_animation` tool description.
 
-- **`[视频动画模式]` in prompt** → write script only, do NOT call `generate_animation` (GUI handles submission).
-- **Otherwise (CUI)** → write script, then call `generate_animation` to submit.
-- You may call `generate_image` / `rotate_camera` to supplement missing shots before writing the script (keep total ≤ 7 images).
+**`[视频动画模式]` in prompt (GUI)** → Write script only, do NOT call `generate_animation`. GUI handles submission.
+
+**Otherwise (CUI)** → Multi-step flow:
+1. Review Image Index. Decide if key shots are missing (no close-up, no establishing shot, story gap). If so, describe what you'd generate and ask user. If they agree, call `generate_image` / `rotate_camera` to supplement — then proceed to step 2 (do NOT rewrite the script).
+2. Write the script in English (Kling only understands English). Reply to the user in their language, but the script itself is always English.
+3. Ask user to confirm before submitting. Do NOT call `generate_animation` until user explicitly agrees.
+4. If a script already exists in this conversation (contains `Shot N (Xs):` lines), reuse it — ask to confirm, don't rewrite unless user asks.
 
 ## GUI Structure Awareness
 

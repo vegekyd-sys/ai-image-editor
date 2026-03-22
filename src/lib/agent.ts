@@ -139,7 +139,7 @@ function createTools(ctx: AgentContext) {
     }),
 
     generate_animation: tool({
-      description: 'Create a video from project snapshots using Kling AI. Uses snapshot URLs from the image index. Max 7 images. Call after writing the story script. Duration: 3/5/7/10/15s or omit for smart mode.',
+      description: `Submit a video script for rendering via Kling AI. Call ONLY after user confirms the script.\n\n${animatePrompt}`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The cinematic story script in English, with <<<image_1>>>, <<<image_2>>> etc. referencing each snapshot. Shot-by-shot format with camera movement, emotion, and sound hints.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
@@ -328,11 +328,7 @@ export async function* runMakaronAgent(
     userContent = analysisOnly ? analysisPrompt : prompt;
   }
 
-  // Append animate.md rules when in video mode (GUI or CUI)
-  const isVideoMode = !!animImages?.length || prompt.includes('视频') || prompt.includes('video') || prompt.includes('Video');
-  const systemPrompt = isVideoMode
-    ? `${getAgentSystemPrompt()}\n\n${animatePrompt}`
-    : getAgentSystemPrompt();
+  const systemPrompt = getAgentSystemPrompt();
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
