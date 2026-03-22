@@ -1582,13 +1582,14 @@ ${imageIndex}
 
 Select the best 3-7 images for a compelling video. You do NOT need to use all images or follow their order — pick the ones that create the strongest narrative arc. Output only the script, no confirmation needed.`;
 
-    const userMsgId = generateId();
+    const userMsg = { id: generateId(), role: 'user' as const, content: t('editor.makeVideo'), timestamp: Date.now() };
     const assistantMsgId = generateId();
     setMessages((prev) => [
       ...prev,
-      { id: userMsgId, role: 'user' as const, content: t('editor.makeVideo'), timestamp: Date.now() },
+      userMsg,
       { id: assistantMsgId, role: 'assistant' as const, content: '', timestamp: Date.now() },
     ]);
+    onSaveMessage?.(userMsg);
 
     // Stay in GUI — Agent runs in background
     setAnimationState(prev => prev ? { ...prev, status: 'generating_prompt', prompt: '' } : prev);
