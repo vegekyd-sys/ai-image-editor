@@ -179,6 +179,8 @@ interface AgentChatViewProps {
   mode?: 'overlay' | 'panel';
   skipSlideIn?: boolean;
   snapshots?: Snapshot[];
+  /** 1-based index of current snapshot for PiP @N badge */
+  currentSnapshotIndex?: number;
   preferredModel?: PreferredModel;
   onModelChange?: (model: PreferredModel) => void;
 }
@@ -199,6 +201,7 @@ export default function AgentChatView({
   mode = 'overlay',
   skipSlideIn = false,
   snapshots = [],
+  currentSnapshotIndex,
   preferredModel = 'auto',
   onModelChange,
 }: AgentChatViewProps) {
@@ -567,7 +570,7 @@ export default function AgentChatView({
                 backdropFilter: 'blur(4px)',
               }}
             >
-              @{snapshots.length || 1}
+              @{currentSnapshotIndex ?? snapshots.length ?? 1}
             </div>
           )}
           {/* Resize handle — bottom-right corner, cycles PIP size */}

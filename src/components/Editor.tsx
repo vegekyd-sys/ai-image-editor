@@ -2768,6 +2768,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
             onImageTap={handleImageTap}
             snapshots={snapshots}
+            currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
             preferredModel={preferredModel}
             onModelChange={setPreferredModel}
           />
@@ -2793,6 +2794,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           onImageTap={handleImageTap}
           focusOnOpen={isViewingDraft}
           snapshots={snapshots}
+          currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
           preferredModel={preferredModel}
           onModelChange={setPreferredModel}
         />
