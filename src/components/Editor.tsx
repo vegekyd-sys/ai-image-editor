@@ -1564,7 +1564,7 @@ export default function Editor({
 
     const n = imageUrls.length;
     const userHint = animationStateRef.current?.userHint?.trim() || '';
-    const langInstr = 'Write the script in English (Kling works best with English prompts).';
+    const langInstr = locale === 'en' ? 'Write the script in English.' : '用中文写脚本。';
     const hintLine = userHint ? `\nUser requirements: ${userHint}` : '';
 
     // Build Image Index with descriptions so Agent can pick images intelligently
@@ -2412,7 +2412,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     videoUrl: null,
                     status: 'idle',
                     error: null,
-                    duration: 10,
+                    duration: null,
                     pollSeconds: 0,
                   });
                   setShowAnimateSheet(true);
@@ -2655,7 +2655,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     const imageUrls = allUrls.length <= 7
                       ? allUrls
                       : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: 10, pollSeconds: 0 });
+                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0 });
                     setShowAnimateSheet(true);
                   } : undefined}
                   hasVideo={hasVideo}
@@ -2678,7 +2678,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         videoUrl: null,
                         status: 'idle',
                         error: null,
-                        duration: 10,
+                        duration: null,
                         pollSeconds: 0,
                       });
                       setShowAnimateSheet(true);

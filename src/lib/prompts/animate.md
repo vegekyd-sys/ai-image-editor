@@ -26,7 +26,7 @@ A short title on the first line (2-5 words, no quotes, no markdown), then Shot l
    - Top-down, Bird's-eye view, Low angle, Side view
    - Camera circles, Push-in, Pull-out, Whip pan, Dolly
 
-4. **Language**: ALWAYS write in English. Kling responds best to English prompts.
+4. **Language**: Write descriptions in the same language the user is speaking. BUT keep `Shot N (Xs):` format exactly as-is (not "镜头N" or "分镜N") — Kling requires this exact format. Same for `Style:` tag.
 
 5. **Dialogue**: Characters can speak — put dialogue in quotes.
 
