@@ -2281,6 +2281,20 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [snapshots, draftParentIndex, isDesktop, cuiPanelWidth]);
 
+  // Navigate GUI canvas to a snapshot when clicking @N chip in CUI (desktop only)
+  const handleNavigateToSnapshot = useCallback((snapIndex: number) => {
+    if (!isDesktop) return; // mobile keeps default hover/tap preview
+    if (snapIndex < 0 || snapIndex >= snapshots.length) return;
+    setViewIndex(timelineFromSnap(snapIndex, draftParentIndex));
+    // If GUI is smaller than CUI, snap to 50/50
+    const containerW = document.querySelector('.flex.flex-row')?.clientWidth ?? 0;
+    if (containerW && cuiPanelWidth > containerW / 2) {
+      const midW = Math.round(containerW / 2);
+      setCuiPanelWidth(midW);
+      if (cuiPanelRef.current) cuiPanelRef.current.style.width = `${midW}px`;
+    }
+  }, [snapshots.length, draftParentIndex, isDesktop, cuiPanelWidth]);
+
   // Track whether we've pushed a CUI history state that hasn't been consumed yet.
   // We need this because setViewMode('gui') can be called via two paths:
   //   1. popstate (history.back) → state already consumed, don't back() again
@@ -2851,6 +2865,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
             preferredModel={preferredModel}
             onModelChange={setPreferredModel}
+            onNavigateToSnapshot={handleNavigateToSnapshot}
           />
         </div>
       </>) : viewMode === 'cui' ? (
@@ -2877,6 +2892,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
           preferredModel={preferredModel}
           onModelChange={setPreferredModel}
+          onNavigateToSnapshot={handleNavigateToSnapshot}
         />
       ) : null}
 

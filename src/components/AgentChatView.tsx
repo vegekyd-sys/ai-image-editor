@@ -96,7 +96,7 @@ function fixMarkdownDelimiters(text: string): string {
 /** Shared Markdown renderer to avoid duplicating component overrides.
  *  <<<image_N>>> tokens are converted to `IMG_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
-function MarkdownBlock({ text, isPanel, snapshots }: { text: string; isPanel: boolean; snapshots?: Snapshot[] }) {
+function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void }) {
   // Replace <<<image_N>>> with inline code `IMG_REF_N` so markdown structure stays intact
   const processed = snapshots
     ? text.replace(/<<<image_(\d+)>>>/g, '`IMG_REF_$1`')
@@ -120,7 +120,7 @@ function MarkdownBlock({ text, isPanel, snapshots }: { text: string; isPanel: bo
             const m = str.match(/^IMG_REF_(\d+)$/);
             if (m) {
               const idx = parseInt(m[1]) - 1;
-              return <ImageRefChip index={idx} snapshot={snapshots[idx]} />;
+              return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
             }
           }
           return inline ? (
@@ -183,6 +183,8 @@ interface AgentChatViewProps {
   currentSnapshotIndex?: number;
   preferredModel?: PreferredModel;
   onModelChange?: (model: PreferredModel) => void;
+  /** Navigate GUI canvas to snapshot by 0-based index */
+  onNavigateToSnapshot?: (index: number) => void;
 }
 
 export default function AgentChatView({
@@ -204,6 +206,7 @@ export default function AgentChatView({
   currentSnapshotIndex,
   preferredModel = 'auto',
   onModelChange,
+  onNavigateToSnapshot,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -705,6 +708,7 @@ export default function AgentChatView({
                           text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, ''))}
                           isPanel={isPanel}
                           snapshots={snapshots}
+                          onNavigateToSnapshot={onNavigateToSnapshot}
                         />
                         {/* Inline video player for animation results */}
                         {(() => {

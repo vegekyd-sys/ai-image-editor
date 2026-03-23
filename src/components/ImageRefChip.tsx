@@ -7,9 +7,10 @@ import { getThumbnailUrl } from '@/lib/supabase/storage';
 interface ImageRefChipProps {
   index: number; // 0-based
   snapshot?: Snapshot;
+  onNavigate?: (index: number) => void;
 }
 
-export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
+export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefChipProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -74,7 +75,8 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
         onMouseLeave={() => { if (!isTouchDevice.current) setShowPreview(false); }}
         onClick={(e) => {
           e.stopPropagation();
-          if (showPreview) { setShowPreview(false); } else { updatePosition(); setShowPreview(true); }
+          if (onNavigate) { onNavigate(index); setShowPreview(false); }
+          else if (showPreview) { setShowPreview(false); } else { updatePosition(); setShowPreview(true); }
         }}
       >
         {thumbUrl && (
