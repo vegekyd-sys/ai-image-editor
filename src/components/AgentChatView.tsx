@@ -432,6 +432,8 @@ export default function AgentChatView({
   }, []);
 
   // Auto-load earlier messages when scrolling near top — preserve scroll position
+  // Track the first visible message element so we can scroll back to it after loading
+  const firstVisibleMsgRef = useRef<Element | null>(null);
   useEffect(() => {
     const sentinel = loadMoreSentinel.current;
     const scrollEl = messagesRef.current;
@@ -440,16 +442,27 @@ export default function AgentChatView({
       if (entries[0]?.isIntersecting) {
         // Stop mount scroll-pinning before loading (prevents snap to bottom)
         if (mountRoRef.current) { mountRoRef.current.disconnect(); mountRoRef.current = null; }
-        const prevH = scrollEl.scrollHeight;
+        // Remember the first visible message (the sentinel's next sibling)
+        const msgList = sentinel.parentElement;
+        const firstMsg = msgList?.children[1]; // [0]=sentinel, [1]=first visible msg
+        firstVisibleMsgRef.current = firstMsg || null;
         setShowAllMessages(true);
-        requestAnimationFrame(() => {
-          const newH = scrollEl.scrollHeight;
-          scrollEl.scrollTop += newH - prevH;
-        });
       }
     }, { root: scrollEl, threshold: 0 });
     io.observe(sentinel);
     return () => io.disconnect();
+  }, [showAllMessages]);
+
+  // After earlier messages render, scroll so the previously-first message stays in view
+  useEffect(() => {
+    if (!showAllMessages || !firstVisibleMsgRef.current) return;
+    const el = firstVisibleMsgRef.current as HTMLElement;
+    const scrollEl = messagesRef.current;
+    if (!scrollEl) return;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'start' });
+      firstVisibleMsgRef.current = null;
+    });
   }, [showAllMessages]);
 
   // Auto-scroll ONLY when AI is actively streaming content (not on mount or status changes)
