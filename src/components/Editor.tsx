@@ -223,6 +223,7 @@ export default function Editor({
   const isDesktop = useIsDesktop();
   const { t, locale } = useLocale();
   const [cuiPanelWidth, setCuiPanelWidth] = useState(340);
+  const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -2790,18 +2791,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             const maxW = containerW - 340;
             const midW = Math.round(containerW / 2);
             const snaps = [minW, midW, maxW];
+            let currentW = startW;
             const onMove = (ev: MouseEvent) => {
               const delta = startX - ev.clientX;
               const raw = Math.max(minW, Math.min(maxW, startW + delta));
-              // Snap to nearest when within 30px
               const nearest = snaps.reduce((a, b) => Math.abs(b - raw) < Math.abs(a - raw) ? b : a);
-              setCuiPanelWidth(Math.abs(nearest - raw) < 30 ? nearest : raw);
+              currentW = Math.abs(nearest - raw) < 30 ? nearest : raw;
+              // DOM-only update during drag — no React re-render
+              if (cuiPanelRef.current) cuiPanelRef.current.style.width = `${currentW}px`;
             };
             const onUp = () => {
               document.removeEventListener('mousemove', onMove);
               document.removeEventListener('mouseup', onUp);
               document.body.style.cursor = '';
               document.body.style.userSelect = '';
+              setCuiPanelWidth(currentW); // sync to React state once
             };
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
@@ -2822,7 +2826,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             </div>
           </div>
         </div>
-        <div className="flex-shrink-0 border-l border-white/[0.08]" style={{ width: cuiPanelWidth }}>
+        <div ref={cuiPanelRef} className="flex-shrink-0 border-l border-white/[0.08]" style={{ width: cuiPanelWidth }}>
           <AgentChatView
             mode="panel"
             messages={messages}
