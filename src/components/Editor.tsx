@@ -2781,7 +2781,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         {/* Resizable divider handle */}
         <div
           className="flex-shrink-0 cursor-col-resize relative group"
-          style={{ width: 4, background: 'rgba(255,255,255,0.12)' }}
+          style={{ width: 0 }}
           onMouseDown={(e) => {
             e.preventDefault();
             const startX = e.clientX;
@@ -2813,16 +2813,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             document.addEventListener('mouseup', onUp);
           }}
         >
-          {/* Wider invisible hit area for easier hover/drag */}
-          <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-fuchsia-500/10 group-active:bg-fuchsia-500/20 transition-colors" />
-          {/* Visual handle dot cluster — always visible */}
-          <div className="absolute inset-y-0 w-1 flex items-center justify-center">
-            <div className="flex flex-col gap-1.5 group-hover:gap-2 transition-all">
-              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
-              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
-              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
-              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
-              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
+          {/* Invisible hit area overlaying the border */}
+          <div className="absolute inset-y-0 -left-[6px] -right-[6px] z-10 group-hover:bg-white/[0.03] transition-colors" />
+          {/* Subtle drag dots — blend with border */}
+          <div className="absolute inset-y-0 -left-[2px] w-[4px] flex items-center justify-center z-20 pointer-events-none">
+            <div className="flex flex-col gap-1">
+              <div className="w-[3px] h-[3px] rounded-full bg-white/10 group-hover:bg-white/30 transition-colors" />
+              <div className="w-[3px] h-[3px] rounded-full bg-white/10 group-hover:bg-white/30 transition-colors" />
+              <div className="w-[3px] h-[3px] rounded-full bg-white/10 group-hover:bg-white/30 transition-colors" />
             </div>
           </div>
         </div>
