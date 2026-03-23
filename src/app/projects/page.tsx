@@ -527,7 +527,7 @@ export default function ProjectsPage() {
           id="new-project-file-input"
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,.heic,.heif"
           style={{ display: 'none' }}
           onChange={async (e) => {
             const file = e.target.files?.[0]

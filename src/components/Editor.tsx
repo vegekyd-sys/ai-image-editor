@@ -2340,7 +2340,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -2352,7 +2352,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       <input
         ref={newProjectFileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

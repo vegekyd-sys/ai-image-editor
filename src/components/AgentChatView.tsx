@@ -219,6 +219,8 @@ export default function AgentChatView({
   const [input, setInput] = useState('');
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isExiting, setIsExiting] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCountRef = useRef(0);
   // Capture skipSlideIn at mount time — ignore prop changes after mount
   const [mountedWithSkip] = useState(skipSlideIn);
   // Lazy message rendering: only show last N messages initially to reduce forced reflow
@@ -547,7 +549,28 @@ export default function AgentChatView({
       }
       style={{ background: '#0a0a0a' }}
       onAnimationEnd={isPanel ? undefined : handleAnimationEnd}
+      onDragEnter={(e) => { e.preventDefault(); dragCountRef.current++; setIsDragOver(true); }}
+      onDragOver={(e) => { e.preventDefault(); }}
+      onDragLeave={() => { dragCountRef.current--; if (dragCountRef.current <= 0) { dragCountRef.current = 0; setIsDragOver(false); } }}
+      onDrop={async (e) => {
+        e.preventDefault();
+        dragCountRef.current = 0;
+        setIsDragOver(false);
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+        if (!files.length) return;
+        const remaining = 3 - attachedImages.length;
+        const toProcess = files.slice(0, remaining);
+        const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
+        setAttachedImages(prev => [...prev, ...compressed].slice(0, 3));
+      }}
     >
+      {/* Drop zone overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center pointer-events-none" style={{ background: 'rgba(0,0,0,0.6)', border: '2px dashed rgba(217,70,239,0.5)', borderRadius: 12, margin: 8 }}>
+          <span className="text-white/60 text-sm">Drop images here</span>
+        </div>
+      )}
+
       {/* ── Back button (overlay mode only) ── */}
       {!isPanel && (
         <div
@@ -823,7 +846,7 @@ export default function AgentChatView({
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         multiple
         className="hidden"
         onChange={async (e) => {

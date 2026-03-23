@@ -7,6 +7,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { Snapshot, Message, Tip, PhotoMetadata, ProjectAnimation } from '@/types'
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
+import { ensureDecodableFile } from '@/lib/imageUtils'
 import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
 
 export default function ProjectPage() {
@@ -177,9 +178,11 @@ export default function ProjectPage() {
   const handleNewProject = useCallback(async (file: File) => {
     if (!user) return
     try {
+      // Convert HEIC to JPEG if needed
+      const decodable = await ensureDecodableFile(file)
       // Compress client-side
       const base64 = await new Promise<string>((resolve, reject) => {
-        const url = URL.createObjectURL(file)
+        const url = URL.createObjectURL(decodable)
         const img = new Image()
         img.onload = () => {
           URL.revokeObjectURL(url)
