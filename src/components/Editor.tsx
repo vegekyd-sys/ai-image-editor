@@ -429,7 +429,11 @@ export default function Editor({
   // Auto-jump when timeline grows (commit adds snapshot) or shrinks (draft dismissed)
   const prevTimelineLen = useRef(0);
   if (timeline.length !== prevTimelineLen.current) {
-    if (timeline.length > prevTimelineLen.current && !isDraft) {
+    const isInitialLoad = prevTimelineLen.current === 0;
+    if (isInitialLoad && hasAnyAnimation) {
+      // First load with videos → jump to video entry
+      setViewIndex(timeline.length - 1);
+    } else if (timeline.length > prevTimelineLen.current && !isDraft) {
       // A new snapshot was committed → jump to the new last snapshot (not video entry)
       const lastSnapshotIdx = hasAnyAnimation ? timeline.length - 2 : timeline.length - 1;
       setViewIndex(Math.max(0, lastSnapshotIdx));

@@ -643,7 +643,7 @@ export default function ImageCanvas({
               ref={videoRef}
               src={effectiveVideoUrl ?? undefined}
               playsInline
-              preload="metadata"
+              preload="none"
               poster={(() => { const prev = timeline[timeline.length - 2]; return prev && prev !== '__VIDEO__' ? prev : undefined; })()}
               className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
                 animDir === 'left' ? 'opacity-0 -translate-x-8' :

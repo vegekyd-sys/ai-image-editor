@@ -698,7 +698,7 @@ export default function AgentChatView({
                                 src={`${mp4Match[0]}#t=0.1`}
                                 controls
                                 playsInline
-                                preload="metadata"
+                                preload="none"
                                 style={{ width: '100%', height: '100%', display: 'block', objectFit: 'contain' }}
                               />
                             </div>
