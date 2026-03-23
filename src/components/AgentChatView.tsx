@@ -710,6 +710,9 @@ export default function AgentChatView({
                         {(() => {
                           const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
                           if (!mp4Match) return null;
+                          const lastSnap = snapshots[snapshots.length - 1];
+                          const posterUrl = lastSnap?.imageUrl || lastSnap?.image;
+                          const poster = posterUrl ? getThumbnailUrl(posterUrl, 680, 60) : undefined;
                           return (
                             <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', aspectRatio: '4/3', maxHeight: isPanel ? 200 : 360, background: '#000' }}>
                               <video
@@ -717,6 +720,7 @@ export default function AgentChatView({
                                 controls
                                 playsInline
                                 preload="none"
+                                poster={poster}
                                 style={{ width: '100%', height: '100%', display: 'block', objectFit: 'contain' }}
                               />
                             </div>
