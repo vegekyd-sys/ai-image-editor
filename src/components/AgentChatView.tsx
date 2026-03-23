@@ -221,6 +221,7 @@ export default function AgentChatView({
   const [isExiting, setIsExiting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCountRef = useRef(0);
+  const [processingImageCount, setProcessingImageCount] = useState(0);
   // Capture skipSlideIn at mount time — ignore prop changes after mount
   const [mountedWithSkip] = useState(skipSlideIn);
   // Lazy message rendering: only show last N messages initially to reduce forced reflow
@@ -560,8 +561,10 @@ export default function AgentChatView({
         if (!files.length) return;
         const remaining = 3 - attachedImages.length;
         const toProcess = files.slice(0, remaining);
+        setProcessingImageCount(toProcess.length);
         const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
         setAttachedImages(prev => [...prev, ...compressed].slice(0, 3));
+        setProcessingImageCount(0);
       }}
     >
       {/* Drop zone overlay */}
@@ -854,8 +857,10 @@ export default function AgentChatView({
           e.target.value = '';
           const remaining = 3 - attachedImages.length;
           const toProcess = files.slice(0, remaining);
+          setProcessingImageCount(toProcess.length);
           const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
           setAttachedImages(prev => [...prev, ...compressed].slice(0, 3));
+          setProcessingImageCount(0);
         }}
       />
 
@@ -969,6 +974,12 @@ export default function AgentChatView({
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
                 </button>
+              </div>
+            ))}
+            {/* Processing spinner placeholders */}
+            {Array.from({ length: processingImageCount }).map((_, i) => (
+              <div key={`proc-${i}`} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
               </div>
             ))}
 

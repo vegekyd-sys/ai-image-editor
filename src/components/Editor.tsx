@@ -1846,8 +1846,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     setDraftParentIndex(null);
     setMessages([]);
 
-    const previewUrl = URL.createObjectURL(file);
+    const heic = isHeicFile(file);
     const snapId = generateId();
+
+    // HEIC: show loading spinner (Chrome can't render HEIC blob URLs)
+    // Non-HEIC: show instant blob URL preview
+    const previewUrl = heic ? '' : URL.createObjectURL(file);
     const previewSnapshot: Snapshot = { id: snapId, image: previewUrl, tips: [], messageId: '' };
     setSnapshots([previewSnapshot]);
     snapshotsRef.current = [previewSnapshot];
@@ -1861,7 +1865,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       // Convert HEIC to JPEG in browser if needed (Chrome/Firefox can't decode HEIC)
       const decodable = await ensureDecodableFile(file);
       const base64 = await compressClientSide(decodable);
-      URL.revokeObjectURL(previewUrl);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
 
       // Start tips generation immediately with compressed image
       const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
@@ -2376,12 +2380,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             className="flex-1 relative min-h-0 overflow-hidden"
             style={heroAnim ? { opacity: 0 } : undefined}
           >
-            {timeline.length === 0 ? (
-              isAgentActive ? (
+            {timeline.length === 0 || (timeline.length === 1 && !timeline[0]) ? (
+              (isAgentActive || (timeline.length === 1 && !timeline[0])) ? (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-8 h-8 border-2 border-fuchsia-400 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-white/50 text-sm">{t('editor.generatingImage')}</span>
+                    <span className="text-white/50 text-sm">{timeline.length === 1 ? 'Converting...' : t('editor.generatingImage')}</span>
                   </div>
                 </div>
               ) : (
