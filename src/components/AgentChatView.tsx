@@ -413,23 +413,21 @@ export default function AgentChatView({
   }, [onInputBarHeight]);
 
   // On mount: keep scroll pinned to bottom until content stabilizes (images loading etc.)
+  const mountRoRef = useRef<ResizeObserver | null>(null);
   useEffect(() => {
     const el = messagesRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-    // Watch for height changes (image loads, lazy content) and re-pin to bottom
-    // Use rAF to batch scroll updates and avoid forced reflow
     let rafId = 0;
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
     });
-    // Observe the scroll content (not the container)
+    mountRoRef.current = ro;
     const content = el.firstElementChild;
     if (content) ro.observe(content);
-    // Stop pinning after content stabilizes (longer for videos)
-    const timer = setTimeout(() => ro.disconnect(), 2000);
-    return () => { ro.disconnect(); clearTimeout(timer); cancelAnimationFrame(rafId); };
+    const timer = setTimeout(() => { ro.disconnect(); mountRoRef.current = null; }, 2000);
+    return () => { ro.disconnect(); mountRoRef.current = null; clearTimeout(timer); cancelAnimationFrame(rafId); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -440,9 +438,10 @@ export default function AgentChatView({
     if (!sentinel || !scrollEl || showAllMessages) return;
     const io = new IntersectionObserver((entries) => {
       if (entries[0]?.isIntersecting) {
+        // Stop mount scroll-pinning before loading (prevents snap to bottom)
+        if (mountRoRef.current) { mountRoRef.current.disconnect(); mountRoRef.current = null; }
         const prevH = scrollEl.scrollHeight;
         setShowAllMessages(true);
-        // After React renders new messages, restore scroll position
         requestAnimationFrame(() => {
           const newH = scrollEl.scrollHeight;
           scrollEl.scrollTop += newH - prevH;
