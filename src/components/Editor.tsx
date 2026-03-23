@@ -1148,18 +1148,24 @@ export default function Editor({
     snapshotId: string,
     imageBase64: string,
     context: 'initial' | 'post-edit' = 'initial',
+    options?: { silent?: boolean },
   ) => {
     if (!projectId) return;
 
-    setIsAgentActive(true);
-    setAgentStatus(t('status.analyzingImage'));
-    agentAbortRef.current = new AbortController();
+    const silent = options?.silent ?? false;
+
+    if (!silent) {
+      setIsAgentActive(true);
+      setAgentStatus(t('status.analyzingImage'));
+      agentAbortRef.current = new AbortController();
+    }
 
     let description = '';
-    // For initial upload: show analysis as a CUI message so the user sees it
+    // For initial upload (non-silent): show analysis as a CUI message
     const isInitial = context === 'initial';
-    const msgId = isInitial ? generateId() : null;
-    if (isInitial && msgId) {
+    const showInCui = isInitial && !silent;
+    const msgId = showInCui ? generateId() : null;
+    if (showInCui && msgId) {
       setMessages((prev) => [...prev, {
         id: msgId,
         role: 'assistant' as const,
@@ -1172,11 +1178,10 @@ export default function Editor({
       await streamAgent(
         { prompt: '', image: imageBase64, projectId, analysisOnly: true, analysisContext: context },
         {
-          onStatus: (s) => setAgentStatus(s),
+          onStatus: (s) => { if (!silent) setAgentStatus(s); },
           onContent: (delta) => {
             description += delta;
-            // Stream into the CUI message for initial uploads
-            if (isInitial && msgId) {
+            if (showInCui && msgId) {
               setMessages((prev) => prev.map((m) =>
                 m.id === msgId ? { ...m, content: m.content + delta } : m
               ));
@@ -1191,8 +1196,7 @@ export default function Editor({
                 s.id === snapshotId ? { ...s, description } : s
               ));
               onUpdateDescription?.(snapshotId, description);
-              // Append a hint about tips being generated, then persist the CUI message
-              if (isInitial && msgId) {
+              if (showInCui && msgId) {
                 const suffix = t('editor.tipsSuffix');
                 setMessages((prev) => {
                   const msg = prev.find(m => m.id === msgId);
@@ -1204,14 +1208,13 @@ export default function Editor({
                   return prev;
                 });
               }
-              // Auto-name the project once, based on the image analysis description
+              // Auto-name the project once
               if (!hasTriggeredNamingRef.current && (!initialTitle || initialTitle === 'Untitled' || initialTitle === '未命名' || initialTitle === '未命名项目')) {
                 hasTriggeredNamingRef.current = true;
                 triggerProjectNaming(description);
               }
             }
-            // Only fall back to GREETING if tips failed entirely (useEffect handles other cases)
-            if (!isTipsFetchingRef.current) {
+            if (!silent && !isTipsFetchingRef.current) {
               const snap = snapshotsRef.current.find(s => s.id === snapshotId);
               if (!snap || snap.tips.length === 0) {
                 setAgentStatus(t('editor.greeting'));
@@ -1220,18 +1223,19 @@ export default function Editor({
           },
           onError: () => {},
         },
-        agentAbortRef.current.signal,
+        silent ? undefined : agentAbortRef.current.signal,
       );
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       console.error('[runAutoAnalysis] error:', err);
     } finally {
-      setIsAgentActive(false);
-      // Drain any pending teaser that was queued while analysis was running
-      const pending = pendingTeaserRef.current;
-      if (pending) {
-        pendingTeaserRef.current = null;
-        setTimeout(() => triggerTipsTeaser(pending.snapshotId, pending.tips), 400);
+      if (!silent) {
+        setIsAgentActive(false);
+        const pending = pendingTeaserRef.current;
+        if (pending) {
+          pendingTeaserRef.current = null;
+          setTimeout(() => triggerTipsTeaser(pending.snapshotId, pending.tips), 400);
+        }
       }
     }
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
@@ -1390,11 +1394,36 @@ export default function Editor({
     const rawOriginal = originalSnapshot ? getImageForApi(originalSnapshot) : undefined;
     const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64(rawOriginal, 3_000_000) : rawOriginal;
 
+    // Compress snapshot images for API payload — URLs pass through (~100B), base64 compressed to 600KB
+    // This prevents multi-image uploads from exceeding Vercel body size limits
+    const snapshotImagesForApi = await Promise.all(
+      snapshotsRef.current.map(async (s) => {
+        const img = getImageForApi(s);
+        return img.startsWith('data:') ? compressBase64(img, 600_000) : img;
+      })
+    );
+
     const _agentT0 = performance.now();
     let _genStartTime = 0;
+    // Track analyze_image results for auto-saving to snapshot.description
+    let _lastAnalyzedIdx: number | null = null;
+    let _analyzedTextBuf = '';
+    const _flushAnalyzedDesc = () => {
+      if (_lastAnalyzedIdx !== null && _analyzedTextBuf.trim()) {
+        const desc = _analyzedTextBuf.split('\n\n')[0].trim().slice(0, 300);
+        const snapIdx = _lastAnalyzedIdx - 1;
+        const snap = snapshotsRef.current[snapIdx];
+        if (snap && !snap.description) {
+          setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, description: desc } : s));
+          onUpdateDescription?.(snap.id, desc);
+        }
+      }
+      _lastAnalyzedIdx = null;
+      _analyzedTextBuf = '';
+    };
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotsRef.current.map(s => getImageForApi(s)), currentSnapshotIndex: contextSnapshotIndex },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex },
         {
           onStatus: (status) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
@@ -1404,7 +1433,13 @@ export default function Editor({
             }
             setAgentStatus(status);
           },
+          onImageAnalyzed: (imageIndex) => {
+            _flushAnalyzedDesc(); // flush previous if any
+            _lastAnalyzedIdx = imageIndex;
+            _analyzedTextBuf = '';
+          },
           onNewTurn: () => {
+            _flushAnalyzedDesc();
             const newId = generateId();
             currentMsgId = newId;
             agentMsgIds.push(newId);
@@ -1420,6 +1455,10 @@ export default function Editor({
             setMessages((prev) => prev.map((m) =>
               m.id === id ? { ...m, content: m.content + delta } : m
             ));
+            // Accumulate text after analyze_image for auto-saving description
+            if (_lastAnalyzedIdx !== null) {
+              _analyzedTextBuf += delta;
+            }
           },
           onImage: (imageData, usedModel) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
@@ -1511,6 +1550,7 @@ export default function Editor({
             });
           },
           onDone: () => {
+            _flushAnalyzedDesc(); // save any pending analyze_image description
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
             console.log(`⏱️ [agent] DONE total ${elapsed}s`);
             setAgentStatus(t('editor.done'));
@@ -1963,12 +2003,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     if (pendingImages && pendingImages.length > 0 && !pendingHandled.current) {
       pendingHandled.current = true;
 
-      // Create all snapshots synchronously
+      // Create all snapshots — pendingImages may be URLs (pre-uploaded) or base64
       const allSnapshots: Snapshot[] = pendingImages.map((img, i) => ({
         id: generateId(),
         image: img,
         tips: [],
         messageId: '',
+        ...(img.startsWith('http') ? { imageUrl: img } : {}),
         ...(i === 0 && pendingMetadata ? { metadata: pendingMetadata } : {}),
       }));
       setSnapshots(allSnapshots);
@@ -1984,11 +2025,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         cacheImage(`snap:${snap.id}`, snap.image);
       });
 
+      // Helper: URL → use directly, base64 → compress for tips API
+      const tipsImage = (img: string) =>
+        img.startsWith('http') ? Promise.resolve(img) : compressBase64(img, 600_000);
+
       if (pendingPrompt) {
         // Path 3: images + prompt → CUI with prompt as first message
         pendingPromptHandled.current = true;
         // Fetch tips for first image in background
-        compressBase64(allSnapshots[0].image, 600_000).then(img =>
+        tipsImage(allSnapshots[0].image).then(img =>
           fetchTipsForSnapshot(allSnapshots[0].id, img)
         );
         setTimeout(() => {
@@ -1998,19 +2043,29 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       } else if (allSnapshots.length === 1) {
         // Single image: full flow (tips with previews + CUI analysis)
         const snap = allSnapshots[0];
-        compressBase64(snap.image, 600_000).then(img => fetchTipsForSnapshot(snap.id, img));
+        tipsImage(snap.image).then(img => fetchTipsForSnapshot(snap.id, img));
         runAutoAnalysis(snap.id, snap.image, 'initial');
       } else {
-        // Multi-image: tips text only (no previews), agent sees all images and responds
+        // Multi-image: tips text only + parallel silent analysis → then greet
         for (const snap of allSnapshots) {
-          compressBase64(snap.image, 600_000).then(img => fetchTipsForSnapshot(snap.id, img, 'none'));
+          tipsImage(snap.image).then(img => fetchTipsForSnapshot(snap.id, img, 'none'));
         }
-        setTimeout(() => {
+        // Show immediate "analyzing" message in CUI + typing indicator
+        const analyzingMsgId = generateId();
+        const analyzingText = t('editor.multiImageAnalyzing').replace('{count}', String(allSnapshots.length));
+        setMessages(prev => [...prev, { id: analyzingMsgId, role: 'assistant' as const, content: analyzingText, timestamp: Date.now() }]);
+        setIsAgentActive(true);
+        // Parallel analyze all images (silent: no CUI messages, no status bar)
+        // After all done, send a lightweight greeting (agent has descriptions, no need to analyze again)
+        Promise.all(
+          allSnapshots.map(snap => runAutoAnalysis(snap.id, snap.image, 'initial', { silent: true }))
+        ).then(() => {
+          setIsAgentActive(false);
           handleAgentRequest(
-            `[System] User uploaded ${allSnapshots.length} images. Briefly describe what you see in each image and greet the user.`,
+            `[System] User uploaded ${allSnapshots.length} images. All images have been analyzed (see Image Index descriptions). Briefly greet the user and mention what you see in each image in 1 sentence each.`,
             undefined, undefined, { silent: true }
           );
-        }, 200);
+        });
       }
     }
   }, [pendingImages, pendingMetadata, pendingPrompt, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
@@ -2963,7 +3018,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
           preferredModel={preferredModel}
           onModelChange={setPreferredModel}
-          onNavigateToSnapshot={handleNavigateToSnapshot}
+          onNavigateToSnapshot={undefined}
         />
       ) : null}
 

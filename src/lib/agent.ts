@@ -60,6 +60,7 @@ export type AgentStreamEvent =
   | { type: 'image'; image: string; usedModel?: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
   | { type: 'animation_task'; taskId: string }  // emitted when generate_animation tool creates a PiAPI task
+  | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -408,6 +409,14 @@ export async function* runMakaronAgent(
         const toolName = (event as any).toolName as string | undefined;
         const toolDuration = toolCallStartTime ? ((Date.now() - toolCallStartTime) / 1000).toFixed(1) : '?';
         console.log(`⏱️ [agent] tool-result "${toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (tool took ${toolDuration}s)`);
+
+        // Emit image_analyzed event so frontend can save the description
+        if (toolName === 'analyze_image') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const analyzeInput = (event as any).input as { image_index?: number } | undefined;
+          const analyzedIdx = analyzeInput?.image_index ?? (ctx.currentSnapshotIndex + 1);
+          yield { type: 'image_analyzed', imageIndex: analyzedIdx };
+        }
 
         // Detect generate_image failure: tool was called but no new image produced
         if (toolName === 'generate_image' && imagesSent === ctx.generatedImages.length) {

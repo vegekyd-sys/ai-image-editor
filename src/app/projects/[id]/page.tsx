@@ -7,7 +7,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { Snapshot, Message, Tip, PhotoMetadata, ProjectAnimation } from '@/types'
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
-import { ensureDecodableFile } from '@/lib/imageUtils'
+import { createProject } from '@/lib/createProject'
 import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
 
 export default function ProjectPage() {
@@ -188,34 +188,10 @@ export default function ProjectPage() {
   const handleNewProject = useCallback(async (file: File) => {
     if (!user) return
     try {
-      // Convert HEIC to JPEG if needed
-      const decodable = await ensureDecodableFile(file)
-      // Compress client-side
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const url = URL.createObjectURL(decodable)
-        const img = new Image()
-        img.onload = () => {
-          URL.revokeObjectURL(url)
-          const maxSize = 2048
-          const scale = Math.min(1, maxSize / Math.max(img.width, img.height))
-          const canvas = document.createElement('canvas')
-          canvas.width = Math.round(img.width * scale)
-          canvas.height = Math.round(img.height * scale)
-          canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
-          resolve(canvas.toDataURL('image/jpeg', 0.85))
-        }
-        img.onerror = reject
-        img.src = url
-      })
       const supabase = createClient()
-      const { data: project, error } = await supabase
-        .from('projects')
-        .insert({ user_id: user.id, title: 'Untitled' })
-        .select('id')
-        .single()
-      if (error || !project) throw new Error('Failed to create project')
-      sessionStorage.setItem('pendingImages', JSON.stringify([base64]))
-      router.push(`/projects/${project.id}`)
+      const result = await createProject(supabase, user.id, [file])
+      if (!result) throw new Error('Failed to create project')
+      router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('New project error:', err)
     }

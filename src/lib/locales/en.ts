@@ -139,6 +139,7 @@ const en = {
 
   // Editor inline strings
   'editor.greeting': 'Hi! How would you like to edit this photo?',
+  'editor.multiImageAnalyzing': 'Got your {count} images! Analyzing them now, about 1 minute ⏳',
   'editor.tipsSuffix': '\n\nComing up with some fun edit ideas...',
   'editor.agentThinking': 'Agent is thinking...',
   'editor.makeVideo': '✨ Turn these photos into a video for me',

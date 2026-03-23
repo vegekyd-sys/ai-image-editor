@@ -7,9 +7,10 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cacheProjectsList } from '@/lib/imageCache'
-import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils'
+import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
+import { createProject } from '@/lib/createProject'
 import RollingTagline from '@/components/RollingTagline'
 
 interface ProjectWithSnapshots {
@@ -20,29 +21,6 @@ interface ProjectWithSnapshots {
   created_at: string
   snapshots: { id: string; image_url: string; sort_order: number }[]
   hasVideo?: boolean
-}
-
-function compressClientSide(file: File, maxSize = 2048, quality = 0.92): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file)
-    const img = new Image()
-    img.onload = () => {
-      URL.revokeObjectURL(url)
-      const { naturalWidth: w, naturalHeight: h } = img
-      const scale = Math.min(1, maxSize / Math.max(w, h))
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.round(w * scale)
-      canvas.height = Math.round(h * scale)
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-      resolve(canvas.toDataURL('image/jpeg', quality))
-    }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('Failed to load image'))
-    }
-    img.src = url
-  })
 }
 
 function timeAgo(dateStr: string): string {
@@ -324,138 +302,30 @@ export default function ProjectsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
-  const handleCreateProject = useCallback(async (files: File[]) => {
-    if (!user || creating || files.length === 0) return
+  const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
+    if (!user || creating || (files.length === 0 && !prompt)) return
     setCreating(true)
-
     try {
-      // Extract EXIF metadata from first file only
-      let metadata: { takenAt?: string; location?: string } | undefined
-      try {
-        const exifr = (await import('exifr')).default
-        const exif = await exifr.parse(files[0], { gps: true, reviveValues: false })
-        console.log('[EXIF]', JSON.stringify({ lat: exif?.latitude, lng: exif?.longitude, date: exif?.DateTimeOriginal }))
-        if (exif) {
-          const lat = exif.latitude; const lng = exif.longitude
-          const datetimeRaw: string | undefined = exif.DateTimeOriginal || exif.CreateDate
-          let takenAt: string | undefined
-          if (datetimeRaw && typeof datetimeRaw === 'string') {
-            const m = datetimeRaw.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/)
-            if (m) {
-              const utcOffset = lat !== undefined && lng !== undefined
-                ? Math.round(lng / 15)
-                : undefined
-              const tzStr = utcOffset !== undefined
-                ? ` (UTC${utcOffset >= 0 ? '+' : ''}${utcOffset})`
-                : ''
-              takenAt = `${m[1]}年${parseInt(m[2])}月${parseInt(m[3])}日 ${m[4]}:${m[5]}${tzStr}`
-            }
-          }
-          let location: string | undefined
-          if (lat && lng) {
-            try {
-              const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=zh-CN`, { headers: { 'User-Agent': 'Makaron-App/1.0' } })
-              if (geoRes.ok) {
-                const geo = await geoRes.json()
-                const addr = geo.address
-                const city = addr.city || addr.town || addr.village || addr.county
-                location = [city, addr.country].filter(Boolean).join(', ')
-                console.log('[GEOCODE]', location, '| addr:', JSON.stringify(addr))
-              } else {
-                console.log('[GEOCODE] failed:', geoRes.status)
-              }
-            } catch (e) { console.log('[GEOCODE] error:', e) }
-          }
-          if (takenAt || location) metadata = { takenAt, location }
-          console.log('[METADATA]', JSON.stringify(metadata))
-        }
-      } catch { /* EXIF reading is non-critical */ }
-
-      // Parallel compress all files
-      const base64Array = await Promise.all(files.map(async (file) => {
-        try {
-          const decodable = await ensureDecodableFile(file)
-          return await compressClientSide(decodable)
-        } catch {
-          console.warn('[HEIC] client conversion failed, trying server fallback')
-          const formData = new FormData()
-          formData.append('file', file)
-          const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
-          if (!uploadRes.ok) throw new Error('Server HEIC conversion failed')
-          const { image } = await uploadRes.json()
-          return image as string
-        }
-      }))
-
       const supabase = createClient()
-      const { data: project, error: pErr } = await supabase
-        .from('projects')
-        .insert({ user_id: user.id, title: 'Untitled' })
-        .select('id')
-        .single()
-
-      if (pErr || !project) throw new Error('Failed to create project')
-      sessionStorage.setItem('pendingImages', JSON.stringify(base64Array))
-      if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
-      router.push(`/projects/${project.id}`)
+      const result = await createProject(supabase, user.id, files, prompt ? { prompt } : undefined)
+      if (!result) throw new Error('Failed to create project')
+      router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('Create project error:', err)
       setCreating(false)
     }
   }, [user, creating, router])
 
-  // Unified create: text only, image only, or both
+  // Unified create: text only, image only, or both — all go through handleCreateProject
   const handleCreate = useCallback(async () => {
     const hasText = inputText.trim()
     const hasFiles = attachedFiles.length > 0
     if (!hasText && !hasFiles) return
-    if (!user || creating) return
-
-    // Image-only (no text) → original flow
-    if (hasFiles && !hasText) {
-      handleCreateProject(attachedFiles)
-      return
-    }
-
-    setCreating(true)
-    try {
-      const base64Array: string[] = []
-      if (hasFiles) {
-        for (const file of attachedFiles) {
-          try {
-            const decodable = await ensureDecodableFile(file)
-            base64Array.push(await compressClientSide(decodable))
-          } catch {
-            console.warn('[HEIC] client conversion failed, trying server fallback')
-            const formData = new FormData()
-            formData.append('file', file)
-            const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
-            if (!uploadRes.ok) throw new Error('Server HEIC conversion failed')
-            const { image } = await uploadRes.json()
-            base64Array.push(image)
-          }
-        }
-      }
-
-      const supabase = createClient()
-      const { data: project, error: pErr } = await supabase
-        .from('projects')
-        .insert({ user_id: user.id, title: 'Untitled' })
-        .select('id')
-        .single()
-      if (pErr || !project) throw new Error('Failed to create project')
-
-      if (base64Array.length > 0) sessionStorage.setItem('pendingImages', JSON.stringify(base64Array))
-      sessionStorage.setItem('pendingPrompt', hasText)
-      setInputText('')
-      setAttachedFiles([])
-      setAttachedPreviews([])
-      router.push(`/projects/${project.id}`)
-    } catch (err) {
-      console.error('Create project error:', err)
-      setCreating(false)
-    }
-  }, [user, creating, router, inputText, attachedFiles, handleCreateProject])
+    await handleCreateProject(hasFiles ? attachedFiles : [], hasText || undefined)
+    setInputText('')
+    setAttachedFiles([])
+    setAttachedPreviews([])
+  }, [inputText, attachedFiles, handleCreateProject])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
@@ -781,7 +651,7 @@ export default function ProjectsPage() {
                       paddingTop: 4,
                     }}
                   >
-                  {attachedPreviews.map((preview, i) => (
+                  {attachedFiles.length >= 2 && attachedPreviews.map((preview, i) => (
                     <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
                       {preview && preview !== 'heic-pending' ? (
                         // eslint-disable-next-line @next/next/no-img-element
