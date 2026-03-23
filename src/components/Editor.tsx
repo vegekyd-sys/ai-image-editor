@@ -222,7 +222,7 @@ export default function Editor({
 }: EditorProps = {}) {
   const isDesktop = useIsDesktop();
   const { t, locale } = useLocale();
-  const [cuiPanelWidth, setCuiPanelWidth] = useState(340);
+  const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
