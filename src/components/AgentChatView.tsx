@@ -18,7 +18,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
   const modelLabels: Record<string, string> = { qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious' };
   const modelLabel = modelLabels[editModel || ''] || 'nano banana 2';
   return (
-    <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}>
+    <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', maxWidth: 308 }}>
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-2 px-3 py-2 text-left active:opacity-70 transition-opacity"
