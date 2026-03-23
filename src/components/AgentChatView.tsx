@@ -218,6 +218,12 @@ export default function AgentChatView({
   const [isExiting, setIsExiting] = useState(false);
   // Capture skipSlideIn at mount time — ignore prop changes after mount
   const [mountedWithSkip] = useState(skipSlideIn);
+  // Lazy message rendering: only show last N messages initially to reduce forced reflow
+  const INITIAL_MSG_COUNT = 12;
+  const [showAllMessages, setShowAllMessages] = useState(false);
+  const visibleMessages = showAllMessages || messages.length <= INITIAL_MSG_COUNT
+    ? messages
+    : messages.slice(-INITIAL_MSG_COUNT);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -408,15 +414,18 @@ export default function AgentChatView({
     if (!el) return;
     el.scrollTop = el.scrollHeight;
     // Watch for height changes (image loads, lazy content) and re-pin to bottom
+    // Use rAF to batch scroll updates and avoid forced reflow
+    let rafId = 0;
     const ro = new ResizeObserver(() => {
-      el.scrollTop = el.scrollHeight;
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
     });
     // Observe the scroll content (not the container)
     const content = el.firstElementChild;
     if (content) ro.observe(content);
     // Stop pinning after content stabilizes (longer for videos)
     const timer = setTimeout(() => ro.disconnect(), 2000);
-    return () => { ro.disconnect(); clearTimeout(timer); };
+    return () => { ro.disconnect(); clearTimeout(timer); cancelAnimationFrame(rafId); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -649,7 +658,16 @@ export default function AgentChatView({
 
         {/* Message list */}
         <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
-          {messages.map((msg, idx) => (
+          {!showAllMessages && messages.length > INITIAL_MSG_COUNT && (
+            <button
+              onClick={() => setShowAllMessages(true)}
+              className="self-center text-xs py-1.5 px-3 rounded-full mb-1"
+              style={{ color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.06)' }}
+            >
+              ↑ {messages.length - INITIAL_MSG_COUNT} earlier messages
+            </button>
+          )}
+          {visibleMessages.map((msg, idx) => (
             <div key={msg.id}>
               {msg.role === 'user' ? (
                 /* User bubble — right-aligned pill */
@@ -708,7 +726,7 @@ export default function AgentChatView({
                     )}
 
                     {/* Typing dots — show when active, last message, no content yet */}
-                    {!msg.content && isAgentActive && idx === messages.length - 1 && (
+                    {!msg.content && isAgentActive && idx === visibleMessages.length - 1 && (
                       <span className="inline-flex gap-[5px] items-center h-[18px] mt-0.5">
                         <span className="typing-dot w-[6px] h-[6px] rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }} />
                         <span className="typing-dot w-[6px] h-[6px] rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }} />
