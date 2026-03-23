@@ -2245,7 +2245,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     const src = imgSrc || snap?.image || snap?.imageUrl || '';
     setViewIndex(timelineFromSnap(snapIdx, draftParentIndex));
 
-    if (!isDesktop) {
+    if (isDesktop) {
+      // When GUI is smaller than CUI, snap to 50/50 so user can see the image
+      const containerW = document.querySelector('.flex.flex-row')?.clientWidth ?? 0;
+      if (containerW && cuiPanelWidth > containerW / 2) {
+        const midW = Math.round(containerW / 2);
+        setCuiPanelWidth(midW);
+        if (cuiPanelRef.current) cuiPanelRef.current.style.width = `${midW}px`;
+      }
+    } else {
       const cr = lastCanvasRect.current;
       if (imgRect && cr && src) {
         // Compute actual image position within canvas (object-contain)
@@ -2271,7 +2279,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       }
       setViewMode('gui');
     }
-  }, [snapshots, draftParentIndex, isDesktop]);
+  }, [snapshots, draftParentIndex, isDesktop, cuiPanelWidth]);
 
   // Track whether we've pushed a CUI history state that hasn't been consumed yet.
   // We need this because setViewMode('gui') can be called via two paths:
@@ -2781,7 +2789,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         {/* Resizable divider handle */}
         <div
           className="flex-shrink-0 cursor-col-resize relative group"
-          style={{ width: 0 }}
+          style={{ width: 1 }}
           onMouseDown={(e) => {
             e.preventDefault();
             const startX = e.clientX;
@@ -2813,14 +2821,16 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             document.addEventListener('mouseup', onUp);
           }}
         >
-          {/* Invisible hit area overlaying the border */}
-          <div className="absolute inset-y-0 -left-[6px] -right-[6px] z-10 group-hover:bg-white/[0.03] transition-colors" />
-          {/* Subtle drag dots — blend with border */}
-          <div className="absolute inset-y-0 -left-[2px] w-[4px] flex items-center justify-center z-20 pointer-events-none">
-            <div className="flex flex-col gap-1">
-              <div className="w-[3px] h-[3px] rounded-full bg-white/10 group-hover:bg-white/30 transition-colors" />
-              <div className="w-[3px] h-[3px] rounded-full bg-white/10 group-hover:bg-white/30 transition-colors" />
-              <div className="w-[3px] h-[3px] rounded-full bg-white/10 group-hover:bg-white/30 transition-colors" />
+          {/* Hit area + hover thicken effect */}
+          <div className="absolute inset-y-0 -left-[5px] -right-[5px] z-10" />
+          {/* Visible line — thickens on hover */}
+          <div className="absolute inset-y-0 -left-[0.5px] w-[1px] bg-white/[0.08] group-hover:w-[3px] group-hover:-left-[1.5px] group-hover:bg-white/20 transition-all duration-150 z-20 pointer-events-none" />
+          {/* Handle pill — always visible */}
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+            <div className="w-[6px] py-3 rounded-full bg-white/15 group-hover:bg-white/30 group-hover:w-[8px] transition-all duration-150 flex flex-col items-center justify-center gap-[3px]">
+              <div className="w-[2px] h-[2px] rounded-full bg-white/40" />
+              <div className="w-[2px] h-[2px] rounded-full bg-white/40" />
+              <div className="w-[2px] h-[2px] rounded-full bg-white/40" />
             </div>
           </div>
         </div>
