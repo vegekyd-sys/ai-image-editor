@@ -189,7 +189,8 @@ interface EditorProps {
   projectId?: string;
   initialSnapshots?: Snapshot[];
   initialMessages?: Message[];
-  pendingImage?: string;
+  pendingImage?: string;  // legacy single-image (unused, kept for compat)
+  pendingImages?: string[];
   pendingMetadata?: PhotoMetadata;
   pendingPrompt?: string;
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void;
@@ -208,6 +209,7 @@ export default function Editor({
   initialSnapshots,
   initialMessages,
   pendingImage,
+  pendingImages: pendingImagesProp,
   pendingMetadata,
   pendingPrompt,
   onSaveSnapshot,
@@ -220,6 +222,8 @@ export default function Editor({
   onNewProject,
   initialAnimations,
 }: EditorProps = {}) {
+  // Merge legacy single + new multi into one array
+  const pendingImages = pendingImagesProp ?? (pendingImage ? [pendingImage] : undefined);
   const isDesktop = useIsDesktop();
   const { t, locale } = useLocale();
   const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
@@ -1233,7 +1237,38 @@ export default function Editor({
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean }) => {
+    // CUI reference images → append as new snapshots (so agent sees them in Image Index)
+    if (attachedImages?.length && !overrideImage) {
+      const newSnaps: Snapshot[] = [];
+      for (const img of attachedImages) {
+        const snapId = generateId();
+        const snap: Snapshot = { id: snapId, image: img, tips: [], messageId: '', description: 'User-uploaded reference image' };
+        newSnaps.push(snap);
+      }
+      if (newSnaps.length > 0) {
+        const baseOrder = snapshotsRef.current.length;
+        setSnapshots(prev => {
+          const updated = [...prev, ...newSnaps];
+          snapshotsRef.current = updated;
+          return updated;
+        });
+        // Persist + cache, tips text-only after agent finishes, NO analysis (agent already sees the images)
+        newSnaps.forEach((snap, i) => {
+          const sortOrder = baseOrder + i;
+          onSaveSnapshot?.(snap, sortOrder, (url) => {
+            setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+          });
+          cacheImage(`snap:${snap.id}`, snap.image);
+          onUpdateDescription?.(snap.id, snap.description!);
+        });
+        // Queue tips-only (no analysis) after agent finishes
+        for (const snap of newSnaps) {
+          pendingAnalysisRef.current.push({ id: snap.id, image: snap.image });
+        }
+      }
+    }
+
     // Map timeline index → snapshot index; null means we're at the draft slot
     const snapIdx = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
     let currentImage = snapIdx !== null ? snapshotsRef.current[snapIdx]?.image : undefined;
@@ -1260,8 +1295,10 @@ export default function Editor({
     const rawImage = snapForApi ? getImageForApi(snapForApi) : (currentImage || '');
     const imageForApi = overrideImage
       || (rawImage.startsWith('data:') ? await compressBase64(rawImage, 3_000_000) : rawImage);
-    // Show attached/annotated images in the user message bubble
-    addMessage('user', text, undefined, overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
+    // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
+    if (!options?.silent) {
+      addMessage('user', text, undefined, overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
+    }
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
       id: assistantMsgId,
@@ -1483,8 +1520,17 @@ export default function Editor({
               toSave.forEach(m => onSaveMessage?.(m));
               return prev;
             });
-            // Clear any pending analysis refs (post-edit analysis removed)
+            // Drain pending CUI-attached images: tips text only, no preview, no analysis
+            const pendingAnalysisList = [...pendingAnalysisRef.current];
             pendingAnalysisRef.current = [];
+            if (pendingAnalysisList.length > 0) {
+              (async () => {
+                for (const { id, image } of pendingAnalysisList) {
+                  const tipsImg = await compressBase64(image, 600_000);
+                  fetchTipsForSnapshot(id, tipsImg, 'none');
+                }
+              })();
+            }
             {
               // Drain pending teaser or reset to greeting
               const pendingTeaser = pendingTeaserRef.current;
@@ -1912,56 +1958,77 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   const pendingHandled = useRef(false);
   const pendingPromptHandled = useRef(false);
 
-  // Path 1 (image only) or Path 3 (image + prompt): handle pendingImage
+  // Path 1 (images only) or Path 3 (images + prompt): handle pendingImages
   useEffect(() => {
-    if (pendingImage && !pendingHandled.current) {
+    if (pendingImages && pendingImages.length > 0 && !pendingHandled.current) {
       pendingHandled.current = true;
-      const snapId = generateId();
-      const newSnapshot: Snapshot = { id: snapId, image: pendingImage, tips: [], messageId: '', metadata: pendingMetadata };
-      setSnapshots([newSnapshot]);
-      snapshotsRef.current = [newSnapshot];
-      prevTimelineLen.current = 1;
-      setViewIndex(0);
-      onSaveSnapshot?.(newSnapshot, 0, (url) => {
-        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
-      });
-      cacheImage(`snap:${snapId}`, pendingImage);
 
-      // Tips only need to "see" the image — use smaller version
-      const tipsImagePromise = compressBase64(pendingImage, 600_000);
+      // Create all snapshots synchronously
+      const allSnapshots: Snapshot[] = pendingImages.map((img, i) => ({
+        id: generateId(),
+        image: img,
+        tips: [],
+        messageId: '',
+        ...(i === 0 && pendingMetadata ? { metadata: pendingMetadata } : {}),
+      }));
+      setSnapshots(allSnapshots);
+      snapshotsRef.current = allSnapshots;
+      prevTimelineLen.current = allSnapshots.length;
+      setViewIndex(0);
+
+      // Persist all snapshots + cache
+      allSnapshots.forEach((snap, i) => {
+        onSaveSnapshot?.(snap, i, (url) => {
+          setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+        });
+        cacheImage(`snap:${snap.id}`, snap.image);
+      });
 
       if (pendingPrompt) {
-        // Path 3: image + prompt → CUI with prompt as first message
+        // Path 3: images + prompt → CUI with prompt as first message
         pendingPromptHandled.current = true;
-        // Still fetch tips in background
-        tipsImagePromise.then(img => fetchTipsForSnapshot(snapId, img));
-        // Enter CUI and send the prompt (mobile only — desktop CUI panel is always visible)
+        // Fetch tips for first image in background
+        compressBase64(allSnapshots[0].image, 600_000).then(img =>
+          fetchTipsForSnapshot(allSnapshots[0].id, img)
+        );
         setTimeout(() => {
           if (!isDesktop) setViewMode('cui');
           handleAgentRequest(pendingPrompt);
         }, 200);
+      } else if (allSnapshots.length === 1) {
+        // Single image: full flow (tips with previews + CUI analysis)
+        const snap = allSnapshots[0];
+        compressBase64(snap.image, 600_000).then(img => fetchTipsForSnapshot(snap.id, img));
+        runAutoAnalysis(snap.id, snap.image, 'initial');
       } else {
-        // Path 1: image only → original flow
-        tipsImagePromise.then(img => fetchTipsForSnapshot(snapId, img));
-        runAutoAnalysis(snapId, pendingImage);
+        // Multi-image: tips text only (no previews), agent sees all images and responds
+        for (const snap of allSnapshots) {
+          compressBase64(snap.image, 600_000).then(img => fetchTipsForSnapshot(snap.id, img, 'none'));
+        }
+        setTimeout(() => {
+          handleAgentRequest(
+            `[System] User uploaded ${allSnapshots.length} images. Briefly describe what you see in each image and greet the user.`,
+            undefined, undefined, { silent: true }
+          );
+        }, 200);
       }
     }
-  }, [pendingImage, pendingMetadata, pendingPrompt, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
+  }, [pendingImages, pendingMetadata, pendingPrompt, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
 
   // Path 2: text only (no image) → CUI mode, send prompt to Agent
   useEffect(() => {
-    if (pendingPrompt && !pendingImage && !pendingPromptHandled.current) {
+    if (pendingPrompt && !pendingImages?.length && !pendingPromptHandled.current) {
       pendingPromptHandled.current = true;
       if (!isDesktop) setViewMode('cui');
       // Small delay to ensure CUI is mounted
       setTimeout(() => handleAgentRequest(pendingPrompt), 200);
     }
-  }, [pendingPrompt, pendingImage, handleAgentRequest, isDesktop]);
+  }, [pendingPrompt, pendingImages, handleAgentRequest, isDesktop]);
 
   // Existing project with no tips on latest snapshot — auto-fetch
   const autoFetchTriggered = useRef(false);
   useEffect(() => {
-    if (autoFetchTriggered.current || pendingImage) return;
+    if (autoFetchTriggered.current || pendingImages?.length) return;
     const lastSnap = snapshots[snapshots.length - 1];
     if (!lastSnap || lastSnap.tips.length > 0) return;
     autoFetchTriggered.current = true;
@@ -1972,7 +2039,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     } else {
       fetchTipsForSnapshot(lastSnap.id, image);
     }
-  }, [snapshots, pendingImage, fetchTipsForSnapshot]);
+  }, [snapshots, pendingImages, fetchTipsForSnapshot]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
   const animationInitRef = useRef((initialAnimations ?? []).length > 0);

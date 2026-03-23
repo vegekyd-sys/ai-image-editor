@@ -33,11 +33,21 @@ export default function ProjectPage() {
     return sync ? sync.title : 'Untitled'
   })
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
-  const [pendingImage] = useState<string | null>(() => {
+  const [pendingImages] = useState<string[] | null>(() => {
     if (typeof window === 'undefined') return null
-    const pending = sessionStorage.getItem('pendingImage')
-    if (pending) sessionStorage.removeItem('pendingImage')
-    return pending
+    // New multi-image path
+    const multi = sessionStorage.getItem('pendingImages')
+    if (multi) {
+      sessionStorage.removeItem('pendingImages')
+      try { return JSON.parse(multi) as string[] } catch { return null }
+    }
+    // Legacy single-image fallback
+    const single = sessionStorage.getItem('pendingImage')
+    if (single) {
+      sessionStorage.removeItem('pendingImage')
+      return [single]
+    }
+    return null
   })
   const [pendingMetadata] = useState<PhotoMetadata | undefined>(() => {
     if (typeof window === 'undefined') return undefined
@@ -93,7 +103,7 @@ export default function ProjectPage() {
   // Effect 1: Load from project cache immediately (no auth dependency)
   // This runs before Supabase fetch and shows Editor instantly on return visits
   useEffect(() => {
-    if (pendingImage) return  // New project flow: skip cache, use pendingImage directly
+    if (pendingImages) return  // New project flow: skip cache, use pendingImages directly
     let cancelled = false
     getCachedProjectData(projectId).then(async (cached) => {
       if (!cached || cancelled || shownRef.current) return
@@ -204,7 +214,7 @@ export default function ProjectPage() {
         .select('id')
         .single()
       if (error || !project) throw new Error('Failed to create project')
-      sessionStorage.setItem('pendingImage', base64)
+      sessionStorage.setItem('pendingImages', JSON.stringify([base64]))
       router.push(`/projects/${project.id}`)
     } catch (err) {
       console.error('New project error:', err)
@@ -228,7 +238,7 @@ export default function ProjectPage() {
       projectId={projectId}
       initialSnapshots={initialSnapshots ?? []}
       initialMessages={initialMessages ?? []}
-      pendingImage={pendingImage ?? undefined}
+      pendingImages={pendingImages ?? undefined}
       pendingMetadata={pendingMetadata}
       pendingPrompt={pendingPrompt ?? undefined}
       onSaveSnapshot={handleSaveSnapshot}

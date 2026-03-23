@@ -83,8 +83,55 @@ export default function ProjectsPage() {
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
   const [inputText, setInputText] = useState('')
-  const [attachedFile, setAttachedFile] = useState<File | null>(null)
-  const [attachedPreview, setAttachedPreview] = useState<string | null>(null)
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
+  const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
+  const MAX_FILES = 10
+
+  // Shared helper: process new files and append to attached arrays
+  const addFiles = useCallback(async (newFiles: File[]) => {
+    if (creating || newFiles.length === 0) return
+    for (const file of newFiles) {
+      // Check limit using latest state
+      let atLimit = false
+      setAttachedFiles(prev => {
+        if (prev.length >= MAX_FILES) { atLimit = true; return prev }
+        return prev
+      })
+      if (atLimit) break
+
+      if (isHeicFile(file)) {
+        // Append file + null preview immediately (shows spinner)
+        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
+        setAttachedPreviews(prev => [...prev, null].slice(0, MAX_FILES))
+        try {
+          const decodable = await ensureDecodableFile(file)
+          const previewUrl = URL.createObjectURL(decodable)
+          // Replace the last-added HEIC entry with the decoded version
+          setAttachedFiles(prev => {
+            const idx = prev.indexOf(file)
+            if (idx === -1) return prev
+            return prev.map((f, i) => i === idx ? decodable : f)
+          })
+          setAttachedPreviews(prev => {
+            // Find the matching null slot from the end
+            const idx = prev.lastIndexOf(null)
+            if (idx === -1) return prev
+            return prev.map((p, i) => i === idx ? previewUrl : p)
+          })
+        } catch {
+          setAttachedPreviews(prev => {
+            const idx = prev.lastIndexOf(null)
+            if (idx === -1) return prev
+            return prev.map((p, i) => i === idx ? 'heic-pending' : p)
+          })
+        }
+      } else {
+        const previewUrl = URL.createObjectURL(file)
+        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
+        setAttachedPreviews(prev => [...prev, previewUrl].slice(0, MAX_FILES))
+      }
+    }
+  }, [creating])
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
@@ -277,27 +324,24 @@ export default function ProjectsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
-  const handleCreateProject = useCallback(async (file: File) => {
-    if (!user || creating) return
+  const handleCreateProject = useCallback(async (files: File[]) => {
+    if (!user || creating || files.length === 0) return
     setCreating(true)
 
     try {
-      // Extract EXIF metadata before compression (needs original File)
+      // Extract EXIF metadata from first file only
       let metadata: { takenAt?: string; location?: string } | undefined
       try {
         const exifr = (await import('exifr')).default
-        // reviveValues:false keeps datetime as raw string "YYYY:MM:DD HH:MM:SS" — avoids timezone conversion
-        const exif = await exifr.parse(file, { gps: true, reviveValues: false })
+        const exif = await exifr.parse(files[0], { gps: true, reviveValues: false })
         console.log('[EXIF]', JSON.stringify({ lat: exif?.latitude, lng: exif?.longitude, date: exif?.DateTimeOriginal }))
         if (exif) {
           const lat = exif.latitude; const lng = exif.longitude
           const datetimeRaw: string | undefined = exif.DateTimeOriginal || exif.CreateDate
           let takenAt: string | undefined
           if (datetimeRaw && typeof datetimeRaw === 'string') {
-            // Parse "YYYY:MM:DD HH:MM:SS" directly — no timezone conversion
             const m = datetimeRaw.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/)
             if (m) {
-              // Estimate UTC offset from longitude (each 15° = 1 hour)
               const utcOffset = lat !== undefined && lng !== undefined
                 ? Math.round(lng / 15)
                 : undefined
@@ -310,7 +354,6 @@ export default function ProjectsPage() {
           let location: string | undefined
           if (lat && lng) {
             try {
-              // zoom=14 gives neighborhood/district level — more reliable than building-level (zoom=18) which may return wrong POIs
               const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=zh-CN`, { headers: { 'User-Agent': 'Makaron-App/1.0' } })
               if (geoRes.ok) {
                 const geo = await geoRes.json()
@@ -328,20 +371,21 @@ export default function ProjectsPage() {
         }
       } catch { /* EXIF reading is non-critical */ }
 
-      let base64: string
-      try {
-        const decodable = await ensureDecodableFile(file)
-        base64 = await compressClientSide(decodable)
-      } catch {
-        // Client-side HEIC conversion failed — fallback to server-side (macOS sips)
-        console.warn('[HEIC] client conversion failed, trying server fallback')
-        const formData = new FormData()
-        formData.append('file', file)
-        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
-        if (!uploadRes.ok) throw new Error('Server HEIC conversion failed')
-        const { image } = await uploadRes.json()
-        base64 = image
-      }
+      // Parallel compress all files
+      const base64Array = await Promise.all(files.map(async (file) => {
+        try {
+          const decodable = await ensureDecodableFile(file)
+          return await compressClientSide(decodable)
+        } catch {
+          console.warn('[HEIC] client conversion failed, trying server fallback')
+          const formData = new FormData()
+          formData.append('file', file)
+          const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+          if (!uploadRes.ok) throw new Error('Server HEIC conversion failed')
+          const { image } = await uploadRes.json()
+          return image as string
+        }
+      }))
 
       const supabase = createClient()
       const { data: project, error: pErr } = await supabase
@@ -351,7 +395,7 @@ export default function ProjectsPage() {
         .single()
 
       if (pErr || !project) throw new Error('Failed to create project')
-      sessionStorage.setItem('pendingImage', base64)
+      sessionStorage.setItem('pendingImages', JSON.stringify(base64Array))
       if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
       router.push(`/projects/${project.id}`)
     } catch (err) {
@@ -363,31 +407,33 @@ export default function ProjectsPage() {
   // Unified create: text only, image only, or both
   const handleCreate = useCallback(async () => {
     const hasText = inputText.trim()
-    const hasFile = attachedFile
-    if (!hasText && !hasFile) return
+    const hasFiles = attachedFiles.length > 0
+    if (!hasText && !hasFiles) return
     if (!user || creating) return
 
     // Image-only (no text) → original flow
-    if (hasFile && !hasText) {
-      handleCreateProject(hasFile)
+    if (hasFiles && !hasText) {
+      handleCreateProject(attachedFiles)
       return
     }
 
     setCreating(true)
     try {
-      let base64: string | undefined
-      if (hasFile) {
-        try {
-          const decodable = await ensureDecodableFile(hasFile)
-          base64 = await compressClientSide(decodable)
-        } catch {
-          console.warn('[HEIC] client conversion failed, trying server fallback')
-          const formData = new FormData()
-          formData.append('file', hasFile)
-          const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
-          if (!uploadRes.ok) throw new Error('Server HEIC conversion failed')
-          const { image } = await uploadRes.json()
-          base64 = image
+      const base64Array: string[] = []
+      if (hasFiles) {
+        for (const file of attachedFiles) {
+          try {
+            const decodable = await ensureDecodableFile(file)
+            base64Array.push(await compressClientSide(decodable))
+          } catch {
+            console.warn('[HEIC] client conversion failed, trying server fallback')
+            const formData = new FormData()
+            formData.append('file', file)
+            const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+            if (!uploadRes.ok) throw new Error('Server HEIC conversion failed')
+            const { image } = await uploadRes.json()
+            base64Array.push(image)
+          }
         }
       }
 
@@ -399,41 +445,28 @@ export default function ProjectsPage() {
         .single()
       if (pErr || !project) throw new Error('Failed to create project')
 
-      if (base64) sessionStorage.setItem('pendingImage', base64)
+      if (base64Array.length > 0) sessionStorage.setItem('pendingImages', JSON.stringify(base64Array))
       sessionStorage.setItem('pendingPrompt', hasText)
       setInputText('')
-      setAttachedFile(null)
-      setAttachedPreview(null)
+      setAttachedFiles([])
+      setAttachedPreviews([])
       router.push(`/projects/${project.id}`)
     } catch (err) {
       console.error('Create project error:', err)
       setCreating(false)
     }
-  }, [user, creating, router, inputText, attachedFile, handleCreateProject])
+  }, [user, creating, router, inputText, attachedFiles, handleCreateProject])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     dragCounterRef.current = 0
     setDragOver(false)
     if (creating) return
-    const file = e.dataTransfer.files?.[0]
-    if (!file || !file.type.startsWith('image/')) return
-    if (isHeicFile(file)) {
-      setAttachedFile(file)
-      setAttachedPreview(null)
-      try {
-        const decodable = await ensureDecodableFile(file)
-        setAttachedFile(decodable)
-        setAttachedPreview(URL.createObjectURL(decodable))
-      } catch (err) {
-        console.warn('[HEIC preview] conversion failed:', err)
-        setAttachedPreview('heic-pending')
-      }
-    } else {
-      setAttachedFile(file)
-      setAttachedPreview(URL.createObjectURL(file))
-    }
-  }, [creating])
+    const droppedFiles = Array.from(e.dataTransfer.files ?? []).filter(
+      f => f.type.startsWith('image/') || isHeicFile(f)
+    )
+    addFiles(droppedFiles)
+  }, [creating, addFiles])
 
   if (authLoading || !user) {
     return (
@@ -512,6 +545,8 @@ export default function ProjectsPage() {
           transition: background 0.15s, opacity 0.15s;
         }
         .mkr-more-btn:hover { opacity: 1 !important; }
+        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
       <div className={`mkr-page${navigating ? ' page-slide-out' : ''}`} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden' }}>
@@ -528,29 +563,12 @@ export default function ProjectsPage() {
           ref={fileInputRef}
           type="file"
           accept="image/*,.heic,.heif"
+          multiple
           style={{ display: 'none' }}
           onChange={async (e) => {
-            const file = e.target.files?.[0]
-            if (!file) return
+            const files = Array.from(e.target.files ?? [])
             e.target.value = ''
-            if (isHeicFile(file)) {
-              // HEIC not renderable by browser — convert first, then preview
-              setAttachedFile(file)
-              setAttachedPreview(null) // show spinner while converting
-              try {
-                const decodable = await ensureDecodableFile(file)
-                setAttachedFile(decodable)
-                setAttachedPreview(URL.createObjectURL(decodable))
-              } catch (err) {
-                console.warn('[HEIC preview] conversion failed, will retry on create:', err)
-                // Keep file attached — conversion will be retried in handleCreateProject
-                // Show a placeholder preview via canvas fallback (won't work for HEIC, but signals file is attached)
-                setAttachedPreview('heic-pending')
-              }
-            } else {
-              setAttachedFile(file)
-              setAttachedPreview(URL.createObjectURL(file))
-            }
+            addFiles(files)
           }}
         />
 
@@ -635,66 +653,97 @@ export default function ProjectsPage() {
               }}
             >
               {/* Left: photo slot — square, width = container height */}
-              <label
-                htmlFor="new-project-file-input"
+              <div
+                onClick={(e) => {
+                  if (creating) return
+                  fileInputRef.current?.click()
+                }}
                 style={{
                   width: photoSlotWidth, flexShrink: 0, alignSelf: 'stretch',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: creating ? 'default' : 'pointer',
                   borderRight: '1px solid rgba(255,255,255,0.08)',
                   position: 'relative',
-                  background: attachedPreview ? 'transparent' : attachedFile ? 'rgba(217,70,239,0.08)' : 'rgba(217,70,239,0.04)',
+                  background: attachedFiles.length > 0 ? 'transparent' : 'rgba(217,70,239,0.04)',
                 }}
               >
-                {attachedPreview && attachedPreview !== 'heic-pending' ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={attachedPreview} alt="attached"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
-                      onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}
-                    />
-                    <div style={{
-                      position: 'absolute', top: 4, right: 4,
-                      width: 18, height: 18, borderRadius: '50%',
-                      background: 'rgba(0,0,0,0.6)', color: '#fff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '0.6rem', cursor: 'pointer', zIndex: 1,
-                    }} onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}>✕</div>
-                  </>
-                ) : attachedFile && !attachedPreview ? (
-                  /* HEIC converting — show spinner */
-                  <Spinner size={16} />
-                ) : attachedFile ? (
-                  /* HEIC conversion failed — show file icon with close button */
-                  <>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14,2 14,8 20,8" />
-                    </svg>
-                    <div style={{
-                      position: 'absolute', top: 4, right: 4,
-                      width: 18, height: 18, borderRadius: '50%',
-                      background: 'rgba(0,0,0,0.6)', color: '#fff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '0.6rem', cursor: 'pointer', zIndex: 1,
-                    }} onClick={(e) => { e.preventDefault(); setAttachedFile(null); setAttachedPreview(null); }}>✕</div>
-                  </>
-                ) : (
+                {attachedFiles.length === 0 ? (
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                     <circle cx="12" cy="13" r="4" />
                   </svg>
+                ) : attachedFiles.length === 1 ? (
+                  <>
+                    {attachedPreviews[0] && attachedPreviews[0] !== 'heic-pending' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={attachedPreviews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : attachedPreviews[0] === null ? (
+                      <Spinner size={16} />
+                    ) : (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.7)" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14,2 14,8 20,8" /></svg>
+                    )}
+                    <div style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 2 }}
+                      onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]);  }}>✕</div>
+                  </>
+                ) : (
+                  /* Stacked cards effect for 2+ images */
+                  <>
+                    {/* Card stack container — inset 6px from edges */}
+                    <div style={{ position: 'absolute', inset: 6, pointerEvents: 'none' }}>
+                      {(() => {
+                        // Show up to 3 layers: back, middle (if 3+), front
+                        const cardStyle = (preview: string | null, rotate: number, zIndex: number): React.CSSProperties => ({
+                          position: 'absolute', inset: 0,
+                          borderRadius: 6, overflow: 'hidden',
+                          transform: `rotate(${rotate}deg)`,
+                          border: '1.5px solid rgba(255,255,255,0.12)',
+                          background: '#1a1a1a',
+                          zIndex,
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                        })
+                        const n = attachedFiles.length
+                        const layers: { preview: string | null; rotate: number; z: number }[] = []
+                        if (n >= 3) layers.push({ preview: attachedPreviews[0], rotate: -6, z: 1 })
+                        if (n >= 2) layers.push({ preview: attachedPreviews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2 })
+                        layers.push({ preview: attachedPreviews[n - 1], rotate: 0, z: 3 })
+                        return layers.map((layer, i) => (
+                          <div key={i} style={cardStyle(layer.preview, layer.rotate, layer.z)}>
+                            {layer.preview && layer.preview !== 'heic-pending' ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : layer.preview === null ? (
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Spinner size={12} />
+                              </div>
+                            ) : null}
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                    {/* Count badge */}
+                    <div style={{
+                      position: 'absolute', bottom: 4, right: 4, zIndex: 4,
+                      background: 'rgba(217,70,239,0.85)', color: '#fff',
+                      borderRadius: 8, padding: '1px 6px',
+                      fontSize: '0.6rem', fontWeight: 700,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                    }}>
+                      {attachedFiles.length}
+                    </div>
+                    {/* Clear button */}
+                    <div style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 5 }}
+                      onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]);  }}>✕</div>
+                  </>
                 )}
-              </label>
+              </div>
 
-              {/* Right: textarea + create */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+              {/* Right: textarea + bottom toolbar */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFile)) {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFiles.length > 0)) {
                       e.preventDefault();
                       handleCreate();
                     }
@@ -705,47 +754,113 @@ export default function ProjectsPage() {
                   style={{
                     flex: 1, border: 'none', background: 'transparent',
                     color: '#fff', fontSize: '0.95rem', lineHeight: 1.45,
-                    padding: '12px 14px', paddingBottom: 40,
+                    padding: '12px 14px 4px',
                     outline: 'none', resize: 'none',
                     fontFamily: 'var(--font-geist-sans), sans-serif',
-                    minHeight: 80,
+                    minHeight: 60,
                   }}
                 />
-                {/* Create button — always visible, inside the box */}
-                <button
-                  className="mkr-create-btn"
-                  onClick={() => {
-                    if (inputText.trim() || attachedFile) handleCreate()
-                    else fileInputRef.current?.click()
-                  }}
-                  disabled={creating}
-                  style={{
-                    position: 'absolute', bottom: 8, right: 8,
-                    display: 'flex', alignItems: 'center', gap: '5px',
-                    padding: '5px 10px',
-                    borderRadius: '14px',
-                    background: 'none',
-                    border: 'none',
-                    color: 'rgba(217,70,239,0.9)',
-                    fontSize: '0.75rem',
-                    fontWeight: 500,
-                    letterSpacing: '0.03em',
-                    cursor: creating ? 'default' : 'pointer',
-                    fontFamily: 'var(--font-geist-sans), sans-serif',
-                  }}
-                >
-                  {creating ? <Spinner size={12} /> : (
-                    <>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Create
-                    </>
-                  )}
-                </button>
+                {/* Bottom toolbar: [thumbnails (scrollable)] [Create (pinned)] */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  padding: '4px 8px 8px',
+                }}>
+                  {/* Scrollable thumbnails area */}
+                  <div
+                    className="hide-scrollbar"
+                    onWheel={(e) => {
+                      if (e.deltaY !== 0) {
+                        e.currentTarget.scrollLeft += e.deltaY
+                        e.preventDefault()
+                      }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 4,
+                      flex: 1, minWidth: 0,
+                      overflowX: 'auto',
+                      paddingTop: 4,
+                    }}
+                  >
+                  {attachedPreviews.map((preview, i) => (
+                    <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+                      {preview && preview !== 'heic-pending' ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={preview} alt="" style={{
+                          width: 36, height: 36, borderRadius: 8,
+                          objectFit: 'cover', display: 'block',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                        }} />
+                      ) : (
+                        <div style={{
+                          width: 36, height: 36, borderRadius: 8,
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <Spinner size={10} />
+                        </div>
+                      )}
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setAttachedFiles(prev => prev.filter((_, j) => j !== i))
+                          setAttachedPreviews(prev => prev.filter((_, j) => j !== i))
+                        }}
+                        style={{
+                          position: 'absolute', top: -4, right: -4,
+                          width: 14, height: 14, borderRadius: '50%',
+                          background: 'rgba(20,20,20,0.9)',
+                          border: '1px solid rgba(255,255,255,0.18)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
+                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </div>
+                    </div>
+                  ))}
+
+                  </div>
+
+                  {/* Create button */}
+                  <button
+                    className="mkr-create-btn"
+                    onClick={() => {
+                      if (inputText.trim() || attachedFiles.length > 0) handleCreate()
+                      else fileInputRef.current?.click()
+                    }}
+                    disabled={creating}
+                    style={{
+                      flexShrink: 0,
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                      padding: '5px 10px',
+                      borderRadius: '14px',
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(217,70,239,0.9)',
+                      fontSize: '0.75rem',
+                      fontWeight: 500,
+                      letterSpacing: '0.03em',
+                      cursor: creating ? 'default' : 'pointer',
+                      fontFamily: 'var(--font-geist-sans), sans-serif',
+                    }}
+                  >
+                    {creating ? <Spinner size={12} /> : (
+                      <>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Create
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
+
           </div>
         </div>
 

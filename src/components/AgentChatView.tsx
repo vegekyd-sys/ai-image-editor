@@ -559,11 +559,11 @@ export default function AgentChatView({
         setIsDragOver(false);
         const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
         if (!files.length) return;
-        const remaining = 3 - attachedImages.length;
+        const remaining = 10 - attachedImages.length;
         const toProcess = files.slice(0, remaining);
         setProcessingImageCount(toProcess.length);
         const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
-        setAttachedImages(prev => [...prev, ...compressed].slice(0, 3));
+        setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
         setProcessingImageCount(0);
       }}
     >
@@ -855,11 +855,11 @@ export default function AgentChatView({
         onChange={async (e) => {
           const files = Array.from(e.target.files ?? []);
           e.target.value = '';
-          const remaining = 3 - attachedImages.length;
+          const remaining = 10 - attachedImages.length;
           const toProcess = files.slice(0, remaining);
           setProcessingImageCount(toProcess.length);
           const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
-          setAttachedImages(prev => [...prev, ...compressed].slice(0, 3));
+          setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
           setProcessingImageCount(0);
         }}
       />
@@ -910,7 +910,7 @@ export default function AgentChatView({
             {/* Image attach button */}
             <button
               onClick={() => imageInputRef.current?.click()}
-              disabled={isAgentActive || attachedImages.length >= 3}
+              disabled={isAgentActive || attachedImages.length >= 10}
               className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
               style={{
                 background: attachedImages.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
