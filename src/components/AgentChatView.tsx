@@ -106,9 +106,9 @@ function MarkdownBlock({ text, isPanel, snapshots }: { text: string; isPanel: bo
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        h1: ({ children }) => <h1 className={`${isPanel ? 'text-[16px]' : 'text-[24px]'} font-bold mt-3 mb-1`}>{children}</h1>,
-        h2: ({ children }) => <h2 className={`${isPanel ? 'text-[15px]' : 'text-[22px]'} font-semibold mt-3 mb-1`}>{children}</h2>,
-        h3: ({ children }) => <h3 className={`${isPanel ? 'text-[14px]' : 'text-[21px]'} font-semibold mt-2 mb-0.5`}>{children}</h3>,
+        h1: ({ children }) => <h1 className={`${isPanel ? 'text-[20px]' : 'text-[24px]'} font-bold mt-3 mb-1`}>{children}</h1>,
+        h2: ({ children }) => <h2 className={`${isPanel ? 'text-[18px]' : 'text-[22px]'} font-semibold mt-3 mb-1`}>{children}</h2>,
+        h3: ({ children }) => <h3 className={`${isPanel ? 'text-[17px]' : 'text-[21px]'} font-semibold mt-2 mb-0.5`}>{children}</h3>,
         p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
         strong: ({ children }) => <strong className="font-semibold text-white/95">{children}</strong>,
         em: ({ children }) => <em className="italic">{children}</em>,
@@ -124,9 +124,9 @@ function MarkdownBlock({ text, isPanel, snapshots }: { text: string; isPanel: bo
             }
           }
           return inline ? (
-            <code className={`font-mono ${isPanel ? 'text-[12px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
+            <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
           ) : (
-            <code className={`block font-mono ${isPanel ? 'text-[12px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
+            <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
           );
         },
         pre: ({ children }) => <pre className="my-0">{children}</pre>,
@@ -149,7 +149,7 @@ function MarkdownBlock({ text, isPanel, snapshots }: { text: string; isPanel: bo
         ),
         table: ({ children }) => (
           <div className="overflow-x-auto my-2">
-            <table className={`${isPanel ? 'text-[13px]' : 'text-[20px]'} border-collapse w-full`}>{children}</table>
+            <table className={`${isPanel ? 'text-[16px]' : 'text-[20px]'} border-collapse w-full`}>{children}</table>
           </div>
         ),
         th: ({ children }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
@@ -650,7 +650,7 @@ export default function AgentChatView({
                 <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
               </svg>
             </div>
-            <p className={`text-white/25 text-center leading-relaxed max-w-[220px] ${isPanel ? 'text-[14px]' : 'text-[19px]'}`}>
+            <p className={`text-white/25 text-center leading-relaxed max-w-[220px] ${isPanel ? 'text-[17px]' : 'text-[19px]'}`}>
               Tell me what you&apos;d like to do with your photo
             </p>
           </div>
@@ -673,7 +673,7 @@ export default function AgentChatView({
                 /* User bubble — right-aligned pill */
                 <div className="flex justify-end">
                   <div
-                    className={`text-white/90 leading-relaxed max-w-[82%] ${isPanel ? 'text-[14px]' : 'text-[21px]'}`}
+                    className={`text-white/90 leading-relaxed max-w-[82%] ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
                     style={{
                       background: '#222222',
                       borderRadius: isPanel ? '14px 14px 4px 14px' : '18px 18px 5px 18px',
@@ -697,7 +697,7 @@ export default function AgentChatView({
               ) : (
                 /* Assistant — no bubble, full-width text */
                 <div className="flex flex-col gap-2.5">
-                  <div className={`${isPanel ? 'text-[14px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
+                  <div className={`${isPanel ? 'text-[17px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
                     {msg.content && (
                       <div className="markdown-body">
                         <MarkdownBlock
@@ -714,14 +714,14 @@ export default function AgentChatView({
                           const posterUrl = lastSnap?.imageUrl || lastSnap?.image;
                           const poster = posterUrl ? getThumbnailUrl(posterUrl, 680, 60) : undefined;
                           return (
-                            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', aspectRatio: '4/3', maxHeight: isPanel ? 200 : 360, background: '#000' }}>
+                            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', maxWidth: 308, background: '#000' }}>
                               <video
                                 src={`${mp4Match[0]}#t=0.1`}
                                 controls
                                 playsInline
                                 preload="none"
                                 poster={poster}
-                                style={{ width: '100%', height: '100%', display: 'block', objectFit: 'contain' }}
+                                style={{ width: '100%', aspectRatio: '4/3', objectFit: 'contain', display: 'block' }}
                               />
                             </div>
                           );
@@ -750,8 +750,8 @@ export default function AgentChatView({
                           <img
                             src={msg.image.startsWith('http') ? getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75, 2000, 'contain') : msg.image}
                             alt="Generated"
-                            className="rounded-2xl w-full"
-                            style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+                            className="rounded-2xl"
+                            style={{ border: '1px solid rgba(255,255,255,0.08)', maxWidth: 308 }}
                           />
                           {snapIdx !== null && (
                             <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur text-white text-xs font-medium px-1.5 py-0.5 rounded-md">
@@ -841,7 +841,7 @@ export default function AgentChatView({
               }
             }}
             placeholder={t('chat.placeholder')}
-            className={`w-full bg-transparent outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-y-auto block ${isPanel ? 'text-[14px]' : 'text-[21px]'}`}
+            className={`w-full bg-transparent outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-y-auto block ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem', padding: isPanel ? '10px 14px 4px' : '12px 16px 6px' }}
           />
 

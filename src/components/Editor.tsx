@@ -222,6 +222,7 @@ export default function Editor({
 }: EditorProps = {}) {
   const isDesktop = useIsDesktop();
   const { t, locale } = useLocale();
+  const [cuiPanelWidth, setCuiPanelWidth] = useState(340);
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -2775,8 +2776,53 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       )}
 
       {/* CUI mode — desktop: side panel (always visible), mobile: fullscreen overlay */}
-      {isDesktop ? (
-        <div className="w-[340px] flex-shrink-0 border-l border-white/[0.08]">
+      {isDesktop ? (<>
+        {/* Resizable divider handle */}
+        <div
+          className="flex-shrink-0 cursor-col-resize relative group"
+          style={{ width: 4, background: 'rgba(255,255,255,0.12)' }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startW = cuiPanelWidth;
+            const containerW = (e.currentTarget.parentElement?.clientWidth ?? 1200);
+            const minW = 340;
+            const maxW = containerW - 340;
+            const midW = Math.round(containerW / 2);
+            const snaps = [minW, midW, maxW];
+            const onMove = (ev: MouseEvent) => {
+              const delta = startX - ev.clientX;
+              const raw = Math.max(minW, Math.min(maxW, startW + delta));
+              // Snap to nearest when within 30px
+              const nearest = snaps.reduce((a, b) => Math.abs(b - raw) < Math.abs(a - raw) ? b : a);
+              setCuiPanelWidth(Math.abs(nearest - raw) < 30 ? nearest : raw);
+            };
+            const onUp = () => {
+              document.removeEventListener('mousemove', onMove);
+              document.removeEventListener('mouseup', onUp);
+              document.body.style.cursor = '';
+              document.body.style.userSelect = '';
+            };
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+          }}
+        >
+          {/* Wider invisible hit area for easier hover/drag */}
+          <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-fuchsia-500/10 group-active:bg-fuchsia-500/20 transition-colors" />
+          {/* Visual handle dot cluster — always visible */}
+          <div className="absolute inset-y-0 w-1 flex items-center justify-center">
+            <div className="flex flex-col gap-1.5 group-hover:gap-2 transition-all">
+              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
+              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
+              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
+              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
+              <div className="w-1 h-1 rounded-full bg-white/25 group-hover:bg-white/50 transition-colors" />
+            </div>
+          </div>
+        </div>
+        <div className="flex-shrink-0 border-l border-white/[0.08]" style={{ width: cuiPanelWidth }}>
           <AgentChatView
             mode="panel"
             messages={messages}
@@ -2795,7 +2841,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             onModelChange={setPreferredModel}
           />
         </div>
-      ) : viewMode === 'cui' ? (
+      </>) : viewMode === 'cui' ? (
         <AgentChatView
           messages={messages}
           isAgentActive={isAgentActive}
