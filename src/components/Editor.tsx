@@ -430,8 +430,9 @@ export default function Editor({
   const prevTimelineLen = useRef(0);
   if (timeline.length !== prevTimelineLen.current) {
     if (timeline.length > prevTimelineLen.current && !isDraft) {
-      // A new snapshot was committed → jump to the new last snapshot
-      setViewIndex(timeline.length - 1);
+      // A new snapshot was committed → jump to the new last snapshot (not video entry)
+      const lastSnapshotIdx = hasAnyAnimation ? timeline.length - 2 : timeline.length - 1;
+      setViewIndex(Math.max(0, lastSnapshotIdx));
     } else if (viewIndex >= timeline.length) {
       setViewIndex(Math.max(0, timeline.length - 1));
     }
@@ -2101,12 +2102,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [animationState?.status, animationState?.taskId, animationState?.prompt, animationState?.imageUrls, projectId]);
 
   // Navigate to video entry after submitting animation (deferred to next render when timeline is updated)
+  // Only fires ONCE per flag set — resets immediately to prevent re-triggering on subsequent timeline changes
   useEffect(() => {
     if (pendingNavigateToVideoRef.current && videoTimelineIndex >= 0) {
       pendingNavigateToVideoRef.current = false;
-      setViewIndex(videoTimelineIndex);
+      // Use requestAnimationFrame to ensure state has settled before navigating
+      requestAnimationFrame(() => setViewIndex(videoTimelineIndex));
     }
-  }, [videoTimelineIndex]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animations.length]); // Only react to animations array changes, not every timeline resize
 
   // Watch for animations completing — send CUI notification + StatusBar update
   const prevCompletedIdsRef = useRef<Set<string>>(
@@ -2120,9 +2124,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       const anim = animations.find(a => a.id === id);
       if (anim?.videoUrl) {
         setAgentStatus(t('status.videoDone'));
-        // Show "See" button to navigate to video — target is last snapshot (video appears after it)
-        const lastSnapIdx = snapshotsRef.current.length - 1;
-        setPendingNotification({ text: t('status.videoDone'), targetIndex: lastSnapIdx });
+        // Show "See" button to navigate to video entry (last item in timeline)
+        setPendingNotification({ text: t('status.videoDone'), targetIndex: videoTimelineIndex });
         const alreadyHasVideo = messages.some(m => m.content?.includes(anim.videoUrl!));
         if (!alreadyHasVideo) {
           const videoMsg: Message = {
