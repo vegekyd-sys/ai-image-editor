@@ -227,6 +227,7 @@ export default function AgentChatView({
   const visibleMessages = showAllMessages || messages.length <= INITIAL_MSG_COUNT
     ? messages
     : messages.slice(-INITIAL_MSG_COUNT);
+  const loadMoreSentinel = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -431,6 +432,26 @@ export default function AgentChatView({
     return () => { ro.disconnect(); clearTimeout(timer); cancelAnimationFrame(rafId); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-load earlier messages when scrolling near top — preserve scroll position
+  useEffect(() => {
+    const sentinel = loadMoreSentinel.current;
+    const scrollEl = messagesRef.current;
+    if (!sentinel || !scrollEl || showAllMessages) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        const prevH = scrollEl.scrollHeight;
+        setShowAllMessages(true);
+        // After React renders new messages, restore scroll position
+        requestAnimationFrame(() => {
+          const newH = scrollEl.scrollHeight;
+          scrollEl.scrollTop += newH - prevH;
+        });
+      }
+    }, { root: scrollEl, threshold: 0 });
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [showAllMessages]);
 
   // Auto-scroll ONLY when AI is actively streaming content (not on mount or status changes)
   const prevMsgCountRef = useRef(messages.length);
@@ -661,14 +682,9 @@ export default function AgentChatView({
 
         {/* Message list */}
         <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
+          {/* Invisible sentinel — triggers auto-load when scrolled into view */}
           {!showAllMessages && messages.length > INITIAL_MSG_COUNT && (
-            <button
-              onClick={() => setShowAllMessages(true)}
-              className="self-center text-xs py-1.5 px-3 rounded-full mb-1"
-              style={{ color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.06)' }}
-            >
-              ↑ {messages.length - INITIAL_MSG_COUNT} earlier messages
-            </button>
+            <div ref={loadMoreSentinel} className="h-1" />
           )}
           {visibleMessages.map((msg, idx) => (
             <div key={msg.id}>
