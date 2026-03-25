@@ -30,6 +30,7 @@ const OPENROUTER_MODEL = `google/${MODEL}`;
 const TIPS_PROVIDER = (process.env.TIPS_PROVIDER || 'openrouter') as 'bedrock' | 'openrouter' | 'google';
 // Temperature for tips generation — higher = more creative
 const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
+type TipsProvider = 'bedrock' | 'openrouter' | 'google';
 
 // Bedrock instance for tips (lazy init)
 let _bedrockForTips: ReturnType<typeof createAmazonBedrock> | null = null;
@@ -907,20 +908,43 @@ export async function* streamTipsByCategory(
     return;
   }
 
-  const source = TIPS_PROVIDER === 'bedrock'
-    ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale)
-    : TIPS_PROVIDER === 'openrouter'
-      ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale)
-      : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale);
-
   // Cap output: AI sometimes returns more tips than requested.
-  // Track all unique labels (partial + complete) to enforce the limit.
+  // Track all unique labels (partial + complete) to enforce the limit, even if we
+  // need to fall back to a secondary provider mid-stream.
   const labels = new Set<string>();
-  for await (const tip of source) {
-    if (tip.label && !labels.has(tip.label) && labels.size >= count) continue;
-    if (tip.label) labels.add(tip.label);
-    yield tip;
+
+  const providers: TipsProvider[] = [TIPS_PROVIDER];
+  if (TIPS_PROVIDER === 'openrouter' && process.env.GOOGLE_API_KEY?.trim()) {
+    providers.push('google');
   }
+
+  let lastError: unknown;
+  for (const [index, provider] of providers.entries()) {
+    try {
+      const source = provider === 'bedrock'
+        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale)
+        : provider === 'openrouter'
+          ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale)
+          : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale);
+
+      for await (const tip of source) {
+        if (tip.label && !labels.has(tip.label) && labels.size >= count) continue;
+        if (tip.label) labels.add(tip.label);
+        yield tip;
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      const nextProvider = providers[index + 1];
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[tips] provider ${provider} failed for ${category}`, error);
+      tlog(`[tips:${provider}:${category}] provider failed: ${message}`);
+      if (!nextProvider) break;
+      console.warn(`[tips] falling back from ${provider} to ${nextProvider} for ${category}`);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Tips provider failed');
 }
 
 // --- Google Provider ---

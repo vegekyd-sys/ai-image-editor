@@ -11,12 +11,14 @@ import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
 import { cacheImage } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
-import { newAnnotationId } from '@/components/AnnotationCanvas';
+import { newAnnotationId } from '@/features/annotation/annotationIds';
 import AnimateSheet from '@/components/AnimateSheet';
 import VideoResultCard from '@/components/VideoResultCard';
 import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
-import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils';
+import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
+import { containRect, coverRect } from '@/lib/image/geometry';
+import { extractPhotoMetadata } from '@/lib/image/metadata';
 import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
@@ -52,138 +54,12 @@ function timelineFromSnap(snapIdx: number, draftParentIdx: number | null): numbe
   return snapIdx + 1;
 }
 
-// Compute image absolute rect within a container using object-contain semantics
-function containRect(cW: number, cH: number, ar: number) {
-  let w, h;
-  if (ar > cW / cH) { w = cW; h = cW / ar; }
-  else              { h = cH; w = cH * ar; }
-  return { l: (cW - w) / 2, t: (cH - h) / 2, w, h };
-}
-
-// Compute image absolute rect within a container using object-cover semantics
-function coverRect(cW: number, cH: number, ar: number) {
-  let w, h;
-  if (ar > cW / cH) { h = cH; w = cH * ar; }
-  else              { w = cW; h = cW / ar; }
-  return { l: (cW - w) / 2, t: (cH - h) / 2, w, h };
-}
-
-// Extract EXIF metadata (location + time) from a photo file
-async function extractPhotoMetadata(file: File): Promise<PhotoMetadata | undefined> {
-  try {
-    const exifr = (await import('exifr')).default;
-    // reviveValues:false keeps datetime as raw string — avoids timezone conversion
-    const exif = await exifr.parse(file, { gps: true, reviveValues: false });
-    if (!exif) return undefined;
-
-    const lat = exif.latitude;
-    const lng = exif.longitude;
-    const datetimeRaw: string | undefined = exif.DateTimeOriginal || exif.CreateDate;
-
-    // Parse "YYYY:MM:DD HH:MM:SS" directly — no timezone conversion (EXIF stores local time)
-    let takenAt: string | undefined;
-    if (datetimeRaw && typeof datetimeRaw === 'string') {
-      const m = datetimeRaw.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/);
-      if (m) {
-        const utcOffset = lat !== undefined && lng !== undefined
-          ? Math.round(lng / 15)
-          : undefined;
-        const tzStr = utcOffset !== undefined
-          ? ` (UTC${utcOffset >= 0 ? '+' : ''}${utcOffset})`
-          : '';
-        takenAt = `${m[1]}年${parseInt(m[2])}月${parseInt(m[3])}日 ${m[4]}:${m[5]}${tzStr}`;
-      }
-    }
-
-    // Reverse geocode — zoom=14 for neighborhood level (more reliable than building-level)
-    let location: string | undefined;
-    if (lat && lng) {
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=zh-CN`,
-          { headers: { 'User-Agent': 'Makaron-App/1.0' } }
-        );
-        if (res.ok) {
-          const geo = await res.json();
-          const addr = geo.address;
-          const city = addr.city || addr.town || addr.village || addr.county;
-          location = [city, addr.country].filter(Boolean).join(', ');
-        }
-      } catch { /* geocoding failure is non-critical */ }
-    }
-
-    if (!takenAt && !location) return undefined;
-    return { takenAt, location, raw: { lat, lng, datetime: datetimeRaw } };
-  } catch {
-    return undefined;
-  }
-}
-
 // t('editor.greeting') is now locale-aware via t('editor.greeting') in the component
 
 /** Get best image representation for API calls: URL if available (tiny payload), else raw image (base64) */
 function getImageForApi(snapshot: Snapshot | undefined): string {
   return snapshot?.imageUrl || snapshot?.image || '';
 }
-
-/**
- * Compress a base64 image only if it exceeds maxBytes (default 1.8MB).
- * Used as fallback when URL isn't available yet (e.g. user chats before Supabase upload completes).
- * Preserves quality: only resizes beyond 2048px, starts at quality 0.92.
- */
-async function compressBase64(image: string, maxBytes = 1_800_000): Promise<string> {
-  if (!image || !image.startsWith('data:')) return image;
-  if (image.length * 0.75 < maxBytes) return image;
-
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const maxDim = 2048;
-      let { width, height } = img;
-      if (width > maxDim || height > maxDim) {
-        const scale = maxDim / Math.max(width, height);
-        width = Math.round(width * scale);
-        height = Math.round(height * scale);
-      }
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0, width, height);
-      for (const q of [0.92, 0.85, 0.75, 0.65]) {
-        const result = canvas.toDataURL('image/jpeg', q);
-        if (result.length * 0.75 < maxBytes) { resolve(result); return; }
-      }
-      resolve(canvas.toDataURL('image/jpeg', 0.6));
-    };
-    img.onerror = () => resolve(image);
-    img.src = image;
-  });
-}
-
-function compressClientSide(file: File, maxSize = 2048, quality = 0.92): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const { naturalWidth: w, naturalHeight: h } = img;
-      const scale = Math.min(1, maxSize / Math.max(w, h));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(w * scale);
-      canvas.height = Math.round(h * scale);
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image'));
-    };
-    img.src = url;
-  });
-}
-
 
 interface EditorProps {
   projectId?: string;
@@ -1298,7 +1174,7 @@ export default function Editor({
     const snapForApi = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     const rawImage = snapForApi ? getImageForApi(snapForApi) : (currentImage || '');
     const imageForApi = overrideImage
-      || (rawImage.startsWith('data:') ? await compressBase64(rawImage, 3_000_000) : rawImage);
+      || (rawImage.startsWith('data:') ? await compressBase64Image(rawImage, 3_000_000) : rawImage);
     // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
     if (!options?.silent) {
       addMessage('user', text, undefined, overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
@@ -1392,14 +1268,14 @@ export default function Editor({
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
     const rawOriginal = originalSnapshot ? getImageForApi(originalSnapshot) : undefined;
-    const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64(rawOriginal, 3_000_000) : rawOriginal;
+    const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64Image(rawOriginal, 3_000_000) : rawOriginal;
 
     // Compress snapshot images for API payload — URLs pass through (~100B), base64 compressed to 600KB
     // This prevents multi-image uploads from exceeding Vercel body size limits
     const snapshotImagesForApi = await Promise.all(
       snapshotsRef.current.map(async (s) => {
         const img = getImageForApi(s);
-        return img.startsWith('data:') ? compressBase64(img, 600_000) : img;
+        return img.startsWith('data:') ? compressBase64Image(img, 600_000) : img;
       })
     );
 
@@ -1566,7 +1442,7 @@ export default function Editor({
             if (pendingAnalysisList.length > 0) {
               (async () => {
                 for (const { id, image } of pendingAnalysisList) {
-                  const tipsImg = await compressBase64(image, 600_000);
+                  const tipsImg = await compressBase64Image(image, 600_000);
                   fetchTipsForSnapshot(id, tipsImg, 'none');
                 }
               })();
@@ -1796,7 +1672,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     if (committedImage.startsWith('http')) {
       fetchTipsForSnapshot(snapId, committedImage, 'none', tip.category);
     } else {
-      compressBase64(committedImage, 600_000).then(compressed => {
+      compressBase64Image(committedImage, 600_000).then(compressed => {
         fetchTipsForSnapshot(snapId, compressed, 'none', tip.category);
       });
     }
@@ -1949,15 +1825,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
     try {
       // Convert HEIC to JPEG in browser if needed (Chrome/Firefox can't decode HEIC)
-      const decodable = await ensureDecodableFile(file);
-      const base64 = await compressClientSide(decodable);
+      const base64 = await compressImageFile(file, 2048, 0.92);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
 
       // Start tips generation immediately with compressed image
       const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
-      const tipsImage = await compressBase64(base64, 600_000);
+      const tipsImage = await compressBase64Image(base64, 600_000);
       fetchTipsForSnapshot(snapId, tipsImage, 'full');
 
       // Attach metadata when available
@@ -2027,7 +1902,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
       // Helper: URL → use directly, base64 → compress for tips API
       const tipsImage = (img: string) =>
-        img.startsWith('http') ? Promise.resolve(img) : compressBase64(img, 600_000);
+        img.startsWith('http') ? Promise.resolve(img) : compressBase64Image(img, 600_000);
 
       if (pendingPrompt) {
         // Path 3: images + prompt → CUI with prompt as first message
@@ -2090,7 +1965,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     const image = getImageForApi(lastSnap);
     if (!image) return;
     if (image.startsWith('data:')) {
-      compressBase64(image, 600_000).then(img => fetchTipsForSnapshot(lastSnap.id, img));
+      compressBase64Image(image, 600_000).then(img => fetchTipsForSnapshot(lastSnap.id, img));
     } else {
       fetchTipsForSnapshot(lastSnap.id, image);
     }
@@ -2527,6 +2402,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               )
             ) : (
               <ImageCanvas
+                key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
                 timeline={timeline}
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}

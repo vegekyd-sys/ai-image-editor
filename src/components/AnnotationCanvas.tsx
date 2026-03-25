@@ -3,6 +3,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import type { AnnotationEntry, BrushData, RectData, TextData } from '@/types';
 import { replayAnnotations } from '@/lib/annotationUtils';
+import { newAnnotationId } from '@/features/annotation/annotationIds';
 
 interface AnnotationCanvasProps {
   imageRect: { l: number; t: number; w: number; h: number };
@@ -18,9 +19,6 @@ interface AnnotationCanvasProps {
   onStartTextEdit?: (canvasX: number, canvasY: number) => void;
   textEditing?: { x: number; y: number; text: string; textColor: string; bgColor: string } | null;
 }
-
-let _idCounter = 0;
-export function newAnnotationId() { return `ann_${Date.now()}_${++_idCounter}`; }
 
 export default function AnnotationCanvas({
   imageRect, naturalWidth, naturalHeight,
@@ -108,13 +106,6 @@ export default function AnnotationCanvas({
   }, [entries, selectedId]);
 
   useEffect(() => { redraw(); }, [redraw]);
-
-  // Deselect when tool changes (render-time state adjustment)
-  const [prevActiveTool, setPrevActiveTool] = useState(activeTool);
-  if (activeTool !== prevActiveTool) {
-    setPrevActiveTool(activeTool);
-    setSelectedId(null);
-  }
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     const { x, y } = toCanvasCoords(e.clientX, e.clientY);

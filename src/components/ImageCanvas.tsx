@@ -3,17 +3,10 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import type { AnnotationEntry } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
+import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
 
 const VIDEO_SENTINEL = '__VIDEO__';
-
-// Compute image absolute rect within a container using object-contain semantics
-function containRect(cW: number, cH: number, ar: number) {
-  let w, h;
-  if (ar > cW / cH) { w = cW; h = cW / ar; }
-  else              { h = cH; w = cH * ar; }
-  return { l: (cW - w) / 2, t: (cH - h) / 2, w, h };
-}
 
 interface ImageCanvasProps {
   timeline: string[];
@@ -83,16 +76,6 @@ export default function ImageCanvas({
   const [imageRect, setImageRect] = useState({ l: 0, t: 0, w: 0, h: 0 });
   const [naturalDims, setNaturalDims] = useState({ w: 0, h: 0 });
 
-  // Reset zoom when entering annotation mode
-  const [prevAnnotationMode, setPrevAnnotationMode] = useState(false);
-  if (annotationMode && !prevAnnotationMode) {
-    setPrevAnnotationMode(!!annotationMode);
-    setScale(1);
-    setTranslate({ x: 0, y: 0 });
-  } else if (!!annotationMode !== prevAnnotationMode) {
-    setPrevAnnotationMode(!!annotationMode);
-  }
-
   // Image loading state
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -109,18 +92,6 @@ export default function ImageCanvas({
   const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDragging = useRef(false);
-  const [prevVideoUrl, setPrevVideoUrl] = useState(videoUrl);
-  if (prevVideoUrl !== videoUrl) {
-    setPrevVideoUrl(videoUrl);
-    setVideoError(false);
-    if (videoPlaying) setVideoPlaying(false);
-    if (videoLoading) setVideoLoading(false);
-    if (videoBuffered !== 0) setVideoBuffered(0);
-    if (videoCurrentTime !== 0) setVideoCurrentTime(0);
-    if (videoDuration !== 0) setVideoDuration(0);
-    if (!showControls) setShowControls(true);
-  }
-
   // Pull-down gesture (mobile only: free-drag like iOS Photos dismiss)
   const isPullDown = useRef(false);
   const pullDownStartX = useRef(0);
@@ -153,21 +124,6 @@ export default function ImageCanvas({
   }, [updateImageRect]);
 
   const SWIPE_THRESHOLD = 40;
-
-  // Reset zoom and loading state when image changes (derived state pattern per React docs)
-  const [prevIdx, setPrevIdx] = useState(currentIndex);
-  const [prevSrc, setPrevSrc] = useState('');
-  const currentSrc = timeline[currentIndex] ?? '';
-  if (prevIdx !== currentIndex || prevSrc !== currentSrc) {
-    setPrevIdx(currentIndex);
-    setPrevSrc(currentSrc);
-    if (scale !== 1) setScale(1);
-    if (translate.x !== 0 || translate.y !== 0) setTranslate({ x: 0, y: 0 });
-    // Only reset loading if source actually changed (avoids flicker on re-render)
-    if (prevSrc !== currentSrc) setImageLoaded(false);
-    // Reset video state when navigating away
-    if (videoPlaying) setVideoPlaying(false);
-  }
 
   const clearLongPress = useCallback(() => {
     if (longPressTimer.current) {
@@ -836,6 +792,7 @@ export default function ImageCanvas({
         {/* Annotation overlay */}
         {annotationMode && !isVideoEntry && imageRect.w > 0 && onAddAnnotationEntry && (
           <AnnotationCanvas
+            key={annotationTool || 'brush'}
             imageRect={imageRect}
             naturalWidth={naturalDims.w}
             naturalHeight={naturalDims.h}
