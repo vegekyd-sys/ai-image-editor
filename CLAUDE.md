@@ -73,7 +73,11 @@ printf 'value' | npx vercel env add NAME preview --force
 
 ## Current Status
 
-Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。当前生图和 tips 均走 OpenRouter `gemini-3.1-flash-image-preview`（从 `gemini-3-pro-image-preview` 切换，2026-02-27）。tips/preview 缩略图不走 MOCK_AI（已关闭）。
+Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。**当前生图和 tips 均走 Google 直连** `gemini-3.1-flash-image-preview`（2026-03-25 从 OpenRouter 切换，因 OpenRouter 账号被封）。tips/preview 缩略图不走 MOCK_AI（已关闭）。
+
+**NSFW 内容保护（2026-03-25）**：`ContentBlockedError` 检测 Gemini `promptFeedback.blockReason`。Tips：blocked 时不重试不 fallback，发 `[BLOCKED]` SSE 事件给前端。生图：blocked 时 model-router 自动 fallback 到 Qwen。Tips 并发信号量限制 max 4（防多图上传爆发 40+ 并发请求）。
+
+**Agent/自动化友好改造（2026-03-25）**：`data-testid` + `aria-label` + `data-*` 状态属性。Editor root 暴露 `data-tips-status/agent-status/snapshot-count/view-mode/preferred-model`。File input 改 `opacity:0`（不再 `display:none`），Chrome DevTools/Playwright 可上传文件。Tip 卡片有 `data-testid="tip-card-N"` + `data-tip-category/label/status`。
 
 **项目列表页性能优化（2026-03-08）**：缩略图用 Supabase Image Transformations（`/render/image/` + `width=400&height=400&resize=cover&quality=50`），自动转 WebP ~16KB/张（原图 ~1.7MB），总传输 31.2MB→2MB（-94%），LCP 1553→1091ms（-30%）。首屏 4 张 `fetchPriority="high"`。需 Pro 计划 + Dashboard 开启 Image Transformations。
 
