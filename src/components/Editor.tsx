@@ -9,6 +9,22 @@ import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
+
+// Semaphore to limit concurrent /api/tips requests across all snapshots.
+// Single image: 4 categories run in parallel (fine). Multi-image: 10 images × 4 = 40 concurrent → rate limit risk.
+// With maxConcurrent=4, multi-image tips are effectively serialized per snapshot.
+const _tipsQueue: Array<() => void> = [];
+let _tipsRunning = 0;
+const TIPS_MAX_CONCURRENT = 4;
+function acquireTipsSlot(): Promise<void> {
+  if (_tipsRunning < TIPS_MAX_CONCURRENT) { _tipsRunning++; return Promise.resolve(); }
+  return new Promise(resolve => _tipsQueue.push(resolve));
+}
+function releaseTipsSlot() {
+  _tipsRunning--;
+  const next = _tipsQueue.shift();
+  if (next) { _tipsRunning++; next(); }
+}
 import { cacheImage } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
@@ -786,6 +802,10 @@ export default function Editor({
     const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
     let completedCount = 0;
     const fetchCategory = async (category: string) => {
+      await acquireTipsSlot();
+      try { await _fetchCategoryInner(category); } finally { releaseTipsSlot(); }
+    };
+    const _fetchCategoryInner = async (category: string) => {
       // imageInput can be URL or base64 — server handles both
       const imageForApi = imageInput;
       const MAX_RETRIES = 2;
@@ -818,6 +838,11 @@ export default function Editor({
               if (line.startsWith('data: ')) {
                 const payload = line.slice(6);
                 if (payload === '[DONE]') break;
+                if (payload === '[BLOCKED]') {
+                  console.warn(`[tips] ${category} content blocked — skipping`);
+                  tipsReceived = -1; // sentinel: don't retry
+                  break;
+                }
                 try {
                   const tip = JSON.parse(payload) as Tip;
                   handleTipEvent(tip, snapshotId, (t) => {
@@ -830,6 +855,8 @@ export default function Editor({
               }
             }
           }
+          // Content blocked — don't retry
+          if (tipsReceived === -1) break;
           // Stream succeeded but returned 0 tips — treat as failure and retry
           if (tipsReceived === 0) throw new Error(`Tips ${category}: 0 tips returned`);
           break;

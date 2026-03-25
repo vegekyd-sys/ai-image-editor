@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { streamTipsByCategory } from '@/lib/gemini';
+import { streamTipsByCategory, ContentBlockedError } from '@/lib/gemini';
 
 export const maxDuration = 60;
 
@@ -33,7 +33,12 @@ export async function POST(req: NextRequest) {
           }
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
         } catch (err) {
-          console.error('Tips stream error:', err);
+          if (err instanceof ContentBlockedError) {
+            console.warn('[tips] Content blocked, sending [BLOCKED] to client');
+            controller.enqueue(encoder.encode(`data: [BLOCKED]\n\n`));
+          } else {
+            console.error('Tips stream error:', err);
+          }
         } finally {
           controller.close();
         }

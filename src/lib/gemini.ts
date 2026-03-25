@@ -15,6 +15,23 @@ function tlog(msg: string) {
   fs.appendFileSync(LOG_FILE, line);
 }
 
+/** Thrown when Gemini blocks content via promptFeedback.blockReason. Do NOT retry — fallback to Qwen. */
+export class ContentBlockedError extends Error {
+  constructor(public blockReason: string) {
+    super(`Content blocked by Gemini: ${blockReason}`);
+    this.name = 'ContentBlockedError';
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function checkBlockReason(result: any, label: string): void {
+  const blockReason = result?.promptFeedback?.blockReason;
+  if (blockReason) {
+    console.warn(`[${label}] Content blocked: ${blockReason}`);
+    throw new ContentBlockedError(blockReason);
+  }
+}
+
 // ── Provider & Model Config ─────────────────────────────────────
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
 export const PROVIDER = (process.env.AI_PROVIDER || 'openrouter') as 'google' | 'openrouter';
@@ -471,6 +488,7 @@ export async function generatePreviewImageGoogle(
     config,
   });
 
+  checkBlockReason(result, 'Google');
   const parts = result.candidates?.[0]?.content?.parts;
   if (!parts) {
     console.warn('[Google] No parts in response — model returned empty');
@@ -654,6 +672,7 @@ async function generateMultiImageGoogle(
     config,
   });
 
+  checkBlockReason(result, 'Google-Multi');
   const resultParts = result.candidates?.[0]?.content?.parts;
   if (!resultParts) {
     console.warn('[Google-Multi] No parts in response — model returned empty');
@@ -934,6 +953,11 @@ export async function* streamTipsByCategory(
       }
       return;
     } catch (error) {
+      // Content blocked = NSFW image, no point retrying with any provider — re-throw immediately
+      if (error instanceof ContentBlockedError) {
+        console.warn(`[tips] Content blocked for ${category}, skipping (no fallback)`);
+        throw error;
+      }
       lastError = error;
       const nextProvider = providers[index + 1];
       const message = error instanceof Error ? error.message : String(error);
@@ -1133,9 +1157,11 @@ async function* streamTipsByCategoryBedrock(
 // ── Shared Incremental JSON Parser ──────────────────────────────
 
 async function* streamToTextIterator(
-  stream: AsyncIterable<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  stream: AsyncIterable<any>,
 ): AsyncGenerator<string> {
   for await (const chunk of stream) {
+    checkBlockReason(chunk, 'Google-Stream');
     const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text;
     if (text) yield text;
   }
