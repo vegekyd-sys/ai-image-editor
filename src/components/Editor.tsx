@@ -2364,9 +2364,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [viewMode, isDesktop]);
 
   return (
-    <div className={`h-dvh bg-black relative overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}>
+    <div
+      data-testid="editor"
+      data-tips-status={isTipsFetching ? 'loading' : (snapshots[0]?.tips?.length ? 'ready' : 'empty')}
+      data-tips-count={snapshots.reduce((n, s) => n + (s.tips?.length || 0), 0)}
+      data-agent-status={isAgentActive ? 'active' : 'idle'}
+      data-snapshot-count={snapshots.length}
+      data-current-snapshot={viewIndex}
+      data-view-mode={viewMode}
+      data-preferred-model={preferredModel}
+      className={`h-dvh bg-black relative overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
+    >
       <input
         ref={fileInputRef}
+        data-testid="editor-file-upload"
+        aria-label="Upload photo to editor"
         type="file"
         accept="image/*,.heic,.heif"
         className="hidden"
@@ -2429,6 +2441,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               )
             ) : (
               <ImageCanvas
+                data-testid="canvas"
                 key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
                 timeline={timeline}
                 currentIndex={viewIndex}

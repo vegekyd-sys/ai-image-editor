@@ -219,7 +219,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
 
   // Collect the set of categories present in current tips (for nav bar)
   return (
-    <div className="flex flex-col">
+    <div data-testid="tips-bar" className="flex flex-col">
       {/* Carousel */}
       <div
         ref={scrollContainerRef}
@@ -261,6 +261,10 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
               <div className="flex-shrink-0 flex items-stretch animate-tip-in">
                 {/* Main tip card */}
                 <button
+                  data-testid={`tip-card-${originalIndex}`}
+                  data-tip-category={tip.category}
+                  data-tip-label={tip.label}
+                  data-tip-status={tip.previewStatus || 'pending'}
                   onClick={handleCardClick}
                   disabled={isEditing}
                   className={`${isDesktop ? 'w-[176px]' : 'w-[200px]'} text-left hover:brightness-110 active:scale-[0.97] disabled:opacity-40 border overflow-hidden cursor-pointer ${

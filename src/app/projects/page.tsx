@@ -464,11 +464,13 @@ export default function ProjectsPage() {
 
         <input
           id="new-project-file-input"
+          data-testid="photo-upload"
+          aria-label="Upload photo"
           ref={fileInputRef}
           type="file"
           accept="image/*,.heic,.heif"
           multiple
-          style={{ display: 'none' }}
+          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
           onChange={async (e) => {
             const files = Array.from(e.target.files ?? [])
             e.target.value = ''
@@ -804,6 +806,7 @@ export default function ProjectsPage() {
 
                   {/* Create button */}
                   <button
+                    data-testid="create-project"
                     className="mkr-create-btn"
                     onClick={() => {
                       if (inputText.trim() || attachedFiles.length > 0) handleCreate()

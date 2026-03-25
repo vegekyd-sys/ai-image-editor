@@ -891,6 +891,8 @@ export default function AgentChatView({
           {/* Row 1: Textarea */}
           <textarea
             ref={inputRef}
+            data-testid="chat-input"
+            aria-label="Chat with agent"
             value={input}
             rows={1}
             onChange={(e) => setInput(e.target.value)}
@@ -926,6 +928,9 @@ export default function AgentChatView({
             {/* Model selector pill */}
             {onModelChange && (
               <button
+                data-testid="model-selector"
+                data-current-model={preferredModel}
+                aria-label={`Model: ${preferredModel}. Click to switch.`}
                 onClick={() => {
                   const cycle: PreferredModel[] = ['auto', 'gemini', 'qwen'];
                   const next = cycle[(cycle.indexOf(preferredModel) + 1) % cycle.length];
