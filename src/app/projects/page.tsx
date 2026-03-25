@@ -63,6 +63,38 @@ export default function ProjectsPage() {
   const [inputText, setInputText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
+  const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
+  const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
+  const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
+  const cardSwipeRef = useRef<HTMLDivElement>(null)
+
+  // Non-passive touchmove to allow preventDefault (block scroll during horizontal swipe)
+  useEffect(() => {
+    const el = cardSwipeRef.current
+    if (!el) return
+    const onMove = (e: TouchEvent) => {
+      if (!cardTouchRef.current) return
+      const dx = e.touches[0].clientX - cardTouchRef.current.startX
+      const dy = e.touches[0].clientY - cardTouchRef.current.startY
+      if (!cardTouchRef.current.locked) {
+        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+        cardTouchRef.current.locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
+      }
+      if (cardTouchRef.current.locked !== 'x') return
+      e.preventDefault()
+      e.stopPropagation()
+      setCardDragX(prev => {
+        // Read current cardIndex + file count from DOM data attrs
+        const idx = parseInt(el.dataset.idx || '0')
+        const count = parseInt(el.dataset.count || '0')
+        const atStart = idx === 0 && dx > 0
+        const atEnd = idx >= count - 1 && dx < 0
+        return (atStart || atEnd) ? dx * 0.2 : dx
+      })
+    }
+    el.addEventListener('touchmove', onMove, { passive: false })
+    return () => el.removeEventListener('touchmove', onMove)
+  })
   const MAX_FILES = 10
 
   // Shared helper: process new files and append to attached arrays
@@ -109,6 +141,8 @@ export default function ProjectsPage() {
         setAttachedPreviews(prev => [...prev, previewUrl].slice(0, MAX_FILES))
       }
     }
+    // Jump to last card (clamped in render via Math.min)
+    setCardIndex(999)
   }, [creating])
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
@@ -556,41 +590,100 @@ export default function ProjectsPage() {
                       onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]);  }}>✕</div>
                   </>
                 ) : (
-                  /* Stacked cards effect for 2+ images */
+                  /* 2+ images: Desktop = static stack, Mobile = swipeable */
                   <>
-                    {/* Card stack container — inset 6px from edges */}
-                    <div style={{ position: 'absolute', inset: 6, pointerEvents: 'none' }}>
-                      {(() => {
-                        // Show up to 3 layers: back, middle (if 3+), front
-                        const cardStyle = (preview: string | null, rotate: number, zIndex: number): React.CSSProperties => ({
-                          position: 'absolute', inset: 0,
-                          borderRadius: 6, overflow: 'hidden',
-                          transform: `rotate(${rotate}deg)`,
-                          border: '1.5px solid rgba(255,255,255,0.12)',
-                          background: '#1a1a1a',
-                          zIndex,
-                          boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-                        })
-                        const n = attachedFiles.length
-                        const layers: { preview: string | null; rotate: number; z: number }[] = []
-                        if (n >= 3) layers.push({ preview: attachedPreviews[0], rotate: -6, z: 1 })
-                        if (n >= 2) layers.push({ preview: attachedPreviews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2 })
-                        layers.push({ preview: attachedPreviews[n - 1], rotate: 0, z: 3 })
-                        return layers.map((layer, i) => (
-                          <div key={i} style={cardStyle(layer.preview, layer.rotate, layer.z)}>
-                            {layer.preview && layer.preview !== 'heic-pending' ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : layer.preview === null ? (
-                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Spinner size={12} />
+                    {isDesktop ? (
+                      /* Desktop: static stacked cards */
+                      <div style={{ position: 'absolute', inset: 6, pointerEvents: 'none' }}>
+                        {(() => {
+                          const cardStyle = (rotate: number, zIndex: number): React.CSSProperties => ({
+                            position: 'absolute', inset: 0,
+                            borderRadius: 6, overflow: 'hidden',
+                            transform: `rotate(${rotate}deg)`,
+                            border: '1.5px solid rgba(255,255,255,0.12)',
+                            background: '#1a1a1a', zIndex,
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                          })
+                          const n = attachedFiles.length
+                          const layers: { preview: string | null; rotate: number; z: number }[] = []
+                          if (n >= 3) layers.push({ preview: attachedPreviews[0], rotate: -6, z: 1 })
+                          if (n >= 2) layers.push({ preview: attachedPreviews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2 })
+                          layers.push({ preview: attachedPreviews[n - 1], rotate: 0, z: 3 })
+                          return layers.map((layer, i) => (
+                            <div key={i} style={cardStyle(layer.rotate, layer.z)}>
+                              {layer.preview && layer.preview !== 'heic-pending' ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : layer.preview === null ? (
+                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Spinner size={12} />
+                                </div>
+                              ) : null}
+                            </div>
+                          ))
+                        })()}
+                      </div>
+                    ) : (
+                      /* Mobile: swipeable card stack */
+                      <div
+                        ref={cardSwipeRef}
+                        data-idx={Math.min(cardIndex, attachedFiles.length - 1)}
+                        data-count={attachedFiles.length}
+                        style={{ position: 'absolute', inset: 6 }}
+                        onTouchStart={(e) => {
+                          cardTouchRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, locked: null }
+                        }}
+                        onTouchEnd={() => {
+                          const touch = cardTouchRef.current
+                          cardTouchRef.current = null
+                          if (!touch || touch.locked !== 'x') { setCardDragX(0); return }
+                          const threshold = 25
+                          const idx = Math.min(cardIndex, attachedFiles.length - 1)
+                          if (cardDragX < -threshold && idx < attachedFiles.length - 1) {
+                            setCardIndex(idx + 1)
+                          } else if (cardDragX > threshold && idx > 0) {
+                            setCardIndex(idx - 1)
+                          }
+                          setCardDragX(0)
+                        }}
+                      >
+                        {(() => {
+                          const n = attachedFiles.length
+                          const idx = Math.min(cardIndex, n - 1)
+                          const dragging = cardDragX !== 0
+                          const layers: { preview: string | null; baseRotate: number; z: number; key: number; isFront: boolean }[] = []
+                          if (idx + 1 < n) layers.push({ preview: attachedPreviews[idx + 1], baseRotate: 4, z: 1, key: idx + 1, isFront: false })
+                          if (idx > 0) layers.push({ preview: attachedPreviews[idx - 1], baseRotate: -4, z: 1, key: idx - 1, isFront: false })
+                          layers.push({ preview: attachedPreviews[idx], baseRotate: 0, z: 3, key: idx, isFront: true })
+                          return layers.map((layer) => {
+                            const tx = layer.isFront ? cardDragX : 0
+                            const rot = layer.isFront ? cardDragX * 0.15 : layer.baseRotate
+                            const opacity = layer.isFront ? Math.max(0.5, 1 - Math.abs(cardDragX) / 150) : 1
+                            return (
+                              <div key={layer.key} style={{
+                                position: 'absolute', inset: 0,
+                                borderRadius: 6, overflow: 'hidden',
+                                transform: `translateX(${tx}px) rotate(${rot}deg)`,
+                                border: '1.5px solid rgba(255,255,255,0.12)',
+                                background: '#1a1a1a', zIndex: layer.z,
+                                boxShadow: '0 1px 4px rgba(0,0,0,0.4)', opacity,
+                                transition: dragging ? 'none' : 'transform 0.25s ease, opacity 0.25s ease',
+                              }}>
+                                {layer.preview && layer.preview !== 'heic-pending' ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                                ) : layer.preview === null ? (
+                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Spinner size={12} />
+                                  </div>
+                                ) : null}
                               </div>
-                            ) : null}
-                          </div>
-                        ))
-                      })()}
-                    </div>
-                    {/* Count badge */}
+                            )
+                          })
+                        })()}
+                      </div>
+                    )}
+                    {/* Count/index badge */}
                     <div style={{
                       position: 'absolute', bottom: 4, right: 4, zIndex: 4,
                       background: 'rgba(217,70,239,0.85)', color: '#fff',
@@ -598,11 +691,25 @@ export default function ProjectsPage() {
                       fontSize: '0.6rem', fontWeight: 700,
                       boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
                     }}>
-                      {attachedFiles.length}
+                      {isDesktop ? attachedFiles.length : Math.min(cardIndex, attachedFiles.length - 1) + 1}
                     </div>
-                    {/* Clear button */}
+                    {/* Clear / delete button */}
                     <div style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 5 }}
-                      onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]);  }}>✕</div>
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (isDesktop) {
+                          setAttachedFiles([]); setAttachedPreviews([])
+                        } else {
+                          const idx = Math.min(cardIndex, attachedFiles.length - 1)
+                          if (attachedFiles.length <= 1) {
+                            setAttachedFiles([]); setAttachedPreviews([]); setCardIndex(0)
+                          } else {
+                            setAttachedFiles(prev => prev.filter((_, j) => j !== idx))
+                            setAttachedPreviews(prev => prev.filter((_, j) => j !== idx))
+                            if (idx >= attachedFiles.length - 1) setCardIndex(Math.max(0, idx - 1))
+                          }
+                        }
+                      }}>✕</div>
                   </>
                 )}
               </div>
@@ -651,7 +758,8 @@ export default function ProjectsPage() {
                       paddingTop: 4,
                     }}
                   >
-                  {attachedFiles.length >= 2 && attachedPreviews.map((preview, i) => (
+                  {/* Desktop: thumbnail row for browsing/deleting; Mobile: hidden (card swipe instead) */}
+                  {isDesktop && attachedFiles.length >= 2 && attachedPreviews.map((preview, i) => (
                     <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
                       {preview && preview !== 'heic-pending' ? (
                         // eslint-disable-next-line @next/next/no-img-element

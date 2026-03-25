@@ -45,8 +45,9 @@ interface AgentContext {
   preferredModel?: ModelId;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
-  /** PiAPI task ID set by generate_animation tool, emitted as animation_task event */
+  /** Task ID + prompt set by generate_animation tool, emitted as animation_task event */
   animationTaskId?: string;
+  animationPrompt?: string;
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<image_1>>> */
   snapshotImages: string[];
   /** 0-based index of the snapshot the user is currently viewing */
@@ -59,7 +60,7 @@ export type AgentStreamEvent =
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string; usedModel?: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
-  | { type: 'animation_task'; taskId: string }  // emitted when generate_animation tool creates a PiAPI task
+  | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'done' }
   | { type: 'error'; message: string };
@@ -163,6 +164,7 @@ function createTools(ctx: AgentContext) {
             duration,
           });
           ctx.animationTaskId = taskId;
+          ctx.animationPrompt = story_prompt;
           return { success: true as const, taskId, message: 'Video generation task created! It takes about 3–5 minutes. The result will appear here when done.' };
         } catch (e) {
           return { success: false as const, message: String(e) };
@@ -429,8 +431,9 @@ export async function* runMakaronAgent(
           imagesSent++;
         }
         if (ctx.animationTaskId) {
-          yield { type: 'animation_task', taskId: ctx.animationTaskId };
+          yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '' };
           ctx.animationTaskId = undefined;
+          ctx.animationPrompt = undefined;
         }
         continue;
       }

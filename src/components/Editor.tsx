@@ -1520,7 +1520,7 @@ export default function Editor({
               lastEditInputImagesRef.current = images ?? null;
             }
           },
-          onAnimationTask: (taskId) => {
+          onAnimationTask: (taskId, prompt) => {
             // CUI-initiated video: add to animations array and start polling
             const urls = snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
             const newAnim: ProjectAnimation = {
@@ -1528,7 +1528,7 @@ export default function Editor({
               projectId: projectId ?? '',
               taskId,
               videoUrl: null,
-              prompt: '',
+              prompt,
               snapshotUrls: urls,
               status: 'processing',
               createdAt: new Date().toISOString(),
@@ -1540,7 +1540,7 @@ export default function Editor({
             setAnimationState({
               imageUrls: urls,
               status: 'polling',
-              prompt: '',
+              prompt,
               userHint: '',
               taskId,
               videoUrl: null,
