@@ -127,6 +127,34 @@ function getPromptTemplate(category: TipCategory): string {
   return PROMPT_TEMPLATES[category];
 }
 
+// ── Shared Tips Prompt Builder ───────────────────────────────────
+function buildTipsPrompt(
+  category: TipCategory,
+  metadata?: { takenAt?: string; location?: string },
+  count: number = 2,
+  existingLabels?: string[],
+) {
+  const template = getPromptTemplate(category);
+  const systemPrompt = buildCategorySystemPrompt(category, count);
+  const metaLines: string[] = [];
+  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
+  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
+  const metaContext = metaLines.length > 0
+    ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
+    : '';
+  const dedupeNote = existingLabels?.length
+    ? `[已有以下建议，必须生成完全不同的方向] ${existingLabels.join('、')}\n\n`
+    : '';
+  // enhance: skip image analysis — universal technical improvements don't need content analysis
+  const analysisStep = category === 'enhance'
+    ? ''
+    : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
+  const userText = `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}`;
+  // creative/wild use high reasoning for better creativity; enhance/captions use minimal for speed
+  const useHighReasoning = category === 'creative' || category === 'wild';
+  return { systemPrompt, userText, useHighReasoning };
+}
+
 // Google structured output schema (only used with Google provider + gemini-3)
 const TIPS_SCHEMA = {
   type: Type.ARRAY,
@@ -980,37 +1008,22 @@ async function* streamTipsByCategoryGoogle(
   existingLabels?: string[],
   locale?: string,
 ): AsyncGenerator<Tip> {
-  const resolved = await ensureBase64Server(imageBase64);
-  const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
-  const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-  const template = getPromptTemplate(category);
-  const systemPrompt = buildCategorySystemPrompt(category, count);
-  const metaLines: string[] = [];
-  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
-  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
-  const metaContext = metaLines.length > 0
-    ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
-    : '';
-  const dedupeNote = existingLabels?.length
-    ? `[已有以下建议，必须生成完全不同的方向] ${existingLabels.join('、')}\n\n`
-    : '';
-
-  // enhance: skip image analysis — universal technical improvements don't need content analysis
-  const analysisStep = category === 'enhance'
-    ? ''
-    : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
+  const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels);
 
   const supportsStructuredOutput = MODEL.includes('gemini-3');
   const config: Record<string, unknown> = {
     systemInstruction: systemPrompt,
+    thinkingConfig: { thinkingBudget: useHighReasoning ? -1 : 0 },
   };
   if (supportsStructuredOutput) {
     config.responseMimeType = 'application/json';
     config.responseSchema = TIPS_SCHEMA;
   }
 
-  const isEn = locale === 'en';
   const promptSuffix = supportsStructuredOutput ? '' : getJsonFormatSuffix(locale);
+  const resolved = await ensureBase64Server(imageBase64);
+  const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
+  const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
   const stream = await getAI().models.generateContentStream({
     model: MODEL,
     contents: [
@@ -1018,9 +1031,7 @@ async function* streamTipsByCategoryGoogle(
         role: 'user',
         parts: [
           { inlineData: { mimeType, data: base64Data } },
-          {
-            text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${promptSuffix}`,
-          },
+          { text: `${userText}${promptSuffix}` },
         ],
       },
     ],
@@ -1042,26 +1053,7 @@ async function* streamTipsByCategoryOpenRouter(
   existingLabels?: string[],
   locale?: string,
 ): AsyncGenerator<Tip> {
-  const isEn = locale === 'en';
-  const template = getPromptTemplate(category);
-  const systemPrompt = buildCategorySystemPrompt(category, count);
-  const metaLines: string[] = [];
-  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
-  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
-  const metaContext = metaLines.length > 0
-    ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
-    : '';
-  const dedupeNote = existingLabels?.length
-    ? `[已有以下建议，必须生成完全不同的方向] ${existingLabels.join('、')}\n\n`
-    : '';
-
-  // enhance: skip image analysis — universal technical improvements don't need content analysis
-  const analysisStep = category === 'enhance'
-    ? ''
-    : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
-
-  // creative/wild use Flash High reasoning for better creativity; enhance/captions use minimal for speed
-  const useHighReasoning = category === 'creative' || category === 'wild';
+  const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels);
   const reasoning = useHighReasoning ? { effort: 'high' } : { effort: 'minimal' };
 
   const t0 = Date.now();
@@ -1079,10 +1071,7 @@ async function* streamTipsByCategoryOpenRouter(
           role: 'user',
           content: [
             toImageContent(imageBase64),
-            {
-              type: 'text',
-              text: `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${getJsonFormatSuffix(locale)}`,
-            },
+            { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
           ],
         },
       ],
@@ -1091,6 +1080,9 @@ async function* streamTipsByCategoryOpenRouter(
 
   if (!res.ok) {
     const errText = await res.text();
+    if (res.status === 403 || errText.includes('PROHIBITED_CONTENT')) {
+      throw new ContentBlockedError(errText);
+    }
     throw new Error(`OpenRouter tips error ${res.status}: ${errText}`);
   }
 
@@ -1111,22 +1103,10 @@ async function* streamTipsByCategoryBedrock(
   existingLabels?: string[],
   locale?: string,
 ): AsyncGenerator<Tip> {
-  const isEn = locale === 'en';
-  // Bedrock (ai SDK) needs data URL for image — ensure conversion
-  const dataUrl = imageBase64.startsWith('http')
-    ? (await ensureBase64Server(imageBase64))
+  const imageContent = imageBase64.startsWith('http')
+    ? new URL(imageBase64)
     : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
-  const template = getPromptTemplate(category);
-  const systemPrompt = buildCategorySystemPrompt(category, count);
-  const metaLines: string[] = [];
-  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
-  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
-  const metaContext = metaLines.length > 0
-    ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
-    : '';
-  const dedupeNote = existingLabels?.length
-    ? `[已有以下建议，必须生成完全不同的方向] ${existingLabels.join('、')}\n\n`
-    : '';
+  const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels);
 
   const t0 = Date.now();
   tlog(`[tips:bedrock:${category}] stream start`);
@@ -1139,8 +1119,8 @@ async function* streamTipsByCategoryBedrock(
       {
         role: 'user',
         content: [
-          { type: 'image', image: dataUrl },
-          { type: 'text', text: `${metaContext}${dedupeNote}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}${getJsonFormatSuffix(locale)}` },
+          { type: 'image', image: imageContent },
+          { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
         ],
       },
     ],
@@ -1191,7 +1171,17 @@ async function* sseToTextIterator(res: Response, label: string): AsyncGenerator<
       }
       try {
         const chunk = JSON.parse(payload);
-        const text = chunk.choices?.[0]?.delta?.content;
+        // OpenRouter: detect content blocked by upstream provider (e.g. Gemini safety filter)
+        if (chunk.error) {
+          const msg = typeof chunk.error === 'string' ? chunk.error : chunk.error.message || JSON.stringify(chunk.error);
+          console.warn(`[${label}] SSE error: ${msg}`);
+          throw new ContentBlockedError(msg);
+        }
+        const choice = chunk.choices?.[0];
+        if (choice?.finish_reason === 'content_filter') {
+          throw new ContentBlockedError('content_filter');
+        }
+        const text = choice?.delta?.content;
         if (text) {
           if (firstToken) {
             tlog(`[tips:${label}] first-token at +${Date.now() - t0}ms`);
@@ -1199,7 +1189,10 @@ async function* sseToTextIterator(res: Response, label: string): AsyncGenerator<
           }
           yield text;
         }
-      } catch { /* skip */ }
+      } catch (e) {
+        if (e instanceof ContentBlockedError) throw e;
+        /* skip malformed JSON */
+      }
     }
   }
 }
