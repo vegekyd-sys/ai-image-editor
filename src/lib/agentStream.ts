@@ -10,6 +10,7 @@ export interface AgentStreamCallbacks {
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onAnimationTask?: (taskId: string, prompt: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
+  onNsfwDetected?: () => void;
   onDone?: () => void;
   onError?: (message: string) => void;
 }
@@ -29,6 +30,7 @@ export async function streamAgent(
     preferredModel?: string;
     snapshotImages?: string[];
     currentSnapshotIndex?: number;
+    isNsfw?: boolean;
   },
   callbacks: AgentStreamCallbacks,
   signal?: AbortSignal,
@@ -85,6 +87,9 @@ export async function streamAgent(
             break;
           case 'image_analyzed':
             callbacks.onImageAnalyzed?.(event.imageIndex);
+            break;
+          case 'nsfw_detected':
+            callbacks.onNsfwDetected?.();
             break;
           case 'done':
             receivedDone = true;

@@ -9,6 +9,7 @@ export interface GenerateImageRequest {
   thinkingEffort?: 'minimal' | 'high';
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
   fallbackPrompt?: string;  // clean prompt without skill template — used when falling back to a model that can't digest .md templates
+  isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true
 }
 
 export interface GenerateImageResult {
@@ -16,6 +17,7 @@ export interface GenerateImageResult {
   model: ModelId;           // model that actually produced the image
   fallbackUsed: boolean;
   failedModels?: ModelId[]; // models that were tried and returned null/error
+  contentBlocked?: boolean; // Gemini refused content (NSFW) — caller should set isNsfw flag
 }
 
 export interface ModelBackend {

@@ -15,7 +15,7 @@ import { streamAgent } from '@/lib/agentStream';
 // With maxConcurrent=4, multi-image tips are effectively serialized per snapshot.
 const _tipsQueue: Array<() => void> = [];
 let _tipsRunning = 0;
-const TIPS_MAX_CONCURRENT = 4;
+const TIPS_MAX_CONCURRENT = 20;
 function acquireTipsSlot(): Promise<void> {
   if (_tipsRunning < TIPS_MAX_CONCURRENT) { _tipsRunning++; return Promise.resolve(); }
   return new Promise(resolve => _tipsQueue.push(resolve));
@@ -170,6 +170,7 @@ export default function Editor({
   const pendingAnalysisRef = useRef<{ id: string; image: string }[]>([]);
   const lastEditPromptRef = useRef<string | null>(null); // captures editPrompt from generate_image tool calls
   const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
+  const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
 
   // ── Hero animation (GUI ↔ CUI transition) ───────────────────────
   const canvasAreaRef = useRef<HTMLDivElement>(null);
@@ -709,12 +710,13 @@ export default function Editor({
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category }),
+        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, isNsfw: isNsfwRef.current || undefined }),
         signal: previewAbortRef.current.signal,
       });
 
       if (!res.ok) throw new Error('Preview failed');
-      const { image } = await res.json();
+      const { image, contentBlocked } = await res.json();
+      if (contentBlocked) isNsfwRef.current = true;
 
       cacheImage(`tip:${snapshotId}:${editPrompt}`, image);
       setSnapshots((prev) => {
@@ -1326,7 +1328,7 @@ export default function Editor({
     };
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined },
         {
           onStatus: (status) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
@@ -1451,6 +1453,10 @@ export default function Editor({
               duration: null,
               pollSeconds: 0,
             });
+          },
+          onNsfwDetected: () => {
+            console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
+            isNsfwRef.current = true;
           },
           onDone: () => {
             _flushAnalyzedDesc(); // save any pending analyze_image description

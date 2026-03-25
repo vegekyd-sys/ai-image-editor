@@ -4,6 +4,7 @@
  */
 import type { ModelId, GenerateImageRequest, GenerateImageResult } from './models/types';
 import { getBackend } from './models';
+import { ContentBlockedError } from './gemini';
 
 export type { ModelId, GenerateImageRequest, GenerateImageResult } from './models/types';
 
@@ -18,6 +19,8 @@ function getFallbacks(model: ModelId): ModelId[] {
 }
 
 function resolveModelChain(req: GenerateImageRequest): ModelId[] {
+  // 0. NSFW project → Qwen only, never touch Gemini
+  if (req.isNsfw) return ['qwen'];
   // 1. Explicit model → that model + fallbacks
   if (req.model) return [req.model, ...getFallbacks(req.model)];
   // 2. Multi-image references → Gemini only (others don't support it)
@@ -33,6 +36,7 @@ function resolveModelChain(req: GenerateImageRequest): ModelId[] {
 export async function generateImage(req: GenerateImageRequest): Promise<GenerateImageResult> {
   const chain = resolveModelChain(req);
   const failedModels: ModelId[] = [];
+  let contentBlocked = false;
 
   for (const modelId of chain) {
     const backend = getBackend(modelId);
@@ -48,15 +52,20 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
       if (image) {
         const fallbackUsed = modelId !== chain[0];
         if (fallbackUsed) console.log(`[model-router] Fallback: ${chain[0]} → ${modelId}`);
-        return { image, model: modelId, fallbackUsed, failedModels: failedModels.length ? failedModels : undefined };
+        return { image, model: modelId, fallbackUsed, failedModels: failedModels.length ? failedModels : undefined, contentBlocked: contentBlocked || undefined };
       }
       console.log(`[model-router] ${modelId} returned null, trying next...`);
       failedModels.push(modelId);
     } catch (e) {
-      console.error(`[model-router] ${modelId} error:`, e instanceof Error ? e.message : e);
+      if (e instanceof ContentBlockedError) {
+        console.warn(`[model-router] ${modelId} content blocked (NSFW), trying fallback...`);
+        contentBlocked = true;
+      } else {
+        console.error(`[model-router] ${modelId} error:`, e instanceof Error ? e.message : e);
+      }
       failedModels.push(modelId);
     }
   }
 
-  return { image: null, model: chain[0], fallbackUsed: false, failedModels };
+  return { image: null, model: chain[0], fallbackUsed: false, failedModels, contentBlocked: contentBlocked || undefined };
 }

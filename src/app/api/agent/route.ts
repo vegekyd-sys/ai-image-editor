@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     const { prompt, image, originalImage, referenceImages, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
-            previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex } = await req.json();
+            previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
           }
 
           // Normal agent request
-          for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex })) {
+          for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw })) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
           }
         } catch (err) {

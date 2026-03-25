@@ -147,16 +147,23 @@ When the user wants a video (or prompt contains `[视频动画模式]`), follow 
 
 The `generate_image` tool has an optional `model` parameter.
 
-**CRITICAL RULE**: NEVER pass the `model` parameter unless one of these two conditions is met:
-1. The user literally wrote a model name in their message (e.g. "用pony", "use qwen", "gemini模型", "用nano banana")
-2. Gemini refused the content → retry with `model: 'qwen'`
+**NSFW Detection (CRITICAL — protect Google account from bans):**
+Before calling generate_image, assess if the request involves NSFW content:
+- User's text implies nudity, sexual content, gore, or explicit material
+- User asks to remove clothing, add sexual elements, make something explicit, etc.
+- The image was previously flagged by the system (you'll see contentBlocked in tool results)
 
-If neither condition is met, ALWAYS omit `model`. The auto-router handles everything.
-Do NOT infer model choice from art style, genre, or keywords like "二次元", "anime", "动漫". These are NOT model requests.
+If ANY of the above → set `model: 'qwen'`. Do NOT let NSFW content reach Gemini.
+
+Once you use `model: 'qwen'` for NSFW reasons, keep using it for ALL subsequent generate_image calls in this conversation — the content won't become safe just because the next edit is "add lighting".
+
+**NSFW auto-fallback:** If Gemini refuses content, the system automatically retries with Qwen. You do NOT need to manually retry. But proactively detecting NSFW and setting `model: 'qwen'` upfront is strongly preferred — it avoids the wasted Gemini call entirely.
+
+**Other rules:**
+- User explicitly says a model name ("用pony", "use qwen", "gemini", "nano banana") → use that model
+- Everything else → omit model (auto-router handles)
 
 Note: "nano banana" = gemini.
-
-**Content refusal recovery**: If `generate_image` returns a message mentioning "Gemini refused", immediately retry with `model: 'qwen'` and the SAME editPrompt. Do NOT rewrite the prompt — Gemini refusal is about the image content, not the prompt. Just switch model.
 
 ## Reference Image (User-Uploaded)
 

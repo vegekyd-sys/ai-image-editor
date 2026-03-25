@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { image, editPrompt, aspectRatio, category } = await req.json();
+    const { image, editPrompt, aspectRatio, category, isNsfw } = await req.json();
 
     if (!image || !editPrompt) {
       return new Response(
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category });
+    const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw });
 
     if (!result.image) {
       return new Response(
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     }
 
     return new Response(
-      JSON.stringify({ image: result.image }),
+      JSON.stringify({ image: result.image, contentBlocked: result.contentBlocked }),
       { headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {

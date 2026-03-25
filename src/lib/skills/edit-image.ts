@@ -28,13 +28,15 @@ export interface EditImageInput {
   skillPrompts?: Record<string, string>;
   /** User's preferred model override — bypasses default routing */
   preferredModel?: ModelId;
+  /** NSFW flag — skip Gemini entirely */
+  isNsfw?: boolean;
 }
 
 export async function editImage(
   input: EditImageInput,
   ctx: SkillContext,
 ): Promise<SkillResult> {
-  const { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts, preferredModel } = input;
+  const { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts, preferredModel, isNsfw } = input;
   const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
   const hasReference = !!ctx.referenceImages?.length;
 
@@ -81,6 +83,7 @@ export async function editImage(
   let result: string | null = null;
   let usedModel: ModelId = 'gemini';
   let lastFailedModels: ModelId[] | undefined;
+  let contentBlocked = false;
   const MAX_ATTEMPTS = 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -93,11 +96,13 @@ export async function editImage(
       thinkingEffort: 'minimal',
       references,
       fallbackPrompt: skillTemplate ? editPrompt : undefined,
+      isNsfw,
     });
 
     result = genResult.image;
     usedModel = genResult.model;
     lastFailedModels = genResult.failedModels;
+    if (genResult.contentBlocked) contentBlocked = true;
 
     if (result) break;
     if (attempt < MAX_ATTEMPTS) {
@@ -106,16 +111,14 @@ export async function editImage(
   }
 
   if (!result) {
-    const geminiRefused = lastFailedModels?.includes('gemini');
     console.error(`❌ [edit_image] all attempts failed after ${((Date.now() - t0) / 1000).toFixed(1)}s, failedModels=${lastFailedModels}`);
     return {
       success: false,
-      message: geminiRefused
-        ? 'Image generation failed — Gemini refused this content. Retry with model: "qwen" to bypass content restrictions.'
-        : 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.',
+      contentBlocked,
+      message: 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.',
     };
   }
 
   console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel}`);
-  return { success: true, message: 'Image generated successfully.', image: result, usedModel };
+  return { success: true, message: 'Image generated successfully.', image: result, usedModel, contentBlocked };
 }

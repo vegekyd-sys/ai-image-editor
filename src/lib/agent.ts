@@ -52,6 +52,8 @@ interface AgentContext {
   snapshotImages: string[];
   /** 0-based index of the snapshot the user is currently viewing */
   currentSnapshotIndex: number;
+  /** NSFW flag — set when Gemini refuses content. All subsequent calls skip Gemini. */
+  isNsfw?: boolean;
 }
 
 export type AgentStreamEvent =
@@ -62,6 +64,7 @@ export type AgentStreamEvent =
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
   | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
+  | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -126,9 +129,11 @@ function createTools(ctx: AgentContext) {
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
-          { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: resolvedModel },
+          { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           { currentImage: editTarget, originalImage: ctx.originalImage, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
+        // NSFW detection: flag session so all subsequent calls skip Gemini
+        if (skillResult.contentBlocked) ctx.isNsfw = true;
         if (skillResult.image) {
           ctx.currentImage = skillResult.image;
           ctx.snapshotImages.push(skillResult.image); // Append as <<<image_N+1>>>
@@ -136,7 +141,7 @@ function createTools(ctx: AgentContext) {
           if (skillResult.usedModel) ctx.lastUsedModel = skillResult.usedModel;
         }
         const indexInfo = skillResult.image ? ` Now <<<image_${ctx.snapshotImages.length}>>>.` : '';
-        return { success: skillResult.success as true, message: skillResult.message + indexInfo };
+        return { success: skillResult.success as true, message: skillResult.message + indexInfo, contentBlocked: skillResult.contentBlocked };
       },
     }),
 
@@ -277,7 +282,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -289,6 +294,7 @@ export async function* runMakaronAgent(
     preferredModel: options?.preferredModel,
     snapshotImages: options?.snapshotImages ?? [currentImage],
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
+    isNsfw: options?.isNsfw,
   };
 
   const allTools = createTools(ctx);
@@ -420,10 +426,17 @@ export async function* runMakaronAgent(
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
         }
 
-        // Detect generate_image failure: tool was called but no new image produced
-        if (toolName === 'generate_image' && imagesSent === ctx.generatedImages.length) {
-          const isEn = options?.locale === 'en';
-          yield { type: 'status', text: isEn ? 'Image generation failed' : '图片生成失败' };
+        // Detect generate_image failure or NSFW content block
+        if (toolName === 'generate_image') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const toolResult = (event as any).result as { contentBlocked?: boolean } | undefined;
+          if (toolResult?.contentBlocked) {
+            yield { type: 'nsfw_detected' };
+          }
+          if (imagesSent === ctx.generatedImages.length) {
+            const isEn = options?.locale === 'en';
+            yield { type: 'status', text: isEn ? 'Image generation failed' : '图片生成失败' };
+          }
         }
 
         while (imagesSent < ctx.generatedImages.length) {
