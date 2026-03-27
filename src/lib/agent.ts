@@ -3,11 +3,12 @@ import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
 import type { ModelId } from './models/types';
-import { submitAnimationTask } from './kling';
+import { filterAndRemapImages } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
+import { createVideo } from './skills/create-video';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -161,13 +162,37 @@ function createTools(ctx: AgentContext) {
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
-          // Same code path as GUI: filter/remap images, provider selection, DB persist
-          const { taskId } = await submitAnimationTask({
-            projectId: ctx.projectId,
-            prompt: story_prompt,
-            imageUrls,
+          // Call skill layer: createVideo (stateless, no DB)
+          const skillResult = await createVideo({
+            script: story_prompt,
+            images: imageUrls,
             duration,
           });
+
+          if (!skillResult.success || !skillResult.taskId) {
+            return { success: false as const, message: skillResult.message };
+          }
+
+          const taskId = skillResult.taskId;
+
+          // Persist to DB (Agent layer responsibility)
+          const { createClient } = await import('@/lib/supabase/server');
+          const supabase = await createClient();
+          const { filteredImages, finalPrompt } = filterAndRemapImages(story_prompt, imageUrls);
+          const { data: animation, error } = await supabase
+            .from('project_animations')
+            .insert({
+              project_id: ctx.projectId,
+              piapi_task_id: taskId,
+              status: 'processing',
+              prompt: finalPrompt,
+              snapshot_urls: filteredImages,
+            })
+            .select('id')
+            .single();
+
+          if (error) throw error;
+
           ctx.animationTaskId = taskId;
           ctx.animationPrompt = story_prompt;
           return { success: true as const, taskId, message: 'Video generation task created! It takes about 3–5 minutes. The result will appear here when done.' };

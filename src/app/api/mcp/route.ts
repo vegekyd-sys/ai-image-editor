@@ -1,7 +1,7 @@
 import { createMakaronMcpServer } from '@/mcp/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 function checkAuth(req: Request): Response | null {
   const apiKey = process.env.MCP_API_KEY;

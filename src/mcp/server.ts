@@ -2,6 +2,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { editImage } from '../lib/skills/edit-image';
 import { rotateCamera } from '../lib/skills/rotate-camera';
+import { writeVideoScript } from '../lib/skills/write-video-script';
+import { createVideo } from '../lib/skills/create-video';
+import { getVideoStatus } from '../lib/skills/get-video-status';
 
 /** Resolve image input to data URL or HTTP URL for AI APIs. */
 function resolveImage(input: string): string {
@@ -151,6 +154,119 @@ Uses Qwen Image Edit model to regenerate the image from the requested camera ang
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP rotate_camera error]', msg);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  server.tool(
+    'makaron_write_video_script',
+    `Analyze 1-7 images and write a cinematic video script optimized for Kling VIDEO 3.0 Omni.
+
+Returns a shot-by-shot script with <<<image_N>>> references, camera directions, sound cues, and timing.
+The script follows Kling prompt format and can be passed directly to makaron_create_video.
+
+Tips:
+- Provide 3-7 images for best results (more variety = better story)
+- Images are referenced as <<<image_1>>>, <<<image_2>>> etc. in order
+- Optional userRequest lets you guide the style/mood/story direction
+- Script generation takes ~30-60s (AI analyzes all images)
+- Images can be URLs or base64 data URLs`,
+    {
+      images: z.array(z.string()).min(1).max(7).describe('Images: URLs or base64 data URLs (1-7)'),
+      userRequest: z.string().nullish().describe('Optional style/mood/story direction'),
+      language: z.enum(['en', 'zh']).nullish().describe('Script language (default: en)'),
+    },
+    async (params) => {
+      try {
+        const resolvedImages = params.images.map((img) => resolveImage(img));
+        const result = await writeVideoScript({
+          images: resolvedImages,
+          userRequest: params.userRequest ?? undefined,
+          language: params.language ?? 'en',
+        });
+
+        return { content: [{ type: 'text' as const, text: result.success
+          ? `${result.message}\n\nTitle: ${result.title}\n\n${result.script}`
+          : result.message }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[MCP write_video_script error]', msg);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  server.tool(
+    'makaron_create_video',
+    `Submit a video rendering task to Kling AI. Returns a taskId for polling.
+
+IMPORTANT:
+- images must be publicly accessible URLs (not base64). Upload to storage first.
+- script should use <<<image_N>>> format (from makaron_write_video_script output)
+- Video rendering takes 3-5 minutes. Use makaron_get_video_status to poll.
+- Duration: omit for smart mode (AI decides 3-15s based on script).
+
+Example script format:
+Shot 1 (2s): Wide shot, <<<image_1>>> ...
+Shot 2 (3s): Close-up, <<<image_2>>> ...
+Style: Cinematic, warm golden light.`,
+    {
+      script: z.string().describe('Video script with <<<image_N>>> references'),
+      images: z.array(z.string().url()).min(1).max(7).describe('Publicly accessible image URLs'),
+      duration: z.number().optional().describe('Duration: 3, 5, 7, 10, or 15 seconds. Omit for smart mode.'),
+      aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
+    },
+    async (params) => {
+      try {
+        const result = await createVideo({
+          script: params.script,
+          images: params.images,
+          duration: params.duration,
+          aspectRatio: params.aspectRatio,
+        });
+
+        return { content: [{ type: 'text' as const, text: result.success
+          ? `${result.message}\n\nTask ID: ${result.taskId}`
+          : result.message }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[MCP create_video error]', msg);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  server.tool(
+    'makaron_get_video_status',
+    `Poll the status of a video rendering task. Returns status + videoUrl when complete.
+
+Status values:
+- pending: task queued
+- processing: rendering in progress (typically 3-5 minutes)
+- completed: done, videoUrl available
+- failed: error occurred
+
+Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
+    {
+      taskId: z.string().describe('Task ID from makaron_create_video'),
+    },
+    async (params) => {
+      try {
+        const result = await getVideoStatus({ taskId: params.taskId });
+
+        let response = result.message;
+        if (result.status === 'completed' && result.videoUrl) {
+          response += `\n\nVideo URL: ${result.videoUrl}`;
+        }
+        if (result.status === 'failed' && result.error) {
+          response += `\n\nError: ${result.error}`;
+        }
+
+        return { content: [{ type: 'text' as const, text: response }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[MCP get_video_status error]', msg);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
       }
     },
