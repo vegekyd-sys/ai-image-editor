@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { submitAnimationTask } from '@/lib/kling'
+import { createVideo } from '@/lib/skills/create-video'
+import { filterAndRemapImages } from '@/lib/kling'
 
 export const maxDuration = 30
 
@@ -27,11 +28,37 @@ export async function POST(req: NextRequest) {
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
-    const { taskId, animationId } = await submitAnimationTask({
-      projectId, prompt, imageUrls, duration, aspectRatio,
+    // Call skill layer (stateless, no DB)
+    const skillResult = await createVideo({
+      script: prompt,
+      images: imageUrls,
+      duration,
+      aspectRatio,
     })
 
-    return NextResponse.json({ animationId, taskId })
+    if (!skillResult.success || !skillResult.taskId) {
+      return NextResponse.json({ error: skillResult.message }, { status: 500 })
+    }
+
+    const taskId = skillResult.taskId
+
+    // Persist to DB (API route responsibility)
+    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, imageUrls)
+    const { data: animation, error } = await supabase
+      .from('project_animations')
+      .insert({
+        project_id: projectId,
+        piapi_task_id: taskId,
+        status: 'processing',
+        prompt: finalPrompt,
+        snapshot_urls: filteredImages,
+      })
+      .select('id')
+      .single()
+
+    if (error) throw error
+
+    return NextResponse.json({ animationId: animation.id, taskId })
   } catch (err) {
     console.error('animate POST error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
