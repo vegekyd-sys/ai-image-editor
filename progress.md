@@ -3561,3 +3561,123 @@ default        → [gemini, qwen]
 | Agent 自动选 pony | ✅ | Agent 识别"二次元"+"用pony" → 传 `model: 'pony'` |
 | Danbooru 翻译 | ✅ | 自然语言 → Grok-3 翻译 → ComfyUI SDXL 生图 |
 | 图片质量 | ✅ | 猫耳+女仆装+猫，二次元风格正确 |
+
+---
+
+## Foldin (SeeDance 2.0) Video API 集成（2026-03-27）
+
+### 背景
+视频 MCP 功能需要测试新的视频 provider。Foldin (SeeDance 2.0) 是火山引擎旗下的视频生成服务，通过 Gateway API 提供访问。
+
+### 集成内容
+
+**新增文件**：
+- `src/lib/foldin.ts` — Foldin API 客户端（createTask, getStatus, getOutputs, poll）
+- `scripts/test-foldin*.mjs` — 6 个测试脚本（格式测试、多图测试、URL 验证等）
+
+**修改文件**：
+- `src/lib/skills/create-video.ts`
+  - ✅ 移除 7 图硬限制（line 19）→ 允许传入任意数量图片，由 filterAndRemapImages 决定
+  - ✅ Foldin provider 保留 `<<<image_N>>>` 标记（line 59-61）
+- `src/lib/skills/get-video-status.ts`
+  - ✅ 添加 Foldin provider 路由（line 28-71）
+  - ✅ 状态映射：PENDING/RUNNING/SUCCESS/FAILED/CANCELED → pending/processing/completed/failed
+- `src/app/api/animate/[taskId]/route.ts`
+  - ✅ 轮询 API 添加 Foldin provider 支持（line 23-54）
+- `.env.local`
+  - 添加 `FOLDIN_ACCESS_KEY`, `FOLDIN_GATEWAY_URL`
+  - `ANIMATE_PROVIDER=foldin` 可切换（默认保持 `kling`）
+
+### 关键发现
+
+**1. 3 图失败根因：URL 404**
+- 初始测试：1 图✅、2 图✅、3 图❌（`content[3].image_url not found`）
+- 排查发现：第三张 Unsplash URL 已失效（HTTP 404）
+- 修复：替换有效 URL，3 图测试通过 ✅
+
+**2. 脚本格式兼容性**
+| 格式 | 测试结果 | 视频链接 |
+|------|----------|----------|
+| 自然语言"图N中的xxx" | ✅ 成功 | [链接](https://oss.foldin.cn/.../703d52a9.mp4) |
+| `<<<image_N>>>` 保留标记 | ✅ 成功（5.5min） | [链接](https://oss.foldin.cn/.../bfdfb2b3.mp4) |
+| 移除标记 | ✅ 成功 | [链接](https://oss.foldin.cn/.../2a3d2cf9.mp4) |
+
+**结论**：Foldin **完全理解** `<<<image_N>>>` 标记，无需转换。Kling、PiAPI、Foldin 三个 provider 统一使用同一套脚本格式。
+
+**3. 关键 Bug 修复**
+
+| Bug | 位置 | 问题 | 修复 |
+|-----|------|------|------|
+| #1 | `create-video.ts` line 19 | 硬限制 7 图输入 | 移除限制，让 filterAndRemapImages 决定 |
+| #2 | `create-video.ts` line 59-61 | 移除 `<<<image_N>>>` 标记 | 保留标记，Foldin 能理解 |
+| #3 | `/api/animate/[taskId]/route.ts` | 轮询 API 无 Foldin 支持 | 添加 provider 路由 |
+
+### 测试脚本记录
+
+**三只猫咪的冒险故事**（最终验证测试）：
+```
+Shot 1 (3s): <<<image_1>>> 早晨，橘猫从懒懒的睡梦中醒来，伸了个大大的懒腰，准备开始新的一天
+Shot 2 (3s): <<<image_2>>> 中午，白猫发现了一个神秘的盒子，好奇地歪着头，想要探个究竟
+Shot 3 (4s): <<<image_3>>> 傍晚，灰猫找到了最喜欢的玩具，轻轻地用爪子拨弄，享受着安静的时光
+```
+- 耗时：329 秒（~5.5 分钟）
+- 状态：SUCCESS
+- 视频：https://oss.foldin.cn/.../bfdfb2b3-48e5-4660-b191-58d92b279d39.mp4
+
+### API 对比
+
+| 特性 | Kling VIDEO 3.0 | Foldin (SeeDance 2.0) |
+|------|------------------|------------------------|
+| 图片上限 | 7 张 | 测试验证 3+ 张 ✅ |
+| 脚本格式 | `<<<image_N>>>` | `<<<image_N>>>` 或自然语言 |
+| 渲染速度 | ~3-5 分钟 | ~5-6 分钟 |
+| 状态轮询 | 4 秒间隔 | 4 秒间隔 |
+| 输出格式 | MP4 | MP4 |
+| 成本 | $0.112/s | 待确认 |
+
+### 环境变量配置
+
+```bash
+# Foldin (SeeDance 2.0) - 已测试通过，保留备用
+FOLDIN_ACCESS_KEY=fld_sk_***
+FOLDIN_GATEWAY_URL=https://aistudio.foldin.cn/api/gateway
+# ANIMATE_PROVIDER=foldin  # 注释掉 = 使用 kling（默认）
+
+# 切换 provider
+# ANIMATE_PROVIDER=kling    # Kling 直连（默认）
+# ANIMATE_PROVIDER=piapi    # PiAPI 中转
+# ANIMATE_PROVIDER=foldin   # Foldin (SeeDance 2.0)
+```
+
+### 架构总结
+
+**统一的 Provider 抽象**：
+```
+create-video.ts (skill)
+  ├─ provider=foldin → foldin.ts → Foldin Gateway API
+  ├─ provider=piapi  → piapi.ts  → PiAPI
+  └─ provider=kling  → kling.ts  → Kling Direct API
+
+get-video-status.ts (skill)
+  ├─ provider=foldin → getFoldinTaskStatus + getFoldinTaskOutputs
+  ├─ provider=piapi  → getKlingTaskPiAPI
+  └─ provider=kling  → getKlingTask
+
+/api/animate/[taskId] (polling endpoint)
+  ├─ provider=foldin → map Foldin status → update DB
+  ├─ provider=piapi  → PiAPI status → update DB
+  └─ provider=kling  → Kling status → update DB
+```
+
+**关键设计**：
+- Skill 层无副作用（无 DB 写入），由 Agent/API route 层负责持久化
+- 脚本格式统一（`<<<image_N>>>`），provider 层按需转换（PiAPI 转 `@image_N`，Foldin 保留）
+- `filterAndRemapImages()` 统一处理图片引用和索引重映射
+
+### 上线状态
+
+- ✅ 代码已合并到 `dev` 分支
+- ✅ 所有测试通过（单图、双图、3 图、脚本格式兼容性）
+- ✅ 默认 provider 保持 `kling`，Foldin 作为备用可切换
+- ✅ 开发服务器 http://localhost:3000 已验证功能正常
+

@@ -19,9 +19,51 @@ export async function GET(
 
     const { taskId } = await params
 
-    // Poll task — default Kling direct, ANIMATE_PROVIDER=piapi to fallback
-    const usePiAPI = process.env.ANIMATE_PROVIDER === 'piapi'
-    const result = usePiAPI ? await getKlingTaskPiAPI(taskId) : await getKlingTask(taskId)
+    // Poll task — provider routing: foldin, piapi, or kling (default)
+    const provider = process.env.ANIMATE_PROVIDER || 'kling'
+    let result: { taskId: string; status: string; videoUrl?: string; error?: string }
+
+    if (provider === 'foldin') {
+      const { getFoldinTaskStatus, getFoldinTaskOutputs } = await import('@/lib/foldin')
+      const statusData = await getFoldinTaskStatus(taskId)
+
+      // Map Foldin status to our format
+      let status: string
+      let videoUrl: string | undefined
+
+      switch (statusData.status) {
+        case 'PENDING':
+          status = 'pending'
+          break
+        case 'RUNNING':
+          status = 'processing'
+          break
+        case 'SUCCESS':
+          status = 'completed'
+          const outputs = await getFoldinTaskOutputs(taskId)
+          if (outputs.length > 0) {
+            videoUrl = outputs[0].object_url || outputs[0].upstream_object_url || undefined
+          }
+          break
+        case 'FAILED':
+        case 'CANCELED':
+          status = 'failed'
+          break
+        default:
+          status = 'pending'
+      }
+
+      result = {
+        taskId,
+        status,
+        videoUrl,
+        error: statusData.error || undefined,
+      }
+    } else if (provider === 'piapi') {
+      result = await getKlingTaskPiAPI(taskId)
+    } else {
+      result = await getKlingTask(taskId)
+    }
 
     // If completed, update DB
     if (result.status === 'completed' && result.videoUrl) {

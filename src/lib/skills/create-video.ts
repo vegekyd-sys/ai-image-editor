@@ -16,10 +16,10 @@ export interface CreateVideoResult {
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const { script, images, duration, aspectRatio } = input;
 
-  if (images.length === 0 || images.length > 7) {
+  if (images.length === 0) {
     return {
       success: false,
-      message: 'Must provide 1-7 images. Provided: ' + images.length,
+      message: 'No images provided.',
     };
   }
 
@@ -35,6 +35,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
   try {
     // Filter to only referenced images and remap indices
+    // filterAndRemapImages will enforce the 7-image limit on the filtered result
     const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
 
     if (filteredImages.length === 0) {
@@ -50,11 +51,22 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     console.log(`\n🎬 [create_video] ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
-    // Provider routing: Kling direct (default) or PiAPI
-    const usePiAPI = process.env.ANIMATE_PROVIDER === 'piapi';
+    // Provider routing: foldin, piapi, or kling (default)
+    const provider = process.env.ANIMATE_PROVIDER || 'kling';
     let taskId: string;
 
-    if (usePiAPI) {
+    if (provider === 'foldin') {
+      const { createFoldinTask } = await import('../foldin');
+      // Foldin understands <<<image_N>>> markers directly, keep them
+      taskId = await createFoldinTask({
+        prompt: finalPrompt,
+        images: filteredImages,
+        duration: resolvedDuration,
+        ratio: aspectRatio,
+        resolution: '720P',
+      });
+      console.log(`✅ [create_video] Foldin task created: ${taskId}`);
+    } else if (provider === 'piapi') {
       const { createKlingTask: createKlingTaskPiAPI } = await import('../piapi');
       taskId = await createKlingTaskPiAPI({
         prompt: finalPrompt.replace(/<<<image_(\d+)>>>/g, '@image_$1'), // PiAPI format
