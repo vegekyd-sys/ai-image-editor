@@ -4,18 +4,6 @@
 
 ---
 
-## ⚠️ 第一步：判断人脸大小！（每次分析图片必须先做这步）
-
-- **大脸**（特写/半身照，脸部占画面 >10%）→ 正常处理
-- **小脸**（全身照/合照/远景/广角，脸部占画面 <10%）→ 触发小脸保护模式
-
-**小脸保护模式：所有editPrompt必须加入以下句子（字面照抄）：**
-> "CRITICAL: Faces in this photo are small. Leave ALL face areas completely untouched — do NOT sharpen, enhance, retouch, relight, resize, or process any face region in any way. Apply all edits only to background, environment, and clothing. Treat face areas as if they are masked off and invisible to you."
-
-小脸时不要写 "luminous skin"、"slim face"、"enlarge eyes" 等任何面部处理指令——这些在小脸上会导致马赛克感或面部重新生成。光影/色彩改变只作用于环境和身体，面部区域保持原样。
-
----
-
 ## ✅ 方向选择
 
 以下 7 个方向经过大量测试，稳定得分 8 分。**优先从这里选**，但不是硬性限制——如果这张照片有一个更好的专属方向，可以提出来（见下方"开放方向"规则）。
@@ -49,26 +37,34 @@
 
 ---
 
-## 📝 editPrompt必须包含的固定句子（每条都必须有，字面照抄）
+## 📝 editPrompt 构成规则
 
-**句子1（场景净化，必须是第一句）：**
-> "FIRST: Clean up the scene — remove any element that draws attention away from the main subject but adds no compositional value (cluttered objects, background people, distracting items). Replace with natural-looking scene."
+editPrompt 由两部分拼接而成。
 
-**句子2（背景锚定）：**
-> "Keep the original background scene intact — enhance lighting and colors on the existing scene, do NOT replace or regenerate the background."
+### 第一部分：固定句子（始终包含，字面照抄）
 
-**句子3（瘦脸，有人物时）：**
-> "If and only if the person has a clearly defined adult jawline: apply a visible V-line face-slimming effect, narrowing the jaw width and slimming the lower face contour. For children or people with naturally round/soft faces, do NOT apply any face-slimming or face modification whatsoever. The upper face (eyes, nose, forehead) must remain completely unchanged for everyone."
+> "FIRST: Clean up the scene — remove any element that draws attention away from the main subject but adds no compositional value (cluttered objects, background people, distracting items). Replace with natural-looking scene. Keep the original background scene intact — enhance lighting and colors on the existing scene, do NOT replace or regenerate the background."
 
-**句子4（人脸保真）：**
-> "Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider, rounder, or alter jaw lines."
+然后写你的增强描述（光影、色彩、景深、环境变化等）。
 
-**句子5（收尾）：**
+最后以这句收尾：
 > "Do NOT add any text, watermarks, or borders."
 
-⚠️ **绝对禁止修改眼睛大小/形状**——眼部改动会导致面部重新生成，人物认不出来。
+### 第二部分：人脸保护（⚠️ 条件追加）
 
-皮肤描述措辞：用 "luminous, translucent skin with natural micro-texture"，禁止 "smooth skin" / "porcelain" / "flawless" / "soft focus on face"。
+先判断：**这张图片里有没有真实的人类面孔？**
+- 卡通角色、动漫人物、动物、风景、物品、雕塑 = 不是人类面孔
+- 只有真实的人类照片 = 有人类面孔
+
+**有人类面孔** → 在 editPrompt 末尾（"Do NOT add any text" 之前）追加以下句子：
+> "If and only if the person has a clearly defined adult jawline: apply a visible V-line face-slimming effect, narrowing the jaw width and slimming the lower face contour. For children or people with naturally round/soft faces, do NOT apply any face-slimming or face modification whatsoever. The upper face (eyes, nose, forehead) must remain completely unchanged for everyone. Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider, rounder, or alter jaw lines."
+
+如果是小脸（全身照/合照/远景，脸部占画面 <10%），改为追加：
+> "CRITICAL: Faces in this photo are small. Leave ALL face areas completely untouched — do NOT sharpen, enhance, retouch, relight, resize, or process any face region in any way. Apply all edits only to background, environment, and clothing."
+
+**没有人类面孔** → **不追加任何句子。第二部分为空。**
+
+⚠️ **为什么这个判断至关重要？** 生图模型会把 editPrompt 中出现的 "face"、"jawline"、"identity" 等词当作生成指令——在非人物图片上会凭空生成人脸。这是已确认的严重 bug。所以：**没有人类面孔时，editPrompt 中绝对不能出现任何人脸相关的词。** 宁可漏掉人脸保护，也不要在非人物图片上触发人脸生成。
 
 ---
 

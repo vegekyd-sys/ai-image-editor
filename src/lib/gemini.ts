@@ -571,7 +571,6 @@ export async function generatePreviewImageOpenRouter(
     temperature: 1.0,
     reasoning: { effort: thinkingEffort || 'minimal' },
     messages: [
-      { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
     ],
   };
@@ -579,20 +578,27 @@ export async function generatePreviewImageOpenRouter(
     body.image_config = { aspect_ratio: aspectRatio };
   }
 
-  console.log(`[OpenRouter] generatePreview reasoning=${thinkingEffort || 'minimal'}`);
+  const bodyJson = JSON.stringify(body);
+  console.log(`[OpenRouter] generatePreview reasoning=${thinkingEffort || 'minimal'} bodySize=${(bodyJson.length/1024).toFixed(0)}KB`);
+  const t0 = Date.now();
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
     headers: openrouterHeaders(),
-    body: JSON.stringify(body),
+    body: bodyJson,
   });
+  const ttfb = Date.now() - t0;
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    console.error(`[OpenRouter] ${res.status}: ${errText.slice(0, 200)}`);
+    console.error(`[OpenRouter] ${res.status} (TTFB ${ttfb}ms): ${errText.slice(0, 200)}`);
     return null;
   }
 
+  const t1 = Date.now();
   const data = await res.json();
+  const downloadMs = Date.now() - t1;
+  console.log(`[OpenRouter] TTFB=${ttfb}ms download=${downloadMs}ms total=${Date.now() - t0}ms`);
+
   const choice = data.choices?.[0]?.message;
   if (!choice) {
     console.error('[OpenRouter] No choice in response:', JSON.stringify(data).slice(0, 300));
@@ -611,8 +617,10 @@ export async function generatePreviewImageOpenRouter(
       if (url) {
         const outputLen = url.length;
         const inputLen = imageBase64?.length ?? 0;
-        console.log(`[OpenRouter] Image generated: input=${(inputLen/1024).toFixed(0)}KB output=${(outputLen/1024).toFixed(0)}KB ratio=${inputLen ? (outputLen/inputLen*100).toFixed(0) : '?'}%`);
-        return ensureJpeg(url);
+        const t2 = Date.now();
+        const result = await ensureJpeg(url);
+        console.log(`[OpenRouter] Image generated: input=${(inputLen/1024).toFixed(0)}KB output=${(outputLen/1024).toFixed(0)}KB ensureJpeg=${Date.now() - t2}ms`);
+        return result;
       }
     }
   }
