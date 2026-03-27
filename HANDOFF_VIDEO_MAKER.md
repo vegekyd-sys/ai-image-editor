@@ -139,6 +139,224 @@ const result = await client.callTool({
 });
 ```
 
+### 3. `makaron_write_video_script`
+
+根据 1-7 张图片写视频脚本。返回 Kling 格式脚本，可直接传给 `makaron_create_video`。
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `images` | string[] | ✅ | 1-7 张图片（URL 或 base64）|
+| `userRequest` | string | | 可选的风格/主题/故事方向 |
+| `language` | string | | 脚本语言：`'en'` 或 `'zh'`（默认 `'en'`）|
+
+**返回格式：**
+
+文本包含：
+- 标题（第一行，2-5 词）
+- 脚本正文（Shot-by-shot 格式，含 `<<<image_N>>>` 引用）
+- 预估时长（从脚本解析）
+
+**调用示例：**
+
+```ts
+const result = await client.callTool({
+  name: 'makaron_write_video_script',
+  arguments: {
+    images: [
+      'https://example.com/photo1.jpg',
+      'https://example.com/photo2.jpg',
+      'https://example.com/photo3.jpg',
+    ],
+    userRequest: 'Create a cinematic transformation story with urban vibe',
+    language: 'en',
+  },
+});
+
+console.log(result.content[0].text);
+// Output:
+// Video script generated successfully. Estimated duration: 10s.
+//
+// Title: Urban Metamorphosis
+//
+// Shot 1 (2s): Wide shot, <<<image_1>>> — original street scene, warm evening light...
+// Shot 2 (3s): Push-in to mid-shot, <<<image_2>>> — neon color grade...
+// ...
+```
+
+### 4. `makaron_create_video`
+
+提交视频渲染任务。**注意：images 必须是公开可访问的 URL**（不支持 base64），请先上传到存储服务。
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `script` | string | ✅ | Kling 格式脚本（含 `<<<image_N>>>` 引用）|
+| `images` | string[] | ✅ | 1-7 张图片的公开 URL |
+| `duration` | number | | 时长：3/5/7/10/15 秒。省略=智能模式 |
+| `aspectRatio` | string | | 宽高比：`"9:16"` / `"16:9"` / `"1:1"` |
+
+**返回格式：**
+
+文本包含 Task ID，用于轮询。
+
+**调用示例：**
+
+```ts
+const result = await client.callTool({
+  name: 'makaron_create_video',
+  arguments: {
+    script: scriptFromPreviousStep,
+    images: [
+      'https://storage.example.com/img1.jpg',
+      'https://storage.example.com/img2.jpg',
+    ],
+    duration: 10,
+    aspectRatio: '9:16',
+  },
+});
+
+console.log(result.content[0].text);
+// Output:
+// Video rendering task created. Task ID: abc123xyz. Rendering takes 3-5 minutes. Use makaron_get_video_status to poll.
+//
+// Task ID: abc123xyz
+```
+
+### 5. `makaron_get_video_status`
+
+查询视频任务状态。**建议每 10-15 秒轮询一次，不要紧密循环**。
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `taskId` | string | ✅ | 来自 `makaron_create_video` 的 Task ID |
+
+**返回格式：**
+
+文本包含状态 + videoUrl（完成时）。
+
+**调用示例：**
+
+```ts
+// 轮询直到完成
+while (true) {
+  const result = await client.callTool({
+    name: 'makaron_get_video_status',
+    arguments: { taskId: 'abc123xyz' },
+  });
+
+  const text = result.content[0].text;
+  console.log(text);
+
+  if (text.includes('completed')) {
+    // Extract videoUrl from text
+    break;
+  } else if (text.includes('failed')) {
+    throw new Error('Video rendering failed');
+  }
+
+  await sleep(15000); // 等 15 秒
+}
+```
+
+**状态说明：**
+
+| 状态 | 含义 |
+|------|------|
+| `pending` | 任务排队中 |
+| `processing` | 渲染中（通常 3-5 分钟）|
+| `completed` | 渲染完成，返回 videoUrl |
+| `failed` | 渲染失败，返回 error |
+
+---
+
+## 完整视频工作流
+
+结合图片编辑 + 视频生成的端到端示例：
+
+```ts
+// Step 1: 生成/编辑图片
+const img1 = await client.callTool({
+  name: 'makaron_edit_image',
+  arguments: {
+    image: 'https://example.com/original.jpg',
+    editPrompt: 'Cinematic warm golden hour lighting',
+    skill: 'enhance',
+  },
+});
+
+const img2 = await client.callTool({
+  name: 'makaron_edit_image',
+  arguments: {
+    image: extractBase64(img1),
+    editPrompt: 'A tiny chameleon on the shoulder',
+    skill: 'creative',
+  },
+});
+
+const img3 = await client.callTool({
+  name: 'makaron_edit_image',
+  arguments: {
+    image: 'https://example.com/original.jpg',
+    editPrompt: 'Neon color grading with cyberpunk vibe',
+    skill: 'wild',
+  },
+});
+
+// Step 2: 上传图片到存储（CooClip 自己的存储服务）
+const urls = await uploadToStorage([img1, img2, img3]);
+
+// Step 3: 写视频脚本
+const scriptResult = await client.callTool({
+  name: 'makaron_write_video_script',
+  arguments: {
+    images: urls,
+    userRequest: 'Urban transformation with neon vibes',
+    language: 'en',
+  },
+});
+
+const script = extractScript(scriptResult.content[0].text);
+
+// Step 4: 创建视频任务
+const createResult = await client.callTool({
+  name: 'makaron_create_video',
+  arguments: {
+    script: script,
+    images: urls,
+    duration: 10,
+  },
+});
+
+const taskId = extractTaskId(createResult.content[0].text);
+
+// Step 5: 轮询直到完成
+let videoUrl;
+while (true) {
+  const statusResult = await client.callTool({
+    name: 'makaron_get_video_status',
+    arguments: { taskId },
+  });
+
+  const statusText = statusResult.content[0].text;
+
+  if (statusText.includes('completed')) {
+    videoUrl = extractVideoUrl(statusText);
+    break;
+  } else if (statusText.includes('failed')) {
+    throw new Error('Video failed');
+  }
+
+  await sleep(15000);
+}
+
+console.log('Video ready:', videoUrl);
+```
+
 ---
 
 ## 连续编辑（链式调用）
@@ -196,9 +414,13 @@ const step2 = await client.callTool({
 |---|---|
 | `edit_image` 耗时 | ~15-25s |
 | `rotate_camera` 耗时 | ~20-30s |
-| 最大超时 | 120s |
+| `write_video_script` 耗时 | ~30-60s（AI 分析多图）|
+| `create_video` 耗时 | ~2s（提交任务）|
+| `get_video_status` 耗时 | ~1s（查询状态）|
+| 视频渲染时长 | 3-5 分钟（异步，需轮询）|
+| 最大超时 | 180s |
 | 图片建议大小 | < 2MB |
-| 输出格式 | JPEG base64 |
+| 输出格式 | JPEG base64（图片）/ URL（视频）|
 | 并发 | 无硬限制，但 Vercel serverless 有并发上限 |
 
 ---
