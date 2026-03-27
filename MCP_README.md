@@ -1,8 +1,17 @@
 # Makaron MCP Server
 
-Makaron 的 AI 图片编辑能力通过 [MCP (Model Context Protocol)](https://modelcontextprotocol.io) 对外暴露，任何支持 MCP 的 agent 或项目都可以接入。
+Makaron 的 AI 图片编辑和视频生成能力通过 [MCP (Model Context Protocol)](https://modelcontextprotocol.io) 对外暴露，任何支持 MCP 的 agent 或项目都可以接入。
 
 ## 可用 Tools
+
+**图片编辑（2 个）：**
+- `makaron_edit_image` — AI 图片编辑/生成
+- `makaron_rotate_camera` — 3D 视角旋转
+
+**视频生成（3 个）：**
+- `makaron_write_video_script` — 根据图片生成视频脚本
+- `makaron_create_video` — 提交视频渲染任务
+- `makaron_get_video_status` — 查询视频任务状态
 
 ### `makaron_edit_image`
 
@@ -62,6 +71,109 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 | `azimuth` | number | ✅ | 水平旋转 0-360°（0=正面, 90=右侧, 180=背面, 270=左侧） |
 | `elevation` | number | ✅ | 俯仰角 -30~60°（0=平视, 60=俯视） |
 | `distance` | number | ✅ | 距离 0.6~1.4（0.6=特写, 1.0=中景, 1.4=远景） |
+
+### `makaron_write_video_script`
+
+根据 1-7 张图片生成视频脚本。调用 Claude Sonnet 分析图片并写出 Shot-by-shot 格式的视频脚本，可直接用于 `makaron_create_video`。
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `images` | string[] | ✅ | 1-7 张图片（URL 或 base64 data URL） |
+| `userRequest` | string | | 可选的风格/主题/故事方向（如 "cinematic urban transformation story"） |
+| `language` | string | | 脚本语言：`'en'` 或 `'zh'`（默认 `'en'`） |
+
+**返回：**
+- 标题（第一行，2-5 词）
+- Shot-by-shot 脚本（含 `<<<image_N>>>` 引用）
+- 预估时长
+
+**示例：**
+```ts
+const result = await client.callTool({
+  name: 'makaron_write_video_script',
+  arguments: {
+    images: [
+      'https://example.com/photo1.jpg',
+      'https://example.com/photo2.jpg',
+      'https://example.com/photo3.jpg',
+    ],
+    userRequest: 'Create a cinematic transformation story',
+    language: 'en',
+  },
+});
+```
+
+### `makaron_create_video`
+
+提交视频渲染任务。**重要：images 必须是公开可访问的 URL**（不支持 base64）。
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `script` | string | ✅ | 视频脚本（Kling 格式，含 `<<<image_N>>>` 引用） |
+| `images` | string[] | ✅ | 1-7 张图片的公开 URL（必须 https://） |
+| `duration` | number | | 时长：3/5/7/10/15 秒。省略=智能模式（API 自动决定） |
+| `aspectRatio` | string | | 宽高比：`"9:16"` / `"16:9"` / `"1:1"` |
+
+**返回：**
+- 文本包含 Task ID，用于后续轮询状态
+
+**示例：**
+```ts
+const result = await client.callTool({
+  name: 'makaron_create_video',
+  arguments: {
+    script: scriptFromPreviousStep,
+    images: [
+      'https://storage.example.com/img1.jpg',
+      'https://storage.example.com/img2.jpg',
+    ],
+    duration: 10,
+    aspectRatio: '16:9',
+  },
+});
+// 提取 Task ID: result.content[0].text 包含 "Task ID: abc123xyz"
+```
+
+### `makaron_get_video_status`
+
+查询视频任务状态。**建议每 10-15 秒轮询一次，不要紧密循环**。
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `taskId` | string | ✅ | 来自 `makaron_create_video` 的 Task ID |
+
+**返回状态：**
+- `pending` — 排队中
+- `processing` — 渲染中（通常 3-5 分钟）
+- `completed` — 完成（包含 videoUrl）
+- `failed` — 失败（包含错误信息）
+
+**示例：**
+```ts
+// 轮询直到完成
+while (true) {
+  const result = await client.callTool({
+    name: 'makaron_get_video_status',
+    arguments: { taskId: 'abc123xyz' },
+  });
+
+  const text = result.content[0].text;
+  if (text.includes('completed')) {
+    // 提取 videoUrl: "Video URL: https://..."
+    break;
+  } else if (text.includes('failed')) {
+    throw new Error('Video rendering failed');
+  }
+
+  await new Promise(r => setTimeout(r, 15000)); // 15 秒间隔
+}
+```
 
 ---
 
@@ -124,6 +236,52 @@ const rotated = await client.callTool({
     distance: 1.0,
   },
 });
+
+// 视频生成完整流程
+// 1. 写脚本
+const script = await client.callTool({
+  name: 'makaron_write_video_script',
+  arguments: {
+    images: [
+      'https://example.com/photo1.jpg',
+      'https://example.com/photo2.jpg',
+    ],
+    userRequest: 'Create a cinematic story',
+  },
+});
+
+// 2. 提交渲染任务
+const createResult = await client.callTool({
+  name: 'makaron_create_video',
+  arguments: {
+    script: script.content[0].text,
+    images: [
+      'https://example.com/photo1.jpg',
+      'https://example.com/photo2.jpg',
+    ],
+    duration: 10,
+  },
+});
+
+// 提取 Task ID
+const taskId = createResult.content[0].text.match(/Task ID: (\S+)/)[1];
+
+// 3. 轮询状态
+while (true) {
+  const status = await client.callTool({
+    name: 'makaron_get_video_status',
+    arguments: { taskId },
+  });
+
+  const text = status.content[0].text;
+  if (text.includes('completed')) {
+    const videoUrl = text.match(/Video URL: (\S+)/)[1];
+    console.log('Video ready:', videoUrl);
+    break;
+  }
+
+  await new Promise(r => setTimeout(r, 15000)); // 15s 间隔
+}
 ```
 
 **curl 测试：**
@@ -215,7 +373,16 @@ stdio 模式额外支持本地文件路径作为 image 输入，结果保存到 
 
 ## 限制
 
+**图片编辑：**
 - `edit_image` 耗时 ~15-25 秒（Gemini 生图）
 - `rotate_camera` 耗时 ~20-30 秒（HuggingFace/fal.ai）
-- HTTP 模式 maxDuration = 120 秒
+- HTTP 模式 maxDuration = 180 秒（脚本生成可能需要 30-60s）
 - 图片建议 < 2MB，过大会影响速度
+
+**视频生成：**
+- `write_video_script` 耗时 ~1-2 分钟（Claude Sonnet 多图分析）
+- `create_video` 提交任务 ~1-2 秒（返回 Task ID）
+- `get_video_status` 查询状态 ~1 秒
+- **视频渲染耗时 3-5 分钟**（Kling/Foldin 后台处理）
+- 图片必须是公开 URL（不支持 base64）
+- 建议轮询间隔：10-15 秒
