@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
 
   // Not logged in — /login, /landingpage, / are accessible; others → landing page
   if (!user) {
-    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/mcp') {
+    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/mcp' && pathname !== '/admin/status') {
       const url = request.nextUrl.clone()
       url.pathname = '/landingpage'
       return NextResponse.redirect(url)
