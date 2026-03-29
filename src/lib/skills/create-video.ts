@@ -15,7 +15,6 @@ export interface CreateVideoResult {
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const { script, images, duration, aspectRatio } = input;
-
   if (images.length === 0) {
     return {
       success: false,

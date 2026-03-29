@@ -41,16 +41,20 @@ function headers() {
 
 /** Submit a v3-omni video task. Returns the Kling task ID. */
 export async function createKlingTask(input: KlingTaskInput): Promise<string> {
+  // With aspect_ratio: images as references (no type), Kling respects aspect_ratio.
+  // Without aspect_ratio: first image as first_frame, Kling matches image dimensions.
   const body: Record<string, unknown> = {
     model_name: 'kling-v3-omni',
     image_list: input.images.map((img, i) => ({
       image_url: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
-      // First image as first_frame → API auto-detects aspect ratio from it
-      ...(i === 0 ? { type: 'first_frame' } : {}),
+      ...(i === 0 && !input.aspect_ratio ? { type: 'first_frame' } : {}),
     })),
     prompt: input.prompt,
     mode: input.mode ?? 'std',
     sound: 'on',
+  }
+  if (input.aspect_ratio) {
+    body.aspect_ratio = input.aspect_ratio
   }
   // duration undefined = smart mode (API decides 3-15s)
   if (input.duration != null) {

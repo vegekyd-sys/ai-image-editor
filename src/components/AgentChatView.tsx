@@ -237,6 +237,7 @@ export default function AgentChatView({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const inputBarRef = useRef<HTMLDivElement>(null);
   const scrollStartY = useRef<number | null>(null);
+  const userScrolledUp = useRef(false);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
   const [inputBarH, setInputBarH] = useState(96);
@@ -479,8 +480,8 @@ export default function AgentChatView({
     prevMsgCountRef.current = messages.length;
     prevLastMsgLenRef.current = lastMsg?.content?.length ?? 0;
 
-    // Only scroll when AI is actively outputting (new assistant message or content growing)
-    if (isAgentActive && (msgCountChanged || lastMsgGrew)) {
+    // Only auto-scroll when AI is actively outputting AND user hasn't scrolled up
+    if (isAgentActive && (msgCountChanged || lastMsgGrew) && !userScrolledUp.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isAgentActive]);
@@ -491,6 +492,18 @@ export default function AgentChatView({
     const t = setTimeout(() => inputRef.current?.focus(), 350);
     return () => clearTimeout(t);
   }, [focusOnOpen]);
+
+  // Track whether user has scrolled away from the bottom (suppress auto-scroll)
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      userScrolledUp.current = distFromBottom > 80;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Dismiss keyboard when user scrolls the chat (iOS Safari: native listeners work more reliably)
   useEffect(() => {
@@ -523,6 +536,7 @@ export default function AgentChatView({
     const text = input.trim();
     if ((!text && attachedImages.length === 0) || isAgentActive) return;
     onSendMessage(text, attachedImages.length > 0 ? attachedImages : undefined);
+    userScrolledUp.current = false;
     setInput('');
     setAttachedImages([]);
   }, [input, attachedImages, isAgentActive, onSendMessage]);
