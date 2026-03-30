@@ -12,6 +12,7 @@ import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
 import { createProject } from '@/lib/createProject'
 import RollingTagline from '@/components/RollingTagline'
+import Changelog from '@/components/Changelog'
 
 interface ProjectWithSnapshots {
   id: string
@@ -40,7 +41,7 @@ function timeAgo(dateStr: string): string {
 
 export default function ProjectsPage() {
   const { user, loading: authLoading, signOut } = useAuth()
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const router = useRouter()
   const isDesktop = useIsDesktop()
   // Phase 1: Synchronous memory cache — same-session instant render
@@ -63,6 +64,7 @@ export default function ProjectsPage() {
   const [inputText, setInputText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
+  const [showChangelog, setShowChangelog] = useState(false)
   const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
   const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
@@ -480,20 +482,35 @@ export default function ProjectsPage() {
 
         {/* Top bar: language toggle (left) + sign out (right) */}
         <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
-          <LocaleToggle />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <LocaleToggle />
+            <button
+              onClick={() => setShowChangelog(true)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.25)',
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.55)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.25)')}
+            >
+              {locale === 'zh' ? '更新' : "What's new"}
+            </button>
+          </div>
           <button
-            onClick={() => signOut()}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-              color: 'rgba(255,255,255,0.18)',
-              transition: 'color 0.2s',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.18)')}
-          >
-            Sign out
-          </button>
+              onClick={() => signOut()}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.18)',
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.18)')}
+            >
+              Sign out
+            </button>
         </div>
 
         {/* ═══════════════════════════════
@@ -1006,6 +1023,7 @@ export default function ProjectsPage() {
           </div>
         </div>
       )}
+      {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
     </>
   )
 }

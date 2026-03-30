@@ -313,9 +313,8 @@ export default function Editor({
   const videoTimelineIndex = hasAnyAnimation ? timeline.length - 1 : -1;
   const isViewingVideo = hasAnyAnimation && viewIndex === videoTimelineIndex;
   // Currently selected video for canvas playback
-  const currentVideo = selectedVideoId
-    ? animations.find(a => a.id === selectedVideoId)
-    : animations.find(a => a.status === 'completed' && !!a.videoUrl);
+  const currentVideo = (selectedVideoId && animations.find(a => a.id === selectedVideoId))
+    || animations.find(a => a.status === 'completed' && !!a.videoUrl);
 
   // Draft occupies the slot immediately after its parent snapshot
   const isViewingDraft = isDraft && draftParentIndex !== null && viewIndex === draftParentIndex + 1;
@@ -2332,10 +2331,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
     setViewIndex(videoTimelineIndex);
 
-    // Select the matching animation by ID
-    if (animId) {
-      setSelectedVideoId(animId);
-    }
+    // Select the matching animation by ID (null resets to default fallback)
+    setSelectedVideoId(animId ?? null);
 
     if (isDesktop) {
       const containerW = document.querySelector('.flex.flex-row')?.clientWidth ?? 0;
