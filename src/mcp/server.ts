@@ -74,7 +74,9 @@ export function createMakaronMcpServer() {
 | Not sure | (omit) | (auto) | Auto routing with fallback |
 
 When skill is omitted, editPrompt is sent directly. When skill is set, a structured .md template is injected to guide the AI.
-Input image can be a local file path (stdio), URL, or base64 data URL. Omit image for text-to-image generation.`,
+Input image can be a local file path (stdio), URL, or base64 data URL. Omit image for text-to-image generation.
+
+IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are fully supported and produce better results.`,
     {
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('English editing instructions describing what to change'),

@@ -368,7 +368,7 @@ export async function* runMakaronAgent(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = (streamText as any)({
       model: MODEL,
-      system: systemPrompt,
+      system: [{ role: 'system', content: systemPrompt, providerOptions: { bedrock: { cachePoint: { type: 'default' } } } }],
       messages: [{ role: 'user', content: userContent }],
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),

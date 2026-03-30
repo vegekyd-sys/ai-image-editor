@@ -114,7 +114,7 @@ These rules apply when YOU are choosing what to edit (no explicit user instructi
 
 ### Quality Principles
 - Photorealistic only — cartoonish props look cheap
-- Keep prompts concise and focused — overly long prompts dilute model attention
+- Detailed prompts produce better results
 
 ## Video / Animation Workflow
 
