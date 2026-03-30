@@ -24,6 +24,12 @@ interface ProjectWithSnapshots {
   hasVideo?: boolean
 }
 
+// Available skills (client-side list, mirrors src/skills/ directory)
+const AVAILABLE_SKILLS = [
+  { name: 'photo-to-video', label: 'Photo to Video', makaron: { icon: '🎬', color: '#c084fc' } },
+  { name: 'makaron-mascot', label: 'Pixel Wizard', makaron: { icon: '🧙', color: '#3D2FBF' } },
+];
+
 function timeAgo(dateStr: string): string {
   const now = Date.now()
   const then = new Date(dateStr).getTime()
@@ -65,6 +71,7 @@ export default function ProjectsPage() {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
   const [showChangelog, setShowChangelog] = useState(false)
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
   const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
@@ -343,14 +350,17 @@ export default function ProjectsPage() {
     setCreating(true)
     try {
       const supabase = createClient()
-      const result = await createProject(supabase, user.id, files, prompt ? { prompt } : undefined)
+      const opts: { prompt?: string; skill?: string } = {}
+      if (prompt) opts.prompt = prompt
+      if (selectedSkill) opts.skill = selectedSkill
+      const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('Create project error:', err)
       setCreating(false)
     }
-  }, [user, creating, router])
+  }, [user, creating, router, selectedSkill])
 
   // Unified create: text only, image only, or both — all go through handleCreateProject
   const handleCreate = useCallback(async () => {
@@ -857,6 +867,34 @@ export default function ProjectsPage() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* Skill selector */}
+            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+              {AVAILABLE_SKILLS.map(skill => (
+                <button
+                  key={skill.name}
+                  onClick={() => setSelectedSkill(selectedSkill === skill.name ? null : skill.name)}
+                  style={{
+                    padding: '5px 14px',
+                    borderRadius: 20,
+                    fontSize: '0.8rem',
+                    letterSpacing: '0.01em',
+                    border: 'none',
+                    background: selectedSkill === skill.name
+                      ? `${skill.makaron.color || 'rgba(217,70,239,0.5)'}25`
+                      : 'rgba(255,255,255,0.06)',
+                    color: selectedSkill === skill.name
+                      ? (skill.makaron.color || '#f0abfc')
+                      : 'rgba(255,255,255,0.4)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    fontFamily: 'var(--font-geist-sans), sans-serif',
+                  }}
+                >
+                  {skill.makaron.icon} {skill.label}
+                </button>
+              ))}
             </div>
 
           </div>

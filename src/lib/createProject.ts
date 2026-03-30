@@ -25,7 +25,7 @@ export async function createProject(
   supabase: SupabaseClient,
   userId: string,
   files: File[],
-  options?: { prompt?: string },
+  options?: { prompt?: string; skill?: string },
 ): Promise<{ projectId: string; metadata?: { takenAt?: string; location?: string } } | null> {
   // Extract EXIF from first file
   const metadata = files.length > 0 ? await extractPhotoMetadata(files[0]) : undefined
@@ -46,6 +46,7 @@ export async function createProject(
     if (base64) sessionStorage.setItem('pendingImages', JSON.stringify([base64]))
     if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
     if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt)
+    if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill)
     return { projectId: project.id, metadata }
   }
 
@@ -66,6 +67,7 @@ export async function createProject(
   sessionStorage.setItem('pendingImages', JSON.stringify(urls))
   if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
   if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt)
+  if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill)
 
   return { projectId: project.id, metadata }
 }

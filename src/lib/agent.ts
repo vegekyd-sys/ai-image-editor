@@ -80,6 +80,9 @@ const SKILL_PROMPTS: Record<string, string> = {
   captions: captionsPrompt,
 };
 
+// Dynamic skills from SKILL.md registry
+import { getSkill, getSkillsSummaryForAgent } from './skill-registry';
+
 // ---------------------------------------------------------------------------
 // System prompt (bundled via webpack asset/source)
 // ---------------------------------------------------------------------------
@@ -98,7 +101,7 @@ function createTools(ctx: AgentContext) {
       description: generateImageToolPrompt,
       inputSchema: z.object({
         editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, write only the direction — template rules are auto-injected.'),
-        skill: z.enum(['enhance', 'creative', 'wild', 'captions']).optional().describe('Activate a skill template. See tool description for routing rules.'),
+        skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions, makaron-mascot). See tool description and available skills.'),
         model: z.enum(['gemini', 'qwen', 'pony', 'wai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
@@ -116,8 +119,15 @@ function createTools(ctx: AgentContext) {
           editTarget = ctx.snapshotImages[idx];
         }
 
-        // Resolve reference images from snapshot indices — merge with user-uploaded references
+        // Resolve reference images: user-uploaded + skill assets + snapshot indices
         let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
+        // Inject skill reference images (e.g. mascot character sheet) only when that skill is used
+        if (skill) {
+          const skillDef = getSkill(skill);
+          if (skillDef?.makaron.referenceImages?.length) {
+            resolvedRefs.push(...skillDef.makaron.referenceImages);
+          }
+        }
         if (reference_image_indices?.length) {
           for (const refIdx of reference_image_indices) {
             const idx = refIdx - 1;
@@ -330,7 +340,7 @@ export async function* runMakaronAgent(
 
   const analysisOnly = options?.analysisOnly ?? false;
   const tipReactionOnly = options?.tipReactionOnly ?? false;
-  const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : 10;
+  const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : 30;
   const analysisPrompt = withLocale(
     options?.analysisContext === 'post-edit' ? ANALYSIS_PROMPT_POSTEDIT : ANALYSIS_PROMPT_INITIAL,
     options?.locale,
@@ -362,7 +372,8 @@ export async function* runMakaronAgent(
     userContent = analysisOnly ? analysisPrompt : prompt;
   }
 
-  const systemPrompt = getAgentSystemPrompt();
+  // Build system prompt: base agent.md + skill registry summary
+  const systemPrompt = getAgentSystemPrompt() + getSkillsSummaryForAgent();
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

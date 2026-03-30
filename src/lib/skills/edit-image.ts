@@ -44,7 +44,16 @@ export async function editImage(
   // Qwen can't digest creative/wild/captions .md templates — only enhance works well
   const qwenIncompatibleSkill = preferredModel === 'qwen' && skill && skill !== 'enhance';
   const prompts = skillPrompts ?? loadSkillPromptsFromDisk();
-  const skillTemplate = (skill && !qwenIncompatibleSkill) ? prompts[skill] : null;
+  // Try hardcoded prompts first, then fall back to SkillRegistry (for dynamic skills like makaron-mascot)
+  let skillTemplate: string | null = null;
+  if (skill && !qwenIncompatibleSkill) {
+    skillTemplate = prompts[skill] ?? null;
+    if (!skillTemplate) {
+      const { getSkill } = require('../skill-registry');
+      const registrySkill = getSkill(skill);
+      if (registrySkill) skillTemplate = registrySkill.template;
+    }
+  }
   const finalPrompt = skillTemplate
     ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
     : editPrompt;
