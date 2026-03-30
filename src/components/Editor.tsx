@@ -2347,11 +2347,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     } else {
       const cr = lastCanvasRect.current;
       if (videoRect && cr && posterSrc) {
+        // Compute actual video position within canvas (object-contain), same as image hero
+        const ar = lastImageAR.current;
+        const vidInCanvas = containRect(cr.w, cr.h, ar);
+        const toRect = { l: cr.l + vidInCanvas.l, t: cr.t + vidInCanvas.t, w: vidInCanvas.w, h: vidInCanvas.h };
         const fromRect = { l: videoRect.left, t: videoRect.top, w: videoRect.width, h: videoRect.height };
         const dummy = { l: 0, t: 0, w: 0, h: 0 };
         setHeroAnim({
           src: posterSrc,
-          fromRect, toRect: cr,
+          fromRect, toRect,
           fromImg: dummy, toImg: dummy,
           fromRadius: '12px', toRadius: '0px',
           active: false,
