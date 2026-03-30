@@ -38,6 +38,8 @@ interface ImageCanvasProps {
   pullDownActive?: boolean;
   onPullDown?: (dx: number, dy: number, progress: number) => void;
   onPullDownEnd?: (committed: boolean) => void;
+  /** Increment to trigger video playback from external source (e.g. CUI second click) */
+  videoPlayTrigger?: number;
 }
 
 export default function ImageCanvas({
@@ -48,6 +50,7 @@ export default function ImageCanvas({
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
   pullDownActive, onPullDown, onPullDownEnd,
+  videoPlayTrigger,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -89,6 +92,7 @@ export default function ImageCanvas({
   const [videoDuration, setVideoDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
+  const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
   const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDragging = useRef(false);
@@ -514,6 +518,20 @@ export default function ImageCanvas({
     setVideoCurrentTime(pct * dur);
   }, []);
 
+  const videoFrameLoaded = videoFrameLoadedUrl === videoUrl;
+
+  // External trigger to start video playback (e.g. second click in CUI)
+  const prevPlayTrigger = useRef(videoPlayTrigger ?? 0);
+  useEffect(() => {
+    if (videoPlayTrigger && videoPlayTrigger !== prevPlayTrigger.current) {
+      prevPlayTrigger.current = videoPlayTrigger;
+      const v = videoRef.current;
+      if (v && isVideoEntry && videoUrl) {
+        v.play(); // onWaiting/onCanPlay handle loading state
+      }
+    }
+  }, [videoPlayTrigger, isVideoEntry, videoUrl]);
+
   // Non-Supabase video URLs (Kling CDN etc.) are proxied to avoid CORS and expiry issues
   const effectiveVideoUrl = videoUrl && !videoUrl.includes('supabase.co')
     ? `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`
@@ -599,8 +617,7 @@ export default function ImageCanvas({
               ref={videoRef}
               src={effectiveVideoUrl ?? undefined}
               playsInline
-              preload="none"
-              poster={(() => { const prev = timeline[timeline.length - 2]; return prev && prev !== '__VIDEO__' ? prev : undefined; })()}
+              preload="metadata"
               className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
                 animDir === 'left' ? 'opacity-0 -translate-x-8' :
                 animDir === 'right' ? 'opacity-0 translate-x-8' :
@@ -630,6 +647,7 @@ export default function ImageCanvas({
                 const v = videoRef.current;
                 if (v) setVideoCurrentTime(v.currentTime);
               }}
+              onLoadedData={() => setVideoFrameLoadedUrl(videoUrl ?? null)}
               onLoadedMetadata={() => {
                 const v = videoRef.current;
                 if (v && isFinite(v.duration)) setVideoDuration(v.duration);
@@ -641,6 +659,20 @@ export default function ImageCanvas({
                 }
               }}
             />
+
+            {/* Snapshot poster overlay — shown until video first frame loads */}
+            {!videoFrameLoaded && !videoPlaying && (() => {
+              const prev = timeline[timeline.length - 2];
+              const posterSrc = prev && prev !== VIDEO_SENTINEL ? prev : undefined;
+              return posterSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={posterSrc}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+                />
+              ) : null;
+            })()}
 
             {/* Buffering spinner (mid-playback) */}
             {videoLoading && videoPlaying && (

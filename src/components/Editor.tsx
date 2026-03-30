@@ -152,6 +152,7 @@ export default function Editor({
   const [animations, setAnimations] = useState<ProjectAnimation[]>(() => initialAnimations ?? []);
   // Which video is currently selected for canvas playback
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  const [videoPlayTrigger, setVideoPlayTrigger] = useState(0);
   // Detail mode: which animation to view in AnimateSheet
   const [detailAnimation, setDetailAnimation] = useState<ProjectAnimation | null>(null);
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
@@ -2171,7 +2172,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           const videoMsg: Message = {
             id: generateId(),
             role: 'assistant',
-            content: `🎬 ${t('status.videoDone')}！\n${anim.videoUrl}`,
+            content: `🎬 ${t('status.videoDone')}！\n${anim.videoUrl}\nanim:${anim.id}`,
             timestamp: Date.now(),
           };
           setMessages(prev => [...prev, videoMsg]);
@@ -2314,6 +2315,56 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setViewMode('gui');
     }
   }, [snapshots, draftParentIndex, isDesktop, cuiPanelWidth]);
+
+  // CUI: tap inline video → first click shows in GUI, second click plays
+  const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string) => {
+    if (videoTimelineIndex < 0) return;
+
+    // Desktop: if already viewing this exact video, trigger play instead of re-navigating
+    const alreadyViewing = isDesktop
+      && viewIndex === videoTimelineIndex
+      && animId != null
+      && selectedVideoId === animId;
+    if (alreadyViewing) {
+      setVideoPlayTrigger(n => n + 1);
+      return;
+    }
+
+    setViewIndex(videoTimelineIndex);
+
+    // Select the matching animation by ID
+    if (animId) {
+      setSelectedVideoId(animId);
+    }
+
+    if (isDesktop) {
+      const containerW = document.querySelector('.flex.flex-row')?.clientWidth ?? 0;
+      if (containerW && cuiPanelWidth > containerW / 2) {
+        const midW = Math.round(containerW / 2);
+        setCuiPanelWidth(midW);
+        if (cuiPanelRef.current) cuiPanelRef.current.style.width = `${midW}px`;
+      }
+    } else {
+      const cr = lastCanvasRect.current;
+      if (videoRect && cr && posterSrc) {
+        const fromRect = { l: videoRect.left, t: videoRect.top, w: videoRect.width, h: videoRect.height };
+        const dummy = { l: 0, t: 0, w: 0, h: 0 };
+        setHeroAnim({
+          src: posterSrc,
+          fromRect, toRect: cr,
+          fromImg: dummy, toImg: dummy,
+          fromRadius: '12px', toRadius: '0px',
+          active: false,
+          objectCover: true,
+        });
+        requestAnimationFrame(() => requestAnimationFrame(() =>
+          setHeroAnim(p => p ? { ...p, active: true } : null)
+        ));
+        setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
+      }
+      setViewMode('gui');
+    }
+  }, [videoTimelineIndex, isDesktop, cuiPanelWidth, viewIndex, selectedVideoId]);
 
   // Navigate GUI canvas to a snapshot when clicking @N chip in CUI (desktop only)
   const handleNavigateToSnapshot = useCallback((snapIndex: number) => {
@@ -2504,6 +2555,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 videoUrl={currentVideo?.videoUrl ?? null}
                 videoProcessing={isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing')}
                 videoPosterImage={snapshots[snapshots.length - 1]?.image}
+                videoPlayTrigger={videoPlayTrigger}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
@@ -2909,6 +2961,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             onPipTap={() => {}}
             onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
             onImageTap={handleImageTap}
+            onVideoTap={handleVideoTap}
             snapshots={snapshots}
             currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
             preferredModel={preferredModel}
@@ -2935,6 +2988,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           hidePip={heroAnim !== null || pullProgress !== null}
           onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
           onImageTap={handleImageTap}
+          onVideoTap={handleVideoTap}
           focusOnOpen={isViewingDraft}
           snapshots={snapshots}
           currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}

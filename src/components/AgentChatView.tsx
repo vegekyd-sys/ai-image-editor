@@ -185,6 +185,8 @@ interface AgentChatViewProps {
   onModelChange?: (model: PreferredModel) => void;
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
+  /** Tap video in CUI → jump to GUI video entry */
+  onVideoTap?: (rect?: DOMRect, posterSrc?: string, animId?: string) => void;
 }
 
 export default function AgentChatView({
@@ -207,6 +209,7 @@ export default function AgentChatView({
   preferredModel = 'auto',
   onModelChange,
   onNavigateToSnapshot,
+  onVideoTap,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -553,6 +556,15 @@ export default function AgentChatView({
     onImageTap(messageId, rect ?? undefined, imgEl?.src);
   }, [onImageTap]);
 
+  const handleInlineVideoClick = useCallback((e: React.MouseEvent, videoUrl: string, animId?: string) => {
+    if (!onVideoTap) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const lastSnap = snapshots[snapshots.length - 1];
+    const posterSrc = lastSnap?.imageUrl || lastSnap?.image;
+    setIsExiting(true);
+    onVideoTap(rect ?? undefined, posterSrc, animId);
+  }, [onVideoTap, snapshots]);
+
 
   const isPanel = mode === 'panel';
 
@@ -773,29 +785,40 @@ export default function AgentChatView({
                       <div className="markdown-body">
                         <MarkdownBlock
                           key={msg.id}
-                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, ''))}
+                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, ''))}
                           isPanel={isPanel}
                           snapshots={snapshots}
                           onNavigateToSnapshot={onNavigateToSnapshot}
                         />
-                        {/* Inline video player for animation results */}
+                        {/* Inline video — clickable thumbnail, jumps to GUI */}
                         {(() => {
                           const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
                           if (!mp4Match) return null;
-                          const lastSnap = snapshots[snapshots.length - 1];
-                          const posterUrl = lastSnap?.imageUrl || lastSnap?.image;
-                          const poster = posterUrl ? getThumbnailUrl(posterUrl, 680, 60) : undefined;
+                          const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
+                          const animId = animIdMatch?.[1];
                           return (
-                            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', maxWidth: 308, background: '#000' }}>
-                              <video
-                                src={`${mp4Match[0]}#t=0.1`}
-                                controls
-                                playsInline
-                                preload="none"
-                                poster={poster}
-                                style={{ width: '100%', aspectRatio: '4/3', objectFit: 'contain', display: 'block' }}
-                              />
-                            </div>
+                            <button
+                              onClick={(e) => handleInlineVideoClick(e, mp4Match[0], animId)}
+                              className="block w-full mt-2.5 active:opacity-75 transition-opacity"
+                            >
+                              <div style={{ borderRadius: 12, overflow: 'hidden', maxWidth: 308, background: '#000', position: 'relative' }}>
+                                <video
+                                  src={`${mp4Match[0]}#t=0.001`}
+                                  muted
+                                  playsInline
+                                  preload="metadata"
+                                  style={{ width: '100%', aspectRatio: '4/3', objectFit: 'contain', display: 'block', pointerEvents: 'none' }}
+                                />
+                                {/* Play icon — bottom-left, small */}
+                                <div className="absolute bottom-2.5 left-2.5">
+                                  <div className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                                    <svg width="13" height="13" viewBox="0 0 10 10" fill="white">
+                                      <polygon points="3.5,1.5 8.5,5 3.5,8.5" />
+                                    </svg>
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
                           );
                         })()}
                       </div>
