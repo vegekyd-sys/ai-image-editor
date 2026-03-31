@@ -66,6 +66,7 @@ export interface Snapshot {
   imageUrl?: string;      // Supabase Storage URL (persisted)
   description?: string;   // agent's analysis of this image (auto-generated, persisted)
   metadata?: PhotoMetadata; // EXIF metadata (location, time)
+  type?: 'original' | 'edit' | 'reference'; // snapshot kind — reference = skill asset
 }
 
 export interface Project {
@@ -86,6 +87,7 @@ export interface DbSnapshot {
   sort_order: number;
   created_at: string;
   description?: string;
+  type?: string;
 }
 
 export interface DbMessage {

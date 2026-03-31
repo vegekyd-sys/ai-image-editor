@@ -18,6 +18,7 @@ export async function GET() {
       color: s.makaron.color || '#a78bfa',
       builtIn: true,
       description: s.description,
+      referenceImages: s.makaron.referenceImages || [],
     }));
 
     // User skills (if logged in)
@@ -39,6 +40,7 @@ export async function GET() {
             color: parsed?.makaron.color || '#a78bfa',
             builtIn: false,
             description: parsed?.description || '',
+            referenceImages: parsed?.makaron.referenceImages || [],
           };
         });
       }

@@ -90,7 +90,7 @@ import { getSkill, getSkillFromAll, getSkillsSummaryForAgent, type ParsedSkill }
 // ---------------------------------------------------------------------------
 
 function getAgentSystemPrompt(): string {
-  return agentPrompt;
+  return agentPrompt + '\n\n## Video Script Format\n\n' + animatePrompt;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,8 +131,15 @@ function createTools(ctx: AgentContext) {
           const skillDef = getSkillFromAll(skill, ctx.userSkills);
           logLine(`🔍 [generate_image] getSkill("${skill}") found=${!!skillDef} refImages=${JSON.stringify(skillDef?.makaron?.referenceImages?.map((u: string) => u.slice(0, 60)))}`);
           if (skillDef?.makaron.referenceImages?.length) {
-            logLine(`🖼️ [generate_image] Injecting ${skillDef.makaron.referenceImages.length} reference image(s) from skill "${skill}"`);
-            resolvedRefs.push(...skillDef.makaron.referenceImages);
+            // Deduplicate: skip skill reference images already present as snapshots
+            const existingUrls = new Set(ctx.snapshotImages);
+            const newRefs = skillDef.makaron.referenceImages.filter((url: string) => !existingUrls.has(url));
+            if (newRefs.length) {
+              logLine(`🖼️ [generate_image] Injecting ${newRefs.length} reference image(s) from skill "${skill}" (${skillDef.makaron.referenceImages.length - newRefs.length} already in snapshots)`);
+              resolvedRefs.push(...newRefs);
+            } else {
+              logLine(`✅ [generate_image] All ${skillDef.makaron.referenceImages.length} reference image(s) from skill "${skill}" already in snapshots, skipping`);
+            }
           } else {
             logLine(`⚠️ [generate_image] Skill "${skill}" has NO referenceImages!`);
           }
@@ -150,7 +157,7 @@ function createTools(ctx: AgentContext) {
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
-          { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           { currentImage: editTarget, originalImage: ctx.originalImage, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
         // NSFW detection: flag session so all subsequent calls skip Gemini
@@ -167,9 +174,9 @@ function createTools(ctx: AgentContext) {
     }),
 
     generate_animation: tool({
-      description: `Submit a video script for rendering via Kling AI. Call ONLY after user confirms the script.\n\n${animatePrompt}`,
+      description: 'Submit a video script for rendering. Write the script yourself first (streamed to user in chat, following the Video Script Format in your system prompt), then call this tool to submit it.',
       inputSchema: z.object({
-        story_prompt: z.string().describe('The cinematic story script in English, with <<<image_1>>>, <<<image_2>>> etc. referencing each snapshot. Shot-by-shot format with camera movement, emotion, and sound hints.'),
+        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then Shot lines with <<<image_N>>> references, camera directions, sound cues, ending with Style line. Follow the Video Script Format in system prompt.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
       }),
       execute: async ({ story_prompt, duration }) => {
@@ -238,6 +245,11 @@ function createTools(ctx: AgentContext) {
           }
         }
 
+        // No image available (text-to-image mode, no uploads yet)
+        if (!imageSource) {
+          return { base64Data: '', mimeType: 'image/jpeg', question, error: 'No image available to analyze. Generate an image first using generate_image.' };
+        }
+
         // Resolve image to base64 buffer — handles both URL and base64 input
         let buf: Buffer;
         if (imageSource.startsWith('http')) {
@@ -260,6 +272,13 @@ function createTools(ctx: AgentContext) {
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toModelOutput({ output }: { output: any }) {
+        // No image available — return text-only error
+        if (!output.base64Data || output.error) {
+          return {
+            type: 'content' as const,
+            value: [{ type: 'text' as const, text: output.error || 'No image available to analyze.' }],
+          };
+        }
         return {
           type: 'content' as const,
           value: [
@@ -337,7 +356,7 @@ export async function* runMakaronAgent(
     generatedImages: [],
     animationImageUrls: options?.animationImageUrls,
     preferredModel: options?.preferredModel,
-    snapshotImages: options?.snapshotImages ?? [currentImage],
+    snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
     userSkills: options?.userSkills,

@@ -40,6 +40,8 @@ interface ImageCanvasProps {
   onPullDownEnd?: (committed: boolean) => void;
   /** Increment to trigger video playback from external source (e.g. CUI second click) */
   videoPlayTrigger?: number;
+  /** Number of reference snapshots at the start of the timeline */
+  referenceCount?: number;
 }
 
 export default function ImageCanvas({
@@ -51,6 +53,7 @@ export default function ImageCanvas({
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
   pullDownActive, onPullDown, onPullDownEnd,
   videoPlayTrigger,
+  referenceCount = 0,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -527,7 +530,7 @@ export default function ImageCanvas({
       prevPlayTrigger.current = videoPlayTrigger;
       const v = videoRef.current;
       if (v && isVideoEntry && videoUrl) {
-        v.play(); // onWaiting/onCanPlay handle loading state
+        v.play().catch(() => {}); // onWaiting/onCanPlay handle loading state
       }
     }
   }, [videoPlayTrigger, isVideoEntry, videoUrl]);
@@ -542,6 +545,8 @@ export default function ImageCanvas({
     if (timeline[index] === VIDEO_SENTINEL) return 'Video';
     // isDraft=true means we're currently viewing the draft slot
     if (isDraft) return 'Draft';
+    // Reference snapshot
+    if (referenceCount > 0 && index < referenceCount) return `@Ref ${index + 1}`;
     // 1-based index matching <<<image_N>>> convention
     const editNum = (draftTimelineIndex !== undefined && index > draftTimelineIndex)
       ? index
@@ -609,7 +614,7 @@ export default function ImageCanvas({
               e.stopPropagation();
               if (!showControls) { resetControlsTimer(); return; }
               if (videoPlaying) { videoRef.current?.pause(); }
-              else { setVideoLoading(true); videoRef.current?.play(); }
+              else { setVideoLoading(true); videoRef.current?.play().catch(() => {}); }
             }}
           >
             <video
@@ -856,30 +861,39 @@ export default function ImageCanvas({
           <div className={`flex items-center rounded-full ${isDesktop ? 'gap-1.5 px-3 py-1.5' : 'gap-[5px] px-[10px] py-[5px]'}`}
             style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
           >
-            {timeline.map((entry, i) => (
-              entry === VIDEO_SENTINEL ? (
-                <button
-                  key={i}
-                  onClick={() => goTo(i)}
-                  className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-5 h-5 hover:opacity-80' : 'w-3 h-3'}`}
-                  style={{ color: i === currentIndex ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
-                >
-                  <svg width={isDesktop ? "11" : "8"} height={isDesktop ? "11" : "8"} viewBox="0 0 8 8" fill="currentColor">
-                    <polygon points="2,1 7,4 2,7" />
-                  </svg>
-                </button>
-              ) : (
-                <button
-                  key={i}
-                  onClick={() => goTo(i)}
-                  className={`transition-all cursor-pointer ${
-                    i === currentIndex
-                      ? isDesktop ? 'w-5 h-2 rounded-full bg-white/70 hover:bg-white/90' : 'w-3 h-1 rounded-full bg-white/70'
-                      : isDesktop ? 'w-2 h-2 rounded-full bg-white/25 hover:bg-white/40' : 'w-1 h-1 rounded-full bg-white/25'
-                  }`}
-                />
-              )
-            ))}
+            {timeline.map((entry, i) => {
+              const isRef = referenceCount > 0 && i < referenceCount;
+              const showDivider = referenceCount > 0 && i === referenceCount;
+              return (
+                <span key={i} className="flex items-center">
+                  {showDivider && (
+                    <span className={`${isDesktop ? 'w-px h-3 mr-1.5' : 'w-px h-2 mr-[5px]'} bg-white/20`} />
+                  )}
+                  {entry === VIDEO_SENTINEL ? (
+                    <button
+                      onClick={() => goTo(i)}
+                      className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-5 h-5 hover:opacity-80' : 'w-3 h-3'}`}
+                      style={{ color: i === currentIndex ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
+                    >
+                      <svg width={isDesktop ? "11" : "8"} height={isDesktop ? "11" : "8"} viewBox="0 0 8 8" fill="currentColor">
+                        <polygon points="2,1 7,4 2,7" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => goTo(i)}
+                      className={`transition-all cursor-pointer ${
+                        i === currentIndex
+                          ? isDesktop ? 'w-5 h-2 rounded-full bg-white/70 hover:bg-white/90' : 'w-3 h-1 rounded-full bg-white/70'
+                          : isRef
+                            ? isDesktop ? 'w-2 h-2 rounded-full border border-dashed border-white/40 bg-transparent hover:border-white/60' : 'w-1.5 h-1.5 rounded-full border border-dashed border-white/40 bg-transparent'
+                            : isDesktop ? 'w-2 h-2 rounded-full bg-white/25 hover:bg-white/40' : 'w-1 h-1 rounded-full bg-white/25'
+                      }`}
+                    />
+                  )}
+                </span>
+              );
+            })}
             <span className={`font-medium whitespace-nowrap ${isDesktop ? 'text-xs ml-2' : 'text-[10px] ml-1'}`}
               style={{ color: 'rgba(255,255,255,0.4)' }}
             >

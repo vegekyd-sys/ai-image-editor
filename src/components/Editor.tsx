@@ -77,6 +77,28 @@ function getImageForApi(snapshot: Snapshot | undefined): string {
   return snapshot?.imageUrl || snapshot?.image || '';
 }
 
+/** Fetch reference images for a skill and return them as Snapshot objects. */
+async function fetchSkillReferenceSnapshots(skillName: string): Promise<Snapshot[]> {
+  try {
+    const res = await fetch('/api/skills');
+    const { skills } = await res.json();
+    const skill = skills?.find((s: { name: string }) => s.name === skillName);
+    const refImages: string[] = skill?.referenceImages || [];
+    return refImages.map((url, i) => ({
+      id: generateId(),
+      image: url,
+      tips: [],
+      messageId: '',
+      imageUrl: url,
+      type: 'reference' as const,
+      description: `Reference image ${i + 1} from skill "${skillName}"`,
+    }));
+  } catch (err) {
+    console.warn('[Editor] Failed to fetch skill reference images:', err);
+    return [];
+  }
+}
+
 interface EditorProps {
   projectId?: string;
   initialSnapshots?: Snapshot[];
@@ -292,6 +314,10 @@ export default function Editor({
     }
     return base;
   }, [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex]);
+
+  const referenceCount = useMemo(() =>
+    snapshots.filter(s => s.type === 'reference').length,
+  [snapshots]);
 
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
@@ -1276,11 +1302,15 @@ export default function Editor({
     // Build image index for multi-snapshot navigation — only when >1 snapshot
     const snapshotIndexContext = snapshotsRef.current.length > 1
       ? `[图片索引 / Image Index — ${snapshotsRef.current.length} snapshots]\n${snapshotsRef.current.map((s, i) => {
-          const desc = i === 0
-            ? (s.description || '原图 / Original upload')
-            : (s.description || '(use analyze_image to see this snapshot)');
+          const isRef = s.type === 'reference';
+          const desc = isRef
+            ? (s.description || 'Skill reference image')
+            : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
+              ? (s.description || '原图 / Original upload')
+              : (s.description || '(use analyze_image to see this snapshot)');
+          const tag = isRef ? ' (reference)' : '';
           const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
-          return `<<<image_${i + 1}>>>${marker} — ${desc}`;
+          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}`;
         }).join('\n')}\n\n`
       : '';
 
@@ -1303,12 +1333,13 @@ export default function Editor({
 
     // Compress snapshot images for API payload — URLs pass through (~100B), base64 compressed to 600KB
     // This prevents multi-image uploads from exceeding Vercel body size limits
-    const snapshotImagesForApi = await Promise.all(
+    const snapshotImagesForApi = (await Promise.all(
       snapshotsRef.current.map(async (s) => {
         const img = getImageForApi(s);
+        if (!img) return '';
         return img.startsWith('data:') ? compressBase64Image(img, 600_000) : img;
       })
-    );
+    )).filter(img => img.length > 0);
 
     const _agentT0 = performance.now();
     let _genStartTime = 0;
@@ -1905,92 +1936,110 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     };
   }, []);
 
-  const pendingHandled = useRef(false);
-  const pendingPromptHandled = useRef(false);
+  const initHandled = useRef(false);
 
-  // Path 1 (images only) or Path 3 (images + prompt): handle pendingImages
+  // Unified init: handles all entry scenarios (images, text, images+text, with/without skill)
   useEffect(() => {
-    if (pendingImages && pendingImages.length > 0 && !pendingHandled.current) {
-      pendingHandled.current = true;
+    const hasImages = pendingImages && pendingImages.length > 0;
+    const hasPrompt = !!pendingPrompt;
+    if (!hasImages && !hasPrompt) return;
+    if (initHandled.current) return;
+    initHandled.current = true;
 
-      // Create all snapshots — pendingImages may be URLs (pre-uploaded) or base64
-      const allSnapshots: Snapshot[] = pendingImages.map((img, i) => ({
-        id: generateId(),
-        image: img,
-        tips: [],
-        messageId: '',
-        ...(img.startsWith('http') ? { imageUrl: img } : {}),
-        ...(i === 0 && pendingMetadata ? { metadata: pendingMetadata } : {}),
-      }));
-      setSnapshots(allSnapshots);
-      snapshotsRef.current = allSnapshots;
-      prevTimelineLen.current = allSnapshots.length;
-      setViewIndex(0);
+    const init = async () => {
+      const isMulti = hasImages && pendingImages!.length > 1;
 
-      // Persist all snapshots + cache
+      // ── Step 1: Skill reference images ──
+      const refSnapshots = pendingSkill ? await fetchSkillReferenceSnapshots(pendingSkill) : [];
+
+      // ── Step 2: Work snapshots ──
+      const workSnapshots: Snapshot[] = hasImages
+        ? pendingImages!.map((img, i) => ({
+            id: generateId(),
+            image: img,
+            tips: [],
+            messageId: '',
+            ...(img.startsWith('http') ? { imageUrl: img } : {}),
+            ...(i === 0 && pendingMetadata ? { metadata: pendingMetadata } : {}),
+          }))
+        : [];
+
+      // ── Step 3: Commit to state ──
+      const allSnapshots = [...refSnapshots, ...workSnapshots];
+      if (allSnapshots.length > 0) {
+        setSnapshots(allSnapshots);
+        snapshotsRef.current = allSnapshots;
+        prevTimelineLen.current = allSnapshots.length;
+        if (workSnapshots.length > 0) setViewIndex(refSnapshots.length);
+      }
+
+      // ── Step 4: Persist + cache ──
       allSnapshots.forEach((snap, i) => {
         onSaveSnapshot?.(snap, i, (url) => {
           setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
         });
-        cacheImage(`snap:${snap.id}`, snap.image);
+        if (snap.type !== 'reference') {
+          cacheImage(`snap:${snap.id}`, snap.image);
+        }
       });
 
-      // Helper: URL → use directly, base64 → compress for tips API
-      const tipsImage = (img: string) =>
-        img.startsWith('http') ? Promise.resolve(img) : compressBase64Image(img, 600_000);
-
-      if (pendingPrompt) {
-        // Path 3: images + prompt → CUI with prompt as first message
-        pendingPromptHandled.current = true;
-        // Fetch tips for first image in background
-        tipsImage(allSnapshots[0].image).then(img =>
-          fetchTipsForSnapshot(allSnapshots[0].id, img)
-        );
-        setTimeout(() => {
-          if (!isDesktop) setViewMode('cui');
-          const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
-          handleAgentRequest(skillPrefix + pendingPrompt);
-        }, 200);
-      } else if (allSnapshots.length === 1) {
-        // Single image: full flow (tips with previews + CUI analysis)
-        const snap = allSnapshots[0];
-        tipsImage(snap.image).then(img => fetchTipsForSnapshot(snap.id, img));
-        runAutoAnalysis(snap.id, snap.image, 'initial');
-      } else {
-        // Multi-image: tips text only + parallel silent analysis → then greet
-        for (const snap of allSnapshots) {
-          tipsImage(snap.image).then(img => fetchTipsForSnapshot(snap.id, img, 'none'));
+      // ── Step 5: Tips (if images exist) ──
+      if (hasImages) {
+        const tipsImage = (img: string) =>
+          img.startsWith('http') ? Promise.resolve(img) : compressBase64Image(img, 600_000);
+        if (hasPrompt) {
+          // Images + prompt: tips for first image only (full preview)
+          tipsImage(workSnapshots[0].image).then(img => fetchTipsForSnapshot(workSnapshots[0].id, img));
+        } else if (isMulti) {
+          // Multi-image: tips for all, no preview
+          for (const snap of workSnapshots) {
+            tipsImage(snap.image).then(img => fetchTipsForSnapshot(snap.id, img, 'none'));
+          }
+        } else {
+          // Single image: tips with full preview
+          tipsImage(workSnapshots[0].image).then(img => fetchTipsForSnapshot(workSnapshots[0].id, img));
         }
-        // Show immediate "analyzing" message in CUI + typing indicator
-        const analyzingMsgId = generateId();
-        const analyzingText = t('editor.multiImageAnalyzing').replace('{count}', String(allSnapshots.length));
-        setMessages(prev => [...prev, { id: analyzingMsgId, role: 'assistant' as const, content: analyzingText, timestamp: Date.now() }]);
-        setIsAgentActive(true);
-        // Parallel analyze all images (silent: no CUI messages, no status bar)
-        // After all done, send a lightweight greeting (agent has descriptions, no need to analyze again)
-        Promise.all(
-          allSnapshots.map(snap => runAutoAnalysis(snap.id, snap.image, 'initial', { silent: true }))
-        ).then(() => {
-          setIsAgentActive(false);
-          handleAgentRequest(
-            `[System] User uploaded ${allSnapshots.length} images. All images have been analyzed (see Image Index descriptions). Briefly greet the user and mention what you see in each image in 1 sentence each.`,
-            undefined, undefined, { silent: true }
-          );
-        });
       }
-    }
-  }, [pendingImages, pendingMetadata, pendingPrompt, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
 
-  // Path 2: text only (no image) → CUI mode, send prompt to Agent
-  useEffect(() => {
-    if (pendingPrompt && !pendingImages?.length && !pendingPromptHandled.current) {
-      pendingPromptHandled.current = true;
-      if (!isDesktop) setViewMode('cui');
-      // Small delay to ensure CUI is mounted
-      const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
-      setTimeout(() => handleAgentRequest(skillPrefix + pendingPrompt), 200);
-    }
-  }, [pendingPrompt, pendingSkill, pendingImages, handleAgentRequest, isDesktop]);
+      // ── Step 6: Analysis (if images, no prompt) ──
+      if (hasImages && !hasPrompt) {
+        if (isMulti) {
+          // Multi-image: silent analysis → greeting
+          const analyzingMsgId = generateId();
+          const analyzingText = t('editor.multiImageAnalyzing').replace('{count}', String(workSnapshots.length));
+          setMessages(prev => [...prev, { id: analyzingMsgId, role: 'assistant' as const, content: analyzingText, timestamp: Date.now() }]);
+          setIsAgentActive(true);
+          Promise.all(
+            workSnapshots.map(snap => runAutoAnalysis(snap.id, snap.image, 'initial', { silent: true }))
+          ).then(() => {
+            setIsAgentActive(false);
+            handleAgentRequest(
+              `[System] User uploaded ${workSnapshots.length} images. All images have been analyzed (see Image Index descriptions). Briefly greet the user and mention what you see in each image in 1 sentence each.`,
+              undefined, undefined, { silent: true }
+            );
+          });
+        } else {
+          // Single image: non-silent analysis (shows in CUI)
+          runAutoAnalysis(workSnapshots[0].id, workSnapshots[0].image, 'initial');
+        }
+      }
+
+      // ── Step 7: Agent request (if prompt) ──
+      if (hasPrompt) {
+        setTimeout(() => {
+          const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
+          handleAgentRequest(skillPrefix + pendingPrompt!);
+        }, 200);
+      }
+
+      // ── Step 8: CUI mode ──
+      if ((hasPrompt || isMulti) && !isDesktop) {
+        setViewMode('cui');
+      }
+    };
+
+    init();
+  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
 
   // Existing project with no tips on latest snapshot — auto-fetch
   const autoFetchTriggered = useRef(false);
@@ -2508,6 +2557,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 timeline={timeline}
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}
+                referenceCount={referenceCount}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
                 isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
@@ -2537,8 +2587,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     setViewIndex(videoTimelineIndex);
                     return;
                   }
-                  // No animations yet — open creation card
-                  const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
+                  // No animations yet — open creation card (exclude reference snapshots)
+                  const allUrls = snapshots.filter(s => s.type !== 'reference').map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
                   const imageUrls = allUrls.length <= 7
                     ? allUrls
                     : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);

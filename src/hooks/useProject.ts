@@ -69,6 +69,7 @@ export function useProject(projectId: string, userId: string) {
       messageId: s.message_id || '',
       imageUrl: s.image_url,
       description: s.description ?? undefined,
+      ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
     }))
 
     const messages: Message[] = dbMessages.map((m) => {
@@ -141,6 +142,7 @@ export function useProject(projectId: string, userId: string) {
           message_id: snapshot.messageId,
           sort_order: sortOrder,
           ...(snapshot.description ? { description: snapshot.description } : {}),
+          ...(snapshot.type ? { type: snapshot.type } : {}),
         }, { onConflict: 'id' })
 
         if (error) console.warn('saveSnapshot error:', error)

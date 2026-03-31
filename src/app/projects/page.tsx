@@ -76,6 +76,7 @@ export default function ProjectsPage() {
   const [showChangelog, setShowChangelog] = useState(false)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
+  const [skillsExpanded, setSkillsExpanded] = useState(false)
   // Fetch skills from API
   useEffect(() => {
     fetch('/api/skills').then(r => r.json()).then(d => {
@@ -841,6 +842,30 @@ export default function ProjectsPage() {
 
                   </div>
 
+                  {/* Skill button — inside input bar, before Create */}
+                  {availableSkills.length > 0 && (
+                    <button
+                      onClick={() => setSkillsExpanded(prev => !prev)}
+                      style={{
+                        flexShrink: 0,
+                        padding: '4px 10px',
+                        borderRadius: 12,
+                        border: 'none',
+                        background: selectedSkill ? 'rgba(217,70,239,0.15)' : 'rgba(255,255,255,0.06)',
+                        color: selectedSkill ? '#f0abfc' : 'rgba(255,255,255,0.35)',
+                        fontSize: '0.72rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                        fontFamily: 'var(--font-geist-sans), sans-serif',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {selectedSkill
+                        ? availableSkills.find(s => s.name === selectedSkill)?.label || 'Skill'
+                        : 'Skill'}
+                    </button>
+                  )}
+
                   {/* Create button */}
                   <button
                     data-testid="create-project"
@@ -879,32 +904,72 @@ export default function ProjectsPage() {
               </div>
             </div>
 
-            {/* Skill selector */}
-            {availableSkills.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* Skill pills — expanded below input */}
+            {skillsExpanded && availableSkills.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {availableSkills.map(skill => (
-                <button
-                  key={skill.name}
-                  onClick={() => setSelectedSkill(selectedSkill === skill.name ? null : skill.name)}
-                  style={{
-                    padding: '5px 14px',
-                    borderRadius: 20,
-                    fontSize: '0.8rem',
-                    letterSpacing: '0.01em',
-                    border: 'none',
-                    background: selectedSkill === skill.name
-                      ? 'rgba(217,70,239,0.15)'
-                      : 'rgba(255,255,255,0.06)',
-                    color: selectedSkill === skill.name
-                      ? '#f0abfc'
-                      : 'rgba(255,255,255,0.4)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s',
-                    fontFamily: 'var(--font-geist-sans), sans-serif',
-                  }}
-                >
-                  {skill.label}
-                </button>
+                <span key={skill.name} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                  <button
+                    onClick={() => setSelectedSkill(selectedSkill === skill.name ? null : skill.name)}
+                    style={{
+                      padding: '5px 14px',
+                      paddingRight: !skill.builtIn ? 28 : 14,
+                      borderRadius: 20,
+                      fontSize: '0.8rem',
+                      letterSpacing: '0.01em',
+                      border: 'none',
+                      background: selectedSkill === skill.name
+                        ? 'rgba(217,70,239,0.15)'
+                        : 'rgba(255,255,255,0.06)',
+                      color: selectedSkill === skill.name
+                        ? '#f0abfc'
+                        : 'rgba(255,255,255,0.4)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      fontFamily: 'var(--font-geist-sans), sans-serif',
+                    }}
+                  >
+                    {skill.label}
+                  </button>
+                  {/* Delete button for user-uploaded skills */}
+                  {!skill.builtIn && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (selectedSkill === skill.name) setSelectedSkill(null)
+                        try {
+                          await fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skill.name }) })
+                          setAvailableSkills(prev => prev.filter(s => s.name !== skill.name))
+                        } catch (err) {
+                          console.error('Delete skill error:', err)
+                        }
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: 6,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'rgba(255,255,255,0.3)',
+                        fontSize: '0.65rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                        transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.3)')}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </span>
               ))}
               {/* Upload skill button */}
               <label
@@ -934,7 +999,6 @@ export default function ProjectsPage() {
                       const res = await fetch('/api/skills', { method: 'POST', body: form })
                       const data = await res.json()
                       if (data.success) {
-                        // Refresh skill list
                         const r = await fetch('/api/skills')
                         const d = await r.json()
                         if (d.skills) setAvailableSkills(d.skills)
