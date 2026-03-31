@@ -55,6 +55,8 @@ interface AgentContext {
   currentSnapshotIndex: number;
   /** NSFW flag — set when Gemini refuses content. All subsequent calls skip Gemini. */
   isNsfw?: boolean;
+  /** User skills loaded from DB (for reference image lookup) */
+  userSkills?: ParsedSkill[];
 }
 
 export type AgentStreamEvent =
@@ -81,7 +83,7 @@ const SKILL_PROMPTS: Record<string, string> = {
 };
 
 // Dynamic skills from SKILL.md registry
-import { getSkill, getSkillsSummaryForAgent } from './skill-registry';
+import { getSkill, getSkillFromAll, getSkillsSummaryForAgent, type ParsedSkill } from './skill-registry';
 
 // ---------------------------------------------------------------------------
 // System prompt (bundled via webpack asset/source)
@@ -122,12 +124,20 @@ function createTools(ctx: AgentContext) {
         // Resolve reference images: user-uploaded + skill assets + snapshot indices
         let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
         // Inject skill reference images (e.g. mascot character sheet) only when that skill is used
+        const fs = require('fs');
+        const logLine = (msg: string) => { console.log(msg); fs.appendFileSync('/tmp/skill-debug.log', `${new Date().toISOString()} ${msg}\n`); };
+        logLine(`🎯 [generate_image] skill="${skill || 'none'}" editPrompt="${editPrompt.slice(0, 80)}"`);
         if (skill) {
-          const skillDef = getSkill(skill);
+          const skillDef = getSkillFromAll(skill, ctx.userSkills);
+          logLine(`🔍 [generate_image] getSkill("${skill}") found=${!!skillDef} refImages=${JSON.stringify(skillDef?.makaron?.referenceImages?.map((u: string) => u.slice(0, 60)))}`);
           if (skillDef?.makaron.referenceImages?.length) {
+            logLine(`🖼️ [generate_image] Injecting ${skillDef.makaron.referenceImages.length} reference image(s) from skill "${skill}"`);
             resolvedRefs.push(...skillDef.makaron.referenceImages);
+          } else {
+            logLine(`⚠️ [generate_image] Skill "${skill}" has NO referenceImages!`);
           }
         }
+        logLine(`📎 [generate_image] Total resolvedRefs: ${resolvedRefs.length} (ctx.referenceImages=${ctx.referenceImages?.length ?? 0})`);
         if (reference_image_indices?.length) {
           for (const refIdx of reference_image_indices) {
             const idx = refIdx - 1;
@@ -317,7 +327,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[] },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -330,6 +340,7 @@ export async function* runMakaronAgent(
     snapshotImages: options?.snapshotImages ?? [currentImage],
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
+    userSkills: options?.userSkills,
   };
 
   const allTools = createTools(ctx);
@@ -373,7 +384,7 @@ export async function* runMakaronAgent(
   }
 
   // Build system prompt: base agent.md + skill registry summary
-  const systemPrompt = getAgentSystemPrompt() + getSkillsSummaryForAgent();
+  const systemPrompt = getAgentSystemPrompt() + getSkillsSummaryForAgent(options?.userSkills);
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

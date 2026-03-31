@@ -156,19 +156,41 @@ export function loadBuiltInSkills(): Map<string, ParsedSkill> {
   return _skills;
 }
 
-/** Get a skill by name */
+/** Get a skill by name (built-in only; for user skills use getSkillFromAll) */
 export function getSkill(name: string): ParsedSkill | undefined {
   return loadBuiltInSkills().get(name);
 }
 
-/** Get all loaded skills */
+/** Get all loaded built-in skills */
 export function getAllSkills(): ParsedSkill[] {
   return [...loadBuiltInSkills().values()];
 }
 
+// ── User skills (from DB) ───────────────────────────────────────────────────
+
+/** Load user skills from Supabase user_skills table */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function loadUserSkills(supabase: any, userId: string): Promise<ParsedSkill[]> {
+  const { data } = await supabase
+    .from('user_skills')
+    .select('name, skill_md')
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  if (!data) return [];
+  return (data as { name: string; skill_md: string }[])
+    .map(row => parseSkillMd(row.skill_md))
+    .filter((s): s is ParsedSkill => s !== null);
+}
+
+/** Get skill by name from built-in + user skills */
+export function getSkillFromAll(name: string, userSkills?: ParsedSkill[]): ParsedSkill | undefined {
+  return loadBuiltInSkills().get(name) || userSkills?.find(s => s.name === name);
+}
+
 /** Build skills section for Agent system prompt: summary + full instructions */
-export function getSkillsSummaryForAgent(): string {
-  const skills = getAllSkills();
+export function getSkillsSummaryForAgent(additionalSkills?: ParsedSkill[]): string {
+  const skills = [...getAllSkills(), ...(additionalSkills || [])];
   if (skills.length === 0) return '';
 
   const sections = skills.map(s =>

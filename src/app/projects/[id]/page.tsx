@@ -61,6 +61,12 @@ export default function ProjectPage() {
     if (p) sessionStorage.removeItem('pendingPrompt')
     return p
   })
+  const [pendingSkill] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const s = sessionStorage.getItem('pendingSkill')
+    if (s) sessionStorage.removeItem('pendingSkill')
+    return s
+  })
   // If memory cache has data WITH snapshots, start loaded=true — no spinner at all
   // Empty snapshots (e.g. new text-to-image project whose upload was still in-flight) don't count
   const [loaded, setLoaded] = useState(() => {
@@ -217,6 +223,7 @@ export default function ProjectPage() {
       pendingImages={pendingImages ?? undefined}
       pendingMetadata={pendingMetadata}
       pendingPrompt={pendingPrompt ?? undefined}
+      pendingSkill={pendingSkill ?? undefined}
       onSaveSnapshot={handleSaveSnapshot}
       onSaveMessage={handleSaveMessage}
       onUpdateTips={handleUpdateTips}

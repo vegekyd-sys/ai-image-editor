@@ -116,6 +116,11 @@ These rules apply when YOU are choosing what to edit (no explicit user instructi
 - Photorealistic only — cartoonish props look cheap
 - Detailed prompts produce better results
 
+### Skill Persistence
+- If the user message starts with `[Active skill: xxx]`, ALWAYS set `skill` parameter to that skill name in your `generate_image` calls
+- Once a skill has been used in the conversation (you called generate_image with a skill), continue using that same skill for subsequent related edits unless the user explicitly asks for something different
+- This ensures reference images and skill templates are consistently applied
+
 ## Video / Animation Workflow
 
 When the user wants a video (or prompt contains `[视频动画模式]`), follow the script rules in `generate_animation` tool description.

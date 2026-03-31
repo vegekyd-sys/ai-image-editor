@@ -24,11 +24,14 @@ interface ProjectWithSnapshots {
   hasVideo?: boolean
 }
 
-// Available skills (client-side list, mirrors src/skills/ directory)
-const AVAILABLE_SKILLS = [
-  { name: 'photo-to-video', label: 'Photo to Video', makaron: { icon: '🎬', color: '#c084fc' } },
-  { name: 'makaron-mascot', label: 'Pixel Wizard', makaron: { icon: '🧙', color: '#3D2FBF' } },
-];
+// Skill type for client-side rendering
+interface SkillItem {
+  name: string;
+  label: string;
+  icon: string;
+  color: string;
+  builtIn: boolean;
+}
 
 function timeAgo(dateStr: string): string {
   const now = Date.now()
@@ -72,6 +75,13 @@ export default function ProjectsPage() {
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
   const [showChangelog, setShowChangelog] = useState(false)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
+  const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
+  // Fetch skills from API
+  useEffect(() => {
+    fetch('/api/skills').then(r => r.json()).then(d => {
+      if (d.skills) setAvailableSkills(d.skills)
+    }).catch(() => {})
+  }, [])
   const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
   const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
@@ -870,8 +880,9 @@ export default function ProjectsPage() {
             </div>
 
             {/* Skill selector */}
-            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-              {AVAILABLE_SKILLS.map(skill => (
+            {availableSkills.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              {availableSkills.map(skill => (
                 <button
                   key={skill.name}
                   onClick={() => setSelectedSkill(selectedSkill === skill.name ? null : skill.name)}
@@ -882,20 +893,63 @@ export default function ProjectsPage() {
                     letterSpacing: '0.01em',
                     border: 'none',
                     background: selectedSkill === skill.name
-                      ? `${skill.makaron.color || 'rgba(217,70,239,0.5)'}25`
+                      ? `${skill.color || 'rgba(217,70,239,0.5)'}25`
                       : 'rgba(255,255,255,0.06)',
                     color: selectedSkill === skill.name
-                      ? (skill.makaron.color || '#f0abfc')
+                      ? (skill.color || '#f0abfc')
                       : 'rgba(255,255,255,0.4)',
                     cursor: 'pointer',
                     transition: 'all 0.15s',
                     fontFamily: 'var(--font-geist-sans), sans-serif',
                   }}
                 >
-                  {skill.makaron.icon} {skill.label}
+                  {skill.icon} {skill.label}
                 </button>
               ))}
+              {/* Upload skill button */}
+              <label
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  fontSize: '0.8rem',
+                  border: 'none',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'rgba(255,255,255,0.25)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  fontFamily: 'var(--font-geist-sans), sans-serif',
+                }}
+              >
+                + Skill
+                <input
+                  type="file"
+                  accept=".zip"
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const form = new FormData()
+                    form.append('file', file)
+                    try {
+                      const res = await fetch('/api/skills', { method: 'POST', body: form })
+                      const data = await res.json()
+                      if (data.success) {
+                        // Refresh skill list
+                        const r = await fetch('/api/skills')
+                        const d = await r.json()
+                        if (d.skills) setAvailableSkills(d.skills)
+                      } else {
+                        console.error('Skill upload failed:', data.error)
+                      }
+                    } catch (err) {
+                      console.error('Skill upload error:', err)
+                    }
+                    e.target.value = ''
+                  }}
+                />
+              </label>
             </div>
+            )}
 
           </div>
         </div>

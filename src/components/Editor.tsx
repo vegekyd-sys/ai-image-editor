@@ -85,6 +85,7 @@ interface EditorProps {
   pendingImages?: string[];
   pendingMetadata?: PhotoMetadata;
   pendingPrompt?: string;
+  pendingSkill?: string;
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
@@ -104,6 +105,7 @@ export default function Editor({
   pendingImages: pendingImagesProp,
   pendingMetadata,
   pendingPrompt,
+  pendingSkill,
   onSaveSnapshot,
   onSaveMessage,
   onUpdateTips,
@@ -1946,7 +1948,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         );
         setTimeout(() => {
           if (!isDesktop) setViewMode('cui');
-          handleAgentRequest(pendingPrompt);
+          const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
+          handleAgentRequest(skillPrefix + pendingPrompt);
         }, 200);
       } else if (allSnapshots.length === 1) {
         // Single image: full flow (tips with previews + CUI analysis)
@@ -1984,9 +1987,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       pendingPromptHandled.current = true;
       if (!isDesktop) setViewMode('cui');
       // Small delay to ensure CUI is mounted
-      setTimeout(() => handleAgentRequest(pendingPrompt), 200);
+      const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
+      setTimeout(() => handleAgentRequest(skillPrefix + pendingPrompt), 200);
     }
-  }, [pendingPrompt, pendingImages, handleAgentRequest, isDesktop]);
+  }, [pendingPrompt, pendingSkill, pendingImages, handleAgentRequest, isDesktop]);
 
   // Existing project with no tips on latest snapshot — auto-fetch
   const autoFetchTriggered = useRef(false);
