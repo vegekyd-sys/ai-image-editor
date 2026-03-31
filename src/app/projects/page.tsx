@@ -893,17 +893,17 @@ export default function ProjectsPage() {
                     letterSpacing: '0.01em',
                     border: 'none',
                     background: selectedSkill === skill.name
-                      ? `${skill.color || 'rgba(217,70,239,0.5)'}25`
+                      ? 'rgba(217,70,239,0.15)'
                       : 'rgba(255,255,255,0.06)',
                     color: selectedSkill === skill.name
-                      ? (skill.color || '#f0abfc')
+                      ? '#f0abfc'
                       : 'rgba(255,255,255,0.4)',
                     cursor: 'pointer',
                     transition: 'all 0.15s',
                     fontFamily: 'var(--font-geist-sans), sans-serif',
                   }}
                 >
-                  {skill.icon} {skill.label}
+                  {skill.label}
                 </button>
               ))}
               {/* Upload skill button */}
