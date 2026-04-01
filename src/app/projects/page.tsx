@@ -875,17 +875,16 @@ export default function ProjectsPage() {
                       onClick={() => setSkillsExpanded(prev => !prev)}
                       style={{
                         flexShrink: 0,
-                        padding: '5px 6px',
+                        padding: selectedSkill ? '4px 10px' : '5px 6px',
+                        borderRadius: selectedSkill ? 12 : 0,
                         border: 'none',
-                        background: 'none',
-                        color: selectedSkill ? 'rgba(217,70,239,0.8)' : 'rgba(255,255,255,0.2)',
+                        background: selectedSkill ? 'rgba(217,70,239,0.15)' : 'none',
+                        color: selectedSkill ? '#f0abfc' : 'rgba(255,255,255,0.3)',
                         fontSize: '0.72rem',
                         cursor: 'pointer',
                         transition: 'all 0.15s',
                         fontFamily: 'var(--font-geist-sans), sans-serif',
                         whiteSpace: 'nowrap',
-                        textDecoration: selectedSkill ? 'underline' : 'none',
-                        textUnderlineOffset: '3px',
                       }}
                     >
                       {selectedSkill
