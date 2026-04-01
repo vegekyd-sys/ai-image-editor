@@ -78,7 +78,11 @@ export default function ProjectsPage() {
   const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
   const [skillsExpanded, setSkillsExpanded] = useState(false)
   const [skillDragOver, setSkillDragOver] = useState(false)
+  const [skillUploading, setSkillUploading] = useState(false)
+  const [skillUploadError, setSkillUploadError] = useState<string | null>(null)
   const handleSkillUpload = useCallback(async (file: File) => {
+    setSkillUploading(true)
+    setSkillUploadError(null)
     const form = new FormData()
     form.append('file', file)
     try {
@@ -89,10 +93,15 @@ export default function ProjectsPage() {
         const d = await r.json()
         if (d.skills) setAvailableSkills(d.skills)
       } else {
-        console.error('Skill upload failed:', data.error)
+        setSkillUploadError(data.error || 'Upload failed')
+        setTimeout(() => setSkillUploadError(null), 3000)
       }
     } catch (err) {
+      setSkillUploadError('Upload failed')
+      setTimeout(() => setSkillUploadError(null), 3000)
       console.error('Skill upload error:', err)
+    } finally {
+      setSkillUploading(false)
     }
   }, [])
   // Fetch skills from API
@@ -1024,18 +1033,20 @@ export default function ProjectsPage() {
                   borderRadius: 20,
                   fontSize: '0.8rem',
                   border: 'none',
-                  background: 'rgba(255,255,255,0.04)',
-                  color: 'rgba(255,255,255,0.25)',
-                  cursor: 'pointer',
+                  background: skillUploadError ? 'rgba(239,68,68,0.15)' : skillUploading ? 'rgba(217,70,239,0.12)' : 'rgba(255,255,255,0.04)',
+                  color: skillUploadError ? '#fca5a5' : skillUploading ? '#f0abfc' : 'rgba(255,255,255,0.25)',
+                  cursor: skillUploading ? 'wait' : 'pointer',
                   transition: 'all 0.15s',
                   fontFamily: 'var(--font-geist-sans), sans-serif',
+                  pointerEvents: skillUploading ? 'none' : 'auto',
                 }}
               >
-                + Skill
+                {skillUploadError ? skillUploadError : skillUploading ? 'Uploading...' : '+ Skill'}
                 <input
                   type="file"
                   accept=".zip"
                   style={{ display: 'none' }}
+                  disabled={skillUploading}
                   onChange={async (e) => {
                     const file = e.target.files?.[0]
                     if (file) await handleSkillUpload(file)
