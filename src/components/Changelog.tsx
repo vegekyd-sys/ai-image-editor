@@ -230,7 +230,7 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
 
       {/* Modal — full screen on mobile, centered card on desktop */}
       <div
-        className="relative w-full h-full sm:h-auto sm:max-w-md sm:mx-4 sm:max-h-[80dvh] sm:rounded-2xl overflow-hidden flex flex-col"
+        className="relative w-full h-full sm:h-auto sm:max-w-xl sm:mx-4 sm:max-h-[80dvh] sm:rounded-2xl overflow-hidden flex flex-col"
         style={{ background: 'rgba(20,20,20,0.97)', border: '1px solid rgba(255,255,255,0.08)' }}
         onClick={(e) => e.stopPropagation()}
       >
