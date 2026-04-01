@@ -989,15 +989,13 @@ export default function ProjectsPage() {
                   {/* Delete button for user-uploaded skills */}
                   {!skill.builtIn && (
                     <button
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation()
+                        if (!confirm(`Delete skill "${skill.label}"?`)) return
                         if (selectedSkill === skill.name) setSelectedSkill(null)
-                        try {
-                          await fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skill.name }) })
-                          setAvailableSkills(prev => prev.filter(s => s.name !== skill.name))
-                        } catch (err) {
-                          console.error('Delete skill error:', err)
-                        }
+                        setAvailableSkills(prev => prev.filter(s => s.name !== skill.name))
+                        fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skill.name }) })
+                          .catch(err => console.error('Delete skill error:', err))
                       }}
                       style={{
                         position: 'absolute',
