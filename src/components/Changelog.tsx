@@ -8,6 +8,25 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-01',
+    en: { title: 'Skill System', items: [
+      'SKILL.md-driven skill framework — define workflows with YAML frontmatter + markdown templates',
+      'Built-in skills: Photo-to-Video (3-act story generation) & Makaron Mascot (Pixel Wizard character)',
+      'User custom skills: upload zip with SKILL.md + assets, stored in DB',
+      'Skill reference images as timeline snapshots for Agent context',
+      'Skill pills in Editor UI with unified highlight style',
+      'Skills API: list / create / delete with admin support',
+    ]},
+    zh: { title: 'Skill 技能系统', items: [
+      'SKILL.md 驱动的技能框架 — YAML frontmatter + Markdown 模板定义工作流',
+      '内置技能：照片变视频（3 幕故事生成）& Makaron 吉祥物（Pixel Wizard 角色）',
+      '用户自定义技能：上传 zip（SKILL.md + 素材），存入数据库',
+      '技能参考图作为时间线 snapshot 注入 Agent 上下文',
+      '编辑器 Skill 选择 pill，统一高亮样式',
+      'Skills API：列表 / 创建 / 删除，支持管理员操作',
+    ]},
+  },
+  {
     date: '2026-03-30',
     en: { title: 'Video & Performance', items: [
       'Video first frame preview in canvas',
