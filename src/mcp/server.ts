@@ -51,7 +51,14 @@ function formatResult(image: string, message: string, prefix: string) {
   }
 }
 
-export function createMakaronMcpServer() {
+export interface McpServerOptions {
+  /** Called after each tool completes successfully. Used for billing. */
+  onToolComplete?: (toolName: string, model?: string, durationMs?: number) => void | Promise<void>;
+  /** Called before each tool executes. Return false to reject (insufficient credits). */
+  onToolStart?: (toolName: string) => Promise<{ allowed: boolean; message?: string }>;
+}
+
+export function createMakaronMcpServer(options?: McpServerOptions) {
   const server = new McpServer({
     name: 'makaron',
     version: '1.0.0',
@@ -89,8 +96,13 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
     },
     async (params) => {
       try {
+        // Credit check before execution
+        if (options?.onToolStart) {
+          const check = await options.onToolStart('makaron_edit_image');
+          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+        }
+        const t0 = Date.now();
         const image = params.image ? resolveImage(params.image) : undefined;
-        // MCP callers may send simple/Chinese instructions — wrap to ensure image generation
         const wrappedPrompt = `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
 
         const ctx = {
@@ -113,6 +125,8 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
         if (!result.success || !result.image) {
           return { content: [{ type: 'text' as const, text: result.message }] };
         }
+        // Bill after success
+        await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0);
         const msg = result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
           : result.message;
@@ -143,6 +157,11 @@ Uses Qwen Image Edit model to regenerate the image from the requested camera ang
     },
     async (params) => {
       try {
+        if (options?.onToolStart) {
+          const check = await options.onToolStart('makaron_rotate_camera');
+          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+        }
+        const t0 = Date.now();
         const image = resolveImage(params.image);
         const result = await rotateCamera(
           { azimuth: params.azimuth, elevation: params.elevation, distance: params.distance },
@@ -152,6 +171,7 @@ Uses Qwen Image Edit model to regenerate the image from the requested camera ang
         if (!result.success || !result.image) {
           return { content: [{ type: 'text' as const, text: result.message }] };
         }
+        await options?.onToolComplete?.('makaron_rotate_camera', undefined, Date.now() - t0);
         return formatResult(result.image, result.message, 'rotate');
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -181,6 +201,11 @@ Tips:
     },
     async (params) => {
       try {
+        if (options?.onToolStart) {
+          const check = await options.onToolStart('makaron_write_video_script');
+          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+        }
+        const t0 = Date.now();
         const resolvedImages = params.images.map((img) => resolveImage(img));
         const result = await writeVideoScript({
           images: resolvedImages,
@@ -188,6 +213,9 @@ Tips:
           language: params.language ?? 'en',
         });
 
+        if (result.success) {
+          await options?.onToolComplete?.('makaron_write_video_script', undefined, Date.now() - t0);
+        }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTitle: ${result.title}\n\n${result.script}`
           : result.message }] };
@@ -221,6 +249,11 @@ Style: Cinematic, warm golden light.`,
     },
     async (params) => {
       try {
+        if (options?.onToolStart) {
+          const check = await options.onToolStart('makaron_create_video');
+          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+        }
+        const t0 = Date.now();
         const result = await createVideo({
           script: params.script,
           images: params.images,
@@ -228,12 +261,71 @@ Style: Cinematic, warm golden light.`,
           aspectRatio: params.aspectRatio,
         });
 
+        if (result.success) {
+          await options?.onToolComplete?.('makaron_create_video', undefined, Date.now() - t0);
+        }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}`
           : result.message }] };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP create_video error]', msg);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  server.tool(
+    'makaron_edit_video',
+    `Edit an existing video using Kling AI video-to-video. Returns a taskId for polling.
+
+Uses the video as a base (default) to apply edits described in the script/prompt,
+or as a feature reference to transfer style/motion to new content.
+
+IMPORTANT:
+- videoUrl must be a publicly accessible URL (MP4/MOV, ≥3s, 720-2160px, 24-60fps, ≤200MB)
+- When referType is "base": the video is the starting point for editing. Images serve as additional references only (no first_frame).
+- When referType is "feature": the video provides style/motion reference. Images define the actual content.
+- images (if any) must be publicly accessible URLs
+- Video rendering takes 3-5 minutes. Use makaron_get_video_status to poll.
+
+Example: Edit a video to add cinematic color grading:
+  videoUrl: "https://...", editPrompt: "Apply warm cinematic color grading with film grain", referType: "base"`,
+    {
+      videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV, ≥3s, 720-2160px, ≤200MB)'),
+      editPrompt: z.string().describe('Editing instructions describing what to change'),
+      images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
+      duration: z.number().optional().describe('Output duration: 3, 5, 7, 10, or 15 seconds. Omit for smart mode.'),
+      aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
+      referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
+      keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
+    },
+    async (params) => {
+      try {
+        if (options?.onToolStart) {
+          const check = await options.onToolStart('makaron_edit_video');
+          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+        }
+        const t0 = Date.now();
+        const result = await createVideo({
+          script: params.editPrompt,
+          images: params.images ?? [],
+          duration: params.duration,
+          aspectRatio: params.aspectRatio,
+          videoUrl: params.videoUrl,
+          videoReferType: params.referType ?? 'base',
+          keepOriginalSound: params.keepOriginalSound ?? false,
+        });
+
+        if (result.success) {
+          await options?.onToolComplete?.('makaron_edit_video', undefined, Date.now() - t0);
+        }
+        return { content: [{ type: 'text' as const, text: result.success
+          ? `${result.message}\n\nTask ID: ${result.taskId}`
+          : result.message }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[MCP edit_video error]', msg);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
       }
     },

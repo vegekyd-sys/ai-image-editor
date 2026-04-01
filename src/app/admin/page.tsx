@@ -18,10 +18,20 @@ interface WaitlistEntry {
   created_at: string
 }
 
+interface CreditPricing {
+  tool_name: string
+  supplier_cost: number
+  credits: number
+  is_free: boolean
+  updated_at: string
+}
+
 export default function AdminPage() {
-  const [tab, setTab] = useState<'codes' | 'waitlist'>('codes')
+  const [tab, setTab] = useState<'codes' | 'waitlist' | 'billing'>('codes')
   const [codes, setCodes] = useState<InviteCode[]>([])
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
+  const [pricing, setPricing] = useState<CreditPricing[]>([])
+  const [editingPricing, setEditingPricing] = useState<Record<string, { credits?: string; supplier_cost?: string }>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -44,10 +54,17 @@ export default function AdminPage() {
     if (Array.isArray(data)) setWaitlist(data)
   }, [])
 
+  const fetchPricing = useCallback(async () => {
+    const res = await fetch('/api/admin/credit-pricing')
+    if (res.status === 403) { setError('Not authorized'); return }
+    const data = await res.json()
+    if (Array.isArray(data)) setPricing(data)
+  }, [])
+
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchCodes(), fetchWaitlist()]).finally(() => setLoading(false))
-  }, [fetchCodes, fetchWaitlist])
+    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing()]).finally(() => setLoading(false))
+  }, [fetchCodes, fetchWaitlist, fetchPricing])
 
   const handleCreate = async () => {
     if (!newCode.trim()) return
@@ -117,6 +134,14 @@ export default function AdminPage() {
           }`}
         >
           Waitlist ({waitlist.length})
+        </button>
+        <button
+          onClick={() => setTab('billing')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+            tab === 'billing' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
+          }`}
+        >
+          Billing ({pricing.length})
         </button>
       </div>
 
@@ -209,6 +234,111 @@ export default function AdminPage() {
             <p className="text-white/30 text-sm text-center py-8">No waitlist entries yet</p>
           )}
         </div>
+      )}
+
+      {/* ══════ BILLING TAB ══════ */}
+      {tab === 'billing' && (
+        <>
+          <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-white/50 text-xs">
+                  <th className="text-left px-4 py-3 font-medium">Tool</th>
+                  <th className="text-right px-4 py-3 font-medium">Supplier Cost</th>
+                  <th className="text-right px-4 py-3 font-medium">Credits</th>
+                  <th className="text-center px-4 py-3 font-medium">Free?</th>
+                  <th className="text-right px-4 py-3 font-medium w-20"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pricing.map((p) => {
+                  const editing = editingPricing[p.tool_name]
+                  return (
+                    <tr key={p.tool_name} className="border-b border-white/5 hover:bg-white/[0.02]">
+                      <td className="px-4 py-3 font-mono text-xs">{p.tool_name}</td>
+                      <td className="px-4 py-3 text-right">
+                        {editing ? (
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={editing.supplier_cost ?? String(p.supplier_cost)}
+                            onChange={(e) => setEditingPricing(prev => ({
+                              ...prev,
+                              [p.tool_name]: { ...prev[p.tool_name], supplier_cost: e.target.value }
+                            }))}
+                            className="w-24 px-2 py-1 rounded bg-white/10 text-white text-xs text-right border border-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+                          />
+                        ) : (
+                          <span className="text-white/60">${Number(p.supplier_cost).toFixed(4)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {editing ? (
+                          <input
+                            type="number"
+                            value={editing.credits ?? String(p.credits)}
+                            onChange={(e) => setEditingPricing(prev => ({
+                              ...prev,
+                              [p.tool_name]: { ...prev[p.tool_name], credits: e.target.value }
+                            }))}
+                            className="w-20 px-2 py-1 rounded bg-white/10 text-white text-xs text-right border border-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+                          />
+                        ) : (
+                          <span className={p.is_free ? 'text-white/30' : 'text-fuchsia-400 font-medium'}>{p.credits}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-xs ${p.is_free ? 'text-green-400' : 'text-white/20'}`}>
+                          {p.is_free ? '✓' : '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {editing ? (
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              onClick={async () => {
+                                await fetch('/api/admin/credit-pricing', {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    tool_name: p.tool_name,
+                                    ...(editing.supplier_cost !== undefined ? { supplier_cost: parseFloat(editing.supplier_cost) } : {}),
+                                    ...(editing.credits !== undefined ? { credits: parseInt(editing.credits) } : {}),
+                                  }),
+                                })
+                                setEditingPricing(prev => { const n = { ...prev }; delete n[p.tool_name]; return n })
+                                fetchPricing()
+                              }}
+                              className="px-2 py-1 rounded bg-fuchsia-600 text-white text-xs hover:bg-fuchsia-500"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingPricing(prev => { const n = { ...prev }; delete n[p.tool_name]; return n })}
+                              className="px-2 py-1 rounded bg-white/10 text-white/50 text-xs hover:text-white/70"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setEditingPricing(prev => ({ ...prev, [p.tool_name]: {} }))}
+                            className="px-2 py-1 rounded text-white/30 text-xs hover:text-white/60 hover:bg-white/5"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          {pricing.length === 0 && (
+            <p className="text-white/30 text-sm text-center py-8">No pricing entries</p>
+          )}
+        </>
       )}
     </div>
   )
