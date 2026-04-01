@@ -8,6 +8,25 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-02',
+    en: { title: 'Skill-Driven Tips & Video Editing', items: [
+      'Skill tips fusion: active skill injects character/IP context into tips generation',
+      'Skill reference images passed to preview generation for accurate character rendering',
+      'A/B tested: skill-only mode (no category .md templates) produces better results',
+      'Category hints (enhance/creative/wild/captions) for parallel tip generation',
+      'MCP video editing: new makaron_edit_video tool using Kling video_list API',
+      'Skill upload drag & drop on project page',
+    ]},
+    zh: { title: 'Skill 驱动 Tips & 视频编辑', items: [
+      'Skill Tips 融合：激活 skill 时将角色/IP 上下文注入 tips 生成',
+      'Skill 参考图传给 preview 生图，确保角色渲染准确',
+      'A/B 测试验证：纯 skill 模式（不用分类 .md 模板）效果更好',
+      '分类含义提示（enhance/creative/wild/captions）用于并发 tip 生成',
+      'MCP 视频编辑：新增 makaron_edit_video 工具，基于 Kling video_list API',
+      '项目页 skill 上传支持拖放 zip',
+    ]},
+  },
+  {
     date: '2026-04-01',
     en: { title: 'Skill System', items: [
       'SKILL.md-driven skill framework — define workflows with YAML frontmatter + markdown templates',
