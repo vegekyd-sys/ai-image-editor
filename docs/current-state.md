@@ -1,0 +1,226 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - img "preview"
+          - generic [ref=e9]:
+            - button [ref=e10] [cursor=pointer]
+            - button [ref=e11] [cursor=pointer]
+            - button [ref=e12] [cursor=pointer]
+            - button [ref=e13] [cursor=pointer]:
+              - img [ref=e14]
+            - generic [ref=e16]: "@3"
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - button [ref=e19] [cursor=pointer]:
+              - img [ref=e20]
+            - button [ref=e22] [cursor=pointer]:
+              - img [ref=e23]
+            - button [ref=e25] [cursor=pointer]:
+              - img [ref=e26]
+            - button [ref=e29] [cursor=pointer]:
+              - img [ref=e30]
+          - button "Save" [ref=e38] [cursor=pointer]
+      - generic [ref=e39]:
+        - generic [ref=e40] [cursor=pointer]:
+          - generic [ref=e42]: Video rendering...
+          - button [ref=e43]:
+            - img [ref=e44]
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - generic [ref=e49]:
+              - button "☀️ Dramatic Deep Sea Beach Intensify rich ocean blues and clean beach clutter" [ref=e50] [cursor=pointer]:
+                - generic [ref=e51]:
+                  - generic [ref=e53]: ☀️
+                  - generic [ref=e54]:
+                    - generic [ref=e55]: Dramatic Deep Sea Beach
+                    - generic [ref=e56]: Intensify rich ocean blues and clean beach clutter
+              - button "Commit" [ref=e57] [cursor=pointer]:
+                - img [ref=e58]
+                - generic [ref=e60]: Commit
+            - generic [ref=e61]:
+              - generic [ref=e62]:
+                - button "🌌 Starlit Beach Escape Transform high noon daylight into a calm, romantic coastal night scene" [ref=e63] [cursor=pointer]:
+                  - generic [ref=e64]:
+                    - generic [ref=e66]: 🌌
+                    - generic [ref=e67]:
+                      - generic [ref=e68]: Starlit Beach Escape
+                      - generic [ref=e69]: Transform high noon daylight into a calm, romantic coastal night scene
+                - button "Commit" [ref=e70] [cursor=pointer]:
+                  - img [ref=e71]
+                  - generic [ref=e73]: Commit
+              - button "More" [ref=e74] [cursor=pointer]:
+                - img [ref=e75]
+                - generic [ref=e77]: More
+            - generic [ref=e79]:
+              - button "🌻 向日葵狐猴 人旁边多了穿草帽拿满迷你向日葵的小狐猴" [ref=e80] [cursor=pointer]:
+                - generic [ref=e81]:
+                  - generic [ref=e83]: 🌻
+                  - generic [ref=e84]:
+                    - generic [ref=e85]: 向日葵狐猴
+                    - generic [ref=e86]: 人旁边多了穿草帽拿满迷你向日葵的小狐猴
+              - button "Commit" [ref=e87] [cursor=pointer]:
+                - img [ref=e88]
+                - generic [ref=e90]: Commit
+            - generic [ref=e91]:
+              - generic [ref=e92]:
+                - button "📜 复古旅游海报 整个海滩转成高质感复古插画风旅游海报" [ref=e93] [cursor=pointer]:
+                  - generic [ref=e94]:
+                    - generic [ref=e96]: 📜
+                    - generic [ref=e97]:
+                      - generic [ref=e98]: 复古旅游海报
+                      - generic [ref=e99]: 整个海滩转成高质感复古插画风旅游海报
+                - button "Commit" [ref=e100] [cursor=pointer]:
+                  - img [ref=e101]
+                  - generic [ref=e103]: Commit
+              - button "More" [ref=e104] [cursor=pointer]:
+                - img [ref=e105]
+                - generic [ref=e107]: More
+            - generic [ref=e109]:
+              - button "🌻 Botanical Giant Sunflowers in hand become a towering botanical anomaly." [ref=e110] [cursor=pointer]:
+                - generic [ref=e111]:
+                  - generic [ref=e113]: 🌻
+                  - generic [ref=e114]:
+                    - generic [ref=e115]: Botanical Giant
+                    - generic [ref=e116]: Sunflowers in hand become a towering botanical anomaly.
+              - button "Commit" [ref=e117] [cursor=pointer]:
+                - img [ref=e118]
+                - generic [ref=e120]: Commit
+            - generic [ref=e121]:
+              - generic [ref=e122]:
+                - button "🏰 Straw Hat Sandbox The large straw hat becomes an intricate sandcastle kingdom." [ref=e123] [cursor=pointer]:
+                  - generic [ref=e124]:
+                    - generic [ref=e126]: 🏰
+                    - generic [ref=e127]:
+                      - generic [ref=e128]: Straw Hat Sandbox
+                      - generic [ref=e129]: The large straw hat becomes an intricate sandcastle kingdom.
+                - button "Commit" [ref=e130] [cursor=pointer]:
+                  - img [ref=e131]
+                  - generic [ref=e133]: Commit
+              - button "More" [ref=e134] [cursor=pointer]:
+                - img [ref=e135]
+                - generic [ref=e137]: More
+            - generic [ref=e139]:
+              - button "🎬 Movie Stills Turns the scene into a cinematic film capture." [ref=e140] [cursor=pointer]:
+                - generic [ref=e141]:
+                  - generic [ref=e143]: 🎬
+                  - generic [ref=e144]:
+                    - generic [ref=e145]: Movie Stills
+                    - generic [ref=e146]: Turns the scene into a cinematic film capture.
+              - button "Commit" [ref=e147] [cursor=pointer]:
+                - img [ref=e148]
+                - generic [ref=e150]: Commit
+            - generic [ref=e151]:
+              - generic [ref=e152]:
+                - button "🏝️ Escape Poster Bold A24-style poster for a coastal story." [ref=e153] [cursor=pointer]:
+                  - generic [ref=e154]:
+                    - generic [ref=e156]: 🏝️
+                    - generic [ref=e157]:
+                      - generic [ref=e158]: Escape Poster
+                      - generic [ref=e159]: Bold A24-style poster for a coastal story.
+                - button "Commit" [ref=e160] [cursor=pointer]:
+                  - img [ref=e161]
+                  - generic [ref=e163]: Commit
+              - button "More" [ref=e164] [cursor=pointer]:
+                - img [ref=e165]
+                - generic [ref=e167]: More
+          - generic [ref=e168]:
+            - button "Enhance" [ref=e169] [cursor=pointer]:
+              - generic [ref=e170]: Enhance
+            - button "Creative" [ref=e171] [cursor=pointer]:
+              - generic [ref=e172]: Creative
+            - button "Wild" [ref=e173] [cursor=pointer]:
+              - generic [ref=e174]: Wild
+            - button "Caption" [ref=e175] [cursor=pointer]:
+              - generic [ref=e176]: Caption
+    - generic [ref=e180]:
+      - generic [ref=e182]:
+        - generic [ref=e186]:
+          - list [ref=e187]:
+            - listitem [ref=e188]:
+              - generic [ref=e189]: •
+              - generic [ref=e190]:
+                - button "@3" [ref=e192] [cursor=pointer]
+                - text: — 一位女生坐在金色沙滩上，手持向日葵，戴着草帽，巨石与碧海蓝天为背景，度假氛围满满 🌻🏖️
+          - paragraph [ref=e193]: 有什么想修的图吗？随时告诉我！
+        - generic [ref=e197]:
+          - paragraph [ref=e198]: 👋 欢迎使用 Makaron！以下是你上传的三张图片：
+          - list [ref=e199]:
+            - listitem [ref=e200]:
+              - generic [ref=e201]: •
+              - generic [ref=e202]:
+                - button "@1" [ref=e204] [cursor=pointer]
+                - text: — 一群同事围在大理石桌旁开头脑风暴，有人正在低头记录，氛围认真专注 ✍️
+            - listitem [ref=e205]:
+              - generic [ref=e206]: •
+              - generic [ref=e207]:
+                - button "@2" [ref=e209] [cursor=pointer]
+                - text: — 一场正式会议现场，桌前摆有名牌和麦克风，三人凑近一起翻阅文件，商务感十足 💼
+            - listitem [ref=e210]:
+              - generic [ref=e211]: •
+              - generic [ref=e212]:
+                - button "@3" [ref=e214] [cursor=pointer]
+                - text: — 让我看看第三张！
+        - generic [ref=e218]: ✨ Turn these photos into a video for me
+        - generic [ref=e222]:
+          - paragraph [ref=e223]: Work Hard, Escape Free
+          - paragraph [ref=e224]:
+            - text: "Shot 1 (2s): Extreme close-up, push-in on"
+            - button "@1" [ref=e226] [cursor=pointer]
+            - text: "— a pen tip hitting paper, hands leaning in urgently over the marble table. Sound: sharp pen scratch, muffled office chatter."
+          - paragraph [ref=e227]:
+            - text: "Shot 2 (3s): Mid-shot, slow pan across"
+            - button "@2" [ref=e229] [cursor=pointer]
+            - text: "— serious faces huddled over documents under fluorescent light, name placards in frame. Sound: low murmur of voices, papers rustling."
+          - paragraph [ref=e230]:
+            - text: "Shot 3 (2s): Wide shot, pull-out from"
+            - button "@1" [ref=e232] [cursor=pointer]
+            - text: "— the whole team locked in, coffee cups and notebooks scattered, everyone hyper-focused. Sound: ticking clock fades out."
+          - paragraph [ref=e233]: "Shot 4 (1s): Whip pan to black — hard cut. Sound: sudden silence."
+          - paragraph [ref=e234]:
+            - text: "Shot 5 (3s): Wide shot, slow push-in on"
+            - button "@3" [ref=e236] [cursor=pointer]
+            - text: "— girl sitting barefoot on warm golden sand, sunflowers raised toward the open sky, turquoise water glimmering behind her, straw hat resting beside her. Sound: waves rolling in, soft acoustic guitar fades up."
+          - paragraph [ref=e237]:
+            - text: "Shot 6 (2s): Close-up on"
+            - button "@3" [ref=e239] [cursor=pointer]
+            - text: "— sunflowers swaying gently in the breeze against brilliant blue sky, her shoulders relaxed, completely at ease. Sound: music swells, seagull cry in the distance."
+          - paragraph [ref=e240]: "Style: Cinematic contrast cut, cool office tones to warm golden hour, emotional release."
+        - paragraph [ref=e245]: 🎬 Video generated！
+        - generic [ref=e251]: ✨ Turn these photos into a video for me
+        - generic [ref=e255]:
+          - paragraph [ref=e256]: Work Hard, Dream Free
+          - paragraph [ref=e257]:
+            - text: "Shot 1 (2s): Extreme close-up, push-in on"
+            - button "@1" [ref=e259] [cursor=pointer]
+            - text: "— a pen moving across paper on the marble table, hands blurred in focus around it. Sound: low ambient hum, faint pen scratch."
+          - paragraph [ref=e260]:
+            - text: "Shot 2 (3s): Mid-shot, slow dolly left across"
+            - button "@2" [ref=e262] [cursor=pointer]
+            - text: "— three people huddled over a document, heads nearly touching, name placards and microphones in the foreground. Sound: muffled voices, paper rustling, quiet tension."
+          - paragraph [ref=e263]:
+            - text: "Shot 3 (2s): Cut back to"
+            - button "@1" [ref=e265] [cursor=pointer]
+            - text: "— wide shot of the full group around the marble table, one figure leaning in decisively. Sound: a single decisive tap on the table, beat drops softly."
+          - paragraph [ref=e266]:
+            - text: "Shot 4 (3s): Whip pan transition to"
+            - button "@3" [ref=e268] [cursor=pointer]
+            - text: "— wide shot, the girl sitting barefoot on golden sand, sunflowers catching the sunlight, turquoise water stretching to the horizon behind her. Sound: wind, waves, music opens up warm and bright."
+          - paragraph [ref=e269]:
+            - text: "Shot 5 (3s): Slow push-in on"
+            - button "@3" [ref=e271] [cursor=pointer]
+            - text: "— close-up on the sunflowers held up against the blue sky, straw hat resting on the sand, pure freedom. Sound: acoustic guitar, full warmth, fade out."
+          - paragraph [ref=e272]: "Style: Cinematic documentary, cool-toned work scenes contrasting with warm golden beach light — a story of hustle earning its escape."
+      - generic [ref=e274]:
+        - textbox "Chat with agent" [ref=e275]:
+          - /placeholder: How would you like to edit?
+        - generic [ref=e276]:
+          - button [ref=e277] [cursor=pointer]:
+            - img [ref=e278]
+          - 'button "Model: auto. Click to switch." [ref=e282] [cursor=pointer]':
+            - generic [ref=e283]: AUTO
+          - button [disabled] [ref=e284] [cursor=pointer]:
+            - img [ref=e285]
+  - alert [ref=e287]

@@ -1,0 +1,174 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e6]
+  - generic [ref=e223]:
+    - generic [ref=e224]:
+      - generic [ref=e225]:
+        - generic [ref=e226]:
+          - generic [ref=e227]:
+            - img "preview"
+          - generic [ref=e229]:
+            - button [ref=e230] [cursor=pointer]
+            - button [ref=e231] [cursor=pointer]
+            - button [ref=e232] [cursor=pointer]
+            - generic [ref=e233]: "@3"
+        - generic [ref=e234]:
+          - generic [ref=e235]:
+            - button [ref=e236] [cursor=pointer]:
+              - img [ref=e237]
+            - button [ref=e239] [cursor=pointer]:
+              - img [ref=e240]
+            - button [ref=e242] [cursor=pointer]:
+              - img [ref=e243]
+            - button [ref=e246] [cursor=pointer]:
+              - img [ref=e247]
+          - button "Save" [ref=e255] [cursor=pointer]
+      - generic [ref=e256]:
+        - generic [ref=e257] [cursor=pointer]:
+          - generic [ref=e259]: Hi! How would you like to edit this photo?
+          - button [ref=e260]:
+            - img [ref=e261]
+        - generic [ref=e263]:
+          - generic [ref=e264]:
+            - generic [ref=e266]:
+              - button "☀️ Dramatic Deep Sea Beach Intensify rich ocean blues and clean beach clutter" [ref=e267] [cursor=pointer]:
+                - generic [ref=e268]:
+                  - generic [ref=e270]: ☀️
+                  - generic [ref=e271]:
+                    - generic [ref=e272]: Dramatic Deep Sea Beach
+                    - generic [ref=e273]: Intensify rich ocean blues and clean beach clutter
+              - button "Commit" [ref=e274] [cursor=pointer]:
+                - img [ref=e275]
+                - generic [ref=e277]: Commit
+            - generic [ref=e278]:
+              - generic [ref=e279]:
+                - button "🌌 Starlit Beach Escape Transform high noon daylight into a calm, romantic coastal night scene" [ref=e280] [cursor=pointer]:
+                  - generic [ref=e281]:
+                    - generic [ref=e283]: 🌌
+                    - generic [ref=e284]:
+                      - generic [ref=e285]: Starlit Beach Escape
+                      - generic [ref=e286]: Transform high noon daylight into a calm, romantic coastal night scene
+                - button "Commit" [ref=e287] [cursor=pointer]:
+                  - img [ref=e288]
+                  - generic [ref=e290]: Commit
+              - button "More" [ref=e291] [cursor=pointer]:
+                - img [ref=e292]
+                - generic [ref=e294]: More
+            - generic [ref=e296]:
+              - button "🌻 向日葵狐猴 人旁边多了穿草帽拿满迷你向日葵的小狐猴" [ref=e297] [cursor=pointer]:
+                - generic [ref=e298]:
+                  - generic [ref=e300]: 🌻
+                  - generic [ref=e301]:
+                    - generic [ref=e302]: 向日葵狐猴
+                    - generic [ref=e303]: 人旁边多了穿草帽拿满迷你向日葵的小狐猴
+              - button "Commit" [ref=e304] [cursor=pointer]:
+                - img [ref=e305]
+                - generic [ref=e307]: Commit
+            - generic [ref=e308]:
+              - generic [ref=e309]:
+                - button "📜 复古旅游海报 整个海滩转成高质感复古插画风旅游海报" [ref=e310] [cursor=pointer]:
+                  - generic [ref=e311]:
+                    - generic [ref=e313]: 📜
+                    - generic [ref=e314]:
+                      - generic [ref=e315]: 复古旅游海报
+                      - generic [ref=e316]: 整个海滩转成高质感复古插画风旅游海报
+                - button "Commit" [ref=e317] [cursor=pointer]:
+                  - img [ref=e318]
+                  - generic [ref=e320]: Commit
+              - button "More" [ref=e321] [cursor=pointer]:
+                - img [ref=e322]
+                - generic [ref=e324]: More
+            - generic [ref=e326]:
+              - button "🌻 Botanical Giant Sunflowers in hand become a towering botanical anomaly." [ref=e327] [cursor=pointer]:
+                - generic [ref=e328]:
+                  - generic [ref=e330]: 🌻
+                  - generic [ref=e331]:
+                    - generic [ref=e332]: Botanical Giant
+                    - generic [ref=e333]: Sunflowers in hand become a towering botanical anomaly.
+              - button "Commit" [ref=e334] [cursor=pointer]:
+                - img [ref=e335]
+                - generic [ref=e337]: Commit
+            - generic [ref=e338]:
+              - generic [ref=e339]:
+                - button "🏰 Straw Hat Sandbox The large straw hat becomes an intricate sandcastle kingdom." [ref=e340] [cursor=pointer]:
+                  - generic [ref=e341]:
+                    - generic [ref=e343]: 🏰
+                    - generic [ref=e344]:
+                      - generic [ref=e345]: Straw Hat Sandbox
+                      - generic [ref=e346]: The large straw hat becomes an intricate sandcastle kingdom.
+                - button "Commit" [ref=e347] [cursor=pointer]:
+                  - img [ref=e348]
+                  - generic [ref=e350]: Commit
+              - button "More" [ref=e351] [cursor=pointer]:
+                - img [ref=e352]
+                - generic [ref=e354]: More
+            - generic [ref=e356]:
+              - button "🎬 Movie Stills Turns the scene into a cinematic film capture." [ref=e357] [cursor=pointer]:
+                - generic [ref=e358]:
+                  - generic [ref=e360]: 🎬
+                  - generic [ref=e361]:
+                    - generic [ref=e362]: Movie Stills
+                    - generic [ref=e363]: Turns the scene into a cinematic film capture.
+              - button "Commit" [ref=e364] [cursor=pointer]:
+                - img [ref=e365]
+                - generic [ref=e367]: Commit
+            - generic [ref=e368]:
+              - generic [ref=e369]:
+                - button "🏝️ Escape Poster Bold A24-style poster for a coastal story." [ref=e370] [cursor=pointer]:
+                  - generic [ref=e371]:
+                    - generic [ref=e373]: 🏝️
+                    - generic [ref=e374]:
+                      - generic [ref=e375]: Escape Poster
+                      - generic [ref=e376]: Bold A24-style poster for a coastal story.
+                - button "Commit" [ref=e377] [cursor=pointer]:
+                  - img [ref=e378]
+                  - generic [ref=e380]: Commit
+              - button "More" [ref=e381] [cursor=pointer]:
+                - img [ref=e382]
+                - generic [ref=e384]: More
+          - generic [ref=e385]:
+            - button "Enhance" [ref=e386] [cursor=pointer]:
+              - generic [ref=e387]: Enhance
+            - button "Creative" [ref=e388] [cursor=pointer]:
+              - generic [ref=e389]: Creative
+            - button "Wild" [ref=e390] [cursor=pointer]:
+              - generic [ref=e391]: Wild
+            - button "Caption" [ref=e392] [cursor=pointer]:
+              - generic [ref=e393]: Caption
+    - generic [ref=e397]:
+      - generic [ref=e399]:
+        - generic [ref=e403]:
+          - list [ref=e404]:
+            - listitem [ref=e405]:
+              - generic [ref=e406]: •
+              - generic [ref=e407]:
+                - button "@3" [ref=e409] [cursor=pointer]
+                - text: — 一位女生坐在金色沙滩上，手持向日葵，戴着草帽，巨石与碧海蓝天为背景，度假氛围满满 🌻🏖️
+          - paragraph [ref=e410]: 有什么想修的图吗？随时告诉我！
+        - generic [ref=e414]:
+          - paragraph [ref=e415]: 👋 欢迎使用 Makaron！以下是你上传的三张图片：
+          - list [ref=e416]:
+            - listitem [ref=e417]:
+              - generic [ref=e418]: •
+              - generic [ref=e419]:
+                - button "@1" [ref=e421] [cursor=pointer]
+                - text: — 一群同事围在大理石桌旁开头脑风暴，有人正在低头记录，氛围认真专注 ✍️
+            - listitem [ref=e422]:
+              - generic [ref=e423]: •
+              - generic [ref=e424]:
+                - button "@2" [ref=e426] [cursor=pointer]
+                - text: — 一场正式会议现场，桌前摆有名牌和麦克风，三人凑近一起翻阅文件，商务感十足 💼
+            - listitem [ref=e427]:
+              - generic [ref=e428]: •
+              - generic [ref=e429]:
+                - button "@3" [ref=e431] [cursor=pointer]
+                - text: — 让我看看第三张！
+      - generic [ref=e433]:
+        - textbox "Chat with agent" [ref=e434]:
+          - /placeholder: How would you like to edit?
+        - generic [ref=e435]:
+          - button [ref=e436] [cursor=pointer]:
+            - img [ref=e437]
+          - 'button "Model: auto. Click to switch." [ref=e441] [cursor=pointer]':
+            - generic [ref=e442]: AUTO
+          - button [disabled] [ref=e443] [cursor=pointer]:
+            - img [ref=e444]

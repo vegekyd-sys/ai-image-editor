@@ -5,6 +5,10 @@ export interface CreateVideoInput {
   images: string[];          // public URLs only (no base64)
   duration?: number;         // 3, 5, 7, 10, or 15 seconds. Omit for smart mode
   aspectRatio?: string;      // '9:16', '16:9', '1:1'
+  // Video editing (Kling only)
+  videoUrl?: string;                    // Reference video URL
+  videoReferType?: 'base' | 'feature';  // default: 'base'
+  keepOriginalSound?: boolean;          // default: false
 }
 
 export interface CreateVideoResult {
@@ -14,7 +18,7 @@ export interface CreateVideoResult {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio } = input;
+  const { script, images, duration, aspectRatio, videoUrl, videoReferType, keepOriginalSound } = input;
   if (images.length === 0) {
     return {
       success: false,
@@ -47,12 +51,20 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     // Resolve duration: explicit > parsed from script > undefined (smart mode)
     const resolvedDuration = duration ?? parseTotalDuration(finalPrompt);
 
-    console.log(`\n🎬 [create_video] ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}`);
+    console.log(`\n🎬 [create_video] ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}${videoUrl ? `, video=${videoReferType ?? 'base'}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
     // Provider routing: foldin, piapi, or kling (default)
     const provider = process.env.ANIMATE_PROVIDER || 'kling';
     let taskId: string;
+
+    // Video editing only supported by Kling direct
+    if (videoUrl && provider !== 'kling') {
+      return {
+        success: false,
+        message: `Video editing (video_list) is only supported by Kling direct provider. Current provider: ${provider}`,
+      };
+    }
 
     if (provider === 'foldin') {
       const { createFoldinTask } = await import('../foldin');
@@ -83,6 +95,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         images: filteredImages,
         duration: resolvedDuration,
         aspect_ratio: aspectRatio,
+        videoUrl,
+        videoReferType,
+        keepOriginalSound,
       });
       console.log(`✅ [create_video] Kling task created: ${taskId}`);
     }

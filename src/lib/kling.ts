@@ -8,6 +8,10 @@ export interface KlingTaskInput {
   mode?: 'std' | 'pro'
   duration?: number       // 5 or 10
   aspect_ratio?: string   // '9:16' | '16:9' | '1:1'
+  // Video editing (video_list)
+  videoUrl?: string                    // Reference video URL (MP4/MOV, ≥3s, 720-2160px, ≤200MB)
+  videoReferType?: 'base' | 'feature'  // 'base' = video to edit, 'feature' = feature reference (default: 'base')
+  keepOriginalSound?: boolean          // Keep original video sound (default: false)
 }
 
 export interface KlingTaskResult {
@@ -41,18 +45,34 @@ function headers() {
 
 /** Submit a v3-omni video task. Returns the Kling task ID. */
 export async function createKlingTask(input: KlingTaskInput): Promise<string> {
+  const hasVideo = !!input.videoUrl
+  const referType = input.videoReferType ?? 'base'
+
   // With aspect_ratio: images as references (no type), Kling respects aspect_ratio.
   // Without aspect_ratio: first image as first_frame, Kling matches image dimensions.
+  // When video refer_type=base: first/end frames cannot be defined, skip first_frame type.
+  const skipFirstFrame = hasVideo && referType === 'base'
   const body: Record<string, unknown> = {
     model_name: 'kling-v3-omni',
     image_list: input.images.map((img, i) => ({
       image_url: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
-      ...(i === 0 && !input.aspect_ratio ? { type: 'first_frame' } : {}),
+      ...(i === 0 && !input.aspect_ratio && !skipFirstFrame ? { type: 'first_frame' } : {}),
     })),
     prompt: input.prompt,
     mode: input.mode ?? 'std',
-    sound: 'on',
+    // When video_list is present, sound must be 'off' (keep_original_sound controls video audio)
+    sound: hasVideo ? 'off' : 'on',
   }
+
+  // Add video_list for video editing
+  if (hasVideo) {
+    body.video_list = [{
+      video_url: input.videoUrl,
+      refer_type: referType,
+      keep_original_sound: input.keepOriginalSound ? 'yes' : 'no',
+    }]
+  }
+
   if (input.aspect_ratio) {
     body.aspect_ratio = input.aspect_ratio
   }
@@ -177,6 +197,10 @@ export interface SubmitAnimationInput {
   imageUrls: string[]
   duration?: number
   aspectRatio?: string
+  // Video editing
+  videoUrl?: string
+  videoReferType?: 'base' | 'feature'
+  keepOriginalSound?: boolean
 }
 
 /**
@@ -184,7 +208,7 @@ export interface SubmitAnimationInput {
  * persist to DB. Both the API route and the Agent tool call this.
  */
 export async function submitAnimationTask(input: SubmitAnimationInput): Promise<{ taskId: string; animationId: string }> {
-  const { projectId, prompt, imageUrls, duration, aspectRatio } = input
+  const { projectId, prompt, imageUrls, duration, aspectRatio, videoUrl, videoReferType, keepOriginalSound } = input
 
   // Filter to only referenced images and remap indices sequentially
   const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, imageUrls)
@@ -212,6 +236,9 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
       images: filteredImages,
       duration: resolvedDuration,
       aspect_ratio: aspectRatio,
+      videoUrl,
+      videoReferType,
+      keepOriginalSound,
     })
   }
 

@@ -77,6 +77,24 @@ export default function ProjectsPage() {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
   const [skillsExpanded, setSkillsExpanded] = useState(false)
+  const [skillDragOver, setSkillDragOver] = useState(false)
+  const handleSkillUpload = useCallback(async (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const res = await fetch('/api/skills', { method: 'POST', body: form })
+      const data = await res.json()
+      if (data.success) {
+        const r = await fetch('/api/skills')
+        const d = await r.json()
+        if (d.skills) setAvailableSkills(d.skills)
+      } else {
+        console.error('Skill upload failed:', data.error)
+      }
+    } catch (err) {
+      console.error('Skill upload error:', err)
+    }
+  }, [])
   // Fetch skills from API
   useEffect(() => {
     fetch('/api/skills').then(r => r.json()).then(d => {
@@ -906,7 +924,35 @@ export default function ProjectsPage() {
 
             {/* Skill pills — expanded below input */}
             {skillsExpanded && availableSkills.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center',
+                padding: skillDragOver ? 8 : 0,
+                borderRadius: 12,
+                border: skillDragOver ? '2px dashed rgba(217,70,239,0.5)' : '2px dashed transparent',
+                background: skillDragOver ? 'rgba(217,70,239,0.08)' : 'transparent',
+                transition: 'all 0.15s',
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setSkillDragOver(true)
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setSkillDragOver(false)
+              }}
+              onDrop={async (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setSkillDragOver(false)
+                const file = e.dataTransfer.files?.[0]
+                if (file && file.name.endsWith('.zip')) {
+                  await handleSkillUpload(file)
+                }
+              }}
+            >
               {availableSkills.map(skill => (
                 <span key={skill.name} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                   <button
@@ -992,22 +1038,7 @@ export default function ProjectsPage() {
                   style={{ display: 'none' }}
                   onChange={async (e) => {
                     const file = e.target.files?.[0]
-                    if (!file) return
-                    const form = new FormData()
-                    form.append('file', file)
-                    try {
-                      const res = await fetch('/api/skills', { method: 'POST', body: form })
-                      const data = await res.json()
-                      if (data.success) {
-                        const r = await fetch('/api/skills')
-                        const d = await r.json()
-                        if (d.skills) setAvailableSkills(d.skills)
-                      } else {
-                        console.error('Skill upload failed:', data.error)
-                      }
-                    } catch (err) {
-                      console.error('Skill upload error:', err)
-                    }
+                    if (file) await handleSkillUpload(file)
                     e.target.value = ''
                   }}
                 />

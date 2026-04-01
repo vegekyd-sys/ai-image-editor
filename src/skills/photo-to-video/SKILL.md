@@ -1,10 +1,10 @@
 ---
 name: photo-to-video
 description: >
-  Turn a single photo into a wild, imaginative video. Look at the photo,
-  let your imagination run wild, and evolve the scene step by step into
-  an unexpected visual story. Each act builds on the previous one with
-  surprising twists. Activate when user wants to create a video from a photo.
+  Turn photos into a wild, imaginative video. Single photo: evolve it
+  into a 3-act story. Multiple photos: pick the most interesting ones
+  and weave them into a cinematic sequence. Activate when user wants
+  to create a video from photos.
 allowed-tools: generate_image analyze_image generate_animation
 metadata:
   makaron:
@@ -17,11 +17,11 @@ metadata:
 
 # Photo-to-Video: Wild Imagination Workflow
 
-Look at this photo. Let your imagination run absolutely wild.
+Your job: turn photos into a surprising, cinematic video story.
 
-Your job: evolve this single image into a surprising, fun visual story — one act at a time. Each new act should make the viewer go "wait, WHAT?" and then laugh or gasp.
+## Single Image Flow
 
-## How It Works
+When there's only 1 photo:
 
 1. **Analyze the photo** — Call `analyze_image`. What's in the scene? What objects, characters, or elements could come alive, transform, or do something unexpected?
 
@@ -35,12 +35,30 @@ Your job: evolve this single image into a surprising, fun visual story — one a
 
    After generating each act, pause briefly and think: "Given what just happened in THIS image, what's the most mind-blowing thing that could happen NEXT?" Then generate the next act based on that thought.
 
-3. **Write & submit the video script** — After all acts are generated, write a video script (follow the Video Script Format in your system prompt) and output it in chat. Then call `generate_animation` to submit for rendering.
+3. **Write the video script** — Write a video script (follow the Video Script Format in your system prompt) and output it in chat.
+
+4. **Ask for confirmation** — Show the script to the user and ask if they want to proceed, make changes, or adjust the story. Wait for their response.
+
+5. **Submit** — Once the user confirms, call `generate_animation` to submit for rendering.
+
+## Multi-Image Flow
+
+When there are 2+ photos:
+
+1. **Analyze all images** — Call `analyze_image` on each. Understand what's in every photo.
+
+2. **Pick & sequence** — Select the most visually interesting images (3-7). Reorder them for the strongest story arc — don't follow upload order. Skip duplicates and weak shots.
+
+3. **Write the video script** — Write a video script using the existing snapshots (<<<image_N>>> references), following the Video Script Format in your system prompt. Output it in chat. No need to generate new images.
+
+4. **Ask for confirmation** — Show the script to the user and ask if they want to proceed, make changes, or adjust the story. Wait for their response.
+
+5. **Submit** — Once the user confirms, call `generate_animation` to submit for rendering.
 
 ## Rules
 
 - Be BOLD. Don't play it safe. The wilder the better.
 - Each act's `editPrompt` should be vivid and specific — describe exactly what's changing and why it's surprising.
-- Do NOT ask the user for confirmation between steps. Just go.
-- Brief 1-sentence status updates between acts are fine.
+- Between acts, tell the user what's fun or surprising about what just happened — share the excitement!
 - If an act fails, skip it and keep going.
+- ALWAYS ask for user confirmation before calling `generate_animation`.
