@@ -153,7 +153,7 @@ function buildTipsPrompt(
   // When a skill is active, inject its full template (character definition + directions) BEFORE
   // the category template so the model first understands the skill, then applies category rules.
   const skillSection = skillContext
-    ? `[Active Skill — 将以下角色/IP/品牌融入你的 ${category} 建议]\n${skillContext}\n\n你的 tips 必须围绕这个 skill 展开。editPrompt 必须包含角色的完整视觉描述（外观、颜色、风格、尺寸），因为生图模型不知道这个角色是什么。\n\n现在按以下 ${category} 规则生成 tips：\n\n`
+    ? `[Active Skill — 将以下角色/IP/品牌融入你的 ${category} 建议]\n${skillContext}\n\n你的 tips 必须围绕这个 skill 展开。第一张图片是用户照片，后面的图片是 skill 的参考图（角色设定/风格参考），请仔细观察参考图中的视觉细节。editPrompt 必须包含角色的完整视觉描述（外观、颜色、风格、尺寸），因为生图模型看不到参考图。\n\n现在按以下 ${category} 规则生成 tips：\n\n`
     : '';
   const userText = `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${skillSection}${template}`;
   // creative/wild use high reasoning for better creativity; enhance/captions use minimal for speed
