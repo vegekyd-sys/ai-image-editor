@@ -25,18 +25,14 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Load skill context + reference images when a skill is active
+    // Load skill context when a skill is active (text only — ref images go to preview/generation)
     let skillContext: string | undefined;
-    let skillRefImages: string[] | undefined;
     if (skillName) {
       loadBuiltInSkills();
       const userSkills = await loadUserSkills(supabase, session.user.id);
       const skill = getSkillFromAll(skillName, userSkills);
       if (skill?.makaron.tipsEnabled !== false && skill?.template) {
         skillContext = skill.template;
-        if (skill.makaron.referenceImages?.length) {
-          skillRefImages = skill.makaron.referenceImages;
-        }
       }
     }
 
@@ -44,7 +40,7 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const tip of streamTipsByCategory(image, category, metadata, count, existingLabels, locale, skillContext, skillRefImages)) {
+          for await (const tip of streamTipsByCategory(image, category, metadata, count, existingLabels, locale, skillContext)) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(tip)}\n\n`));
           }
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));

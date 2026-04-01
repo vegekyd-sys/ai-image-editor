@@ -242,6 +242,14 @@ export default function Editor({
   useEffect(() => { isAgentActiveRef.current = isAgentActive; }, [isAgentActive]);
   const activeSkillRef = useRef(pendingSkill);
   useEffect(() => { activeSkillRef.current = pendingSkill; }, [pendingSkill]);
+  const skillRefImagesRef = useRef<string[]>([]);
+  useEffect(() => {
+    if (!pendingSkill) { skillRefImagesRef.current = []; return; }
+    fetch('/api/skills').then(r => r.json()).then(d => {
+      const skill = d.skills?.find((s: { name: string }) => s.name === pendingSkill);
+      skillRefImagesRef.current = skill?.referenceImages || [];
+    }).catch(() => {});
+  }, [pendingSkill]);
   const isTipsFetchingRef = useRef(isTipsFetching);
   isTipsFetchingRef.current = isTipsFetching;
   const previewDoneBaselineRef = useRef(0);
@@ -740,7 +748,7 @@ export default function Editor({
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, isNsfw: isNsfwRef.current || undefined }),
+        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, isNsfw: isNsfwRef.current || undefined, referenceImages: skillRefImagesRef.current.length ? skillRefImagesRef.current : undefined }),
         signal: previewAbortRef.current.signal,
       });
 

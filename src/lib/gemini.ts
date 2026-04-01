@@ -153,7 +153,7 @@ function buildTipsPrompt(
   // When a skill is active, inject its full template (character definition + directions) BEFORE
   // the category template so the model first understands the skill, then applies category rules.
   const skillSection = skillContext
-    ? `[Active Skill — 将以下角色/IP/品牌融入你的 ${category} 建议]\n${skillContext}\n\n你的 tips 必须围绕这个 skill 展开。第一张图片是用户照片，后面的图片是 skill 的参考图（角色设定/风格参考），请仔细观察参考图中的视觉细节。editPrompt 必须包含角色的完整视觉描述（外观、颜色、风格、尺寸），因为生图模型看不到参考图。\n\n现在按以下 ${category} 规则生成 tips：\n\n`
+    ? `[Active Skill — 将以下角色/IP/品牌融入你的 ${category} 建议]\n${skillContext}\n\n你的 tips 必须围绕这个 skill 展开。editPrompt 必须包含角色的完整视觉描述（外观、颜色、风格、尺寸），因为生图模型需要这些信息来渲染角色。\n\n现在按以下 ${category} 规则生成 tips：\n\n`
     : '';
   const userText = `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${skillSection}${template}`;
   // creative/wild use high reasoning for better creativity; enhance/captions use minimal for speed
@@ -942,7 +942,6 @@ export async function* streamTipsByCategory(
   existingLabels?: string[],
   locale?: string,
   skillContext?: string,
-  skillRefImages?: string[],
 ): AsyncGenerator<Tip> {
   if (process.env.MOCK_AI === 'true') {
     const mockTips: Record<string, Tip[]> = {
@@ -984,15 +983,11 @@ export async function* streamTipsByCategory(
   let lastError: unknown;
   for (const [index, provider] of providers.entries()) {
     try {
-      // Assemble all images once: user photo + skill references.
-      // Providers receive the combined list — adding image sources only changes here.
-      const allImages = [imageBase64, ...(skillRefImages || [])];
-
       const source = provider === 'bedrock'
-        ? streamTipsByCategoryBedrock(allImages, category, metadata, count, existingLabels, locale, skillContext)
+        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale, skillContext)
         : provider === 'openrouter'
-          ? streamTipsByCategoryOpenRouter(allImages, category, metadata, count, existingLabels, locale, skillContext)
-          : streamTipsByCategoryGoogle(allImages, category, metadata, count, existingLabels, locale, skillContext);
+          ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale, skillContext)
+          : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale, skillContext);
 
       for await (const tip of source) {
         if (tip.label && !labels.has(tip.label) && labels.size >= count) continue;
@@ -1021,7 +1016,7 @@ export async function* streamTipsByCategory(
 
 // --- Google Provider ---
 async function* streamTipsByCategoryGoogle(
-  images: string[],
+  imageBase64: string,
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
@@ -1042,22 +1037,16 @@ async function* streamTipsByCategoryGoogle(
   }
 
   const promptSuffix = supportsStructuredOutput ? '' : getJsonFormatSuffix(locale);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const imageParts: any[] = [];
-  for (const img of images) {
-    const resolved = await ensureBase64Server(img);
-    const data = resolved.replace(/^data:image\/\w+;base64,/, '');
-    const mime = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-    imageParts.push({ inlineData: { mimeType: mime, data } });
-  }
-
+  const resolved = await ensureBase64Server(imageBase64);
+  const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
+  const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
   const stream = await getAI().models.generateContentStream({
     model: MODEL,
     contents: [
       {
         role: 'user',
         parts: [
-          ...imageParts,
+          { inlineData: { mimeType, data: base64Data } },
           { text: `${userText}${promptSuffix}` },
         ],
       },
@@ -1067,13 +1056,13 @@ async function* streamTipsByCategoryGoogle(
 
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(streamToTextIterator(stream), `google:${category}`, category),
-    images[0], category, `google:${category}`,
+    imageBase64, category, `google:${category}`,
   );
 }
 
 // --- OpenRouter Provider ---
 async function* streamTipsByCategoryOpenRouter(
-  images: string[],
+  imageBase64: string,
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
@@ -1098,7 +1087,7 @@ async function* streamTipsByCategoryOpenRouter(
         {
           role: 'user',
           content: [
-            ...images.map(img => toImageContent(img)),
+            toImageContent(imageBase64),
             { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
           ],
         },
@@ -1117,14 +1106,14 @@ async function* streamTipsByCategoryOpenRouter(
   tlog(`[tips:openrouter:${category}] headers received at +${Date.now() - t0}ms`);
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`), `or:${category}`, category),
-    images[0], category, `or:${category}`,
+    imageBase64, category, `or:${category}`,
   );
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
 }
 
 // --- Bedrock Provider (Claude Sonnet — default for tips) ---
 async function* streamTipsByCategoryBedrock(
-  images: string[],
+  imageBase64: string,
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
@@ -1132,14 +1121,10 @@ async function* streamTipsByCategoryBedrock(
   locale?: string,
   skillContext?: string,
 ): AsyncGenerator<Tip> {
+  const imageContent = imageBase64.startsWith('http')
+    ? new URL(imageBase64)
+    : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const contentParts: any[] = images.map(img => ({
-    type: 'image',
-    image: img.startsWith('http') ? new URL(img)
-      : img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`,
-  }));
 
   const t0 = Date.now();
   tlog(`[tips:bedrock:${category}] stream start`);
@@ -1152,7 +1137,7 @@ async function* streamTipsByCategoryBedrock(
       {
         role: 'user',
         content: [
-          ...contentParts,
+          { type: 'image', image: imageContent },
           { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
         ],
       },
@@ -1162,7 +1147,7 @@ async function* streamTipsByCategoryBedrock(
   tlog(`[tips:bedrock:${category}] streamText ready at +${Date.now() - t0}ms`);
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(result.textStream, `bedrock:${category}`, category),
-    images[0], category, `bedrock:${category}`,
+    imageBase64, category, `bedrock:${category}`,
   );
   tlog(`[tips:bedrock:${category}] done at +${Date.now() - t0}ms`);
 }

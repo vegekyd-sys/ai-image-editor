@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { image, editPrompt, aspectRatio, category, isNsfw } = await req.json();
+    const { image, editPrompt, aspectRatio, category, isNsfw, referenceImages } = await req.json();
 
     if (!image || !editPrompt) {
       return new Response(
@@ -32,7 +32,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw });
+    // Skill reference images → model-router references format
+    const references = referenceImages?.length
+      ? (referenceImages as string[]).map((url: string) => ({ url, role: 'Skill reference — use for visual identity' }))
+      : undefined;
+
+    const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw, references });
 
     if (!result.image) {
       return new Response(
