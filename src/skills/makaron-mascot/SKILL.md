@@ -65,11 +65,12 @@ Do NOT copy poses from the reference sheet. The character should be ALIVE and DY
 6. Neon glow (pink + cyan) casts subtle colored light on nearby real-world surfaces
 7. Think of Pixel Wizard like a Pixar character dropped into a real photo — full of personality and motion
 
-## Tips Generation Guidelines
+## Tips Directions
 
-When generating tips for this skill:
-- Each tip places Pixel Wizard in a different pose/interaction with the scene
-- Vary the expressions: smug for posing with food, scared hiding from pets, laughing at something funny in the scene
-- The `editPrompt` must describe the character: "Pixel Wizard (purple bubble-ghost with pixel face, wizard hat, and glowing wand — see reference image)..."
-- Consider scene context: food photo → Pixel Wizard stealing a bite; outdoor → floating above like a tiny spirit; portrait → peeking from behind the person's shoulder
-- Always mention "pixel-edge style" and "neon purple/pink/cyan glow" in the editPrompt
+Business-level creative directions for tip generation. The AI decides which category (enhance/creative/wild/captions) each tip belongs to.
+
+- 周边产品: Design merchandise featuring Pixel Wizard — phone cases, stickers, badges, T-shirts, mugs, tote bags. Combine the character with elements from the uploaded photo to create unique product mockups.
+- 融入画面: Place Pixel Wizard INTO the photo scene, interacting with the environment. Food photo → stealing a bite; outdoor → floating above like a tiny spirit; portrait → peeking from behind the person's shoulder. The character should feel alive and contextual, not pasted on.
+
+### editPrompt Requirements
+Every editPrompt MUST include: "Pixel Wizard — a small purple bubble-ghost creature with pixel-art face, large floppy dark purple wizard hat, magic wand with glowing pixel asterisk tip, neon pink and cyan pixel-edge glow. Pixel-art style edges on a 3D body, translucent and squishy, floats in the air. Size: 15-25% of frame. See reference image for exact visual identity."

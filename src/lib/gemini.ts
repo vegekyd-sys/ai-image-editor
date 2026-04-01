@@ -133,6 +133,7 @@ function buildTipsPrompt(
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
   existingLabels?: string[],
+  skillContext?: string,
 ) {
   const template = getPromptTemplate(category);
   const systemPrompt = buildCategorySystemPrompt(category, count);
@@ -149,7 +150,12 @@ function buildTipsPrompt(
   const analysisStep = category === 'enhance'
     ? ''
     : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
-  const userText = `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}`;
+  // When a skill is active, inject its full template (character definition + directions) BEFORE
+  // the category template so the model first understands the skill, then applies category rules.
+  const skillSection = skillContext
+    ? `[Active Skill — 将以下角色/IP/品牌融入你的 ${category} 建议]\n${skillContext}\n\n你的 tips 必须围绕这个 skill 展开。editPrompt 必须包含角色的完整视觉描述（外观、颜色、风格、尺寸），因为生图模型不知道这个角色是什么。\n\n现在按以下 ${category} 规则生成 tips：\n\n`
+    : '';
+  const userText = `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${skillSection}${template}`;
   // creative/wild use high reasoning for better creativity; enhance/captions use minimal for speed
   const useHighReasoning = category === 'creative' || category === 'wild';
   return { systemPrompt, userText, useHighReasoning };
@@ -935,6 +941,8 @@ export async function* streamTipsByCategory(
   count: number = 2,
   existingLabels?: string[],
   locale?: string,
+  skillContext?: string,
+  skillRefImages?: string[],
 ): AsyncGenerator<Tip> {
   if (process.env.MOCK_AI === 'true') {
     const mockTips: Record<string, Tip[]> = {
@@ -977,10 +985,10 @@ export async function* streamTipsByCategory(
   for (const [index, provider] of providers.entries()) {
     try {
       const source = provider === 'bedrock'
-        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale)
+        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale, skillContext, skillRefImages)
         : provider === 'openrouter'
-          ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale)
-          : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale);
+          ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale, skillContext, skillRefImages)
+          : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale, skillContext, skillRefImages);
 
       for await (const tip of source) {
         if (tip.label && !labels.has(tip.label) && labels.size >= count) continue;
@@ -1015,8 +1023,10 @@ async function* streamTipsByCategoryGoogle(
   count: number = 2,
   existingLabels?: string[],
   locale?: string,
+  skillContext?: string,
+  skillRefImages?: string[],
 ): AsyncGenerator<Tip> {
-  const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels);
+  const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
 
   const supportsStructuredOutput = MODEL.includes('gemini-3');
   const config: Record<string, unknown> = {
@@ -1032,13 +1042,26 @@ async function* streamTipsByCategoryGoogle(
   const resolved = await ensureBase64Server(imageBase64);
   const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
   const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+
+  // Build image parts: user photo + skill reference images
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const imageParts: any[] = [{ inlineData: { mimeType, data: base64Data } }];
+  if (skillRefImages?.length) {
+    for (const refImg of skillRefImages) {
+      const refResolved = await ensureBase64Server(refImg);
+      const refData = refResolved.replace(/^data:image\/\w+;base64,/, '');
+      const refMime = refResolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+      imageParts.push({ inlineData: { mimeType: refMime, data: refData } });
+    }
+  }
+
   const stream = await getAI().models.generateContentStream({
     model: MODEL,
     contents: [
       {
         role: 'user',
         parts: [
-          { inlineData: { mimeType, data: base64Data } },
+          ...imageParts,
           { text: `${userText}${promptSuffix}` },
         ],
       },
@@ -1060,9 +1083,17 @@ async function* streamTipsByCategoryOpenRouter(
   count: number = 2,
   existingLabels?: string[],
   locale?: string,
+  skillContext?: string,
+  skillRefImages?: string[],
 ): AsyncGenerator<Tip> {
-  const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels);
+  const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
   const reasoning = useHighReasoning ? { effort: 'high' } : { effort: 'minimal' };
+
+  // Build image content: user photo + skill reference images
+  const imageContentParts = [toImageContent(imageBase64)];
+  if (skillRefImages?.length) {
+    for (const refImg of skillRefImages) imageContentParts.push(toImageContent(refImg));
+  }
 
   const t0 = Date.now();
   tlog(`[tips:openrouter:${category}] fetch start (reasoning: ${reasoning.effort})`);
@@ -1078,7 +1109,7 @@ async function* streamTipsByCategoryOpenRouter(
         {
           role: 'user',
           content: [
-            toImageContent(imageBase64),
+            ...imageContentParts,
             { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
           ],
         },
@@ -1110,11 +1141,24 @@ async function* streamTipsByCategoryBedrock(
   count: number = 2,
   existingLabels?: string[],
   locale?: string,
+  skillContext?: string,
+  skillRefImages?: string[],
 ): AsyncGenerator<Tip> {
   const imageContent = imageBase64.startsWith('http')
     ? new URL(imageBase64)
     : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
-  const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels);
+  const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+
+  // Build image parts: user photo + skill reference images
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const contentParts: any[] = [{ type: 'image', image: imageContent }];
+  if (skillRefImages?.length) {
+    for (const refImg of skillRefImages) {
+      const img = refImg.startsWith('http') ? new URL(refImg)
+        : refImg.startsWith('data:') ? refImg : `data:image/jpeg;base64,${refImg}`;
+      contentParts.push({ type: 'image', image: img });
+    }
+  }
 
   const t0 = Date.now();
   tlog(`[tips:bedrock:${category}] stream start`);
@@ -1127,7 +1171,7 @@ async function* streamTipsByCategoryBedrock(
       {
         role: 'user',
         content: [
-          { type: 'image', image: imageContent },
+          ...contentParts,
           { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
         ],
       },

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { streamTipsByCategory, ContentBlockedError } from '@/lib/gemini';
+import { getSkillFromAll, loadBuiltInSkills, loadUserSkills } from '@/lib/skill-registry';
 
 export const maxDuration = 60;
 
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    const { image, category, metadata, count = 2, existingLabels } = await req.json();
+    const { image, category, metadata, count = 2, existingLabels, skillName } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!image || !category) {
@@ -24,11 +25,26 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Load skill context + reference images when a skill is active
+    let skillContext: string | undefined;
+    let skillRefImages: string[] | undefined;
+    if (skillName) {
+      loadBuiltInSkills();
+      const userSkills = await loadUserSkills(supabase, session.user.id);
+      const skill = getSkillFromAll(skillName, userSkills);
+      if (skill?.makaron.tipsEnabled !== false && skill?.template) {
+        skillContext = skill.template;
+        if (skill.makaron.referenceImages?.length) {
+          skillRefImages = skill.makaron.referenceImages;
+        }
+      }
+    }
+
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const tip of streamTipsByCategory(image, category, metadata, count, existingLabels, locale)) {
+          for await (const tip of streamTipsByCategory(image, category, metadata, count, existingLabels, locale, skillContext, skillRefImages)) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(tip)}\n\n`));
           }
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));

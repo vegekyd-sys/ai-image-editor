@@ -240,6 +240,8 @@ export default function Editor({
   previewingTipIndexRef.current = previewingTipIndex;
   const isAgentActiveRef = useRef(isAgentActive);
   useEffect(() => { isAgentActiveRef.current = isAgentActive; }, [isAgentActive]);
+  const activeSkillRef = useRef(pendingSkill);
+  useEffect(() => { activeSkillRef.current = pendingSkill; }, [pendingSkill]);
   const isTipsFetchingRef = useRef(isTipsFetching);
   isTipsFetchingRef.current = isTipsFetching;
   const previewDoneBaselineRef = useRef(0);
@@ -848,6 +850,7 @@ export default function Editor({
               image: imageForApi,
               category,
               metadata: snapshotsRef.current.find(s => s.id === snapshotId)?.metadata,
+              skillName: activeSkillRef.current || undefined,
             }),
           });
           if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
@@ -1039,6 +1042,7 @@ export default function Editor({
             count: 2,
             metadata: snap?.metadata,
             existingLabels,
+            skillName: activeSkillRef.current || undefined,
           }),
         });
         if (!res.ok) return;
