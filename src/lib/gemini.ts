@@ -152,8 +152,15 @@ function buildTipsPrompt(
     : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
   // When a skill is active, use ONLY the skill template — no category .md templates.
   // A/B tested: skill-only mode produces better, more creative results than skill+category fusion.
+  // But each parallel request only sees one category name, so add a one-line definition.
+  const CATEGORY_HINT: Record<string, string> = {
+    enhance: 'enhance（专业增强：光影、色调、质感、景深优化）',
+    creative: 'creative（趣味创意：有故事感的元素、角色互动）',
+    wild: 'wild（疯狂脑洞：夸张变形、超现实场景）',
+    captions: 'captions（创意文案：在画面上加文字标题）',
+  };
   const userText = skillContext
-    ? `${metaContext}${dedupeNote}[Active Skill]\n${skillContext}\n\n根据上面 skill 的 Tips Directions，为这张照片生成 ${count} 条 ${category} 编辑建议。自由发挥，不受其他规则约束。`
+    ? `${metaContext}${dedupeNote}[Active Skill]\n${skillContext}\n\n根据上面 skill 的 Tips Directions，为这张照片生成 ${count} 条 ${CATEGORY_HINT[category] || category} 编辑建议。`
     : `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}`;
   // creative/wild use high reasoning for better creativity; enhance/captions use minimal for speed
   const useHighReasoning = category === 'creative' || category === 'wild';
