@@ -20,10 +20,14 @@ export const geminiBackend: ModelBackend = {
   },
 
   async generate(req: GenerateImageRequest): Promise<string | null> {
-    // Multi-reference path
+    // Multi-reference path: user photo as edit base (first), then reference images
     if (req.references?.length) {
+      const allRefs = [
+        ...(req.image ? [{ url: req.image, role: 'Photo to edit (base image)' }] : []),
+        ...req.references,
+      ];
       return generateImageWithReferences(
-        req.references,
+        allRefs,
         req.prompt,
         req.aspectRatio,
         req.thinkingEffort,
