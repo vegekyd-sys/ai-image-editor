@@ -984,11 +984,15 @@ export async function* streamTipsByCategory(
   let lastError: unknown;
   for (const [index, provider] of providers.entries()) {
     try {
+      // Assemble all images once: user photo + skill references.
+      // Providers receive the combined list — adding image sources only changes here.
+      const allImages = [imageBase64, ...(skillRefImages || [])];
+
       const source = provider === 'bedrock'
-        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale, skillContext, skillRefImages)
+        ? streamTipsByCategoryBedrock(allImages, category, metadata, count, existingLabels, locale, skillContext)
         : provider === 'openrouter'
-          ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale, skillContext, skillRefImages)
-          : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale, skillContext, skillRefImages);
+          ? streamTipsByCategoryOpenRouter(allImages, category, metadata, count, existingLabels, locale, skillContext)
+          : streamTipsByCategoryGoogle(allImages, category, metadata, count, existingLabels, locale, skillContext);
 
       for await (const tip of source) {
         if (tip.label && !labels.has(tip.label) && labels.size >= count) continue;
@@ -1017,14 +1021,13 @@ export async function* streamTipsByCategory(
 
 // --- Google Provider ---
 async function* streamTipsByCategoryGoogle(
-  imageBase64: string,
+  images: string[],
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
   existingLabels?: string[],
   locale?: string,
   skillContext?: string,
-  skillRefImages?: string[],
 ): AsyncGenerator<Tip> {
   const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
 
@@ -1039,20 +1042,13 @@ async function* streamTipsByCategoryGoogle(
   }
 
   const promptSuffix = supportsStructuredOutput ? '' : getJsonFormatSuffix(locale);
-  const resolved = await ensureBase64Server(imageBase64);
-  const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
-  const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-
-  // Build image parts: user photo + skill reference images
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const imageParts: any[] = [{ inlineData: { mimeType, data: base64Data } }];
-  if (skillRefImages?.length) {
-    for (const refImg of skillRefImages) {
-      const refResolved = await ensureBase64Server(refImg);
-      const refData = refResolved.replace(/^data:image\/\w+;base64,/, '');
-      const refMime = refResolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-      imageParts.push({ inlineData: { mimeType: refMime, data: refData } });
-    }
+  const imageParts: any[] = [];
+  for (const img of images) {
+    const resolved = await ensureBase64Server(img);
+    const data = resolved.replace(/^data:image\/\w+;base64,/, '');
+    const mime = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+    imageParts.push({ inlineData: { mimeType: mime, data } });
   }
 
   const stream = await getAI().models.generateContentStream({
@@ -1071,29 +1067,22 @@ async function* streamTipsByCategoryGoogle(
 
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(streamToTextIterator(stream), `google:${category}`, category),
-    imageBase64, category, `google:${category}`,
+    images[0], category, `google:${category}`,
   );
 }
 
 // --- OpenRouter Provider ---
 async function* streamTipsByCategoryOpenRouter(
-  imageBase64: string,
+  images: string[],
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
   existingLabels?: string[],
   locale?: string,
   skillContext?: string,
-  skillRefImages?: string[],
 ): AsyncGenerator<Tip> {
   const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
   const reasoning = useHighReasoning ? { effort: 'high' } : { effort: 'minimal' };
-
-  // Build image content: user photo + skill reference images
-  const imageContentParts = [toImageContent(imageBase64)];
-  if (skillRefImages?.length) {
-    for (const refImg of skillRefImages) imageContentParts.push(toImageContent(refImg));
-  }
 
   const t0 = Date.now();
   tlog(`[tips:openrouter:${category}] fetch start (reasoning: ${reasoning.effort})`);
@@ -1109,7 +1098,7 @@ async function* streamTipsByCategoryOpenRouter(
         {
           role: 'user',
           content: [
-            ...imageContentParts,
+            ...images.map(img => toImageContent(img)),
             { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
           ],
         },
@@ -1128,37 +1117,29 @@ async function* streamTipsByCategoryOpenRouter(
   tlog(`[tips:openrouter:${category}] headers received at +${Date.now() - t0}ms`);
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`), `or:${category}`, category),
-    imageBase64, category, `or:${category}`,
+    images[0], category, `or:${category}`,
   );
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
 }
 
 // --- Bedrock Provider (Claude Sonnet — default for tips) ---
 async function* streamTipsByCategoryBedrock(
-  imageBase64: string,
+  images: string[],
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string },
   count: number = 2,
   existingLabels?: string[],
   locale?: string,
   skillContext?: string,
-  skillRefImages?: string[],
 ): AsyncGenerator<Tip> {
-  const imageContent = imageBase64.startsWith('http')
-    ? new URL(imageBase64)
-    : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
 
-  // Build image parts: user photo + skill reference images
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const contentParts: any[] = [{ type: 'image', image: imageContent }];
-  if (skillRefImages?.length) {
-    for (const refImg of skillRefImages) {
-      const img = refImg.startsWith('http') ? new URL(refImg)
-        : refImg.startsWith('data:') ? refImg : `data:image/jpeg;base64,${refImg}`;
-      contentParts.push({ type: 'image', image: img });
-    }
-  }
+  const contentParts: any[] = images.map(img => ({
+    type: 'image',
+    image: img.startsWith('http') ? new URL(img)
+      : img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`,
+  }));
 
   const t0 = Date.now();
   tlog(`[tips:bedrock:${category}] stream start`);
@@ -1181,7 +1162,7 @@ async function* streamTipsByCategoryBedrock(
   tlog(`[tips:bedrock:${category}] streamText ready at +${Date.now() - t0}ms`);
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(result.textStream, `bedrock:${category}`, category),
-    imageBase64, category, `bedrock:${category}`,
+    images[0], category, `bedrock:${category}`,
   );
   tlog(`[tips:bedrock:${category}] done at +${Date.now() - t0}ms`);
 }
