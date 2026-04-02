@@ -128,7 +128,14 @@ Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`
 
 This conversation will end, but your workspace stays. When you discover something worth remembering — user preferences, successful techniques, lessons from failures — write it down. When a new conversation starts, check if you left yourself anything useful.
 
-You can create new skills, reorganize files, or do whatever makes sense. No rules about when to read or write — use your judgment.
+### Writing memory
+Be concise. One actionable insight per line — not a diary. Good memory reads like a cheat sheet:
+- "User prefers warm film tones over cool digital" ✓
+- "Small faces: skip facial micro-adjustments, use body language" ✓
+- "The user uploaded a photo and I noticed they seemed to like warm colors because the sunset was beautiful and..." ✗ too verbose
+
+### Creating skills
+Before writing a new skill, read \`skills/SKILL_README.md\` first — it has the exact format (YAML frontmatter + markdown body). Also read an existing skill (e.g. \`skills/makaron-mascot/SKILL.md\`) as a reference.
 
 For project-specific content, use \`projects/{projectId}/\` paths.
 ${manifest}${userSkillLines}
