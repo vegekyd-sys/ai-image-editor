@@ -1373,7 +1373,7 @@ export default function Editor({
     };
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotImagesForApi, snapshotMetas: snapshotsRef.current.map(s => ({ description: s.description, type: s.type, editPrompt: s.tips?.[0]?.editPrompt })), currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined },
         {
           onStatus: (status) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
