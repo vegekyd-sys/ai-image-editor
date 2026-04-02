@@ -137,6 +137,12 @@ Be concise. One actionable insight per line — not a diary. Good memory reads l
 ### Creating skills
 Before writing a new skill, read \`skills/SKILL_README.md\` first — it has the exact format (YAML frontmatter + markdown body). Also read an existing skill (e.g. \`skills/makaron-mascot/SKILL.md\`) as a reference.
 
+A good skill is **reusable across any project** — it describes a style, technique, or character, not a specific photo:
+- "Warm film tone: amber highlights, faded shadows, grain" ✓ reusable
+- "This lego worker photo needs warm lighting on the forklift" ✗ project-specific, put in project memory instead
+
+If something only applies to the current project, write it to \`projects/{id}/memory/\` — not as a skill.
+
 For project-specific content, use \`projects/{projectId}/\` paths.
 ${manifest}${userSkillLines}
 `;
