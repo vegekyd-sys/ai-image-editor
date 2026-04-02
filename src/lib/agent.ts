@@ -110,14 +110,18 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[]): Promise<string> {
 
 ## Workspace
 
-You have a workspace containing skill templates, reference images, and memory notes.
-- \`list_workspace\`: discover available files
-- \`read_workspace\`: read file content (text or images)
-- \`write_workspace\`: save notes/memory for future conversations
-${manifest}${userSkillLines}
+You have a persistent workspace with two areas:
+- **skills/** — your abilities and knowledge (built-in + ones you create)
+- **memory/** — your long-term memory (preferences, lessons, plans)
 
-When you need a skill's detailed instructions, read its SKILL.md. Don't guess — read first, then act.
-When you need reference images for a skill, list its assets/ directory and use them with generate_image.
+Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`
+
+This conversation will end, but your workspace stays. When you discover something worth remembering — user preferences, successful techniques, lessons from failures — write it down. When a new conversation starts, check if you left yourself anything useful.
+
+You can create new skills, reorganize files, or do whatever makes sense. No rules about when to read or write — use your judgment.
+
+For project-specific content, use \`projects/{projectId}/\` paths.
+${manifest}${userSkillLines}
 `;
   return base + workspaceSection;
 }
@@ -352,19 +356,19 @@ Parameters:
 
     // ── Workspace tools ─────────────────────────────────────────────────────
 
-    list_workspace: tool({
-      description: `List files in your workspace. Discover available skills, reference images, and your own notes.
+    list_files: tool({
+      description: `List files in your workspace. Discover available skills, reference images, and your memory.
 Returns an array of file entries with path, type, and metadata.
-Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a specific skill, "memory/*" for your notes.`,
+Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a specific skill, "memory/*" for your memory.`,
       inputSchema: z.object({
         pattern: z.string().optional().describe('Glob-like filter: "skills/*", "skills/*/assets/*", "memory/*", "prompts/*"'),
-        scope: z.enum(['global', 'user', 'project']).optional().describe('Filter by scope. global=built-in, user=user skills+prefs, project=project notes. Omit for all.'),
+        scope: z.enum(['global', 'user', 'project']).optional().describe('Filter by scope. global=built-in, user=user skills+memory, project=project memory. Omit for all.'),
         type: z.string().optional().describe('Filter by content type prefix: "text" for .md files, "image" for images'),
       }),
       execute: async ({ pattern, scope, type }) => {
         const files = await workspace.listFiles({
           scope,
-          userId: ctx.projectId ? undefined : undefined, // TODO: pass userId when available
+          projectId: ctx.projectId,
           pattern,
           type,
         });
@@ -380,14 +384,14 @@ Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a speci
       },
     }),
 
-    read_workspace: tool({
+    read_file: tool({
       description: `Read a file from your workspace. For .md files, returns text content. For images, returns the image so you can view it.
-Use this to read skill instructions (SKILL.md), reference images, or your own notes.`,
+Use this to read skill instructions (SKILL.md), reference images, or your memory.`,
       inputSchema: z.object({
-        path: z.string().describe('File path from list_workspace, e.g. "skills/enhance/SKILL.md" or "skills/makaron-mascot/assets/character-sheet.jpg"'),
+        path: z.string().describe('File path from list_files, e.g. "skills/enhance/SKILL.md" or "skills/makaron-mascot/assets/character-sheet.jpg"'),
       }),
       execute: async ({ path: filePath }) => {
-        const result = await workspace.readFile(filePath);
+        const result = await workspace.readFile(filePath, undefined, { projectId: ctx.projectId });
         if (!result) return { error: `File not found: ${filePath}` };
 
         if (result.contentType.startsWith('image/')) {
@@ -419,35 +423,56 @@ Use this to read skill instructions (SKILL.md), reference images, or your own no
       },
     }),
 
-    write_workspace: tool({
-      description: `Write a note or memory file to your workspace. Use this to remember user preferences, project context, or editing decisions for future conversations.
-Only writes to memory/ directory (project or user scope). Cannot modify skills or other files.`,
+    write_file: tool({
+      description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
+Path is free — you decide how to organize. Convention: skills/ for abilities, memory/ for remembering things, projects/{id}/ for project-specific content.`,
       inputSchema: z.object({
-        path: z.string().describe('Path under memory/ directory, e.g. "memory/preferences.md" or "memory/edit-notes.md"'),
+        path: z.string().describe('File path, e.g. "memory/preferences.md", "skills/my-style/SKILL.md", "projects/{id}/memory/plan.md"'),
         content: z.string().describe('File content (markdown recommended)'),
-        scope: z.enum(['user', 'project']).default('project').describe('user = persists across projects, project = this project only'),
       }),
-      execute: async ({ path: filePath, content, scope }) => {
-        // Enforce: only memory/ directory
-        if (!filePath.startsWith('memory/')) {
-          return { success: false, message: 'Can only write to memory/ directory. Use path like "memory/preferences.md".' };
-        }
-
-        // For now, write to local filesystem in dev mode
-        // TODO: write to Supabase in production
+      execute: async ({ path: filePath, content }) => {
+        // Determine scope from path
+        const isProject = filePath.startsWith('projects/');
         try {
           const fs = require('fs') as typeof import('fs');
           const pathMod = require('path') as typeof import('path');
-          const baseDir = scope === 'project'
-            ? pathMod.join(process.cwd(), '.workspace', ctx.projectId)
+          const baseDir = isProject
+            ? pathMod.join(process.cwd(), '.workspace')
             : pathMod.join(process.cwd(), '.workspace', '_user');
           const fullPath = pathMod.join(baseDir, filePath);
           const dir = pathMod.dirname(fullPath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(fullPath, content, 'utf-8');
-          return { success: true, message: `Saved to ${scope}/${filePath}` };
+          return { success: true, message: `Saved: ${filePath}` };
         } catch (e) {
           return { success: false, message: `Write failed: ${e instanceof Error ? e.message : String(e)}` };
+        }
+      },
+    }),
+
+    delete_file: tool({
+      description: `Delete a file from your workspace. Use this to clean up outdated memory or reorganize.`,
+      inputSchema: z.object({
+        path: z.string().describe('File path to delete'),
+      }),
+      execute: async ({ path: filePath }) => {
+        try {
+          const fs = require('fs') as typeof import('fs');
+          const pathMod = require('path') as typeof import('path');
+          // Try project path first, then user path
+          const candidates = [
+            pathMod.join(process.cwd(), '.workspace', filePath),
+            pathMod.join(process.cwd(), '.workspace', '_user', filePath),
+          ];
+          for (const fullPath of candidates) {
+            if (fs.existsSync(fullPath)) {
+              fs.unlinkSync(fullPath);
+              return { success: true, message: `Deleted: ${filePath}` };
+            }
+          }
+          return { success: false, message: `File not found: ${filePath}` };
+        } catch (e) {
+          return { success: false, message: `Delete failed: ${e instanceof Error ? e.message : String(e)}` };
         }
       },
     }),
@@ -567,13 +592,15 @@ export async function* runMakaronAgent(
             : (q ? `分析图片：${q.slice(0, 25)}` : '分析图片') };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
-        } else if (event.toolName === 'list_workspace') {
+        } else if (event.toolName === 'list_files') {
           yield { type: 'status', text: isEnLocale ? 'Browsing workspace...' : '浏览工作台...' };
-        } else if (event.toolName === 'read_workspace') {
+        } else if (event.toolName === 'read_file') {
           const p = (event.input as { path?: string }).path || '';
           yield { type: 'status', text: isEnLocale ? `Reading ${p.split('/').pop()}...` : `读取 ${p.split('/').pop()}...` };
-        } else if (event.toolName === 'write_workspace') {
-          yield { type: 'status', text: isEnLocale ? 'Saving note...' : '保存笔记...' };
+        } else if (event.toolName === 'write_file') {
+          yield { type: 'status', text: isEnLocale ? 'Saving...' : '保存中...' };
+        } else if (event.toolName === 'delete_file') {
+          yield { type: 'status', text: isEnLocale ? 'Deleting...' : '删除中...' };
         } else if (event.toolName === 'rotate_camera') {
           yield { type: 'status', text: isEnLocale ? 'Rotating camera...' : '旋转相机中...' };
         }

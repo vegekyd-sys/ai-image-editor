@@ -162,8 +162,6 @@ function listLocalFiles(opts: WorkspaceListOptions): WorkspaceFile[] {
       const dirs = fs.readdirSync(skillsDir, { withFileTypes: true }).filter((d: { isDirectory: () => boolean }) => d.isDirectory());
       for (const dir of dirs) {
         const skillDir = pathMod.join(skillsDir, dir.name);
-        const entries = fs.readdirSync(skillDir, { recursive: true, withFileTypes: false }) as string[];
-        // readdirSync with recursive returns strings
         const allFiles = listDirRecursive(fs, pathMod, skillDir);
         for (const relPath of allFiles) {
           const fullPath = pathMod.join(skillDir, relPath);
@@ -172,7 +170,7 @@ function listLocalFiles(opts: WorkspaceListOptions): WorkspaceFile[] {
           files.push({
             path: `skills/${dir.name}/${relPath}`,
             scope: 'global',
-            contentType: ext === '.md' ? 'text/markdown' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.png' ? 'image/png' : 'application/octet-stream',
+            contentType: extToContentType(ext),
             size: stat.size,
           });
         }
@@ -193,6 +191,42 @@ function listLocalFiles(opts: WorkspaceListOptions): WorkspaceFile[] {
         });
       }
     }
+
+    // Memory/notes from .workspace/ (project and user scope)
+    const wsBase = pathMod.join(process.cwd(), '.workspace');
+    if (fs.existsSync(wsBase)) {
+      const scanWorkspaceDir = (dir: string, scope: WorkspaceScope) => {
+        if (!fs.existsSync(dir)) return;
+        const allFiles = listDirRecursive(fs, pathMod, dir);
+        for (const relPath of allFiles) {
+          const fullPath = pathMod.join(dir, relPath);
+          const stat = fs.statSync(fullPath);
+          const ext = pathMod.extname(relPath).toLowerCase();
+          files.push({
+            path: relPath,
+            scope,
+            contentType: extToContentType(ext),
+            size: stat.size,
+          });
+        }
+      };
+
+      // User-level workspace: .workspace/_user/
+      scanWorkspaceDir(pathMod.join(wsBase, '_user'), 'user');
+
+      // Project-level workspace: .workspace/{projectId}/
+      if (opts.projectId) {
+        scanWorkspaceDir(pathMod.join(wsBase, opts.projectId), 'project');
+      } else {
+        // Scan all project dirs
+        const entries = fs.readdirSync(wsBase, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory() && entry.name !== '_user') {
+            scanWorkspaceDir(pathMod.join(wsBase, entry.name), 'project');
+          }
+        }
+      }
+    }
   } catch { /* browser */ }
 
   // Apply filters
@@ -205,6 +239,14 @@ function listLocalFiles(opts: WorkspaceListOptions): WorkspaceFile[] {
     }
     return true;
   });
+}
+
+function extToContentType(ext: string): string {
+  if (ext === '.md') return 'text/markdown';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.json') return 'application/json';
+  return 'application/octet-stream';
 }
 
 function listDirRecursive(fs: typeof import('fs'), path: typeof import('path'), dir: string, prefix = ''): string[] {
@@ -222,29 +264,37 @@ function listDirRecursive(fs: typeof import('fs'), path: typeof import('path'), 
 }
 
 /** Read a local workspace file */
-function readLocalFile(filePath: string): WorkspaceReadResult | null {
+function readLocalFile(filePath: string, projectId?: string): WorkspaceReadResult | null {
   try {
     const fs = require('fs') as typeof import('fs');
     const pathMod = require('path') as typeof import('path');
 
     // Map workspace path to actual filesystem path
-    let fullPath: string;
+    let fullPath: string | null = null;
+
     if (filePath.startsWith('skills/')) {
       fullPath = pathMod.join(process.cwd(), 'src', filePath);
     } else if (filePath.startsWith('prompts/')) {
       fullPath = pathMod.join(process.cwd(), 'src', 'lib', filePath);
-    } else {
-      return null;
+    } else if (filePath.startsWith('memory/')) {
+      // Try project scope first, then user scope
+      if (projectId) {
+        const projectPath = pathMod.join(process.cwd(), '.workspace', projectId, filePath);
+        if (fs.existsSync(projectPath)) fullPath = projectPath;
+      }
+      if (!fullPath) {
+        const userPath = pathMod.join(process.cwd(), '.workspace', '_user', filePath);
+        if (fs.existsSync(userPath)) fullPath = userPath;
+      }
     }
 
-    if (!fs.existsSync(fullPath)) return null;
+    if (!fullPath || !fs.existsSync(fullPath)) return null;
     const ext = pathMod.extname(fullPath).toLowerCase();
-    const contentType = ext === '.md' ? 'text/markdown' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.png' ? 'image/png' : 'application/octet-stream';
+    const contentType = extToContentType(ext);
 
-    if (contentType.startsWith('text/')) {
+    if (contentType.startsWith('text/') || contentType === 'application/json') {
       return { content: fs.readFileSync(fullPath, 'utf-8'), contentType };
     } else {
-      // Binary files: return as base64 data URL
       const buf = fs.readFileSync(fullPath);
       return { content: `data:${contentType};base64,${buf.toString('base64')}`, contentType };
     }
@@ -401,8 +451,8 @@ export async function listFiles(opts: WorkspaceListOptions, supabase?: SupabaseC
  * - With supabase: fetches from Storage
  * - Without: reads from local filesystem
  */
-export async function readFile(filePath: string, supabase?: SupabaseClient, opts?: { scope?: WorkspaceScope; userId?: string }): Promise<WorkspaceReadResult | null> {
-  const cacheKey = `read:${filePath}`;
+export async function readFile(filePath: string, supabase?: SupabaseClient, opts?: { scope?: WorkspaceScope; userId?: string; projectId?: string }): Promise<WorkspaceReadResult | null> {
+  const cacheKey = `read:${filePath}:${opts?.projectId || ''}`;
   const cached = getCached<WorkspaceReadResult>(cacheKey);
   if (cached) return cached;
 
@@ -419,7 +469,7 @@ export async function readFile(filePath: string, supabase?: SupabaseClient, opts
 
   // Fallback to local
   if (!result) {
-    result = readLocalFile(filePath);
+    result = readLocalFile(filePath, opts?.projectId);
   }
 
   if (result) {
@@ -434,6 +484,31 @@ export async function readFile(filePath: string, supabase?: SupabaseClient, opts
  * Write a file to the workspace (user or project scope only).
  * Requires supabase client.
  */
+/**
+ * Delete a file from the workspace.
+ */
+export async function deleteFile(filePath: string, projectId?: string): Promise<boolean> {
+  try {
+    const fs = require('fs') as typeof import('fs');
+    const pathMod = require('path') as typeof import('path');
+    const candidates = [
+      pathMod.join(process.cwd(), '.workspace', filePath),
+      pathMod.join(process.cwd(), '.workspace', '_user', filePath),
+    ];
+    if (projectId) {
+      candidates.unshift(pathMod.join(process.cwd(), '.workspace', projectId, filePath));
+    }
+    for (const fullPath of candidates) {
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+        cache.clear(); // invalidate all cache
+        return true;
+      }
+    }
+    return false;
+  } catch { return false; }
+}
+
 export async function writeFile(opts: WorkspaceWriteOptions, supabase: SupabaseClient): Promise<boolean> {
   // Enforce: only user/project scope, only memory/ subdirectory for agent writes
   if (opts.scope === 'project' && !opts.projectId) {
