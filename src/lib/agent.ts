@@ -83,7 +83,9 @@ const SKILL_PROMPTS: Record<string, string> = {
 };
 
 // Dynamic skills from SKILL.md registry
-import { getSkill, getSkillFromAll, getSkillsSummaryForAgent, type ParsedSkill } from './skill-registry';
+import { getSkillFromAll, type ParsedSkill } from './skill-registry';
+// Workspace service — unified access to skills, memory, assets
+import * as workspace from './workspace';
 
 // ---------------------------------------------------------------------------
 // System prompt (bundled via webpack asset/source)
@@ -91,6 +93,33 @@ import { getSkill, getSkillFromAll, getSkillsSummaryForAgent, type ParsedSkill }
 
 function getAgentSystemPrompt(): string {
   return agentPrompt + '\n\n## Video Script Format\n\n' + animatePrompt;
+}
+
+/** Build system prompt with lightweight skill manifest (not full templates) */
+async function buildSystemPrompt(userSkills?: ParsedSkill[]): Promise<string> {
+  const base = getAgentSystemPrompt();
+  const manifest = await workspace.getSkillManifest(undefined, undefined);
+  // Append user skills to manifest if any
+  let userSkillLines = '';
+  if (userSkills?.length) {
+    userSkillLines = '\n' + userSkills.map(s =>
+      `- **${s.name}**: ${s.description.trim().split('\n')[0]}${s.makaron?.referenceImages?.length ? ' [has reference images]' : ''}`
+    ).join('\n');
+  }
+  const workspaceSection = `
+
+## Workspace
+
+You have a workspace containing skill templates, reference images, and memory notes.
+- \`list_workspace\`: discover available files
+- \`read_workspace\`: read file content (text or images)
+- \`write_workspace\`: save notes/memory for future conversations
+${manifest}${userSkillLines}
+
+When you need a skill's detailed instructions, read its SKILL.md. Don't guess — read first, then act.
+When you need reference images for a skill, list its assets/ directory and use them with generate_image.
+`;
+  return base + workspaceSection;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +350,108 @@ Parameters:
       },
     }),
 
+    // ── Workspace tools ─────────────────────────────────────────────────────
+
+    list_workspace: tool({
+      description: `List files in your workspace. Discover available skills, reference images, and your own notes.
+Returns an array of file entries with path, type, and metadata.
+Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a specific skill, "memory/*" for your notes.`,
+      inputSchema: z.object({
+        pattern: z.string().optional().describe('Glob-like filter: "skills/*", "skills/*/assets/*", "memory/*", "prompts/*"'),
+        scope: z.enum(['global', 'user', 'project']).optional().describe('Filter by scope. global=built-in, user=user skills+prefs, project=project notes. Omit for all.'),
+        type: z.string().optional().describe('Filter by content type prefix: "text" for .md files, "image" for images'),
+      }),
+      execute: async ({ pattern, scope, type }) => {
+        const files = await workspace.listFiles({
+          scope,
+          userId: ctx.projectId ? undefined : undefined, // TODO: pass userId when available
+          pattern,
+          type,
+        });
+        return {
+          files: files.map(f => ({
+            path: f.path,
+            scope: f.scope,
+            type: f.contentType,
+            size: f.size,
+          })),
+          count: files.length,
+        };
+      },
+    }),
+
+    read_workspace: tool({
+      description: `Read a file from your workspace. For .md files, returns text content. For images, returns the image so you can view it.
+Use this to read skill instructions (SKILL.md), reference images, or your own notes.`,
+      inputSchema: z.object({
+        path: z.string().describe('File path from list_workspace, e.g. "skills/enhance/SKILL.md" or "skills/makaron-mascot/assets/character-sheet.jpg"'),
+      }),
+      execute: async ({ path: filePath }) => {
+        const result = await workspace.readFile(filePath);
+        if (!result) return { error: `File not found: ${filePath}` };
+
+        if (result.contentType.startsWith('image/')) {
+          // Return image for vision — same pattern as analyze_image
+          const raw = result.content.replace(/^data:image\/\w+;base64,/, '');
+          return { base64Data: raw, mimeType: result.contentType, path: filePath };
+        }
+
+        return { content: result.content, type: result.contentType, path: filePath };
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toModelOutput({ output }: { output: any }) {
+        if (output.error) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        if (output.base64Data) {
+          return {
+            type: 'content' as const,
+            value: [
+              { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
+              { type: 'text' as const, text: `Workspace image: ${output.path}` },
+            ],
+          };
+        }
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: `[${output.path}]\n\n${output.content}` }],
+        };
+      },
+    }),
+
+    write_workspace: tool({
+      description: `Write a note or memory file to your workspace. Use this to remember user preferences, project context, or editing decisions for future conversations.
+Only writes to memory/ directory (project or user scope). Cannot modify skills or other files.`,
+      inputSchema: z.object({
+        path: z.string().describe('Path under memory/ directory, e.g. "memory/preferences.md" or "memory/edit-notes.md"'),
+        content: z.string().describe('File content (markdown recommended)'),
+        scope: z.enum(['user', 'project']).default('project').describe('user = persists across projects, project = this project only'),
+      }),
+      execute: async ({ path: filePath, content, scope }) => {
+        // Enforce: only memory/ directory
+        if (!filePath.startsWith('memory/')) {
+          return { success: false, message: 'Can only write to memory/ directory. Use path like "memory/preferences.md".' };
+        }
+
+        // For now, write to local filesystem in dev mode
+        // TODO: write to Supabase in production
+        try {
+          const fs = require('fs') as typeof import('fs');
+          const pathMod = require('path') as typeof import('path');
+          const baseDir = scope === 'project'
+            ? pathMod.join(process.cwd(), '.workspace', ctx.projectId)
+            : pathMod.join(process.cwd(), '.workspace', '_user');
+          const fullPath = pathMod.join(baseDir, filePath);
+          const dir = pathMod.dirname(fullPath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(fullPath, content, 'utf-8');
+          return { success: true, message: `Saved to ${scope}/${filePath}` };
+        } catch (e) {
+          return { success: false, message: `Write failed: ${e instanceof Error ? e.message : String(e)}` };
+        }
+      },
+    }),
+
   };
 }
 
@@ -379,7 +510,7 @@ export async function* runMakaronAgent(
   // Determine which tools to expose
   // tipReactionOnly: no tools (text-only response)
   // analysisOnly: only analyze_image (agent uses tool to see the photo)
-  // normal chat / animation: all tools (agent.md controls behavior)
+  // normal chat / animation: all tools including workspace (agent.md controls behavior)
   const tools = tipReactionOnly ? undefined : analysisOnly
     ? { analyze_image: allTools.analyze_image }
     : allTools;
@@ -402,8 +533,8 @@ export async function* runMakaronAgent(
     userContent = analysisOnly ? analysisPrompt : prompt;
   }
 
-  // Build system prompt: base agent.md + skill registry summary
-  const systemPrompt = getAgentSystemPrompt() + getSkillsSummaryForAgent(options?.userSkills);
+  // Build system prompt: base agent.md + workspace manifest (lightweight, not full templates)
+  const systemPrompt = await buildSystemPrompt(options?.userSkills);
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -436,6 +567,13 @@ export async function* runMakaronAgent(
             : (q ? `分析图片：${q.slice(0, 25)}` : '分析图片') };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
+        } else if (event.toolName === 'list_workspace') {
+          yield { type: 'status', text: isEnLocale ? 'Browsing workspace...' : '浏览工作台...' };
+        } else if (event.toolName === 'read_workspace') {
+          const p = (event.input as { path?: string }).path || '';
+          yield { type: 'status', text: isEnLocale ? `Reading ${p.split('/').pop()}...` : `读取 ${p.split('/').pop()}...` };
+        } else if (event.toolName === 'write_workspace') {
+          yield { type: 'status', text: isEnLocale ? 'Saving note...' : '保存笔记...' };
         } else if (event.toolName === 'rotate_camera') {
           yield { type: 'status', text: isEnLocale ? 'Rotating camera...' : '旋转相机中...' };
         }
