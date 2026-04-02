@@ -104,12 +104,15 @@ export default function ProjectsPage() {
       setSkillUploading(false)
     }
   }, [])
-  // Fetch skills from API
+  // Fetch skills lazily — only when user expands the skill panel
+  const skillsFetchedRef = useRef(false)
   useEffect(() => {
+    if (!skillsExpanded || skillsFetchedRef.current) return
+    skillsFetchedRef.current = true
     fetch('/api/skills').then(r => r.json()).then(d => {
       if (d.skills) setAvailableSkills(d.skills)
     }).catch(() => {})
-  }, [])
+  }, [skillsExpanded])
   const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
   const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
@@ -870,30 +873,28 @@ export default function ProjectsPage() {
                   </div>
 
                   {/* Skill button — inside input bar, before Create */}
-                  {availableSkills.length > 0 && (
-                    <button
-                      onClick={() => setSkillsExpanded(prev => !prev)}
-                      style={{
-                        flexShrink: 0,
-                        padding: selectedSkill ? '4px 10px' : '5px 6px',
-                        borderRadius: selectedSkill ? 12 : 0,
-                        border: 'none',
-                        background: selectedSkill ? 'rgba(217,70,239,0.15)' : 'none',
-                        color: selectedSkill ? '#f0abfc' : 'rgba(255,255,255,0.45)',
-                        fontSize: '0.75rem',
-                        fontWeight: 500,
-                        letterSpacing: '0.03em',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
-                        fontFamily: 'var(--font-geist-sans), sans-serif',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {selectedSkill
-                        ? availableSkills.find(s => s.name === selectedSkill)?.label || 'Skill'
-                        : 'Skill'}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setSkillsExpanded(prev => !prev)}
+                    style={{
+                      flexShrink: 0,
+                      padding: selectedSkill ? '4px 10px' : '5px 6px',
+                      borderRadius: selectedSkill ? 12 : 0,
+                      border: 'none',
+                      background: selectedSkill ? 'rgba(217,70,239,0.15)' : 'none',
+                      color: selectedSkill ? '#f0abfc' : 'rgba(255,255,255,0.45)',
+                      fontSize: '0.75rem',
+                      fontWeight: 500,
+                      letterSpacing: '0.03em',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      fontFamily: 'var(--font-geist-sans), sans-serif',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {selectedSkill
+                      ? availableSkills.find(s => s.name === selectedSkill)?.label || 'Skill'
+                      : 'Skill'}
+                  </button>
 
                   {/* Create button */}
                   <button
@@ -934,7 +935,7 @@ export default function ProjectsPage() {
             </div>
 
             {/* Skill pills — expanded below input */}
-            {skillsExpanded && availableSkills.length > 0 && (
+            {skillsExpanded && (
             <div
               style={{
                 display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center',
