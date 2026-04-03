@@ -132,6 +132,11 @@ A good skill is **reusable across any project** — it describes a style, techni
 
 If something only applies to the current project, write it to \`projects/{id}/memory/\` — not as a skill.
 
+### Efficiency
+- Read a file once, then act. Don't re-read or re-analyze the same content.
+- If you already called analyze_image on a snapshot, you've seen it — don't analyze it again.
+- When using a skill with reference images: list → read SKILL.md → generate_image. That's 2 tool calls, not 5.
+
 For project-specific content, use \`projects/{projectId}/\` paths.
 ${manifest}${userSkillLines}
 `;
@@ -662,11 +667,21 @@ export async function* runMakaronAgent(
         console.log(`⏱️ [agent] tool-result "${toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (tool took ${toolDuration}s)`);
 
         // Emit image_analyzed event so frontend can save the description
+        // Mark the snapshot as "analyzed" in ctx.snapshotMetas so Agent doesn't re-analyze
         if (toolName === 'analyze_image') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const analyzeInput = (event as any).input as { image_index?: number } | undefined;
           const analyzedIdx = analyzeInput?.image_index ?? (ctx.currentSnapshotIndex + 1);
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
+
+          // Mark as analyzed in snapshotMetas — list_files will show "(analyzed)" to prevent re-analysis
+          const metaIdx = analyzedIdx - 1;
+          if (metaIdx >= 0 && metaIdx < ctx.snapshotMetas.length) {
+            ctx.snapshotMetas[metaIdx] = {
+              ...ctx.snapshotMetas[metaIdx],
+              description: (ctx.snapshotMetas[metaIdx].description || '') + ' [analyzed this conversation]',
+            };
+          }
         }
 
         // Detect generate_image failure or NSFW content block
