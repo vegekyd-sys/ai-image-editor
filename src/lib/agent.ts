@@ -81,19 +81,8 @@ export type AgentStreamEvent =
   | { type: 'done' }
   | { type: 'error'; message: string };
 
-// ---------------------------------------------------------------------------
-// Skill template map — reuses already-imported .md files
-// ---------------------------------------------------------------------------
-
-const SKILL_PROMPTS: Record<string, string> = {
-  enhance: enhancePrompt,
-  creative: creativePrompt,
-  wild: wildPrompt,
-  captions: captionsPrompt,
-};
-
-// Dynamic skills from SKILL.md registry
-import { getSkillFromAll, type ParsedSkill } from './skill-registry';
+// Skill types (workspace replaces hardcoded SKILL_PROMPTS map)
+import { type ParsedSkill } from './skill-registry';
 // Workspace service — unified access to skills, memory, assets
 import * as workspace from './workspace';
 
@@ -177,30 +166,11 @@ function createTools(ctx: AgentContext) {
           editTarget = ctx.snapshotImages[idx];
         }
 
-        // Resolve reference images: user-uploaded + skill assets + snapshot indices
+        // Resolve reference images: user-uploaded + snapshot indices
+        // Note: skill reference images are no longer auto-injected here.
+        // The Agent discovers them via list_files and passes them as reference_image_indices.
         let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
-        // Inject skill reference images (e.g. mascot character sheet) only when that skill is used
-        const fs = require('fs');
-        const logLine = (msg: string) => { console.log(msg); fs.appendFileSync('/tmp/skill-debug.log', `${new Date().toISOString()} ${msg}\n`); };
-        logLine(`🎯 [generate_image] skill="${skill || 'none'}" editPrompt="${editPrompt.slice(0, 80)}"`);
-        if (skill) {
-          const skillDef = getSkillFromAll(skill, ctx.userSkills);
-          logLine(`🔍 [generate_image] getSkill("${skill}") found=${!!skillDef} refImages=${JSON.stringify(skillDef?.makaron?.referenceImages?.map((u: string) => u.slice(0, 60)))}`);
-          if (skillDef?.makaron.referenceImages?.length) {
-            // Deduplicate: skip skill reference images already present as snapshots
-            const existingUrls = new Set(ctx.snapshotImages);
-            const newRefs = skillDef.makaron.referenceImages.filter((url: string) => !existingUrls.has(url));
-            if (newRefs.length) {
-              logLine(`🖼️ [generate_image] Injecting ${newRefs.length} reference image(s) from skill "${skill}" (${skillDef.makaron.referenceImages.length - newRefs.length} already in snapshots)`);
-              resolvedRefs.push(...newRefs);
-            } else {
-              logLine(`✅ [generate_image] All ${skillDef.makaron.referenceImages.length} reference image(s) from skill "${skill}" already in snapshots, skipping`);
-            }
-          } else {
-            logLine(`⚠️ [generate_image] Skill "${skill}" has NO referenceImages!`);
-          }
-        }
-        logLine(`📎 [generate_image] Total resolvedRefs: ${resolvedRefs.length} (ctx.referenceImages=${ctx.referenceImages?.length ?? 0})`);
+        console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_image_indices?.length) {
           for (const refIdx of reference_image_indices) {
             const idx = refIdx - 1;
@@ -213,7 +183,7 @@ function createTools(ctx: AgentContext) {
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
-          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           { currentImage: editTarget, originalImage: ctx.originalImage, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
         // NSFW detection: flag session so all subsequent calls skip Gemini

@@ -1,30 +1,14 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { generateImage } from '../model-router';
 import type { ModelId } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
-
-// Lazy-loaded skill prompts from disk (for standalone MCP server / non-webpack environments)
-let _diskPrompts: Record<string, string> | null = null;
-function loadSkillPromptsFromDisk(): Record<string, string> {
-  if (!_diskPrompts) {
-    const dir = join(process.cwd(), 'src', 'lib', 'prompts');
-    _diskPrompts = {
-      enhance: readFileSync(join(dir, 'enhance.md'), 'utf-8'),
-      creative: readFileSync(join(dir, 'creative.md'), 'utf-8'),
-      wild: readFileSync(join(dir, 'wild.md'), 'utf-8'),
-      captions: readFileSync(join(dir, 'captions.md'), 'utf-8'),
-    };
-  }
-  return _diskPrompts;
-}
+import * as workspace from '../workspace';
 
 export interface EditImageInput {
   editPrompt: string;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   useOriginalAsReference?: boolean;
   aspectRatio?: string;
-  /** Pre-loaded skill prompt templates (from webpack). If omitted, loads from disk. */
+  /** @deprecated Use workspace service instead. Kept for backward compat. */
   skillPrompts?: Record<string, string>;
   /** User's preferred model override — bypasses default routing */
   preferredModel?: ModelId;
@@ -43,16 +27,11 @@ export async function editImage(
   // Inject skill template if provided
   // Qwen can't digest creative/wild/captions .md templates — only enhance works well
   const qwenIncompatibleSkill = preferredModel === 'qwen' && skill && skill !== 'enhance';
-  const prompts = skillPrompts ?? loadSkillPromptsFromDisk();
-  // Try hardcoded prompts first, then fall back to SkillRegistry (for dynamic skills like makaron-mascot)
+  // Load skill template from workspace (unified source) or legacy skillPrompts
   let skillTemplate: string | null = null;
   if (skill && !qwenIncompatibleSkill) {
-    skillTemplate = prompts[skill] ?? null;
-    if (!skillTemplate) {
-      const { getSkill } = require('../skill-registry');
-      const registrySkill = getSkill(skill);
-      if (registrySkill) skillTemplate = registrySkill.template;
-    }
+    // Try workspace first, then legacy skillPrompts for backward compat
+    skillTemplate = await workspace.getSkillTemplate(skill) ?? skillPrompts?.[skill] ?? null;
   }
   const finalPrompt = skillTemplate
     ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
