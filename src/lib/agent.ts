@@ -524,7 +524,7 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
           ]);
 
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'N/A'}, dataIsBuffer: ${result?.data ? Buffer.isBuffer(result.data) : 'no data'}`);
+          console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'N/A'}, dataType: ${result?.data ? `${typeof result.data} / ${result.data.constructor?.name} / len=${result.data.length || 'N/A'}` : 'no data'}`);
 
           // Handle result types — be flexible about what Agent returns
           if (!result) {
@@ -539,22 +539,35 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
             return null;
           };
 
+          // Helper: push image to generatedImages so it shows in CUI
+          const pushImage = (b64: string, mime: string) => {
+            const dataUrl = `data:${mime};base64,${b64}`;
+            ctx.generatedImages.push(dataUrl);
+            ctx.snapshotImages.push(dataUrl);
+            ctx.currentImage = dataUrl;
+          };
+
           // Buffer or Uint8Array → treat as image
           const directB64 = toBase64(result);
           if (directB64) {
+            pushImage(directB64, 'image/jpeg');
             return { type: 'image' as const, base64Data: directB64, mimeType: 'image/jpeg', description: desc };
           }
 
           // { type: 'image', data: ... } — standard format
           if (result.type === 'image' && result.data) {
             const b64 = toBase64(result.data) || String(result.data);
+            pushImage(b64, result.mimeType || 'image/jpeg');
             return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
           }
 
           // { buffer: ... } — sharp output shorthand
           if (result.buffer) {
             const b64 = toBase64(result.buffer);
-            if (b64) return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
+            if (b64) {
+              pushImage(b64, result.mimeType || 'image/jpeg');
+              return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
+            }
           }
 
           // Error result
