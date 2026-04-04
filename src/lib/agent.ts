@@ -2,7 +2,24 @@ import { streamText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
+import satori from 'satori';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import type { ModelId } from './models/types';
+
+// Pre-load font for satori (HTML→image rendering)
+let _satoriFont: Buffer | null = null;
+function getSatoriFont(): Buffer {
+  if (!_satoriFont) {
+    try {
+      _satoriFont = readFileSync(join(process.cwd(), 'node_modules/next/dist/compiled/@vercel/og/noto-sans-v27-latin-regular.ttf'));
+    } catch {
+      // Fallback: empty buffer (satori will error on text, but won't crash on import)
+      _satoriFont = Buffer.alloc(0);
+    }
+  }
+  return _satoriFont;
+}
 import { filterAndRemapImages } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
@@ -106,9 +123,10 @@ You have a persistent workspace with two areas:
 Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
 
 ### run_code
-Execute JavaScript with access to \`sharp\` (image processing) and snapshot images.
-Use for: cropping, resizing, compositing, adding text/overlays, color analysis, batch operations, creating skills with assets.
-When user asks to crop, resize, add text/watermark, make collages, or any image manipulation that doesn't need AI generation — use \`run_code\` instead of \`generate_image\`.
+Execute JavaScript with access to image processing libraries and snapshot images.
+- \`sharp\` — pixel operations: crop, resize, composite, color adjust, blur, sharpen
+- \`renderHtml(element, width, height)\` — HTML/CSS layout → PNG image. Great for text overlays, social media covers, brand materials, cards, labels.
+When user asks to crop, resize, add text/watermark, make collages, design layouts, or any image manipulation that doesn't need AI generation — use \`run_code\` instead of \`generate_image\`.
 
 This conversation will end, but your workspace stays. When you discover something worth remembering — user preferences, successful techniques, lessons from failures — write it down. When a new conversation starts, check if you left yourself anything useful.
 
@@ -475,7 +493,8 @@ Use this for any task that requires computation:
 - Skill creation with assets: upload images to storage, build SKILL.md, save to database
 
 Available in your code:
-- \`sharp\` — image processing (sharp npm package). Example: \`const img = sharp(buffer); const out = await img.resize(800).jpeg().toBuffer();\`
+- \`sharp\` — image processing: crop, resize, composite, color adjust, format convert. Example: \`const out = await sharp(buf).resize(800).jpeg().toBuffer();\`
+- \`renderHtml(element, width?, height?)\` — HTML/CSS → PNG image. Element format: \`{ type: 'div', props: { style: {...}, children: [...] } }\`. Supports: div, span, p, img, flexbox layout, fontSize, fontWeight, color, backgroundColor, borderRadius, padding, margin, gap. Returns PNG Buffer. Example: \`const png = await renderHtml({ type: 'div', props: { style: { display: 'flex', background: '#1a1a2e', color: 'white', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, children: [{ type: 'h1', props: { children: 'Title', style: { fontSize: 64 } } }] } }, 1080, 1350);\`
 - \`ctx.snapshotImages\` — array of snapshot URLs/base64 (index 0 = <<<image_1>>>)
 - \`ctx.projectId\`, \`ctx.userId\` — current project and user IDs
 - \`fetch\` — make HTTP requests (e.g. download snapshot images from URLs)
@@ -493,8 +512,21 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
         const startTime = Date.now();
         try {
           // Build sandbox context
+          const fontData = getSatoriFont();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const renderHtml = async (element: any, width = 800, height = 600) => {
+            const svg = await satori(element, {
+              width,
+              height,
+              fonts: [{ name: 'Noto Sans', data: fontData, weight: 400 as const }],
+            });
+            return await sharp(Buffer.from(svg)).png().toBuffer();
+          };
+
           const sandbox = {
             sharp,
+            satori,
+            renderHtml,
             fetch: globalThis.fetch,
             Buffer,
             JSON,
