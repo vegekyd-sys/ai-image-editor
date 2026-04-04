@@ -460,6 +460,103 @@ Path is free — you decide how to organize. Convention: skills/ for abilities, 
       },
     }),
 
+    run_code: tool({
+      description: `Execute JavaScript code with access to image processing libraries and project context.
+
+Use this for any task that requires computation:
+- Image manipulation: crop, resize, composite, watermark, color analysis (sharp)
+- Layout/design generation: social media covers, before/after comparisons, brand materials (satori — write HTML/CSS, get PNG)
+- Data processing: extract colors, analyze image stats, batch operations
+- Skill creation with assets: upload images to storage, build SKILL.md, save to database
+
+Available in your code:
+- \`sharp\` — image processing (sharp npm package). Example: \`const img = sharp(buffer); const out = await img.resize(800).jpeg().toBuffer();\`
+- \`ctx.snapshotImages\` — array of snapshot URLs/base64 (index 0 = <<<image_1>>>)
+- \`ctx.projectId\`, \`ctx.userId\` — current project and user IDs
+- \`fetch\` — make HTTP requests (e.g. download snapshot images from URLs)
+- Standard Node.js: Buffer, JSON, Math, Date, etc.
+
+Your code must return a value. If returning an image, return \`{ type: 'image', data: base64String, mimeType: 'image/jpeg' }\`.
+For text results, return \`{ type: 'text', content: 'your result' }\`.
+For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
+      inputSchema: z.object({
+        code: z.string().describe('JavaScript code to execute. Must return a result object.'),
+        description: z.string().optional().describe('Brief description of what this code does'),
+      }),
+      execute: async ({ code, description: desc }) => {
+        console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
+        const startTime = Date.now();
+        try {
+          // Build sandbox context
+          const sandbox = {
+            sharp,
+            fetch: globalThis.fetch,
+            Buffer,
+            JSON,
+            Math,
+            Date,
+            console: { log: (...args: unknown[]) => console.log('[run_code]', ...args) },
+            ctx: {
+              snapshotImages: ctx.snapshotImages,
+              snapshotCount: ctx.snapshotImages.length,
+              projectId: ctx.projectId,
+              userId: '', // TODO: pass userId when available
+            },
+          };
+
+          // Wrap code in async function and execute
+          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+          const fn = new AsyncFunction(
+            ...Object.keys(sandbox),
+            `'use strict';\n${code}`
+          );
+
+          // Execute with timeout
+          const timeoutMs = 30_000;
+          const result = await Promise.race([
+            fn(...Object.values(sandbox)),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Code execution timed out (30s)')), timeoutMs)),
+          ]);
+
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`✅ [run_code] done in ${elapsed}s`);
+
+          // Handle result types
+          if (result?.type === 'image' && result.data) {
+            // Image result — will be rendered by toModelOutput
+            return { type: 'image' as const, base64Data: result.data, mimeType: result.mimeType || 'image/jpeg', description: desc };
+          }
+          if (result?.type === 'error') {
+            return { type: 'text' as const, content: `Error: ${result.message}` };
+          }
+          // Default: text result
+          const content = result?.content || result?.type === 'text' ? result.content : JSON.stringify(result, null, 2);
+          return { type: 'text' as const, content: String(content) };
+        } catch (e) {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(`❌ [run_code] failed in ${elapsed}s:`, msg);
+          return { type: 'text' as const, content: `Code execution error: ${msg}` };
+        }
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toModelOutput({ output }: { output: any }) {
+        if (output.type === 'image' && output.base64Data) {
+          return {
+            type: 'content' as const,
+            value: [
+              { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType || 'image/jpeg' },
+              { type: 'text' as const, text: output.description ? `Code output: ${output.description}` : 'Code produced an image.' },
+            ],
+          };
+        }
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: output.content || 'Code executed successfully.' }],
+        };
+      },
+    }),
+
   };
 }
 
@@ -584,6 +681,9 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: isEnLocale ? 'Saving...' : '保存中...' };
         } else if (event.toolName === 'delete_file') {
           yield { type: 'status', text: isEnLocale ? 'Deleting...' : '删除中...' };
+        } else if (event.toolName === 'run_code') {
+          const desc = (event.input as { description?: string }).description;
+          yield { type: 'status', text: isEnLocale ? `Running: ${desc || 'code'}...` : `执行: ${desc || '代码'}...` };
         } else if (event.toolName === 'rotate_camera') {
           yield { type: 'status', text: isEnLocale ? 'Rotating camera...' : '旋转相机中...' };
         }
@@ -638,6 +738,17 @@ export async function* runMakaronAgent(
           const analyzeInput = (event as any).input as { image_index?: number } | undefined;
           const analyzedIdx = analyzeInput?.image_index ?? (ctx.currentSnapshotIndex + 1);
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
+        }
+
+        // run_code image output — push to generatedImages so it appears in CUI
+        if (toolName === 'run_code') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const codeResult = (event as any).result as { type?: string; base64Data?: string; mimeType?: string } | undefined;
+          if (codeResult?.type === 'image' && codeResult.base64Data) {
+            const dataUrl = `data:${codeResult.mimeType || 'image/jpeg'};base64,${codeResult.base64Data}`;
+            ctx.generatedImages.push(dataUrl);
+            ctx.snapshotImages.push(dataUrl);
+          }
         }
 
         // Detect generate_image failure or NSFW content block
