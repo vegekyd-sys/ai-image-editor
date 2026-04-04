@@ -519,19 +519,41 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
           ]);
 
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          console.log(`✅ [run_code] done in ${elapsed}s`);
+          console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}`);
 
-          // Handle result types
-          if (result?.type === 'image' && result.data) {
-            // Image result — will be rendered by toModelOutput
-            return { type: 'image' as const, base64Data: result.data, mimeType: result.mimeType || 'image/jpeg', description: desc };
+          // Handle result types — be flexible about what Agent returns
+          if (!result) {
+            return { type: 'text' as const, content: 'Code executed but returned nothing. Make sure to return a value.' };
           }
-          if (result?.type === 'error') {
+
+          // Buffer → treat as image
+          if (Buffer.isBuffer(result)) {
+            return { type: 'image' as const, base64Data: result.toString('base64'), mimeType: 'image/jpeg', description: desc };
+          }
+
+          // { type: 'image', data: base64String } — standard format
+          if (result.type === 'image' && result.data) {
+            const b64 = Buffer.isBuffer(result.data) ? result.data.toString('base64') : result.data;
+            return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
+          }
+
+          // { buffer: Buffer } — sharp output shorthand
+          if (result.buffer && Buffer.isBuffer(result.buffer)) {
+            return { type: 'image' as const, base64Data: result.buffer.toString('base64'), mimeType: result.mimeType || 'image/jpeg', description: desc };
+          }
+
+          // Error result
+          if (result.type === 'error') {
             return { type: 'text' as const, content: `Error: ${result.message}` };
           }
-          // Default: text result
-          const content = result?.content || result?.type === 'text' ? result.content : JSON.stringify(result, null, 2);
-          return { type: 'text' as const, content: String(content) };
+
+          // Text result
+          if (result.type === 'text') {
+            return { type: 'text' as const, content: String(result.content) };
+          }
+
+          // Fallback: stringify
+          return { type: 'text' as const, content: JSON.stringify(result, null, 2) };
         } catch (e) {
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
           const msg = e instanceof Error ? e.message : String(e);
