@@ -123,7 +123,10 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot }: { tex
               return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
             }
           }
-          return inline ? (
+          // Treat short single-line code as inline even if markdown parser says block
+          const text = String(children);
+          const isShort = !text.includes('\n') && text.length < 60;
+          return (inline || isShort) ? (
             <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
           ) : (
             <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
