@@ -1469,14 +1469,14 @@ export default function Editor({
               lastEditPromptRef.current = input.editPrompt;
               lastEditInputImagesRef.current = images ?? null;
             }
-            // Append run_code info as inline content in current message
+            // Append run_code info as code fence in current message
             if (tool === 'run_code' && typeof input.code === 'string') {
-              const desc = (input.description as string) || 'Running code';
-              const codePreview = (input.code as string).length > 200 ? (input.code as string).slice(0, 200) + '...' : input.code as string;
+              const desc = (input.description as string) || 'Code';
+              const code = input.code as string;
               const id = currentMsgId;
               if (id) {
                 setMessages(prev => prev.map(m =>
-                  m.id === id ? { ...m, content: (m.content || '') + `\n\n<run_code>${desc}</run_code>\n` } : m
+                  m.id === id ? { ...m, content: (m.content || '') + `\n\n⚡ *${desc}*\n\`\`\`javascript\n${code}\n\`\`\`\n` } : m
                 ));
               }
             }

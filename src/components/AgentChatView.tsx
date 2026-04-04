@@ -129,8 +129,6 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
     : text;
   // Replace `path/to/file.md` with FILE_REF token for clickable file chips
   processed = processed.replace(/`([^`]*\.md)`/g, '`FILE_REF_$1`');
-  // Replace <run_code>desc</run_code> with styled inline token
-  processed = processed.replace(/<run_code>(.*?)<\/run_code>/g, '`RUN_CODE_$1`');
 
   return (
     <ReactMarkdown
@@ -159,19 +157,6 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
             const fileMatch = str2.match(/^FILE_REF_(.+)$/);
             if (fileMatch) {
               return <FileRefChip path={fileMatch[1]} onView={onViewFile} />;
-            }
-          }
-          // Intercept RUN_CODE tokens → render subtle inline indicator
-          {
-            const str3 = String(children);
-            const codeMatch = str3.match(/^RUN_CODE_(.+)$/);
-            if (codeMatch) {
-              return (
-                <span className="inline-flex items-center gap-1 opacity-40" style={{ fontSize: '0.8em' }}>
-                  <span>⚡</span>
-                  <span className="italic">{codeMatch[1]}</span>
-                </span>
-              );
             }
           }
           // Treat short single-line code as inline even if markdown parser says block
