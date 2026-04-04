@@ -524,27 +524,37 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
           ]);
 
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}`);
+          console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'N/A'}, dataIsBuffer: ${result?.data ? Buffer.isBuffer(result.data) : 'no data'}`);
 
           // Handle result types — be flexible about what Agent returns
           if (!result) {
             return { type: 'text' as const, content: 'Code executed but returned nothing. Make sure to return a value.' };
           }
 
-          // Buffer → treat as image
-          if (Buffer.isBuffer(result)) {
-            return { type: 'image' as const, base64Data: result.toString('base64'), mimeType: 'image/jpeg', description: desc };
+          // Helper: convert anything buffer-like to base64 string
+          const toBase64 = (data: unknown): string | null => {
+            if (Buffer.isBuffer(data)) return data.toString('base64');
+            if (data instanceof Uint8Array) return Buffer.from(data).toString('base64');
+            if (typeof data === 'string' && data.length > 100) return data; // already base64
+            return null;
+          };
+
+          // Buffer or Uint8Array → treat as image
+          const directB64 = toBase64(result);
+          if (directB64) {
+            return { type: 'image' as const, base64Data: directB64, mimeType: 'image/jpeg', description: desc };
           }
 
-          // { type: 'image', data: base64String } — standard format
+          // { type: 'image', data: ... } — standard format
           if (result.type === 'image' && result.data) {
-            const b64 = Buffer.isBuffer(result.data) ? result.data.toString('base64') : result.data;
+            const b64 = toBase64(result.data) || String(result.data);
             return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
           }
 
-          // { buffer: Buffer } — sharp output shorthand
-          if (result.buffer && Buffer.isBuffer(result.buffer)) {
-            return { type: 'image' as const, base64Data: result.buffer.toString('base64'), mimeType: result.mimeType || 'image/jpeg', description: desc };
+          // { buffer: ... } — sharp output shorthand
+          if (result.buffer) {
+            const b64 = toBase64(result.buffer);
+            if (b64) return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
           }
 
           // Error result
