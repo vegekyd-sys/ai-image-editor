@@ -95,6 +95,36 @@ function fixMarkdownDelimiters(text: string): string {
 }
 
 
+/** Collapsible code block — shows first line + expand button for long code */
+function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const firstLine = text.split('\n')[0] || '';
+  const lineCount = text.split('\n').length;
+
+  return (
+    <div className="my-1.5 rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
+      <button
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-left"
+        style={{ color: 'rgba(255,255,255,0.4)' }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span style={{ fontSize: '0.75em' }}>{expanded ? '▼' : '▶'}</span>
+        <span className={`font-mono truncate ${isPanel ? 'text-[12px]' : 'text-[14px]'}`}>
+          {firstLine.slice(0, 60)}{firstLine.length > 60 ? '...' : ''}
+        </span>
+        <span className={`ml-auto flex-shrink-0 ${isPanel ? 'text-[11px]' : 'text-[12px]'}`} style={{ opacity: 0.5 }}>
+          {lineCount} lines
+        </span>
+      </button>
+      {expanded && (
+        <code className={`block font-mono ${isPanel ? 'text-[12px] px-3 pb-2' : 'text-[14px] px-3 pb-2.5'} overflow-x-auto`} style={{ color: 'rgba(255,255,255,0.7)' }}>
+          {text}
+        </code>
+      )}
+    </div>
+  );
+}
+
 /** Shared Markdown renderer to avoid duplicating component overrides.
  *  <<<image_N>>> tokens are converted to `IMG_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
@@ -137,15 +167,15 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
               return <FileRefChip path={fileMatch[1]} onView={onViewFile} />;
             }
           }
-          // Intercept RUN_CODE tokens → render compact code indicator
+          // Intercept RUN_CODE tokens → render subtle inline indicator
           {
             const str3 = String(children);
             const codeMatch = str3.match(/^RUN_CODE_(.+)$/);
             if (codeMatch) {
               return (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg" style={{ background: 'rgba(168,85,247,0.15)', color: 'rgba(168,85,247,0.9)', fontSize: 'inherit' }}>
-                  <span style={{ fontSize: '0.85em' }}>⚡</span>
-                  <span style={{ fontSize: '0.9em' }}>{codeMatch[1]}</span>
+                <span className="inline-flex items-center gap-1 opacity-40" style={{ fontSize: '0.8em' }}>
+                  <span>⚡</span>
+                  <span className="italic">{codeMatch[1]}</span>
                 </span>
               );
             }
@@ -153,11 +183,15 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
           // Treat short single-line code as inline even if markdown parser says block
           const text = String(children);
           const isShort = !text.includes('\n') && text.length < 60;
-          return (inline || isShort) ? (
-            <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
-          ) : (
-            <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
-          );
+          if (inline || isShort) {
+            return <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>;
+          }
+          // Long code blocks: collapsible
+          const lines = text.split('\n');
+          if (lines.length > 3) {
+            return <CollapsibleCode text={text} isPanel={isPanel} />;
+          }
+          return <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>;
         },
         pre: ({ children }) => <pre className="my-0">{children}</pre>,
         ul: ({ children }) => <ul className="list-none pl-3 my-1.5 space-y-0.5">{children}</ul>,
