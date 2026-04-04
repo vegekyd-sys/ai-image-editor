@@ -95,29 +95,23 @@ function fixMarkdownDelimiters(text: string): string {
 }
 
 
-/** Collapsible code block — shows first line + expand button for long code */
+/** Collapsible code block — original markdown code style + toggle button */
 function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const firstLine = text.split('\n')[0] || '';
   const lineCount = text.split('\n').length;
 
   return (
-    <div className="my-1.5 rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
+    <div className="my-2">
       <button
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-left"
-        style={{ color: 'rgba(255,255,255,0.4)' }}
+        className="flex items-center gap-1.5 mb-1"
+        style={{ color: 'rgba(255,255,255,0.35)', fontSize: isPanel ? '12px' : '13px' }}
         onClick={() => setExpanded(!expanded)}
       >
-        <span style={{ fontSize: '0.75em' }}>{expanded ? '▼' : '▶'}</span>
-        <span className={`font-mono truncate ${isPanel ? 'text-[12px]' : 'text-[14px]'}`}>
-          {firstLine.slice(0, 60)}{firstLine.length > 60 ? '...' : ''}
-        </span>
-        <span className={`ml-auto flex-shrink-0 ${isPanel ? 'text-[11px]' : 'text-[12px]'}`} style={{ opacity: 0.5 }}>
-          {lineCount} lines
-        </span>
+        <span>{expanded ? '▼' : '▶'}</span>
+        <span>{expanded ? 'Hide code' : `Show code (${lineCount} lines)`}</span>
       </button>
       {expanded && (
-        <code className={`block font-mono ${isPanel ? 'text-[12px] px-3 pb-2' : 'text-[14px] px-3 pb-2.5'} overflow-x-auto`} style={{ color: 'rgba(255,255,255,0.7)' }}>
+        <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>
           {text}
         </code>
       )}
