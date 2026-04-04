@@ -33,14 +33,6 @@ const MODEL = bedrock('us.anthropic.claude-sonnet-4-6');
 // Types
 // ---------------------------------------------------------------------------
 
-/** Snapshot metadata passed from frontend for workspace integration */
-export interface SnapshotMeta {
-  description?: string;
-  type?: 'original' | 'edit' | 'reference';
-  editPrompt?: string;   // the editPrompt that created this snapshot
-  category?: string;     // enhance/creative/wild/captions
-}
-
 interface AgentContext {
   currentImage: string;       // base64 data URL – updated after each generation
   originalImage?: string;     // base64 data URL – the very first image, never changes
@@ -59,8 +51,6 @@ interface AgentContext {
   animationPrompt?: string;
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<image_1>>> */
   snapshotImages: string[];
-  /** Snapshot metadata for workspace integration */
-  snapshotMetas: SnapshotMeta[];
   /** 0-based index of the snapshot the user is currently viewing */
   currentSnapshotIndex: number;
   /** NSFW flag — set when Gemini refuses content. All subsequent calls skip Gemini. */
@@ -373,25 +363,7 @@ Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a speci
           size: f.size,
         }));
 
-        // Include snapshots when listing project files or all files
-        const wantSnapshots = !pattern || pattern.includes('snapshot') || pattern === '*' || pattern.startsWith('projects/');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const snapshots: any[] = [];
-        if (wantSnapshots && ctx.snapshotMetas.length > 0) {
-          for (let i = 0; i < ctx.snapshotMetas.length; i++) {
-            const meta = ctx.snapshotMetas[i];
-            snapshots.push({
-              path: `projects/${ctx.projectId}/snapshots/${i + 1}`,
-              index: i + 1,
-              type: meta.type || (i === 0 ? 'original' : 'edit'),
-              description: meta.description || undefined,
-              editPrompt: meta.editPrompt || undefined,
-              category: meta.category || undefined,
-            });
-          }
-        }
-
-        return { files: result, snapshots, count: result.length + snapshots.length };
+        return { files: result, count: result.length };
       },
     }),
 
@@ -513,7 +485,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; snapshotMetas?: SnapshotMeta[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[] },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[] },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -524,7 +496,6 @@ export async function* runMakaronAgent(
     animationImageUrls: options?.animationImageUrls,
     preferredModel: options?.preferredModel,
     snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
-    snapshotMetas: options?.snapshotMetas ?? [],
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
     userSkills: options?.userSkills,

@@ -29,7 +29,6 @@ export async function streamAgent(
     previewsReady?: boolean; readyTips?: object[];
     preferredModel?: string;
     snapshotImages?: string[];
-    snapshotMetas?: { description?: string; type?: string; editPrompt?: string }[];
     currentSnapshotIndex?: number;
     isNsfw?: boolean;
   },
