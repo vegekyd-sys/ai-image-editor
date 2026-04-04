@@ -9,6 +9,8 @@ import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
+import FileRefChip from '@/components/FileRefChip';
+import FileViewer from '@/components/FileViewer';
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -96,11 +98,15 @@ function fixMarkdownDelimiters(text: string): string {
 /** Shared Markdown renderer to avoid duplicating component overrides.
  *  <<<image_N>>> tokens are converted to `IMG_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
-function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void }) {
+function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onViewFile?: (path: string) => void }) {
   // Replace <<<image_N>>> with inline code `IMG_REF_N` so markdown structure stays intact
-  const processed = snapshots
+  let processed = snapshots
     ? text.replace(/<<<image_(\d+)>>>/g, '`IMG_REF_$1`')
     : text;
+  // Replace `path/to/file.md` with FILE_REF token for clickable file chips
+  processed = processed.replace(/`([^`]*\.md)`/g, '`FILE_REF_$1`');
+  // Replace <run_code>desc</run_code> with styled inline token
+  processed = processed.replace(/<run_code>(.*?)<\/run_code>/g, '`RUN_CODE_$1`');
 
   return (
     <ReactMarkdown
@@ -121,6 +127,27 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot }: { tex
             if (m) {
               const idx = parseInt(m[1]) - 1;
               return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
+            }
+          }
+          // Intercept FILE_REF tokens → render FileRefChip
+          {
+            const str2 = String(children);
+            const fileMatch = str2.match(/^FILE_REF_(.+)$/);
+            if (fileMatch) {
+              return <FileRefChip path={fileMatch[1]} onView={onViewFile} />;
+            }
+          }
+          // Intercept RUN_CODE tokens → render compact code indicator
+          {
+            const str3 = String(children);
+            const codeMatch = str3.match(/^RUN_CODE_(.+)$/);
+            if (codeMatch) {
+              return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg" style={{ background: 'rgba(168,85,247,0.15)', color: 'rgba(168,85,247,0.9)', fontSize: 'inherit' }}>
+                  <span style={{ fontSize: '0.85em' }}>⚡</span>
+                  <span style={{ fontSize: '0.9em' }}>{codeMatch[1]}</span>
+                </span>
+              );
             }
           }
           // Treat short single-line code as inline even if markdown parser says block
@@ -223,6 +250,7 @@ export default function AgentChatView({
   }, [snapshots]);
 
   const [input, setInput] = useState('');
+  const [viewingFile, setViewingFile] = useState<string | null>(null);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isExiting, setIsExiting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -572,6 +600,7 @@ export default function AgentChatView({
   const isPanel = mode === 'panel';
 
   return (
+    <>
     <div
       className={isPanel
         ? 'flex flex-col h-full'
@@ -792,6 +821,7 @@ export default function AgentChatView({
                           isPanel={isPanel}
                           snapshots={snapshots}
                           onNavigateToSnapshot={onNavigateToSnapshot}
+                          onViewFile={setViewingFile}
                         />
                         {/* Inline video — clickable thumbnail, jumps to GUI */}
                         {(() => {
@@ -1062,5 +1092,7 @@ export default function AgentChatView({
         </div>
       </div>
     </div>
+    {viewingFile && <FileViewer path={viewingFile} onClose={() => setViewingFile(null)} />}
+    </>
   );
 }
