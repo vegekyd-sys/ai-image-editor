@@ -1,56 +1,39 @@
 /**
- * Workspace Service — unified access layer for skills, memory, and assets.
+ * Workspace Service — unified file system backed by Supabase.
  *
- * Three scopes:
- *   global  — built-in skills and prompts (read-only, all users share)
- *   user    — user-uploaded skills + agent-written memory
- *   project — agent-written project-specific notes
+ * All files stored in Supabase Storage (`images` bucket, `workspace/{userId}/{path}`).
+ * `workspace_files` table is the index (path → storage_url mapping).
  *
- * Storage: Supabase Storage `workspace/` bucket + `workspace_files` DB index.
- * Fallback: local filesystem (for dev / CLI mode).
+ * Built-in skills (src/skills/, src/lib/prompts/) are loaded from local filesystem
+ * as fallback when not in DB. Will be migrated to DB via seed script.
  *
- * Both the Agent (via tool calls) and the Tips pipeline (via direct function
- * calls) go through this service. Caching keeps the tips path fast.
+ * Path conventions:
+ *   skills/{name}/SKILL.md         — User-level skill
+ *   skills/{name}/assets/{file}    — Skill reference images
+ *   memory/{file}                  — User-level memory (hidden this release)
+ *   projects/{id}/...              — Project-level (hidden this release)
  */
 
 import { parseSkillMd, type ParsedSkill } from './skill-registry';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SupabaseClient = any;
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export type WorkspaceScope = 'global' | 'user' | 'project';
-
 export interface WorkspaceFile {
-  path: string;              // e.g. "skills/enhance/SKILL.md"
-  scope: WorkspaceScope;
-  contentType: string;       // "text/markdown", "image/jpeg", etc.
+  path: string;
+  contentType: string;
   size?: number;
-  metadata?: Record<string, unknown>; // parsed frontmatter, tags, etc.
-  storageUrl?: string;       // Supabase Storage public URL
+  storageUrl?: string;
   updatedAt?: string;
-}
-
-export interface WorkspaceListOptions {
-  scope?: WorkspaceScope;
-  userId?: string;
-  projectId?: string;
-  pattern?: string;          // glob-like: "skills/*", "*.md"
-  tag?: string;              // filter by metadata tag
-  type?: string;             // filter by contentType prefix: "text", "image"
+  isBuiltIn?: boolean;  // true for src/skills/ files
 }
 
 export interface WorkspaceReadResult {
-  content: string;
+  content: string;       // text content or data:... URL for binary
   contentType: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface WorkspaceWriteOptions {
-  scope: 'user' | 'project'; // global is read-only
-  userId: string;
-  projectId?: string;        // required for project scope
-  path: string;
-  content: string;
-  contentType?: string;      // default: "text/markdown"
+  storageUrl?: string;
 }
 
 // ── Cache ───────────────────────────────────────────────────────────────────
@@ -61,8 +44,7 @@ interface CacheEntry<T> {
 }
 
 const cache = new Map<string, CacheEntry<unknown>>();
-const GLOBAL_TTL = 5 * 60 * 1000;  // 5 minutes for global files
-const USER_TTL = 60 * 1000;        // 1 minute for user files
+const CACHE_TTL = 60 * 1000; // 1 minute
 
 function getCached<T>(key: string): T | undefined {
   const entry = cache.get(key);
@@ -74,7 +56,7 @@ function getCached<T>(key: string): T | undefined {
   return entry.value as T;
 }
 
-function setCache<T>(key: string, value: T, ttl: number): void {
+function setCache<T>(key: string, value: T, ttl = CACHE_TTL): void {
   cache.set(key, { value, expiresAt: Date.now() + ttl });
 }
 
@@ -82,533 +64,394 @@ export function clearWorkspaceCache(): void {
   cache.clear();
 }
 
-// ── Local filesystem backend (dev / CLI) ────────────────────────────────────
+// ── MIME type helpers ──────────────────────────────────────────────────────
 
-function getLocalSkillsDir(): string | null {
+function extToContentType(ext: string): string {
+  const map: Record<string, string> = {
+    '.md': 'text/markdown', '.txt': 'text/plain', '.json': 'application/json',
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf',
+    '.zip': 'application/zip',
+  };
+  return map[ext.toLowerCase()] || 'application/octet-stream';
+}
+
+function pathToContentType(filePath: string): string {
+  const ext = filePath.includes('.') ? '.' + filePath.split('.').pop()!.toLowerCase() : '';
+  return extToContentType(ext);
+}
+
+// ── Supabase operations ────────────────────────────────────────────────────
+
+/** Storage path: workspace/{userId}/{path} */
+function storagePath(userId: string, path: string): string {
+  return `workspace/${userId}/${path}`;
+}
+
+/** List files from workspace_files table */
+async function dbListFiles(supabase: SupabaseClient, userId: string, pattern?: string): Promise<WorkspaceFile[]> {
+  let query = supabase
+    .from('workspace_files')
+    .select('path, content_type, size_bytes, storage_url, updated_at')
+    .or(`user_id.eq.${userId},user_id.is.null`); // own files + global
+
+  if (pattern) {
+    const likePattern = pattern.replace(/\*/g, '%');
+    query = query.like('path', likePattern);
+  }
+
+  const { data, error } = await query.order('path');
+  if (error) {
+    console.error('[workspace] list error:', error.message);
+    return [];
+  }
+
+  return (data || []).map((row: { path: string; content_type: string; size_bytes: number | null; storage_url: string; updated_at: string | null }) => ({
+    path: row.path,
+    contentType: row.content_type,
+    size: row.size_bytes ?? undefined,
+    storageUrl: row.storage_url,
+    updatedAt: row.updated_at ?? undefined,
+  }));
+}
+
+/** Read file content from Storage via its URL */
+async function fetchFileContent(storageUrl: string, contentType: string): Promise<WorkspaceReadResult | null> {
+  try {
+    const response = await fetch(storageUrl);
+    if (!response.ok) return null;
+
+    if (contentType.startsWith('text/') || contentType === 'application/json') {
+      return { content: await response.text(), contentType, storageUrl };
+    } else {
+      const buffer = await response.arrayBuffer();
+      return { content: `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`, contentType, storageUrl };
+    }
+  } catch (e) {
+    console.error('[workspace] fetch error:', e);
+    return null;
+  }
+}
+
+/** Write file to Storage + upsert workspace_files row */
+async function dbWriteFile(
+  supabase: SupabaseClient,
+  userId: string,
+  path: string,
+  content: string | Buffer,
+  contentType?: string,
+): Promise<{ success: boolean; storageUrl?: string; error?: string }> {
+  const ct = contentType || pathToContentType(path);
+  const sp = storagePath(userId, path);
+  const isText = ct.startsWith('text/') || ct === 'application/json';
+  const body = isText && typeof content === 'string' ? content : (Buffer.isBuffer(content) ? content : Buffer.from(content));
+  const sizeBytes = typeof content === 'string' ? Buffer.byteLength(content, 'utf-8') : (Buffer.isBuffer(content) ? content.length : 0);
+
+  // Upload to Storage
+  const { error: uploadError } = await supabase.storage
+    .from('images')
+    .upload(sp, body, { contentType: ct, upsert: true });
+
+  if (uploadError) {
+    console.error('[workspace] upload error:', uploadError.message);
+    return { success: false, error: uploadError.message };
+  }
+
+  // Get public URL
+  const { data: urlData } = supabase.storage.from('images').getPublicUrl(sp);
+  const publicUrl = urlData?.publicUrl;
+
+  // Upsert index row
+  const { error: dbError } = await supabase.from('workspace_files').upsert({
+    user_id: userId,
+    path,
+    content_type: ct,
+    size_bytes: sizeBytes,
+    storage_url: publicUrl,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id,path' });
+
+  if (dbError) {
+    console.error('[workspace] db upsert error:', dbError.message);
+    return { success: false, error: dbError.message };
+  }
+
+  cache.clear();
+  return { success: true, storageUrl: publicUrl };
+}
+
+/** Delete file from Storage + workspace_files */
+async function dbDeleteFile(supabase: SupabaseClient, userId: string, path: string): Promise<boolean> {
+  const sp = storagePath(userId, path);
+
+  // Delete from Storage
+  await supabase.storage.from('images').remove([sp]);
+
+  // Delete from DB
+  const { error } = await supabase.from('workspace_files')
+    .delete()
+    .eq('user_id', userId)
+    .eq('path', path);
+
+  if (error) {
+    console.error('[workspace] delete error:', error.message);
+    return false;
+  }
+
+  cache.clear();
+  return true;
+}
+
+// ── Local filesystem fallback (built-in skills + prompts) ──────────────────
+
+function listDirRecursive(dir: string, prefix = ''): string[] {
   try {
     const fs = require('fs') as typeof import('fs');
     const path = require('path') as typeof import('path');
-    const candidates = [
-      path.join(process.cwd(), 'src', 'skills'),
-      path.join(process.cwd(), 'src', 'lib', 'prompts'),
-    ];
-    for (const dir of candidates) {
-      if (fs.existsSync(dir)) return dir;
-    }
-  } catch { /* browser — no fs */ }
-  return null;
-}
-
-/** Load skills from local filesystem (src/skills/ + src/lib/prompts/) */
-function loadLocalSkills(): Map<string, ParsedSkill> {
-  const skills = new Map<string, ParsedSkill>();
-  try {
-    const fs = require('fs') as typeof import('fs');
-    const path = require('path') as typeof import('path');
-
-    // 1. SKILL.md format skills (src/skills/{name}/SKILL.md)
-    const skillsDir = path.join(process.cwd(), 'src', 'skills');
-    if (fs.existsSync(skillsDir)) {
-      const dirs = fs.readdirSync(skillsDir, { withFileTypes: true }).filter((d: { isDirectory: () => boolean }) => d.isDirectory());
-      for (const dir of dirs) {
-        const skillPath = path.join(skillsDir, dir.name, 'SKILL.md');
-        if (!fs.existsSync(skillPath)) continue;
-        try {
-          const content = fs.readFileSync(skillPath, 'utf-8');
-          const skill = parseSkillMd(content);
-          if (skill) skills.set(skill.name, skill);
-        } catch { /* skip */ }
+    const results: string[] = [];
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        results.push(...listDirRecursive(path.join(dir, entry.name), relPath));
+      } else {
+        results.push(relPath);
       }
     }
-
-    // 1b. Agent-created skills (.workspace/_user/skills/{name}/SKILL.md)
-    const userSkillsDir = path.join(process.cwd(), '.workspace', '_user', 'skills');
-    if (fs.existsSync(userSkillsDir)) {
-      const userDirs = fs.readdirSync(userSkillsDir, { withFileTypes: true }).filter((d: { isDirectory: () => boolean }) => d.isDirectory());
-      for (const dir of userDirs) {
-        const skillPath = path.join(userSkillsDir, dir.name, 'SKILL.md');
-        if (!fs.existsSync(skillPath)) continue;
-        try {
-          const content = fs.readFileSync(skillPath, 'utf-8');
-          const skill = parseSkillMd(content);
-          if (skill && !skills.has(skill.name)) skills.set(skill.name, skill);
-        } catch { /* skip */ }
-      }
-    }
-
-    // 2. Legacy category .md files (src/lib/prompts/{name}.md) — no frontmatter
-    const promptsDir = path.join(process.cwd(), 'src', 'lib', 'prompts');
-    const categories = ['enhance', 'creative', 'wild', 'captions'];
-    for (const cat of categories) {
-      if (skills.has(cat)) continue; // SKILL.md version takes priority
-      const mdPath = path.join(promptsDir, `${cat}.md`);
-      if (!fs.existsSync(mdPath)) continue;
-      try {
-        const content = fs.readFileSync(mdPath, 'utf-8');
-        // Try parsing as SKILL.md first (if migrated to have frontmatter)
-        const parsed = parseSkillMd(content);
-        if (parsed) {
-          skills.set(parsed.name, parsed);
-        } else {
-          // Legacy format: raw template, wrap as ParsedSkill
-          skills.set(cat, {
-            name: cat,
-            description: `${cat} category template`,
-            makaron: { builtIn: true, tipsEnabled: true, tipsCount: 2 },
-            template: content,
-          });
-        }
-      } catch { /* skip */ }
-    }
-  } catch { /* browser */ }
-  return skills;
+    return results;
+  } catch { return []; }
 }
 
-/** List local workspace files */
-function listLocalFiles(opts: WorkspaceListOptions): WorkspaceFile[] {
+/** List built-in skill files from src/skills/ (local, read-only) */
+function listBuiltInFiles(pattern?: string): WorkspaceFile[] {
   const files: WorkspaceFile[] = [];
   try {
     const fs = require('fs') as typeof import('fs');
     const pathMod = require('path') as typeof import('path');
 
-    // Skills from src/skills/
     const skillsDir = pathMod.join(process.cwd(), 'src', 'skills');
     if (fs.existsSync(skillsDir)) {
       const dirs = fs.readdirSync(skillsDir, { withFileTypes: true }).filter((d: { isDirectory: () => boolean }) => d.isDirectory());
       for (const dir of dirs) {
-        const skillDir = pathMod.join(skillsDir, dir.name);
-        const allFiles = listDirRecursive(fs, pathMod, skillDir);
+        const allFiles = listDirRecursive(pathMod.join(skillsDir, dir.name));
         for (const relPath of allFiles) {
-          const fullPath = pathMod.join(skillDir, relPath);
+          const fullPath = pathMod.join(skillsDir, dir.name, relPath);
           const stat = fs.statSync(fullPath);
           const ext = pathMod.extname(relPath).toLowerCase();
           files.push({
             path: `skills/${dir.name}/${relPath}`,
-            scope: 'global',
             contentType: extToContentType(ext),
             size: stat.size,
+            isBuiltIn: true,
           });
         }
       }
     }
 
-    // Category prompts from src/lib/prompts/
+    // Legacy prompts
     const promptsDir = pathMod.join(process.cwd(), 'src', 'lib', 'prompts');
     if (fs.existsSync(promptsDir)) {
-      const promptFiles = fs.readdirSync(promptsDir).filter((f: string) => f.endsWith('.md'));
-      for (const f of promptFiles) {
+      const mds = fs.readdirSync(promptsDir).filter((f: string) => f.endsWith('.md'));
+      for (const f of mds) {
         const stat = fs.statSync(pathMod.join(promptsDir, f));
-        files.push({
-          path: `prompts/${f}`,
-          scope: 'global',
-          contentType: 'text/markdown',
-          size: stat.size,
-        });
-      }
-    }
-
-    // Memory/notes from .workspace/ (project and user scope)
-    const wsBase = pathMod.join(process.cwd(), '.workspace');
-    if (fs.existsSync(wsBase)) {
-      const scanWorkspaceDir = (dir: string, scope: WorkspaceScope) => {
-        if (!fs.existsSync(dir)) return;
-        const allFiles = listDirRecursive(fs, pathMod, dir);
-        for (const relPath of allFiles) {
-          const fullPath = pathMod.join(dir, relPath);
-          const stat = fs.statSync(fullPath);
-          const ext = pathMod.extname(relPath).toLowerCase();
-          files.push({
-            path: relPath,
-            scope,
-            contentType: extToContentType(ext),
-            size: stat.size,
-          });
-        }
-      };
-
-      // User-level workspace: .workspace/_user/
-      scanWorkspaceDir(pathMod.join(wsBase, '_user'), 'user');
-
-      // Project-level workspace: .workspace/{projectId}/
-      if (opts.projectId) {
-        scanWorkspaceDir(pathMod.join(wsBase, opts.projectId), 'project');
-      } else {
-        // Scan all project dirs
-        const entries = fs.readdirSync(wsBase, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory() && entry.name !== '_user') {
-            scanWorkspaceDir(pathMod.join(wsBase, entry.name), 'project');
-          }
-        }
+        files.push({ path: `prompts/${f}`, contentType: 'text/markdown', size: stat.size, isBuiltIn: true });
       }
     }
   } catch { /* browser */ }
 
-  // Apply filters
-  return files.filter(f => {
-    if (opts.scope && f.scope !== opts.scope) return false;
-    if (opts.type && !f.contentType.startsWith(opts.type)) return false;
-    if (opts.pattern) {
-      const regex = new RegExp('^' + opts.pattern.replace(/\*/g, '.*') + '$');
-      if (!regex.test(f.path)) return false;
-    }
-    return true;
-  });
-}
-
-function extToContentType(ext: string): string {
-  if (ext === '.md') return 'text/markdown';
-  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
-  if (ext === '.png') return 'image/png';
-  if (ext === '.json') return 'application/json';
-  return 'application/octet-stream';
-}
-
-function listDirRecursive(fs: typeof import('fs'), path: typeof import('path'), dir: string, prefix = ''): string[] {
-  const results: string[] = [];
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      results.push(...listDirRecursive(fs, path, path.join(dir, entry.name), relPath));
-    } else {
-      results.push(relPath);
-    }
+  if (pattern) {
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    return files.filter(f => regex.test(f.path));
   }
-  return results;
+  return files;
 }
 
-/** Read a local workspace file */
-function readLocalFile(filePath: string, projectId?: string): WorkspaceReadResult | null {
+/** Read a built-in file from local filesystem */
+function readBuiltInFile(filePath: string): WorkspaceReadResult | null {
   try {
     const fs = require('fs') as typeof import('fs');
     const pathMod = require('path') as typeof import('path');
 
-    // Map workspace path to actual filesystem path
     let fullPath: string | null = null;
-
     if (filePath.startsWith('skills/')) {
-      // Try .workspace/_user/skills/ first (Agent-created), then src/skills/ (built-in)
-      const userPath = pathMod.join(process.cwd(), '.workspace', '_user', filePath);
-      if (fs.existsSync(userPath)) {
-        fullPath = userPath;
-      } else {
-        fullPath = pathMod.join(process.cwd(), 'src', filePath);
-      }
+      fullPath = pathMod.join(process.cwd(), 'src', filePath);
     } else if (filePath.startsWith('prompts/')) {
       fullPath = pathMod.join(process.cwd(), 'src', 'lib', filePath);
-    } else if (filePath.startsWith('memory/')) {
-      // Try project scope first, then user scope
-      if (projectId) {
-        const projectPath = pathMod.join(process.cwd(), '.workspace', projectId, filePath);
-        if (fs.existsSync(projectPath)) fullPath = projectPath;
-      }
-      if (!fullPath) {
-        const userPath = pathMod.join(process.cwd(), '.workspace', '_user', filePath);
-        if (fs.existsSync(userPath)) fullPath = userPath;
-      }
     }
-
     if (!fullPath || !fs.existsSync(fullPath)) return null;
-    const ext = pathMod.extname(fullPath).toLowerCase();
-    const contentType = extToContentType(ext);
 
-    if (contentType.startsWith('text/') || contentType === 'application/json') {
-      return { content: fs.readFileSync(fullPath, 'utf-8'), contentType };
+    const ext = pathMod.extname(fullPath).toLowerCase();
+    const ct = extToContentType(ext);
+    if (ct.startsWith('text/') || ct === 'application/json') {
+      return { content: fs.readFileSync(fullPath, 'utf-8'), contentType: ct };
     } else {
       const buf = fs.readFileSync(fullPath);
-      return { content: `data:${contentType};base64,${buf.toString('base64')}`, contentType };
+      return { content: `data:${ct};base64,${buf.toString('base64')}`, contentType: ct };
     }
   } catch { return null; }
 }
 
-// ── Supabase backend ────────────────────────────────────────────────────────
+/** Load built-in skills as ParsedSkill map (for skill manifest + getSkill) */
+function loadBuiltInSkills(): Map<string, ParsedSkill> {
+  const cacheKey = 'builtInSkills';
+  const cached = getCached<Map<string, ParsedSkill>>(cacheKey);
+  if (cached) return cached;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SupabaseClient = any;
-
-/** List files from workspace_files DB table */
-async function listSupabaseFiles(supabase: SupabaseClient, opts: WorkspaceListOptions): Promise<WorkspaceFile[]> {
-  let query = supabase
-    .from('workspace_files')
-    .select('path, scope, content_type, size_bytes, metadata, storage_url, updated_at');
-
-  if (opts.scope) query = query.eq('scope', opts.scope);
-  if (opts.userId) query = query.eq('user_id', opts.userId);
-  if (opts.projectId) query = query.eq('project_id', opts.projectId);
-  if (opts.pattern) {
-    // Convert glob to SQL LIKE pattern
-    const likePattern = opts.pattern.replace(/\*/g, '%');
-    query = query.like('path', likePattern);
-  }
-  if (opts.tag) {
-    query = query.contains('metadata', { tags: [opts.tag] });
-  }
-
-  const { data, error } = await query.order('path');
-  if (error || !data) return [];
-
-  return (data as Array<{
-    path: string;
-    scope: WorkspaceScope;
-    content_type: string;
-    size_bytes: number | null;
-    metadata: Record<string, unknown> | null;
-    storage_url: string | null;
-    updated_at: string | null;
-  }>).map(row => ({
-    path: row.path,
-    scope: row.scope,
-    contentType: row.content_type,
-    size: row.size_bytes ?? undefined,
-    metadata: row.metadata ?? undefined,
-    storageUrl: row.storage_url ?? undefined,
-    updatedAt: row.updated_at ?? undefined,
-  })).filter(f => {
-    if (opts.type && !f.contentType.startsWith(opts.type)) return false;
-    return true;
-  });
-}
-
-/** Read file content from Supabase Storage */
-async function readSupabaseFile(supabase: SupabaseClient, file: WorkspaceFile): Promise<WorkspaceReadResult | null> {
-  if (!file.storageUrl) return null;
-
+  const skills = new Map<string, ParsedSkill>();
   try {
-    const response = await fetch(file.storageUrl);
-    if (!response.ok) return null;
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
 
-    if (file.contentType.startsWith('text/')) {
-      return { content: await response.text(), contentType: file.contentType, metadata: file.metadata };
-    } else {
-      const buffer = await response.arrayBuffer();
-      const base64 = Buffer.from(buffer).toString('base64');
-      return { content: `data:${file.contentType};base64,${base64}`, contentType: file.contentType, metadata: file.metadata };
+    // src/skills/
+    const skillsDir = path.join(process.cwd(), 'src', 'skills');
+    if (fs.existsSync(skillsDir)) {
+      const dirs = fs.readdirSync(skillsDir, { withFileTypes: true }).filter((d: { isDirectory: () => boolean }) => d.isDirectory());
+      for (const dir of dirs) {
+        const p = path.join(skillsDir, dir.name, 'SKILL.md');
+        if (!fs.existsSync(p)) continue;
+        const parsed = parseSkillMd(fs.readFileSync(p, 'utf-8'));
+        if (parsed) skills.set(parsed.name, parsed);
+      }
     }
-  } catch { return null; }
-}
 
-/** Write file to Supabase Storage + upsert workspace_files index */
-async function writeSupabaseFile(supabase: SupabaseClient, opts: WorkspaceWriteOptions): Promise<boolean> {
-  const contentType = opts.contentType || 'text/markdown';
+    // Legacy prompts
+    const promptsDir = path.join(process.cwd(), 'src', 'lib', 'prompts');
+    for (const cat of ['enhance', 'creative', 'wild', 'captions']) {
+      if (skills.has(cat)) continue;
+      const p = path.join(promptsDir, `${cat}.md`);
+      if (!fs.existsSync(p)) continue;
+      const content = fs.readFileSync(p, 'utf-8');
+      const parsed = parseSkillMd(content);
+      if (parsed) {
+        skills.set(parsed.name, parsed);
+      } else {
+        skills.set(cat, { name: cat, description: `${cat} template`, makaron: { builtIn: true, tipsEnabled: true, tipsCount: 2 }, template: content });
+      }
+    }
+  } catch { /* browser */ }
 
-  // Build storage path: workspace/{scope}/{userId}/{projectId?}/{path}
-  const storagePath = opts.scope === 'project'
-    ? `workspace/${opts.userId}/${opts.projectId}/${opts.path}`
-    : `workspace/${opts.userId}/${opts.path}`;
-
-  // Upload to Storage
-  const { error: uploadError } = await supabase.storage
-    .from('images') // reuse existing bucket
-    .upload(storagePath, opts.content, {
-      contentType,
-      upsert: true,
-    });
-
-  if (uploadError) {
-    console.error('[workspace] Storage upload error:', uploadError.message);
-    return false;
-  }
-
-  // Get public URL
-  const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath);
-
-  // Upsert index row
-  const { error: dbError } = await supabase.from('workspace_files').upsert({
-    scope: opts.scope,
-    user_id: opts.userId,
-    project_id: opts.scope === 'project' ? opts.projectId : null,
-    path: opts.path,
-    content_type: contentType,
-    size_bytes: Buffer.byteLength(opts.content, 'utf-8'),
-    storage_url: urlData?.publicUrl,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'scope,user_id,project_id,path' });
-
-  if (dbError) {
-    console.error('[workspace] DB upsert error:', dbError.message);
-    return false;
-  }
-
-  // Invalidate cache
-  cache.delete(`list:${opts.scope}:${opts.userId}`);
-
-  return true;
+  setCache(cacheKey, skills, 5 * 60 * 1000);
+  return skills;
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * List workspace files. Works in two modes:
- * - With supabase client: queries DB index (production)
- * - Without: scans local filesystem (dev / CLI)
+ * List workspace files.
+ * Combines: workspace_files table (user's) + built-in skills (local).
  */
-export async function listFiles(opts: WorkspaceListOptions, supabase?: SupabaseClient): Promise<WorkspaceFile[]> {
-  const cacheKey = `list:${opts.scope || 'all'}:${opts.userId || ''}:${opts.pattern || ''}:${opts.tag || ''}`;
+export async function listFiles(pattern?: string, supabase?: SupabaseClient, userId?: string): Promise<WorkspaceFile[]> {
+  const cacheKey = `list:${userId || ''}:${pattern || ''}`;
   const cached = getCached<WorkspaceFile[]>(cacheKey);
   if (cached) return cached;
 
-  let files: WorkspaceFile[];
-  if (supabase) {
-    // Production: DB index + local fallback for global files
-    const dbFiles = await listSupabaseFiles(supabase, opts);
-    if (dbFiles.length > 0 || opts.scope !== 'global') {
-      files = dbFiles;
-    } else {
-      // Fallback to local for global (not yet synced)
-      files = listLocalFiles(opts);
-    }
-  } else {
-    files = listLocalFiles(opts);
+  // Built-in files (always available)
+  const builtIn = listBuiltInFiles(pattern);
+
+  // User files from DB
+  let userFiles: WorkspaceFile[] = [];
+  if (supabase && userId) {
+    userFiles = await dbListFiles(supabase, userId, pattern);
   }
 
-  const ttl = opts.scope === 'global' ? GLOBAL_TTL : USER_TTL;
-  setCache(cacheKey, files, ttl);
-  return files;
+  // Merge: user files override built-in if same path
+  const pathSet = new Set(userFiles.map(f => f.path));
+  const merged = [...userFiles, ...builtIn.filter(f => !pathSet.has(f.path))];
+
+  setCache(cacheKey, merged);
+  return merged;
 }
 
 /**
  * Read a workspace file's content.
- * - With supabase: fetches from Storage
- * - Without: reads from local filesystem
+ * Tries: workspace_files (Supabase) → built-in (local).
  */
-export async function readFile(filePath: string, supabase?: SupabaseClient, opts?: { scope?: WorkspaceScope; userId?: string; projectId?: string }): Promise<WorkspaceReadResult | null> {
-  const cacheKey = `read:${filePath}:${opts?.projectId || ''}`;
+export async function readFile(filePath: string, supabase?: SupabaseClient, userId?: string): Promise<WorkspaceReadResult | null> {
+  const cacheKey = `read:${userId || ''}:${filePath}`;
   const cached = getCached<WorkspaceReadResult>(cacheKey);
   if (cached) return cached;
 
-  let result: WorkspaceReadResult | null = null;
-
-  if (supabase && opts?.userId) {
-    // Find the file in the index
-    const files = await listFiles({ scope: opts.scope, userId: opts.userId, pattern: filePath }, supabase);
-    const file = files.find(f => f.path === filePath);
-    if (file) {
-      result = await readSupabaseFile(supabase, file);
-    }
-  }
-
-  // Fallback to local
-  if (!result) {
-    result = readLocalFile(filePath, opts?.projectId);
-  }
-
-  if (result) {
-    const ttl = opts?.scope === 'global' || !opts?.scope ? GLOBAL_TTL : USER_TTL;
-    setCache(cacheKey, result, ttl);
-  }
-
-  return result;
-}
-
-/**
- * Write a file to the workspace (user or project scope only).
- * Requires supabase client.
- */
-/**
- * Delete a file from the workspace.
- */
-export async function deleteFile(filePath: string, projectId?: string): Promise<boolean> {
-  try {
-    const fs = require('fs') as typeof import('fs');
-    const pathMod = require('path') as typeof import('path');
-    const candidates = [
-      pathMod.join(process.cwd(), '.workspace', filePath),
-      pathMod.join(process.cwd(), '.workspace', '_user', filePath),
-    ];
-    if (projectId) {
-      candidates.unshift(pathMod.join(process.cwd(), '.workspace', projectId, filePath));
-    }
-    for (const fullPath of candidates) {
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath);
-        cache.clear(); // invalidate all cache
-        return true;
-      }
-    }
-    return false;
-  } catch { return false; }
-}
-
-export async function writeFile(opts: WorkspaceWriteOptions, supabase: SupabaseClient): Promise<boolean> {
-  // Enforce: only user/project scope, only memory/ subdirectory for agent writes
-  if (opts.scope === 'project' && !opts.projectId) {
-    console.error('[workspace] project scope requires projectId');
-    return false;
-  }
-
-  return writeSupabaseFile(supabase, opts);
-}
-
-// ── Convenience: Skill Access ───────────────────────────────────────────────
-
-/**
- * Get a skill's parsed template by name.
- * Checks: local built-in → DB user skills → local legacy .md
- */
-export async function getSkill(name: string, supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill | null> {
-  const cacheKey = `skill:${name}:${userId || ''}`;
-  const cached = getCached<ParsedSkill>(cacheKey);
-  if (cached) return cached;
-
-  // 1. Try local built-in skills
-  const localSkills = loadLocalSkills();
-  const local = localSkills.get(name);
-  if (local) {
-    setCache(cacheKey, local, GLOBAL_TTL);
-    return local;
-  }
-
-  // 2. Try DB user skills
+  // Try Supabase first
   if (supabase && userId) {
-    const files = await listFiles({ scope: 'user', userId, pattern: `skills/${name}/SKILL.md` }, supabase);
-    const file = files[0];
-    if (file) {
-      const content = await readSupabaseFile(supabase, file);
-      if (content) {
-        const parsed = parseSkillMd(content.content);
-        if (parsed) {
-          setCache(cacheKey, parsed, USER_TTL);
-          return parsed;
-        }
-      }
+    const files = await dbListFiles(supabase, userId, filePath);
+    const file = files.find(f => f.path === filePath);
+    if (file?.storageUrl) {
+      const result = await fetchFileContent(file.storageUrl, file.contentType);
+      if (result) { setCache(cacheKey, result); return result; }
     }
   }
+
+  // Fallback to built-in
+  const builtIn = readBuiltInFile(filePath);
+  if (builtIn) { setCache(cacheKey, builtIn); return builtIn; }
 
   return null;
 }
 
 /**
- * Get a skill's template string (the markdown body).
- * This is the main entry point for the tips pipeline.
+ * Write a file to workspace.
+ * Uploads to Supabase Storage + upserts workspace_files index.
  */
+export async function writeFile(
+  filePath: string,
+  content: string | Buffer,
+  supabase: SupabaseClient,
+  userId: string,
+  contentType?: string,
+): Promise<{ success: boolean; storageUrl?: string; error?: string }> {
+  return dbWriteFile(supabase, userId, filePath, content, contentType);
+}
+
+/**
+ * Delete a file from workspace.
+ */
+export async function deleteFile(filePath: string, supabase: SupabaseClient, userId: string): Promise<boolean> {
+  return dbDeleteFile(supabase, userId, filePath);
+}
+
+// ── Skill convenience methods ──────────────────────────────────────────────
+
+/** Get a skill by name. Checks: DB user skills → built-in skills. */
+export async function getSkill(name: string, supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill | null> {
+  const cacheKey = `skill:${name}:${userId || ''}`;
+  const cached = getCached<ParsedSkill>(cacheKey);
+  if (cached) return cached;
+
+  // Try DB
+  if (supabase && userId) {
+    const result = await readFile(`skills/${name}/SKILL.md`, supabase, userId);
+    if (result) {
+      const parsed = parseSkillMd(result.content);
+      if (parsed) { setCache(cacheKey, parsed); return parsed; }
+    }
+  }
+
+  // Try built-in
+  const builtIn = loadBuiltInSkills().get(name);
+  if (builtIn) { setCache(cacheKey, builtIn); return builtIn; }
+
+  return null;
+}
+
+/** Get a skill's template string. Main entry for tips pipeline. */
 export async function getSkillTemplate(name: string, supabase?: SupabaseClient, userId?: string): Promise<string | null> {
   const skill = await getSkill(name, supabase, userId);
   return skill?.template ?? null;
 }
 
-/**
- * Get a skill's reference images.
- */
-export async function getSkillReferenceImages(name: string, supabase?: SupabaseClient, userId?: string): Promise<string[]> {
-  const skill = await getSkill(name, supabase, userId);
-  return skill?.makaron?.referenceImages ?? [];
-}
-
-/**
- * Get all available skills (built-in + user).
- */
+/** Get all skills (built-in + user). */
 export async function getAllSkills(supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill[]> {
-  const localSkills = loadLocalSkills();
-  const skills = [...localSkills.values()];
+  const builtIn = loadBuiltInSkills();
+  const skills = [...builtIn.values()];
 
   if (supabase && userId) {
-    const userFiles = await listFiles({ scope: 'user', userId, pattern: 'skills/*/SKILL.md' }, supabase);
+    const userFiles = await dbListFiles(supabase, userId, 'skills/%/SKILL.md');
     for (const file of userFiles) {
-      const content = await readSupabaseFile(supabase, file);
-      if (content) {
-        const parsed = parseSkillMd(content.content);
-        if (parsed && !localSkills.has(parsed.name)) {
+      if (!file.storageUrl) continue;
+      const result = await fetchFileContent(file.storageUrl, file.contentType);
+      if (result) {
+        const parsed = parseSkillMd(result.content);
+        if (parsed && !builtIn.has(parsed.name)) {
           skills.push(parsed);
         }
       }
@@ -618,10 +461,7 @@ export async function getAllSkills(supabase?: SupabaseClient, userId?: string): 
   return skills;
 }
 
-/**
- * Build a lightweight manifest for the Agent system prompt.
- * Just names + one-line descriptions, not full templates.
- */
+/** Build lightweight skill manifest for Agent system prompt. */
 export async function getSkillManifest(supabase?: SupabaseClient, userId?: string): Promise<string> {
   const skills = await getAllSkills(supabase, userId);
   if (skills.length === 0) return '';
@@ -634,5 +474,5 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
     return `- **${s.name}**: ${s.description.trim().split('\n')[0]}${suffix}`;
   });
 
-  return `\n## Available Skills\n\nUse \`list_workspace\` and \`read_workspace\` to get detailed instructions.\n\n${lines.join('\n')}\n`;
+  return `\n## Available Skills\n\n${lines.join('\n')}\n`;
 }

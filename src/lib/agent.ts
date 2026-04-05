@@ -55,6 +55,9 @@ interface AgentContext {
   originalImage?: string;     // base64 data URL – the very first image, never changes
   referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase?: any;             // Supabase client for workspace operations
+  userId?: string;            // Current user ID for workspace
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
   /** Which model was used for the last image generation */
@@ -102,9 +105,10 @@ function getAgentSystemPrompt(): string {
 }
 
 /** Build system prompt with lightweight skill manifest (not full templates) */
-async function buildSystemPrompt(userSkills?: ParsedSkill[]): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, userId?: string): Promise<string> {
   const base = getAgentSystemPrompt();
-  const manifest = await workspace.getSkillManifest(undefined, undefined);
+  const manifest = await workspace.getSkillManifest(supabase, userId);
   // Append user skills to manifest if any
   let userSkillLines = '';
   if (userSkills?.length) {
@@ -116,11 +120,13 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[]): Promise<string> {
 
 ## Workspace
 
-You have a persistent workspace with two areas:
-- **skills/** — your abilities and knowledge (built-in + ones you create)
-- **memory/** — your long-term memory (preferences, lessons, plans)
+You have a persistent workspace for skills and files.
 
 Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
+
+### File organization
+- **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
+- **skills/{name}/assets/{filename}** — Reference images for skills.
 
 ### run_code
 Execute JavaScript with access to image processing libraries and snapshot images.
@@ -129,24 +135,11 @@ Execute JavaScript with access to image processing libraries and snapshot images
 When user asks to crop, resize, add text/watermark, make collages, design layouts, or any image manipulation that doesn't need AI generation — use \`run_code\` instead of \`generate_image\`.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
-This conversation will end, but your workspace stays. When you discover something worth remembering — user preferences, successful techniques, lessons from failures — write it down. When a new conversation starts, check if you left yourself anything useful.
-
-### Writing memory
-Be concise. One actionable insight per line — not a diary. Good memory reads like a cheat sheet:
-- "User prefers warm film tones over cool digital" ✓
-- "Small faces: skip facial micro-adjustments, use body language" ✓
-- "The user uploaded a photo and I noticed they seemed to like warm colors because the sunset was beautiful and..." ✗ too verbose
-
 ### Creating skills
 Before writing a new skill, read \`skills/SKILL_README.md\` first — it has the exact format (YAML frontmatter + markdown body). Also read an existing skill (e.g. \`skills/makaron-mascot/SKILL.md\`) as a reference.
 
-A good skill is **reusable across any project** — it describes a style, technique, or character, not a specific photo:
-- "Warm film tone: amber highlights, faded shadows, grain" ✓ reusable
-- "This lego worker photo needs warm lighting on the forklift" ✗ project-specific, put in project memory instead
+A good skill is **reusable across any project** — it describes a style, technique, or character, not a specific photo.
 
-If something only applies to the current project, write it to \`projects/{id}/memory/\` — not as a skill.
-
-For project-specific content, use \`projects/{projectId}/\` paths.
 ${manifest}${userSkillLines}
 `;
   return base + workspaceSection;
@@ -364,27 +357,19 @@ Parameters:
     // ── Workspace tools ─────────────────────────────────────────────────────
 
     list_files: tool({
-      description: `List files in your workspace. Discover available skills, reference images, and your memory.
-Returns an array of file entries with path, type, and metadata.
-Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a specific skill, "memory/*" for your memory.`,
+      description: `List files in your workspace. Discover available skills and reference images.
+Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a specific skill.`,
       inputSchema: z.object({
-        pattern: z.string().optional().describe('Glob-like filter: "skills/*", "skills/*/assets/*", "memory/*", "prompts/*"'),
-        scope: z.enum(['global', 'user', 'project']).optional().describe('Filter by scope. global=built-in, user=user skills+memory, project=project memory. Omit for all.'),
-        type: z.string().optional().describe('Filter by content type prefix: "text" for .md files, "image" for images'),
+        pattern: z.string().optional().describe('Glob-like filter: "skills/*", "skills/*/assets/*"'),
       }),
-      execute: async ({ pattern, scope, type }) => {
-        const files = await workspace.listFiles({
-          scope,
-          projectId: ctx.projectId,
-          pattern,
-          type,
-        });
+      execute: async ({ pattern }) => {
+        const files = await workspace.listFiles(pattern, ctx.supabase, ctx.userId);
 
         const result = files.map(f => ({
           path: f.path,
-          scope: f.scope,
           type: f.contentType,
           size: f.size,
+          builtIn: f.isBuiltIn || false,
         }));
 
         return { files: result, count: result.length };
@@ -398,7 +383,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
         path: z.string().describe('File path from list_files, e.g. "skills/enhance/SKILL.md" or "skills/makaron-mascot/assets/character-sheet.jpg"'),
       }),
       execute: async ({ path: filePath }) => {
-        const result = await workspace.readFile(filePath, undefined, { projectId: ctx.projectId });
+        const result = await workspace.readFile(filePath, ctx.supabase, ctx.userId);
         if (!result) return { error: `File not found: ${filePath}` };
 
         if (result.contentType.startsWith('image/')) {
@@ -438,22 +423,13 @@ Path is free — you decide how to organize. Convention: skills/ for abilities, 
         content: z.string().describe('File content (markdown recommended)'),
       }),
       execute: async ({ path: filePath, content }) => {
-        // Determine scope from path
-        const isProject = filePath.startsWith('projects/');
-        try {
-          const fs = require('fs') as typeof import('fs');
-          const pathMod = require('path') as typeof import('path');
-          const baseDir = isProject
-            ? pathMod.join(process.cwd(), '.workspace')
-            : pathMod.join(process.cwd(), '.workspace', '_user');
-          const fullPath = pathMod.join(baseDir, filePath);
-          const dir = pathMod.dirname(fullPath);
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          fs.writeFileSync(fullPath, content, 'utf-8');
-          return { success: true, message: `Saved: ${filePath}` };
-        } catch (e) {
-          return { success: false, message: `Write failed: ${e instanceof Error ? e.message : String(e)}` };
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false, message: 'Workspace not available (no Supabase connection).' };
         }
+        const result = await workspace.writeFile(filePath, content, ctx.supabase, ctx.userId);
+        return result.success
+          ? { success: true, message: `Saved: ${filePath}`, storageUrl: result.storageUrl }
+          : { success: false, message: `Write failed: ${result.error}` };
       },
     }),
 
@@ -464,20 +440,11 @@ Path is free — you decide how to organize. Convention: skills/ for abilities, 
       }),
       execute: async ({ path: filePath }) => {
         try {
-          const fs = require('fs') as typeof import('fs');
-          const pathMod = require('path') as typeof import('path');
-          // Try project path first, then user path
-          const candidates = [
-            pathMod.join(process.cwd(), '.workspace', filePath),
-            pathMod.join(process.cwd(), '.workspace', '_user', filePath),
-          ];
-          for (const fullPath of candidates) {
-            if (fs.existsSync(fullPath)) {
-              fs.unlinkSync(fullPath);
-              return { success: true, message: `Deleted: ${filePath}` };
-            }
+          if (!ctx.supabase || !ctx.userId) {
+            return { success: false, message: 'Workspace not available.' };
           }
-          return { success: false, message: `File not found: ${filePath}` };
+          const ok = await workspace.deleteFile(filePath, ctx.supabase, ctx.userId);
+          return ok ? { success: true, message: `Deleted: ${filePath}` } : { success: false, message: `File not found: ${filePath}` };
         } catch (e) {
           return { success: false, message: `Delete failed: ${e instanceof Error ? e.message : String(e)}` };
         }
@@ -538,7 +505,8 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
               snapshotImages: ctx.snapshotImages,
               snapshotCount: ctx.snapshotImages.length,
               projectId: ctx.projectId,
-              userId: '', // TODO: pass userId when available
+              userId: ctx.userId || '',
+              supabase: ctx.supabase,
             },
           };
 
@@ -665,7 +633,8 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[] },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -679,6 +648,8 @@ export async function* runMakaronAgent(
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
     userSkills: options?.userSkills,
+    supabase: options?.supabase,
+    userId: options?.userId,
   };
 
   const allTools = createTools(ctx);
@@ -722,7 +693,7 @@ export async function* runMakaronAgent(
   }
 
   // Build system prompt: base agent.md + workspace manifest (lightweight, not full templates)
-  const systemPrompt = await buildSystemPrompt(options?.userSkills);
+  const systemPrompt = await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId);
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
