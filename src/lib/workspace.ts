@@ -439,10 +439,14 @@ export async function getSkillTemplate(name: string, supabase?: SupabaseClient, 
   return skill?.template ?? null;
 }
 
-/** Get all skills (built-in + user). */
+// Legacy prompt names — these are tips templates, not user-facing skills
+const LEGACY_PROMPTS = new Set(['enhance', 'creative', 'wild', 'captions']);
+
+/** Get all skills (built-in SKILL.md + user). Excludes legacy prompt templates. */
 export async function getAllSkills(supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill[]> {
   const builtIn = loadBuiltInSkills();
-  const skills = [...builtIn.values()];
+  // Filter out legacy prompts — they're for tips pipeline, not user-selectable skills
+  const skills = [...builtIn.values()].filter(s => !LEGACY_PROMPTS.has(s.name));
 
   if (supabase && userId) {
     const userFiles = await dbListFiles(supabase, userId, 'skills/%/SKILL.md');
