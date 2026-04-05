@@ -121,6 +121,21 @@ function loadLocalSkills(): Map<string, ParsedSkill> {
       }
     }
 
+    // 1b. Agent-created skills (.workspace/_user/skills/{name}/SKILL.md)
+    const userSkillsDir = path.join(process.cwd(), '.workspace', '_user', 'skills');
+    if (fs.existsSync(userSkillsDir)) {
+      const userDirs = fs.readdirSync(userSkillsDir, { withFileTypes: true }).filter((d: { isDirectory: () => boolean }) => d.isDirectory());
+      for (const dir of userDirs) {
+        const skillPath = path.join(userSkillsDir, dir.name, 'SKILL.md');
+        if (!fs.existsSync(skillPath)) continue;
+        try {
+          const content = fs.readFileSync(skillPath, 'utf-8');
+          const skill = parseSkillMd(content);
+          if (skill && !skills.has(skill.name)) skills.set(skill.name, skill);
+        } catch { /* skip */ }
+      }
+    }
+
     // 2. Legacy category .md files (src/lib/prompts/{name}.md) — no frontmatter
     const promptsDir = path.join(process.cwd(), 'src', 'lib', 'prompts');
     const categories = ['enhance', 'creative', 'wild', 'captions'];
@@ -273,7 +288,13 @@ function readLocalFile(filePath: string, projectId?: string): WorkspaceReadResul
     let fullPath: string | null = null;
 
     if (filePath.startsWith('skills/')) {
-      fullPath = pathMod.join(process.cwd(), 'src', filePath);
+      // Try .workspace/_user/skills/ first (Agent-created), then src/skills/ (built-in)
+      const userPath = pathMod.join(process.cwd(), '.workspace', '_user', filePath);
+      if (fs.existsSync(userPath)) {
+        fullPath = userPath;
+      } else {
+        fullPath = pathMod.join(process.cwd(), 'src', filePath);
+      }
     } else if (filePath.startsWith('prompts/')) {
       fullPath = pathMod.join(process.cwd(), 'src', 'lib', filePath);
     } else if (filePath.startsWith('memory/')) {
