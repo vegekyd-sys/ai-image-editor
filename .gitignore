@@ -65,3 +65,6 @@ test-kling.mjs
 
 # Screenshots (Playwright / Chrome DevTools)
 /screenshots/
+
+# workspace agent runtime data
+.workspace/

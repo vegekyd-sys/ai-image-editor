@@ -1,59 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { loadBuiltInSkills, parseSkillMd } from '@/lib/skill-registry';
+import { parseSkillMd } from '@/lib/skill-registry';
+import { getAllSkills, writeFile, deleteFile, listFiles } from '@/lib/workspace';
 import JSZip from 'jszip';
 
-// GET — list built-in + user skills
+// GET — list built-in + user skills (via workspace)
 export async function GET() {
   try {
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
 
-    // Built-in skills
-    const builtIn = [...loadBuiltInSkills().values()].map(s => ({
+    const allSkills = await getAllSkills(supabase, userId || undefined);
+
+    const skills = allSkills.map(s => ({
       name: s.name,
       label: s.name.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' '),
-      icon: s.makaron.icon || '',
-      color: s.makaron.color || '#a78bfa',
-      builtIn: true,
-      description: s.description,
-      referenceImages: s.makaron.referenceImages || [],
+      icon: s.makaron?.icon || '',
+      color: s.makaron?.color || '#a78bfa',
+      builtIn: s.makaron?.builtIn || false,
+      description: s.description || '',
+      referenceImages: s.makaron?.referenceImages || [],
     }));
 
-    // User skills (if logged in)
-    let userSkills: typeof builtIn = [];
-    if (userId) {
-      const { data } = await supabase
-        .from('user_skills')
-        .select('name, skill_md, is_active')
-        .eq('user_id', userId)
-        .eq('is_active', true);
-
-      if (data) {
-        userSkills = data.map(row => {
-          const parsed = parseSkillMd(row.skill_md);
-          return {
-            name: parsed?.name || row.name,
-            label: (parsed?.name || row.name).split('-').map((w: string) => w[0].toUpperCase() + w.slice(1)).join(' '),
-            icon: parsed?.makaron.icon || '📦',
-            color: parsed?.makaron.color || '#a78bfa',
-            builtIn: false,
-            description: parsed?.description || '',
-            referenceImages: parsed?.makaron.referenceImages || [],
-          };
-        });
-      }
-    }
-
-    return NextResponse.json({ skills: [...builtIn, ...userSkills] });
+    return NextResponse.json({ skills });
   } catch (err) {
     console.error('[skills GET]', err);
     return NextResponse.json({ error: 'Failed to load skills' }, { status: 500 });
   }
 }
 
-// POST — upload zip to create a new user skill
+// POST — upload zip to create a new user skill (via workspace)
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -68,7 +45,7 @@ export async function POST(req: NextRequest) {
     const buffer = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(buffer);
 
-    // Find SKILL.md (could be at root or in a subdirectory)
+    // Find SKILL.md
     let skillMdContent: string | null = null;
     let skillMdPath = '';
     for (const [path, entry] of Object.entries(zip.files)) {
@@ -83,59 +60,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No SKILL.md found in zip' }, { status: 400 });
     }
 
-    // Parse SKILL.md
     const parsed = parseSkillMd(skillMdContent);
     if (!parsed) {
       return NextResponse.json({ error: 'Invalid SKILL.md format' }, { status: 400 });
     }
 
-    // Upload assets to Supabase Storage
+    // Upload assets via workspace
     const skillDir = skillMdPath.includes('/') ? skillMdPath.substring(0, skillMdPath.lastIndexOf('/') + 1) : '';
     const assetsPrefix = skillDir + 'assets/';
     const uploadedUrls: Record<string, string> = {};
 
     for (const [path, entry] of Object.entries(zip.files)) {
       if (entry.dir || !path.startsWith(assetsPrefix)) continue;
-      const data = await entry.async('uint8array');
+      const data = await entry.async('nodebuffer');
       const filename = path.substring(assetsPrefix.length);
-      const storagePath = `${user.id}/skills/${parsed.name}/${filename}`;
+      const ct = filename.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      const wsPath = `skills/${parsed.name}/assets/${filename}`;
 
-      const { error: uploadErr } = await supabase.storage
-        .from('images')
-        .upload(storagePath, data, {
-          contentType: filename.endsWith('.png') ? 'image/png' : 'image/jpeg',
-          upsert: true,
-        });
-
-      if (uploadErr) {
-        console.error(`[skills POST] Upload failed for ${filename}:`, uploadErr);
-        continue;
+      const result = await writeFile(wsPath, data, supabase, user.id, ct);
+      if (result.success && result.storageUrl) {
+        uploadedUrls[`assets/${filename}`] = result.storageUrl;
       }
-
-      const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath);
-      uploadedUrls[`assets/${filename}`] = urlData.publicUrl;
     }
 
-    // Replace relative asset paths in SKILL.md with Supabase URLs
+    // Replace relative asset paths with Storage URLs
     let finalSkillMd = skillMdContent;
     for (const [relativePath, publicUrl] of Object.entries(uploadedUrls)) {
       finalSkillMd = finalSkillMd.replace(new RegExp(relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), publicUrl);
     }
 
-    // Upsert to user_skills table
-    const { error: dbErr } = await supabase
-      .from('user_skills')
-      .upsert({
-        user_id: user.id,
-        name: parsed.name,
-        skill_md: finalSkillMd,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,name' });
-
-    if (dbErr) {
-      console.error('[skills POST] DB error:', dbErr);
-      return NextResponse.json({ error: 'Failed to save skill' }, { status: 500 });
+    // Save SKILL.md via workspace
+    const mdResult = await writeFile(`skills/${parsed.name}/SKILL.md`, finalSkillMd, supabase, user.id, 'text/markdown');
+    if (!mdResult.success) {
+      return NextResponse.json({ error: `Failed to save SKILL.md: ${mdResult.error}` }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -149,7 +106,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE — remove a user skill
+// DELETE — remove a user skill (via workspace)
 export async function DELETE(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -159,13 +116,16 @@ export async function DELETE(req: NextRequest) {
     const { name } = await req.json();
     if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
-    await supabase.from('user_skills').delete().eq('user_id', user.id).eq('name', name);
+    // Find all files under skills/{name}/
+    const files = await listFiles(`skills/${name}/%`, supabase, user.id);
 
-    // Clean up storage
-    const { data: files } = await supabase.storage.from('images').list(`${user.id}/skills/${name}`);
-    if (files?.length) {
-      await supabase.storage.from('images').remove(files.map(f => `${user.id}/skills/${name}/${f.name}`));
+    // Delete each file
+    for (const f of files) {
+      await deleteFile(f.path, supabase, user.id);
     }
+
+    // Also delete exact match (in case SKILL.md path doesn't end with /)
+    await deleteFile(`skills/${name}/SKILL.md`, supabase, user.id);
 
     return NextResponse.json({ success: true });
   } catch (err) {

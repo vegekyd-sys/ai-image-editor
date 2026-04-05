@@ -1469,6 +1469,16 @@ export default function Editor({
               lastEditPromptRef.current = input.editPrompt;
               lastEditInputImagesRef.current = images ?? null;
             }
+            // Append run_code as code fence only (description goes into collapse button via CollapsibleCode)
+            if (tool === 'run_code' && typeof input.code === 'string') {
+              const code = input.code as string;
+              const id = currentMsgId;
+              if (id) {
+                setMessages(prev => prev.map(m =>
+                  m.id === id ? { ...m, content: (m.content || '') + `\n\n\`\`\`javascript\n${code}\n\`\`\`\n` } : m
+                ));
+              }
+            }
           },
           onAnimationTask: (taskId, prompt) => {
             // CUI-initiated video: add to animations array and start polling

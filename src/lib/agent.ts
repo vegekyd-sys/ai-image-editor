@@ -2,7 +2,24 @@ import { streamText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
+import satori from 'satori';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import type { ModelId } from './models/types';
+
+// Pre-load font for satori (HTML→image rendering)
+let _satoriFont: Buffer | null = null;
+function getSatoriFont(): Buffer {
+  if (!_satoriFont) {
+    try {
+      _satoriFont = readFileSync(join(process.cwd(), 'node_modules/next/dist/compiled/@vercel/og/noto-sans-v27-latin-regular.ttf'));
+    } catch {
+      // Fallback: empty buffer (satori will error on text, but won't crash on import)
+      _satoriFont = Buffer.alloc(0);
+    }
+  }
+  return _satoriFont;
+}
 import { filterAndRemapImages } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
@@ -38,6 +55,9 @@ interface AgentContext {
   originalImage?: string;     // base64 data URL – the very first image, never changes
   referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase?: any;             // Supabase client for workspace operations
+  userId?: string;            // Current user ID for workspace
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
   /** Which model was used for the last image generation */
@@ -71,19 +91,10 @@ export type AgentStreamEvent =
   | { type: 'done' }
   | { type: 'error'; message: string };
 
-// ---------------------------------------------------------------------------
-// Skill template map — reuses already-imported .md files
-// ---------------------------------------------------------------------------
-
-const SKILL_PROMPTS: Record<string, string> = {
-  enhance: enhancePrompt,
-  creative: creativePrompt,
-  wild: wildPrompt,
-  captions: captionsPrompt,
-};
-
-// Dynamic skills from SKILL.md registry
-import { getSkill, getSkillFromAll, getSkillsSummaryForAgent, type ParsedSkill } from './skill-registry';
+// Skill types (workspace replaces hardcoded SKILL_PROMPTS map)
+import { type ParsedSkill } from './skill-registry';
+// Workspace service — unified access to skills, memory, assets
+import * as workspace from './workspace';
 
 // ---------------------------------------------------------------------------
 // System prompt (bundled via webpack asset/source)
@@ -91,6 +102,47 @@ import { getSkill, getSkillFromAll, getSkillsSummaryForAgent, type ParsedSkill }
 
 function getAgentSystemPrompt(): string {
   return agentPrompt + '\n\n## Video Script Format\n\n' + animatePrompt;
+}
+
+/** Build system prompt with lightweight skill manifest (not full templates) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, userId?: string): Promise<string> {
+  const base = getAgentSystemPrompt();
+  const manifest = await workspace.getSkillManifest(supabase, userId);
+  // Append user skills to manifest if any
+  let userSkillLines = '';
+  if (userSkills?.length) {
+    userSkillLines = '\n' + userSkills.map(s =>
+      `- **${s.name}**: ${s.description.trim().split('\n')[0]}${s.makaron?.referenceImages?.length ? ' [has reference images]' : ''}`
+    ).join('\n');
+  }
+  const workspaceSection = `
+
+## Workspace
+
+You have a persistent workspace for skills and files.
+
+Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
+
+### File organization
+- **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
+- **skills/{name}/assets/{filename}** — Reference images for skills.
+
+### run_code
+Execute JavaScript with access to image processing libraries and snapshot images.
+- \`sharp\` — pixel operations: crop, resize, composite, color adjust, blur, sharpen
+- \`renderHtml(element, width, height)\` — HTML/CSS layout → PNG image. Great for text overlays, social media covers, brand materials, cards, labels.
+When user asks to crop, resize, add text/watermark, make collages, design layouts, or any image manipulation that doesn't need AI generation — use \`run_code\` instead of \`generate_image\`.
+Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
+
+### Creating skills
+Before writing a new skill, read \`skills/SKILL_README.md\` first — it has the exact format (YAML frontmatter + markdown body). Also read an existing skill (e.g. \`skills/makaron-mascot/SKILL.md\`) as a reference.
+
+A good skill is **reusable across any project** — it describes a style, technique, or character, not a specific photo.
+
+${manifest}${userSkillLines}
+`;
+  return base + workspaceSection;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,30 +173,11 @@ function createTools(ctx: AgentContext) {
           editTarget = ctx.snapshotImages[idx];
         }
 
-        // Resolve reference images: user-uploaded + skill assets + snapshot indices
+        // Resolve reference images: user-uploaded + snapshot indices
+        // Note: skill reference images are no longer auto-injected here.
+        // The Agent discovers them via list_files and passes them as reference_image_indices.
         let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
-        // Inject skill reference images (e.g. mascot character sheet) only when that skill is used
-        const fs = require('fs');
-        const logLine = (msg: string) => { console.log(msg); fs.appendFileSync('/tmp/skill-debug.log', `${new Date().toISOString()} ${msg}\n`); };
-        logLine(`🎯 [generate_image] skill="${skill || 'none'}" editPrompt="${editPrompt.slice(0, 80)}"`);
-        if (skill) {
-          const skillDef = getSkillFromAll(skill, ctx.userSkills);
-          logLine(`🔍 [generate_image] getSkill("${skill}") found=${!!skillDef} refImages=${JSON.stringify(skillDef?.makaron?.referenceImages?.map((u: string) => u.slice(0, 60)))}`);
-          if (skillDef?.makaron.referenceImages?.length) {
-            // Deduplicate: skip skill reference images already present as snapshots
-            const existingUrls = new Set(ctx.snapshotImages);
-            const newRefs = skillDef.makaron.referenceImages.filter((url: string) => !existingUrls.has(url));
-            if (newRefs.length) {
-              logLine(`🖼️ [generate_image] Injecting ${newRefs.length} reference image(s) from skill "${skill}" (${skillDef.makaron.referenceImages.length - newRefs.length} already in snapshots)`);
-              resolvedRefs.push(...newRefs);
-            } else {
-              logLine(`✅ [generate_image] All ${skillDef.makaron.referenceImages.length} reference image(s) from skill "${skill}" already in snapshots, skipping`);
-            }
-          } else {
-            logLine(`⚠️ [generate_image] Skill "${skill}" has NO referenceImages!`);
-          }
-        }
-        logLine(`📎 [generate_image] Total resolvedRefs: ${resolvedRefs.length} (ctx.referenceImages=${ctx.referenceImages?.length ?? 0})`);
+        console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_image_indices?.length) {
           for (const refIdx of reference_image_indices) {
             const idx = refIdx - 1;
@@ -157,7 +190,7 @@ function createTools(ctx: AgentContext) {
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
-          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, skillPrompts: SKILL_PROMPTS, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           { currentImage: editTarget, originalImage: ctx.originalImage, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
         // NSFW detection: flag session so all subsequent calls skip Gemini
@@ -321,6 +354,272 @@ Parameters:
       },
     }),
 
+    // ── Workspace tools ─────────────────────────────────────────────────────
+
+    list_files: tool({
+      description: `List files in your workspace. Discover available skills and reference images.
+Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a specific skill.`,
+      inputSchema: z.object({
+        pattern: z.string().optional().describe('Glob-like filter: "skills/*", "skills/*/assets/*"'),
+      }),
+      execute: async ({ pattern }) => {
+        const files = await workspace.listFiles(pattern, ctx.supabase, ctx.userId);
+
+        const result = files.map(f => ({
+          path: f.path,
+          type: f.contentType,
+          size: f.size,
+          builtIn: f.isBuiltIn || false,
+        }));
+
+        return { files: result, count: result.length };
+      },
+    }),
+
+    read_file: tool({
+      description: `Read a file from your workspace. For .md files, returns text content. For images, returns the image so you can view it.
+Use this to read skill instructions (SKILL.md), reference images, or your memory.`,
+      inputSchema: z.object({
+        path: z.string().describe('File path from list_files, e.g. "skills/enhance/SKILL.md" or "skills/makaron-mascot/assets/character-sheet.jpg"'),
+      }),
+      execute: async ({ path: filePath }) => {
+        const result = await workspace.readFile(filePath, ctx.supabase, ctx.userId);
+        if (!result) return { error: `File not found: ${filePath}` };
+
+        if (result.contentType.startsWith('image/')) {
+          // Return image for vision — same pattern as analyze_image
+          const raw = result.content.replace(/^data:image\/\w+;base64,/, '');
+          return { base64Data: raw, mimeType: result.contentType, path: filePath };
+        }
+
+        return { content: result.content, type: result.contentType, path: filePath };
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toModelOutput({ output }: { output: any }) {
+        if (output.error) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        if (output.base64Data) {
+          return {
+            type: 'content' as const,
+            value: [
+              { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
+              { type: 'text' as const, text: `Workspace image: ${output.path}` },
+            ],
+          };
+        }
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: `[${output.path}]\n\n${output.content}` }],
+        };
+      },
+    }),
+
+    write_file: tool({
+      description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
+Path is free — you decide how to organize. Convention: skills/ for abilities, memory/ for remembering things, projects/{id}/ for project-specific content.`,
+      inputSchema: z.object({
+        path: z.string().describe('File path, e.g. "memory/preferences.md", "skills/my-style/SKILL.md", "projects/{id}/memory/plan.md"'),
+        content: z.string().describe('File content (markdown recommended)'),
+      }),
+      execute: async ({ path: filePath, content }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false, message: 'Workspace not available (no Supabase connection).' };
+        }
+        const result = await workspace.writeFile(filePath, content, ctx.supabase, ctx.userId);
+        return result.success
+          ? { success: true, message: `Saved: ${filePath}`, storageUrl: result.storageUrl }
+          : { success: false, message: `Write failed: ${result.error}` };
+      },
+    }),
+
+    delete_file: tool({
+      description: `Delete a file from your workspace. Use this to clean up outdated memory or reorganize.`,
+      inputSchema: z.object({
+        path: z.string().describe('File path to delete'),
+      }),
+      execute: async ({ path: filePath }) => {
+        try {
+          if (!ctx.supabase || !ctx.userId) {
+            return { success: false, message: 'Workspace not available.' };
+          }
+          const ok = await workspace.deleteFile(filePath, ctx.supabase, ctx.userId);
+          return ok ? { success: true, message: `Deleted: ${filePath}` } : { success: false, message: `File not found: ${filePath}` };
+        } catch (e) {
+          return { success: false, message: `Delete failed: ${e instanceof Error ? e.message : String(e)}` };
+        }
+      },
+    }),
+
+    run_code: tool({
+      description: `Execute JavaScript code with access to image processing libraries and project context.
+
+Use this for any task that requires computation:
+- Image manipulation: crop, resize, composite, watermark, color analysis (sharp)
+- Layout/design generation: social media covers, before/after comparisons, brand materials (satori — write HTML/CSS, get PNG)
+- Data processing: extract colors, analyze image stats, batch operations
+- Skill creation with assets: upload images to storage, build SKILL.md, save to database
+
+Available in your code:
+- \`sharp\` — image processing: crop, resize, composite, color adjust, format convert. Example: \`const out = await sharp(buf).resize(800).jpeg().toBuffer();\`
+- \`renderHtml(element, width?, height?)\` — HTML/CSS → PNG image. Element format: \`{ type: 'div', props: { style: {...}, children: [...] } }\`. Supports: div, span, p, img, flexbox layout, fontSize, fontWeight, color, backgroundColor, borderRadius, padding, margin, gap. Returns PNG Buffer. Example: \`const png = await renderHtml({ type: 'div', props: { style: { display: 'flex', background: '#1a1a2e', color: 'white', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, children: [{ type: 'h1', props: { children: 'Title', style: { fontSize: 64 } } }] } }, 1080, 1350);\`
+- \`saveToWorkspace(path, content, contentType?)\` — Save a file directly to workspace (Supabase Storage). Returns \`{ success, storageUrl, error }\`. Use for skill assets, exports, etc. Example: \`await saveToWorkspace('skills/my-skill/assets/ref.jpg', pngBuffer, 'image/jpeg')\`
+- \`JSZip\` — Create zip files. Example: \`const zip = new JSZip(); zip.file('SKILL.md', text); zip.file('assets/ref.jpg', imgBuffer); const buf = await zip.generateAsync({type:'nodebuffer'}); const {storageUrl} = await saveToWorkspace('exports/skill.zip', buf, 'application/zip');\`
+- \`ctx.snapshotImages\` — array of snapshot URLs/base64 (index 0 = <<<image_1>>>)
+- \`ctx.projectId\`, \`ctx.userId\` — current project and user IDs
+- \`fetch\` — make HTTP requests (e.g. download snapshot images from URLs)
+- Standard Node.js: Buffer, JSON, Math, Date, etc.
+
+Your code must return a value. If returning an image, return \`{ type: 'image', data: base64String, mimeType: 'image/jpeg' }\`.
+For text results, return \`{ type: 'text', content: 'your result' }\`.
+For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
+      inputSchema: z.object({
+        code: z.string().describe('JavaScript code to execute. Must return a result object.'),
+        description: z.string().optional().describe('Brief description of what this code does'),
+      }),
+      execute: async ({ code, description: desc }) => {
+        console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
+        const startTime = Date.now();
+        try {
+          // Build sandbox context
+          const fontData = getSatoriFont();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const renderHtml = async (element: any, width = 800, height = 600) => {
+            const svg = await satori(element, {
+              width,
+              height,
+              fonts: [{ name: 'Noto Sans', data: fontData, weight: 400 as const }],
+            });
+            return await sharp(Buffer.from(svg)).png().toBuffer();
+          };
+
+          // Helper: save file to workspace directly from run_code (avoids passing large base64 back to Agent)
+          const saveToWorkspace = async (path: string, content: string | Buffer, contentType?: string) => {
+            if (!ctx.supabase || !ctx.userId) return { success: false, error: 'No Supabase connection' };
+            return workspace.writeFile(path, content, ctx.supabase, ctx.userId, contentType);
+          };
+
+          const JSZip = (await import('jszip')).default;
+
+          const sandbox = {
+            sharp,
+            satori,
+            renderHtml,
+            saveToWorkspace,
+            JSZip,
+            fetch: globalThis.fetch,
+            Buffer,
+            JSON,
+            Math,
+            Date,
+            console: { log: (...args: unknown[]) => console.log('[run_code]', ...args) },
+            ctx: {
+              snapshotImages: ctx.snapshotImages,
+              snapshotCount: ctx.snapshotImages.length,
+              projectId: ctx.projectId,
+              userId: ctx.userId || '',
+              supabase: ctx.supabase,
+            },
+          };
+
+          // Wrap code in async function and execute
+          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+          const fn = new AsyncFunction(
+            ...Object.keys(sandbox),
+            `'use strict';\n${code}`
+          );
+
+          // Execute with timeout
+          const timeoutMs = 30_000;
+          const result = await Promise.race([
+            fn(...Object.values(sandbox)),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Code execution timed out (30s)')), timeoutMs)),
+          ]);
+
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'N/A'}, dataType: ${result?.data ? `${typeof result.data} / ${result.data.constructor?.name} / len=${result.data.length || 'N/A'}` : 'no data'}`);
+
+          // Handle result types — be flexible about what Agent returns
+          if (!result) {
+            return { type: 'text' as const, content: 'Code executed but returned nothing. Make sure to return a value.' };
+          }
+
+          // Helper: convert anything buffer-like to base64 string
+          const toBase64 = (data: unknown): string | null => {
+            if (Buffer.isBuffer(data)) return data.toString('base64');
+            if (data instanceof Uint8Array) return Buffer.from(data).toString('base64');
+            if (typeof data === 'string' && data.length > 100) return data; // already base64
+            return null;
+          };
+
+          // Helper: push image to generatedImages so it shows in CUI
+          const pushImage = (b64: string, mime: string) => {
+            const dataUrl = `data:${mime};base64,${b64}`;
+            ctx.generatedImages.push(dataUrl);
+            ctx.snapshotImages.push(dataUrl);
+            ctx.currentImage = dataUrl;
+          };
+
+          // Buffer or Uint8Array → treat as image
+          const directB64 = toBase64(result);
+          if (directB64) {
+            pushImage(directB64, 'image/jpeg');
+            return { type: 'image' as const, base64Data: directB64, mimeType: 'image/jpeg', description: desc };
+          }
+
+          // { type: 'image', data: ... } — standard format
+          if (result.type === 'image' && result.data) {
+            const b64 = toBase64(result.data) || String(result.data);
+            pushImage(b64, result.mimeType || 'image/jpeg');
+            return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
+          }
+
+          // { buffer: ... } — sharp output shorthand
+          if (result.buffer) {
+            const b64 = toBase64(result.buffer);
+            if (b64) {
+              pushImage(b64, result.mimeType || 'image/jpeg');
+              return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
+            }
+          }
+
+          // Error result
+          if (result.type === 'error') {
+            return { type: 'text' as const, content: `Error: ${result.message}` };
+          }
+
+          // Text result
+          if (result.type === 'text') {
+            return { type: 'text' as const, content: String(result.content) };
+          }
+
+          // Fallback: stringify
+          return { type: 'text' as const, content: JSON.stringify(result, null, 2) };
+        } catch (e) {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(`❌ [run_code] failed in ${elapsed}s:`, msg);
+          return { type: 'text' as const, content: `Code execution error: ${msg}` };
+        }
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toModelOutput({ output }: { output: any }) {
+        if (output.type === 'image' && output.base64Data) {
+          return {
+            type: 'content' as const,
+            value: [
+              { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType || 'image/jpeg' },
+              { type: 'text' as const, text: output.description ? `Code output: ${output.description}` : 'Code produced an image.' },
+            ],
+          };
+        }
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: output.content || 'Code executed successfully.' }],
+        };
+      },
+    }),
+
   };
 }
 
@@ -346,7 +645,8 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[] },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -360,6 +660,8 @@ export async function* runMakaronAgent(
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
     userSkills: options?.userSkills,
+    supabase: options?.supabase,
+    userId: options?.userId,
   };
 
   const allTools = createTools(ctx);
@@ -379,7 +681,7 @@ export async function* runMakaronAgent(
   // Determine which tools to expose
   // tipReactionOnly: no tools (text-only response)
   // analysisOnly: only analyze_image (agent uses tool to see the photo)
-  // normal chat / animation: all tools (agent.md controls behavior)
+  // normal chat / animation: all tools including workspace (agent.md controls behavior)
   const tools = tipReactionOnly ? undefined : analysisOnly
     ? { analyze_image: allTools.analyze_image }
     : allTools;
@@ -402,8 +704,8 @@ export async function* runMakaronAgent(
     userContent = analysisOnly ? analysisPrompt : prompt;
   }
 
-  // Build system prompt: base agent.md + skill registry summary
-  const systemPrompt = getAgentSystemPrompt() + getSkillsSummaryForAgent(options?.userSkills);
+  // Build system prompt: base agent.md + workspace manifest (lightweight, not full templates)
+  const systemPrompt = await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId);
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -436,6 +738,18 @@ export async function* runMakaronAgent(
             : (q ? `分析图片：${q.slice(0, 25)}` : '分析图片') };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
+        } else if (event.toolName === 'list_files') {
+          yield { type: 'status', text: isEnLocale ? 'Browsing workspace...' : '浏览工作台...' };
+        } else if (event.toolName === 'read_file') {
+          const p = (event.input as { path?: string }).path || '';
+          yield { type: 'status', text: isEnLocale ? `Reading ${p.split('/').pop()}...` : `读取 ${p.split('/').pop()}...` };
+        } else if (event.toolName === 'write_file') {
+          yield { type: 'status', text: isEnLocale ? 'Saving...' : '保存中...' };
+        } else if (event.toolName === 'delete_file') {
+          yield { type: 'status', text: isEnLocale ? 'Deleting...' : '删除中...' };
+        } else if (event.toolName === 'run_code') {
+          const desc = (event.input as { description?: string }).description;
+          yield { type: 'status', text: isEnLocale ? `Running: ${desc || 'code'}...` : `执行: ${desc || '代码'}...` };
         } else if (event.toolName === 'rotate_camera') {
           yield { type: 'status', text: isEnLocale ? 'Rotating camera...' : '旋转相机中...' };
         }
@@ -490,6 +804,17 @@ export async function* runMakaronAgent(
           const analyzeInput = (event as any).input as { image_index?: number } | undefined;
           const analyzedIdx = analyzeInput?.image_index ?? (ctx.currentSnapshotIndex + 1);
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
+        }
+
+        // run_code image output — push to generatedImages so it appears in CUI
+        if (toolName === 'run_code') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const codeResult = (event as any).result as { type?: string; base64Data?: string; mimeType?: string } | undefined;
+          if (codeResult?.type === 'image' && codeResult.base64Data) {
+            const dataUrl = `data:${codeResult.mimeType || 'image/jpeg'};base64,${codeResult.base64Data}`;
+            ctx.generatedImages.push(dataUrl);
+            ctx.snapshotImages.push(dataUrl);
+          }
         }
 
         // Detect generate_image failure or NSFW content block

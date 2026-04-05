@@ -9,6 +9,8 @@ import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
+import FileRefChip from '@/components/FileRefChip';
+import FileViewer from '@/components/FileViewer';
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -93,14 +95,40 @@ function fixMarkdownDelimiters(text: string): string {
 }
 
 
+/** Collapsible code block — original markdown code style + toggle button */
+function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const lineCount = text.split('\n').length;
+
+  return (
+    <div className="my-2">
+      <button
+        className="flex items-center gap-1.5 mb-1"
+        style={{ color: 'rgba(255,255,255,0.35)', fontSize: isPanel ? '12px' : '13px' }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span>{expanded ? '▼' : '▶'}</span>
+        <span>{expanded ? 'Hide code' : `Show code (${lineCount} lines)`}</span>
+      </button>
+      {expanded && (
+        <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>
+          {text}
+        </code>
+      )}
+    </div>
+  );
+}
+
 /** Shared Markdown renderer to avoid duplicating component overrides.
  *  <<<image_N>>> tokens are converted to `IMG_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
-function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void }) {
+function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onViewFile?: (path: string) => void }) {
   // Replace <<<image_N>>> with inline code `IMG_REF_N` so markdown structure stays intact
-  const processed = snapshots
+  let processed = snapshots
     ? text.replace(/<<<image_(\d+)>>>/g, '`IMG_REF_$1`')
     : text;
+  // Replace `path/to/file.md` with FILE_REF token for clickable file chips
+  processed = processed.replace(/`([^`]*\.md)`/g, '`FILE_REF_$1`');
 
   return (
     <ReactMarkdown
@@ -123,11 +151,26 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot }: { tex
               return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
             }
           }
-          return inline ? (
-            <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>
-          ) : (
-            <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>
-          );
+          // Intercept FILE_REF tokens → render FileRefChip
+          {
+            const str2 = String(children);
+            const fileMatch = str2.match(/^FILE_REF_(.+)$/);
+            if (fileMatch) {
+              return <FileRefChip path={fileMatch[1]} onView={onViewFile} />;
+            }
+          }
+          // Treat short single-line code as inline even if markdown parser says block
+          const text = String(children);
+          const isShort = !text.includes('\n') && text.length < 60;
+          if (inline || isShort) {
+            return <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>;
+          }
+          // Long code blocks: collapsible
+          const lines = text.split('\n');
+          if (lines.length > 3) {
+            return <CollapsibleCode text={text} isPanel={isPanel} />;
+          }
+          return <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>;
         },
         pre: ({ children }) => <pre className="my-0">{children}</pre>,
         ul: ({ children }) => <ul className="list-none pl-3 my-1.5 space-y-0.5">{children}</ul>,
@@ -220,6 +263,7 @@ export default function AgentChatView({
   }, [snapshots]);
 
   const [input, setInput] = useState('');
+  const [viewingFile, setViewingFile] = useState<string | null>(null);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isExiting, setIsExiting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -569,6 +613,7 @@ export default function AgentChatView({
   const isPanel = mode === 'panel';
 
   return (
+    <>
     <div
       className={isPanel
         ? 'flex flex-col h-full'
@@ -789,6 +834,7 @@ export default function AgentChatView({
                           isPanel={isPanel}
                           snapshots={snapshots}
                           onNavigateToSnapshot={onNavigateToSnapshot}
+                          onViewFile={setViewingFile}
                         />
                         {/* Inline video — clickable thumbnail, jumps to GUI */}
                         {(() => {
@@ -1059,5 +1105,7 @@ export default function AgentChatView({
         </div>
       </div>
     </div>
+    {viewingFile && <FileViewer path={viewingFile} onClose={() => setViewingFile(null)} />}
+    </>
   );
 }

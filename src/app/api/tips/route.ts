@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { streamTipsByCategory, ContentBlockedError } from '@/lib/gemini';
-import { getSkillFromAll, loadBuiltInSkills, loadUserSkills } from '@/lib/skill-registry';
+import { getSkill } from '@/lib/workspace';
 
 export const maxDuration = 60;
 
@@ -25,13 +25,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Load skill context when a skill is active (text only — ref images go to preview/generation)
+    // Load skill context via workspace (built-in + user skills unified)
     let skillContext: string | undefined;
     if (skillName) {
-      loadBuiltInSkills();
-      const userSkills = await loadUserSkills(supabase, session.user.id);
-      const skill = getSkillFromAll(skillName, userSkills);
-      if (skill?.makaron.tipsEnabled !== false && skill?.template) {
+      const skill = await getSkill(skillName, supabase, session.user.id);
+      if (skill?.makaron?.tipsEnabled !== false && skill?.template) {
         skillContext = skill.template;
       }
     }
