@@ -83,9 +83,9 @@ function pathToContentType(filePath: string): string {
 
 // ── Supabase operations ────────────────────────────────────────────────────
 
-/** Storage path: workspace/{userId}/{path} */
+/** Storage path: {userId}/workspace/{path} — first folder must be userId for RLS */
 function storagePath(userId: string, path: string): string {
-  return `workspace/${userId}/${path}`;
+  return `${userId}/workspace/${path}`;
 }
 
 /** List files from workspace_files table */
