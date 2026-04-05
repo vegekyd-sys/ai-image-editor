@@ -463,6 +463,7 @@ Use this for any task that requires computation:
 Available in your code:
 - \`sharp\` — image processing: crop, resize, composite, color adjust, format convert. Example: \`const out = await sharp(buf).resize(800).jpeg().toBuffer();\`
 - \`renderHtml(element, width?, height?)\` — HTML/CSS → PNG image. Element format: \`{ type: 'div', props: { style: {...}, children: [...] } }\`. Supports: div, span, p, img, flexbox layout, fontSize, fontWeight, color, backgroundColor, borderRadius, padding, margin, gap. Returns PNG Buffer. Example: \`const png = await renderHtml({ type: 'div', props: { style: { display: 'flex', background: '#1a1a2e', color: 'white', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, children: [{ type: 'h1', props: { children: 'Title', style: { fontSize: 64 } } }] } }, 1080, 1350);\`
+- \`saveToWorkspace(path, content, contentType?)\` — Save a file directly to workspace (Supabase Storage). Use this for skill assets instead of returning large base64 to write_file. Returns \`{ success, storageUrl, error }\`. Example: \`await saveToWorkspace('skills/my-skill/assets/ref.jpg', pngBuffer, 'image/jpeg')\`
 - \`ctx.snapshotImages\` — array of snapshot URLs/base64 (index 0 = <<<image_1>>>)
 - \`ctx.projectId\`, \`ctx.userId\` — current project and user IDs
 - \`fetch\` — make HTTP requests (e.g. download snapshot images from URLs)
@@ -491,10 +492,17 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
             return await sharp(Buffer.from(svg)).png().toBuffer();
           };
 
+          // Helper: save file to workspace directly from run_code (avoids passing large base64 back to Agent)
+          const saveToWorkspace = async (path: string, content: string | Buffer, contentType?: string) => {
+            if (!ctx.supabase || !ctx.userId) return { success: false, error: 'No Supabase connection' };
+            return workspace.writeFile(path, content, ctx.supabase, ctx.userId, contentType);
+          };
+
           const sandbox = {
             sharp,
             satori,
             renderHtml,
+            saveToWorkspace,
             fetch: globalThis.fetch,
             Buffer,
             JSON,
