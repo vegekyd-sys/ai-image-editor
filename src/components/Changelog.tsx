@@ -8,6 +8,29 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-05',
+    en: { title: 'Workspace Agent & Code Execution', items: [
+      'Workspace file system: skills and files stored in Supabase with persistent workspace_files table',
+      'Agent run_code: execute JavaScript with sharp (image processing), satori (HTML→image), JSZip (packaging)',
+      'Agent can create skills with reference images — any great result can become a reusable skill',
+      'saveToWorkspace: upload files directly to Supabase Storage from run_code',
+      'Skill packaging: Agent builds zip files for sharing, with download links in chat',
+      'CUI improvements: clickable file chips (📄), collapsible code blocks, run_code status indicators',
+      'Built-in skills (Makaron Mascot, Photo-to-Video) seeded as global workspace files',
+      'GET/POST /api/skills unified through workspace — user_skills table replaced',
+    ]},
+    zh: { title: 'Workspace Agent & 代码执行', items: [
+      'Workspace 文件系统：skill 和文件存储到 Supabase，workspace_files 表持久化',
+      'Agent run_code：执行 JavaScript，预装 sharp（图片处理）、satori（HTML→图片）、JSZip（打包）',
+      'Agent 可以创建带参考图的 skill — 任何做得好的结果都能固化成可复用 skill',
+      'saveToWorkspace：run_code 中直接上传文件到 Supabase Storage',
+      'Skill 打包：Agent 自动打 zip 包供分享，CUI 中显示下载链接',
+      'CUI 优化：可点击文件标签（📄）、代码块折叠、run_code 状态指示',
+      '内置 skill（Makaron 吉祥物、照片变视频）作为全局 workspace 文件种子',
+      'GET/POST /api/skills 统一通过 workspace — 替换旧 user_skills 表',
+    ]},
+  },
+  {
     date: '2026-04-02',
     en: { title: 'Skill-Driven Tips & Video Editing', items: [
       'Skill tips fusion: active skill injects character/IP context into tips generation',

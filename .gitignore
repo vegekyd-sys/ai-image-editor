@@ -68,3 +68,4 @@ test-kling.mjs
 
 # workspace agent runtime data
 .workspace/
+.claude/worktrees/
