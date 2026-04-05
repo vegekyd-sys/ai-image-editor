@@ -115,9 +115,10 @@ export async function POST(req: NextRequest) {
             return;
           }
 
-          // Load user skills for this session
-          const { loadUserSkills } = await import('@/lib/skill-registry');
-          const userSkills = user ? await loadUserSkills(supabase, user.id) : [];
+          // Load user skills from workspace
+          const { getAllSkills } = await import('@/lib/workspace');
+          const allSkills = await getAllSkills(supabase, user.id);
+          const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
 
           // Normal agent request
           for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id })) {
