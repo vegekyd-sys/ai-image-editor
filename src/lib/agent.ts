@@ -522,19 +522,16 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
             },
           };
 
-          // Wrap code in async function and execute
-          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-          const fn = new AsyncFunction(
-            ...Object.keys(sandbox),
-            `'use strict';\n${code}`
-          );
+          // Execute in vm sandbox — isolates from process.env, require, fs, etc.
+          const vm = require('vm') as typeof import('vm');
+          const context = vm.createContext({
+            ...sandbox,
+            setTimeout, clearTimeout, Promise, // needed for async code
+          });
 
-          // Execute with timeout
-          const timeoutMs = 30_000;
-          const result = await Promise.race([
-            fn(...Object.values(sandbox)),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Code execution timed out (30s)')), timeoutMs)),
-          ]);
+          const wrappedCode = `(async () => { 'use strict';\n${code}\n})()`;
+          const script = new vm.Script(wrappedCode);
+          const result = await script.runInContext(context, { timeout: 30_000 });
 
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
           console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'N/A'}, dataType: ${result?.data ? `${typeof result.data} / ${result.data.constructor?.name} / len=${result.data.length || 'N/A'}` : 'no data'}`);
