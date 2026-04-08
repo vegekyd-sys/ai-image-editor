@@ -79,11 +79,13 @@ export function useProject(projectId: string, userId: string) {
       if (!dp) continue
       try {
         const storagePath = `${userId}/workspace/${dp}`
-        const { data } = await supabase.storage.from('images').download(storagePath)
-        if (data) {
-          const text = await data.text()
-          const design = JSON.parse(text)
-          snap.design = design
+        const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
+        if (urlData?.publicUrl) {
+          const res = await fetch(urlData.publicUrl)
+          if (res.ok) {
+            const design = await res.json()
+            snap.design = design
+          }
         }
       } catch (e) {
         console.warn('Failed to load design from workspace:', dp, e)
