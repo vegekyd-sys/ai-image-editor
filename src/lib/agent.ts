@@ -2,24 +2,7 @@ import { streamText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
-import satori from 'satori';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import type { ModelId } from './models/types';
-
-// Pre-load font for satori (HTML→image rendering)
-let _satoriFont: Buffer | null = null;
-function getSatoriFont(): Buffer {
-  if (!_satoriFont) {
-    try {
-      _satoriFont = readFileSync(join(process.cwd(), 'node_modules/next/dist/compiled/@vercel/og/noto-sans-v27-latin-regular.ttf'));
-    } catch {
-      // Fallback: empty buffer (satori will error on text, but won't crash on import)
-      _satoriFont = Buffer.alloc(0);
-    }
-  }
-  return _satoriFont;
-}
 import { filterAndRemapImages } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
@@ -466,15 +449,14 @@ Path is free — you decide how to organize. Convention: skills/ for abilities, 
       description: `Execute JavaScript code with access to image processing libraries and project context.
 
 Use this for any task that requires computation:
-- Image manipulation: crop, resize, composite, watermark, color analysis (sharp)
-- Layout/design generation: social media covers, before/after comparisons, brand materials (satori — write HTML/CSS, get PNG)
+- Visual output: design mode (React/CSS) — covers text, layout, images, overlays, animations
+- Image utilities: format conversion, metadata reading (sharp)
 - Data processing: extract colors, analyze image stats, batch operations
 - Skill creation with assets: upload images to storage, build SKILL.md, save to database
 
 Available in your code:
-- \`sharp\` — image processing: crop, resize, composite, color adjust, format convert. Example: \`const out = await sharp(buf).resize(800).jpeg().toBuffer();\`
-- \`renderHtml(element, width?, height?)\` — HTML/CSS → PNG image. Element format: \`{ type: 'div', props: { style: {...}, children: [...] } }\`. Supports: div, span, p, img, flexbox layout, fontSize, fontWeight, color, backgroundColor, borderRadius, padding, margin, gap. Returns PNG Buffer. Example: \`const png = await renderHtml({ type: 'div', props: { style: { display: 'flex', background: '#1a1a2e', color: 'white', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, children: [{ type: 'h1', props: { children: 'Title', style: { fontSize: 64 } } }] } }, 1080, 1350);\`
-- \`saveToWorkspace(path, content, contentType?)\` — Save a file directly to workspace (Supabase Storage). Returns \`{ success, storageUrl, error }\`. Use for skill assets, exports, etc. Example: \`await saveToWorkspace('skills/my-skill/assets/ref.jpg', pngBuffer, 'image/jpeg')\`
+- \`sharp\` — image format conversion and metadata. Example: \`const { width, height } = await sharp(images[0]).metadata();\`
+- \`saveToWorkspace(path, content, contentType?)\` — Save a file directly to workspace (Supabase Storage). Returns \`{ success, storageUrl, error }\`. Use for skill assets, exports, etc.
 - \`JSZip\` — Create zip files. Example: \`const zip = new JSZip(); zip.file('SKILL.md', text); zip.file('assets/ref.jpg', imgBuffer); const buf = await zip.generateAsync({type:'nodebuffer'}); const {storageUrl} = await saveToWorkspace('exports/skill.zip', buf, 'application/zip');\`
 - \`images\` — pre-fetched snapshot Buffers from \`image_refs\` parameter. \`images[0]\` = first ref, \`images[1]\` = second, etc. Ready for sharp operations.
 - \`ctx.snapshotImages\` — array of snapshot URLs/base64 (index 0 = <<<image_1>>>)
@@ -512,17 +494,6 @@ Your code must return a value:
           }
 
           // Build sandbox context
-          const fontData = getSatoriFont();
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const renderHtml = async (element: any, width = 800, height = 600) => {
-            const svg = await satori(element, {
-              width,
-              height,
-              fonts: [{ name: 'Noto Sans', data: fontData, weight: 400 as const }],
-            });
-            return await sharp(Buffer.from(svg)).png().toBuffer();
-          };
-
           // Helper: save file to workspace directly from run_code (avoids passing large base64 back to Agent)
           const saveToWorkspace = async (path: string, content: string | Buffer, contentType?: string) => {
             if (!ctx.supabase || !ctx.userId) return { success: false, error: 'No Supabase connection' };
@@ -533,8 +504,6 @@ Your code must return a value:
 
           const sandbox = {
             sharp,
-            satori,
-            renderHtml,
             saveToWorkspace,
             JSZip,
             images: preloadedImages,
