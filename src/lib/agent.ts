@@ -837,6 +837,9 @@ export async function* runMakaronAgent(
         const toolName = (event as any).toolName as string | undefined;
         const toolDuration = toolCallStartTime ? ((Date.now() - toolCallStartTime) / 1000).toFixed(1) : '?';
         console.log(`⏱️ [agent] tool-result "${toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (tool took ${toolDuration}s)`);
+        // Reset status after tool completes so stale status doesn't linger during thinking
+        const isEnLocale = options?.locale === 'en';
+        yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
 
         // Emit image_analyzed event so frontend can save the description
         if (toolName === 'analyze_image') {
