@@ -1,112 +1,73 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill } from 'remotion';
+import React, { useRef, useMemo, useState, useCallback, useEffect } from 'react';
+import { Player, type PlayerRef } from '@remotion/player';
+import { evalRemotionJSX } from '@/lib/evalRemotionJSX';
 import html2canvas from 'html2canvas';
 
 /**
  * Design payload from Agent's run_code.
- * Agent writes React component code as a string, which gets executed
- * inside a Remotion-compatible context with access to all Remotion APIs.
  */
 export interface DesignPayload {
-  code: string;          // React component body (string)
+  code: string;
   width: number;
   height: number;
-  props?: Record<string, unknown>;  // Props passed to the component (snapshot URLs, etc.)
-  animation?: {          // If present, render as video/GIF
+  props?: Record<string, unknown>;
+  animation?: {
     fps: number;
     durationInSeconds: number;
     format?: 'mp4' | 'gif';
   };
 }
 
-/**
- * Create a React component from Agent's code string.
- * Injects all Remotion APIs into the function scope.
- */
-function createComponentFromCode(code: string): React.FC<Record<string, unknown>> {
-  try {
-    // Wrap Agent code in a function that receives Remotion APIs + React
-    const factory = new Function(
-      'React',
-      'useCurrentFrame',
-      'useVideoConfig',
-      'interpolate',
-      'spring',
-      'Sequence',
-      'Series',
-      'Img',
-      'AbsoluteFill',
-      'props',
-      // Return a component function
-      `return function AgentDesign(componentProps) {
-        const props = { ...componentProps, ...arguments[arguments.length - 1] };
-        ${code}
-      }`
-    );
-
-    return factory(
-      React,
-      useCurrentFrame,
-      useVideoConfig,
-      interpolate,
-      spring,
-      Sequence,
-      Series,
-      Img,
-      AbsoluteFill,
-    );
-  } catch (e) {
-    // If code parsing fails, return error component
-    return () => React.createElement('div', {
-      style: { color: 'red', padding: 20, fontFamily: 'monospace', fontSize: 14 },
-    }, `Code error: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
-
 interface RemotionRendererProps {
   design: DesignPayload;
   onComplete: (dataUrl: string) => void;
   onError: (error: string) => void;
+  /** If true, auto-capture screenshot after render (for still designs) */
+  autoCapture?: boolean;
 }
 
 /**
- * Hidden renderer that:
- * 1. Creates React component from Agent's code
- * 2. Renders in a hidden container
- * 3. Waits for fonts to load
- * 4. Captures as image via html2canvas
- * 5. Returns data URL to parent
+ * Renders Agent's React JSX design using @remotion/player.
+ * - Sucrase transpiles JSX → React.createElement
+ * - Player renders the component with full Remotion API support
+ * - For stills: auto-captures screenshot after render
+ * - For animations: shows Player with controls
  */
-export default function RemotionRenderer({ design, onComplete, onError }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onComplete, onError, autoCapture = true }: RemotionRendererProps) {
+  const playerRef = useRef<PlayerRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [Component, setComponent] = useState<React.FC<Record<string, unknown>> | null>(null);
-  const [rendering, setRendering] = useState(false);
+  const [captured, setCaptured] = useState(false);
+  const [compileError, setCompileError] = useState<string | null>(null);
 
-  // Create component from code
-  useEffect(() => {
-    try {
-      const comp = createComponentFromCode(design.code);
-      setComponent(() => comp);
-    } catch (e) {
-      onError(`Failed to create component: ${e instanceof Error ? e.message : String(e)}`);
+  // Compile Agent code → React component
+  const Component = useMemo(() => {
+    setCompileError(null);
+    const comp = evalRemotionJSX(design.code);
+    if (!comp) {
+      setCompileError('Failed to compile design code');
     }
-  }, [design.code, onError]);
+    return comp;
+  }, [design.code]);
 
-  // Capture after render
+  const isStill = !design.animation;
+  const fps = design.animation?.fps || 30;
+  const durationInFrames = design.animation
+    ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
+    : 1;
+
+  // Auto-capture for still designs
   const capture = useCallback(async () => {
-    if (!containerRef.current || rendering) return;
-    setRendering(true);
+    if (captured || !containerRef.current) return;
+    setCaptured(true);
 
     try {
-      // Wait for fonts to load
+      // Wait for fonts
       await document.fonts.ready;
+      // Small delay for layout settle
+      await new Promise(r => setTimeout(r, 800));
 
-      // Small delay for images/layout to settle
-      await new Promise(r => setTimeout(r, 500));
-
-      // Capture
       const canvas = await html2canvas(containerRef.current, {
         width: design.width,
         height: design.height,
@@ -116,44 +77,47 @@ export default function RemotionRenderer({ design, onComplete, onError }: Remoti
         backgroundColor: null,
       });
 
-      const dataUrl = canvas.toDataURL('image/png');
-      onComplete(dataUrl);
+      onComplete(canvas.toDataURL('image/png'));
     } catch (e) {
       onError(`Capture failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setRendering(false);
     }
-  }, [design.width, design.height, onComplete, onError, rendering]);
+  }, [captured, design.width, design.height, onComplete, onError]);
 
-  // Trigger capture after component mounts
+  // Trigger capture for still designs after a delay
   useEffect(() => {
-    if (Component) {
-      // Wait a frame for React to render, then capture
-      const timer = setTimeout(capture, 800);
+    if (isStill && autoCapture && Component && !captured) {
+      const timer = setTimeout(capture, 1500);
       return () => clearTimeout(timer);
     }
-  }, [Component, capture]);
+  }, [isStill, autoCapture, Component, captured, capture]);
+
+  if (compileError) {
+    return (
+      <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 13, background: 'rgba(248,113,113,0.1)', borderRadius: 12, margin: '8px 0' }}>
+        Code error: {compileError}
+      </div>
+    );
+  }
 
   if (!Component) return null;
 
+  // Wrapper component that passes props
+  const WrappedComponent: React.FC = () => <Component {...(design.props || {})} />;
+
   return (
-    <div
-      style={{
-        position: 'fixed',
-        left: -9999,
-        top: -9999,
-        width: design.width,
-        height: design.height,
-        overflow: 'hidden',
-        pointerEvents: 'none',
-      }}
-    >
-      <div
-        ref={containerRef}
-        style={{ width: design.width, height: design.height, position: 'relative' }}
-      >
-        <Component {...(design.props || {})} />
-      </div>
+    <div ref={containerRef} style={{ borderRadius: 12, overflow: 'hidden', margin: '8px 0' }}>
+      <Player
+        ref={playerRef}
+        component={WrappedComponent}
+        compositionWidth={design.width}
+        compositionHeight={design.height}
+        durationInFrames={durationInFrames}
+        fps={fps}
+        style={{ width: '100%', borderRadius: 12 }}
+        controls={!isStill}
+        loop={!isStill}
+        autoPlay={!isStill}
+      />
     </div>
   );
 }
