@@ -86,7 +86,7 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
           defaultProps: {},
         },
         frame: 0,
-        imageFormat: 'png',
+        imageFormat: 'jpeg',
         inputProps: resolvedProps as Record<string, unknown>,
       });
 
