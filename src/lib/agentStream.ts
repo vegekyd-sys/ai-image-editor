@@ -11,6 +11,7 @@ export interface AgentStreamCallbacks {
   onAnimationTask?: (taskId: string, prompt: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onNsfwDetected?: () => void;
+  onDesign?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
 }
@@ -90,6 +91,9 @@ export async function streamAgent(
             break;
           case 'nsfw_detected':
             callbacks.onNsfwDetected?.();
+            break;
+          case 'design':
+            callbacks.onDesign?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } });
             break;
           case 'done':
             receivedDone = true;

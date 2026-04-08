@@ -88,6 +88,7 @@ export type AgentStreamEvent =
   | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
+  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // Agent React design for browser rendering
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -557,6 +558,18 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
             ctx.currentImage = dataUrl;
           };
 
+          // { type: 'design', code: '...' } — React design for browser rendering
+          if (result?.type === 'design' && typeof result.code === 'string') {
+            return {
+              type: 'design' as const,
+              code: result.code,
+              width: result.width || 1080,
+              height: result.height || 1350,
+              props: result.props,
+              animation: result.animation,
+            };
+          }
+
           // Buffer or Uint8Array → treat as image
           const directB64 = toBase64(result);
           if (directB64) {
@@ -803,11 +816,16 @@ export async function* runMakaronAgent(
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
         }
 
-        // run_code image output — push to generatedImages so it appears in CUI
+        // run_code output handling
         if (toolName === 'run_code') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const codeResult = (event as any).result as { type?: string; base64Data?: string; mimeType?: string } | undefined;
-          if (codeResult?.type === 'image' && codeResult.base64Data) {
+          const codeResult = (event as any).result as { type?: string; base64Data?: string; mimeType?: string; code?: string; width?: number; height?: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } } | undefined;
+          // Design output → emit design event for browser rendering
+          if (codeResult?.type === 'design' && codeResult.code) {
+            yield { type: 'design', code: codeResult.code, width: codeResult.width || 1080, height: codeResult.height || 1350, props: codeResult.props, animation: codeResult.animation };
+          }
+          // Image output → push to generatedImages
+          else if (codeResult?.type === 'image' && codeResult.base64Data) {
             const dataUrl = `data:${codeResult.mimeType || 'image/jpeg'};base64,${codeResult.base64Data}`;
             ctx.generatedImages.push(dataUrl);
             ctx.snapshotImages.push(dataUrl);
