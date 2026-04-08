@@ -119,6 +119,7 @@ interface AnimationRendererProps {
 function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: AnimationRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const [posterCaptured, setPosterCaptured] = useState(false);
+  const [resolvedProps, setResolvedProps] = useState<Record<string, unknown> | null>(null);
 
   const Component = useMemo(() => {
     const comp = evalRemotionJSX(design.code);
@@ -131,13 +132,21 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
-  // Capture frame 0 as poster for persistence
+  // Pre-fetch URLs in props → data URLs (for both Player and poster)
   useEffect(() => {
-    if (!Component || posterCaptured) return;
+    if (!Component || resolvedProps) return;
+    (async () => {
+      const props = await resolvePropsUrls(design.props || {});
+      setResolvedProps(props);
+    })();
+  }, [Component, resolvedProps, design.props]);
+
+  // Capture frame 0 as poster for persistence (after props resolved)
+  useEffect(() => {
+    if (!Component || !resolvedProps || posterCaptured) return;
     setPosterCaptured(true);
     (async () => {
       try {
-        const resolvedProps = await resolvePropsUrls(design.props || {});
         const dataUrl = await captureStill(Component, design, resolvedProps);
         console.log('🎨 [design] poster captured');
         onPoster(dataUrl);
@@ -145,9 +154,9 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
         console.warn('🎨 [design] poster capture failed, continuing with Player:', e);
       }
     })();
-  }, [Component, posterCaptured, design, onPoster]);
+  }, [Component, resolvedProps, posterCaptured, design, onPoster]);
 
-  if (!Component) return null;
+  if (!Component || !resolvedProps) return null;
 
   const isFill = mode === 'fill';
 
@@ -156,7 +165,7 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
       <Player
         ref={playerRef}
         component={Component}
-        inputProps={design.props || {}}
+        inputProps={resolvedProps}
         compositionWidth={design.width}
         compositionHeight={design.height}
         durationInFrames={durationInFrames}
