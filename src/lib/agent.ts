@@ -147,12 +147,11 @@ Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_cod
 ### File organization
 - **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
 - **skills/{name}/assets/{filename}** — Reference images for skills.
+- **code/{snapshotId}.json** — Persisted design code (auto-saved). You can \`list_files('code/')\` to find previous designs and \`read_file\` to reuse/modify them.
 
 ### run_code
-Execute JavaScript with access to image processing libraries and snapshot images.
-- \`sharp\` — pixel operations: crop, resize, composite, color adjust, blur, sharpen
-- \`renderHtml(element, width, height)\` — HTML/CSS layout → PNG image. Great for text overlays, social media covers, brand materials, cards, labels.
-When user asks to crop, resize, add text/watermark, make collages, design layouts, or any image manipulation that doesn't need AI generation — use \`run_code\` instead of \`generate_image\`.
+Execute JavaScript with design mode (React/CSS) and image utilities (sharp).
+When user asks for visual output — use \`run_code\` with design mode instead of \`generate_image\`.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills

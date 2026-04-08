@@ -155,7 +155,7 @@ export function useProject(projectId: string, userId: string) {
         // Persist design code to workspace if present
         let designPath: string | null = null
         if (snapshot.design?.code) {
-          designPath = `projects/${projectId}/designs/${snapshot.id}.json`
+          designPath = `code/${snapshot.id}.json`
           const designJson = JSON.stringify({
             code: snapshot.design.code,
             width: snapshot.design.width,
