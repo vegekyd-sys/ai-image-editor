@@ -2,7 +2,7 @@
 
 import React, { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
-import { renderStillOnWeb } from '@remotion/web-renderer';
+import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX } from '@/lib/evalRemotionJSX';
 import type { DesignPayload } from '@/types';
 
@@ -211,4 +211,43 @@ export default function RemotionRenderer({ design, onComplete, onError, mode = '
       mode={mode}
     />
   );
+}
+
+// ─── MP4 Export (callable from Editor) ───────────────────────────────────────
+
+export type { RenderMediaOnWebProgress };
+
+/** Export an animated design as MP4 blob via renderMediaOnWeb (browser-side). */
+export async function exportDesignVideo(
+  design: DesignPayload,
+  onProgress?: (progress: RenderMediaOnWebProgress) => void,
+): Promise<Blob> {
+  const Component = evalRemotionJSX(design.code);
+  if (!Component) throw new Error('Failed to compile design code');
+
+  const fps = design.animation?.fps || 30;
+  const durationInFrames = design.animation
+    ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
+    : 1;
+
+  const resolvedProps = await resolvePropsUrls(design.props || {});
+
+  const result = await renderMediaOnWeb({
+    composition: {
+      component: Component,
+      durationInFrames,
+      fps,
+      width: design.width,
+      height: design.height,
+      id: 'agent-design-export',
+      calculateMetadata: null,
+      defaultProps: {},
+    },
+    inputProps: resolvedProps as Record<string, unknown>,
+    videoCodec: 'h264',
+    container: 'mp4',
+    onProgress: onProgress || null,
+  });
+
+  return result.getBlob();
 }

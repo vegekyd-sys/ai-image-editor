@@ -2334,6 +2334,39 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       return;
     }
 
+    // Animated design → export as MP4 via renderMediaOnWeb
+    const snapIdx = snapFromTimeline(viewIndex, draftParentIndexRef.current);
+    const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
+    if (currentSnap?.design?.animation) {
+      setIsSaving(true);
+      try {
+        const { exportDesignVideo } = await import('@/components/RemotionRenderer');
+        const blob = await exportDesignVideo(currentSnap.design, (p) => {
+          setAgentStatus(`Exporting video... ${Math.round(p.progress * 100)}%`);
+        });
+        const filename = `makaron-design-${Date.now()}.mp4`;
+        const file = new File([blob], filename, { type: 'video/mp4' });
+        if (navigator.share && navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+          await navigator.share({ files: [file] });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          link.click();
+          URL.revokeObjectURL(url);
+        }
+        setIsSaving(false);
+        setAgentStatus(t('editor.done'));
+        showSaveToast();
+      } catch (e) {
+        console.error('MP4 export failed:', e);
+        setIsSaving(false);
+        setAgentStatus('Export failed');
+      }
+      return;
+    }
+
     // Image download
     const img = timeline[viewIndex];
     if (!img) return;
