@@ -98,6 +98,7 @@ export interface DbSnapshot {
   created_at: string;
   description?: string;
   type?: string;
+  design_path?: string;
 }
 
 export interface DbMessage {
