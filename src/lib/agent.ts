@@ -559,13 +559,20 @@ Your code must return a value:
 
           // { type: 'design', code: '...' } — Store for event loop to emit as SSE
           if (result?.type === 'design' && typeof result.code === 'string') {
-            // Store in context — the event loop will emit this as a 'design' SSE event
+            // Normalize animation struct — agent may return { fps, duration } or { animation: { fps, durationInSeconds } }
+            let animation = result.animation;
+            if (!animation && (result.fps || result.duration || result.durationInSeconds)) {
+              animation = {
+                fps: result.fps || 30,
+                durationInSeconds: result.durationInSeconds || result.duration || 5,
+              };
+            }
             (ctx as any).__pendingDesign = {
               code: result.code,
               width: result.width || 1080,
               height: result.height || 1350,
               props: result.props,
-              animation: result.animation,
+              animation,
             };
             return { type: 'text' as const, content: 'Design ready — rendering in browser.' };
           }
