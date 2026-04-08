@@ -51,10 +51,13 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
     setCaptured(true);
 
     try {
-      // Wait for fonts
-      await document.fonts.ready;
-      // Small delay for layout settle
-      await new Promise(r => setTimeout(r, 800));
+      // Wait for fonts OR 2s timeout (Google Fonts may be blocked in some regions)
+      await Promise.race([
+        document.fonts.ready,
+        new Promise(r => setTimeout(r, 2000)),
+      ]);
+      // Brief layout settle
+      await new Promise(r => setTimeout(r, 300));
 
       const canvas = await html2canvas(containerRef.current, {
         width: design.width,
@@ -71,10 +74,10 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
     }
   }, [captured, design.width, design.height, onComplete, onError]);
 
-  // Trigger capture for still designs after a delay
+  // Trigger capture for still designs after a short delay
   useEffect(() => {
     if (isStill && autoCapture && Component && !captured) {
-      const timer = setTimeout(capture, 1500);
+      const timer = setTimeout(capture, 500);
       return () => clearTimeout(timer);
     }
   }, [isStill, autoCapture, Component, captured, capture]);

@@ -11,9 +11,9 @@ import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
-import dynamic from 'next/dynamic';
-
-const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
+// TODO: Re-enable for animated Remotion designs (video export)
+// import dynamic from 'next/dynamic';
+// const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -911,7 +911,7 @@ export default function AgentChatView({
                       <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
 
-                    {/* Inline Remotion Player for design payloads */}
+                    {/* TODO: Re-enable for animated Remotion designs (video export)
                     {msg.design && (
                       <div className="mt-3" style={{ maxWidth: 308 }}>
                         <RemotionRenderer
@@ -921,7 +921,7 @@ export default function AgentChatView({
                           onError={(err) => console.error('[design inline] render error:', err)}
                         />
                       </div>
-                    )}
+                    )} */}
                   </div>
 
                 </div>

@@ -191,6 +191,7 @@ export default function Editor({
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
+  const pendingDesignMsgIdRef = useRef<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
@@ -1519,11 +1520,8 @@ export default function Editor({
           onDesign: (design) => {
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
             setAgentStatus('Rendering design...');
-            // Attach design to current assistant message for inline CUI rendering
-            const id = currentMsgId;
-            setMessages((prev) => prev.map((m) =>
-              m.id === id ? { ...m, design } : m
-            ));
+            // Store currentMsgId so onComplete can attach the screenshot to the right message
+            pendingDesignMsgIdRef.current = currentMsgId;
             setPendingDesign(design);
           },
           onDone: () => {
@@ -3237,11 +3235,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           onComplete={(dataUrl) => {
             console.log('🎨 [design] capture complete');
             const snapId = generateId();
+            const msgId = pendingDesignMsgIdRef.current;
             const newSnapshot: Snapshot = {
               id: snapId,
               image: dataUrl,
               tips: [],
-              messageId: '',
+              messageId: msgId,
               description: '[run_code design]',
             };
             setSnapshots(prev => [...prev, newSnapshot]);
@@ -3250,6 +3249,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             });
             cacheImage(`snap:${snapId}`, dataUrl);
             fetchTipsForSnapshot(snapId, dataUrl, 'none');
+            // Attach screenshot to CUI message as inline image (same as onImage)
+            setMessages((prev) => prev.map((m) =>
+              m.id === msgId ? { ...m, image: dataUrl } : m
+            ));
             setAgentStatus('Design rendered ✅');
             setPendingDesign(null);
           }}
