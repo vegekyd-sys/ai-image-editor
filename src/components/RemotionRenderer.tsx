@@ -1,163 +1,205 @@
 'use client';
 
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useMemo, useState, useEffect, useCallback } from 'react';
+import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb } from '@remotion/web-renderer';
 import { evalRemotionJSX } from '@/lib/evalRemotionJSX';
 import type { DesignPayload } from '@/types';
 
 export type { DesignPayload };
 
-interface RemotionRendererProps {
-  design: DesignPayload;
-  /** Called with base64 data URL when screenshot capture completes */
-  onComplete: (dataUrl: string) => void;
-  onError: (error: string) => void;
-  /** If true, auto-capture screenshot after compile (default true for stills) */
-  autoCapture?: boolean;
+/** Helper: resolve external URLs in props to data URLs (cross-origin workaround for renderStillOnWeb) */
+async function resolvePropsUrls(props: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const resolved = { ...props };
+  for (const [key, val] of Object.entries(resolved)) {
+    if (typeof val === 'string' && val.startsWith('http') && /\.(jpg|jpeg|png|webp|gif)/i.test(val)) {
+      try {
+        const res = await fetch(val);
+        const blob = await res.blob();
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+        resolved[key] = dataUrl;
+        console.log(`🎨 [design] resolved prop "${key}" URL → dataUrl (${(blob.size / 1024).toFixed(0)}KB)`);
+      } catch (e) {
+        console.warn(`🎨 [design] failed to resolve prop "${key}" URL:`, e);
+      }
+    }
+  }
+  return resolved;
 }
 
-/**
- * Renders Agent's React JSX design and captures a screenshot via renderStillOnWeb.
- * Uses Remotion's built-in browser renderer (no html2canvas).
- */
-export default function RemotionRenderer({ design, onComplete, onError, autoCapture = true }: RemotionRendererProps) {
-  const [compileError, setCompileError] = useState<string | null>(null);
-  const [capturing, setCapturing] = useState(false);
-
-  const Component = useMemo(() => {
-    setCompileError(null);
-    const comp = evalRemotionJSX(design.code);
-    if (!comp) {
-      setCompileError('Failed to compile design code');
-    }
-    return comp;
-  }, [design.code]);
-
-  const isStill = !design.animation;
+/** Helper: capture frame 0 as JPEG data URL via renderStillOnWeb */
+async function captureStill(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Component: React.ComponentType<any>,
+  design: DesignPayload,
+  resolvedProps: Record<string, unknown>,
+): Promise<string> {
   const fps = design.animation?.fps || 30;
   const durationInFrames = design.animation
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
-  // Report compile errors
-  useEffect(() => {
-    if (compileError) {
-      onError(compileError);
-    }
-  }, [compileError, onError]);
+  const result = await renderStillOnWeb({
+    composition: {
+      component: Component,
+      durationInFrames,
+      fps,
+      width: design.width,
+      height: design.height,
+      id: 'agent-design',
+      calculateMetadata: null,
+      defaultProps: {},
+    },
+    frame: 0,
+    imageFormat: 'jpeg',
+    inputProps: resolvedProps,
+  });
 
-  // Capture screenshot using renderStillOnWeb
+  return new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.readAsDataURL(result.blob);
+  });
+}
+
+// ─── Still-only renderer (offscreen capture) ──────────────────────────────────
+
+interface StillRendererProps {
+  design: DesignPayload;
+  onComplete: (dataUrl: string) => void;
+  onError: (error: string) => void;
+}
+
+function StillRenderer({ design, onComplete, onError }: StillRendererProps) {
+  const [capturing, setCapturing] = useState(false);
+
+  const Component = useMemo(() => {
+    const comp = evalRemotionJSX(design.code);
+    if (!comp) onError('Failed to compile design code');
+    return comp;
+  }, [design.code, onError]);
+
   const capture = useCallback(async () => {
     if (!Component || capturing) return;
     setCapturing(true);
-
     try {
       console.log('🎨 [design] renderStillOnWeb starting...');
-
-      // Pre-fetch external URLs in props to data URLs — renderStillOnWeb can't load cross-origin images
-      const resolvedProps = { ...(design.props || {}) } as Record<string, unknown>;
-      for (const [key, val] of Object.entries(resolvedProps)) {
-        if (typeof val === 'string' && val.startsWith('http') && /\.(jpg|jpeg|png|webp|gif)/i.test(val)) {
-          try {
-            const res = await fetch(val);
-            const blob = await res.blob();
-            const dataUrl = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
-            resolvedProps[key] = dataUrl;
-            console.log(`🎨 [design] resolved prop "${key}" URL → dataUrl (${(blob.size / 1024).toFixed(0)}KB)`);
-          } catch (e) {
-            console.warn(`🎨 [design] failed to resolve prop "${key}" URL:`, e);
-          }
-        }
-      }
-
-      const result = await renderStillOnWeb({
-        composition: {
-          component: Component,
-          durationInFrames,
-          fps,
-          width: design.width,
-          height: design.height,
-          id: 'agent-design',
-          calculateMetadata: null,
-          defaultProps: {},
-        },
-        frame: 0,
-        imageFormat: 'jpeg',
-        inputProps: resolvedProps as Record<string, unknown>,
-      });
-
-      const blob = result.blob;
-      console.log(`🎨 [design] renderStillOnWeb done, blob ${(blob.size / 1024).toFixed(0)}KB`);
-
-      // Convert blob to base64 data URL
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        onComplete(dataUrl);
-      };
-      reader.readAsDataURL(blob);
+      const resolvedProps = await resolvePropsUrls(design.props || {});
+      const dataUrl = await captureStill(Component, design, resolvedProps);
+      console.log('🎨 [design] renderStillOnWeb done');
+      onComplete(dataUrl);
     } catch (e) {
       console.error('🎨 [design] renderStillOnWeb failed:', e);
       onError(`Capture failed: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }, [Component, capturing, design, durationInFrames, fps, onComplete, onError]);
+  }, [Component, capturing, design, onComplete, onError]);
 
-  // Auto-capture for still designs
   useEffect(() => {
-    if (isStill && autoCapture && Component && !capturing) {
-      capture();
-    }
-  }, [isStill, autoCapture, Component, capturing, capture]);
+    if (Component && !capturing) capture();
+  }, [Component, capturing, capture]);
 
-  // No visible output — renderStillOnWeb works offscreen
-  // TODO: For animated designs, render Player here (future video export)
-  return null;
+  return null; // offscreen
 }
 
-// --- PRESERVED FOR FUTURE VIDEO EXPORT ---
-// import { Player, type PlayerRef } from '@remotion/player';
-//
-// /** Live Player mode — renders design inline without screenshot */
-// export function RemotionPlayerLive({ design, onError, onReady, mode = 'inline' }: {
-//   design: DesignPayload;
-//   onError?: (error: string) => void;
-//   onReady?: () => void;
-//   mode?: 'fill' | 'inline';
-// }) {
-//   const playerRef = useRef<PlayerRef>(null);
-//   const [compileError, setCompileError] = useState<string | null>(null);
-//   const Component = useMemo(() => {
-//     setCompileError(null);
-//     const comp = evalRemotionJSX(design.code);
-//     if (!comp) setCompileError('Failed to compile design code');
-//     return comp;
-//   }, [design.code]);
-//   const isStill = !design.animation;
-//   const fps = design.animation?.fps || 30;
-//   const durationInFrames = design.animation
-//     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
-//     : 1;
-//   useEffect(() => { if (compileError && onError) onError(compileError); }, [compileError, onError]);
-//   useEffect(() => { if (Component && onReady) onReady(); }, [Component, onReady]);
-//   if (!Component) return null;
-//   const isFill = mode === 'fill';
-//   return (
-//     <div style={isFill ? { width: '100%', height: '100%' } : { borderRadius: 12, overflow: 'hidden', margin: '8px 0' }}>
-//       <Player ref={playerRef} component={Component} inputProps={design.props || {}}
-//         compositionWidth={design.width} compositionHeight={design.height}
-//         durationInFrames={durationInFrames} fps={fps}
-//         style={isFill ? { width: '100%', height: '100%' } : { width: '100%', borderRadius: 12 }}
-//         controls={!isStill} loop={!isStill} autoPlay={!isStill} acknowledgeRemotionLicense
-//         errorFallback={({ error }) => (
-//           <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12 }}>
-//             Render error: {error.message}
-//           </div>
-//         )}
-//       />
-//     </div>
-//   );
-// }
+// ─── Animation renderer (Player + poster capture) ────────────────────────────
+
+interface AnimationRendererProps {
+  design: DesignPayload;
+  /** Called with poster image (frame 0) for persistence */
+  onPoster: (dataUrl: string) => void;
+  onError: (error: string) => void;
+  /** Display mode: 'fill' for Canvas, 'inline' for CUI */
+  mode?: 'fill' | 'inline';
+}
+
+function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: AnimationRendererProps) {
+  const playerRef = useRef<PlayerRef>(null);
+  const [posterCaptured, setPosterCaptured] = useState(false);
+
+  const Component = useMemo(() => {
+    const comp = evalRemotionJSX(design.code);
+    if (!comp) onError('Failed to compile design code');
+    return comp;
+  }, [design.code, onError]);
+
+  const fps = design.animation?.fps || 30;
+  const durationInFrames = design.animation
+    ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
+    : 1;
+
+  // Capture frame 0 as poster for persistence
+  useEffect(() => {
+    if (!Component || posterCaptured) return;
+    setPosterCaptured(true);
+    (async () => {
+      try {
+        const resolvedProps = await resolvePropsUrls(design.props || {});
+        const dataUrl = await captureStill(Component, design, resolvedProps);
+        console.log('🎨 [design] poster captured');
+        onPoster(dataUrl);
+      } catch (e) {
+        console.warn('🎨 [design] poster capture failed, continuing with Player:', e);
+      }
+    })();
+  }, [Component, posterCaptured, design, onPoster]);
+
+  if (!Component) return null;
+
+  const isFill = mode === 'fill';
+
+  return (
+    <div style={isFill ? { width: '100%', height: '100%' } : { borderRadius: 12, overflow: 'hidden', margin: '8px 0' }}>
+      <Player
+        ref={playerRef}
+        component={Component}
+        inputProps={design.props || {}}
+        compositionWidth={design.width}
+        compositionHeight={design.height}
+        durationInFrames={durationInFrames}
+        fps={fps}
+        style={isFill ? { width: '100%', height: '100%' } : { width: '100%', borderRadius: 12 }}
+        controls
+        loop
+        autoPlay
+        acknowledgeRemotionLicense
+        errorFallback={({ error }) => (
+          <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
+            Render error: {error.message}
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
+// ─── Main export: routes to Still or Animation ────────────────────────────────
+
+interface RemotionRendererProps {
+  design: DesignPayload;
+  /** Called with image data URL (still: screenshot, animation: poster frame 0) */
+  onComplete: (dataUrl: string) => void;
+  onError: (error: string) => void;
+  /** Display mode for animation Player */
+  mode?: 'fill' | 'inline';
+}
+
+export default function RemotionRenderer({ design, onComplete, onError, mode = 'inline' }: RemotionRendererProps) {
+  const isStill = !design.animation;
+
+  if (isStill) {
+    return <StillRenderer design={design} onComplete={onComplete} onError={onError} />;
+  }
+
+  return (
+    <AnimationRenderer
+      design={design}
+      onPoster={onComplete}
+      onError={onError}
+      mode={mode}
+    />
+  );
+}

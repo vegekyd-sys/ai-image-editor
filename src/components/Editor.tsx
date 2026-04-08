@@ -332,12 +332,12 @@ export default function Editor({
     snapshots.filter(s => s.type === 'reference').length,
   [snapshots]);
 
-  // TODO: Re-enable for animated designs (video export)
-  // const designs = useMemo(() => {
-  //   const map = new Map<number, import('@/types').DesignPayload>();
-  //   snapshots.forEach((s, i) => { if (s.design) map.set(i, s.design); });
-  //   return map;
-  // }, [snapshots]);
+  // Map timeline index → DesignPayload for animated designs (rendered via Player)
+  const animatedDesigns = useMemo(() => {
+    const map = new Map<number, import('@/types').DesignPayload>();
+    snapshots.forEach((s, i) => { if (s.design?.animation) map.set(i, s.design); });
+    return map;
+  }, [snapshots]);
 
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
@@ -2603,7 +2603,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}
                 referenceCount={referenceCount}
-                // designs={designs}  // TODO: re-enable for animated designs
+                animatedDesigns={animatedDesigns}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
                 isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
