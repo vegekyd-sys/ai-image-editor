@@ -9,6 +9,8 @@ import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
+import dynamic from 'next/dynamic';
+const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 // Semaphore to limit concurrent /api/tips requests across all snapshots.
 // Single image: 4 categories run in parallel (fine). Multi-image: 10 images × 4 = 40 concurrent → rate limit risk.
 // With maxConcurrent=4, multi-image tips are effectively serialized per snapshot.
@@ -183,10 +185,12 @@ export default function Editor({
   const [draftFullLoaded, setDraftFullLoaded] = useState(false);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
+  const [pendingDesign, setPendingDesign] = useState<DesignPayload | null>(null);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
+  const pendingDesignMsgIdRef = useRef<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
@@ -328,14 +332,12 @@ export default function Editor({
     snapshots.filter(s => s.type === 'reference').length,
   [snapshots]);
 
-  // Map timeline index → DesignPayload for live Remotion designs
-  const designs = useMemo(() => {
-    const map = new Map<number, import('@/types').DesignPayload>();
-    snapshots.forEach((s, i) => {
-      if (s.design) map.set(i, s.design);
-    });
-    return map;
-  }, [snapshots]);
+  // TODO: Re-enable for animated designs (video export)
+  // const designs = useMemo(() => {
+  //   const map = new Map<number, import('@/types').DesignPayload>();
+  //   snapshots.forEach((s, i) => { if (s.design) map.set(i, s.design); });
+  //   return map;
+  // }, [snapshots]);
 
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
@@ -1530,23 +1532,9 @@ export default function Editor({
           },
           onDesign: (design) => {
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
-            // Create snapshot with live design (no screenshot capture)
-            const snapId = generateId();
-            const msgId = currentMsgId;
-            const newSnapshot: Snapshot = {
-              id: snapId,
-              image: '', // no screenshot — design rendered live via Player
-              tips: [],
-              messageId: msgId,
-              description: '[run_code design]',
-              design,
-            };
-            setSnapshots(prev => [...prev, newSnapshot]);
-            // Attach design to CUI message
-            setMessages((prev) => prev.map((m) =>
-              m.id === msgId ? { ...m, design } : m
-            ));
-            setAgentStatus('Design rendered ✅');
+            setAgentStatus('Rendering design...');
+            pendingDesignMsgIdRef.current = currentMsgId;
+            setPendingDesign(design);
           },
           onDone: () => {
             _flushAnalyzedDesc(); // save any pending analyze_image description
@@ -2615,7 +2603,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}
                 referenceCount={referenceCount}
-                designs={designs}
+                // designs={designs}  // TODO: re-enable for animated designs
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
                 isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
@@ -3253,7 +3241,47 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
         }
       `}</style>
-      {/* pendingDesign is now handled directly in onDesign callback */}
+      {/* Remotion renderer — captures design as screenshot via renderStillOnWeb */}
+      {pendingDesign && (
+        <RemotionRenderer
+          design={pendingDesign}
+          onComplete={(dataUrl) => {
+            console.log('🎨 [design] capture complete');
+            const snapId = generateId();
+            const msgId = pendingDesignMsgIdRef.current;
+            const newSnapshot: Snapshot = {
+              id: snapId,
+              image: dataUrl,
+              tips: [],
+              messageId: msgId,
+              description: '[run_code design]',
+              design: pendingDesign,
+            };
+            setSnapshots(prev => [...prev, newSnapshot]);
+            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
+              setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+            });
+            cacheImage(`snap:${snapId}`, dataUrl);
+            fetchTipsForSnapshot(snapId, dataUrl, 'none');
+            setMessages((prev) => prev.map((m) =>
+              m.id === msgId ? { ...m, image: dataUrl } : m
+            ));
+            setAgentStatus('Design rendered ✅');
+            setPendingDesign(null);
+          }}
+          onError={(error) => {
+            console.error('🎨 [design] render error:', error);
+            setPendingDesign(null);
+            const msgId = pendingDesignMsgIdRef.current;
+            if (msgId) {
+              setMessages((prev) => prev.map((m) =>
+                m.id === msgId ? { ...m, content: (m.content || '') + `\n\n⚠️ Design render failed: ${error}` } : m
+              ));
+            }
+            setAgentStatus('Design failed');
+          }}
+        />
+      )}
     </div>
   );
 }

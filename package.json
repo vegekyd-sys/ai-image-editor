@@ -20,6 +20,7 @@
     "@remotion/media": "^4.0.446",
     "@remotion/media-utils": "^4.0.446",
     "@remotion/player": "^4.0.446",
+    "@remotion/web-renderer": "^4.0.446",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.96.0",
     "@tensorflow-models/blazeface": "^0.1.0",
