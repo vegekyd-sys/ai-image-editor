@@ -111,7 +111,8 @@ function validateImageIndex(snapshotImages: string[], index: number): { idx: num
   return { idx };
 }
 
-/** Fetch an image source (URL or base64 data URL) into a Buffer, with optional compression. */
+/** Fetch an image source (URL or base64 data URL) into a JPEG Buffer.
+ *  Always normalizes to JPEG to avoid MIME type mismatches (e.g. PNG labeled as JPEG). */
 async function fetchImageBuffer(
   source: string,
   opts?: { maxBytes?: number; maxPx?: number; quality?: number },
@@ -122,13 +123,13 @@ async function fetchImageBuffer(
   } else {
     buf = Buffer.from(source.replace(/^data:image\/\w+;base64,/, ''), 'base64');
   }
-  const maxBytes = opts?.maxBytes ?? 2_000_000;
-  if (buf.length > maxBytes) {
-    buf = Buffer.from(await sharp(buf)
-      .resize(opts?.maxPx ?? 2048, opts?.maxPx ?? 2048, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: opts?.quality ?? 90 })
-      .toBuffer());
-  }
+  // Always convert to JPEG — ensures consistent MIME type for Bedrock vision
+  const maxPx = opts?.maxPx ?? 2048;
+  const quality = opts?.quality ?? 90;
+  buf = Buffer.from(await sharp(buf)
+    .resize(maxPx, maxPx, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality })
+    .toBuffer());
   return buf;
 }
 

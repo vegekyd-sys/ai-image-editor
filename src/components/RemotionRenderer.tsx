@@ -53,6 +53,27 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
 
     try {
       console.log('🎨 [design] renderStillOnWeb starting...');
+
+      // Pre-fetch external URLs in props to data URLs — renderStillOnWeb can't load cross-origin images
+      const resolvedProps = { ...(design.props || {}) } as Record<string, unknown>;
+      for (const [key, val] of Object.entries(resolvedProps)) {
+        if (typeof val === 'string' && val.startsWith('http') && /\.(jpg|jpeg|png|webp|gif)/i.test(val)) {
+          try {
+            const res = await fetch(val);
+            const blob = await res.blob();
+            const dataUrl = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+            resolvedProps[key] = dataUrl;
+            console.log(`🎨 [design] resolved prop "${key}" URL → dataUrl (${(blob.size / 1024).toFixed(0)}KB)`);
+          } catch (e) {
+            console.warn(`🎨 [design] failed to resolve prop "${key}" URL:`, e);
+          }
+        }
+      }
+
       const result = await renderStillOnWeb({
         composition: {
           component: Component,
@@ -66,7 +87,7 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
         },
         frame: 0,
         imageFormat: 'png',
-        inputProps: (design.props || {}) as Record<string, unknown>,
+        inputProps: resolvedProps as Record<string, unknown>,
       });
 
       const blob = result.blob;
