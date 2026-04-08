@@ -98,13 +98,12 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
     }
   }, [isStill, autoCapture, Component, captured, capture]);
 
-  if (compileError) {
-    return (
-      <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 13, background: 'rgba(248,113,113,0.1)', borderRadius: 12, margin: '8px 0' }}>
-        Code error: {compileError}
-      </div>
-    );
-  }
+  // Report compile errors via onError callback (shown in CUI, not as a visible element)
+  useEffect(() => {
+    if (compileError) {
+      onError(compileError);
+    }
+  }, [compileError, onError]);
 
   if (!Component) return null;
 

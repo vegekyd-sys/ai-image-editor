@@ -3258,8 +3258,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           }}
           onError={(error) => {
             console.error('🎨 [design] render error:', error);
-            setAgentStatus(`Design error: ${error}`);
             setPendingDesign(null);
+            // Show error in CUI as assistant message
+            const msgId = pendingDesignMsgIdRef.current;
+            if (msgId) {
+              setMessages((prev) => prev.map((m) =>
+                m.id === msgId ? { ...m, content: (m.content || '') + `\n\n⚠️ Design render failed: ${error}` } : m
+              ));
+            }
+            setAgentStatus('Design failed');
           }}
         />
       )}
