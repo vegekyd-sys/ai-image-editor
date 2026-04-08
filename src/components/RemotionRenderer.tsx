@@ -75,7 +75,7 @@ interface StillRendererProps {
 }
 
 function StillRenderer({ design, onComplete, onError }: StillRendererProps) {
-  const [capturing, setCapturing] = useState(false);
+  const capturingRef = useRef(false);
 
   const Component = useMemo(() => {
     const comp = evalRemotionJSX(design.code);
@@ -83,24 +83,23 @@ function StillRenderer({ design, onComplete, onError }: StillRendererProps) {
     return comp;
   }, [design.code, onError]);
 
-  const capture = useCallback(async () => {
-    if (!Component || capturing) return;
-    setCapturing(true);
-    try {
-      console.log('🎨 [design] renderStillOnWeb starting...');
-      const resolvedProps = await resolvePropsUrls(design.props || {});
-      const dataUrl = await captureStill(Component, design, resolvedProps);
-      console.log('🎨 [design] renderStillOnWeb done');
-      onComplete(dataUrl);
-    } catch (e) {
-      console.error('🎨 [design] renderStillOnWeb failed:', e);
-      onError(`Capture failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }, [Component, capturing, design, onComplete, onError]);
-
   useEffect(() => {
-    if (Component && !capturing) capture();
-  }, [Component, capturing, capture]);
+    if (!Component || capturingRef.current) return;
+    capturingRef.current = true;
+    (async () => {
+      try {
+        console.log('🎨 [design] renderStillOnWeb starting...');
+        const resolvedProps = await resolvePropsUrls(design.props || {});
+        const dataUrl = await captureStill(Component, design, resolvedProps);
+        console.log('🎨 [design] renderStillOnWeb done');
+        onComplete(dataUrl);
+      } catch (e) {
+        console.error('🎨 [design] renderStillOnWeb failed:', e);
+        onError(`Capture failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Component]);
 
   return null; // offscreen
 }
@@ -118,7 +117,8 @@ interface AnimationRendererProps {
 
 function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: AnimationRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
-  const [posterCaptured, setPosterCaptured] = useState(false);
+  const posterCapturedRef = useRef(false);
+  const propsResolvedRef = useRef(false);
   const [resolvedProps, setResolvedProps] = useState<Record<string, unknown> | null>(null);
 
   const Component = useMemo(() => {
@@ -134,17 +134,19 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
 
   // Pre-fetch URLs in props → data URLs (for both Player and poster)
   useEffect(() => {
-    if (!Component || resolvedProps) return;
+    if (!Component || propsResolvedRef.current) return;
+    propsResolvedRef.current = true;
     (async () => {
       const props = await resolvePropsUrls(design.props || {});
       setResolvedProps(props);
     })();
-  }, [Component, resolvedProps, design.props]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Component]);
 
   // Capture frame 0 as poster for persistence (after props resolved)
   useEffect(() => {
-    if (!Component || !resolvedProps || posterCaptured) return;
-    setPosterCaptured(true);
+    if (!Component || !resolvedProps || posterCapturedRef.current) return;
+    posterCapturedRef.current = true;
     (async () => {
       try {
         const dataUrl = await captureStill(Component, design, resolvedProps);
@@ -154,7 +156,8 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
         console.warn('🎨 [design] poster capture failed, continuing with Player:', e);
       }
     })();
-  }, [Component, resolvedProps, posterCaptured, design, onPoster]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Component, resolvedProps]);
 
   if (!Component || !resolvedProps) return null;
 
