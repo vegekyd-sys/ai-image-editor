@@ -3279,9 +3279,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         <RemotionRenderer
           design={pendingDesign}
           onComplete={(dataUrl) => {
+            // Guard against double-invoke (React StrictMode or async race)
+            const msgId = pendingDesignMsgIdRef.current;
+            if (!msgId) return;
+            pendingDesignMsgIdRef.current = '';
             console.log('🎨 [design] capture complete');
             const snapId = generateId();
-            const msgId = pendingDesignMsgIdRef.current;
             const currentDesign = pendingDesign;
             const newSnapshot: Snapshot = {
               id: snapId,
