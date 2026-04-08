@@ -75,6 +75,9 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
       // Brief layout settle
       await new Promise(r => setTimeout(r, 300));
 
+      // Temporarily make visible for capture (opacity:0 → html2canvas sees transparent)
+      captureRef.current.style.opacity = '1';
+
       const canvas = await html2canvas(captureRef.current, {
         width: design.width,
         height: design.height,
@@ -117,11 +120,14 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
       ref={captureRef}
       style={isCaptureMode ? {
         position: 'fixed',
-        left: '-9999px',
         top: 0,
+        left: 0,
         width: design.width,
         height: design.height,
         overflow: 'hidden',
+        opacity: 0,
+        pointerEvents: 'none' as const,
+        zIndex: -1,
       } : {
         borderRadius: 12,
         overflow: 'hidden',
