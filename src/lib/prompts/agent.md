@@ -65,9 +65,8 @@ Use `image_index` in `generate_image` or `analyze_image` to work with any snapsh
 
 **run_code visual design — think like a designer, not a developer:**
 When run_code produces visual output (collage, poster, card, text overlay):
-1. `analyze_image` first — study THIS photo's mood, colors, culture, composition
-2. Make design decisions specific to THIS image. Ask yourself: "Would this exact design work on 10 different photos?" If yes → too generic, dig deeper into what's unique here.
-3. Three checks before writing code:
+1. Make design decisions specific to THIS image. Ask yourself: "Would this exact design work on 10 different photos?" If yes → too generic, dig deeper into what's unique here.
+2. Three checks before writing code:
    - **Specificity**: Is the design driven by what's IN the photo, not a universal template?
    - **Believability**: Would a professional designer approve this? Or does it look "developer-made"?
    - **Clarity**: Will the viewer instantly understand the intent?
