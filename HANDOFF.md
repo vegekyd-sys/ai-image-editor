@@ -1,84 +1,78 @@
-# Handoff: Remotion Design 图片导出
+# Handoff: Remotion 渲染引擎 + Workspace Agent
 
 ## 当前分支
-`worktree-workspace-agent`，所有代码已 commit（`de19293`）。
+`worktree-workspace-agent`，最新 commit `08b2fa2`
 
-## 当前状态
+## 2026-04-09 更新总结
 
 ### 已完成
-1. **evalRemotionJSX 简化** — Agent 写完整 `function Design(props) { return ... }`，去掉了所有 auto-return regex
-2. **agent.ts tool description** — 更新为要求 agent 写完整函数 + 示例
-3. **html2canvas 截图位置** — 从 `left:-9999px`（黑屏）改为 `opacity:0`（浏览器正常渲染），截图前临时 `opacity:1`
-4. **CUI inline** — 截图作为 `msg.image` 显示（不用 Remotion Player）
-5. **Canvas** — 截图作为普通 snapshot 图片显示
-6. **DesignPayload 类型** — 共享在 `src/types/index.ts`
-7. **错误处理** — 编译失败通过 onError 显示在 CUI 消息里（不是浮动 div）
 
-### 测试结果
-| 测试 | 结果 |
+1. **renderStillOnWeb 图片截图**
+   - 替代 html2canvas，用 Remotion 官方浏览器渲染器
+   - 输出 JPEG，可持久化、生 tips、刷新不丢失
+   - 跨域图片自动预取为 data URL（`resolvePropsUrls`）
+
+2. **Remotion Player 动画播放**
+   - `design.animation` 存在时渲染 Player（controls + loop + autoPlay）
+   - 截 frame 0 作为 poster 存到 snapshot.image
+   - Canvas 显示 Player，CUI 显示 inline Player
+   - `animatedDesigns` map 驱动 ImageCanvas 的 Player 渲染
+
+3. **Design 持久化（workspace_files）**
+   - design JSON 存到 `code/{snapshotId}.json`（Supabase Storage）
+   - snapshots 表加 `design_path` 列
+   - 刷新后从 workspace 加载 design → 编译 JSX → 渲染 Player/截图
+   - userId 从 image_url 推导（避免 auth 时序问题）
+
+4. **MP4 导出**
+   - `renderMediaOnWeb`（h264/mp4）浏览器端渲染
+   - Save 按钮自动判断：animated design → MP4，静态图 → JPEG
+   - 进度显示
+
+5. **Babel standalone 替代 Sucrase**
+   - 支持 optional chaining、nullish coalescing 等现代语法
+   - 修复 agent 生成复杂代码时的编译错误
+
+6. **去掉 satori**
+   - renderHtml 功能被 design 模式完全替代
+   - 简化依赖
+
+7. **run_code image_refs**
+   - 模型自选带哪些图片，pre-fetch 为 Buffer 放入 sandbox `images[]`
+   - 共享 `validateImageIndex` + `fetchImageBuffer` 工具函数
+
+8. **Design 默认策略**
+   - 所有视觉输出用 design 模式（React/CSS）
+   - sharp 只用于格式转换/metadata
+
+9. **video-design skill**
+   - 四问自检框架（剪辑方式、视频 vs 网页、情绪、字幕）
+   - 存在 `src/skills/video-design/SKILL.md`
+
+10. **Agent 模型升级**
+    - Opus 4.6（`us.anthropic.claude-opus-4-6-v1`）
+
+11. **Bug 修复**
+    - MIME 类型不匹配（PNG 标为 JPEG → Bedrock 报错）
+    - 跨域黑图（Player + renderStillOnWeb 都需要预取 URL）
+    - animation 结构归一化（agent 返回 fps/duration → 包装成 animation）
+    - tool-result 后 status 重置（不再停留在"分析图片"）
+    - 重复 snapshot（useRef guard + onComplete ref guard）
+
+### 已知问题
+
+- Agent 生成的视频"像网页"（UI 元素、白色底）— video-design skill 已加自检框架但需验证效果
+- MP4 导出未实际测试
+- agent 修改 `code/xxx.json` 后 session 内不实时更新（需刷新）
+
+### 关键文件
+
+| 文件 | 作用 |
 |------|------|
-| 简单纯色 design（红底 HELLO、蓝色 MAKARON）| ✅ 截图正确，CUI + Canvas 显示正常 |
-| 复杂带照片 design（杂志封面 10K chars）| ⚠️ 文字/排版渲染正常，但照片不显示（黑底+文字） |
-| Tips 生成 | ✅ 基于截图正常生成 |
-| 编译失败 | ✅ 错误显示在 CUI 消息里 |
-
-### 当前 Bug：复杂 design 照片不显示
-
-**症状**：Agent 生成的杂志封面代码中，文字、渐变、标签都正确渲染，但背景照片（`<img src={props.snapshotUrl}>`）不显示。
-
-**已知信息**：
-- `props.snapshotUrl` 通过 `design.props` → Player `inputProps` 传入
-- 图片等待逻辑已有（5s timeout for img.onload）
-- 之前 inline Remotion Player 模式下照片能正常显示
-
-**可能原因**：
-1. Player 在 `opacity:0` 模式下图片加载行为不同
-2. `props.snapshotUrl` 是 base64 还是 URL — 如果是 base64 可能太大
-3. html2canvas 的 `useCORS` 处理跨域图片有问题
-4. 图片在 5s timeout 内没加载完
-
-**排查方向**：
-- 当前 RemotionRenderer 已改为 debug 可见模式（`zIndex: 9999`，注释掉了 opacity:0）
-- 下一步：发一个带照片的 design，用 Playwright 截图看 Player 里照片是否显示
-- 如果 Player 里照片显示正常 → html2canvas 捕获问题
-- 如果 Player 里照片也不显示 → props 传递或图片加载问题
-
-### Debug 状态
-`RemotionRenderer.tsx` 当前是 **debug 可见模式**（`zIndex: 9999`，`opacity` 注释掉了）。
-修复完需要改回 `opacity: 0; zIndex: -1`。
-
-## 关键文件
-
-| 文件 | 状态 | 作用 |
-|------|------|------|
-| `src/lib/evalRemotionJSX.ts` | ✅ 重写 | 简化：直接 transpile 完整函数，无 auto-return |
-| `src/components/RemotionRenderer.tsx` | 🔧 debug 模式 | Player 渲染 + html2canvas 截图 |
-| `src/components/Editor.tsx` | ✅ 已改 | onDesign → pendingDesignMsgIdRef → onComplete 设 msg.image |
-| `src/components/AgentChatView.tsx` | ✅ 已改 | inline Player 注释掉，CUI 显示截图图片 |
-| `src/lib/agent.ts` | ✅ 已改 | tool description 要求 agent 写完整函数 |
-| `src/types/index.ts` | ✅ 已改 | DesignPayload + Message.design 类型 |
-
-## 下一步
-
-1. **排查照片不显示** — 用 debug 可见模式看 Player 渲染结果
-2. **修复后恢复隐藏** — `opacity: 0; zIndex: -1`
-3. **commit + 测试全链路**
-4. **后续：Remotion Player 展示 + 视频导出**（另一个 milestone）
-
-## 测试方法
-
-1. `npm run dev`（worktree 目录）
-2. 登录 test-claude@makaron.app / TestAccount2026!
-3. 进入项目 `448e04be-70cd-4709-9680-569c3dba8c24`
-4. CUI 发送：`用 run_code design 给 @1 做一张杂志封面，用系统字体`
-5. 观察：
-   - 如果 debug 模式：Player 会覆盖在页面顶层显示
-   - 截图完成后 Player 移除
-   - CUI 显示截图图片 @N
-   - Canvas 显示截图图片
-
-## Plan 文件
-`/Users/tianyicai/.claude/plans/encapsulated-leaping-globe.md`
-
-## MOCK_AI 状态
-`.env.local` 中 `MOCK_AI=true`（节省 tips API 费用）。测试生图需要改回 `# MOCK_AI=true`。
+| `src/components/RemotionRenderer.tsx` | Still → renderStillOnWeb，Animation → Player + poster，MP4 导出 |
+| `src/lib/evalRemotionJSX.ts` | Babel standalone 编译 Agent JSX |
+| `src/components/Editor.tsx` | pendingDesign → snapshot，animatedDesigns，MP4 Save |
+| `src/components/ImageCanvas.tsx` | animated design 用 Player 渲染 |
+| `src/hooks/useProject.ts` | design 持久化（save + load workspace JSON） |
+| `src/lib/agent.ts` | Opus 4.6，image_refs，validateImageIndex，fetchImageBuffer |
+| `src/skills/video-design/SKILL.md` | 视频设计自检框架 |
