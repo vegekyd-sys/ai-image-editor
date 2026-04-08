@@ -471,9 +471,13 @@ Available in your code:
 - \`fetch\` — make HTTP requests (e.g. download snapshot images from URLs)
 - Standard Node.js: Buffer, JSON, Math, Date, etc.
 
-Your code must return a value. If returning an image, return \`{ type: 'image', data: base64String, mimeType: 'image/jpeg' }\`.
-For text results, return \`{ type: 'text', content: 'your result' }\`.
-For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
+Your code must return a value:
+- Image (sharp output): return Buffer directly, or \`{ type: 'image', data: base64, mimeType: 'image/jpeg' }\`
+- Text: return \`{ type: 'text', content: 'result' }\`
+- **Design (React — for text/layout/fonts)**: return \`{ type: 'design', code: 'React component body', width: 1080, height: 1350, props: { snapshotUrl: ctx.snapshotImages[0] } }\`. The code string is a React component body with access to: useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, props. Rendered by the browser with full CSS + Google Fonts support. Use \`<link href="https://fonts.googleapis.com/css2?family=Font+Name:wght@400;700&display=swap" rel="stylesheet" />\` in your JSX for custom fonts.
+- Error: return \`{ type: 'error', message: 'what went wrong' }\`
+
+**When to use design vs image:** Use \`design\` when you need text, typography, layout, or custom fonts. Use \`image\` (sharp) for pixel operations (crop, resize, color adjust, composite).`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does'),

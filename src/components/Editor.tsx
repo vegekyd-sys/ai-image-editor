@@ -9,6 +9,8 @@ import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
+import dynamic from 'next/dynamic';
+const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
 // Semaphore to limit concurrent /api/tips requests across all snapshots.
 // Single image: 4 categories run in parallel (fine). Multi-image: 10 images × 4 = 40 concurrent → rate limit risk.
@@ -184,6 +186,7 @@ export default function Editor({
   const [draftFullLoaded, setDraftFullLoaded] = useState(false);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
+  const [pendingDesign, setPendingDesign] = useState<{ code: string; width: number; height: number; props?: Record<string, unknown> } | null>(null);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
@@ -1512,6 +1515,11 @@ export default function Editor({
           onNsfwDetected: () => {
             console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
             isNsfwRef.current = true;
+          },
+          onDesign: (design) => {
+            console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
+            setAgentStatus('Rendering design...');
+            setPendingDesign(design);
           },
           onDone: () => {
             _flushAnalyzedDesc(); // save any pending analyze_image description
@@ -3217,6 +3225,36 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
         }
       `}</style>
+      {/* Remotion browser renderer — renders Agent React designs as snapshots */}
+      {pendingDesign && (
+        <RemotionRenderer
+          design={pendingDesign}
+          onComplete={(dataUrl) => {
+            console.log('🎨 [design] capture complete');
+            const snapId = generateId();
+            const newSnapshot: Snapshot = {
+              id: snapId,
+              image: dataUrl,
+              tips: [],
+              messageId: '',
+              description: '[run_code design]',
+            };
+            setSnapshots(prev => [...prev, newSnapshot]);
+            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
+              setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+            });
+            cacheImage(`snap:${snapId}`, dataUrl);
+            fetchTipsForSnapshot(snapId, dataUrl, 'none');
+            setAgentStatus('Design rendered ✅');
+            setPendingDesign(null);
+          }}
+          onError={(error) => {
+            console.error('🎨 [design] render error:', error);
+            setAgentStatus(`Design error: ${error}`);
+            setPendingDesign(null);
+          }}
+        />
+      )}
     </div>
   );
 }
