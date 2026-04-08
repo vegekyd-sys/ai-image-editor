@@ -98,6 +98,41 @@ import { type ParsedSkill } from './skill-registry';
 import * as workspace from './workspace';
 
 // ---------------------------------------------------------------------------
+// Shared image reference utilities
+// ---------------------------------------------------------------------------
+
+/** Validate a 1-based snapshot index. Returns 0-based index or error. */
+function validateImageIndex(snapshotImages: string[], index: number): { idx: number; error?: string } {
+  const idx = index - 1;
+  if (idx < 0 || idx >= snapshotImages.length) {
+    return { idx: -1, error: `Invalid index ${index}. Available: 1-${snapshotImages.length}` };
+  }
+  if (!snapshotImages[idx]) return { idx: -1, error: 'No image at this index' };
+  return { idx };
+}
+
+/** Fetch an image source (URL or base64 data URL) into a Buffer, with optional compression. */
+async function fetchImageBuffer(
+  source: string,
+  opts?: { maxBytes?: number; maxPx?: number; quality?: number },
+): Promise<Buffer> {
+  let buf: Buffer;
+  if (source.startsWith('http')) {
+    buf = Buffer.from(await (await fetch(source)).arrayBuffer());
+  } else {
+    buf = Buffer.from(source.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+  }
+  const maxBytes = opts?.maxBytes ?? 2_000_000;
+  if (buf.length > maxBytes) {
+    buf = Buffer.from(await sharp(buf)
+      .resize(opts?.maxPx ?? 2048, opts?.maxPx ?? 2048, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: opts?.quality ?? 90 })
+      .toBuffer());
+  }
+  return buf;
+}
+
+// ---------------------------------------------------------------------------
 // System prompt (bundled via webpack asset/source)
 // ---------------------------------------------------------------------------
 
@@ -167,24 +202,18 @@ function createTools(ctx: AgentContext) {
         // Resolve which image to edit — image_index overrides currentImage
         let editTarget = ctx.currentImage;
         if (image_index !== undefined) {
-          const idx = image_index - 1;
-          if (idx < 0 || idx >= ctx.snapshotImages.length) {
-            return { success: false as const, message: `Invalid image_index ${image_index}. Available: 1-${ctx.snapshotImages.length}` };
-          }
-          editTarget = ctx.snapshotImages[idx];
+          const v = validateImageIndex(ctx.snapshotImages, image_index);
+          if (v.error) return { success: false as const, message: v.error };
+          editTarget = ctx.snapshotImages[v.idx];
         }
 
         // Resolve reference images: user-uploaded + snapshot indices
-        // Note: skill reference images are no longer auto-injected here.
-        // The Agent discovers them via list_files and passes them as reference_image_indices.
         let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
         console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_image_indices?.length) {
           for (const refIdx of reference_image_indices) {
-            const idx = refIdx - 1;
-            if (idx >= 0 && idx < ctx.snapshotImages.length) {
-              resolvedRefs.push(ctx.snapshotImages[idx]);
-            }
+            const v = validateImageIndex(ctx.snapshotImages, refIdx);
+            if (!v.error) resolvedRefs.push(ctx.snapshotImages[v.idx]);
           }
         }
 
@@ -273,36 +302,16 @@ function createTools(ctx: AgentContext) {
         // Resolve which image to analyze
         let imageSource = ctx.currentImage;
         if (image_index !== undefined) {
-          const idx = image_index - 1;
-          if (idx >= 0 && idx < ctx.snapshotImages.length) {
-            imageSource = ctx.snapshotImages[idx];
-          }
+          const v = validateImageIndex(ctx.snapshotImages, image_index);
+          if (!v.error) imageSource = ctx.snapshotImages[v.idx];
         }
 
-        // No image available (text-to-image mode, no uploads yet)
         if (!imageSource) {
           return { base64Data: '', mimeType: 'image/jpeg', question, error: 'No image available to analyze. Generate an image first using generate_image.' };
         }
 
-        // Resolve image to base64 buffer — handles both URL and base64 input
-        let buf: Buffer;
-        if (imageSource.startsWith('http')) {
-          const res = await fetch(imageSource);
-          buf = Buffer.from(await res.arrayBuffer());
-        } else {
-          const raw = imageSource.replace(/^data:image\/\w+;base64,/, '');
-          buf = Buffer.from(raw, 'base64');
-        }
-        // Compress for analysis — vision doesn't need full resolution, ~600KB is enough
-        if (buf.length > 600_000) {
-          buf = Buffer.from(await sharp(buf)
-            .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
-            .jpeg({ quality: 75 })
-            .toBuffer());
-        }
-        const base64Data = buf.toString('base64');
-        const mimeType = 'image/jpeg';
-        return { base64Data, mimeType, question };
+        const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
+        return { base64Data: buf.toString('base64'), mimeType: 'image/jpeg', question };
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toModelOutput({ output }: { output: any }) {
@@ -466,9 +475,10 @@ Available in your code:
 - \`renderHtml(element, width?, height?)\` — HTML/CSS → PNG image. Element format: \`{ type: 'div', props: { style: {...}, children: [...] } }\`. Supports: div, span, p, img, flexbox layout, fontSize, fontWeight, color, backgroundColor, borderRadius, padding, margin, gap. Returns PNG Buffer. Example: \`const png = await renderHtml({ type: 'div', props: { style: { display: 'flex', background: '#1a1a2e', color: 'white', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, children: [{ type: 'h1', props: { children: 'Title', style: { fontSize: 64 } } }] } }, 1080, 1350);\`
 - \`saveToWorkspace(path, content, contentType?)\` — Save a file directly to workspace (Supabase Storage). Returns \`{ success, storageUrl, error }\`. Use for skill assets, exports, etc. Example: \`await saveToWorkspace('skills/my-skill/assets/ref.jpg', pngBuffer, 'image/jpeg')\`
 - \`JSZip\` — Create zip files. Example: \`const zip = new JSZip(); zip.file('SKILL.md', text); zip.file('assets/ref.jpg', imgBuffer); const buf = await zip.generateAsync({type:'nodebuffer'}); const {storageUrl} = await saveToWorkspace('exports/skill.zip', buf, 'application/zip');\`
+- \`images\` — pre-fetched snapshot Buffers from \`image_refs\` parameter. \`images[0]\` = first ref, \`images[1]\` = second, etc. Ready for sharp operations.
 - \`ctx.snapshotImages\` — array of snapshot URLs/base64 (index 0 = <<<image_1>>>)
 - \`ctx.projectId\`, \`ctx.userId\` — current project and user IDs
-- \`fetch\` — make HTTP requests (e.g. download snapshot images from URLs)
+- \`fetch\` — make HTTP requests
 - Standard Node.js: Buffer, JSON, Math, Date, etc.
 
 Your code must return a value:
@@ -481,11 +491,25 @@ Your code must return a value:
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does'),
+        image_refs: z.array(z.number()).optional().describe('1-based snapshot indices to pre-fetch as Buffers (e.g. [2, 3] for <<<image_2>>> and <<<image_3>>>). Available in code as images[0], images[1], ... (Buffer order matches this array).'),
       }),
-      execute: async ({ code, description: desc }) => {
+      execute: async ({ code, description: desc, image_refs }) => {
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         try {
+          // Pre-fetch requested snapshot images as Buffers
+          let preloadedImages: Buffer[] = [];
+          if (image_refs?.length) {
+            for (const ref of image_refs) {
+              const v = validateImageIndex(ctx.snapshotImages, ref);
+              if (v.error) return { type: 'text' as const, content: v.error };
+            }
+            preloadedImages = await Promise.all(
+              image_refs.map(ref => fetchImageBuffer(ctx.snapshotImages[ref - 1]))
+            );
+            console.log(`📦 [run_code] pre-fetched ${preloadedImages.length} images (${preloadedImages.map(b => `${(b.length / 1024).toFixed(0)}KB`).join(', ')})`);
+          }
+
           // Build sandbox context
           const fontData = getSatoriFont();
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -512,6 +536,7 @@ Your code must return a value:
             renderHtml,
             saveToWorkspace,
             JSZip,
+            images: preloadedImages,
             fetch: globalThis.fetch,
             Buffer,
             JSON,

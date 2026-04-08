@@ -9,9 +9,6 @@ import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
-import dynamic from 'next/dynamic';
-const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
-
 // Semaphore to limit concurrent /api/tips requests across all snapshots.
 // Single image: 4 categories run in parallel (fine). Multi-image: 10 images × 4 = 40 concurrent → rate limit risk.
 // With maxConcurrent=4, multi-image tips are effectively serialized per snapshot.
@@ -186,12 +183,10 @@ export default function Editor({
   const [draftFullLoaded, setDraftFullLoaded] = useState(false);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
-  const [pendingDesign, setPendingDesign] = useState<DesignPayload | null>(null);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
-  const pendingDesignMsgIdRef = useRef<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
@@ -332,6 +327,15 @@ export default function Editor({
   const referenceCount = useMemo(() =>
     snapshots.filter(s => s.type === 'reference').length,
   [snapshots]);
+
+  // Map timeline index → DesignPayload for live Remotion designs
+  const designs = useMemo(() => {
+    const map = new Map<number, import('@/types').DesignPayload>();
+    snapshots.forEach((s, i) => {
+      if (s.design) map.set(i, s.design);
+    });
+    return map;
+  }, [snapshots]);
 
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
@@ -1232,14 +1236,21 @@ export default function Editor({
         || snapshotsRef.current[draftParentIndexRef.current]?.image;
       contextSnapshotIndex = draftParentIndexRef.current;
     }
-    // Fallback to last snapshot when viewing video entry
+    // Fallback to last snapshot with an actual image (design snapshots have image='')
     if (!currentImage) {
-      currentImage = snapshotsRef.current[snapshotsRef.current.length - 1]?.image;
-      contextSnapshotIndex = snapshotsRef.current.length - 1;
+      for (let i = snapshotsRef.current.length - 1; i >= 0; i--) {
+        if (snapshotsRef.current[i]?.image) {
+          currentImage = snapshotsRef.current[i].image;
+          contextSnapshotIndex = i;
+          break;
+        }
+      }
     }
     if (!projectId) return;
     // Path 2 (text-only): no image is OK — Agent will generate one
-    if (!currentImage && snapshotsRef.current.length > 0) return;
+    // Design snapshots have no image (rendered via Player), skip this check for them
+    const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
+    if (!currentImage && !currentSnap?.design && snapshotsRef.current.length > 0) return;
 
     // Prefer URL (tiny payload) over base64 for API calls — server handles both
     // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
@@ -1519,10 +1530,23 @@ export default function Editor({
           },
           onDesign: (design) => {
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
-            setAgentStatus('Rendering design...');
-            // Store currentMsgId so onComplete can attach the screenshot to the right message
-            pendingDesignMsgIdRef.current = currentMsgId;
-            setPendingDesign(design);
+            // Create snapshot with live design (no screenshot capture)
+            const snapId = generateId();
+            const msgId = currentMsgId;
+            const newSnapshot: Snapshot = {
+              id: snapId,
+              image: '', // no screenshot — design rendered live via Player
+              tips: [],
+              messageId: msgId,
+              description: '[run_code design]',
+              design,
+            };
+            setSnapshots(prev => [...prev, newSnapshot]);
+            // Attach design to CUI message
+            setMessages((prev) => prev.map((m) =>
+              m.id === msgId ? { ...m, design } : m
+            ));
+            setAgentStatus('Design rendered ✅');
           },
           onDone: () => {
             _flushAnalyzedDesc(); // save any pending analyze_image description
@@ -2591,6 +2615,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}
                 referenceCount={referenceCount}
+                designs={designs}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
                 isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
@@ -3228,48 +3253,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
         }
       `}</style>
-      {/* Remotion browser renderer — renders Agent React designs as snapshots */}
-      {pendingDesign && (
-        <RemotionRenderer
-          design={pendingDesign}
-          onComplete={(dataUrl) => {
-            console.log('🎨 [design] capture complete');
-            const snapId = generateId();
-            const msgId = pendingDesignMsgIdRef.current;
-            const newSnapshot: Snapshot = {
-              id: snapId,
-              image: dataUrl,
-              tips: [],
-              messageId: msgId,
-              description: '[run_code design]',
-            };
-            setSnapshots(prev => [...prev, newSnapshot]);
-            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
-              setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
-            });
-            cacheImage(`snap:${snapId}`, dataUrl);
-            fetchTipsForSnapshot(snapId, dataUrl, 'none');
-            // Attach screenshot to CUI message as inline image (same as onImage)
-            setMessages((prev) => prev.map((m) =>
-              m.id === msgId ? { ...m, image: dataUrl } : m
-            ));
-            setAgentStatus('Design rendered ✅');
-            setPendingDesign(null);
-          }}
-          onError={(error) => {
-            console.error('🎨 [design] render error:', error);
-            setPendingDesign(null);
-            // Show error in CUI as assistant message
-            const msgId = pendingDesignMsgIdRef.current;
-            if (msgId) {
-              setMessages((prev) => prev.map((m) =>
-                m.id === msgId ? { ...m, content: (m.content || '') + `\n\n⚠️ Design render failed: ${error}` } : m
-              ));
-            }
-            setAgentStatus('Design failed');
-          }}
-        />
-      )}
+      {/* pendingDesign is now handled directly in onDesign callback */}
     </div>
   );
 }

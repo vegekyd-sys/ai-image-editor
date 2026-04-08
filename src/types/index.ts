@@ -76,6 +76,7 @@ export interface Snapshot {
   description?: string;   // agent's analysis of this image (auto-generated, persisted)
   metadata?: PhotoMetadata; // EXIF metadata (location, time)
   type?: 'original' | 'edit' | 'reference'; // snapshot kind — reference = skill asset
+  design?: DesignPayload; // live Remotion design (rendered via Player, not screenshot)
 }
 
 export interface Project {
