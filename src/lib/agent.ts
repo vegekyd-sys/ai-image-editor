@@ -826,8 +826,11 @@ export async function* runMakaronAgent(
           // Design output stored in ctx.__pendingDesign → emit as SSE event
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
+            console.log(`🎨 [agent] emitting design SSE: ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars`);
             yield { type: 'design', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation };
             (ctx as any).__pendingDesign = null;
+          } else {
+            console.log(`🔍 [agent] run_code result: no __pendingDesign found`);
           }
           // Image output (from toModelOutput won't have base64Data here, but pushImage in execute already handled it)
         }

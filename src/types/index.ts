@@ -1,3 +1,11 @@
+export interface DesignPayload {
+  code: string;
+  width: number;
+  height: number;
+  props?: Record<string, unknown>;
+  animation?: { fps: number; durationInSeconds: number; format?: string };
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -6,6 +14,7 @@ export interface Message {
   editPrompt?: string;   // the English editPrompt sent to generate_image (for transparency)
   editModel?: string;    // which model generated the image ('gemini' | 'qwen')
   editInputImages?: string[]; // images passed to Gemini as input (1 = normal, 2 = face restoration)
+  design?: DesignPayload; // Remotion design from run_code
   timestamp: number;
   projectId?: string;
 }

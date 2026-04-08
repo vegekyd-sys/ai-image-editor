@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -186,7 +186,7 @@ export default function Editor({
   const [draftFullLoaded, setDraftFullLoaded] = useState(false);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
-  const [pendingDesign, setPendingDesign] = useState<{ code: string; width: number; height: number; props?: Record<string, unknown> } | null>(null);
+  const [pendingDesign, setPendingDesign] = useState<DesignPayload | null>(null);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
@@ -1519,6 +1519,11 @@ export default function Editor({
           onDesign: (design) => {
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
             setAgentStatus('Rendering design...');
+            // Attach design to current assistant message for inline CUI rendering
+            const id = currentMsgId;
+            setMessages((prev) => prev.map((m) =>
+              m.id === id ? { ...m, design } : m
+            ));
             setPendingDesign(design);
           },
           onDone: () => {

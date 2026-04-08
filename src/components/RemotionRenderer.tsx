@@ -4,21 +4,9 @@ import React, { useRef, useMemo, useState, useCallback, useEffect } from 'react'
 import { Player, type PlayerRef } from '@remotion/player';
 import { evalRemotionJSX } from '@/lib/evalRemotionJSX';
 import html2canvas from 'html2canvas';
+import type { DesignPayload } from '@/types';
 
-/**
- * Design payload from Agent's run_code.
- */
-export interface DesignPayload {
-  code: string;
-  width: number;
-  height: number;
-  props?: Record<string, unknown>;
-  animation?: {
-    fps: number;
-    durationInSeconds: number;
-    format?: 'mp4' | 'gif';
-  };
-}
+export type { DesignPayload };
 
 interface RemotionRendererProps {
   design: DesignPayload;
@@ -101,14 +89,12 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
 
   if (!Component) return null;
 
-  // Wrapper component that passes props
-  const WrappedComponent: React.FC = () => <Component {...(design.props || {})} />;
-
   return (
     <div ref={containerRef} style={{ borderRadius: 12, overflow: 'hidden', margin: '8px 0' }}>
       <Player
         ref={playerRef}
-        component={WrappedComponent}
+        component={Component}
+        inputProps={design.props || {}}
         compositionWidth={design.width}
         compositionHeight={design.height}
         durationInFrames={durationInFrames}
@@ -117,6 +103,12 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
         controls={!isStill}
         loop={!isStill}
         autoPlay={!isStill}
+        acknowledgeRemotionLicense
+        errorFallback={({ error }) => (
+          <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12, wordBreak: 'break-all' }}>
+            Render error: {error.message}
+          </div>
+        )}
       />
     </div>
   );
