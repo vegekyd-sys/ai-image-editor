@@ -58,6 +58,20 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
         document.fonts.ready,
         new Promise(r => setTimeout(r, 2000)),
       ]);
+
+      // Wait for all images inside the capture area to load
+      if (captureRef.current) {
+        const imgs = captureRef.current.querySelectorAll('img');
+        if (imgs.length > 0) {
+          await Promise.race([
+            Promise.all(Array.from(imgs).map(img =>
+              img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+            )),
+            new Promise(r => setTimeout(r, 5000)), // 5s timeout for images
+          ]);
+        }
+      }
+
       // Brief layout settle
       await new Promise(r => setTimeout(r, 300));
 
@@ -94,29 +108,27 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
 
   if (!Component) return null;
 
-  // For still capture: render component directly in a native-size div (no Player transforms).
-  // This div is positioned off-screen so it's invisible but html2canvas can capture it.
-  if (isStill && autoCapture) {
-    return (
-      <div
-        ref={captureRef}
-        style={{
-          position: 'fixed',
-          left: '-9999px',
-          top: 0,
-          width: design.width,
-          height: design.height,
-          overflow: 'hidden',
-        }}
-      >
-        <Component {...(design.props || {})} />
-      </div>
-    );
-  }
+  // Render via Player (provides Remotion context for hooks like useCurrentFrame).
+  // For capture: render at native resolution off-screen so html2canvas gets 1:1 pixels.
+  // For display: render inline with width: 100%.
+  const isCaptureMode = isStill && autoCapture;
 
-  // For animations: use Remotion Player with controls
   return (
-    <div style={{ borderRadius: 12, overflow: 'hidden', margin: '8px 0' }}>
+    <div
+      ref={captureRef}
+      style={isCaptureMode ? {
+        position: 'fixed',
+        left: '-9999px',
+        top: 0,
+        width: design.width,
+        height: design.height,
+        overflow: 'hidden',
+      } : {
+        borderRadius: 12,
+        overflow: 'hidden',
+        margin: '8px 0',
+      }}
+    >
       <Player
         ref={playerRef}
         component={Component}
@@ -125,10 +137,13 @@ export default function RemotionRenderer({ design, onComplete, onError, autoCapt
         compositionHeight={design.height}
         durationInFrames={durationInFrames}
         fps={fps}
-        style={{ width: '100%', borderRadius: 12 }}
-        controls
-        loop
-        autoPlay
+        style={isCaptureMode
+          ? { width: design.width, height: design.height }
+          : { width: '100%', borderRadius: 12 }
+        }
+        controls={!isStill}
+        loop={!isStill}
+        autoPlay={!isStill}
         acknowledgeRemotionLicense
         errorFallback={({ error }) => (
           <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12, wordBreak: 'break-all' }}>
