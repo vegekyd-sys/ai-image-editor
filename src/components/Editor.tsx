@@ -3282,13 +3282,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             console.log('🎨 [design] capture complete');
             const snapId = generateId();
             const msgId = pendingDesignMsgIdRef.current;
+            const currentDesign = pendingDesign;
             const newSnapshot: Snapshot = {
               id: snapId,
               image: dataUrl,
               tips: [],
               messageId: msgId,
               description: '[run_code design]',
-              design: pendingDesign,
+              design: currentDesign,
             };
             setSnapshots(prev => [...prev, newSnapshot]);
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
@@ -3300,6 +3301,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               m.id === msgId ? { ...m, image: dataUrl } : m
             ));
             setAgentStatus('Design rendered ✅');
+            // Always clear pendingDesign — animated designs continue via animatedDesigns map in ImageCanvas
             setPendingDesign(null);
           }}
           onError={(error) => {
