@@ -562,16 +562,17 @@ Your code must return a value:
             ctx.currentImage = dataUrl;
           };
 
-          // { type: 'design', code: '...' } — React design for browser rendering
+          // { type: 'design', code: '...' } — Store for event loop to emit as SSE
           if (result?.type === 'design' && typeof result.code === 'string') {
-            return {
-              type: 'design' as const,
+            // Store in context — the event loop will emit this as a 'design' SSE event
+            (ctx as any).__pendingDesign = {
               code: result.code,
               width: result.width || 1080,
               height: result.height || 1350,
               props: result.props,
               animation: result.animation,
             };
+            return { type: 'text' as const, content: 'Design ready — rendering in browser.' };
           }
 
           // Buffer or Uint8Array → treat as image
@@ -822,18 +823,13 @@ export async function* runMakaronAgent(
 
         // run_code output handling
         if (toolName === 'run_code') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const codeResult = (event as any).result as { type?: string; base64Data?: string; mimeType?: string; code?: string; width?: number; height?: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } } | undefined;
-          // Design output → emit design event for browser rendering
-          if (codeResult?.type === 'design' && codeResult.code) {
-            yield { type: 'design', code: codeResult.code, width: codeResult.width || 1080, height: codeResult.height || 1350, props: codeResult.props, animation: codeResult.animation };
+          // Design output stored in ctx.__pendingDesign → emit as SSE event
+          const pendingDesign = (ctx as any).__pendingDesign;
+          if (pendingDesign) {
+            yield { type: 'design', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation };
+            (ctx as any).__pendingDesign = null;
           }
-          // Image output → push to generatedImages
-          else if (codeResult?.type === 'image' && codeResult.base64Data) {
-            const dataUrl = `data:${codeResult.mimeType || 'image/jpeg'};base64,${codeResult.base64Data}`;
-            ctx.generatedImages.push(dataUrl);
-            ctx.snapshotImages.push(dataUrl);
-          }
+          // Image output (from toModelOutput won't have base64Data here, but pushImage in execute already handled it)
         }
 
         // Detect generate_image failure or NSFW content block
