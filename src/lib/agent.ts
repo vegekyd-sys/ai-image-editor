@@ -488,7 +488,7 @@ Your code must return a value:
 - **Design (React — for text/layout/fonts)**: return \`{ type: 'design', code: 'function Design(props) { return (...); }', width: 1080, height: 1350, props: { snapshotUrl: ctx.snapshotImages[0] } }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill. Rendered by the browser with full CSS + Google Fonts support. Use \`<link href="https://fonts.googleapis.com/css2?family=Font+Name:wght@400;700&display=swap" rel="stylesheet" />\` in your JSX for custom fonts. Example: \`code: 'function Design(props) { const { snapshotUrl } = props; return (<div style={{width:"100%",height:"100%",background:"#000"}}><img src={snapshotUrl} style={{width:"100%"}} /><h1 style={{color:"white"}}>Title</h1></div>); }'\`
 - Error: return \`{ type: 'error', message: 'what went wrong' }\`
 
-**When to use design vs image:** Use \`design\` when you need text, typography, layout, or custom fonts. Use \`image\` (sharp) for pixel operations (crop, resize, color adjust, composite).`,
+**Default to design for all visual output.** Design supports text, layout, images (via \`<img src={props.snapshotUrl}>\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does'),
