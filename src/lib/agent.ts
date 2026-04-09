@@ -568,10 +568,22 @@ Your code must return a value:
                 durationInSeconds: result.durationInSeconds || result.duration || 5,
               };
             }
-            // Replace snapshot image values in props with lightweight placeholders
-            // to avoid sending multi-MB base64 over SSE (which may truncate on mobile).
+            // Replace snapshot image values with lightweight placeholders in BOTH
+            // code and props — avoids multi-MB base64 in SSE (truncates on mobile).
             // Frontend resolves __snapshot_N__ back to actual images.
+            let designCode = result.code;
             const designProps = result.props ? { ...result.props } : undefined;
+            // Replace in code string (agent may embed URLs directly in template literals)
+            for (let i = 0; i < ctx.snapshotImages.length; i++) {
+              const img = ctx.snapshotImages[i];
+              if (!img || img.length < 100) continue; // skip short strings (already URLs)
+              const placeholder = `__snapshot_${i + 1}__`;
+              // Replace all occurrences in code
+              while (designCode.includes(img)) {
+                designCode = designCode.replace(img, placeholder);
+              }
+            }
+            // Replace in props
             if (designProps) {
               for (const [key, val] of Object.entries(designProps)) {
                 if (typeof val !== 'string') continue;
@@ -582,7 +594,7 @@ Your code must return a value:
               }
             }
             (ctx as any).__pendingDesign = {
-              code: result.code,
+              code: designCode,
               width: result.width || 1080,
               height: result.height || 1350,
               props: designProps,

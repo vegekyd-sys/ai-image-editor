@@ -1538,25 +1538,37 @@ export default function Editor({
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
             setAgentStatus('Rendering design...');
             pendingDesignMsgIdRef.current = currentMsgId;
-            // Resolve __snapshot_N__ placeholders in props to actual snapshot images.
+            // Resolve __snapshot_N__ placeholders to actual snapshot images.
             // Server replaces large base64 with placeholders to keep SSE payload small.
-            if (design.props) {
-              const resolvedProps = { ...design.props };
-              for (const [key, val] of Object.entries(resolvedProps)) {
-                if (typeof val === 'string') {
-                  const m = val.match(/^__snapshot_(\d+)__$/);
-                  if (m) {
-                    const idx = parseInt(m[1], 10) - 1;
-                    const snap = snapshotsRef.current[idx];
-                    if (snap) {
-                      resolvedProps[key] = snap.imageUrl || snap.image;
-                    }
-                  }
+            const resolveSnapshot = (placeholder: string): string => {
+              const m = placeholder.match(/__snapshot_(\d+)__/);
+              if (!m) return placeholder;
+              const idx = parseInt(m[1], 10) - 1;
+              const snap = snapshotsRef.current[idx];
+              return snap ? (snap.imageUrl || snap.image) : placeholder;
+            };
+            // Resolve in code string (agent may embed URLs in template literals)
+            let resolvedCode = design.code;
+            const codeMatches = resolvedCode.match(/__snapshot_\d+__/g);
+            if (codeMatches) {
+              for (const ph of new Set(codeMatches)) {
+                const resolved = resolveSnapshot(ph);
+                while (resolvedCode.includes(ph)) {
+                  resolvedCode = resolvedCode.replace(ph, resolved);
                 }
               }
-              design = { ...design, props: resolvedProps };
             }
-            setPendingDesign(design);
+            // Resolve in props
+            let resolvedProps = design.props;
+            if (resolvedProps) {
+              resolvedProps = { ...resolvedProps };
+              for (const [key, val] of Object.entries(resolvedProps)) {
+                if (typeof val === 'string' && val.includes('__snapshot_')) {
+                  resolvedProps[key] = resolveSnapshot(val);
+                }
+              }
+            }
+            setPendingDesign({ ...design, code: resolvedCode, props: resolvedProps });
           },
           onDone: () => {
             _flushAnalyzedDesc(); // save any pending analyze_image description
