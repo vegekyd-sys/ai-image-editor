@@ -3299,7 +3299,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
             cacheImage(`snap:${snapId}`, dataUrl);
-            fetchTipsForSnapshot(snapId, dataUrl, 'none');
+            // Skip tips for animated designs (video snapshots don't need edit suggestions)
+            if (!currentDesign?.animation) {
+              fetchTipsForSnapshot(snapId, dataUrl, 'none');
+            }
             setMessages((prev) => prev.map((m) =>
               m.id === msgId ? { ...m, image: dataUrl } : m
             ));
