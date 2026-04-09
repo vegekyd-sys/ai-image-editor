@@ -568,45 +568,13 @@ Your code must return a value:
                 durationInSeconds: result.durationInSeconds || result.duration || 5,
               };
             }
-            // Replace snapshot image values with lightweight placeholders in BOTH
-            // code and props — avoids multi-MB base64 in SSE (truncates on mobile).
-            // Frontend resolves __snapshot_N__ back to actual images.
-            let designCode = result.code;
-            const designProps = result.props ? { ...result.props } : undefined;
-            // Replace in code string (agent may embed URLs directly in template literals)
-            for (let i = 0; i < ctx.snapshotImages.length; i++) {
-              const img = ctx.snapshotImages[i];
-              if (!img || img.length < 100) continue; // skip short strings (already URLs)
-              const placeholder = `__snapshot_${i + 1}__`;
-              // Replace all occurrences in code
-              while (designCode.includes(img)) {
-                designCode = designCode.replace(img, placeholder);
-              }
-            }
-            // Replace in props (handles strings, arrays of strings, nested objects)
-            const replaceInValue = (v: unknown): unknown => {
-              if (typeof v === 'string') {
-                const idx = ctx.snapshotImages.indexOf(v);
-                return idx >= 0 ? `__snapshot_${idx + 1}__` : v;
-              }
-              if (Array.isArray(v)) return v.map(replaceInValue);
-              if (v && typeof v === 'object') {
-                const out: Record<string, unknown> = {};
-                for (const [k, val] of Object.entries(v)) out[k] = replaceInValue(val);
-                return out;
-              }
-              return v;
-            };
-            if (designProps) {
-              for (const [key, val] of Object.entries(designProps)) {
-                designProps[key] = replaceInValue(val);
-              }
-            }
+            // ctx.snapshotImages are URLs (not base64) — safe to pass through SSE.
+            // Agent's code/props reference URLs directly, no placeholder needed.
             (ctx as any).__pendingDesign = {
-              code: designCode,
+              code: result.code,
               width: result.width || 1080,
               height: result.height || 1350,
-              props: designProps,
+              props: result.props,
               animation,
             };
             return { type: 'text' as const, content: 'Design ready — rendering in browser.' };

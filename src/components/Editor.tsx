@@ -1364,15 +1364,18 @@ export default function Editor({
     const rawOriginal = originalSnapshot ? getImageForApi(originalSnapshot) : undefined;
     const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64Image(rawOriginal, 3_000_000) : rawOriginal;
 
-    // Compress snapshot images for API payload — URLs pass through (~100B), base64 compressed to 600KB
-    // This prevents multi-image uploads from exceeding Vercel body size limits
-    const snapshotImagesForApi = (await Promise.all(
-      snapshotsRef.current.map(async (s) => {
-        const img = getImageForApi(s);
-        if (!img) return '';
-        return img.startsWith('data:') ? compressBase64Image(img, 600_000) : img;
-      })
-    )).filter(img => img.length > 0);
+    // Snapshot images for API: prefer Storage URLs (tiny payload).
+    // base64 fallback only for the current image (needed for vision); others skip if no URL yet.
+    const snapshotImagesForApi = snapshotsRef.current.map((s) => {
+      return s.imageUrl || '';
+    }).map((img, i) => {
+      // Current image may need base64 if URL not ready yet (for vision/analyze_image)
+      if (!img && i === contextSnapshotIndex) {
+        const fallback = getImageForApi(snapshotsRef.current[i]);
+        return fallback || '';
+      }
+      return img;
+    });
 
     const _agentT0 = performance.now();
     let _genStartTime = 0;
@@ -1538,45 +1541,9 @@ export default function Editor({
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
             setAgentStatus('Rendering design...');
             pendingDesignMsgIdRef.current = currentMsgId;
-            // Resolve __snapshot_N__ placeholders to actual snapshot images.
-            // Server replaces large base64 with placeholders to keep SSE payload small.
-            const resolveSnapshot = (placeholder: string): string => {
-              const m = placeholder.match(/__snapshot_(\d+)__/);
-              if (!m) return placeholder;
-              const idx = parseInt(m[1], 10) - 1;
-              const snap = snapshotsRef.current[idx];
-              return snap ? (snap.imageUrl || snap.image) : placeholder;
-            };
-            // Resolve in code string (agent may embed URLs in template literals)
-            let resolvedCode = design.code;
-            const codeMatches = resolvedCode.match(/__snapshot_\d+__/g);
-            if (codeMatches) {
-              for (const ph of new Set(codeMatches)) {
-                const resolved = resolveSnapshot(ph);
-                while (resolvedCode.includes(ph)) {
-                  resolvedCode = resolvedCode.replace(ph, resolved);
-                }
-              }
-            }
-            // Resolve in props (handles strings, arrays, nested objects)
-            const resolveValue = (v: unknown): unknown => {
-              if (typeof v === 'string' && v.includes('__snapshot_')) return resolveSnapshot(v);
-              if (Array.isArray(v)) return v.map(resolveValue);
-              if (v && typeof v === 'object') {
-                const out: Record<string, unknown> = {};
-                for (const [k, val] of Object.entries(v)) out[k] = resolveValue(val);
-                return out;
-              }
-              return v;
-            };
-            let resolvedProps = design.props;
-            if (resolvedProps) {
-              resolvedProps = {};
-              for (const [key, val] of Object.entries(design.props!)) {
-                resolvedProps[key] = resolveValue(val);
-              }
-            }
-            setPendingDesign({ ...design, code: resolvedCode, props: resolvedProps });
+            // ctx.snapshotImages are URLs — design code/props reference them directly.
+            // No placeholder resolution needed.
+            setPendingDesign(design);
           },
           onDone: () => {
             _flushAnalyzedDesc(); // save any pending analyze_image description
