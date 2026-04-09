@@ -91,9 +91,11 @@ export default function RemotionRenderer({ design, onComplete, onError, mode = '
   // Animation designs: render Player with controls
   return (
     <div style={isFill ? { width: '100%', height: '100%' } : {
-      // For still capture: render at native resolution off-screen, then replace with poster
-      position: isStill && !posterCapturedRef.current ? 'fixed' : 'relative',
-      ...(isStill && !posterCapturedRef.current ? { left: -9999, top: 0, opacity: 0 } : {}),
+      // Still capture: render visible (iOS Safari delays loading off-screen images).
+      // Use opacity near-zero so images load but Player is barely visible.
+      // After capture, onComplete triggers setPendingDesign(null) which unmounts this.
+      position: isStill ? 'fixed' : 'relative',
+      ...(isStill ? { left: 0, top: 0, zIndex: -1, opacity: 0.01, pointerEvents: 'none' as const } : {}),
       borderRadius: isStill ? 0 : 12,
       overflow: 'hidden',
       margin: isStill ? 0 : '8px 0',
