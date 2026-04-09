@@ -136,6 +136,7 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, use
       `- **${s.name}**: ${s.description.trim().split('\n')[0]}${s.makaron?.referenceImages?.length ? ' [has reference images]' : ''}`
     ).join('\n');
   }
+
   const workspaceSection = `
 
 ## Workspace
@@ -466,12 +467,22 @@ Available in your code:
 Your code must return a value:
 - Image (sharp output): return Buffer directly, or \`{ type: 'image', data: base64, mimeType: 'image/jpeg' }\`
 - Text: return \`{ type: 'text', content: 'result' }\`
-- **Design (React)**: return \`{ type: 'design', code: 'function Design(props) { return (...); }', width: 1080, height: 1350, props: { snapshotUrl: ctx.snapshotImages[0] } }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill. Rendered by the browser with full CSS + Google Fonts support.
+- **Design (React)**: return \`{ type: 'design', code: '...', width: 1080, height: 1350 }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill. Rendered by the browser with full CSS + Google Fonts support.
+  **Embed image URLs directly in code using template literals** — do NOT use props for images:
+  \`\`\`
+  return {
+    type: 'design',
+    width: 1080, height: 1350,
+    code: \\\`function Design() {
+      return (<div style={{width:'100%',height:'100%'}}><img src="\${ctx.snapshotImages[0]}" style={{width:'100%',height:'100%',objectFit:'cover'}} /></div>);
+    }\\\`
+  }
+  \`\`\`
   - **Still** (default): omit \`duration\` — renders as a single image.
-  - **Animation**: add \`duration: 5\` (seconds) — renders as a playable video with Remotion Player. Use \`useCurrentFrame()\` + \`interpolate()\` for animation. Example: \`{ type: 'design', code: '...', width: 1080, height: 1080, duration: 3, props: { snapshotUrl: ctx.snapshotImages[0] } }\`
+  - **Animation**: add \`duration: 5\` (seconds) — renders as a playable video with Remotion Player. Use \`useCurrentFrame()\` + \`interpolate()\` for animation.
 - Error: return \`{ type: 'error', message: 'what went wrong' }\`
 
-**Default to design for all visual output.** Design supports text, layout, images (via \`<img src={props.snapshotUrl}>\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
+**Default to design for all visual output.** Design supports text, layout, images (embed URLs via template literal \\\`\${ctx.snapshotImages[N]}\\\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does'),
