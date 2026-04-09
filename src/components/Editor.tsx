@@ -337,9 +337,10 @@ export default function Editor({
   [snapshots]);
 
   // Map timeline index → DesignPayload for animated designs (rendered via Player)
-  const animatedDesigns = useMemo(() => {
+  // All design snapshots (still + animated) render via Player in ImageCanvas
+  const designsMap = useMemo(() => {
     const map = new Map<number, import('@/types').DesignPayload>();
-    snapshots.forEach((s, i) => { if (s.design?.animation) map.set(i, s.design); });
+    snapshots.forEach((s, i) => { if (s.design) map.set(i, s.design); });
     return map;
   }, [snapshots]);
 
@@ -2654,7 +2655,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}
                 referenceCount={referenceCount}
-                animatedDesigns={animatedDesigns}
+                animatedDesigns={designsMap}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
                 isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
@@ -3337,7 +3338,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               m.id === msgId ? { ...m, image: dataUrl } : m
             ));
             setAgentStatus(t('status.designCreated'));
-            // Always clear pendingDesign — animated designs continue via animatedDesigns map in ImageCanvas
+            // Always clear pendingDesign — designs continue via designsMap in ImageCanvas
             setPendingDesign(null);
           }}
           onError={(error) => {
