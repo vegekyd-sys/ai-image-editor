@@ -11,23 +11,37 @@ export type { DesignPayload };
 
 /** Helper: resolve external URLs in props to data URLs (cross-origin workaround for renderStillOnWeb) */
 async function resolvePropsUrls(props: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const resolved = { ...props };
-  for (const [key, val] of Object.entries(resolved)) {
-    if (typeof val === 'string' && val.startsWith('http') && /\.(jpg|jpeg|png|webp|gif)/i.test(val)) {
-      try {
-        const res = await fetch(val);
-        const blob = await res.blob();
-        const dataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-        resolved[key] = dataUrl;
-        console.log(`🎨 [design] resolved prop "${key}" URL → dataUrl (${(blob.size / 1024).toFixed(0)}KB)`);
-      } catch (e) {
-        console.warn(`🎨 [design] failed to resolve prop "${key}" URL:`, e);
+  const resolveValue = async (val: unknown): Promise<unknown> => {
+    if (typeof val === 'string' && val.startsWith('http')) {
+      // Resolve any HTTP URL that looks like an image (file extension or Supabase storage path)
+      if (/\.(jpg|jpeg|png|webp|gif)/i.test(val) || val.includes('/storage/')) {
+        try {
+          const res = await fetch(val);
+          const blob = await res.blob();
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          console.log(`🎨 [design] resolved URL → dataUrl (${(blob.size / 1024).toFixed(0)}KB)`);
+          return dataUrl;
+        } catch (e) {
+          console.warn(`🎨 [design] failed to resolve URL:`, e);
+          return val;
+        }
       }
     }
+    if (Array.isArray(val)) return Promise.all(val.map(resolveValue));
+    if (val && typeof val === 'object' && !(val instanceof Blob)) {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(val)) out[k] = await resolveValue(v);
+      return out;
+    }
+    return val;
+  };
+  const resolved: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(props)) {
+    resolved[key] = await resolveValue(val);
   }
   return resolved;
 }
