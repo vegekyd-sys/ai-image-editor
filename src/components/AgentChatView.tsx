@@ -11,9 +11,8 @@ import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
-// CUI shows poster images for animated designs (no live Player — multiple Players cause lag)
-// import dynamic from 'next/dynamic';
-// const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
+import dynamic from 'next/dynamic';
+const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -233,6 +232,8 @@ interface AgentChatViewProps {
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
   onVideoTap?: (rect?: DOMRect, posterSrc?: string, animId?: string) => void;
+  /** Design poster captured from visible Player — update snapshot.image */
+  onDesignPoster?: (messageId: string, posterDataUrl: string) => void;
 }
 
 export default function AgentChatView({
@@ -256,6 +257,7 @@ export default function AgentChatView({
   onModelChange,
   onNavigateToSnapshot,
   onVideoTap,
+  onDesignPoster,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -911,8 +913,21 @@ export default function AgentChatView({
                       <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
 
-                    {/* Animated designs: show poster image in CUI (no live Player — too many Players = lag).
-                        The image is already in msg.image from onComplete. User taps to view Player in Canvas. */}
+                    {/* Design: render Player with autoCapture — captures poster then replaces with image */}
+                    {msg.design && !msg.image && (
+                      <div className="mt-3" style={{ maxWidth: 308 }}>
+                        <RemotionRenderer
+                          design={msg.design}
+                          autoCapture
+                          onComplete={(posterUrl) => {
+                            if (posterUrl && onDesignPoster) {
+                              onDesignPoster(msg.id, posterUrl);
+                            }
+                          }}
+                          onError={(err) => console.error('[design CUI] error:', err)}
+                        />
+                      </div>
+                    )}
                   </div>
 
                 </div>

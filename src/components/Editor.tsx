@@ -2466,6 +2466,26 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [snapshots, draftParentIndex, isDesktop, cuiPanelWidth]);
 
   // CUI: tap inline video → first click shows in GUI, second click plays
+  // Design poster captured from CUI's visible Player — update snapshot + message
+  const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
+    if (!posterDataUrl) return;
+    // Update message image
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, image: posterDataUrl } : m));
+    // Update snapshot image + trigger persistence + tips
+    const snap = snapshotsRef.current.find(s => s.messageId === messageId);
+    if (snap && !snap.image) {
+      setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, image: posterDataUrl } : s));
+      onSaveSnapshot?.({ ...snap, image: posterDataUrl }, snapshotsRef.current.indexOf(snap), (url) => {
+        setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+      });
+      cacheImage(`snap:${snap.id}`, posterDataUrl);
+      // Tips for still designs
+      if (!snap.design?.animation) {
+        fetchTipsForSnapshot(snap.id, posterDataUrl, 'none');
+      }
+    }
+  }, [onSaveSnapshot, fetchTipsForSnapshot]);
+
   const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string) => {
     if (videoTimelineIndex < 0) return;
 
@@ -3132,6 +3152,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             preferredModel={preferredModel}
             onModelChange={setPreferredModel}
             onNavigateToSnapshot={handleNavigateToSnapshot}
+            onDesignPoster={handleDesignPoster}
           />
         </div>
       </>) : viewMode === 'cui' ? (
@@ -3160,6 +3181,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           preferredModel={preferredModel}
           onModelChange={setPreferredModel}
           onNavigateToSnapshot={undefined}
+          onDesignPoster={handleDesignPoster}
         />
       ) : null}
 
@@ -3306,42 +3328,40 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         }
       `}</style>
       {/* Remotion renderer — captures design as screenshot via renderStillOnWeb */}
-      {pendingDesign && (
-        <RemotionRenderer
-          design={pendingDesign}
-          onComplete={(dataUrl) => {
-            // Guard against double-invoke (React StrictMode or async race)
-            const msgId = pendingDesignMsgIdRef.current;
-            if (!msgId) return;
-            pendingDesignMsgIdRef.current = '';
-            console.log('🎨 [design] capture complete');
-            const snapId = generateId();
-            const currentDesign = pendingDesign;
-            const newSnapshot: Snapshot = {
-              id: snapId,
-              image: dataUrl,
-              tips: [],
-              messageId: msgId,
-              description: '[run_code design]',
-              design: currentDesign,
-            };
+      {/* pendingDesign: create snapshot immediately (no screenshot yet).
+          Poster will be captured from CUI's visible Player via autoCapture. */}
+      {pendingDesign && (() => {
+        const msgId = pendingDesignMsgIdRef.current;
+        if (msgId) {
+          pendingDesignMsgIdRef.current = '';
+          const snapId = generateId();
+          const currentDesign = pendingDesign;
+          const newSnapshot: Snapshot = {
+            id: snapId,
+            image: '', // empty — poster comes later from CUI autoCapture
+            tips: [],
+            messageId: msgId,
+            description: '[run_code design]',
+            design: currentDesign,
+          };
+          // Use queueMicrotask to avoid setState during render
+          queueMicrotask(() => {
             setSnapshots(prev => [...prev, newSnapshot]);
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
-            cacheImage(`snap:${snapId}`, dataUrl);
-            // Still designs get tips, animated designs don't
-            if (!currentDesign?.animation) {
-              fetchTipsForSnapshot(snapId, dataUrl, 'none');
-            }
             setMessages((prev) => prev.map((m) =>
-              m.id === msgId ? { ...m, image: dataUrl } : m
+              m.id === msgId ? { ...m, design: currentDesign } : m
             ));
             setAgentStatus(t('status.designCreated'));
-            // Always clear pendingDesign — designs continue via designsMap in ImageCanvas
             setPendingDesign(null);
-          }}
-          onError={(error) => {
+          });
+        }
+        return null;
+      })()}
+      {/* Note: old onError for design compile is now handled by harness on server side */}
+      {false && (
+        <RemotionRenderer design={{code:'',width:0,height:0}} onComplete={() => {}} onError={(error) => {
             console.error('🎨 [design] render error:', error);
             setPendingDesign(null);
             const msgId = pendingDesignMsgIdRef.current;

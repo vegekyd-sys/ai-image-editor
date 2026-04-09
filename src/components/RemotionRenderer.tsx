@@ -2,53 +2,33 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
-import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
+import { renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
+import { toJpeg } from 'html-to-image';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import type { DesignPayload } from '@/types';
 
 export type { DesignPayload };
 export type { RenderMediaOnWebProgress };
 
-/** Helper: resolve HTTP URLs in code to data URLs (for renderStillOnWeb CORS workaround) */
-async function resolveCodeUrls(code: string): Promise<string> {
-  const urlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif|mp3|wav|m4a|aac|ogg)([^\s"'`<>)}\]]*)/gi;
-  const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi;
-  const urls = new Set<string>();
-  for (const m of code.matchAll(urlPattern)) urls.add(m[0]);
-  for (const m of code.matchAll(storagePattern)) urls.add(m[0]);
-  if (urls.size === 0) return code;
-  let resolved = code;
-  await Promise.all([...urls].map(async (url) => {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const dataUrl = await new Promise<string>((r) => {
-        const reader = new FileReader();
-        reader.onloadend = () => r(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-      while (resolved.includes(url)) resolved = resolved.replace(url, dataUrl);
-    } catch { /* skip failed URLs */ }
-  }));
-  return resolved;
-}
-
-// ─── Main renderer ──────────────────────────────────────────────────────────
+// ─── Main renderer: Player for display + html-to-image for poster ───────────
 
 interface RemotionRendererProps {
   design: DesignPayload;
-  /** Called with JPEG data URL poster (animation) or empty string (still — Canvas uses Player) */
+  /** Called with JPEG data URL poster after visible Player screenshot */
   onComplete: (dataUrl: string) => void;
   onError: (error: string) => void;
   mode?: 'fill' | 'inline';
+  /** If true, auto-capture poster from visible Player then call onComplete */
+  autoCapture?: boolean;
 }
 
-export default function RemotionRenderer({ design, onComplete, onError, mode = 'inline' }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onComplete, onError, mode = 'inline', autoCapture = false }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const initRef = useRef(false);
-  const posterRef = useRef(false);
+  const capturedRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
+  const [posterUrl, setPosterUrl] = useState<string | null>(null);
 
   const isStill = !design.animation;
   const fps = design.animation?.fps || 30;
@@ -67,46 +47,47 @@ export default function RemotionRenderer({ design, onComplete, onError, mode = '
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
-  // Capture poster via renderStillOnWeb (both still and animation — same approach)
+  // Auto-capture: screenshot visible Player after images load, then call onComplete
   useEffect(() => {
-    if (!Component || posterRef.current) return;
-    posterRef.current = true;
-    (async () => {
+    if (!autoCapture || !Component || capturedRef.current) return;
+    const timer = setTimeout(async () => {
+      if (capturedRef.current) return;
+      capturedRef.current = true;
       try {
-        const resolvedCode = await resolveCodeUrls(design.code);
-        const posterComp = evalRemotionJSX(resolvedCode);
-        if (!posterComp) { onComplete(''); return; } // fallback: empty poster
-        console.log('🎨 [design] renderStillOnWeb poster...');
-        const result = await renderStillOnWeb({
-          composition: {
-            component: posterComp,
-            durationInFrames,
-            fps,
-            width: design.width,
-            height: design.height,
-            id: 'agent-design',
-            calculateMetadata: null,
-            defaultProps: {},
-          },
-          frame: 0,
-          imageFormat: 'jpeg',
-          inputProps: (design.props || {}) as Record<string, unknown>,
+        const container = playerRef.current?.getContainerNode();
+        if (!container) { onComplete(''); return; }
+        playerRef.current?.seekTo(0);
+        playerRef.current?.pause();
+        console.log('🎨 [design] capturing poster from visible Player...');
+        const dataUrl = await toJpeg(container, {
+          quality: 0.92,
+          width: design.width,
+          height: design.height,
+          cacheBust: true,
         });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          console.log('🎨 [design] poster captured');
-          onComplete(reader.result as string);
-        };
-        reader.readAsDataURL(result.blob);
+        console.log('🎨 [design] poster captured');
+        setPosterUrl(dataUrl);
+        onComplete(dataUrl);
       } catch (e) {
-        console.warn('🎨 [design] poster capture failed, using empty:', e);
-        onComplete(''); // fallback: empty poster (Player still works)
+        console.warn('🎨 [design] capture failed:', e);
+        onComplete('');
       }
-    })();
+    }, 3000); // 3s for images to load in visible Player
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Component]);
+  }, [autoCapture, Component]);
 
   if (!Component) return null;
+
+  // After capture, show poster image instead of Player (destroy Player to save resources)
+  if (posterUrl) {
+    return (
+      <div style={{ borderRadius: 12, overflow: 'hidden', margin: '8px 0' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={posterUrl} alt="design" style={{ width: '100%', borderRadius: 12 }} />
+      </div>
+    );
+  }
 
   const isFill = mode === 'fill';
 
@@ -147,8 +128,7 @@ export async function exportDesignVideo(
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
   preloadBabel().catch(() => {});
-  const resolvedCode = await resolveCodeUrls(design.code);
-  const Component = evalRemotionJSX(resolvedCode);
+  const Component = evalRemotionJSX(design.code);
   if (!Component) throw new Error('Failed to compile design code');
 
   const fps = design.animation?.fps || 30;
