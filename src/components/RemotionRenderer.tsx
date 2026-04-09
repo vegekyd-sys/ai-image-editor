@@ -5,11 +5,7 @@ import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import type { DesignPayload } from '@/types';
-
-// Pre-load Babel standalone on first import (background, non-blocking)
-if (typeof window !== 'undefined') {
-  preloadBabel().catch(() => {});
-}
+// Sucrase is bundled — no preload needed. Babel loaded on-demand only if Sucrase fails.
 
 export type { DesignPayload };
 
@@ -87,12 +83,8 @@ function StillRenderer({ design, onComplete, onError }: StillRendererProps) {
   // Load Babel + compile (async because Babel is lazy-loaded)
   useEffect(() => {
     (async () => {
-      try {
-        await preloadBabel();
-      } catch (e) {
-        onError(`Design engine failed to load: ${e instanceof Error ? e.message : String(e)}`);
-        return;
-      }
+      // Sucrase compiles synchronously (bundled). Babel loaded in background as fallback.
+      preloadBabel().catch(() => {});
       const comp = evalRemotionJSX(design.code);
       if (!comp) { onError('Failed to compile design code'); return; }
       setComponent(() => comp);
@@ -143,12 +135,8 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
   // Load Babel + compile (async because Babel is lazy-loaded)
   useEffect(() => {
     (async () => {
-      try {
-        await preloadBabel();
-      } catch (e) {
-        onError(`Design engine failed to load: ${e instanceof Error ? e.message : String(e)}`);
-        return;
-      }
+      // Sucrase compiles synchronously (bundled). Babel loaded in background as fallback.
+      preloadBabel().catch(() => {});
       const comp = evalRemotionJSX(design.code);
       if (!comp) { onError('Failed to compile design code'); return; }
       setComponent(() => comp);
@@ -254,7 +242,7 @@ export async function exportDesignVideo(
   design: DesignPayload,
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
-  await preloadBabel();
+  preloadBabel().catch(() => {}); // Babel as background fallback
   const Component = evalRemotionJSX(design.code);
   if (!Component) throw new Error('Failed to compile design code');
 

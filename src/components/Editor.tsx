@@ -10,10 +10,8 @@ import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
 import dynamic from 'next/dynamic';
-import { preloadBabel, getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
+import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
-// Pre-load Babel from CDN as soon as Editor module loads (not waiting for first design)
-if (typeof window !== 'undefined') { preloadBabel().catch(() => {}); }
 // Semaphore to limit concurrent /api/tips requests across all snapshots.
 // Single image: 4 categories run in parallel (fine). Multi-image: 10 images × 4 = 40 concurrent → rate limit risk.
 // With maxConcurrent=4, multi-image tips are effectively serialized per snapshot.
