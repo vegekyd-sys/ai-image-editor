@@ -39,16 +39,25 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   AbsoluteFill,
 };
 
-// Lazy-loaded Babel transform function (37MB — must not be in initial bundle)
+// Lazy-loaded Babel transform function — loaded from CDN to avoid 37MB bundle
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _babelTransform: ((code: string, opts: any) => { code: string }) | null = null;
 
-/** Pre-load Babel standalone. Call this early to avoid delay on first design render. */
+/** Pre-load Babel standalone from CDN. Call this early to avoid delay on first design render. */
 export async function preloadBabel(): Promise<void> {
   if (_babelTransform) return;
-  // @ts-expect-error — @babel/standalone has no types
-  const babel = await import('@babel/standalone');
-  _babelTransform = babel.transform;
+  // Load from CDN via script tag — avoids bundling 37MB into client chunk
+  await new Promise<void>((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).Babel) { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Babel from CDN'));
+    document.head.appendChild(script);
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _babelTransform = (window as any).Babel.transform;
 }
 
 /**
