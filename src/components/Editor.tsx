@@ -1538,6 +1538,24 @@ export default function Editor({
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
             setAgentStatus('Rendering design...');
             pendingDesignMsgIdRef.current = currentMsgId;
+            // Resolve __snapshot_N__ placeholders in props to actual snapshot images.
+            // Server replaces large base64 with placeholders to keep SSE payload small.
+            if (design.props) {
+              const resolvedProps = { ...design.props };
+              for (const [key, val] of Object.entries(resolvedProps)) {
+                if (typeof val === 'string') {
+                  const m = val.match(/^__snapshot_(\d+)__$/);
+                  if (m) {
+                    const idx = parseInt(m[1], 10) - 1;
+                    const snap = snapshotsRef.current[idx];
+                    if (snap) {
+                      resolvedProps[key] = snap.imageUrl || snap.image;
+                    }
+                  }
+                }
+              }
+              design = { ...design, props: resolvedProps };
+            }
             setPendingDesign(design);
           },
           onDone: () => {

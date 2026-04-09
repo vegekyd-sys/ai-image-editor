@@ -568,11 +568,24 @@ Your code must return a value:
                 durationInSeconds: result.durationInSeconds || result.duration || 5,
               };
             }
+            // Replace snapshot image values in props with lightweight placeholders
+            // to avoid sending multi-MB base64 over SSE (which may truncate on mobile).
+            // Frontend resolves __snapshot_N__ back to actual images.
+            const designProps = result.props ? { ...result.props } : undefined;
+            if (designProps) {
+              for (const [key, val] of Object.entries(designProps)) {
+                if (typeof val !== 'string') continue;
+                const idx = ctx.snapshotImages.indexOf(val);
+                if (idx >= 0) {
+                  designProps[key] = `__snapshot_${idx + 1}__`;
+                }
+              }
+            }
             (ctx as any).__pendingDesign = {
               code: result.code,
               width: result.width || 1080,
               height: result.height || 1350,
-              props: result.props,
+              props: designProps,
               animation,
             };
             return { type: 'text' as const, content: 'Design ready — rendering in browser.' };
