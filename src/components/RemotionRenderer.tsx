@@ -85,18 +85,12 @@ export default function RemotionRenderer({ design, onComplete, onError, mode = '
 
   const isFill = mode === 'fill';
 
-  // Still designs: render Player paused at frame 0, capture poster, then show poster image
-  // Animation designs: render Player with controls
+  // Both still and animation: render Player visible (same as video)
   return (
     <div style={isFill ? { width: '100%', height: '100%' } : {
-      // Still capture: render visible (iOS Safari delays loading off-screen images).
-      // Use opacity near-zero so images load but Player is barely visible.
-      // After capture, onComplete triggers setPendingDesign(null) which unmounts this.
-      position: isStill ? 'fixed' : 'relative',
-      ...(isStill ? { left: 0, top: 0, zIndex: -1, opacity: 0.01, pointerEvents: 'none' as const } : {}),
-      borderRadius: isStill ? 0 : 12,
+      borderRadius: 12,
       overflow: 'hidden',
-      margin: isStill ? 0 : '8px 0',
+      margin: '8px 0',
     }}>
       <Player
         ref={playerRef}
@@ -108,11 +102,11 @@ export default function RemotionRenderer({ design, onComplete, onError, mode = '
         fps={fps}
         style={isFill
           ? { width: '100%', height: '100%' }
-          : { width: isStill ? design.width : '100%', height: isStill ? design.height : undefined, borderRadius: isStill ? 0 : 12 }
+          : { width: '100%', borderRadius: 12 }
         }
         controls={!isStill}
         loop={!isStill}
-        autoPlay={!isStill}
+        autoPlay={false}
         acknowledgeRemotionLicense
         errorFallback={({ error }) => (
           <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
