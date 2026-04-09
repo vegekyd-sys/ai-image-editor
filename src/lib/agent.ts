@@ -457,8 +457,8 @@ Available in your code:
 - \`sharp\` — image format conversion and metadata. Example: \`const { width, height } = await sharp(images[0]).metadata();\`
 - \`saveToWorkspace(path, content, contentType?)\` — Save a file directly to workspace (Supabase Storage). Returns \`{ success, storageUrl, error }\`. Use for skill assets, exports, etc.
 - \`JSZip\` — Create zip files. Example: \`const zip = new JSZip(); zip.file('SKILL.md', text); zip.file('assets/ref.jpg', imgBuffer); const buf = await zip.generateAsync({type:'nodebuffer'}); const {storageUrl} = await saveToWorkspace('exports/skill.zip', buf, 'application/zip');\`
-- \`images\` — pre-fetched snapshot Buffers from \`image_refs\` parameter. \`images[0]\` = first ref, \`images[1]\` = second, etc. Ready for sharp operations.
-- \`ctx.snapshotImages\` — array of snapshot URLs/base64 (index 0 = <<<image_1>>>)
+- \`images\` — pre-fetched snapshot Buffers from \`image_refs\` parameter. \`images[0]\` = first ref, \`images[1]\` = second, etc. **Only for sharp operations (metadata, crop, format conversion). Do NOT convert to base64 for design props — use ctx.snapshotImages URLs instead.**
+- \`ctx.snapshotImages\` — array of snapshot URLs (index 0 = <<<image_1>>>). **Use these for design props** (e.g. \`props: { snapshotUrl: ctx.snapshotImages[0] }\`). These are lightweight URLs, not base64.
 - \`ctx.projectId\`, \`ctx.userId\` — current project and user IDs
 - \`fetch\` — make HTTP requests
 - Standard Node.js: Buffer, JSON, Math, Date, etc.
