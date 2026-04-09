@@ -60,11 +60,9 @@ export default function RemotionRenderer({ design, onComplete, onError, mode = '
           onError('Player container not available');
           return;
         }
-        // Ensure Player is at frame 0 and paused for still capture
-        if (isStill) {
-          playerRef.current?.seekTo(0);
-          playerRef.current?.pause();
-        }
+        // Seek to frame 0 and pause for poster capture (both still and animation)
+        playerRef.current?.seekTo(0);
+        playerRef.current?.pause();
         console.log('🎨 [design] capturing poster via html-to-image...');
         const dataUrl = await toJpeg(container, {
           quality: 0.92,
