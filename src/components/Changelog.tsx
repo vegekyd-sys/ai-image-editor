@@ -8,6 +8,29 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-09',
+    en: { title: 'Remotion Rendering Engine & Design Persistence', items: [
+      'Design mode renders via Remotion: still images use renderStillOnWeb (JPEG), animations use Remotion Player with controls',
+      'Design persistence: code saved to workspace, survives page refresh',
+      'MP4 export: Save button auto-detects animated designs and exports via renderMediaOnWeb (browser-side h264/mp4)',
+      'Babel standalone replaces Sucrase for JSX compilation — supports all modern JS/TS syntax',
+      'run_code image_refs: model chooses which snapshot images to pre-fetch as Buffers',
+      'Video Design skill: 4-question self-check framework for cinematic video output',
+      'Agent upgraded to Opus 4.6 with AGENT_MODEL env var for flexible model switching',
+      'All visual output defaults to design mode (React/CSS); sharp reserved for format conversion only',
+    ]},
+    zh: { title: 'Remotion 渲染引擎 & Design 持久化', items: [
+      'Design 模式用 Remotion 渲染：静态图用 renderStillOnWeb（JPEG），动画用 Remotion Player 带控制条播放',
+      'Design 持久化：代码存到 workspace，刷新页面后自动恢复',
+      'MP4 导出：Save 按钮自动判断，animated design 用 renderMediaOnWeb 浏览器端导出 h264/mp4',
+      'Babel standalone 替代 Sucrase 编译 JSX — 支持 optional chaining 等现代语法',
+      'run_code image_refs：模型自选带哪些图片，pre-fetch 为 Buffer 供代码使用',
+      '视频设计 Skill：四问自检框架，确保视频有电影感而非网页感',
+      'Agent 升级为 Opus 4.6，AGENT_MODEL 环境变量可灵活切换模型',
+      '所有视觉输出默认用 design 模式（React/CSS），sharp 只做格式转换',
+    ]},
+  },
+  {
     date: '2026-04-05',
     en: { title: 'Workspace Agent & Code Execution', items: [
       'Workspace file system: skills and files stored in Supabase with persistent workspace_files table',
