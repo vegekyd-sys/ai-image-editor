@@ -2092,12 +2092,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     init();
   }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
 
-  // Existing project with no tips on latest snapshot — auto-fetch
+  // Existing project with no tips on latest snapshot — auto-fetch (skip design snapshots)
   const autoFetchTriggered = useRef(false);
   useEffect(() => {
     if (autoFetchTriggered.current || pendingImages?.length) return;
     const lastSnap = snapshots[snapshots.length - 1];
     if (!lastSnap || lastSnap.tips.length > 0) return;
+    // Animated design snapshots don't need tips (still designs do)
+    if (lastSnap.design?.animation) return;
     autoFetchTriggered.current = true;
     const image = getImageForApi(lastSnap);
     if (!image) return;
@@ -3317,7 +3319,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
             cacheImage(`snap:${snapId}`, dataUrl);
-            // Skip tips for animated designs (video snapshots don't need edit suggestions)
+            // Still designs get tips, animated designs don't
             if (!currentDesign?.animation) {
               fetchTipsForSnapshot(snapId, dataUrl, 'none');
             }
