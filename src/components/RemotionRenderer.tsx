@@ -9,40 +9,44 @@ import type { DesignPayload } from '@/types';
 
 export type { DesignPayload };
 
-/** Helper: resolve external URLs in props to data URLs (cross-origin workaround for renderStillOnWeb) */
-async function resolvePropsUrls(props: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const resolveValue = async (val: unknown): Promise<unknown> => {
-    if (typeof val === 'string' && val.startsWith('http')) {
-      // Resolve any HTTP URL that looks like an image (file extension or Supabase storage path)
-      if (/\.(jpg|jpeg|png|webp|gif)/i.test(val) || val.includes('/storage/')) {
-        try {
-          const res = await fetch(val);
-          const blob = await res.blob();
-          const dataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(blob);
-          });
-          console.log(`🎨 [design] resolved URL → dataUrl (${(blob.size / 1024).toFixed(0)}KB)`);
-          return dataUrl;
-        } catch (e) {
-          console.warn(`🎨 [design] failed to resolve URL:`, e);
-          return val;
-        }
+/** Helper: fetch a URL to data URL */
+async function urlToDataUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Resolve all HTTP image/audio URLs in a code string to data URLs (cross-origin workaround) */
+async function resolveCodeUrls(code: string): Promise<string> {
+  // Find all HTTP URLs in the code (inside quotes or template literals)
+  const urlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif|mp3|wav|m4a|aac|ogg)([^\s"'`<>)}\]]*)/gi;
+  // Also match Supabase storage URLs that may not end with extensions
+  const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi;
+
+  const urls = new Set<string>();
+  for (const m of code.matchAll(urlPattern)) urls.add(m[0]);
+  for (const m of code.matchAll(storagePattern)) urls.add(m[0]);
+
+  if (urls.size === 0) return code;
+
+  let resolved = code;
+  await Promise.all([...urls].map(async (url) => {
+    try {
+      const dataUrl = await urlToDataUrl(url);
+      // Replace all occurrences
+      while (resolved.includes(url)) {
+        resolved = resolved.replace(url, dataUrl);
       }
+      console.log(`🎨 [design] resolved code URL → dataUrl (${url.substring(0, 60)}...)`);
+    } catch (e) {
+      console.warn(`🎨 [design] failed to resolve code URL: ${url.substring(0, 60)}`, e);
     }
-    if (Array.isArray(val)) return Promise.all(val.map(resolveValue));
-    if (val && typeof val === 'object' && !(val instanceof Blob)) {
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(val)) out[k] = await resolveValue(v);
-      return out;
-    }
-    return val;
-  };
-  const resolved: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(props)) {
-    resolved[key] = await resolveValue(val);
-  }
+  }));
+
   return resolved;
 }
 
@@ -94,26 +98,21 @@ function StillRenderer({ design, onComplete, onError }: StillRendererProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
 
-  // Load Babel + compile (async because Babel is lazy-loaded)
+  // Resolve URLs in code → compile → capture
   useEffect(() => {
-    (async () => {
-      // Sucrase compiles synchronously (bundled). Babel loaded in background as fallback.
-      preloadBabel().catch(() => {});
-      const comp = evalRemotionJSX(design.code);
-      if (!comp) { onError('Failed to compile design code'); return; }
-      setComponent(() => comp);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [design.code]);
-
-  useEffect(() => {
-    if (!Component || capturingRef.current) return;
+    if (capturingRef.current) return;
     capturingRef.current = true;
     (async () => {
       try {
+        // 1. Resolve HTTP URLs in code to data URLs (cross-origin workaround)
+        const resolvedCode = await resolveCodeUrls(design.code);
+        // 2. Compile
+        preloadBabel().catch(() => {});
+        const comp = evalRemotionJSX(resolvedCode);
+        if (!comp) { onError('Failed to compile design code'); return; }
+        // 3. Capture
         console.log('🎨 [design] renderStillOnWeb starting...');
-        const resolvedProps = await resolvePropsUrls(design.props || {});
-        const dataUrl = await captureStill(Component, design, resolvedProps);
+        const dataUrl = await captureStill(comp, { ...design, code: resolvedCode }, design.props || {});
         console.log('🎨 [design] renderStillOnWeb done');
         onComplete(dataUrl);
       } catch (e) {
@@ -122,7 +121,7 @@ function StillRenderer({ design, onComplete, onError }: StillRendererProps) {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Component]);
+  }, [design.code]);
 
   return null; // offscreen
 }
@@ -141,19 +140,28 @@ interface AnimationRendererProps {
 function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: AnimationRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const posterCapturedRef = useRef(false);
-  const propsResolvedRef = useRef(false);
-  const [resolvedProps, setResolvedProps] = useState<Record<string, unknown> | null>(null);
+  const initRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
+  // Poster uses resolved code (data URLs); Player uses original code (browser loads URLs natively)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [PosterComponent, setPosterComponent] = useState<React.ComponentType<any> | null>(null);
 
-  // Load Babel + compile (async because Babel is lazy-loaded)
+  // Compile for Player (original code — browser handles URL loading)
+  // + compile for poster (resolved code — renderStillOnWeb needs data URLs)
   useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
     (async () => {
-      // Sucrase compiles synchronously (bundled). Babel loaded in background as fallback.
       preloadBabel().catch(() => {});
+      // Player component (original URLs — browser loads them fine)
       const comp = evalRemotionJSX(design.code);
       if (!comp) { onError('Failed to compile design code'); return; }
       setComponent(() => comp);
+      // Poster component (resolved URLs — for renderStillOnWeb Canvas)
+      const resolvedCode = await resolveCodeUrls(design.code);
+      const posterComp = evalRemotionJSX(resolvedCode);
+      if (posterComp) setPosterComponent(() => posterComp);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
@@ -163,24 +171,13 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
-  // Pre-fetch URLs in props → data URLs (for both Player and poster)
+  // Capture frame 0 as poster for persistence
   useEffect(() => {
-    if (!Component || propsResolvedRef.current) return;
-    propsResolvedRef.current = true;
-    (async () => {
-      const props = await resolvePropsUrls(design.props || {});
-      setResolvedProps(props);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Component]);
-
-  // Capture frame 0 as poster for persistence (after props resolved)
-  useEffect(() => {
-    if (!Component || !resolvedProps || posterCapturedRef.current) return;
+    if (!PosterComponent || posterCapturedRef.current) return;
     posterCapturedRef.current = true;
     (async () => {
       try {
-        const dataUrl = await captureStill(Component, design, resolvedProps);
+        const dataUrl = await captureStill(PosterComponent, design, design.props || {});
         console.log('🎨 [design] poster captured');
         onPoster(dataUrl);
       } catch (e) {
@@ -188,9 +185,9 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Component, resolvedProps]);
+  }, [PosterComponent]);
 
-  if (!Component || !resolvedProps) return null;
+  if (!Component) return null;
 
   const isFill = mode === 'fill';
 
@@ -199,7 +196,7 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
       <Player
         ref={playerRef}
         component={Component}
-        inputProps={resolvedProps}
+        inputProps={design.props || {}}
         compositionWidth={design.width}
         compositionHeight={design.height}
         durationInFrames={durationInFrames}
@@ -257,15 +254,14 @@ export async function exportDesignVideo(
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
   preloadBabel().catch(() => {}); // Babel as background fallback
-  const Component = evalRemotionJSX(design.code);
+  const resolvedCode = await resolveCodeUrls(design.code);
+  const Component = evalRemotionJSX(resolvedCode);
   if (!Component) throw new Error('Failed to compile design code');
 
   const fps = design.animation?.fps || 30;
   const durationInFrames = design.animation
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
-
-  const resolvedProps = await resolvePropsUrls(design.props || {});
 
   const result = await renderMediaOnWeb({
     composition: {
@@ -278,7 +274,7 @@ export async function exportDesignVideo(
       calculateMetadata: null,
       defaultProps: {},
     },
-    inputProps: resolvedProps as Record<string, unknown>,
+    inputProps: (design.props || {}) as Record<string, unknown>,
     videoCodec: 'h264',
     container: 'mp4',
     onProgress: onProgress || null,
