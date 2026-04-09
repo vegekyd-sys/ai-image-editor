@@ -1558,14 +1558,22 @@ export default function Editor({
                 }
               }
             }
-            // Resolve in props
+            // Resolve in props (handles strings, arrays, nested objects)
+            const resolveValue = (v: unknown): unknown => {
+              if (typeof v === 'string' && v.includes('__snapshot_')) return resolveSnapshot(v);
+              if (Array.isArray(v)) return v.map(resolveValue);
+              if (v && typeof v === 'object') {
+                const out: Record<string, unknown> = {};
+                for (const [k, val] of Object.entries(v)) out[k] = resolveValue(val);
+                return out;
+              }
+              return v;
+            };
             let resolvedProps = design.props;
             if (resolvedProps) {
-              resolvedProps = { ...resolvedProps };
-              for (const [key, val] of Object.entries(resolvedProps)) {
-                if (typeof val === 'string' && val.includes('__snapshot_')) {
-                  resolvedProps[key] = resolveSnapshot(val);
-                }
+              resolvedProps = {};
+              for (const [key, val] of Object.entries(design.props!)) {
+                resolvedProps[key] = resolveValue(val);
               }
             }
             setPendingDesign({ ...design, code: resolvedCode, props: resolvedProps });

@@ -583,14 +583,23 @@ Your code must return a value:
                 designCode = designCode.replace(img, placeholder);
               }
             }
-            // Replace in props
+            // Replace in props (handles strings, arrays of strings, nested objects)
+            const replaceInValue = (v: unknown): unknown => {
+              if (typeof v === 'string') {
+                const idx = ctx.snapshotImages.indexOf(v);
+                return idx >= 0 ? `__snapshot_${idx + 1}__` : v;
+              }
+              if (Array.isArray(v)) return v.map(replaceInValue);
+              if (v && typeof v === 'object') {
+                const out: Record<string, unknown> = {};
+                for (const [k, val] of Object.entries(v)) out[k] = replaceInValue(val);
+                return out;
+              }
+              return v;
+            };
             if (designProps) {
               for (const [key, val] of Object.entries(designProps)) {
-                if (typeof val !== 'string') continue;
-                const idx = ctx.snapshotImages.indexOf(val);
-                if (idx >= 0) {
-                  designProps[key] = `__snapshot_${idx + 1}__`;
-                }
+                designProps[key] = replaceInValue(val);
               }
             }
             (ctx as any).__pendingDesign = {
