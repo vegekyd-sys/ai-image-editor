@@ -1366,15 +1366,22 @@ export default function Editor({
 
     // Snapshot images for API: prefer Storage URLs (tiny payload).
     // base64 fallback only for the current image (needed for vision); others skip if no URL yet.
-    const snapshotImagesForApi = snapshotsRef.current.map((s) => {
-      return s.imageUrl || '';
-    }).map((img, i) => {
-      // Current image may need base64 if URL not ready yet (for vision/analyze_image)
-      if (!img && i === contextSnapshotIndex) {
-        const fallback = getImageForApi(snapshotsRef.current[i]);
-        return fallback || '';
+    // Wait briefly for image uploads to complete (up to 5s) if any snapshot lacks a URL
+    const hasAllUrls = () => snapshotsRef.current.every(s => s.imageUrl || s.design);
+    if (!hasAllUrls()) {
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        if (hasAllUrls()) break;
       }
-      return img;
+    }
+    // Build snapshot images: prefer Storage URLs, base64 fallback for current image only
+    const snapshotImagesForApi = snapshotsRef.current.map((s, i) => {
+      if (s.imageUrl) return s.imageUrl;
+      // Current image fallback to base64 (for vision/analyze_image)
+      if (i === contextSnapshotIndex) {
+        return getImageForApi(s) || '';
+      }
+      return '';
     });
 
     const _agentT0 = performance.now();
@@ -1539,7 +1546,7 @@ export default function Editor({
           },
           onDesign: (design) => {
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
-            setAgentStatus('Rendering design...');
+            setAgentStatus(t('status.renderingDesign'));
             pendingDesignMsgIdRef.current = currentMsgId;
             // ctx.snapshotImages are URLs — design code/props reference them directly.
             // No placeholder resolution needed.
@@ -3329,7 +3336,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             setMessages((prev) => prev.map((m) =>
               m.id === msgId ? { ...m, image: dataUrl } : m
             ));
-            setAgentStatus('Design rendered ✅');
+            setAgentStatus(t('status.designCreated'));
             // Always clear pendingDesign — animated designs continue via animatedDesigns map in ImageCanvas
             setPendingDesign(null);
           }}
@@ -3342,7 +3349,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 m.id === msgId ? { ...m, content: (m.content || '') + `\n\n⚠️ Design render failed: ${error}` } : m
               ));
             }
-            setAgentStatus('Design failed');
+            setAgentStatus(t('status.designFailed'));
           }}
         />
       )}

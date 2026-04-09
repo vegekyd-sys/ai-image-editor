@@ -10,6 +10,8 @@ import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
+import { createMusic } from './skills/create-music';
+import { getMusicStatus } from './skills/get-music-status';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -594,15 +596,12 @@ Your code must return a value:
               props: result.props,
               animation,
             };
-            // Update ctx so Agent knows a new snapshot was created.
-            // The actual screenshot is generated on the frontend, but Agent needs
-            // to know the new <<<image_N+1>>> exists and is the "current" image.
-            // Use a placeholder URL — the real URL will be set after frontend upload.
-            const designPlaceholder = `__design_pending_${ctx.snapshotImages.length + 1}__`;
-            ctx.snapshotImages.push(designPlaceholder);
+            // Design screenshot is rendered on the frontend — not available server-side.
+            // Tell Agent to review its own code if changes needed, not call analyze_image.
+            const newIdx = ctx.snapshotImages.length + 1;
+            ctx.snapshotImages.push(''); // placeholder — real URL set after frontend upload
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-            // currentImage stays as the source image (design's visual is not available server-side)
-            return { type: 'text' as const, content: `Design ready — rendering in browser. Now <<<image_${ctx.snapshotImages.length}>>>.` };
+            return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>. The screenshot is generated client-side so you cannot analyze_image on it. To modify this design, read_file the saved code from code/ and edit it.` };
           }
 
           // Buffer or Uint8Array → treat as image
@@ -662,6 +661,33 @@ Your code must return a value:
           type: 'content' as const,
           value: [{ type: 'text' as const, text: output.content || 'Code executed successfully.' }],
         };
+      },
+    }),
+
+    generate_music: tool({
+      description: `Generate background music using Suno AI. Returns a taskId immediately.
+Music takes 2-3 minutes — call get_music_status to poll.
+Prompt tips: genre, mood, instruments, and beat structure matching your video timing.
+Example: "15-second cinematic, slow strings 0-3s, percussive hit at 3s, rising energy 3-10s, piano fadeout"`,
+      inputSchema: z.object({
+        prompt: z.string().describe('Music description: genre, mood, instruments, beat timing'),
+        instrumental: z.boolean().optional().describe('No vocals (default: true)'),
+        style: z.string().optional().describe('Genre/mood tags for custom mode'),
+      }),
+      execute: async ({ prompt, instrumental, style }) => {
+        return await createMusic({ prompt, instrumental, style });
+      },
+    }),
+
+    get_music_status: tool({
+      description: `Poll music generation status. Returns audioUrl when complete.
+Status: pending → processing → completed (with audioUrl) or failed.
+Poll every 15-20 seconds. When completed, use the audioUrl in <Audio> component.`,
+      inputSchema: z.object({
+        taskId: z.string().describe('Task ID from generate_music'),
+      }),
+      execute: async ({ taskId }) => {
+        return await getMusicStatus({ taskId });
       },
     }),
 
