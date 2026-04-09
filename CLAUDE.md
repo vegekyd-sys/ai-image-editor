@@ -75,6 +75,8 @@ printf 'value' | npx vercel env add NAME preview --force
 
 Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。**当前生图和 tips 均走 Google 直连** `gemini-3.1-flash-image-preview`（2026-03-25 从 OpenRouter 切换，因 OpenRouter 账号被封）。tips/preview 缩略图不走 MOCK_AI（已关闭）。
 
+**Remotion 渲染引擎（2026-04-09，worktree-workspace-agent 分支）**：Agent 的 `run_code` design 模式用 Remotion 渲染。静态图用 `renderStillOnWeb`（JPEG截图），动画用 `@remotion/player`（带控制条）+ poster 截图。Design JSON 持久化到 workspace `code/{snapId}.json`，刷新后恢复。MP4 导出用 `renderMediaOnWeb`（浏览器端 h264/mp4）。JSX 编译从 Sucrase 切换到 `@babel/standalone`（支持现代语法）。Satori 已移除（design 模式替代）。Agent 模型升级为 Opus 4.6（`us.anthropic.claude-opus-4-6-v1`）。`run_code` 新增 `image_refs` 参数让模型自选带哪些图片。所有视觉输出默认用 design 模式，sharp 只做格式转换。`video-design` skill 提供视频创作四问自检框架。
+
 **NSFW 内容保护（2026-03-25）**：`ContentBlockedError` 检测 Gemini `promptFeedback.blockReason`。Tips：blocked 时不重试不 fallback，发 `[BLOCKED]` SSE 事件给前端。生图：blocked 时 model-router 自动 fallback 到 Qwen。Tips 并发信号量限制 max 4（防多图上传爆发 40+ 并发请求）。
 
 **Agent/自动化友好改造（2026-03-25）**：`data-testid` + `aria-label` + `data-*` 状态属性。Editor root 暴露 `data-tips-status/agent-status/snapshot-count/view-mode/preferred-model`。File input 改 `opacity:0`（不再 `display:none`），Chrome DevTools/Playwright 可上传文件。Tip 卡片有 `data-testid="tip-card-N"` + `data-tip-category/label/status`。
@@ -240,11 +242,21 @@ Key components in `src/components/`:
 - **`streamTips`**: 图片分析 + prompt 模板 → 逐 tip 流式输出
 - **Prompt templates**: `src/lib/prompts/*.md`（enhance, creative, wild, captions, pony_translate, wai_translate）
 
-`src/lib/agent.ts` — Makaron Agent（Claude Sonnet via Bedrock）:
-- **Tools**: `generate_image`（`model` 参数选模型）、`analyze_image`、`rotate_camera`、`generate_animation`
-- **Model selection**: Agent 根据 agent.md 指令选模型（anime→pony, NSFW→qwen, 用户指定→直接用）
+`src/lib/agent.ts` — Makaron Agent（Claude Opus 4.6 via Bedrock）:
+- **Model**: `us.anthropic.claude-opus-4-6-v1`
+- **Tools**: `generate_image`、`analyze_image`、`rotate_camera`、`generate_animation`、`run_code`（含 `image_refs`）、`list_files`、`read_file`、`write_file`、`delete_file`
+- **run_code design 模式**: 返回 React JSX → 浏览器渲染（still: renderStillOnWeb → JPEG, animation: Player + poster）
+- **共享工具函数**: `validateImageIndex` + `fetchImageBuffer`（所有 tool 复用）
 - **`runMakaronAgent`**: Async generator yielding SSE events
 - **System prompt**: `src/lib/prompts/agent.md`
+
+`src/lib/evalRemotionJSX.ts` — Babel standalone 编译 Agent JSX（支持 optional chaining 等现代语法）
+
+`src/components/RemotionRenderer.tsx` — Remotion 渲染:
+- **Still**: `renderStillOnWeb` → JPEG 截图（offscreen）
+- **Animation**: `@remotion/player` Player + `renderStillOnWeb` frame 0 poster
+- **MP4 导出**: `exportDesignVideo` → `renderMediaOnWeb`（h264/mp4）
+- **跨域图片**: `resolvePropsUrls` 预取 Supabase URL → data URL
 
 `src/lib/comfyui-qwen.ts` — Qwen Edit AIO ComfyUI 客户端（img2img + rotate）
 `src/lib/comfyui-sdxl.ts` — Pony/WAI 共用 SDXL ComfyUI 函数（txt2img + danbooru 翻译）

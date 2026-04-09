@@ -104,15 +104,24 @@ export default function ProjectsPage() {
       setSkillUploading(false)
     }
   }, [])
-  // Fetch skills lazily — only when user expands the skill panel
+  // Prefetch skills during idle time so they're ready when user expands
   const skillsFetchedRef = useRef(false)
   useEffect(() => {
-    if (!skillsExpanded || skillsFetchedRef.current) return
-    skillsFetchedRef.current = true
-    fetch('/api/skills').then(r => r.json()).then(d => {
-      if (d.skills) setAvailableSkills(d.skills)
-    }).catch(() => {})
-  }, [skillsExpanded])
+    if (skillsFetchedRef.current) return
+    const load = () => {
+      skillsFetchedRef.current = true
+      fetch('/api/skills').then(r => r.json()).then(d => {
+        if (d.skills) setAvailableSkills(d.skills)
+      }).catch(() => {})
+    }
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(load, { timeout: 5000 })
+      return () => cancelIdleCallback(id)
+    }
+    // Safari fallback
+    const t = setTimeout(load, 2000)
+    return () => clearTimeout(t)
+  }, [])
   const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
   const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)

@@ -47,6 +47,10 @@ const OPENROUTER_MODEL = `google/${MODEL}`;
 const TIPS_PROVIDER = (process.env.TIPS_PROVIDER || 'openrouter') as 'bedrock' | 'openrouter' | 'google';
 // Temperature for tips generation — higher = more creative
 const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
+// Thinking level for tips (Gemini 3.1 Flash): minimal | low | high
+// Default: creative/wild = high, enhance/captions = minimal
+// Override with TIPS_THINKING env var to apply to ALL categories
+const TIPS_THINKING_OVERRIDE = process.env.TIPS_THINKING as 'minimal' | 'low' | 'high' | undefined;
 type TipsProvider = 'bedrock' | 'openrouter' | 'google';
 
 // Bedrock instance for tips (lazy init)
@@ -162,9 +166,11 @@ function buildTipsPrompt(
   const userText = skillContext
     ? `${metaContext}${dedupeNote}[Active Skill]\n${skillContext}\n\n根据上面 skill 的 Tips Directions，为这张照片生成 ${count} 条 ${CATEGORY_HINT[category] || category} 编辑建议。`
     : `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}`;
-  // creative/wild use high reasoning for better creativity; enhance/captions use minimal for speed
-  const useHighReasoning = category === 'creative' || category === 'wild';
-  return { systemPrompt, userText, useHighReasoning };
+  // Thinking level: env override > per-category default
+  // Default: creative/wild = high, enhance/captions = minimal
+  const defaultLevel = (category === 'creative' || category === 'wild') ? 'high' : 'minimal';
+  const thinkingLevel = TIPS_THINKING_OVERRIDE || defaultLevel;
+  return { systemPrompt, userText, thinkingLevel };
 }
 
 // Google structured output schema (only used with Google provider + gemini-3)
@@ -1030,12 +1036,16 @@ async function* streamTipsByCategoryGoogle(
   locale?: string,
   skillContext?: string,
 ): AsyncGenerator<Tip> {
-  const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
 
   const supportsStructuredOutput = MODEL.includes('gemini-3');
+  // Gemini 3.x uses thinkingLevel (minimal/low/medium/high), not thinkingBudget
+  const isGemini3 = MODEL.includes('gemini-3');
   const config: Record<string, unknown> = {
     systemInstruction: systemPrompt,
-    thinkingConfig: { thinkingBudget: useHighReasoning ? -1 : 0 },
+    ...(isGemini3
+      ? { thinkingConfig: { thinkingLevel } }
+      : { thinkingConfig: { thinkingBudget: thinkingLevel === 'high' ? -1 : thinkingLevel === 'minimal' ? 0 : 1024 } }),
   };
   if (supportsStructuredOutput) {
     config.responseMimeType = 'application/json';
@@ -1076,8 +1086,9 @@ async function* streamTipsByCategoryOpenRouter(
   locale?: string,
   skillContext?: string,
 ): AsyncGenerator<Tip> {
-  const { systemPrompt, userText, useHighReasoning } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
-  const reasoning = useHighReasoning ? { effort: 'high' } : { effort: 'minimal' };
+  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  // OpenRouter uses effort: minimal/low/medium/high
+  const reasoning = { effort: thinkingLevel };
 
   const t0 = Date.now();
   tlog(`[tips:openrouter:${category}] fetch start (reasoning: ${reasoning.effort})`);

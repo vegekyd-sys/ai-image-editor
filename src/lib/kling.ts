@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 
-const KLING_BASE = 'https://api-singapore.klingai.com'
+const KLING_BASE = process.env.KLING_API_BASE || 'https://api-beijing.klingai.com'
 
 export interface KlingTaskInput {
   prompt: string

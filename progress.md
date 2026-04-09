@@ -3681,3 +3681,36 @@ get-video-status.ts (skill)
 - ✅ 默认 provider 保持 `kling`，Foldin 作为备用可切换
 - ✅ 开发服务器 http://localhost:3000 已验证功能正常
 
+
+## 2026-04-09 — Remotion 渲染引擎 + Design 持久化 + Agent 升级
+
+### 新功能
+- **Remotion 渲染引擎**：Agent `run_code` design 模式用 Remotion 渲染。静态图用 `renderStillOnWeb`（JPEG 截图），动画用 `@remotion/player`（带控制条播放）+ poster 截图
+- **Design 持久化**：design JSON 存到 workspace `code/{snapId}.json`（Supabase Storage），刷新后自动恢复
+- **MP4 导出**：animated design 点 Save 按钮自动用 `renderMediaOnWeb`（浏览器端 h264/mp4）导出
+- **run_code image_refs**：模型自选带哪些图片，pre-fetch 为 Buffer 放入 sandbox `images[]`
+- **video-design skill**：视频创作四问自检框架（剪辑方式/视频 vs 网页/情绪/字幕）
+- **AGENT_MODEL 环境变量**：灵活切换 Agent 模型
+
+### 架构变更
+- **Babel standalone 替代 Sucrase**：支持 optional chaining 等现代语法，动态加载（37MB 不进初始 bundle）
+- **Satori 已移除**：design 模式（React/CSS → renderStillOnWeb）完全替代
+- **Design 为默认视觉输出**：所有视觉任务用 design 模式，sharp 只做格式转换/metadata
+- **共享工具函数**：`validateImageIndex` + `fetchImageBuffer`（generate_image/analyze_image/run_code 复用）
+- **Agent 模型**：默认 Opus 4.6（`us.anthropic.claude-opus-4-6-v1`）
+
+### Bug 修复
+- MIME 类型不匹配（PNG 标为 JPEG → Bedrock 报错）→ fetchImageBuffer 始终转 JPEG
+- 跨域黑图（Supabase URL 在 renderStillOnWeb/Player 中无法加载）→ resolvePropsUrls 预取为 data URL
+- animation 结构归一化（agent 返回 fps/duration → 自动包装成 animation 对象）
+- tool-result 后 status 重置（不再停留在"分析图片"）
+- 重复 snapshot（useRef guard + onComplete ref guard）
+- userId 时序问题（从 image_url 推导 userId）
+- CUI 多 Player 卡顿 → 只显示 poster 图片
+
+### 其他改动
+- Tips thinking level 三级控制（TIPS_THINKING 环境变量）
+- Kling API base 改为北京 + env var 控制
+- Skills 预加载改用 requestIdleCallback
+- enhance 儿童脸不做美化/平滑
+- animated design 不生成 tips
