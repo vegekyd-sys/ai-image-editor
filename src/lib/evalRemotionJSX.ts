@@ -43,21 +43,56 @@ const REMOTION_SCOPE: Record<string, unknown> = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _babelTransform: ((code: string, opts: any) => { code: string }) | null = null;
 
-/** Pre-load Babel standalone from CDN. Call this early to avoid delay on first design render. */
+/** Observable loading state for UI feedback */
+export type BabelStatus = 'idle' | 'loading' | 'ready' | 'error';
+let _babelStatus: BabelStatus = 'idle';
+let _babelError: string | null = null;
+const _listeners: Set<() => void> = new Set();
+
+export function getBabelStatus(): { status: BabelStatus; error: string | null } {
+  return { status: _babelStatus, error: _babelError };
+}
+export function subscribeBabelStatus(fn: () => void): () => void {
+  _listeners.add(fn);
+  return () => _listeners.delete(fn);
+}
+function _notify(status: BabelStatus, error?: string) {
+  _babelStatus = status;
+  _babelError = error ?? null;
+  _listeners.forEach(fn => fn());
+}
+
+/** Pre-load Babel standalone from CDN. 15s timeout for slow networks. */
 export async function preloadBabel(): Promise<void> {
   if (_babelTransform) return;
-  // Load from CDN via script tag — avoids bundling 37MB into client chunk
-  await new Promise<void>((resolve, reject) => {
+  if (_babelStatus === 'loading') {
+    // Already loading — wait for it
+    return new Promise<void>((resolve, reject) => {
+      const unsub = subscribeBabelStatus(() => {
+        if (_babelStatus === 'ready') { unsub(); resolve(); }
+        else if (_babelStatus === 'error') { unsub(); reject(new Error(_babelError || 'Babel load failed')); }
+      });
+    });
+  }
+  _notify('loading');
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((window as any).Babel) { resolve(); return; }
+      const timeout = setTimeout(() => reject(new Error('Babel CDN timeout (15s)')), 15000);
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js';
+      script.onload = () => { clearTimeout(timeout); resolve(); };
+      script.onerror = () => { clearTimeout(timeout); reject(new Error('Failed to load Babel from CDN')); };
+      document.head.appendChild(script);
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).Babel) { resolve(); return; }
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Babel from CDN'));
-    document.head.appendChild(script);
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  _babelTransform = (window as any).Babel.transform;
+    _babelTransform = (window as any).Babel.transform;
+    _notify('ready');
+  } catch (e) {
+    _notify('error', e instanceof Error ? e.message : String(e));
+    throw e;
+  }
 }
 
 /**

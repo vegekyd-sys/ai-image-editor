@@ -10,7 +10,7 @@ import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
 import dynamic from 'next/dynamic';
-import { preloadBabel } from '@/lib/evalRemotionJSX';
+import { preloadBabel, getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 // Pre-load Babel from CDN as soon as Editor module loads (not waiting for first design)
 if (typeof window !== 'undefined') { preloadBabel().catch(() => {}); }
@@ -154,6 +154,9 @@ export default function Editor({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
+  // Babel CDN loading status for UI feedback
+  const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
+  useEffect(() => subscribeBabelStatus(() => setBabelStatus(getBabelStatus().status)), []);
   const [isTipsFetching, setIsTipsFetching] = useState(false);
   const [failedCategories, setFailedCategories] = useState<Set<Tip['category']>>(new Set());
   const [viewIndex, setViewIndex] = useState(0);
@@ -2775,6 +2778,18 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Babel CDN loading indicator */}
+                  {babelStatus === 'loading' && (
+                    <span className="flex items-center gap-1 text-[10px] text-white/30" title="Loading design engine...">
+                      <svg className="animate-spin w-3 h-3 text-fuchsia-400/60" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    </span>
+                  )}
+                  {babelStatus === 'error' && (
+                    <span className="text-[10px] text-red-400/60" title="Design engine failed to load">⚠</span>
+                  )}
                   {snapshots.length > 0 && (
                     <button
                       onClick={handleDownload}
