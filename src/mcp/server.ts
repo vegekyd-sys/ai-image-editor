@@ -5,6 +5,8 @@ import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo } from '../lib/skills/create-video';
 import { getVideoStatus } from '../lib/skills/get-video-status';
+import { createMusic } from '../lib/skills/create-music';
+import { getMusicStatus } from '../lib/skills/get-music-status';
 
 /** Resolve image input to data URL or HTTP URL for AI APIs. */
 function resolveImage(input: string): string {
@@ -361,6 +363,87 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP get_video_status error]', msg);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  // ── Music generation ─────────────────────────────────────────────────────
+
+  server.tool(
+    'makaron_create_music',
+    `Generate background music using Suno AI. Returns a taskId for polling.
+
+- Music generation takes 2-3 minutes. Use makaron_get_music_status to poll.
+- Each generation produces 2 tracks — poll returns the first track's URL.
+- Default: instrumental (no vocals). Set instrumental=false for vocals.
+- Prompt: describe genre, mood, instruments (e.g. "gentle piano, cinematic, warm strings").
+- Style: optional genre/mood tags for custom mode (e.g. "lo-fi, ambient, chill").
+- Generated audio files are kept for 15 days.`,
+    {
+      prompt: z.string().describe('Music description: genre, mood, instruments (max 500 chars)'),
+      instrumental: z.boolean().optional().describe('Instrumental only, no vocals (default: true)'),
+      style: z.string().optional().describe('Genre/mood tags for custom mode (e.g. "lo-fi, ambient")'),
+    },
+    async (params) => {
+      try {
+        if (options?.onToolStart) {
+          const check = await options.onToolStart('makaron_create_music');
+          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+        }
+        const t0 = Date.now();
+        const result = await createMusic({
+          prompt: params.prompt,
+          instrumental: params.instrumental,
+          style: params.style,
+        });
+
+        if (result.success) {
+          await options?.onToolComplete?.('makaron_create_music', undefined, Date.now() - t0);
+        }
+        return { content: [{ type: 'text' as const, text: result.success
+          ? `${result.message}\n\nTask ID: ${result.taskId}`
+          : result.message }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[MCP create_music error]', msg);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  server.tool(
+    'makaron_get_music_status',
+    `Poll the status of a music generation task. Returns status + audioUrl when complete.
+
+Status values:
+- pending: task queued
+- processing: generating (typically 2-3 minutes)
+- completed: done, audioUrl available
+- failed: error occurred
+
+Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
+    {
+      taskId: z.string().describe('Task ID from makaron_create_music'),
+    },
+    async (params) => {
+      try {
+        const result = await getMusicStatus({ taskId: params.taskId });
+
+        let response = result.message;
+        if (result.status === 'completed' && result.audioUrl) {
+          response += `\n\nAudio URL: ${result.audioUrl}`;
+          if (result.duration) response += `\nDuration: ${Math.round(result.duration)}s`;
+          if (result.title) response += `\nTitle: ${result.title}`;
+        }
+        if (result.status === 'failed' && result.error) {
+          response += `\n\nError: ${result.error}`;
+        }
+
+        return { content: [{ type: 'text' as const, text: response }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[MCP get_music_status error]', msg);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
       }
     },

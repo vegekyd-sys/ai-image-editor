@@ -494,6 +494,11 @@ Your code must return a value:
       execute: async ({ code, description: desc, image_refs }) => {
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
+        // Debug: log snapshot image URLs available to run_code
+        console.log(`📸 [run_code] ctx.snapshotImages (${ctx.snapshotImages.length}):`);
+        ctx.snapshotImages.forEach((img, i) => {
+          console.log(`  [${i}] ${img ? (img.startsWith('http') ? img.substring(0, 80) : `base64:${img.length}chars`) : 'EMPTY'}`);
+        });
         try {
           // Pre-fetch requested snapshot images as Buffers
           let preloadedImages: Buffer[] = [];

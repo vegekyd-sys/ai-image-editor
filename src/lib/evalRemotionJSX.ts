@@ -20,6 +20,7 @@ import {
   Img,
   AbsoluteFill,
 } from 'remotion';
+import { Audio } from '@remotion/media';
 
 /** All APIs available to Agent's React code */
 const REMOTION_SCOPE: Record<string, unknown> = {
@@ -37,6 +38,7 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   Series,
   Img,
   AbsoluteFill,
+  Audio,
 };
 
 // Babel CDN fallback (lazy-loaded only when Sucrase fails)
