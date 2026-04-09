@@ -414,16 +414,29 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-Path is free — you decide how to organize. Convention: skills/ for abilities, memory/ for remembering things, projects/{id}/ for project-specific content.`,
+Path is free — you decide how to organize. Convention: skills/ for abilities, memory/ for remembering things, code/ for saved run_code output.
+Set fromLastRunCode=true to save the last run_code output (full code or design JSON) — no need to copy the code yourself.`,
       inputSchema: z.object({
-        path: z.string().describe('File path, e.g. "memory/preferences.md", "skills/my-style/SKILL.md", "projects/{id}/memory/plan.md"'),
-        content: z.string().describe('File content (markdown recommended)'),
+        path: z.string().describe('File path, e.g. "code/sunset-poster.json", "skills/my-style/SKILL.md"'),
+        content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
+        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output (code or design JSON). No need to copy code.'),
       }),
-      execute: async ({ path: filePath, content }) => {
+      execute: async ({ path: filePath, content, fromLastRunCode }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, message: 'Workspace not available (no Supabase connection).' };
         }
-        const result = await workspace.writeFile(filePath, content, ctx.supabase, ctx.userId);
+        let fileContent = content || '';
+        if (fromLastRunCode) {
+          const lastCode = (ctx as any).__lastRunCode;
+          if (!lastCode) {
+            return { success: false, message: 'No run_code output to save. Call run_code first.' };
+          }
+          fileContent = lastCode;
+        }
+        if (!fileContent) {
+          return { success: false, message: 'No content to write. Provide content or set fromLastRunCode=true.' };
+        }
+        const result = await workspace.writeFile(filePath, fileContent, ctx.supabase, ctx.userId);
         return result.success
           ? { success: true, message: `Saved: ${filePath}`, storageUrl: result.storageUrl }
           : { success: false, message: `Write failed: ${result.error}` };
@@ -494,6 +507,8 @@ Your code must return a value:
       execute: async ({ code, description: desc, image_refs }) => {
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
+        // Store raw code for write_file({ fromLastRunCode: true })
+        (ctx as any).__lastRunCode = code;
         // Debug: log snapshot image URLs available to run_code
         console.log(`📸 [run_code] ctx.snapshotImages (${ctx.snapshotImages.length}):`);
         ctx.snapshotImages.forEach((img, i) => {
@@ -594,13 +609,16 @@ Your code must return a value:
             }
 
             // ── Harness passed — store design ──
-            (ctx as any).__pendingDesign = {
+            const designPayload = {
               code: result.code,
               width: result.width || 1080,
               height: result.height || 1350,
               props: result.props,
               animation,
             };
+            (ctx as any).__pendingDesign = designPayload;
+            // Store for write_file({ fromLastRunCode: true })
+            (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
             // Design screenshot is rendered on the frontend — not available server-side.
             // Tell Agent to review its own code if changes needed, not call analyze_image.
             const newIdx = ctx.snapshotImages.length + 1;
