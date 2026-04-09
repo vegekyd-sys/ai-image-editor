@@ -2,6 +2,7 @@ import { streamText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
+import { transform as sucraseTransform } from 'sucrase';
 import type { ModelId } from './models/types';
 import { filterAndRemapImages } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
@@ -579,8 +580,35 @@ Your code must return a value:
                 durationInSeconds: result.durationInSeconds || result.duration || 5,
               };
             }
-            // ctx.snapshotImages are URLs (not base64) — safe to pass through SSE.
-            // Agent's code/props reference URLs directly, no placeholder needed.
+            // ── Harness 1: Compile check ──
+            // Verify code compiles before sending to frontend
+            try {
+              sucraseTransform(result.code.trim(), {
+                transforms: ['typescript', 'jsx'],
+                jsxRuntime: 'classic',
+              });
+            } catch (compileErr) {
+              const msg = compileErr instanceof Error ? compileErr.message : String(compileErr);
+              console.warn(`⚠️ [run_code harness] compile failed: ${msg}`);
+              return { type: 'text' as const, content: `⚠️ Design compile error: ${msg}. Fix the syntax error in your code and try again.` };
+            }
+
+            // ── Harness 2: Image reference check ──
+            // Scan code + props for problematic image references
+            const codeAndProps = JSON.stringify({ code: result.code, props: result.props });
+            // Check for unresolved ctx.snapshotImages string literals (should be URLs, not literal text)
+            if (codeAndProps.includes('"ctx.snapshotImages') || codeAndProps.includes("'ctx.snapshotImages")) {
+              console.warn('⚠️ [run_code harness] found unresolved ctx.snapshotImages string literal');
+              return { type: 'text' as const, content: '⚠️ Design rejected: ctx.snapshotImages[N] was passed as a string literal instead of being evaluated. Use template literal interpolation: `${ctx.snapshotImages[N]}` to embed the actual URL. Regenerate.' };
+            }
+            // Check for large base64 embedded in code or props (>10KB = likely an image)
+            const base64Match = codeAndProps.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{10000,}/);
+            if (base64Match) {
+              console.warn('⚠️ [run_code harness] found large base64 in design');
+              return { type: 'text' as const, content: '⚠️ Design rejected: Large base64 image data found in code/props. Use ctx.snapshotImages[N] URLs instead of converting images to base64. Regenerate.' };
+            }
+
+            // ── Harness passed — store design ──
             (ctx as any).__pendingDesign = {
               code: result.code,
               width: result.width || 1080,
