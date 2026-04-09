@@ -67,21 +67,9 @@ export default function RemotionRenderer({ design, onComplete, onError, mode = '
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
-  // Still: no screenshot needed — Canvas shows Player via designsMap.
-  // Just signal onComplete immediately so snapshot gets created (with empty image).
+  // Capture poster via renderStillOnWeb (both still and animation — same approach)
   useEffect(() => {
     if (!Component || posterRef.current) return;
-    if (isStill) {
-      posterRef.current = true;
-      // Delay slightly to let Player mount (for designsMap to pick up the snapshot)
-      setTimeout(() => onComplete(''), 500);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Component, isStill]);
-
-  // Animation: capture poster via renderStillOnWeb (resolve URLs for CORS)
-  useEffect(() => {
-    if (!Component || posterRef.current || isStill) return;
     posterRef.current = true;
     (async () => {
       try {
@@ -116,7 +104,7 @@ export default function RemotionRenderer({ design, onComplete, onError, mode = '
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Component, isStill]);
+  }, [Component]);
 
   if (!Component) return null;
 
