@@ -87,7 +87,12 @@ function StillRenderer({ design, onComplete, onError }: StillRendererProps) {
   // Load Babel + compile (async because Babel is lazy-loaded)
   useEffect(() => {
     (async () => {
-      await preloadBabel();
+      try {
+        await preloadBabel();
+      } catch (e) {
+        onError(`Design engine failed to load: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
       const comp = evalRemotionJSX(design.code);
       if (!comp) { onError('Failed to compile design code'); return; }
       setComponent(() => comp);
@@ -138,7 +143,12 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
   // Load Babel + compile (async because Babel is lazy-loaded)
   useEffect(() => {
     (async () => {
-      await preloadBabel();
+      try {
+        await preloadBabel();
+      } catch (e) {
+        onError(`Design engine failed to load: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
       const comp = evalRemotionJSX(design.code);
       if (!comp) { onError('Failed to compile design code'); return; }
       setComponent(() => comp);
