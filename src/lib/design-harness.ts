@@ -19,13 +19,16 @@ export interface DesignResult {
  */
 export function validateDesign(result: DesignResult): string | null {
   // ── Check 1: Compile ──
-  // Verify JSX code compiles (Sucrase on server, same as frontend)
   const compileError = checkCompile(result.code);
   if (compileError) return compileError;
 
   // ── Check 2: Image references ──
   const imageError = checkImageReferences(result.code, result.props);
   if (imageError) return imageError;
+
+  // ── Check 3: Image URLs valid ──
+  const urlError = checkImageUrls(result.code);
+  if (urlError) return urlError;
 
   return null; // all checks passed
 }
@@ -59,6 +62,31 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
   if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{10000,}/.test(serialized)) {
     console.warn('⚠️ [design-harness] found large base64 in design');
     return '⚠️ Design rejected: Large base64 image data found in code/props. Use ctx.snapshotImages[N] URLs instead of converting images to base64. Regenerate.';
+  }
+
+  return null;
+}
+
+/** Check that image src values in code are valid HTTPS URLs (not empty, undefined, or localhost) */
+function checkImageUrls(code: string): string | null {
+  // Extract all src="..." values from JSX
+  const srcMatches = code.match(/src=["'`]([^"'`]*)["'`]/g) || [];
+  // Also match template literal: src="${...}" after interpolation → src="https://..."
+  const srcValues = srcMatches.map(m => {
+    const match = m.match(/src=["'`]([^"'`]*)["'`]/);
+    return match?.[1] || '';
+  });
+
+  for (const src of srcValues) {
+    if (!src || src === 'undefined' || src === 'null' || src === '') {
+      console.warn(`⚠️ [design-harness] empty/undefined image src found`);
+      return '⚠️ Design rejected: An <img> tag has an empty or undefined src. Make sure all ctx.snapshotImages[N] have valid URLs. Some snapshots may not have uploaded yet — check ctx.snapshotImages values before using them. Regenerate.';
+    }
+    // Must be HTTPS URL (not http localhost, not relative path, not data: unless small)
+    if (!src.startsWith('https://') && !src.startsWith('data:image/')) {
+      console.warn(`⚠️ [design-harness] non-HTTPS image src: ${src.substring(0, 80)}`);
+      return `⚠️ Design rejected: Image src "${src.substring(0, 60)}..." is not a valid HTTPS URL. Use ctx.snapshotImages[N] which contains Supabase Storage URLs. Regenerate.`;
+    }
   }
 
   return null;
