@@ -11,8 +11,9 @@ import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
-import dynamic from 'next/dynamic';
-const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
+// CUI shows poster images for animated designs (no live Player — multiple Players cause lag)
+// import dynamic from 'next/dynamic';
+// const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -910,13 +911,8 @@ export default function AgentChatView({
                       <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
 
-                    {msg.design?.animation && (
-                      <div className="mt-3" style={{ maxWidth: 308 }}>
-                        <RemotionRenderer design={msg.design}
-                          onComplete={() => {}}
-                          onError={(err) => console.error('[design inline]', err)} />
-                      </div>
-                    )}
+                    {/* Animated designs: show poster image in CUI (no live Player — too many Players = lag).
+                        The image is already in msg.image from onComplete. User taps to view Player in Canvas. */}
                   </div>
 
                 </div>
