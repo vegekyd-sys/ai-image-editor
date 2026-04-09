@@ -70,7 +70,34 @@ export function useProject(projectId: string, userId: string) {
       imageUrl: s.image_url,
       description: s.description ?? undefined,
       ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
+      ...(s.design_path ? { _designPath: s.design_path } : {}),
     }))
+
+    // Load persisted designs from workspace (async, non-blocking)
+    // Derive userId from first snapshot's image_url if userId param is empty (race condition on page load)
+    const resolvedUserId = userId || (() => {
+      const firstUrl = dbSnapshots[0]?.image_url || ''
+      const match = firstUrl.match(/\/images\/([^/]+)\//)
+      return match?.[1] || ''
+    })()
+    for (const snap of snapshots) {
+      const dp = (snap as any)._designPath as string | undefined
+      if (!dp || !resolvedUserId) continue
+      try {
+        const storagePath = `${resolvedUserId}/workspace/${dp}`
+        const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
+        if (urlData?.publicUrl) {
+          const res = await fetch(urlData.publicUrl)
+          if (res.ok) {
+            const design = await res.json()
+            snap.design = design
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load design from workspace:', dp, e)
+      }
+      delete (snap as any)._designPath
+    }
 
     const messages: Message[] = dbMessages.map((m) => {
       // Restore inline image: find the snapshot linked to this message
@@ -133,6 +160,22 @@ export function useProject(projectId: string, userId: string) {
         // Notify caller of the uploaded URL
         onUploaded?.(imageUrl)
 
+        // Persist design code to workspace if present
+        let designPath: string | null = null
+        if (snapshot.design?.code) {
+          designPath = `code/${snapshot.id}.json`
+          const designJson = JSON.stringify({
+            code: snapshot.design.code,
+            width: snapshot.design.width,
+            height: snapshot.design.height,
+            animation: snapshot.design.animation,
+            props: snapshot.design.props,
+          })
+          const bucket = supabase.storage.from('images')
+          const storagePath = `${userId}/workspace/${designPath}`
+          await bucket.upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
+        }
+
         // Upsert snapshot row (upsert handles React StrictMode double-invoke)
         const { error } = await supabase.from('snapshots').upsert({
           id: snapshot.id,
@@ -143,6 +186,7 @@ export function useProject(projectId: string, userId: string) {
           sort_order: sortOrder,
           ...(snapshot.description ? { description: snapshot.description } : {}),
           ...(snapshot.type ? { type: snapshot.type } : {}),
+          ...(designPath ? { design_path: designPath } : {}),
         }, { onConflict: 'id' })
 
         if (error) console.warn('saveSnapshot error:', error)

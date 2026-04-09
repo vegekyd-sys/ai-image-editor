@@ -2,24 +2,7 @@ import { streamText, tool, stepCountIs } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
-import satori from 'satori';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import type { ModelId } from './models/types';
-
-// Pre-load font for satori (HTML→image rendering)
-let _satoriFont: Buffer | null = null;
-function getSatoriFont(): Buffer {
-  if (!_satoriFont) {
-    try {
-      _satoriFont = readFileSync(join(process.cwd(), 'node_modules/next/dist/compiled/@vercel/og/noto-sans-v27-latin-regular.ttf'));
-    } catch {
-      // Fallback: empty buffer (satori will error on text, but won't crash on import)
-      _satoriFont = Buffer.alloc(0);
-    }
-  }
-  return _satoriFont;
-}
 import { filterAndRemapImages } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
@@ -44,7 +27,7 @@ const bedrock = createAmazonBedrock({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
 });
-const MODEL = bedrock('us.anthropic.claude-sonnet-4-6');
+const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +71,7 @@ export type AgentStreamEvent =
   | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
+  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // Agent React design for browser rendering
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -95,6 +79,42 @@ export type AgentStreamEvent =
 import { type ParsedSkill } from './skill-registry';
 // Workspace service — unified access to skills, memory, assets
 import * as workspace from './workspace';
+
+// ---------------------------------------------------------------------------
+// Shared image reference utilities
+// ---------------------------------------------------------------------------
+
+/** Validate a 1-based snapshot index. Returns 0-based index or error. */
+function validateImageIndex(snapshotImages: string[], index: number): { idx: number; error?: string } {
+  const idx = index - 1;
+  if (idx < 0 || idx >= snapshotImages.length) {
+    return { idx: -1, error: `Invalid index ${index}. Available: 1-${snapshotImages.length}` };
+  }
+  if (!snapshotImages[idx]) return { idx: -1, error: 'No image at this index' };
+  return { idx };
+}
+
+/** Fetch an image source (URL or base64 data URL) into a JPEG Buffer.
+ *  Always normalizes to JPEG to avoid MIME type mismatches (e.g. PNG labeled as JPEG). */
+async function fetchImageBuffer(
+  source: string,
+  opts?: { maxBytes?: number; maxPx?: number; quality?: number },
+): Promise<Buffer> {
+  let buf: Buffer;
+  if (source.startsWith('http')) {
+    buf = Buffer.from(await (await fetch(source)).arrayBuffer());
+  } else {
+    buf = Buffer.from(source.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+  }
+  // Always convert to JPEG — ensures consistent MIME type for Bedrock vision
+  const maxPx = opts?.maxPx ?? 2048;
+  const quality = opts?.quality ?? 90;
+  buf = Buffer.from(await sharp(buf)
+    .resize(maxPx, maxPx, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality })
+    .toBuffer());
+  return buf;
+}
 
 // ---------------------------------------------------------------------------
 // System prompt (bundled via webpack asset/source)
@@ -127,12 +147,11 @@ Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_cod
 ### File organization
 - **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
 - **skills/{name}/assets/{filename}** — Reference images for skills.
+- **code/{snapshotId}.json** — Persisted design code (auto-saved). You can \`list_files('code/')\` to find previous designs and \`read_file\` to reuse/modify them.
 
 ### run_code
-Execute JavaScript with access to image processing libraries and snapshot images.
-- \`sharp\` — pixel operations: crop, resize, composite, color adjust, blur, sharpen
-- \`renderHtml(element, width, height)\` — HTML/CSS layout → PNG image. Great for text overlays, social media covers, brand materials, cards, labels.
-When user asks to crop, resize, add text/watermark, make collages, design layouts, or any image manipulation that doesn't need AI generation — use \`run_code\` instead of \`generate_image\`.
+Execute JavaScript with design mode (React/CSS) and image utilities (sharp).
+When user asks for visual output — use \`run_code\` with design mode instead of \`generate_image\`.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills
@@ -166,24 +185,18 @@ function createTools(ctx: AgentContext) {
         // Resolve which image to edit — image_index overrides currentImage
         let editTarget = ctx.currentImage;
         if (image_index !== undefined) {
-          const idx = image_index - 1;
-          if (idx < 0 || idx >= ctx.snapshotImages.length) {
-            return { success: false as const, message: `Invalid image_index ${image_index}. Available: 1-${ctx.snapshotImages.length}` };
-          }
-          editTarget = ctx.snapshotImages[idx];
+          const v = validateImageIndex(ctx.snapshotImages, image_index);
+          if (v.error) return { success: false as const, message: v.error };
+          editTarget = ctx.snapshotImages[v.idx];
         }
 
         // Resolve reference images: user-uploaded + snapshot indices
-        // Note: skill reference images are no longer auto-injected here.
-        // The Agent discovers them via list_files and passes them as reference_image_indices.
         let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
         console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_image_indices?.length) {
           for (const refIdx of reference_image_indices) {
-            const idx = refIdx - 1;
-            if (idx >= 0 && idx < ctx.snapshotImages.length) {
-              resolvedRefs.push(ctx.snapshotImages[idx]);
-            }
+            const v = validateImageIndex(ctx.snapshotImages, refIdx);
+            if (!v.error) resolvedRefs.push(ctx.snapshotImages[v.idx]);
           }
         }
 
@@ -272,36 +285,16 @@ function createTools(ctx: AgentContext) {
         // Resolve which image to analyze
         let imageSource = ctx.currentImage;
         if (image_index !== undefined) {
-          const idx = image_index - 1;
-          if (idx >= 0 && idx < ctx.snapshotImages.length) {
-            imageSource = ctx.snapshotImages[idx];
-          }
+          const v = validateImageIndex(ctx.snapshotImages, image_index);
+          if (!v.error) imageSource = ctx.snapshotImages[v.idx];
         }
 
-        // No image available (text-to-image mode, no uploads yet)
         if (!imageSource) {
           return { base64Data: '', mimeType: 'image/jpeg', question, error: 'No image available to analyze. Generate an image first using generate_image.' };
         }
 
-        // Resolve image to base64 buffer — handles both URL and base64 input
-        let buf: Buffer;
-        if (imageSource.startsWith('http')) {
-          const res = await fetch(imageSource);
-          buf = Buffer.from(await res.arrayBuffer());
-        } else {
-          const raw = imageSource.replace(/^data:image\/\w+;base64,/, '');
-          buf = Buffer.from(raw, 'base64');
-        }
-        // Compress for analysis — vision doesn't need full resolution, ~600KB is enough
-        if (buf.length > 600_000) {
-          buf = Buffer.from(await sharp(buf)
-            .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
-            .jpeg({ quality: 75 })
-            .toBuffer());
-        }
-        const base64Data = buf.toString('base64');
-        const mimeType = 'image/jpeg';
-        return { base64Data, mimeType, question };
+        const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
+        return { base64Data: buf.toString('base64'), mimeType: 'image/jpeg', question };
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toModelOutput({ output }: { output: any }) {
@@ -455,44 +448,53 @@ Path is free — you decide how to organize. Convention: skills/ for abilities, 
       description: `Execute JavaScript code with access to image processing libraries and project context.
 
 Use this for any task that requires computation:
-- Image manipulation: crop, resize, composite, watermark, color analysis (sharp)
-- Layout/design generation: social media covers, before/after comparisons, brand materials (satori — write HTML/CSS, get PNG)
+- Visual output: design mode (React/CSS) — covers text, layout, images, overlays, animations
+- Image utilities: format conversion, metadata reading (sharp)
 - Data processing: extract colors, analyze image stats, batch operations
 - Skill creation with assets: upload images to storage, build SKILL.md, save to database
 
 Available in your code:
-- \`sharp\` — image processing: crop, resize, composite, color adjust, format convert. Example: \`const out = await sharp(buf).resize(800).jpeg().toBuffer();\`
-- \`renderHtml(element, width?, height?)\` — HTML/CSS → PNG image. Element format: \`{ type: 'div', props: { style: {...}, children: [...] } }\`. Supports: div, span, p, img, flexbox layout, fontSize, fontWeight, color, backgroundColor, borderRadius, padding, margin, gap. Returns PNG Buffer. Example: \`const png = await renderHtml({ type: 'div', props: { style: { display: 'flex', background: '#1a1a2e', color: 'white', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, children: [{ type: 'h1', props: { children: 'Title', style: { fontSize: 64 } } }] } }, 1080, 1350);\`
-- \`saveToWorkspace(path, content, contentType?)\` — Save a file directly to workspace (Supabase Storage). Returns \`{ success, storageUrl, error }\`. Use for skill assets, exports, etc. Example: \`await saveToWorkspace('skills/my-skill/assets/ref.jpg', pngBuffer, 'image/jpeg')\`
+- \`sharp\` — image format conversion and metadata. Example: \`const { width, height } = await sharp(images[0]).metadata();\`
+- \`saveToWorkspace(path, content, contentType?)\` — Save a file directly to workspace (Supabase Storage). Returns \`{ success, storageUrl, error }\`. Use for skill assets, exports, etc.
 - \`JSZip\` — Create zip files. Example: \`const zip = new JSZip(); zip.file('SKILL.md', text); zip.file('assets/ref.jpg', imgBuffer); const buf = await zip.generateAsync({type:'nodebuffer'}); const {storageUrl} = await saveToWorkspace('exports/skill.zip', buf, 'application/zip');\`
+- \`images\` — pre-fetched snapshot Buffers from \`image_refs\` parameter. \`images[0]\` = first ref, \`images[1]\` = second, etc. Ready for sharp operations.
 - \`ctx.snapshotImages\` — array of snapshot URLs/base64 (index 0 = <<<image_1>>>)
 - \`ctx.projectId\`, \`ctx.userId\` — current project and user IDs
-- \`fetch\` — make HTTP requests (e.g. download snapshot images from URLs)
+- \`fetch\` — make HTTP requests
 - Standard Node.js: Buffer, JSON, Math, Date, etc.
 
-Your code must return a value. If returning an image, return \`{ type: 'image', data: base64String, mimeType: 'image/jpeg' }\`.
-For text results, return \`{ type: 'text', content: 'your result' }\`.
-For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
+Your code must return a value:
+- Image (sharp output): return Buffer directly, or \`{ type: 'image', data: base64, mimeType: 'image/jpeg' }\`
+- Text: return \`{ type: 'text', content: 'result' }\`
+- **Design (React)**: return \`{ type: 'design', code: 'function Design(props) { return (...); }', width: 1080, height: 1350, props: { snapshotUrl: ctx.snapshotImages[0] } }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill. Rendered by the browser with full CSS + Google Fonts support.
+  - **Still** (default): omit \`duration\` — renders as a single image.
+  - **Animation**: add \`duration: 5\` (seconds) — renders as a playable video with Remotion Player. Use \`useCurrentFrame()\` + \`interpolate()\` for animation. Example: \`{ type: 'design', code: '...', width: 1080, height: 1080, duration: 3, props: { snapshotUrl: ctx.snapshotImages[0] } }\`
+- Error: return \`{ type: 'error', message: 'what went wrong' }\`
+
+**Default to design for all visual output.** Design supports text, layout, images (via \`<img src={props.snapshotUrl}>\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does'),
+        image_refs: z.array(z.number()).optional().describe('1-based snapshot indices to pre-fetch as Buffers (e.g. [2, 3] for <<<image_2>>> and <<<image_3>>>). Available in code as images[0], images[1], ... (Buffer order matches this array).'),
       }),
-      execute: async ({ code, description: desc }) => {
+      execute: async ({ code, description: desc, image_refs }) => {
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         try {
-          // Build sandbox context
-          const fontData = getSatoriFont();
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const renderHtml = async (element: any, width = 800, height = 600) => {
-            const svg = await satori(element, {
-              width,
-              height,
-              fonts: [{ name: 'Noto Sans', data: fontData, weight: 400 as const }],
-            });
-            return await sharp(Buffer.from(svg)).png().toBuffer();
-          };
+          // Pre-fetch requested snapshot images as Buffers
+          let preloadedImages: Buffer[] = [];
+          if (image_refs?.length) {
+            for (const ref of image_refs) {
+              const v = validateImageIndex(ctx.snapshotImages, ref);
+              if (v.error) return { type: 'text' as const, content: v.error };
+            }
+            preloadedImages = await Promise.all(
+              image_refs.map(ref => fetchImageBuffer(ctx.snapshotImages[ref - 1]))
+            );
+            console.log(`📦 [run_code] pre-fetched ${preloadedImages.length} images (${preloadedImages.map(b => `${(b.length / 1024).toFixed(0)}KB`).join(', ')})`);
+          }
 
+          // Build sandbox context
           // Helper: save file to workspace directly from run_code (avoids passing large base64 back to Agent)
           const saveToWorkspace = async (path: string, content: string | Buffer, contentType?: string) => {
             if (!ctx.supabase || !ctx.userId) return { success: false, error: 'No Supabase connection' };
@@ -503,10 +505,9 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
 
           const sandbox = {
             sharp,
-            satori,
-            renderHtml,
             saveToWorkspace,
             JSZip,
+            images: preloadedImages,
             fetch: globalThis.fetch,
             Buffer,
             JSON,
@@ -556,6 +557,26 @@ For errors, return \`{ type: 'error', message: 'what went wrong' }\`.`,
             ctx.snapshotImages.push(dataUrl);
             ctx.currentImage = dataUrl;
           };
+
+          // { type: 'design', code: '...' } — Store for event loop to emit as SSE
+          if (result?.type === 'design' && typeof result.code === 'string') {
+            // Normalize animation struct — agent may return { fps, duration } or { animation: { fps, durationInSeconds } }
+            let animation = result.animation;
+            if (!animation && (result.fps || result.duration || result.durationInSeconds)) {
+              animation = {
+                fps: result.fps || 30,
+                durationInSeconds: result.durationInSeconds || result.duration || 5,
+              };
+            }
+            (ctx as any).__pendingDesign = {
+              code: result.code,
+              width: result.width || 1080,
+              height: result.height || 1350,
+              props: result.props,
+              animation,
+            };
+            return { type: 'text' as const, content: 'Design ready — rendering in browser.' };
+          }
 
           // Buffer or Uint8Array → treat as image
           const directB64 = toBase64(result);
@@ -794,6 +815,9 @@ export async function* runMakaronAgent(
         const toolName = (event as any).toolName as string | undefined;
         const toolDuration = toolCallStartTime ? ((Date.now() - toolCallStartTime) / 1000).toFixed(1) : '?';
         console.log(`⏱️ [agent] tool-result "${toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (tool took ${toolDuration}s)`);
+        // Reset status after tool completes so stale status doesn't linger during thinking
+        const isEnLocale = options?.locale === 'en';
+        yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
 
         // Emit image_analyzed event so frontend can save the description
         if (toolName === 'analyze_image') {
@@ -803,15 +827,18 @@ export async function* runMakaronAgent(
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
         }
 
-        // run_code image output — push to generatedImages so it appears in CUI
+        // run_code output handling
         if (toolName === 'run_code') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const codeResult = (event as any).result as { type?: string; base64Data?: string; mimeType?: string } | undefined;
-          if (codeResult?.type === 'image' && codeResult.base64Data) {
-            const dataUrl = `data:${codeResult.mimeType || 'image/jpeg'};base64,${codeResult.base64Data}`;
-            ctx.generatedImages.push(dataUrl);
-            ctx.snapshotImages.push(dataUrl);
+          // Design output stored in ctx.__pendingDesign → emit as SSE event
+          const pendingDesign = (ctx as any).__pendingDesign;
+          if (pendingDesign) {
+            console.log(`🎨 [agent] emitting design SSE: ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars`);
+            yield { type: 'design', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation };
+            (ctx as any).__pendingDesign = null;
+          } else {
+            console.log(`🔍 [agent] run_code result: no __pendingDesign found`);
           }
+          // Image output (from toModelOutput won't have base64Data here, but pushImage in execute already handled it)
         }
 
         // Detect generate_image failure or NSFW content block

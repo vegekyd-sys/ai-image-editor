@@ -1,10 +1,13 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import type { AnnotationEntry } from '@/types';
+import dynamic from 'next/dynamic';
+import type { AnnotationEntry, DesignPayload } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
 import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
+
+const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
 const VIDEO_SENTINEL = '__VIDEO__';
 
@@ -42,6 +45,8 @@ interface ImageCanvasProps {
   videoPlayTrigger?: number;
   /** Number of reference snapshots at the start of the timeline */
   referenceCount?: number;
+  /** Map of timeline index → DesignPayload for animated designs (rendered via Player) */
+  animatedDesigns?: Map<number, DesignPayload>;
 }
 
 export default function ImageCanvas({
@@ -54,6 +59,7 @@ export default function ImageCanvas({
   pullDownActive, onPullDown, onPullDownEnd,
   videoPlayTrigger,
   referenceCount = 0,
+  animatedDesigns,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -808,6 +814,20 @@ export default function ImageCanvas({
               </div>
             </div>
             <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          </div>
+        ) : animatedDesigns?.get(currentIndex) ? (
+          /* Animated design — rendered via Remotion Player */
+          <div className={`w-full h-full flex items-center justify-center transition-all duration-150 ${
+            pullDownActive ? 'opacity-[0.15] grayscale' :
+            animDir === 'left' ? 'opacity-0 -translate-x-8' :
+            animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
+          }`}>
+            <RemotionRenderer
+              design={animatedDesigns.get(currentIndex)!}
+              mode="fill"
+              onComplete={() => {}}
+              onError={(err) => console.error('[canvas design]', err)}
+            />
           </div>
         ) : (
           /* eslint-disable-next-line @next/next/no-img-element */

@@ -2,14 +2,15 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
-
+import dynamic from 'next/dynamic';
+const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 // Semaphore to limit concurrent /api/tips requests across all snapshots.
 // Single image: 4 categories run in parallel (fine). Multi-image: 10 images × 4 = 40 concurrent → rate limit risk.
 // With maxConcurrent=4, multi-image tips are effectively serialized per snapshot.
@@ -184,10 +185,12 @@ export default function Editor({
   const [draftFullLoaded, setDraftFullLoaded] = useState(false);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
+  const [pendingDesign, setPendingDesign] = useState<DesignPayload | null>(null);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
+  const pendingDesignMsgIdRef = useRef<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
@@ -328,6 +331,13 @@ export default function Editor({
   const referenceCount = useMemo(() =>
     snapshots.filter(s => s.type === 'reference').length,
   [snapshots]);
+
+  // Map timeline index → DesignPayload for animated designs (rendered via Player)
+  const animatedDesigns = useMemo(() => {
+    const map = new Map<number, import('@/types').DesignPayload>();
+    snapshots.forEach((s, i) => { if (s.design?.animation) map.set(i, s.design); });
+    return map;
+  }, [snapshots]);
 
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
@@ -1228,14 +1238,21 @@ export default function Editor({
         || snapshotsRef.current[draftParentIndexRef.current]?.image;
       contextSnapshotIndex = draftParentIndexRef.current;
     }
-    // Fallback to last snapshot when viewing video entry
+    // Fallback to last snapshot with an actual image (design snapshots have image='')
     if (!currentImage) {
-      currentImage = snapshotsRef.current[snapshotsRef.current.length - 1]?.image;
-      contextSnapshotIndex = snapshotsRef.current.length - 1;
+      for (let i = snapshotsRef.current.length - 1; i >= 0; i--) {
+        if (snapshotsRef.current[i]?.image) {
+          currentImage = snapshotsRef.current[i].image;
+          contextSnapshotIndex = i;
+          break;
+        }
+      }
     }
     if (!projectId) return;
     // Path 2 (text-only): no image is OK — Agent will generate one
-    if (!currentImage && snapshotsRef.current.length > 0) return;
+    // Design snapshots have no image (rendered via Player), skip this check for them
+    const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
+    if (!currentImage && !currentSnap?.design && snapshotsRef.current.length > 0) return;
 
     // Prefer URL (tiny payload) over base64 for API calls — server handles both
     // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
@@ -1512,6 +1529,12 @@ export default function Editor({
           onNsfwDetected: () => {
             console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
             isNsfwRef.current = true;
+          },
+          onDesign: (design) => {
+            console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
+            setAgentStatus('Rendering design...');
+            pendingDesignMsgIdRef.current = currentMsgId;
+            setPendingDesign(design);
           },
           onDone: () => {
             _flushAnalyzedDesc(); // save any pending analyze_image description
@@ -2311,6 +2334,39 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       return;
     }
 
+    // Animated design → export as MP4 via renderMediaOnWeb
+    const snapIdx = snapFromTimeline(viewIndex, draftParentIndexRef.current);
+    const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
+    if (currentSnap?.design?.animation) {
+      setIsSaving(true);
+      try {
+        const { exportDesignVideo } = await import('@/components/RemotionRenderer');
+        const blob = await exportDesignVideo(currentSnap.design, (p) => {
+          setAgentStatus(`Exporting video... ${Math.round(p.progress * 100)}%`);
+        });
+        const filename = `makaron-design-${Date.now()}.mp4`;
+        const file = new File([blob], filename, { type: 'video/mp4' });
+        if (navigator.share && navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+          await navigator.share({ files: [file] });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          link.click();
+          URL.revokeObjectURL(url);
+        }
+        setIsSaving(false);
+        setAgentStatus(t('editor.done'));
+        showSaveToast();
+      } catch (e) {
+        console.error('MP4 export failed:', e);
+        setIsSaving(false);
+        setAgentStatus('Export failed');
+      }
+      return;
+    }
+
     // Image download
     const img = timeline[viewIndex];
     if (!img) return;
@@ -2580,6 +2636,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}
                 referenceCount={referenceCount}
+                animatedDesigns={animatedDesigns}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
                 isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
@@ -3217,6 +3274,55 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
         }
       `}</style>
+      {/* Remotion renderer — captures design as screenshot via renderStillOnWeb */}
+      {pendingDesign && (
+        <RemotionRenderer
+          design={pendingDesign}
+          onComplete={(dataUrl) => {
+            // Guard against double-invoke (React StrictMode or async race)
+            const msgId = pendingDesignMsgIdRef.current;
+            if (!msgId) return;
+            pendingDesignMsgIdRef.current = '';
+            console.log('🎨 [design] capture complete');
+            const snapId = generateId();
+            const currentDesign = pendingDesign;
+            const newSnapshot: Snapshot = {
+              id: snapId,
+              image: dataUrl,
+              tips: [],
+              messageId: msgId,
+              description: '[run_code design]',
+              design: currentDesign,
+            };
+            setSnapshots(prev => [...prev, newSnapshot]);
+            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
+              setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
+            });
+            cacheImage(`snap:${snapId}`, dataUrl);
+            // Skip tips for animated designs (video snapshots don't need edit suggestions)
+            if (!currentDesign?.animation) {
+              fetchTipsForSnapshot(snapId, dataUrl, 'none');
+            }
+            setMessages((prev) => prev.map((m) =>
+              m.id === msgId ? { ...m, image: dataUrl } : m
+            ));
+            setAgentStatus('Design rendered ✅');
+            // Always clear pendingDesign — animated designs continue via animatedDesigns map in ImageCanvas
+            setPendingDesign(null);
+          }}
+          onError={(error) => {
+            console.error('🎨 [design] render error:', error);
+            setPendingDesign(null);
+            const msgId = pendingDesignMsgIdRef.current;
+            if (msgId) {
+              setMessages((prev) => prev.map((m) =>
+                m.id === msgId ? { ...m, content: (m.content || '') + `\n\n⚠️ Design render failed: ${error}` } : m
+              ));
+            }
+            setAgentStatus('Design failed');
+          }}
+        />
+      )}
     </div>
   );
 }
