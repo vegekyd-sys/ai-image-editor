@@ -3,8 +3,13 @@
 import React, { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
-import { evalRemotionJSX } from '@/lib/evalRemotionJSX';
+import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import type { DesignPayload } from '@/types';
+
+// Pre-load Babel standalone on first import (background, non-blocking)
+if (typeof window !== 'undefined') {
+  preloadBabel().catch(() => {});
+}
 
 export type { DesignPayload };
 
@@ -76,12 +81,19 @@ interface StillRendererProps {
 
 function StillRenderer({ design, onComplete, onError }: StillRendererProps) {
   const capturingRef = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
 
-  const Component = useMemo(() => {
-    const comp = evalRemotionJSX(design.code);
-    if (!comp) onError('Failed to compile design code');
-    return comp;
-  }, [design.code, onError]);
+  // Load Babel + compile (async because Babel is lazy-loaded)
+  useEffect(() => {
+    (async () => {
+      await preloadBabel();
+      const comp = evalRemotionJSX(design.code);
+      if (!comp) { onError('Failed to compile design code'); return; }
+      setComponent(() => comp);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [design.code]);
 
   useEffect(() => {
     if (!Component || capturingRef.current) return;
@@ -120,12 +132,19 @@ function AnimationRenderer({ design, onPoster, onError, mode = 'inline' }: Anima
   const posterCapturedRef = useRef(false);
   const propsResolvedRef = useRef(false);
   const [resolvedProps, setResolvedProps] = useState<Record<string, unknown> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
 
-  const Component = useMemo(() => {
-    const comp = evalRemotionJSX(design.code);
-    if (!comp) onError('Failed to compile design code');
-    return comp;
-  }, [design.code, onError]);
+  // Load Babel + compile (async because Babel is lazy-loaded)
+  useEffect(() => {
+    (async () => {
+      await preloadBabel();
+      const comp = evalRemotionJSX(design.code);
+      if (!comp) { onError('Failed to compile design code'); return; }
+      setComponent(() => comp);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [design.code]);
 
   const fps = design.animation?.fps || 30;
   const durationInFrames = design.animation
@@ -225,6 +244,7 @@ export async function exportDesignVideo(
   design: DesignPayload,
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
+  await preloadBabel();
   const Component = evalRemotionJSX(design.code);
   if (!Component) throw new Error('Failed to compile design code');
 
