@@ -291,8 +291,8 @@ function createTools(ctx: AgentContext) {
           if (!v.error) imageSource = ctx.snapshotImages[v.idx];
         }
 
-        if (!imageSource) {
-          return { base64Data: '', mimeType: 'image/jpeg', question, error: 'No image available to analyze. Generate an image first using generate_image.' };
+        if (!imageSource || imageSource.startsWith('__design_pending_')) {
+          return { base64Data: '', mimeType: 'image/jpeg', question, error: imageSource?.startsWith('__design_pending_') ? 'This is a design snapshot — the image was rendered in the browser and is not available for server-side analysis. You can describe it based on the code you wrote.' : 'No image available to analyze. Generate an image first using generate_image.' };
         }
 
         const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
@@ -594,7 +594,15 @@ Your code must return a value:
               props: result.props,
               animation,
             };
-            return { type: 'text' as const, content: 'Design ready — rendering in browser.' };
+            // Update ctx so Agent knows a new snapshot was created.
+            // The actual screenshot is generated on the frontend, but Agent needs
+            // to know the new <<<image_N+1>>> exists and is the "current" image.
+            // Use a placeholder URL — the real URL will be set after frontend upload.
+            const designPlaceholder = `__design_pending_${ctx.snapshotImages.length + 1}__`;
+            ctx.snapshotImages.push(designPlaceholder);
+            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+            // currentImage stays as the source image (design's visual is not available server-side)
+            return { type: 'text' as const, content: `Design ready — rendering in browser. Now <<<image_${ctx.snapshotImages.length}>>>.` };
           }
 
           // Buffer or Uint8Array → treat as image
