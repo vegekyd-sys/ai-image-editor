@@ -76,6 +76,10 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
     const checkActiveRun = async () => {
       const supabase = getSupabase()
 
+      // Wait for auth session — RLS requires auth.uid()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
       const { data: runningRun, error } = await supabase
         .from('agent_runs')
         .select('id, status, started_at, metadata')
