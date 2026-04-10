@@ -1564,8 +1564,10 @@ export default function Editor({
             isNsfwRef.current = true;
           },
           onReasoning: () => {
-            // Each reasoning delta keeps SSE alive; update status to show Agent is thinking
             setAgentStatus(t('editor.agentThinking'));
+          },
+          onCoding: () => {
+            setAgentStatus(t('editor.agentCoding'));
           },
           onDesign: (design) => {
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);

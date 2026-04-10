@@ -12,6 +12,7 @@ export interface AgentStreamCallbacks {
   onImageAnalyzed?: (imageIndex: number) => void;
   onNsfwDetected?: () => void;
   onReasoning?: (text: string) => void;
+  onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
   onDesign?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }) => void;
   onDone?: () => void;
@@ -96,6 +97,9 @@ export async function streamAgent(
             break;
           case 'reasoning':
             callbacks.onReasoning?.(event.text);
+            break;
+          case 'coding':
+            callbacks.onCoding?.();
             break;
           case 'code_stream':
             callbacks.onCodeStream?.(event.text, !!event.done);

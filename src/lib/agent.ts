@@ -75,6 +75,7 @@ export type AgentStreamEvent =
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
   | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
+  | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // Agent React design for browser rendering
   | { type: 'done' }
@@ -834,8 +835,12 @@ export async function* runMakaronAgent(
       // ── Heartbeat: keep SSE alive during long operations ──
       // reasoning-delta: extended thinking (~5-10s at start)
       // tool-input-delta: Agent writing tool params / code (~20-30s)
-      if (event.type === 'reasoning-delta' || event.type === 'tool-input-delta') {
-        yield { type: 'reasoning', text: event.type === 'reasoning-delta' ? event.text : '' };
+      if (event.type === 'reasoning-delta') {
+        yield { type: 'reasoning', text: event.text };
+        continue;
+      }
+      if (event.type === 'tool-input-delta') {
+        yield { type: 'coding', text: '' };
         continue;
       }
 
