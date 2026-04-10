@@ -19,19 +19,11 @@ export default function ProjectPage() {
   const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle } =
     useProject(projectId, user?.id ?? '')
 
-  // Synchronous init from memory cache — eliminates spinner on same-session return visits
-  const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() => {
-    const sync = getCachedProjectDataSync(projectId)
-    return sync ? sync.snapshots as Snapshot[] : null
-  })
-  const [initialMessages, setInitialMessages] = useState<Message[] | null>(() => {
-    const sync = getCachedProjectDataSync(projectId)
-    return sync ? sync.messages as Message[] : null
-  })
-  const [initialTitle, setInitialTitle] = useState<string>(() => {
-    const sync = getCachedProjectDataSync(projectId)
-    return sync ? sync.title : 'Untitled'
-  })
+  // DISABLED: sync cache init — always wait for Supabase to ensure data consistency
+  // TODO: re-enable with proper invalidation when background agent writes are guaranteed visible
+  const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(null)
+  const [initialMessages, setInitialMessages] = useState<Message[] | null>(null)
+  const [initialTitle, setInitialTitle] = useState<string>('Untitled')
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
   const [pendingImages] = useState<string[] | null>(() => {
     if (typeof window === 'undefined') return null
@@ -67,15 +59,9 @@ export default function ProjectPage() {
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
-  // If memory cache has data WITH snapshots, start loaded=true — no spinner at all
-  // Empty snapshots (e.g. new text-to-image project whose upload was still in-flight) don't count
-  const [loaded, setLoaded] = useState(() => {
-    if (typeof window === 'undefined') return false
-    const sync = getCachedProjectDataSync(projectId)
-    return sync !== null && (sync.snapshots as Snapshot[]).length > 0
-  })
-  // Tracks whether we've already shown content (cache or Supabase) to avoid double-set
-  const shownRef = useRef(loaded)
+  // Always start unloaded — wait for Supabase
+  const [loaded, setLoaded] = useState(false)
+  const shownRef = useRef(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
