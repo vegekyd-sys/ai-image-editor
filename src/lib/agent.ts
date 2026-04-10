@@ -826,15 +826,10 @@ export async function* runMakaronAgent(
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
       onStepFinish: () => { stepCount++; },
-      providerOptions: {
-        bedrock: { reasoningConfig: { type: 'enabled', budgetTokens: 5000 } },
-      },
     });
 
     for await (const event of result.fullStream) {
-      // ── Heartbeat: keep SSE alive during long operations ──
-      // reasoning-delta: extended thinking (~5-10s at start)
-      // tool-input-delta: Agent writing tool params / code (~20-30s)
+      // ── Heartbeat: keep SSE alive (route.ts sends `: heartbeat` every 10s) ──
       if (event.type === 'reasoning-delta') {
         yield { type: 'reasoning', text: event.text };
         continue;
