@@ -150,24 +150,14 @@ export default function Editor({
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
 
-  // When Supabase returns more data than what IDB cache showed (e.g. background agent
-  // generated images while user was away), replace state entirely with fresh data.
-  // Safe because: user just returned from another page, no locally-created data to lose.
-  // The SSE path (user is on page) never goes through initialSnapshots.
+  // Sync state when initialSnapshots/Messages props change (e.g. Supabase fetch completes)
   useEffect(() => {
     if (!initialSnapshots?.length) return;
     setSnapshots(prev => {
-      if (initialSnapshots.length > prev.length) {
-        console.log(`[Editor] Supabase has more snapshots (${initialSnapshots.length} > ${prev.length}), replacing`);
-        return initialSnapshots;
-      }
-      // Same count but different IDs — also replace (DualWriter IDs differ from frontend IDs)
+      if (initialSnapshots.length > prev.length) return initialSnapshots;
       if (initialSnapshots.length === prev.length) {
         const prevIds = new Set(prev.map(s => s.id));
-        if (initialSnapshots.some(s => !prevIds.has(s.id))) {
-          console.log(`[Editor] Supabase has different snapshot IDs, replacing`);
-          return initialSnapshots;
-        }
+        if (initialSnapshots.some(s => !prevIds.has(s.id))) return initialSnapshots;
       }
       return prev;
     });
@@ -176,16 +166,10 @@ export default function Editor({
   useEffect(() => {
     if (!initialMessages?.length) return;
     setMessages(prev => {
-      if (initialMessages.length > prev.length) {
-        console.log(`[Editor] Supabase has more messages (${initialMessages.length} > ${prev.length}), replacing`);
-        return initialMessages;
-      }
+      if (initialMessages.length > prev.length) return initialMessages;
       if (initialMessages.length === prev.length) {
         const prevIds = new Set(prev.map(m => m.id));
-        if (initialMessages.some(m => !prevIds.has(m.id))) {
-          console.log(`[Editor] Supabase has different message IDs, replacing`);
-          return initialMessages;
-        }
+        if (initialMessages.some(m => !prevIds.has(m.id))) return initialMessages;
       }
       return prev;
     });
@@ -1704,7 +1688,6 @@ export default function Editor({
   // ── Reconnect to active background agent run ──
   useEffect(() => {
     if (!activeRunId || isAgentActive) return;
-    console.log('[Editor] reconnect effect firing, activeRunId:', activeRunId, 'isAgentActive:', isAgentActive);
     setIsAgentActive(true);
     setAgentStatus(isReconnecting ? t('editor.reconnecting') : t('editor.agentThinking'));
 

@@ -72,7 +72,6 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
 
     const checkActiveRun = async () => {
       const supabase = getSupabase()
-      console.log('[useAgentRun] checking for running agent...')
 
       const { data: runningRun, error } = await supabase
         .from('agent_runs')
@@ -83,8 +82,7 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
         .limit(1)
         .maybeSingle()
 
-      if (error) console.error('[useAgentRun] query error:', error)
-      if (!runningRun) { console.log('[useAgentRun] no running agent found'); return }
+      if (error || !runningRun) return
 
       // Check if run is stale (started >5 min ago — likely the function died)
       const startedAt = new Date(runningRun.started_at).getTime()
@@ -97,7 +95,6 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
         return
       }
 
-      console.log('[useAgentRun] found running agent:', runningRun.id)
       setActiveRunId(runningRun.id)
     }
 
@@ -117,7 +114,6 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
     if (!activeRunId) return
     const supabase = getSupabase()
     setIsReconnecting(true)
-    console.log('[useAgentRun] reconnecting to run:', activeRunId)
 
     try {
       // 1. Replay all existing events
@@ -129,7 +125,6 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
 
       let lastSeenSeq = -1
       if (events?.length) {
-        console.log(`[useAgentRun] replaying ${events.length} historical events`)
         for (const row of events) {
           dispatchEvent(row as AgentEventRow, callbacks)
           lastSeenSeq = row.seq
@@ -146,18 +141,15 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
         .single()
 
       if (runNow?.status === 'completed') {
-        console.log('[useAgentRun] run already completed during replay')
         callbacks.onDone?.()
         setActiveRunId(null)
         return
       }
       if (runNow?.status === 'failed') {
-        console.log('[useAgentRun] run failed during replay')
         callbacks.onError?.('Agent run failed')
         setActiveRunId(null)
         return
       }
-      console.log('[useAgentRun] run still active, subscribing to Realtime...')
 
       // 3. Subscribe to new events via Realtime
       const eventsChannel = supabase.channel(`run-events:${activeRunId}`)

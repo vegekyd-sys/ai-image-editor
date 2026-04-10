@@ -106,61 +106,31 @@ export default function ProjectPage() {
     }))
   }
 
-  // Effect 1: Load from project cache immediately (no auth dependency)
-  // This runs before Supabase fetch and shows Editor instantly on return visits
-  useEffect(() => {
-    if (pendingImages) return  // New project flow: skip cache, use pendingImages directly
-    let cancelled = false
-    getCachedProjectData(projectId).then(async (cached) => {
-      if (!cached || cancelled || shownRef.current) return
-      // Skip empty-snapshot caches (e.g. text-to-image project where upload was in-flight)
-      if ((cached.snapshots as Snapshot[]).length === 0) return
-      const patched = await patchFromImageCache(cached.snapshots as Snapshot[])
-      if (cancelled || shownRef.current) return
-      shownRef.current = true
-      setInitialSnapshots(patched)
-      setInitialMessages(cached.messages as Message[])
-      setInitialTitle(cached.title)
-      setLoaded(true)
-    })
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  // DISABLED: Effect 1 (cache) — always wait for Supabase to ensure data consistency
+  // TODO: Re-enable with proper cache invalidation when background agent is active
+  // useEffect(() => {
+  //   if (pendingImages) return
+  //   let cancelled = false
+  //   getCachedProjectData(projectId).then(async (cached) => { ... })
+  //   return () => { cancelled = true }
+  // }, [projectId])
 
-  // Effect 2: Fetch from Supabase (runs when user is available)
-  // If Effect 1 already showed data, this runs silently in background to update cache
+  // Effect 2: Fetch from Supabase — single source of truth
   useEffect(() => {
     if (!user || !projectId) return
     let cancelled = false
 
     loadProject().then(async ({ snapshots, messages, title, animations }) => {
       if (cancelled) return
-      // Always update project cache with fresh Supabase data
+      // Update cache for future use
       cacheProjectData(projectId, snapshots, messages, title)
 
-      // Always set animation data (even if already showing from cache)
       if (animations.length > 0) {
         setInitialAnimations(animations)
       }
 
-      if (shownRef.current) {
-        // Already showing from cache — but Supabase may have newer data
-        const patched = await patchFromImageCache(snapshots)
-        console.log(`[page:merge] cache had data, Supabase: ${snapshots.length} snaps, ${messages.length} msgs, cancelled=${cancelled}`)
-        if (!cancelled) {
-          setInitialSnapshots(patched)
-          setInitialMessages(messages)
-          if (title) setInitialTitle(title)
-        }
-        if (snapshots.length > 0 && snapshots[0].imageUrl) {
-          updateCover(snapshots[0].imageUrl)
-        }
-        return
-      }
-
-      // Cache was empty or this won the race — show from Supabase
       const patched = await patchFromImageCache(snapshots)
-      if (cancelled || shownRef.current) return
+      if (cancelled) return
       shownRef.current = true
       setInitialSnapshots(patched)
       setInitialMessages(messages)
