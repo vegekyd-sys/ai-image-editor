@@ -526,14 +526,17 @@ export default function AgentChatView({
   const prevLastMsgLenRef = useRef(0);
   useEffect(() => {
     const lastMsg = messages[messages.length - 1];
-    const msgCountChanged = messages.length !== prevMsgCountRef.current;
+    const prevCount = prevMsgCountRef.current;
+    const msgCountChanged = messages.length !== prevCount;
     const lastMsgGrew = lastMsg?.role === 'assistant' && lastMsg.content.length > prevLastMsgLenRef.current;
+    const bigJump = msgCountChanged && messages.length > prevCount + 2; // Supabase load / reconnect replay
 
     prevMsgCountRef.current = messages.length;
     prevLastMsgLenRef.current = lastMsg?.content?.length ?? 0;
 
-    // Only auto-scroll when AI is actively outputting AND user hasn't scrolled up
-    if (isAgentActive && (msgCountChanged || lastMsgGrew) && !userScrolledUp.current) {
+    // Auto-scroll: during streaming, on big data loads (reconnect/Supabase), unless user scrolled up
+    const shouldScroll = (isAgentActive && (msgCountChanged || lastMsgGrew)) || bigJump;
+    if (shouldScroll && !userScrolledUp.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isAgentActive]);
