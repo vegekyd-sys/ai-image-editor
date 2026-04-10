@@ -1458,9 +1458,9 @@ export default function Editor({
             _lastAnalyzedIdx = imageIndex;
             _analyzedTextBuf = '';
           },
-          onNewTurn: () => {
+          onNewTurn: (serverMessageId) => {
             _flushAnalyzedDesc();
-            const newId = generateId();
+            const newId = serverMessageId || generateId();
             currentMsgId = newId;
             agentMsgIds.push(newId);
             setMessages((prev) => [...prev, {
@@ -1480,11 +1480,11 @@ export default function Editor({
               _analyzedTextBuf += delta;
             }
           },
-          onImage: (imageData, usedModel) => {
+          onImage: (imageData, usedModel, serverSnapshotId, serverImageUrl) => {
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
             const genDuration = _genStartTime ? ((performance.now() - _genStartTime) / 1000).toFixed(1) : '?';
             console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (${usedModel || 'gemini'} took ${genDuration}s, image ${(imageData.length / 1024).toFixed(0)}KB)`);
-            const snapId = generateId();
+            const snapId = serverSnapshotId || generateId();
             const editDesc = lastEditPromptRef.current
               ? `[agent] ${lastEditPromptRef.current.slice(0, 100)}`
               : undefined;
@@ -1494,8 +1494,11 @@ export default function Editor({
               tips: [],
               messageId: currentMsgId,
               description: editDesc,
+              ...(serverImageUrl ? { imageUrl: serverImageUrl } : {}),
             };
             setSnapshots((prev) => [...prev, newSnapshot]);
+            // Server already uploaded + wrote to snapshots table via DualWriter.
+            // onSaveSnapshot upserts with same ID → idempotent (no duplicate).
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
@@ -1598,6 +1601,13 @@ export default function Editor({
             isNsfwRef.current = true;
           },
           onRunId: (id) => { agentRunIdRef.current = id; },
+          onMessageId: (serverId) => {
+            // Replace the frontend-generated message ID with server's ID (for DB consistency)
+            const oldId = assistantMsgId;
+            currentMsgId = serverId;
+            agentMsgIds[0] = serverId;
+            setMessages(prev => prev.map(m => m.id === oldId ? { ...m, id: serverId } : m));
+          },
           onReasoning: () => {
             if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentThinking');
           },
@@ -1617,12 +1627,7 @@ export default function Editor({
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
             console.log(`⏱️ [agent] DONE total ${elapsed}s`);
             setAgentStatus(t('editor.done'));
-            // Persist all assistant messages created in this agent run
-            setMessages((prev) => {
-              const toSave = prev.filter(m => agentMsgIds.includes(m.id) && m.content);
-              toSave.forEach(m => onSaveMessage?.(m));
-              return prev;
-            });
+            // Messages are persisted by DualWriter (server-side) — no frontend save needed
             // Drain pending CUI-attached images: tips text only, no preview, no analysis
             const pendingAnalysisList = [...pendingAnalysisRef.current];
             pendingAnalysisRef.current = [];
@@ -1649,13 +1654,9 @@ export default function Editor({
             console.error('Agent error:', msg);
             const id = currentMsgId;
             setMessages((prev) => {
-              const updated = prev.map((m) =>
+              return prev.map((m) =>
                 m.id === id ? { ...m, content: m.content || t('editor.errorRetry') } : m
               );
-              // Persist whatever content we have
-              const toSave = updated.filter(m => agentMsgIds.includes(m.id) && m.content);
-              toSave.forEach(m => onSaveMessage?.(m));
-              return updated;
             });
           },
         },

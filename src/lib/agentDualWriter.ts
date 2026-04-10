@@ -3,14 +3,15 @@ import type { AgentStreamEvent } from './agent';
 import { uploadImage } from './supabase/storage';
 
 /**
- * Dual-writes agent SSE events to:
- * 1. SSE stream (real-time browser display)
- * 2. agent_events table (reconnection/replay)
- * 3. snapshots table (persistent image/design data)
- * 4. messages table (persistent chat history)
+ * Server-side persistence for agent events. Handles:
+ * 1. agent_events table (always — for replay/audit)
+ * 2. snapshots table (always — single source of truth)
+ * 3. messages table (always — single source of truth)
+ * 4. SSE stream (enriched events with server-generated IDs)
  *
- * This ensures data survives browser disconnects — user returns and
- * loadProject() has complete data without needing frontend replay.
+ * The frontend receives enriched events (with snapshotId, imageUrl, messageId)
+ * and uses the server's IDs instead of generating its own. Both sides reference
+ * the same IDs → upsert is idempotent, no duplicates.
  */
 export class AgentDualWriter {
   private seq = 0;
@@ -18,7 +19,7 @@ export class AgentDualWriter {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private sseDisconnected = false;
 
-  // Message accumulation — written to messages table on new_turn/done
+  // Message accumulation
   private messageText = '';
   private currentMessageId = crypto.randomUUID();
   private currentMessageHasImage = false;
@@ -32,8 +33,8 @@ export class AgentDualWriter {
     private encoder: TextEncoder,
   ) {}
 
-  /** Write event to SSE stream. Catches disconnect errors silently. */
-  tryEnqueue(event: AgentStreamEvent) {
+  /** Write enriched event to SSE stream. Catches disconnect errors silently. */
+  tryEnqueue(event: Record<string, unknown>) {
     if (this.sseDisconnected) return;
     try {
       this.controller.enqueue(
@@ -44,12 +45,18 @@ export class AgentDualWriter {
     }
   }
 
-  /** Write event to DB. Content is batched; other events are immediate. */
-  async writeEvent(event: AgentStreamEvent) {
+  /**
+   * Process event: write to DB, return enriched event for SSE.
+   * The enriched event includes server-generated IDs (snapshotId, imageUrl, messageId).
+   */
+  async processAndEnqueue(event: AgentStreamEvent): Promise<void> {
     switch (event.type) {
       case 'content': {
         this.contentBuffer += event.text;
         this.messageText += event.text;
+        // SSE: send original content event immediately
+        this.tryEnqueue(event);
+        // DB: batch content writes
         if (this.contentBuffer.length >= 50) {
           await this.flushContent();
         } else if (!this.flushTimer) {
@@ -58,7 +65,6 @@ export class AgentDualWriter {
         return;
       }
 
-      // Image: upload server-side, store URL, write snapshots table
       case 'image': {
         await this.flushContent();
         const snapshotId = crypto.randomUUID();
@@ -66,8 +72,9 @@ export class AgentDualWriter {
         const imageUrl = await uploadImage(
           this.supabase, this.userId, this.projectId, filename, event.image,
         );
+
+        // Write snapshots table
         if (imageUrl) {
-          // Write snapshots table
           const sortOrder = await this.nextSortOrder();
           await this.supabase.from('snapshots').upsert({
             id: snapshotId,
@@ -81,29 +88,35 @@ export class AgentDualWriter {
           });
           this.currentMessageHasImage = true;
         }
+
         // Write agent_events
         await this.insertEvent('image', {
           snapshotId,
           imageUrl: imageUrl ?? undefined,
           usedModel: event.usedModel,
         });
+
+        // SSE: enriched event with server IDs
+        this.tryEnqueue({
+          type: 'image',
+          image: event.image,
+          usedModel: event.usedModel,
+          snapshotId,
+          imageUrl,
+        });
         return;
       }
 
-      // Design: save code to workspace + snapshots table (no poster — client renders later)
       case 'design': {
         await this.flushContent();
         const snapId = crypto.randomUUID();
         const designPath = `code/${snapId}.json`;
         const designJson = JSON.stringify({
-          code: event.code,
-          width: event.width,
-          height: event.height,
-          props: event.props,
-          animation: event.animation,
+          code: event.code, width: event.width, height: event.height,
+          props: event.props, animation: event.animation,
         });
 
-        // Upload design JSON to workspace storage
+        // Upload design JSON to workspace
         try {
           const storagePath = `${this.userId}/workspace/${designPath}`;
           await this.supabase.storage.from('images')
@@ -112,7 +125,7 @@ export class AgentDualWriter {
           console.error('[DualWriter] design upload error:', err);
         }
 
-        // Write snapshots table (image_url empty — poster captured client-side)
+        // Write snapshots table
         const sortOrder = await this.nextSortOrder();
         await this.supabase.from('snapshots').upsert({
           id: snapId,
@@ -130,51 +143,33 @@ export class AgentDualWriter {
 
         // Write agent_events
         await this.insertEvent('design', {
-          code: event.code,
-          width: event.width,
-          height: event.height,
-          props: event.props,
-          animation: event.animation,
-          snapshotId: snapId,
+          code: event.code, width: event.width, height: event.height,
+          props: event.props, animation: event.animation, snapshotId: snapId,
         });
-        return;
-      }
 
-      // Tool call: store but truncate large inputs
-      case 'tool_call': {
-        await this.flushContent();
-        const input = { ...event.input };
-        if (typeof input.code === 'string' && input.code.length > 2000) {
-          input.code = input.code.slice(0, 2000) + '...(truncated)';
-        }
-        delete input.image;
-        delete input.images;
-        await this.insertEvent('tool_call', { tool: event.tool, input });
-        return;
-      }
-
-      case 'status': {
-        await this.flushContent();
-        await this.insertEvent('status', { text: event.text });
+        // SSE: enriched with snapshotId
+        this.tryEnqueue({ ...event, snapshotId: snapId });
         return;
       }
 
       case 'new_turn': {
         await this.flushContent();
-        // Save current message before starting a new one
+        // Save current message
         await this.saveCurrentMessage();
         this.messageText = '';
         this.currentMessageId = crypto.randomUUID();
         this.currentMessageHasImage = false;
-        await this.insertEvent('new_turn', {});
+        await this.insertEvent('new_turn', { messageId: this.currentMessageId });
+        // SSE: include new messageId
+        this.tryEnqueue({ type: 'new_turn', messageId: this.currentMessageId });
         return;
       }
 
       case 'done': {
         await this.flushContent();
-        // Save final message
         await this.saveCurrentMessage();
         await this.insertEvent('done', {});
+        this.tryEnqueue(event);
         return;
       }
 
@@ -184,6 +179,27 @@ export class AgentDualWriter {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { type, ...data } = event as Record<string, unknown>;
         await this.insertEvent('error', data);
+        this.tryEnqueue(event);
+        return;
+      }
+
+      case 'tool_call': {
+        await this.flushContent();
+        const input = { ...event.input };
+        if (typeof input.code === 'string' && input.code.length > 2000) {
+          input.code = input.code.slice(0, 2000) + '...(truncated)';
+        }
+        delete input.image;
+        delete input.images;
+        await this.insertEvent('tool_call', { tool: event.tool, input });
+        this.tryEnqueue(event);
+        return;
+      }
+
+      case 'status': {
+        await this.flushContent();
+        await this.insertEvent('status', { text: event.text });
+        this.tryEnqueue(event);
         return;
       }
 
@@ -194,11 +210,13 @@ export class AgentDualWriter {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { type: _t, ...rest } = event as Record<string, unknown>;
         await this.insertEvent(event.type, rest);
+        this.tryEnqueue(event);
         return;
       }
 
       default:
-        // Unknown event types (reasoning, coding, code_stream): skip DB write
+        // Unknown event types (reasoning, coding, code_stream): pass through SSE only
+        this.tryEnqueue(event);
         return;
     }
   }
@@ -218,6 +236,9 @@ export class AgentDualWriter {
   async flush() {
     await this.flushContent();
   }
+
+  /** Get the current message ID (for the first message before any new_turn). */
+  get firstMessageId() { return this.currentMessageId; }
 
   /** Save accumulated message text to messages table. */
   private async saveCurrentMessage() {
@@ -247,7 +268,7 @@ export class AgentDualWriter {
         .maybeSingle();
       return (data?.sort_order ?? 0) + 1;
     } catch {
-      return Date.now(); // fallback: use timestamp as sort order
+      return Date.now();
     }
   }
 

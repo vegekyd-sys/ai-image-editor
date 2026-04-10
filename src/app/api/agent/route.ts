@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
     const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction;
 
     let runId: string | null = null;
+    let firstMessageId: string | null = null;
     if (isNormalMode) {
       // Mark any stale running runs as failed before creating a new one
       await supabase.from('agent_runs')
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
         const writer = (runId && isNormalMode)
           ? new AgentDualWriter(runId, supabase, user!.id, projectId, controller, encoder)
           : null;
+        if (writer) firstMessageId = writer.firstMessageId;
 
         try {
           // tipsTeaser: generate a one-sentence teaser about the tips (no image needed)
@@ -155,8 +157,7 @@ export async function POST(req: NextRequest) {
           try {
             for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id })) {
               if (writer) {
-                writer.tryEnqueue(event);
-                await writer.writeEvent(event);
+                await writer.processAndEnqueue(event);
               } else {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
               }
@@ -169,8 +170,7 @@ export async function POST(req: NextRequest) {
           console.error('Agent stream error:', msg);
           const errorEvent = { type: 'error' as const, message: msg };
           if (writer) {
-            writer.tryEnqueue(errorEvent);
-            await writer.writeEvent(errorEvent);
+            await writer.processAndEnqueue(errorEvent);
           } else {
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`),
@@ -210,14 +210,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-        ...(runId ? { 'X-Agent-Run-Id': runId } : {}),
-      },
+    const headers: Record<string, string> = {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    };
+    if (runId) headers['X-Agent-Run-Id'] = runId;
+    if (firstMessageId) headers['X-Agent-Message-Id'] = firstMessageId;
+
+    return new Response(stream, { headers,
     });
   } catch (error) {
     console.error('Agent API error:', error);

@@ -5,17 +5,18 @@ export type { AgentStreamEvent };
 export interface AgentStreamCallbacks {
   onStatus?: (text: string) => void;
   onContent?: (text: string) => void;
-  onNewTurn?: () => void;
-  onImage?: (image: string, usedModel?: string) => void;
+  onNewTurn?: (messageId?: string) => void;
+  onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onAnimationTask?: (taskId: string, prompt: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onNsfwDetected?: () => void;
   onRunId?: (runId: string) => void;
+  onMessageId?: (messageId: string) => void;
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
-  onDesign?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }) => void;
+  onDesign?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; snapshotId?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
 }
@@ -53,9 +54,12 @@ export async function streamAgent(
     return;
   }
 
-  // Pass run ID to caller for reconnection support
+  // Pass server-generated IDs to caller
   const agentRunId = res.headers.get('X-Agent-Run-Id');
   if (agentRunId) callbacks.onRunId?.(agentRunId);
+  // First message ID from DualWriter — frontend should use this instead of generating its own
+  const firstMessageId = res.headers.get('X-Agent-Message-Id');
+  if (firstMessageId) callbacks.onMessageId?.(firstMessageId);
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
@@ -83,11 +87,13 @@ export async function streamAgent(
             callbacks.onContent?.(event.text);
             break;
           case 'new_turn':
-            callbacks.onNewTurn?.();
+            callbacks.onNewTurn?.((event as Record<string, unknown>).messageId as string | undefined);
             break;
-          case 'image':
-            callbacks.onImage?.(event.image, event.usedModel);
+          case 'image': {
+            const img = event as Record<string, unknown>;
+            callbacks.onImage?.(event.image, event.usedModel, img.snapshotId as string | undefined, img.imageUrl as string | undefined);
             break;
+          }
           case 'tool_call':
             callbacks.onToolCall?.(event.tool, event.input, event.images);
             break;
@@ -110,7 +116,7 @@ export async function streamAgent(
             callbacks.onCodeStream?.(event.text, !!event.done);
             break;
           case 'design':
-            callbacks.onDesign?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } });
+            callbacks.onDesign?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; snapshotId?: string });
             break;
           case 'done':
             receivedDone = true;
