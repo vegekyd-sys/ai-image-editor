@@ -1247,7 +1247,8 @@ function ProjectCard({
   onMore: (e: React.MouseEvent) => void
   onNavigate: () => void
 }) {
-  const lastSnap = project.snapshots[project.snapshots.length - 1]
+  // Use last snapshot with an actual image URL (skip design snapshots with empty image_url)
+  const lastSnap = project.snapshots.filter(s => s.image_url).pop() ?? project.snapshots[project.snapshots.length - 1]
   const [loaded, setLoaded] = useState(false)
 
   return (
@@ -1278,7 +1279,7 @@ function ProjectCard({
       {/* Full-bleed photo — use Supabase transform for smaller thumbnails */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={getThumbnailUrl(lastSnap.image_url, 400, 50, 400)}
+        src={lastSnap.image_url ? getThumbnailUrl(lastSnap.image_url, 400, 50, 400) : undefined}
         alt={project.title}
         fetchPriority={index < 4 ? 'high' : undefined}
         style={{

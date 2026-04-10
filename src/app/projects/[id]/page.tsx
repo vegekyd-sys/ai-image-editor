@@ -19,11 +19,17 @@ export default function ProjectPage() {
   const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle } =
     useProject(projectId, user?.id ?? '')
 
-  // DISABLED: sync cache init — always wait for Supabase to ensure data consistency
-  // TODO: re-enable with proper invalidation when background agent writes are guaranteed visible
-  const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(null)
+  // Snapshots: sync cache for instant GUI render (images in IDB)
+  const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() => {
+    const sync = getCachedProjectDataSync(projectId)
+    return sync ? sync.snapshots as Snapshot[] : null
+  })
+  // Messages: always null → wait for Supabase (DualWriter writes new msgs that cache doesn't have)
   const [initialMessages, setInitialMessages] = useState<Message[] | null>(null)
-  const [initialTitle, setInitialTitle] = useState<string>('Untitled')
+  const [initialTitle, setInitialTitle] = useState<string>(() => {
+    const sync = getCachedProjectDataSync(projectId)
+    return sync ? sync.title : 'Untitled'
+  })
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
   const [pendingImages] = useState<string[] | null>(() => {
     if (typeof window === 'undefined') return null
@@ -59,9 +65,13 @@ export default function ProjectPage() {
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
-  // Always start unloaded — wait for Supabase
-  const [loaded, setLoaded] = useState(false)
-  const shownRef = useRef(false)
+  // GUI can render immediately if snapshot cache exists
+  const [loaded, setLoaded] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const sync = getCachedProjectDataSync(projectId)
+    return sync !== null && (sync.snapshots as Snapshot[]).length > 0
+  })
+  const shownRef = useRef(loaded)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -96,19 +106,31 @@ export default function ProjectPage() {
   // TODO: Re-enable with proper cache invalidation when background agent is active
   // useEffect(() => {
   //   if (pendingImages) return
-  //   let cancelled = false
-  //   getCachedProjectData(projectId).then(async (cached) => { ... })
-  //   return () => { cancelled = true }
-  // }, [projectId])
+  // Effect 1: Load snapshots from IDB cache (no auth needed, fast)
+  useEffect(() => {
+    if (pendingImages || shownRef.current) return
+    let cancelled = false
+    getCachedProjectData(projectId).then(async (cached) => {
+      if (!cached || cancelled || shownRef.current) return
+      if ((cached.snapshots as Snapshot[]).length === 0) return
+      const patched = await patchFromImageCache(cached.snapshots as Snapshot[])
+      if (cancelled || shownRef.current) return
+      shownRef.current = true
+      setInitialSnapshots(patched)
+      setInitialTitle(cached.title)
+      setLoaded(true) // GUI renders, CUI still waiting for Supabase
+    })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
-  // Effect 2: Fetch from Supabase — single source of truth
+  // Effect 2: Fetch from Supabase — always updates all data
   useEffect(() => {
     if (!user || !projectId) return
     let cancelled = false
 
     loadProject().then(async ({ snapshots, messages, title, animations }) => {
       if (cancelled) return
-      // Update cache for future use
       cacheProjectData(projectId, snapshots, messages, title)
 
       if (animations.length > 0) {
