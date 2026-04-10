@@ -145,9 +145,8 @@ export default function ProjectPage() {
 
       if (shownRef.current) {
         // Already showing from cache — but Supabase may have newer data
-        // (e.g. background agent generated images while user was away)
-        // Editor's incremental merge effect will handle the update
         const patched = await patchFromImageCache(snapshots)
+        console.log(`[page:merge] cache had data, Supabase: ${snapshots.length} snaps, ${messages.length} msgs, cancelled=${cancelled}`)
         if (!cancelled) {
           setInitialSnapshots(patched)
           setInitialMessages(messages)
