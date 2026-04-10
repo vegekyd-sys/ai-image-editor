@@ -11,8 +11,6 @@ import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
-import dynamic from 'next/dynamic';
-const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -907,16 +905,6 @@ export default function AgentChatView({
                         </button>
                       );
                     })()}
-
-                    {/* Design animation — show Player for playback (poster captured by Editor) */}
-                    {msg.design?.animation && msg.image && (
-                      <div className="mt-3" style={{ maxWidth: 308 }}>
-                        <RemotionRenderer
-                          design={msg.design}
-                          onError={(err) => console.error('[design CUI] error:', err)}
-                        />
-                      </div>
-                    )}
 
                     {/* editPrompt card — collapsible */}
                     {msg.editPrompt && (
