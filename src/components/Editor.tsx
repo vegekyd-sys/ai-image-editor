@@ -195,6 +195,8 @@ export default function Editor({
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
+  // Streaming code display: tracks which message is receiving run_code chunks
+  const codeStreamRef = useRef<{ msgId: string; code: string; shown: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
@@ -1501,15 +1503,31 @@ export default function Editor({
               lastEditPromptRef.current = input.editPrompt;
               lastEditInputImagesRef.current = images ?? null;
             }
-            // Append run_code as code fence only (description goes into collapse button via CollapsibleCode)
-            if (tool === 'run_code' && typeof input.code === 'string') {
-              const code = input.code as string;
+            // Open code fence for run_code (full code arrives via onCodeStream chunks)
+            if (tool === 'run_code') {
               const id = currentMsgId;
               if (id) {
+                codeStreamRef.current = { msgId: id, code: '', shown: 0 };
                 setMessages(prev => prev.map(m =>
-                  m.id === id ? { ...m, content: (m.content || '') + `\n\n\`\`\`javascript\n${code}\n\`\`\`\n` } : m
+                  m.id === id ? { ...m, content: (m.content || '') + '\n\n```javascript\n' } : m
                 ));
               }
+            }
+          },
+          onCodeStream: (text, done) => {
+            const stream = codeStreamRef.current;
+            if (!stream) return;
+            if (done) {
+              // Close code fence
+              setMessages(prev => prev.map(m =>
+                m.id === stream.msgId ? { ...m, content: (m.content || '') + '\n```\n' } : m
+              ));
+              codeStreamRef.current = null;
+            } else {
+              // Append chunk
+              setMessages(prev => prev.map(m =>
+                m.id === stream.msgId ? { ...m, content: (m.content || '') + text } : m
+              ));
             }
           },
           onAnimationTask: (taskId, prompt) => {
@@ -1544,6 +1562,10 @@ export default function Editor({
           onNsfwDetected: () => {
             console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
             isNsfwRef.current = true;
+          },
+          onReasoning: () => {
+            // Each reasoning delta keeps SSE alive; update status to show Agent is thinking
+            setAgentStatus(t('editor.agentThinking'));
           },
           onDesign: (design) => {
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);

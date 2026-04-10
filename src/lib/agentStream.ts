@@ -11,6 +11,8 @@ export interface AgentStreamCallbacks {
   onAnimationTask?: (taskId: string, prompt: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onNsfwDetected?: () => void;
+  onReasoning?: (text: string) => void;
+  onCodeStream?: (text: string, done: boolean) => void;
   onDesign?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
@@ -92,6 +94,12 @@ export async function streamAgent(
           case 'nsfw_detected':
             callbacks.onNsfwDetected?.();
             break;
+          case 'reasoning':
+            callbacks.onReasoning?.(event.text);
+            break;
+          case 'code_stream':
+            callbacks.onCodeStream?.(event.text, !!event.done);
+            break;
           case 'design':
             callbacks.onDesign?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } });
             break;
@@ -104,8 +112,8 @@ export async function streamAgent(
             callbacks.onError?.(event.message);
             break;
         }
-      } catch {
-        // skip malformed JSON
+      } catch (e) {
+        console.warn('[agentStream] failed to parse SSE event:', (e as Error)?.message, 'line length:', line.length, 'preview:', line.slice(0, 200));
       }
     }
   }

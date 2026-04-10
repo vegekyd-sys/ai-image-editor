@@ -74,6 +74,8 @@ export type AgentStreamEvent =
   | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
+  | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
+  | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // Agent React design for browser rendering
   | { type: 'done' }
   | { type: 'error'; message: string };
@@ -129,7 +131,7 @@ function getAgentSystemPrompt(): string {
 
 /** Build system prompt with lightweight skill manifest (not full templates) */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, userId?: string): Promise<string> {
+async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, userId?: string, projectId?: string): Promise<string> {
   const base = getAgentSystemPrompt();
   const manifest = await workspace.getSkillManifest(supabase, userId);
   // Append user skills to manifest if any
@@ -140,6 +142,7 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, use
     ).join('\n');
   }
 
+  const projectPath = projectId ? `${projectId}/` : '';
   const workspaceSection = `
 
 ## Workspace
@@ -149,9 +152,9 @@ You have a persistent workspace for skills and files.
 Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
 
 ### File organization
+- **User-level** (shared across projects): \`skills/\`, \`memory/\`
+- **Project-level** (current project): \`${projectPath}code/\`${projectId ? ` — save design code here` : ''}
 - **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
-- **skills/{name}/assets/{filename}** — Reference images for skills.
-- **code/{snapshotId}.json** — Persisted design code (auto-saved). You can \`list_files('code/')\` to find previous designs and \`read_file\` to reuse/modify them.
 
 ### run_code
 Execute JavaScript with design mode (React/CSS) and image utilities (sharp).
@@ -414,31 +417,41 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-Path is free — you decide how to organize. Convention: skills/ for abilities, memory/ for remembering things, code/ for saved run_code output.
-Set fromLastRunCode=true to save the last run_code output (full code or design JSON) — no need to copy the code yourself.`,
+Set fromLastRunCode=true to save the last run_code output — path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.`,
       inputSchema: z.object({
-        path: z.string().describe('File path, e.g. "code/sunset-poster.json", "skills/my-style/SKILL.md"'),
+        path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
+        name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output (code or design JSON). No need to copy code.'),
+        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Path is auto-generated with project ID + snapshot number.'),
       }),
-      execute: async ({ path: filePath, content, fromLastRunCode }) => {
+      execute: async ({ path: filePath, name, content, fromLastRunCode }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, message: 'Workspace not available (no Supabase connection).' };
         }
         let fileContent = content || '';
+        let savePath = filePath || '';
         if (fromLastRunCode) {
           const lastCode = (ctx as any).__lastRunCode;
           if (!lastCode) {
             return { success: false, message: 'No run_code output to save. Call run_code first.' };
           }
           fileContent = lastCode;
+          // Auto-generate path: {projectId}/code/snapshot-{N}-{name}.json
+          if (!savePath) {
+            const snapshotIdx = ctx.snapshotImages.length;
+            const slug = (name || 'design').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+            savePath = `${ctx.projectId}/code/snapshot-${snapshotIdx}-${slug}.json`;
+          }
+        }
+        if (!savePath) {
+          return { success: false, message: 'Provide a path or use fromLastRunCode=true.' };
         }
         if (!fileContent) {
           return { success: false, message: 'No content to write. Provide content or set fromLastRunCode=true.' };
         }
-        const result = await workspace.writeFile(filePath, fileContent, ctx.supabase, ctx.userId);
+        const result = await workspace.writeFile(savePath, fileContent, ctx.supabase, ctx.userId);
         return result.success
-          ? { success: true, message: `Saved: ${filePath}`, storageUrl: result.storageUrl }
+          ? { success: true, message: `Saved: ${savePath}`, storageUrl: result.storageUrl }
           : { success: false, message: `Write failed: ${result.error}` };
       },
     }),
@@ -625,7 +638,7 @@ Your code must return a value:
             const newIdx = ctx.snapshotImages.length + 1;
             ctx.snapshotImages.push(''); // placeholder — real URL set after frontend upload
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-            return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>. Save now: write_file({ path: "${ctx.projectId}/code/snapshot-${newIdx}-<name>.json", fromLastRunCode: true }) — replace <name> with a short descriptive slug.` };
+            return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>. Save now: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
 
           // Buffer or Uint8Array → treat as image
@@ -800,7 +813,7 @@ export async function* runMakaronAgent(
   }
 
   // Build system prompt: base agent.md + workspace manifest (lightweight, not full templates)
-  const systemPrompt = await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId);
+  const systemPrompt = await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -815,6 +828,12 @@ export async function* runMakaronAgent(
     });
 
     for await (const event of result.fullStream) {
+      // ── Reasoning delta (extended thinking) — stream to keep connection alive ──
+      if (event.type === 'reasoning-delta') {
+        yield { type: 'reasoning', text: event.text };
+        continue;
+      }
+
       // ── Text delta ──────────────────────────────────────────────────────────
       if (event.type === 'text-delta') {
         yield { type: 'content', text: event.text };
@@ -877,12 +896,27 @@ export async function* runMakaronAgent(
             ...snapshotRefs,
           ];
         }
+        // For run_code: truncate code in tool_call event, stream full code separately
+        // (large SSE events cause silent JSON.parse failures on iOS Safari)
+        const toolInput = event.input as Record<string, unknown>;
+        const isRunCode = event.toolName === 'run_code' && typeof toolInput.code === 'string';
+        const fullCode = isRunCode ? (toolInput.code as string) : null;
         yield {
           type: 'tool_call',
           tool: event.toolName,
-          input: event.input as Record<string, unknown>,
+          input: isRunCode
+            ? { ...toolInput, code: (fullCode!).slice(0, 100) + `... (${fullCode!.length} chars)` }
+            : toolInput,
           ...(toolCallImages ? { images: toolCallImages } : {}),
         };
+        // Stream full code in small chunks
+        if (fullCode) {
+          const CHUNK = 500;
+          for (let i = 0; i < fullCode.length; i += CHUNK) {
+            yield { type: 'code_stream', text: fullCode.slice(i, i + CHUNK) };
+          }
+          yield { type: 'code_stream', text: '', done: true };
+        }
         continue;
       }
 
