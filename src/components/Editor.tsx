@@ -2625,7 +2625,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   const posterCapturedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const snap of snapshots) {
-      if (snap.design && !snap.image && !posterCapturedRef.current.has(snap.id)) {
+      if (snap.design && !snap.design.animation && !snap.image && !posterCapturedRef.current.has(snap.id)) {
         posterCapturedRef.current.add(snap.id);
         import('@/components/RemotionRenderer').then(({ captureDesignPoster }) =>
           captureDesignPoster(snap.design!).then(poster => {
