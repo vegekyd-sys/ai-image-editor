@@ -1685,6 +1685,7 @@ export default function Editor({
   // ── Reconnect to active background agent run ──
   useEffect(() => {
     if (!activeRunId || isAgentActive) return;
+    console.log('[Editor] reconnect effect firing, activeRunId:', activeRunId, 'isAgentActive:', isAgentActive);
     setIsAgentActive(true);
     setAgentStatus(isReconnecting ? t('editor.reconnecting') : t('editor.agentThinking'));
 
