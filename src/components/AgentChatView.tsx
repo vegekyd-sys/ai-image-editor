@@ -908,17 +908,11 @@ export default function AgentChatView({
                       );
                     })()}
 
-                    {/* Design without poster yet — Player with autoCapture */}
-                    {msg.design && !msg.image && (
+                    {/* Design animation — show Player for playback (poster captured by Editor) */}
+                    {msg.design?.animation && msg.image && (
                       <div className="mt-3" style={{ maxWidth: 308 }}>
                         <RemotionRenderer
                           design={msg.design}
-                          autoCapture
-                          onComplete={(posterDataUrl) => {
-                            if (posterDataUrl && onDesignPoster) {
-                              onDesignPoster(msg.id, posterDataUrl);
-                            }
-                          }}
                           onError={(err) => console.error('[design CUI] error:', err)}
                         />
                       </div>

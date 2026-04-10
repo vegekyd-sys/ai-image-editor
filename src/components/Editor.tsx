@@ -3327,9 +3327,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
         }
       `}</style>
-      {/* Remotion renderer — captures design as screenshot via renderStillOnWeb */}
-      {/* pendingDesign: create snapshot immediately (no screenshot yet).
-          Poster will be captured from CUI's visible Player via autoCapture. */}
+      {/* pendingDesign: create snapshot + capture poster via renderStillOnWeb (no Player needed) */}
       {pendingDesign && (() => {
         const msgId = pendingDesignMsgIdRef.current;
         if (msgId) {
@@ -3338,13 +3336,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           const currentDesign = pendingDesign;
           const newSnapshot: Snapshot = {
             id: snapId,
-            image: '', // empty — poster comes later from CUI autoCapture
+            image: '', // poster captured async below
             tips: [],
             messageId: msgId,
             description: '[run_code design]',
             design: currentDesign,
           };
-          // Use queueMicrotask to avoid setState during render
           queueMicrotask(() => {
             setSnapshots(prev => [...prev, newSnapshot]);
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
@@ -3355,25 +3352,16 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             ));
             setAgentStatus(t('status.designCreated'));
             setPendingDesign(null);
+            // Capture poster async — no Player mount needed
+            import('@/components/RemotionRenderer').then(({ captureDesignPoster }) =>
+              captureDesignPoster(currentDesign).then((poster) => {
+                if (poster) handleDesignPoster(msgId, poster);
+              })
+            );
           });
         }
         return null;
       })()}
-      {/* Note: old onError for design compile is now handled by harness on server side */}
-      {false && (
-        <RemotionRenderer design={{code:'',width:0,height:0}} onComplete={() => {}} onError={(error) => {
-            console.error('🎨 [design] render error:', error);
-            setPendingDesign(null);
-            const msgId = pendingDesignMsgIdRef.current;
-            if (msgId) {
-              setMessages((prev) => prev.map((m) =>
-                m.id === msgId ? { ...m, content: (m.content || '') + `\n\n⚠️ Design render failed: ${error}` } : m
-              ));
-            }
-            setAgentStatus(t('status.designFailed'));
-          }}
-        />
-      )}
     </div>
   );
 }

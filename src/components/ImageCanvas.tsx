@@ -825,7 +825,6 @@ export default function ImageCanvas({
             <RemotionRenderer
               design={animatedDesigns.get(currentIndex)!}
               mode="fill"
-              onComplete={() => {}}
               onError={(err) => console.error('[canvas design]', err)}
             />
           </div>

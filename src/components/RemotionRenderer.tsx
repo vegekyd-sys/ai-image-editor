@@ -33,25 +33,65 @@ async function resolveCodeUrls(code: string): Promise<string> {
   return resolved;
 }
 
-// ─── Main renderer: Player for display, renderStillOnWeb for poster ─────────
+// ─── Standalone poster capture (no DOM needed) ─────────────────────────────
+
+/**
+ * Capture a JPEG poster from a design via renderStillOnWeb.
+ * Uses Remotion's <Img> + delayRender to guarantee images are loaded.
+ * Returns JPEG data URL, or empty string on failure.
+ */
+export async function captureDesignPoster(design: DesignPayload): Promise<string> {
+  try {
+    await preloadBabel().catch(() => {});
+    const resolvedCode = await resolveCodeUrls(design.code);
+    const comp = evalRemotionJSX(resolvedCode);
+    if (!comp) return '';
+
+    const fps = design.animation?.fps || 30;
+    const durationInFrames = design.animation
+      ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
+      : 1;
+
+    console.log('🎨 [design] capturing poster via renderStillOnWeb...');
+    const result = await renderStillOnWeb({
+      composition: {
+        component: comp,
+        durationInFrames, fps,
+        width: design.width, height: design.height,
+        id: 'agent-design-poster',
+        calculateMetadata: null, defaultProps: {},
+      },
+      frame: 0,
+      imageFormat: 'jpeg',
+      inputProps: (design.props || {}) as Record<string, unknown>,
+    });
+
+    const dataUrl = await new Promise<string>((r) => {
+      const reader = new FileReader();
+      reader.onloadend = () => r(reader.result as string);
+      reader.readAsDataURL(result.blob);
+    });
+    console.log('🎨 [design] poster captured');
+    return dataUrl;
+  } catch (e) {
+    console.warn('🎨 [design] poster capture failed:', e);
+    return '';
+  }
+}
+
+// ─── Player component (for interactive playback only) ───────────────────────
 
 interface RemotionRendererProps {
   design: DesignPayload;
-  /** Called with JPEG data URL poster after visible Player screenshot */
-  onComplete: (dataUrl: string) => void;
-  onError: (error: string) => void;
+  onError?: (error: string) => void;
   mode?: 'fill' | 'inline';
-  /** If true, auto-capture poster from visible Player then call onComplete */
-  autoCapture?: boolean;
 }
 
-export default function RemotionRenderer({ design, onComplete, onError, mode = 'inline', autoCapture = false }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onError, mode = 'inline' }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const initRef = useRef(false);
-  const capturedRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
-  const [posterUrl, setPosterUrl] = useState<string | null>(null);
 
   const isStill = !design.animation;
   const fps = design.animation?.fps || 30;
@@ -59,69 +99,17 @@ export default function RemotionRenderer({ design, onComplete, onError, mode = '
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
-  // Compile
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
     preloadBabel().catch(() => {});
     const comp = evalRemotionJSX(design.code);
-    if (!comp) { onError('Failed to compile design code'); return; }
+    if (!comp) { onError?.('Failed to compile design code'); return; }
     setComponent(() => comp);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
-  // Auto-capture: poster via renderStillOnWeb (resolveCodeUrls handles CORS)
-  useEffect(() => {
-    if (!autoCapture || !Component || capturedRef.current) return;
-    capturedRef.current = true;
-    (async () => {
-      try {
-        const resolvedCode = await resolveCodeUrls(design.code);
-        const posterComp = evalRemotionJSX(resolvedCode);
-        if (!posterComp) { onComplete(''); return; }
-        console.log('🎨 [design] capturing poster via renderStillOnWeb...');
-        const result = await renderStillOnWeb({
-          composition: {
-            component: posterComp,
-            durationInFrames,
-            fps,
-            width: design.width,
-            height: design.height,
-            id: 'agent-design-poster',
-            calculateMetadata: null,
-            defaultProps: {},
-          },
-          frame: 0,
-          imageFormat: 'jpeg',
-          inputProps: (design.props || {}) as Record<string, unknown>,
-        });
-        const dataUrl = await new Promise<string>((r) => {
-          const reader = new FileReader();
-          reader.onloadend = () => r(reader.result as string);
-          reader.readAsDataURL(result.blob);
-        });
-        console.log('🎨 [design] poster captured');
-        setPosterUrl(dataUrl);
-        onComplete(dataUrl);
-      } catch (e) {
-        console.warn('🎨 [design] poster capture failed:', e);
-        onComplete('');
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoCapture, Component]);
-
   if (!Component) return null;
-
-  // After capture, show poster image instead of Player (destroy Player to save resources)
-  if (posterUrl) {
-    return (
-      <div style={{ borderRadius: 12, overflow: 'hidden', margin: '8px 0' }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={posterUrl} alt="design" style={{ width: '100%', borderRadius: 12 }} />
-      </div>
-    );
-  }
 
   const isFill = mode === 'fill';
 
