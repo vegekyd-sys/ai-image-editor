@@ -145,6 +145,7 @@ const en = {
   'editor.multiImageAnalyzing': 'Got your {count} images! Analyzing them now, about 1 minute ⏳',
   'editor.tipsSuffix': '\n\nComing up with some fun edit ideas...',
   'editor.agentThinking': 'Agent is thinking...',
+  'editor.reconnecting': 'Reconnecting to Agent...',
   'editor.agentCoding': 'Writing code...',
   'editor.makeVideo': '✨ Turn these photos into a video for me',
 

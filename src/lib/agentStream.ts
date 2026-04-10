@@ -11,6 +11,7 @@ export interface AgentStreamCallbacks {
   onAnimationTask?: (taskId: string, prompt: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onNsfwDetected?: () => void;
+  onRunId?: (runId: string) => void;
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
@@ -51,6 +52,10 @@ export async function streamAgent(
     callbacks.onError?.(text);
     return;
   }
+
+  // Pass run ID to caller for reconnection support
+  const agentRunId = res.headers.get('X-Agent-Run-Id');
+  if (agentRunId) callbacks.onRunId?.(agentRunId);
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();

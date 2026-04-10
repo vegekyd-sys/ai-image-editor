@@ -9,6 +9,7 @@ import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
+import { useAgentRun } from '@/hooks/useAgentRun';
 import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
@@ -148,6 +149,29 @@ export default function Editor({
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
+
+  // Incremental merge: when Supabase loads newer data than IDB cache showed,
+  // merge new snapshots/messages into existing state (no flicker, no data loss)
+  useEffect(() => {
+    if (!initialSnapshots?.length) return;
+    setSnapshots(prev => {
+      const existingIds = new Set(prev.map(s => s.id));
+      const newSnaps = initialSnapshots.filter(s => !existingIds.has(s.id));
+      if (newSnaps.length === 0) return prev;
+      return [...prev, ...newSnaps];
+    });
+  }, [initialSnapshots]);
+
+  useEffect(() => {
+    if (!initialMessages?.length) return;
+    setMessages(prev => {
+      const existingIds = new Set(prev.map(m => m.id));
+      const newMsgs = initialMessages.filter(m => !existingIds.has(m.id));
+      if (newMsgs.length === 0) return prev;
+      return [...prev, ...newMsgs];
+    });
+  }, [initialMessages]);
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -207,6 +231,13 @@ export default function Editor({
   const lastEditPromptRef = useRef<string | null>(null); // captures editPrompt from generate_image tool calls
   const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
+  const agentRunIdRef = useRef<string | null>(null); // current run ID from server
+
+  // ── Background Agent reconnection ──────────────────────────────
+  const { activeRunId, isReconnecting, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
+    projectId: projectId ?? '',
+    enabled: !!projectId && (initialSnapshots?.length ?? 0) > 0,
+  });
 
   // ── Hero animation (GUI ↔ CUI transition) ───────────────────────
   const canvasAreaRef = useRef<HTMLDivElement>(null);
@@ -1563,6 +1594,7 @@ export default function Editor({
             console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
             isNsfwRef.current = true;
           },
+          onRunId: (id) => { agentRunIdRef.current = id; },
           onReasoning: () => {
             if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentThinking');
           },
@@ -1649,6 +1681,64 @@ export default function Editor({
       return prev;
     });
   }, []);
+
+  // ── Reconnect to active background agent run ──
+  useEffect(() => {
+    if (!activeRunId || isAgentActive) return;
+    setIsAgentActive(true);
+    setAgentStatus(isReconnecting ? t('editor.reconnecting') : t('editor.agentThinking'));
+
+    const reconnectMsgId = generateId();
+    let currentMsgId = reconnectMsgId;
+    setMessages(prev => [...prev, { id: reconnectMsgId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
+
+    agentReconnect({
+      onStatus: (status) => { setAgentStatus(status); },
+      onContent: (delta) => {
+        const id = currentMsgId;
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, content: m.content + delta } : m));
+      },
+      onNewTurn: () => {
+        const newId = generateId();
+        currentMsgId = newId;
+        setMessages(prev => [...prev, { id: newId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
+      },
+      onImage: (imageUrl, usedModel) => {
+        const snapId = generateId();
+        const newSnapshot: Snapshot = { id: snapId, image: imageUrl, imageUrl, tips: [], messageId: currentMsgId };
+        setSnapshots(prev => [...prev, newSnapshot]);
+        cacheImage(`snap:${snapId}`, imageUrl);
+        fetchTipsForSnapshot(snapId, imageUrl, 'none');
+        setAgentStatus(t('status.imageGenerated'));
+      },
+      onToolCall: (tool) => {
+        if (tool === 'generate_image') setAgentStatus(t('editor.generatingImage'));
+      },
+      onAnimationTask: (taskId, prompt) => {
+        const urls = snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
+        const newAnim: ProjectAnimation = {
+          id: taskId, projectId: projectId ?? '', taskId, videoUrl: null,
+          prompt, snapshotUrls: urls, status: 'processing', createdAt: new Date().toISOString(),
+        };
+        setAnimations(prev => [newAnim, ...prev]);
+      },
+      onNsfwDetected: () => { isNsfwRef.current = true; },
+      onDone: () => {
+        setAgentStatus(t('editor.done'));
+        setTimeout(() => setAgentStatus(t('editor.greeting')), 2000);
+        setIsAgentActive(false);
+        agentDisconnect();
+      },
+      onError: (msg) => {
+        console.error('[reconnect] Agent error:', msg);
+        setIsAgentActive(false);
+        agentDisconnect();
+      },
+    });
+
+    return () => { agentDisconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRunId]);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
   // NOTE: no compressBase64 here — annotated image is used as generation base,

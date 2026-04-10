@@ -144,7 +144,15 @@ export default function ProjectPage() {
       }
 
       if (shownRef.current) {
-        // Already showing from cache — background refresh done, cover update only
+        // Already showing from cache — but Supabase may have newer data
+        // (e.g. background agent generated images while user was away)
+        // Editor's incremental merge effect will handle the update
+        const patched = await patchFromImageCache(snapshots)
+        if (!cancelled) {
+          setInitialSnapshots(patched)
+          setInitialMessages(messages)
+          if (title) setInitialTitle(title)
+        }
         if (snapshots.length > 0 && snapshots[0].imageUrl) {
           updateCover(snapshots[0].imageUrl)
         }

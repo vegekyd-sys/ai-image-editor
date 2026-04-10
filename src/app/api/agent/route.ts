@@ -1,6 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
+import { AgentDualWriter } from '@/lib/agentDualWriter';
 
 export const maxDuration = 300;
 
@@ -34,9 +35,36 @@ export async function POST(req: NextRequest) {
       previewsReady: '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
     };
 
+    // Only dual-write for normal agent flow (not lightweight teaser/name/reaction branches)
+    const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction;
+
+    let runId: string | null = null;
+    if (isNormalMode) {
+      // Mark any stale running runs as failed before creating a new one
+      await supabase.from('agent_runs')
+        .update({ status: 'failed', ended_at: new Date().toISOString() })
+        .eq('project_id', projectId)
+        .eq('user_id', user.id)
+        .eq('status', 'running');
+
+      const { data: run } = await supabase.from('agent_runs').insert({
+        project_id: projectId,
+        user_id: user.id,
+        status: 'running',
+        prompt: (prompt ?? '').slice(0, 500),
+        metadata: { locale, preferredModel, isNsfw, analysisOnly },
+      }).select('id').single();
+      runId = run?.id ?? null;
+    }
+
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        // Create dual writer if normal mode with a valid run
+        const writer = (runId && isNormalMode)
+          ? new AgentDualWriter(runId, supabase, user!.id, projectId, controller, encoder)
+          : null;
+
         try {
           // tipsTeaser: generate a one-sentence teaser about the tips (no image needed)
           if (tipsTeaser && tipsPayload) {
@@ -122,11 +150,16 @@ export async function POST(req: NextRequest) {
 
           // Normal agent request — SSE heartbeat every 10s to prevent proxy idle timeout
           const heartbeat = setInterval(() => {
-            controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+            try { controller.enqueue(encoder.encode(`: heartbeat\n\n`)); } catch { /* disconnected */ }
           }, 10_000);
           try {
             for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              if (writer) {
+                writer.tryEnqueue(event);
+                await writer.writeEvent(event);
+              } else {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              }
             }
           } finally {
             clearInterval(heartbeat);
@@ -134,14 +167,48 @@ export async function POST(req: NextRequest) {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('Agent stream error:', msg);
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: 'error', message: msg })}\n\n`),
-          );
+          const errorEvent = { type: 'error' as const, message: msg };
+          if (writer) {
+            writer.tryEnqueue(errorEvent);
+            await writer.writeEvent(errorEvent);
+          } else {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`),
+            );
+          }
+          // Mark run as failed
+          if (runId) {
+            try {
+              await supabase.from('agent_runs').update({
+                status: 'failed',
+                ended_at: new Date().toISOString(),
+              }).eq('id', runId);
+            } catch { /* best effort */ }
+          }
         } finally {
+          if (writer) await writer.flush();
           controller.close();
         }
       },
     });
+
+    // after() runs after response is sent — mark run as completed
+    if (runId) {
+      after(async () => {
+        try {
+          const { data: run } = await supabase.from('agent_runs')
+            .select('status').eq('id', runId).single();
+          if (run?.status === 'running') {
+            await supabase.from('agent_runs').update({
+              status: 'completed',
+              ended_at: new Date().toISOString(),
+            }).eq('id', runId);
+          }
+        } catch (err) {
+          console.error('[after] Failed to finalize run:', err);
+        }
+      });
+    }
 
     return new Response(stream, {
       headers: {
@@ -149,6 +216,7 @@ export async function POST(req: NextRequest) {
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
+        ...(runId ? { 'X-Agent-Run-Id': runId } : {}),
       },
     });
   } catch (error) {
