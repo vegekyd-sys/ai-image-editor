@@ -2621,6 +2621,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [onSaveSnapshot, fetchTipsForSnapshot]);
 
+  // Auto-capture poster for design snapshots loaded from Supabase without a poster image
+  const posterCapturedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const snap of snapshots) {
+      if (snap.design && !snap.image && !posterCapturedRef.current.has(snap.id)) {
+        posterCapturedRef.current.add(snap.id);
+        import('@/components/RemotionRenderer').then(({ captureDesignPoster }) =>
+          captureDesignPoster(snap.design!).then(poster => {
+            if (poster) handleDesignPoster(snap.messageId, poster);
+          })
+        ).catch(() => {});
+      }
+    }
+  }, [snapshots, handleDesignPoster]);
+
   const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string) => {
     if (videoTimelineIndex < 0) return;
 

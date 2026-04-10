@@ -76,9 +76,12 @@ export function useProject(projectId: string, userId: string) {
     // Load persisted designs from workspace (async, non-blocking)
     // Derive userId from first snapshot's image_url if userId param is empty (race condition on page load)
     const resolvedUserId = userId || (() => {
-      const firstUrl = dbSnapshots[0]?.image_url || ''
-      const match = firstUrl.match(/\/images\/([^/]+)\//)
-      return match?.[1] || ''
+      for (const s of dbSnapshots) {
+        if (!s.image_url) continue
+        const match = s.image_url.match(/\/images\/([^/]+)\//)
+        if (match) return match[1]
+      }
+      return ''
     })()
     for (const snap of snapshots) {
       const dp = (snap as any)._designPath as string | undefined
