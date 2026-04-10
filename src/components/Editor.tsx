@@ -1740,7 +1740,6 @@ export default function Editor({
         setAnimations(prev => [newAnim, ...prev]);
       },
       onDesign: (design) => {
-        // Trigger the same pendingDesign flow as normal SSE
         pendingDesignMsgIdRef.current = currentMsgId;
         setPendingDesign(design);
       },
