@@ -1505,8 +1505,10 @@ export default function Editor({
               lastEditPromptRef.current = input.editPrompt;
               lastEditInputImagesRef.current = images ?? null;
             }
-            // Open code fence for run_code (full code arrives via onCodeStream chunks)
-            if (tool === 'run_code') {
+          },
+          onCodeStream: (text, done) => {
+            // Auto-init on first chunk (code_stream arrives before tool_call)
+            if (!codeStreamRef.current && !done && text) {
               const id = currentMsgId;
               if (id) {
                 codeStreamRef.current = { msgId: id, code: '', shown: 0 };
@@ -1515,18 +1517,14 @@ export default function Editor({
                 ));
               }
             }
-          },
-          onCodeStream: (text, done) => {
             const stream = codeStreamRef.current;
             if (!stream) return;
             if (done) {
-              // Close code fence
               setMessages(prev => prev.map(m =>
                 m.id === stream.msgId ? { ...m, content: (m.content || '') + '\n```\n' } : m
               ));
               codeStreamRef.current = null;
             } else {
-              // Append chunk
               setMessages(prev => prev.map(m =>
                 m.id === stream.msgId ? { ...m, content: (m.content || '') + text } : m
               ));
