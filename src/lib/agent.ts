@@ -74,6 +74,8 @@ export type AgentStreamEvent =
   | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
+  | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
+  | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // Agent React design for browser rendering
   | { type: 'done' }
@@ -826,9 +828,20 @@ export async function* runMakaronAgent(
       onStepFinish: () => { stepCount++; },
     });
 
+    let currentToolInput = '';
     for await (const event of result.fullStream) {
-      // Skip internal streaming events — route.ts `: heartbeat` keeps SSE alive
-      if (event.type === 'reasoning-delta' || event.type === 'tool-input-delta' || event.type === 'tool-input-start') {
+      // ── Heartbeat: keep SSE alive (route.ts sends `: heartbeat` every 10s) ──
+      if (event.type === 'reasoning-delta') {
+        yield { type: 'reasoning', text: event.text };
+        continue;
+      }
+      // Track which tool is currently receiving input
+      if (event.type === 'tool-input-start') {
+        currentToolInput = (event as any).toolName ?? '';
+        continue;
+      }
+      if (event.type === 'tool-input-delta') {
+        yield { type: currentToolInput === 'run_code' ? 'coding' : 'reasoning', text: '' };
         continue;
       }
 

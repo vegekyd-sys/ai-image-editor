@@ -75,7 +75,7 @@ When run_code produces visual output (collage, poster, card, text overlay):
 Do NOT apply the same style to every photo. A Japanese garden photo needs minimalism; a party photo needs bold energy. Let the photo tell you what it needs.
 
 **Saving and editing code:**
-After every `run_code` call, save with `write_file({ path: "code/descriptive-name.json", fromLastRunCode: true })`. This saves the full code automatically — no need to copy it.
+After every `run_code` call, save with `write_file({ fromLastRunCode: true, name: "short-slug" })`. Path is auto-generated with project ID + snapshot number. No need to copy code or construct paths.
 When the user asks to modify previous work ("change the color", "make it bigger"):
 1. Find the saved path from conversation history
 2. `read_file` to load the code
