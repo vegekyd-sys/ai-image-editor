@@ -197,6 +197,8 @@ export default function Editor({
   const pendingDesignMsgIdRef = useRef<string>('');
   // Streaming code display: tracks which message is receiving run_code chunks
   const codeStreamRef = useRef<{ msgId: string; code: string; shown: number } | null>(null);
+  // Agent elapsed timer: tracks start time and current phase for status bar
+  const agentTimerRef = useRef<{ startTime: number; phase: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
@@ -1564,10 +1566,10 @@ export default function Editor({
             isNsfwRef.current = true;
           },
           onReasoning: () => {
-            setAgentStatus(t('editor.agentThinking'));
+            if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentThinking');
           },
           onCoding: () => {
-            setAgentStatus(t('editor.agentCoding'));
+            if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentCoding');
           },
           onDesign: (design) => {
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
@@ -2488,6 +2490,24 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setViewMode('gui');
     }
   }, [snapshots, draftParentIndex, isDesktop, cuiPanelWidth]);
+
+  // Agent elapsed timer — update status bar every second while agent is active
+  useEffect(() => {
+    if (!isAgentActive) {
+      agentTimerRef.current = null;
+      return;
+    }
+    if (!agentTimerRef.current) {
+      agentTimerRef.current = { startTime: Date.now(), phase: t('editor.agentThinking') };
+    }
+    const timer = setInterval(() => {
+      const ref = agentTimerRef.current;
+      if (!ref) return;
+      const elapsed = Math.round((Date.now() - ref.startTime) / 1000);
+      setAgentStatus(`${ref.phase} (${elapsed}s)`);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isAgentActive, t]);
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message

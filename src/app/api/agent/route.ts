@@ -120,9 +120,16 @@ export async function POST(req: NextRequest) {
           const allSkills = await getAllSkills(supabase, user.id);
           const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
 
-          // Normal agent request
-          for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id })) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          // Normal agent request — SSE heartbeat every 10s to prevent proxy idle timeout
+          const heartbeat = setInterval(() => {
+            controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+          }, 10_000);
+          try {
+            for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id })) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            }
+          } finally {
+            clearInterval(heartbeat);
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -141,6 +148,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
       },
     });
   } catch (error) {
