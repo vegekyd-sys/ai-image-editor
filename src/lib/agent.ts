@@ -825,6 +825,9 @@ export async function* runMakaronAgent(
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
       onStepFinish: () => { stepCount++; },
+      providerOptions: {
+        bedrock: { reasoningConfig: { type: 'enabled', budgetTokens: 5000 } },
+      },
     });
 
     for await (const event of result.fullStream) {
