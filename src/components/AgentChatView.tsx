@@ -537,7 +537,9 @@ export default function AgentChatView({
     // Auto-scroll: during streaming, on big data loads (reconnect/Supabase), unless user scrolled up
     const shouldScroll = (isAgentActive && (msgCountChanged || lastMsgGrew)) || bigJump;
     if (shouldScroll && !userScrolledUp.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      // Big data jump (reconnect/Supabase load): snap to bottom instantly, no animation
+      // Streaming: smooth scroll
+      messagesEndRef.current?.scrollIntoView({ behavior: bigJump ? 'instant' : 'smooth' });
     }
   }, [messages, isAgentActive]);
 
