@@ -61,7 +61,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
         id: 'agent-design-poster',
         calculateMetadata: null, defaultProps: {},
       },
-      frame: 0,
+      frame: Math.min(30, durationInFrames - 1),
       imageFormat: 'jpeg',
       inputProps: (design.props || {}) as Record<string, unknown>,
     });
