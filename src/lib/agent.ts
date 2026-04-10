@@ -831,9 +831,11 @@ export async function* runMakaronAgent(
     });
 
     for await (const event of result.fullStream) {
-      // ── Heartbeat: reasoning-delta keeps SSE alive during extended thinking ──
-      if (event.type === 'reasoning-delta') {
-        yield { type: 'reasoning', text: event.text };
+      // ── Heartbeat: keep SSE alive during long operations ──
+      // reasoning-delta: extended thinking (~5-10s at start)
+      // tool-input-delta: Agent writing tool params / code (~20-30s)
+      if (event.type === 'reasoning-delta' || event.type === 'tool-input-delta') {
+        yield { type: 'reasoning', text: event.type === 'reasoning-delta' ? event.text : '' };
         continue;
       }
 
