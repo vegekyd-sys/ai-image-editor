@@ -221,15 +221,23 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
       callbacks.onContent?.((data as { text: string }).text)
       break
     case 'new_turn':
-      callbacks.onNewTurn?.()
+      callbacks.onNewTurn?.((data as { messageId?: string }).messageId)
       break
-    case 'image':
-      // DB stores imageUrl (not base64). Pass URL as the image arg.
+    case 'image': {
+      const imgData = data as { imageUrl?: string; snapshotId?: string; usedModel?: string }
       callbacks.onImage?.(
-        (data as { imageUrl: string }).imageUrl ?? '',
-        (data as { usedModel?: string }).usedModel,
+        imgData.imageUrl ?? '',
+        imgData.usedModel,
+        imgData.snapshotId,
+        imgData.imageUrl,
       )
       break
+    }
+    case 'design': {
+      const d = data as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; snapshotId?: string }
+      callbacks.onDesign?.(d)
+      break
+    }
     case 'tool_call':
       callbacks.onToolCall?.(
         (data as { tool: string }).tool,

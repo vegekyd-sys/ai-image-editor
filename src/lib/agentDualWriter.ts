@@ -42,6 +42,8 @@ export class AgentDualWriter {
       );
     } catch {
       this.sseDisconnected = true;
+      // Flush any pending content to DB immediately so reconnect sees it
+      void this.flushContent();
     }
   }
 

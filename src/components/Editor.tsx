@@ -1707,13 +1707,17 @@ export default function Editor({
         currentMsgId = newId;
         setMessages(prev => [...prev, { id: newId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
       },
-      onImage: (imageUrl, usedModel) => {
-        const snapId = generateId();
-        const newSnapshot: Snapshot = { id: snapId, image: imageUrl, imageUrl, tips: [], messageId: currentMsgId };
+      onImage: (imageUrl, usedModel, snapshotId, serverUrl) => {
+        const snapId = snapshotId || generateId();
+        const url = serverUrl || imageUrl;
+        const newSnapshot: Snapshot = { id: snapId, image: url, imageUrl: url, tips: [], messageId: currentMsgId };
         setSnapshots(prev => [...prev, newSnapshot]);
-        cacheImage(`snap:${snapId}`, imageUrl);
-        fetchTipsForSnapshot(snapId, imageUrl, 'none');
+        cacheImage(`snap:${snapId}`, url);
+        fetchTipsForSnapshot(snapId, url, 'none');
         setAgentStatus(t('status.imageGenerated'));
+        // Set inline image on current message for CUI display
+        const id = currentMsgId;
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, image: url } : m));
       },
       onToolCall: (tool) => {
         if (tool === 'generate_image') setAgentStatus(t('editor.generatingImage'));
@@ -1725,6 +1729,11 @@ export default function Editor({
           prompt, snapshotUrls: urls, status: 'processing', createdAt: new Date().toISOString(),
         };
         setAnimations(prev => [newAnim, ...prev]);
+      },
+      onDesign: (design) => {
+        // Trigger the same pendingDesign flow as normal SSE
+        pendingDesignMsgIdRef.current = currentMsgId;
+        setPendingDesign(design);
       },
       onNsfwDetected: () => { isNsfwRef.current = true; },
       onDone: () => {
@@ -3288,6 +3297,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           <AgentChatView
             mode="panel"
             messages={messages}
+            messagesLoading={!initialMessages}
             isAgentActive={isAgentActive}
             agentStatus={agentStatus}
             currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
@@ -3309,6 +3319,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       </>) : viewMode === 'cui' ? (
         <AgentChatView
           messages={messages}
+          messagesLoading={!initialMessages}
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
           currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}

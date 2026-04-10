@@ -221,6 +221,7 @@ interface AgentChatViewProps {
   onInputBarHeight?: (h: number) => void;
   mode?: 'overlay' | 'panel';
   skipSlideIn?: boolean;
+  messagesLoading?: boolean;
   snapshots?: Snapshot[];
   /** 1-based index of current snapshot for PiP @N badge */
   currentSnapshotIndex?: number;
@@ -249,6 +250,7 @@ export default function AgentChatView({
   onInputBarHeight,
   mode = 'overlay',
   skipSlideIn = false,
+  messagesLoading = false,
   snapshots = [],
   currentSnapshotIndex,
   preferredModel = 'auto',
@@ -771,25 +773,30 @@ export default function AgentChatView({
 
       {/* ── Messages ── */}
       <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: isPanel ? '16px' : 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: isPanel ? '0' : `${inputBarH}px` }}>
-        {/* Empty state */}
+        {/* Empty state or loading */}
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-3 pb-10">
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center"
-              style={{ background: 'rgba(192,38,211,0.15)' }}
-            >
-              {/* M asterisk icon */}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-fuchsia-400">
-                <line x1="12" y1="2" x2="12" y2="22" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-                <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
-              </svg>
+          messagesLoading ? (
+            <div className="flex items-center justify-center h-full pb-10">
+              <div className="w-6 h-6 border-2 border-white/10 border-t-fuchsia-400 rounded-full animate-spin" />
             </div>
-            <p className={`text-white/25 text-center leading-relaxed max-w-[220px] ${isPanel ? 'text-[17px]' : 'text-[19px]'}`}>
-              Tell me what you&apos;d like to do with your photo
-            </p>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full gap-3 pb-10">
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center"
+                style={{ background: 'rgba(192,38,211,0.15)' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-fuchsia-400">
+                  <line x1="12" y1="2" x2="12" y2="22" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                  <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
+                </svg>
+              </div>
+              <p className={`text-white/25 text-center leading-relaxed max-w-[220px] ${isPanel ? 'text-[17px]' : 'text-[19px]'}`}>
+                Tell me what you&apos;d like to do with your photo
+              </p>
+            </div>
+          )
         )}
 
         {/* Message list */}
