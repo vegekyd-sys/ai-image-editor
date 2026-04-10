@@ -212,31 +212,30 @@ export default function Editor({
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
 
-  // Sync state when initialSnapshots/Messages props change (e.g. Supabase fetch completes)
-  // Don't replace during active agent (Realtime is adding data live)
+  // Sync state when initialSnapshots/Messages props change (Supabase fetch or cache)
   useEffect(() => {
-    if (!initialSnapshots?.length || isAgentActive) return;
+    if (!initialSnapshots?.length) return;
     setSnapshots(prev => {
       const existingIds = new Set(prev.map(s => s.id));
-      const newFromSupabase = initialSnapshots.filter(s => !existingIds.has(s.id));
-      if (newFromSupabase.length === 0 && prev.length >= initialSnapshots.length) return prev;
-      if (newFromSupabase.length > 0) return [...prev, ...newFromSupabase];
-      const prevIds = new Set(prev.map(s => s.id));
-      if (initialSnapshots.some(s => !prevIds.has(s.id))) return initialSnapshots;
-      return prev;
+      const newItems = initialSnapshots.filter(s => !existingIds.has(s.id));
+      if (newItems.length === 0) return prev;
+      // During reconnect: append new items (don't replace Realtime-created ones)
+      // Normal: if Supabase has more, replace entirely for freshness
+      if (isAgentActive) return [...prev, ...newItems];
+      return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
     });
   }, [initialSnapshots, isAgentActive]);
 
   useEffect(() => {
-    if (!initialMessages?.length || isAgentActive) return;
+    if (!initialMessages?.length) return;
     setMessages(prev => {
       const existingIds = new Set(prev.map(m => m.id));
-      const newFromSupabase = initialMessages.filter(m => !existingIds.has(m.id));
-      if (newFromSupabase.length === 0 && prev.length >= initialMessages.length) return prev;
-      if (newFromSupabase.length > 0) return [...prev, ...newFromSupabase];
-      const prevIds = new Set(prev.map(m => m.id));
-      if (initialMessages.some(m => !prevIds.has(m.id))) return initialMessages;
-      return prev;
+      const newItems = initialMessages.filter(m => !existingIds.has(m.id));
+      if (newItems.length === 0) return prev;
+      // During reconnect: prepend old history before reconnect messages
+      // Normal: replace with Supabase data
+      if (isAgentActive) return [...newItems, ...prev];
+      return initialMessages.length > prev.length ? initialMessages : [...newItems, ...prev];
     });
   }, [initialMessages, isAgentActive]);
 

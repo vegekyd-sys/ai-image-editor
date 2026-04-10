@@ -19,13 +19,15 @@ export default function ProjectPage() {
   const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle } =
     useProject(projectId, user?.id ?? '')
 
-  // Snapshots: sync cache for instant GUI render (images in IDB)
+  // Sync cache for instant render (snapshots + messages from IDB/memory)
   const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
     return sync ? sync.snapshots as Snapshot[] : null
   })
-  // Messages: always null → wait for Supabase (DualWriter writes new msgs that cache doesn't have)
-  const [initialMessages, setInitialMessages] = useState<Message[] | null>(null)
+  const [initialMessages, setInitialMessages] = useState<Message[] | null>(() => {
+    const sync = getCachedProjectDataSync(projectId)
+    return sync ? sync.messages as Message[] : null
+  })
   const [initialTitle, setInitialTitle] = useState<string>(() => {
     const sync = getCachedProjectDataSync(projectId)
     return sync ? sync.title : 'Untitled'
@@ -106,7 +108,7 @@ export default function ProjectPage() {
   // TODO: Re-enable with proper cache invalidation when background agent is active
   // useEffect(() => {
   //   if (pendingImages) return
-  // Effect 1: Load snapshots from IDB cache (no auth needed, fast)
+  // Effect 1: Load from IDB cache (no auth needed, fast)
   useEffect(() => {
     if (pendingImages || shownRef.current) return
     let cancelled = false
@@ -117,8 +119,9 @@ export default function ProjectPage() {
       if (cancelled || shownRef.current) return
       shownRef.current = true
       setInitialSnapshots(patched)
+      setInitialMessages(cached.messages as Message[])
       setInitialTitle(cached.title)
-      setLoaded(true) // GUI renders, CUI still waiting for Supabase
+      setLoaded(true)
     })
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
