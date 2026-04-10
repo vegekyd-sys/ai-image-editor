@@ -92,7 +92,10 @@ export function useProject(projectId: string, userId: string) {
         const storagePath = `${resolvedUserId}/workspace/${dp}`
         const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
         if (urlData?.publicUrl) {
-          const res = await fetch(urlData.publicUrl)
+          const res = await Promise.race([
+            fetch(urlData.publicUrl),
+            new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+          ])
           if (res.ok) {
             const design = await res.json()
             snap.design = design
