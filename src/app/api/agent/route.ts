@@ -1,4 +1,4 @@
-import { NextRequest, after } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
@@ -193,28 +193,24 @@ export async function POST(req: NextRequest) {
           }
         } finally {
           if (writer) await writer.flush();
+          // Mark run as completed HERE (agent truly finished), not in after()
+          // after() fires when Response ends (client disconnect), which is too early
+          if (runId) {
+            try {
+              const { data: run } = await supabase.from('agent_runs')
+                .select('status').eq('id', runId).single();
+              if (run?.status === 'running') {
+                await supabase.from('agent_runs').update({
+                  status: 'completed',
+                  ended_at: new Date().toISOString(),
+                }).eq('id', runId);
+              }
+            } catch { /* best effort */ }
+          }
           controller.close();
         }
       },
     });
-
-    // after() runs after response is sent — mark run as completed
-    if (runId) {
-      after(async () => {
-        try {
-          const { data: run } = await supabase.from('agent_runs')
-            .select('status').eq('id', runId).single();
-          if (run?.status === 'running') {
-            await supabase.from('agent_runs').update({
-              status: 'completed',
-              ended_at: new Date().toISOString(),
-            }).eq('id', runId);
-          }
-        } catch (err) {
-          console.error('[after] Failed to finalize run:', err);
-        }
-      });
-    }
 
     const headers: Record<string, string> = {
       'Content-Type': 'text/event-stream',
