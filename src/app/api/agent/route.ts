@@ -65,7 +65,13 @@ export async function POST(req: NextRequest) {
         const writer = (runId && isNormalMode)
           ? new AgentDualWriter(runId, supabase, user!.id, projectId, controller, encoder)
           : null;
-        if (writer) firstMessageId = writer.firstMessageId;
+        if (writer) {
+          firstMessageId = writer.firstMessageId;
+          // Store firstMessageId in run metadata for reconnect
+          supabase.from('agent_runs').update({
+            metadata: { locale, preferredModel, isNsfw, analysisOnly, firstMessageId },
+          }).eq('id', runId).then(() => {});
+        }
 
         try {
           // tipsTeaser: generate a one-sentence teaser about the tips (no image needed)

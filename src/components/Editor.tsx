@@ -1687,23 +1687,32 @@ export default function Editor({
   }, []);
 
   // ── Reconnect to active background agent run ──
+  // When there's a running agent, CUI is rebuilt entirely from agent_events
+  // (not from loadProject's static messages) so streaming can continue seamlessly.
   useEffect(() => {
     if (!activeRunId || isAgentActive) return;
     setIsAgentActive(true);
-    setAgentStatus(isReconnecting ? t('editor.reconnecting') : t('editor.agentThinking'));
+    setAgentStatus(t('editor.reconnecting'));
 
-    const reconnectMsgId = generateId();
-    let currentMsgId = reconnectMsgId;
-    setMessages(prev => [...prev, { id: reconnectMsgId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
+    let currentMsgId = '';
 
     agentReconnect({
+      onClearRunMessages: (msgIds) => {
+        // Remove static loadProject messages that belong to this run
+        // They'll be rebuilt from agent_events replay below
+        if (msgIds.length > 0) {
+          const idSet = new Set(msgIds);
+          setMessages(prev => prev.filter(m => !idSet.has(m.id)));
+        }
+      },
       onStatus: (status) => { setAgentStatus(status); },
       onContent: (delta) => {
+        if (!currentMsgId) return;
         const id = currentMsgId;
         setMessages(prev => prev.map(m => m.id === id ? { ...m, content: m.content + delta } : m));
       },
-      onNewTurn: () => {
-        const newId = generateId();
+      onNewTurn: (serverMessageId) => {
+        const newId = serverMessageId || generateId();
         currentMsgId = newId;
         setMessages(prev => [...prev, { id: newId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
       },

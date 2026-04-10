@@ -13,6 +13,7 @@ export interface AgentStreamCallbacks {
   onNsfwDetected?: () => void;
   onRunId?: (runId: string) => void;
   onMessageId?: (messageId: string) => void;
+  onClearRunMessages?: (messageIds: string[]) => void;
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;

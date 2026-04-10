@@ -34,6 +34,8 @@ interface UseAgentRunOptions {
 interface UseAgentRunReturn {
   /** ID of the active run being reconnected to, or null */
   activeRunId: string | null
+  /** All DualWriter messageIds for the active run (for removing static loadProject messages) */
+  runMessageIds: string[]
   /** Whether we're currently replaying historical events */
   isReconnecting: boolean
   /** Call this to start reconnecting with the provided callbacks */
@@ -55,6 +57,7 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
   const supabaseRef = useRef<SupabaseClient | null>(null)
   const channelsRef = useRef<RealtimeChannel[]>([])
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [runMessageIds, setRunMessageIds] = useState<string[]>([])
   const [isReconnecting, setIsReconnecting] = useState(false)
 
   function getSupabase() {
@@ -75,7 +78,7 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
 
       const { data: runningRun, error } = await supabase
         .from('agent_runs')
-        .select('id, status, started_at')
+        .select('id, status, started_at, metadata')
         .eq('project_id', projectId)
         .eq('status', 'running')
         .order('started_at', { ascending: false })
@@ -116,15 +119,34 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
     setIsReconnecting(true)
 
     try {
-      // 1. Replay all existing events
-      const { data: events } = await supabase
-        .from('agent_events')
-        .select('*')
-        .eq('run_id', activeRunId)
-        .order('seq', { ascending: true })
+      // 1. Get run metadata (firstMessageId) + all events
+      const [runRes, eventsRes] = await Promise.all([
+        supabase.from('agent_runs').select('metadata').eq('id', activeRunId).single(),
+        supabase.from('agent_events').select('*').eq('run_id', activeRunId).order('seq', { ascending: true }),
+      ])
 
+      const events = eventsRes.data ?? []
+      const metadata = runRes.data?.metadata as Record<string, unknown> | null
+
+      // 2. Collect all messageIds from this run (to remove static loadProject versions)
+      const msgIds: string[] = []
+      const firstMsgId = metadata?.firstMessageId as string | undefined
+      if (firstMsgId) msgIds.push(firstMsgId)
+      for (const ev of events) {
+        if (ev.type === 'new_turn' && (ev.data as Record<string, unknown>)?.messageId) {
+          msgIds.push((ev.data as Record<string, unknown>).messageId as string)
+        }
+      }
+      setRunMessageIds(msgIds)
+
+      // 3. Tell Editor to remove static messages from this run (onClearRunMessages callback)
+      callbacks.onClearRunMessages?.(msgIds)
+
+      // 4. Replay all events — rebuilds messages from agent_events (single source of truth)
       let lastSeenSeq = -1
-      if (events?.length) {
+      if (events.length) {
+        // Set first messageId before replaying content events
+        if (firstMsgId) callbacks.onNewTurn?.(firstMsgId)
         for (const row of events) {
           dispatchEvent(row as AgentEventRow, callbacks)
           lastSeenSeq = row.seq
@@ -206,7 +228,7 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
     }
   }, [])
 
-  return { activeRunId, isReconnecting, reconnect, disconnect }
+  return { activeRunId, runMessageIds, isReconnecting, reconnect, disconnect }
 }
 
 /**
