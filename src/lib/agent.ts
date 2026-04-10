@@ -828,9 +828,71 @@ export async function* runMakaronAgent(
       onStepFinish: () => { stepCount++; },
     });
 
+    // State machine for extracting code from run_code tool-input-delta
+    let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
+
     for await (const event of result.fullStream) {
-      // Skip streaming events — route.ts `: heartbeat` every 10s handles keep-alive
-      if (event.type === 'reasoning-delta' || event.type === 'tool-input-start' || event.type === 'tool-input-delta') {
+      // ── Reasoning delta — skip (route.ts heartbeat handles keep-alive) ──
+      if (event.type === 'reasoning-delta') {
+        continue;
+      }
+
+      // ── Tool input streaming — extract code in real-time for run_code ──
+      if (event.type === 'tool-input-start') {
+        const toolName = (event as any).toolName ?? '';
+        if (toolName === 'run_code') {
+          codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0 };
+        }
+        continue;
+      }
+      if (event.type === 'tool-input-delta') {
+        if (!codeExtractor || codeExtractor.state === 'done') continue;
+        const delta = (event as any).delta ?? '';
+        codeExtractor.buffer += delta;
+
+        if (codeExtractor.state === 'waiting') {
+          // Look for "code": " or "code":" marker (with or without space)
+          const match = codeExtractor.buffer.match(/"code"\s*:\s*"/);
+          if (!match || match.index === undefined) continue;
+          // Found — switch to in_code, start after the opening quote
+          codeExtractor.state = 'in_code';
+          codeExtractor.sent = match.index + match[0].length;
+        }
+
+        if (codeExtractor.state === 'in_code') {
+          // Scan new characters for end of JSON string value
+          let codeChunk = '';
+          let i = codeExtractor.sent;
+          while (i < codeExtractor.buffer.length) {
+            const ch = codeExtractor.buffer[i];
+            if (codeExtractor.escaped) {
+              // Unescape JSON: \n → newline, \t → tab, \" → ", \\ → \
+              if (ch === 'n') codeChunk += '\n';
+              else if (ch === 't') codeChunk += '\t';
+              else if (ch === '"') codeChunk += '"';
+              else if (ch === '\\') codeChunk += '\\';
+              else if (ch === '/') codeChunk += '/';
+              else codeChunk += ch;  // fallback: keep as-is
+              codeExtractor.escaped = false;
+            } else if (ch === '\\') {
+              codeExtractor.escaped = true;
+            } else if (ch === '"') {
+              // End of code value
+              codeExtractor.state = 'done';
+              break;
+            } else {
+              codeChunk += ch;
+            }
+            i++;
+          }
+          codeExtractor.sent = i;
+          if (codeChunk) {
+            yield { type: 'code_stream', text: codeChunk };
+          }
+          if (codeExtractor.state === 'done') {
+            yield { type: 'code_stream', text: '', done: true };
+          }
+        }
         continue;
       }
 
@@ -896,27 +958,27 @@ export async function* runMakaronAgent(
             ...snapshotRefs,
           ];
         }
-        // For run_code: truncate code in tool_call event, stream full code separately
-        // (large SSE events cause silent JSON.parse failures on iOS Safari)
+        // For run_code: truncate code in tool_call event (full code already streamed via tool-input-delta)
         const toolInput = event.input as Record<string, unknown>;
         const isRunCode = event.toolName === 'run_code' && typeof toolInput.code === 'string';
-        const fullCode = isRunCode ? (toolInput.code as string) : null;
         yield {
           type: 'tool_call',
           tool: event.toolName,
           input: isRunCode
-            ? { ...toolInput, code: (fullCode!).slice(0, 100) + `... (${fullCode!.length} chars)` }
+            ? { ...toolInput, code: ((toolInput.code as string)).slice(0, 100) + `... (${(toolInput.code as string).length} chars)` }
             : toolInput,
           ...(toolCallImages ? { images: toolCallImages } : {}),
         };
-        // Stream full code in small chunks
-        if (fullCode) {
+        // If code wasn't streamed via delta (edge case), send it now
+        if (isRunCode && (!codeExtractor || codeExtractor.state === 'waiting')) {
+          const code = toolInput.code as string;
           const CHUNK = 500;
-          for (let i = 0; i < fullCode.length; i += CHUNK) {
-            yield { type: 'code_stream', text: fullCode.slice(i, i + CHUNK) };
+          for (let i = 0; i < code.length; i += CHUNK) {
+            yield { type: 'code_stream', text: code.slice(i, i + CHUNK) };
           }
           yield { type: 'code_stream', text: '', done: true };
         }
+        codeExtractor = null; // reset for next tool call
         continue;
       }
 
