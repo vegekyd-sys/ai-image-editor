@@ -831,9 +831,11 @@ export async function* runMakaronAgent(
     });
 
     for await (const event of result.fullStream) {
-      // ── Reasoning delta (extended thinking) — stream to keep connection alive ──
-      if (event.type === 'reasoning-delta') {
-        yield { type: 'reasoning', text: event.text };
+      // ── Heartbeat events — keep SSE alive during long operations ──
+      // reasoning-delta: extended thinking tokens (if enabled)
+      // tool-input-delta: Agent streaming tool call params (writing code, ~20-30s)
+      if (event.type === 'reasoning-delta' || event.type === 'tool-input-delta') {
+        yield { type: 'reasoning', text: event.type === 'reasoning-delta' ? event.text : '' };
         continue;
       }
 
