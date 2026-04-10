@@ -913,17 +913,12 @@ export default function AgentChatView({
                       <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
 
-                    {/* Design: render Player with autoCapture — captures poster then replaces with image */}
-                    {msg.design && !msg.image && (
+                    {/* Design: show live Player in CUI (no autoCapture — poster timing TBD) */}
+                    {msg.design && (
                       <div className="mt-3" style={{ maxWidth: 308 }}>
                         <RemotionRenderer
                           design={msg.design}
-                          autoCapture
-                          onComplete={(posterUrl) => {
-                            if (posterUrl && onDesignPoster) {
-                              onDesignPoster(msg.id, posterUrl);
-                            }
-                          }}
+                          onComplete={() => {}}
                           onError={(err) => console.error('[design CUI] error:', err)}
                         />
                       </div>
