@@ -150,31 +150,6 @@ export default function Editor({
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
 
-  // Sync state when initialSnapshots/Messages props change (e.g. Supabase fetch completes)
-  useEffect(() => {
-    if (!initialSnapshots?.length) return;
-    setSnapshots(prev => {
-      if (initialSnapshots.length > prev.length) return initialSnapshots;
-      if (initialSnapshots.length === prev.length) {
-        const prevIds = new Set(prev.map(s => s.id));
-        if (initialSnapshots.some(s => !prevIds.has(s.id))) return initialSnapshots;
-      }
-      return prev;
-    });
-  }, [initialSnapshots]);
-
-  useEffect(() => {
-    if (!initialMessages?.length) return;
-    setMessages(prev => {
-      if (initialMessages.length > prev.length) return initialMessages;
-      if (initialMessages.length === prev.length) {
-        const prevIds = new Set(prev.map(m => m.id));
-        if (initialMessages.some(m => !prevIds.has(m.id))) return initialMessages;
-      }
-      return prev;
-    });
-  }, [initialMessages]);
-
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -222,6 +197,7 @@ export default function Editor({
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
+  const pendingDesignSnapIdRef = useRef<string>('');
   // Streaming code display: tracks which message is receiving run_code chunks
   const codeStreamRef = useRef<{ msgId: string; code: string; shown: number } | null>(null);
   // Agent elapsed timer: tracks start time and current phase for status bar
@@ -235,6 +211,34 @@ export default function Editor({
   const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
+
+  // Sync state when initialSnapshots/Messages props change (e.g. Supabase fetch completes)
+  // Don't replace during active agent (Realtime is adding data live)
+  useEffect(() => {
+    if (!initialSnapshots?.length || isAgentActive) return;
+    setSnapshots(prev => {
+      const existingIds = new Set(prev.map(s => s.id));
+      const newFromSupabase = initialSnapshots.filter(s => !existingIds.has(s.id));
+      if (newFromSupabase.length === 0 && prev.length >= initialSnapshots.length) return prev;
+      if (newFromSupabase.length > 0) return [...prev, ...newFromSupabase];
+      const prevIds = new Set(prev.map(s => s.id));
+      if (initialSnapshots.some(s => !prevIds.has(s.id))) return initialSnapshots;
+      return prev;
+    });
+  }, [initialSnapshots, isAgentActive]);
+
+  useEffect(() => {
+    if (!initialMessages?.length || isAgentActive) return;
+    setMessages(prev => {
+      const existingIds = new Set(prev.map(m => m.id));
+      const newFromSupabase = initialMessages.filter(m => !existingIds.has(m.id));
+      if (newFromSupabase.length === 0 && prev.length >= initialMessages.length) return prev;
+      if (newFromSupabase.length > 0) return [...prev, ...newFromSupabase];
+      const prevIds = new Set(prev.map(m => m.id));
+      if (initialMessages.some(m => !prevIds.has(m.id))) return initialMessages;
+      return prev;
+    });
+  }, [initialMessages, isAgentActive]);
 
   // ── Background Agent reconnection ──────────────────────────────
   const { activeRunId, isReconnecting, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
@@ -1496,7 +1500,10 @@ export default function Editor({
               description: editDesc,
               ...(serverImageUrl ? { imageUrl: serverImageUrl } : {}),
             };
-            setSnapshots((prev) => [...prev, newSnapshot]);
+            setSnapshots((prev) => {
+              if (prev.some(s => s.id === snapId)) return prev; // deduplicate
+              return [...prev, newSnapshot];
+            });
             // Server already uploaded + wrote to snapshots table via DualWriter.
             // onSaveSnapshot upserts with same ID → idempotent (no duplicate).
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
@@ -1618,6 +1625,7 @@ export default function Editor({
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
             setAgentStatus(t('status.renderingDesign'));
             pendingDesignMsgIdRef.current = currentMsgId;
+            pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
             // ctx.snapshotImages are URLs — design code/props reference them directly.
             // No placeholder resolution needed.
             setPendingDesign(design);
@@ -1720,13 +1728,18 @@ export default function Editor({
         const snapId = snapshotId || generateId();
         const url = serverUrl || imageUrl;
         const newSnapshot: Snapshot = { id: snapId, image: url, imageUrl: url, tips: [], messageId: currentMsgId };
-        setSnapshots(prev => [...prev, newSnapshot]);
+        setSnapshots(prev => {
+          if (prev.some(s => s.id === snapId)) return prev;
+          return [...prev, newSnapshot];
+        });
         cacheImage(`snap:${snapId}`, url);
         fetchTipsForSnapshot(snapId, url, 'none');
         setAgentStatus(t('status.imageGenerated'));
         // Set inline image on current message for CUI display
-        const id = currentMsgId;
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, image: url } : m));
+        if (currentMsgId) {
+          const id = currentMsgId;
+          setMessages(prev => prev.map(m => m.id === id ? { ...m, image: url } : m));
+        }
       },
       onToolCall: (tool) => {
         if (tool === 'generate_image') setAgentStatus(t('editor.generatingImage'));
@@ -1741,6 +1754,7 @@ export default function Editor({
       },
       onDesign: (design) => {
         pendingDesignMsgIdRef.current = currentMsgId;
+        pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
         setPendingDesign(design);
       },
       onNsfwDetected: () => { isNsfwRef.current = true; },
@@ -3305,7 +3319,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           <AgentChatView
             mode="panel"
             messages={messages}
-            messagesLoading={!initialMessages}
+            messagesLoading={messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0}
             isAgentActive={isAgentActive}
             agentStatus={agentStatus}
             currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
@@ -3327,7 +3341,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       </>) : viewMode === 'cui' ? (
         <AgentChatView
           messages={messages}
-          messagesLoading={!initialMessages}
+          messagesLoading={messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0}
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
           currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
@@ -3502,7 +3516,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         const msgId = pendingDesignMsgIdRef.current;
         if (msgId) {
           pendingDesignMsgIdRef.current = '';
-          const snapId = generateId();
+          const snapId = pendingDesignSnapIdRef.current || generateId();
+          pendingDesignSnapIdRef.current = '';
           const currentDesign = pendingDesign;
           const newSnapshot: Snapshot = {
             id: snapId,
@@ -3513,7 +3528,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             design: currentDesign,
           };
           queueMicrotask(() => {
-            setSnapshots(prev => [...prev, newSnapshot]);
+            setSnapshots(prev => {
+              if (prev.some(s => s.id === snapId)) return prev; // deduplicate
+              return [...prev, newSnapshot];
+            });
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
