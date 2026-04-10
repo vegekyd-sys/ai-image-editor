@@ -828,20 +828,9 @@ export async function* runMakaronAgent(
       onStepFinish: () => { stepCount++; },
     });
 
-    let currentToolInput = '';
     for await (const event of result.fullStream) {
-      // ── Heartbeat: keep SSE alive (route.ts sends `: heartbeat` every 10s) ──
-      if (event.type === 'reasoning-delta') {
-        yield { type: 'reasoning', text: event.text };
-        continue;
-      }
-      // Track which tool is currently receiving input
-      if (event.type === 'tool-input-start') {
-        currentToolInput = (event as any).toolName ?? '';
-        continue;
-      }
-      if (event.type === 'tool-input-delta') {
-        yield { type: currentToolInput === 'run_code' ? 'coding' : 'reasoning', text: '' };
+      // Skip streaming events — route.ts `: heartbeat` every 10s handles keep-alive
+      if (event.type === 'reasoning-delta' || event.type === 'tool-input-start' || event.type === 'tool-input-delta') {
         continue;
       }
 
