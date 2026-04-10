@@ -484,13 +484,14 @@ Your code must return a value:
 - Image (sharp output): return Buffer directly, or \`{ type: 'image', data: base64, mimeType: 'image/jpeg' }\`
 - Text: return \`{ type: 'text', content: 'result' }\`
 - **Design (React)**: return \`{ type: 'design', code: '...', width: 1080, height: 1350 }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill. Rendered by the browser with full CSS + Google Fonts support.
+  **IMPORTANT: Use \`<Img>\` (Remotion) instead of \`<img>\` for all images.** \`<Img>\` ensures images are fully loaded before rendering/screenshot. Plain \`<img>\` causes blank images on mobile.
   **Embed image URLs directly in code using template literals** — do NOT use props for images:
   \`\`\`
   return {
     type: 'design',
     width: 1080, height: 1350,
     code: \\\`function Design() {
-      return (<div style={{width:'100%',height:'100%'}}><img src="\${ctx.snapshotImages[0]}" style={{width:'100%',height:'100%',objectFit:'cover'}} /></div>);
+      return (<div style={{width:'100%',height:'100%'}}><Img src="\${ctx.snapshotImages[0]}" style={{width:'100%',height:'100%',objectFit:'cover'}} /></div>);
     }\\\`
   }
   \`\`\`
@@ -624,7 +625,7 @@ Your code must return a value:
             const newIdx = ctx.snapshotImages.length + 1;
             ctx.snapshotImages.push(''); // placeholder — real URL set after frontend upload
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-            return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>. The screenshot is generated client-side so you cannot analyze_image on it. To modify this design, read_file the saved code from code/ and edit it.` };
+            return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>. Save now: write_file({ path: "${ctx.projectId}/code/snapshot-${newIdx}-<name>.json", fromLastRunCode: true }) — replace <name> with a short descriptive slug.` };
           }
 
           // Buffer or Uint8Array → treat as image

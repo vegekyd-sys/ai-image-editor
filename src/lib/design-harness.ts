@@ -18,6 +18,9 @@ export interface DesignResult {
  * Agent receives the error and can retry.
  */
 export function validateDesign(result: DesignResult): string | null {
+  // ── Auto-fix: Replace <img> with Remotion <Img> for delayRender support ──
+  result.code = autoFixImgTags(result.code);
+
   // ── Check 1: Compile ──
   const compileError = checkCompile(result.code);
   if (compileError) return compileError;
@@ -31,6 +34,17 @@ export function validateDesign(result: DesignResult): string | null {
   if (urlError) return urlError;
 
   return null; // all checks passed
+}
+
+/** Replace HTML <img with Remotion <Img so renderStillOnWeb waits for image loading */
+function autoFixImgTags(code: string): string {
+  // <img ... /> or <img ...> → <Img ... /> or <Img ...>
+  // Negative lookbehind: don't replace if already <Img
+  const fixed = code.replace(/<img(?=[\s/>])/g, '<Img');
+  if (fixed !== code) {
+    console.log('🔧 [design-harness] auto-fixed <img> → <Img> for Remotion delayRender');
+  }
+  return fixed;
 }
 
 /** Check that code compiles with Sucrase */

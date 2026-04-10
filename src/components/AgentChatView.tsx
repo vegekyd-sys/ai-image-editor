@@ -884,7 +884,7 @@ export default function AgentChatView({
                       </span>
                     )}
 
-                    {/* Inline generated image */}
+                    {/* Inline image — shared for generate_image and design poster */}
                     {msg.image && (() => {
                       const snapIdx = getSnapshotIndex(msg.id);
                       return (
@@ -908,20 +908,25 @@ export default function AgentChatView({
                       );
                     })()}
 
-                    {/* editPrompt card — collapsible */}
-                    {msg.editPrompt && (
-                      <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
-                    )}
-
-                    {/* Design: show live Player in CUI (no autoCapture — poster timing TBD) */}
-                    {msg.design && (
+                    {/* Design without poster yet — Player with autoCapture */}
+                    {msg.design && !msg.image && (
                       <div className="mt-3" style={{ maxWidth: 308 }}>
                         <RemotionRenderer
                           design={msg.design}
-                          onComplete={() => {}}
+                          autoCapture
+                          onComplete={(posterDataUrl) => {
+                            if (posterDataUrl && onDesignPoster) {
+                              onDesignPoster(msg.id, posterDataUrl);
+                            }
+                          }}
                           onError={(err) => console.error('[design CUI] error:', err)}
                         />
                       </div>
+                    )}
+
+                    {/* editPrompt card — collapsible */}
+                    {msg.editPrompt && (
+                      <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
                   </div>
 
