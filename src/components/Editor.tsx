@@ -197,8 +197,8 @@ export default function Editor({
   const pendingDesignMsgIdRef = useRef<string>('');
   // Streaming code display: tracks which message is receiving run_code chunks
   const codeStreamRef = useRef<{ msgId: string; code: string; shown: number } | null>(null);
-  // Agent elapsed timer: tracks start time and current phase for status bar
-  const agentTimerRef = useRef<{ startTime: number; phase: string } | null>(null);
+  // Agent elapsed timer: startTime + baseStatus (set by tool-call handlers)
+  const agentTimerRef = useRef<{ startTime: number; baseStatus: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = useRef<HTMLInputElement>(null);
   const previewAbortRef = useRef<AbortController>(new AbortController());
@@ -1417,6 +1417,8 @@ export default function Editor({
             if (status.includes('生成图片') || status.includes('Generating image')) {
               _genStartTime = performance.now();
             }
+            // Update timer base so elapsed counter appends to current status
+            if (agentTimerRef.current) agentTimerRef.current.baseStatus = status;
             setAgentStatus(status);
           },
           onImageAnalyzed: (imageIndex) => {
@@ -1564,12 +1566,6 @@ export default function Editor({
           onNsfwDetected: () => {
             console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
             isNsfwRef.current = true;
-          },
-          onReasoning: () => {
-            if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentThinking');
-          },
-          onCoding: () => {
-            if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentCoding');
           },
           onDesign: (design) => {
             console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
@@ -2498,13 +2494,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       return;
     }
     if (!agentTimerRef.current) {
-      agentTimerRef.current = { startTime: Date.now(), phase: t('editor.agentThinking') };
+      agentTimerRef.current = { startTime: Date.now(), baseStatus: t('editor.agentThinking') };
     }
     const timer = setInterval(() => {
       const ref = agentTimerRef.current;
       if (!ref) return;
       const elapsed = Math.round((Date.now() - ref.startTime) / 1000);
-      setAgentStatus(`${ref.phase} (${elapsed}s)`);
+      setAgentStatus(`${ref.baseStatus} (${elapsed}s)`);
     }, 1000);
     return () => clearInterval(timer);
   }, [isAgentActive, t]);
