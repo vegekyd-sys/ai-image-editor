@@ -261,12 +261,16 @@ describe('makeAgentCallbacks', () => {
       vi.useRealTimers();
     });
 
-    it('calls onCleanup if provided', () => {
+    it('calls onCleanup if provided (delayed)', () => {
+      vi.useFakeTimers();
       const cleanup = vi.fn();
       ctx = createMockContext({ onCleanup: cleanup });
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onDone?.();
+      expect(cleanup).not.toHaveBeenCalled(); // delayed
+      vi.advanceTimersByTime(500);
       expect(cleanup).toHaveBeenCalled();
+      vi.useRealTimers();
     });
   });
 

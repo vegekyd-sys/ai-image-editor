@@ -482,7 +482,7 @@ export default function AgentChatView({
     mountRoRef.current = ro;
     const content = el.firstElementChild;
     if (content) ro.observe(content);
-    const timer = setTimeout(() => { ro.disconnect(); mountRoRef.current = null; }, 2000);
+    const timer = setTimeout(() => { ro.disconnect(); mountRoRef.current = null; }, 5000); // Extended for reconnect replay
     return () => { ro.disconnect(); mountRoRef.current = null; clearTimeout(timer); cancelAnimationFrame(rafId); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -529,7 +529,7 @@ export default function AgentChatView({
     const prevCount = prevMsgCountRef.current;
     const msgCountChanged = messages.length !== prevCount;
     const lastMsgGrew = lastMsg?.role === 'assistant' && lastMsg.content.length > prevLastMsgLenRef.current;
-    const bigJump = msgCountChanged && messages.length > prevCount + 2; // Supabase load / reconnect replay
+    const bigJump = msgCountChanged && (messages.length > prevCount + 2 || (prevCount === 0 && messages.length > 0)); // Supabase load / reconnect / first messages
 
     prevMsgCountRef.current = messages.length;
     prevLastMsgLenRef.current = lastMsg?.content?.length ?? 0;
