@@ -109,7 +109,18 @@ export class AgentDualWriter {
         return;
       }
 
-      case 'render':
+      case 'render': {
+        // render events are handled by the frontend (snapshot + poster capture).
+        // DualWriter only passes through — do NOT create snapshot here to avoid duplicates.
+        await this.flushContent();
+        await this.insertEvent('render', {
+          code: event.code, width: event.width, height: event.height,
+          props: event.props, animation: event.animation,
+          description: (event as Record<string, unknown>).description,
+        });
+        this.tryEnqueue(event);
+        return;
+      }
       case 'design': {
         await this.flushContent();
         const snapId = crypto.randomUUID();
