@@ -196,6 +196,9 @@ export default function Editor({
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
+  // Music generation state
+  const [musicTaskId, setMusicTaskId] = useState<string | null>(null);
+  const [musicTracks, setMusicTracks] = useState<{ audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }[]>([]);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
   const pendingDesignSnapIdRef = useRef<string>('');
@@ -1436,6 +1439,11 @@ export default function Editor({
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t, initialTitle, userPromptText: text,
+      onMusicTaskCreated: (taskId) => {
+        setMusicTaskId(taskId);
+        setMusicTracks([]);
+        setAgentStatus(t('status.generatingMusic'));
+      },
     });
     // Sync factory's currentMsgId with the already-created assistant message
     setCurrentMsgId(assistantMsgId);
@@ -2107,6 +2115,57 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [snapshots, tipsSourceIndex, isTipsFetching, triggerPreviewsReadyNotification]);
 
+  // ── Music polling: poll Suno status when musicTaskId is set ──
+  useEffect(() => {
+    if (!musicTaskId) return;
+    console.log(`🎵 [music] polling started for ${musicTaskId}`);
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/music/${musicTaskId}?projectId=${projectId}`);
+        const data = await res.json();
+        if (stopped) return;
+        if (data.status === 'completed' && data.tracks?.length) {
+          setMusicTracks(data.tracks);
+          // Add music tracks as a CUI message
+          const tracksSummary = data.tracks.map((t: { title: string; duration: number }) =>
+            `${t.title} (${Math.round(t.duration)}s)`).join(', ');
+          setMessages(prev => {
+            // Don't duplicate if already added
+            if (prev.some(m => m.id === `music-${musicTaskId}`)) {
+              // Update with new tracks (second track may have arrived)
+              return prev.map(m => m.id === `music-${musicTaskId}`
+                ? { ...m, musicTracks: data.tracks } : m);
+            }
+            return [...prev, {
+              id: `music-${musicTaskId}`,
+              role: 'assistant' as const,
+              content: `🎵 ${tracksSummary}`,
+              timestamp: Date.now(),
+              musicTracks: data.tracks,
+            }];
+          });
+          // Check if all tracks done (2 tracks = full SUCCESS)
+          if (data.tracks.length >= 2) {
+            setMusicTaskId(null);
+            setAgentStatus(t('status.musicReady'));
+            setTimeout(() => setAgentStatus(t('editor.greeting')), 3000);
+          }
+        } else if (data.status === 'failed') {
+          console.warn('🎵 [music] failed:', data.error);
+          setMusicTaskId(null);
+          setAgentStatus(t('status.musicFailed'));
+          setTimeout(() => setAgentStatus(t('editor.greeting')), 3000);
+        }
+      } catch (e) {
+        console.warn('🎵 [music] poll error:', e);
+      }
+    };
+    // Poll immediately, then every 10s
+    poll();
+    const interval = setInterval(poll, 10_000);
+    return () => { stopped = true; clearInterval(interval); };
+  }, [musicTaskId, projectId, t]);
 
 
   // When animationState transitions — handle creation flow lifecycle
@@ -2365,6 +2424,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
+  // Music select: user chose a track → send agent request to inject <Audio>
+  const handleMusicSelect = useCallback((track: { audioUrl: string; duration: number; title: string; tags: string }) => {
+    if (!projectId) return;
+    console.log(`🎵 [music] user selected: ${track.title} (${track.audioUrl})`);
+    // Mark selected in DB
+    fetch('/api/music/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
+    }).catch(() => {});
+    // Send as a user action → triggers agent to inject Audio into design
+    const prompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\n\nAdd <Audio src="${track.audioUrl}" volume={0.3} /> to the current design via run_code. Read the latest design code from workspace first, then add the Audio component.`;
+    handleAgentRequest(prompt);
+  }, [projectId, handleAgentRequest]);
+
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
     // Update message image
@@ -3067,6 +3141,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             onModelChange={setPreferredModel}
             onNavigateToSnapshot={handleNavigateToSnapshot}
             onDesignPoster={handleDesignPoster}
+            onMusicSelect={handleMusicSelect}
           />
         </div>
       </>) : viewMode === 'cui' ? (

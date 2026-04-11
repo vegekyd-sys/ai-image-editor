@@ -95,6 +95,8 @@ export async function getSunoTask(taskId: string): Promise<SunoTaskResult> {
 
   switch (sunoStatus) {
     case 'SUCCESS':
+    case 'FIRST_SUCCESS':
+      // FIRST_SUCCESS = first track ready (~85s), SUCCESS = both ready (~146s)
       status = 'completed'
       break
     case 'CREATE_TASK_FAILED':
@@ -105,19 +107,21 @@ export async function getSunoTask(taskId: string): Promise<SunoTaskResult> {
       error = data?.errorMessage || sunoStatus
       break
     default:
-      // PENDING, TEXT_SUCCESS, FIRST_SUCCESS
+      // PENDING, TEXT_SUCCESS
       status = 'processing'
   }
 
-  // Extract tracks from completed response
+  // Extract tracks — filter to those with audioUrl (FIRST_SUCCESS only has track[0])
   let tracks: SunoTrack[] | undefined
   if (status === 'completed' && data?.response?.sunoData) {
-    tracks = data.response.sunoData.map((t: Record<string, unknown>) => ({
-      audioUrl: t.audioUrl as string,
-      duration: t.duration as number,
-      title: t.title as string,
-      tags: t.tags as string,
-    }))
+    tracks = data.response.sunoData
+      .filter((t: Record<string, unknown>) => t.audioUrl)
+      .map((t: Record<string, unknown>) => ({
+        audioUrl: t.audioUrl as string,
+        duration: t.duration as number,
+        title: t.title as string,
+        tags: t.tags as string,
+      }))
   }
 
   return { taskId, status, tracks, error }

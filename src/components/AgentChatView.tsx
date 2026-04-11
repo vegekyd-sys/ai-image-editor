@@ -83,6 +83,58 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
 
 /**
  * Fix CommonMark strict closing-delimiter rules that break **text:**
+/** Playable music track card for CUI */
+function MusicCard({ track, onSelect }: {
+  track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number };
+  onSelect: () => void;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const toggle = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) { audio.pause(); setPlaying(false); }
+    else { audio.play(); setPlaying(true); }
+  };
+
+  return (
+    <div
+      className="mt-2 flex items-center gap-3 px-3 py-2.5 rounded-xl"
+      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+    >
+      <audio ref={audioRef} src={track.audioUrl} preload="none"
+        onEnded={() => setPlaying(false)} />
+      {/* Play/pause button */}
+      <button onClick={toggle}
+        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ background: playing ? 'rgba(192,38,211,0.3)' : 'rgba(255,255,255,0.1)' }}>
+        {playing ? (
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="white"><rect x="2" y="1" width="3.5" height="12" rx="1" /><rect x="8.5" y="1" width="3.5" height="12" rx="1" /></svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="white"><path d="M3 1.5v11l9.5-5.5z" /></svg>
+        )}
+      </button>
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>
+          {track.title || `Track ${track.trackIndex + 1}`}
+        </div>
+        <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          {Math.round(track.duration)}s · {track.tags || 'instrumental'}
+        </div>
+      </div>
+      {/* Select button */}
+      <button onClick={onSelect}
+        className="px-3 py-1.5 rounded-lg text-[12px] font-medium flex-shrink-0"
+        style={{ background: 'rgba(192,38,211,0.2)', color: 'rgb(192,38,211)', border: '1px solid rgba(192,38,211,0.3)' }}>
+        Insert
+      </button>
+    </div>
+  );
+}
+
+/**
  * When closing ** is preceded by punctuation and followed by non-whitespace,
  * it's not recognized as right-flanking. Move the trailing punctuation outside.
  * e.g. "**下一步建议:**在" → "**下一步建议**:在"
@@ -233,6 +285,8 @@ interface AgentChatViewProps {
   onVideoTap?: (rect?: DOMRect, posterSrc?: string, animId?: string) => void;
   /** Design poster captured from visible Player — update snapshot.image */
   onDesignPoster?: (messageId: string, posterDataUrl: string) => void;
+  /** User selected a music track from MusicCard */
+  onMusicSelect?: (track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }) => void;
 }
 
 export default function AgentChatView({
@@ -258,6 +312,7 @@ export default function AgentChatView({
   onNavigateToSnapshot,
   onVideoTap,
   onDesignPoster,
+  onMusicSelect,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -922,6 +977,15 @@ export default function AgentChatView({
                     {msg.editPrompt && (
                       <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
+
+                    {/* Music tracks — playable cards */}
+                    {msg.musicTracks?.map((track) => (
+                      <MusicCard
+                        key={track.trackIndex}
+                        track={track}
+                        onSelect={() => onMusicSelect?.(track)}
+                      />
+                    ))}
                   </div>
 
                 </div>

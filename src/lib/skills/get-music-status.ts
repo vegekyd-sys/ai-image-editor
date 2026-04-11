@@ -1,15 +1,21 @@
-import { getSunoTask } from '../sunoapi'
+import { getSunoTask, type SunoTrack } from '../sunoapi'
 
 export interface GetMusicStatusInput {
   taskId: string
 }
 
+export interface MusicTrack {
+  audioUrl: string
+  duration: number
+  title: string
+  tags: string
+  trackIndex: number
+}
+
 export interface GetMusicStatusResult {
   success: boolean
   status: 'pending' | 'processing' | 'completed' | 'failed'
-  audioUrl?: string
-  duration?: number
-  title?: string
+  tracks: MusicTrack[]
   error?: string
   message: string
 }
@@ -18,32 +24,35 @@ export async function getMusicStatus(input: GetMusicStatusInput): Promise<GetMus
   const { taskId } = input
 
   if (!taskId) {
-    return { success: false, status: 'failed', message: 'Task ID is required.' }
+    return { success: false, status: 'failed', tracks: [], message: 'Task ID is required.' }
   }
 
   try {
     const result = await getSunoTask(taskId)
 
     let message: string
-    let audioUrl: string | undefined
-    let duration: number | undefined
-    let title: string | undefined
+    const tracks: MusicTrack[] = []
 
     switch (result.status) {
       case 'pending':
         message = 'Music task is queued.'
         break
       case 'processing':
-        message = 'Music is generating. This typically takes 2-3 minutes.'
+        message = 'Music is generating...'
         break
       case 'completed':
-        // Pick the first track
         if (result.tracks?.length) {
-          audioUrl = result.tracks[0].audioUrl
-          duration = result.tracks[0].duration
-          title = result.tracks[0].title
+          result.tracks.forEach((t: SunoTrack, i: number) => {
+            tracks.push({
+              audioUrl: t.audioUrl,
+              duration: t.duration,
+              title: t.title,
+              tags: t.tags,
+              trackIndex: i,
+            })
+          })
         }
-        message = audioUrl ? 'Music generation completed!' : 'Music completed but URL not available yet.'
+        message = tracks.length ? `${tracks.length} track(s) ready` : 'Completed but no audio yet.'
         break
       case 'failed':
         message = `Music generation failed: ${result.error || 'Unknown error'}`
@@ -53,9 +62,7 @@ export async function getMusicStatus(input: GetMusicStatusInput): Promise<GetMus
     return {
       success: true,
       status: result.status,
-      audioUrl,
-      duration,
-      title,
+      tracks,
       error: result.error,
       message,
     }
@@ -65,6 +72,7 @@ export async function getMusicStatus(input: GetMusicStatusInput): Promise<GetMus
     return {
       success: false,
       status: 'failed',
+      tracks: [],
       message: `Failed to query music status: ${msg}`,
     }
   }

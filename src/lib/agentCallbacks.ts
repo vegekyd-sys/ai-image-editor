@@ -52,6 +52,9 @@ export interface AgentCallbackContext {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   t: (...args: any[]) => string;
 
+  // Music
+  onMusicTaskCreated?: (taskId: string) => void;
+
   // Optional cleanup on done (reconnect uses this to disconnect)
   onCleanup?: () => void;
 
@@ -258,6 +261,11 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         duration: null,
         pollSeconds: 0,
       });
+    },
+
+    onMusicTask: (taskId) => {
+      console.log(`🎵 [agent] music task created: ${taskId}`);
+      ctx.onMusicTaskCreated?.(taskId);
     },
 
     onNsfwDetected: () => {

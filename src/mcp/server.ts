@@ -431,10 +431,14 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
         const result = await getMusicStatus({ taskId: params.taskId });
 
         let response = result.message;
-        if (result.status === 'completed' && result.audioUrl) {
-          response += `\n\nAudio URL: ${result.audioUrl}`;
-          if (result.duration) response += `\nDuration: ${Math.round(result.duration)}s`;
-          if (result.title) response += `\nTitle: ${result.title}`;
+        if (result.status === 'completed' && result.tracks.length) {
+          const t = result.tracks[0];
+          response += `\n\nAudio URL: ${t.audioUrl}`;
+          if (t.duration) response += `\nDuration: ${Math.round(t.duration)}s`;
+          if (t.title) response += `\nTitle: ${t.title}`;
+          if (result.tracks.length > 1) {
+            response += `\n\nTrack 2: ${result.tracks[1].audioUrl} (${Math.round(result.tracks[1].duration)}s)`;
+          }
         }
         if (result.status === 'failed' && result.error) {
           response += `\n\nError: ${result.error}`;
