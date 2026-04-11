@@ -109,6 +109,7 @@ export class AgentDualWriter {
         return;
       }
 
+      case 'render':
       case 'design': {
         await this.flushContent();
         const snapId = crypto.randomUUID();
@@ -116,6 +117,7 @@ export class AgentDualWriter {
         const designJson = JSON.stringify({
           code: event.code, width: event.width, height: event.height,
           props: event.props, animation: event.animation,
+          description: (event as Record<string, unknown>).description,
         });
 
         // Upload design JSON to workspace
@@ -136,7 +138,7 @@ export class AgentDualWriter {
           tips: [],
           message_id: this.currentMessageId,
           sort_order: sortOrder,
-          description: '[run_code design]',
+          description: (event as Record<string, unknown>).description as string || '[design]',
           design_path: designPath,
         }, { onConflict: 'id' }).then(({ error }) => {
           if (error) console.error('[DualWriter] design snapshot upsert error:', error);
