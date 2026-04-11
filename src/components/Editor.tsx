@@ -2017,6 +2017,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [snapshots, pendingImages, fetchTipsForSnapshot]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
+  // Pick up late-arriving initialMusicTaskId (from Supabase fetch after cache-init)
+  const musicInitRef = useRef(!!initialMusicTaskId);
+  useEffect(() => {
+    if (musicInitRef.current || !initialMusicTaskId) return;
+    musicInitRef.current = true;
+    setMusicTaskId(initialMusicTaskId);
+    musicPollingRef.current = true;
+  }, [initialMusicTaskId]);
+
   const animationInitRef = useRef((initialAnimations ?? []).length > 0);
   useEffect(() => {
     if (animationInitRef.current || !initialAnimations?.length) return;
