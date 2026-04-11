@@ -10,7 +10,7 @@ import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { createMusic } from './skills/create-music';
+// import { createMusic } from './skills/create-music'; // temporarily disabled
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -718,21 +718,13 @@ Your code must return a value:
       },
     }),
 
-    generate_music: tool({
-      description: `Generate background music using Suno AI. Returns a taskId immediately — the system polls and auto-injects the audio when ready. You do NOT need to poll or wait.
-Prompt tips: genre, mood, instruments, and beat structure matching your video timing.
-Example: "15-second cinematic, slow strings 0-3s, percussive hit at 3s, rising energy 3-10s, piano fadeout"`,
-      inputSchema: z.object({
-        prompt: z.string().describe('Music description: genre, mood, instruments, beat timing'),
-        instrumental: z.boolean().optional().describe('No vocals (default: true)'),
-        style: z.string().optional().describe('Genre/mood tags for custom mode'),
-      }),
-      execute: async ({ prompt, instrumental, style }) => {
-        const result = await createMusic({ prompt, instrumental, style });
-        if (result.taskId) (ctx as any).musicTaskId = result.taskId;
-        return result;
-      },
-    }),
+    // generate_music: temporarily disabled — not shipping in this release
+    // generate_music: tool({
+    //   description: `Generate background music using Suno AI. Returns a taskId immediately — the system polls and auto-injects the audio when ready. You do NOT need to poll or wait.
+    //   ...`,
+    //   inputSchema: z.object({ ... }),
+    //   execute: async ({ prompt, instrumental, style }) => { ... },
+    // }),
 
   };
 }
