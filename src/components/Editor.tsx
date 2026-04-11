@@ -2255,6 +2255,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [animationState?.status, animations, isAgentActive]);
 
+  // Update StatusBar with music generation progress (same pattern as video)
+  useEffect(() => {
+    if (musicTaskId && !isAgentActive) {
+      setAgentStatus(t('status.generatingMusic'));
+    }
+  }, [musicTaskId, isAgentActive, t]);
+
   const showSaveToast = useCallback(() => {
     setSaveToast(true);
     setTimeout(() => setSaveToast(false), 2000);

@@ -109,6 +109,13 @@ export default function RemotionRenderer({ design, onError, mode = 'inline' }: R
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
+  // Pause Remotion Player when a MusicCard starts playing
+  useEffect(() => {
+    const handler = () => { playerRef.current?.pause(); };
+    document.addEventListener('music-play', handler);
+    return () => document.removeEventListener('music-play', handler);
+  }, []);
+
   if (!Component) return null;
 
   const isFill = mode === 'fill';

@@ -96,9 +96,27 @@ function MusicCard({ track, onSelect }: {
   const toggle = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (playing) { audio.pause(); setPlaying(false); }
-    else { audio.play(); setPlaying(true); }
+    if (playing) {
+      audio.pause(); setPlaying(false);
+    } else {
+      // Pause all other audio (MusicCards + Remotion Player)
+      document.dispatchEvent(new CustomEvent('music-play', { detail: track.audioUrl }));
+      audio.play(); setPlaying(true);
+    }
   };
+
+  // Listen for other MusicCards starting — pause this one
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const url = (e as CustomEvent).detail;
+      if (url !== track.audioUrl && audioRef.current) {
+        audioRef.current.pause();
+        setPlaying(false);
+      }
+    };
+    document.addEventListener('music-play', handler);
+    return () => document.removeEventListener('music-play', handler);
+  }, [track.audioUrl]);
 
   // Progress + time update
   useEffect(() => {
@@ -169,20 +187,14 @@ function MusicCard({ track, onSelect }: {
 
       {/* Progress bar — clickable/draggable to seek */}
       <div
-        className="h-[12px] w-full flex items-end cursor-pointer"
-        onClick={(e) => {
-          const audio = audioRef.current;
-          if (!audio || !audio.duration) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-          audio.currentTime = ratio * audio.duration;
-          setProgress(ratio);
-          setCurrentTime(audio.currentTime);
-        }}
+        className="relative h-[16px] w-full flex items-center cursor-pointer"
+        style={{ touchAction: 'none' }}
         onPointerDown={(e) => {
+          e.preventDefault();
           const audio = audioRef.current;
           if (!audio || !audio.duration) return;
           const bar = e.currentTarget;
+          bar.setPointerCapture(e.pointerId);
           const seek = (clientX: number) => {
             const rect = bar.getBoundingClientRect();
             const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
@@ -190,14 +202,18 @@ function MusicCard({ track, onSelect }: {
             setProgress(ratio);
             setCurrentTime(audio.currentTime);
           };
+          seek(e.clientX);
           const onMove = (ev: PointerEvent) => seek(ev.clientX);
-          const onUp = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); };
-          document.addEventListener('pointermove', onMove);
-          document.addEventListener('pointerup', onUp);
+          const onUp = () => { bar.removeEventListener('pointermove', onMove); bar.removeEventListener('pointerup', onUp); };
+          bar.addEventListener('pointermove', onMove);
+          bar.addEventListener('pointerup', onUp);
         }}
       >
-        <div className="h-[3px] w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-          <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.6)', transition: playing ? 'none' : 'width 0.15s' }} />
+        <div className="h-[3px] w-full rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full rounded-full relative" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.6)', transition: playing ? 'none' : 'width 0.15s' }}>
+            {/* Seek handle */}
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[10px] h-[10px] rounded-full" style={{ background: 'rgb(192,38,211)' }} />
+          </div>
         </div>
       </div>
     </div>
