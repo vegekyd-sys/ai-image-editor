@@ -147,7 +147,7 @@ function MusicCard({ track, onSelect }: {
 
       <div className="flex items-center gap-3 px-3.5 py-3.5">
         {/* Play/pause */}
-        <button onClick={toggle}
+        <button onClick={toggle} onTouchEnd={(e) => { e.preventDefault(); toggle(); }}
           className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform"
           style={{ background: playing ? 'rgba(192,38,211,0.3)' : 'rgba(255,255,255,0.1)' }}>
           {playing ? (
@@ -169,7 +169,7 @@ function MusicCard({ track, onSelect }: {
         </div>
 
         {/* Download */}
-        <button onClick={handleDownload}
+        <button onClick={handleDownload} onTouchEnd={(e) => { e.preventDefault(); handleDownload(); }}
           className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-70 transition-all"
           style={{ background: 'rgba(255,255,255,0.06)' }} title="Download">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -177,8 +177,10 @@ function MusicCard({ track, onSelect }: {
           </svg>
         </button>
 
-        {/* Insert into design */}
-        <button onClick={onSelect}
+        {/* Insert into design — onTouchEnd for reliable mobile tap */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onSelect(); }}
+          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(); }}
           className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-80 transition-all"
           style={{ background: 'rgba(192,38,211,0.2)', border: '1px solid rgba(192,38,211,0.3)' }} title="Add to design">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgb(192,38,211)" strokeWidth="2.5" strokeLinecap="round">
@@ -187,10 +189,10 @@ function MusicCard({ track, onSelect }: {
         </button>
       </div>
 
-      {/* Progress bar — in flow (not absolute, avoids blocking buttons on mobile) */}
+      {/* Progress bar — 20px touch target, 2px visual bar at bottom */}
       <div
-        className="h-[2px] w-full cursor-pointer group"
-        style={{ touchAction: 'none', background: 'rgba(255,255,255,0.08)' }}
+        className="relative w-full cursor-pointer"
+        style={{ height: 20, touchAction: 'none' }}
         onTouchStart={(e) => {
           const audio = audioRef.current;
           if (!audio || !audio.duration) return;
@@ -209,7 +211,7 @@ function MusicCard({ track, onSelect }: {
           bar.addEventListener('touchend', onEnd);
         }}
         onPointerDown={(e) => {
-          if (e.pointerType === 'touch') return; // handled by touchStart
+          if (e.pointerType === 'touch') return;
           e.preventDefault();
           const audio = audioRef.current;
           if (!audio || !audio.duration) return;
@@ -229,7 +231,10 @@ function MusicCard({ track, onSelect }: {
           bar.addEventListener('pointerup', onUp);
         }}
       >
-        <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.8)', transition: playing ? 'none' : 'width 0.15s' }} />
+        {/* Visual bar pinned to bottom of touch area */}
+        <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.8)', transition: playing ? 'none' : 'width 0.15s' }} />
+        </div>
       </div>
     </div>
   );

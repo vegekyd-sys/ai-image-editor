@@ -2441,21 +2441,19 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   // Design poster captured from CUI's visible Player — update snapshot + message
   // Music select: user chose a track → show short user msg + send agent inject request
   const handleMusicSelect = useCallback((track: { audioUrl: string; duration: number; title: string; tags: string }) => {
-    if (!projectId) return;
-    console.log(`🎵 [music] user selected: ${track.title} (${track.audioUrl})`);
+    if (!projectId) { console.warn('🎵 [music] no projectId'); return; }
+    if (isAgentActive) { console.warn('🎵 [music] agent busy, skipping'); return; }
+    console.log(`🎵 [music] user selected: ${track.title}`);
     // Mark selected in DB
     fetch('/api/music/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
     }).catch(() => {});
-    // Show short user message, then send agent request to inject
-    const userDisplay = `🎵 ${track.title}`;
-    addMessage('user', userDisplay);
-    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\n\nUse run_code with type "patch" to add <Audio src="${track.audioUrl}" volume={0.3} /> inside the root element of the current design. If no active design, read the latest code from workspace first.`;
-    // Use handleCuiSend-style direct call to avoid image checks in handleAgentRequest
-    handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
-  }, [projectId, handleAgentRequest, addMessage]);
+    // Use handleCuiSend which is the same path as user typing in CUI — proven to work on mobile
+    const prompt = `🎵 ${track.title}\n\nUser selected this background music (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\nAdd <Audio src="${track.audioUrl}" volume={0.3} /> to the current design via run_code patch.`;
+    handleCuiSend(prompt);
+  }, [projectId, isAgentActive, handleCuiSend]);
 
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
