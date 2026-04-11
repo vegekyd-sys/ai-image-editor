@@ -177,6 +177,23 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
         return
       }
 
+      // Helper: fetch and replay any events we missed (gap between lastSeenSeq and DB)
+      const catchUpMissedEvents = async () => {
+        const { data: missed } = await supabase
+          .from('agent_events')
+          .select('*')
+          .eq('run_id', activeRunId)
+          .gt('seq', lastSeenSeq)
+          .order('seq', { ascending: true })
+        if (missed?.length) {
+          for (const ev of missed) {
+            if (ev.seq <= lastSeenSeq) continue
+            lastSeenSeq = ev.seq
+            dispatchEvent(ev as AgentEventRow, callbacks)
+          }
+        }
+      }
+
       // 3. Subscribe to new events via Realtime
       const eventsChannel = supabase.channel(`run-events:${activeRunId}`)
         .on('postgres_changes', {
@@ -184,37 +201,72 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
           schema: 'public',
           table: 'agent_events',
           filter: `run_id=eq.${activeRunId}`,
-        }, (payload) => {
+        }, async (payload) => {
           const row = payload.new as AgentEventRow
-          // Deduplicate: skip if already seen
           if (row.seq <= lastSeenSeq) return
-          lastSeenSeq = row.seq
-          dispatchEvent(row, callbacks)
+
+          if (row.type === 'done' || row.type === 'error') {
+            // Before processing done/error, catch up any missed events
+            await catchUpMissedEvents()
+            dispatchEvent(row, callbacks)
+            return
+          }
+
+          // Normal event — but check for gaps (missed events)
+          if (row.seq > lastSeenSeq + 1) {
+            // Gap detected — fetch missed events from DB
+            await catchUpMissedEvents()
+          } else {
+            lastSeenSeq = row.seq
+            dispatchEvent(row, callbacks)
+          }
         })
         .subscribe()
 
       channelsRef.current.push(eventsChannel)
 
-      // 4. Subscribe to run status changes
+      // 4. Subscribe to run status changes (backup for done)
       const runChannel = supabase.channel(`run-status:${activeRunId}`)
         .on('postgres_changes', {
           event: 'UPDATE',
           schema: 'public',
           table: 'agent_runs',
           filter: `id=eq.${activeRunId}`,
-        }, (payload) => {
+        }, async (payload) => {
           const newStatus = (payload.new as AgentRunRow).status
-          if (newStatus === 'completed') {
-            callbacks.onDone?.()
-            disconnect()
-          } else if (newStatus === 'failed') {
-            callbacks.onError?.('Agent run failed')
+          if (newStatus === 'completed' || newStatus === 'failed') {
+            // Catch up ALL remaining events before signaling done
+            await catchUpMissedEvents()
+            if (newStatus === 'completed') callbacks.onDone?.()
+            else callbacks.onError?.('Agent run failed')
             disconnect()
           }
         })
         .subscribe()
 
       channelsRef.current.push(runChannel)
+
+      // 5. Polling safety net — Realtime might fail silently
+      const pollTimer = setInterval(async () => {
+        try {
+          const { data: run } = await supabase
+            .from('agent_runs')
+            .select('status')
+            .eq('id', activeRunId)
+            .single()
+          if (run?.status === 'completed' || run?.status === 'failed') {
+            clearInterval(pollTimer)
+            await catchUpMissedEvents()
+            if (run.status === 'completed') callbacks.onDone?.()
+            else callbacks.onError?.('Agent run failed')
+            disconnect()
+          }
+        } catch { /* polling is best-effort */ }
+      }, 5000)
+
+      // Store poll timer for cleanup
+      const origDisconnect = disconnect
+      channelsRef.current.push({ unsubscribe: () => clearInterval(pollTimer) } as unknown as RealtimeChannel)
     } catch (err) {
       console.error('[useAgentRun] reconnect error:', err)
       setIsReconnecting(false)
