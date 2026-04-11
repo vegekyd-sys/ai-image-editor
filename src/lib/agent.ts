@@ -534,7 +534,7 @@ Your code must return a value:
 **Default to design for all visual output.** Design supports text, layout, images (embed URLs via template literal \\\`\${ctx.snapshotImages[N]}\\\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
-        description: z.string().optional().describe('Brief description of what this code does'),
+        description: z.string().optional().describe('Brief description of what this code does. For designs/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         image_refs: z.array(z.number()).optional().describe('1-based snapshot indices to pre-fetch as Buffers (e.g. [2, 3] for <<<image_2>>> and <<<image_3>>>). Available in code as images[0], images[1], ... (Buffer order matches this array).'),
       }),
       execute: async ({ code, description: desc, image_refs }) => {
@@ -680,6 +680,7 @@ Your code must return a value:
               height: result.height || 1350,
               props: result.props,
               animation,
+              description: desc, // Agent's brief description of the design
             };
             (ctx as any).__pendingDesign = designPayload;
             (ctx as any).__lastDesignPayload = designPayload;

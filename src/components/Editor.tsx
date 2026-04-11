@@ -1383,12 +1383,15 @@ export default function Editor({
     const snapshotIndexContext = snapshotsRef.current.length > 1
       ? `[图片索引 / Image Index — ${snapshotsRef.current.length} snapshots]\n${snapshotsRef.current.map((s, i) => {
           const isRef = s.type === 'reference';
+          const isDesign = !!s.design;
           const desc = isRef
             ? (s.description || 'Skill reference image')
-            : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
-              ? (s.description || '原图 / Original upload')
-              : (s.description || '(use analyze_image to see this snapshot)');
-          const tag = isRef ? ' (reference)' : '';
+            : isDesign
+              ? (s.description || '[design/video — use code in context to modify, do NOT analyze_image]')
+              : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
+                ? (s.description || '原图 / Original upload')
+                : (s.description || '(use analyze_image to see this snapshot)');
+          const tag = isRef ? ' (reference)' : isDesign ? ' (design)' : '';
           const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
           return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}`;
         }).join('\n')}\n\n`
@@ -3347,12 +3350,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           const snapId = pendingDesignSnapIdRef.current || generateId();
           pendingDesignSnapIdRef.current = '';
           const currentDesign = pendingDesign;
+          const designDesc = (currentDesign as unknown as Record<string, unknown>).description as string | undefined;
           const newSnapshot: Snapshot = {
             id: snapId,
             image: '', // poster captured async below
             tips: [],
             messageId: msgId,
-            description: '[run_code design]',
+            description: designDesc || '[design]',
             design: currentDesign,
           };
           queueMicrotask(() => {
