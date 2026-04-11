@@ -2256,11 +2256,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setAgentStatus(t('status.submittingVideo'));
     } else {
       const processingCount = animations.filter(a => a.status === 'processing').length;
-      if (processingCount > 0 && !isAgentActive) {
+      if (processingCount > 0 && !isAgentActive && !musicTaskId) {
         setAgentStatus(t('status.videoRenderingEllipsis'));
       }
     }
-  }, [animationState?.status, animations, isAgentActive]);
+  }, [animationState?.status, animations, isAgentActive, musicTaskId]);
 
   // Update StatusBar with music generation progress (same pattern as video)
   useEffect(() => {
