@@ -121,6 +121,7 @@ interface EditorProps {
   onBack?: () => void;
   onNewProject?: (file: File) => void;
   initialAnimations?: ProjectAnimation[];
+  initialMusicTaskId?: string | null;
 }
 
 export default function Editor({
@@ -141,6 +142,7 @@ export default function Editor({
   onBack,
   onNewProject,
   initialAnimations,
+  initialMusicTaskId,
 }: EditorProps = {}) {
   // Merge legacy single + new multi into one array
   const pendingImages = pendingImagesProp ?? (pendingImage ? [pendingImage] : undefined);
@@ -197,10 +199,10 @@ export default function Editor({
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   // Music generation state
-  const [musicTaskId, setMusicTaskId] = useState<string | null>(null);
+  const [musicTaskId, setMusicTaskId] = useState<string | null>(initialMusicTaskId ?? null);
   const [musicTracks, setMusicTracks] = useState<{ audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }[]>([]);
   const musicMsgIdRef = useRef<string>(''); // which assistant message to attach tracks to
-  const musicPollingRef = useRef(false); // true during music polling — prevents onDone from resetting status
+  const musicPollingRef = useRef(!!initialMusicTaskId); // true during music polling — prevents onDone from resetting status
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
   const pendingDesignSnapIdRef = useRef<string>('');

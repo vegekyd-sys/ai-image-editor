@@ -765,7 +765,22 @@ Example for a 15s video: "15-second cinematic, slow strings 0-3s, percussive hit
       }),
       execute: async ({ prompt, instrumental, style }) => {
         const result = await createMusic({ prompt, instrumental, style });
-        if (result.taskId) (ctx as any).musicTaskId = result.taskId;
+        if (result.taskId) {
+          (ctx as any).musicTaskId = result.taskId;
+          // Write pending rows to DB so polling resumes after page reload
+          if (ctx.supabase && ctx.userId) {
+            for (const idx of [0, 1]) {
+              await ctx.supabase.from('project_music').upsert({
+                suno_task_id: result.taskId,
+                track_index: idx,
+                project_id: ctx.projectId,
+                user_id: ctx.userId,
+                prompt,
+                status: 'pending',
+              }, { onConflict: 'suno_task_id,track_index' }).catch(() => {});
+            }
+          }
+        }
         return result;
       },
     }),
