@@ -199,6 +199,7 @@ export default function Editor({
   // Music generation state
   const [musicTaskId, setMusicTaskId] = useState<string | null>(null);
   const [musicTracks, setMusicTracks] = useState<{ audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }[]>([]);
+  const musicMsgIdRef = useRef<string>(''); // which assistant message to attach tracks to
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
   const pendingDesignSnapIdRef = useRef<string>('');
@@ -1427,7 +1428,7 @@ export default function Editor({
       return '';
     });
 
-    const { callbacks: agentCallbacks, setCurrentMsgId } = makeAgentCallbacks({
+    const { callbacks: agentCallbacks, setCurrentMsgId, getCurrentMsgId } = makeAgentCallbacks({
       projectId: projectId!,
       setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
       setPendingNotification, setSelectedVideoId, setAnimationState,
@@ -1442,6 +1443,7 @@ export default function Editor({
       onMusicTaskCreated: (taskId) => {
         setMusicTaskId(taskId);
         setMusicTracks([]);
+        musicMsgIdRef.current = getCurrentMsgId();
         setAgentStatus(t('status.generatingMusic'));
       },
     });
@@ -2127,19 +2129,26 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         if (stopped) return;
         if (data.status === 'completed' && data.tracks?.length) {
           setMusicTracks(data.tracks);
-          // Add music tracks as a CUI message (no text, just cards)
+          // Encode track URLs into message content (same pattern as video .mp4 inline)
+          // Format: each track as "music:TITLE|DURATION|TAGS|URL" on its own line
+          const musicLines = data.tracks.map((t: { title: string; duration: number; tags: string; audioUrl: string; trackIndex: number }) =>
+            `music:${t.trackIndex}|${t.title}|${Math.round(t.duration)}|${t.tags}|${t.audioUrl}`
+          ).join('\n');
+          const targetMsgId = musicMsgIdRef.current;
           setMessages(prev => {
-            if (prev.some(m => m.id === `music-${musicTaskId}`)) {
-              return prev.map(m => m.id === `music-${musicTaskId}`
-                ? { ...m, musicTracks: data.tracks } : m);
+            // Attach to the originating assistant message
+            if (targetMsgId && prev.some(m => m.id === targetMsgId)) {
+              return prev.map(m => {
+                if (m.id !== targetMsgId) return m;
+                // Don't duplicate — only add if not already there
+                if (m.content.includes('music:')) return { ...m, content: m.content.replace(/\nmusic:[\s\S]*$/, '\n' + musicLines) };
+                return { ...m, content: m.content + '\n' + musicLines };
+              });
             }
-            return [...prev, {
-              id: `music-${musicTaskId}`,
-              role: 'assistant' as const,
-              content: '',
-              timestamp: Date.now(),
-              musicTracks: data.tracks,
-            }];
+            // Fallback: create a standalone music message
+            const musicMsg: Message = { id: `music-${musicTaskId}`, role: 'assistant', content: musicLines, timestamp: Date.now() };
+            onSaveMessage?.(musicMsg);
+            return [...prev, musicMsg];
           });
           // Check if all tracks done (2 tracks = full SUCCESS)
           if (data.tracks.length >= 2) {

@@ -140,6 +140,32 @@ export default function ProjectPage() {
         setInitialAnimations(animations)
       }
 
+      // Restore music tracks from project_music table (encode as content lines, same as video .mp4 pattern)
+      const supabase = createClient()
+      const { data: musicRows } = await supabase
+        .from('project_music')
+        .select('suno_task_id, track_index, audio_url, duration, title, tags, status')
+        .eq('project_id', projectId)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: true })
+      if (musicRows?.length && !cancelled) {
+        // Check if any existing message already has music: lines
+        const hasMusic = messages.some(m => m.content?.includes('music:'))
+        if (!hasMusic) {
+          const musicLines = musicRows.map(r =>
+            `music:${r.track_index}|${r.title || ''}|${Math.round(Number(r.duration))}|${r.tags || ''}|${r.audio_url}`
+          ).join('\n')
+          // Attach to last assistant message, or create standalone
+          const lastAssistantIdx = [...messages].reverse().findIndex(m => m.role === 'assistant')
+          if (lastAssistantIdx >= 0) {
+            const idx = messages.length - 1 - lastAssistantIdx
+            messages[idx] = { ...messages[idx], content: messages[idx].content + '\n' + musicLines }
+          } else {
+            messages.push({ id: `music-restore`, role: 'assistant', content: musicLines, timestamp: Date.now() })
+          }
+        }
+      }
+
       const patched = await patchFromImageCache(snapshots)
       if (cancelled) return
       shownRef.current = true

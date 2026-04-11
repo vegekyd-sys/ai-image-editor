@@ -943,7 +943,7 @@ export default function AgentChatView({
                       <div className="markdown-body">
                         <MarkdownBlock
                           key={msg.id}
-                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, ''))}
+                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
                           isPanel={isPanel}
                           snapshots={snapshots}
                           onNavigateToSnapshot={onNavigateToSnapshot}
@@ -1021,14 +1021,20 @@ export default function AgentChatView({
                       <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
 
-                    {/* Music tracks — playable cards */}
-                    {msg.musicTracks?.map((track) => (
-                      <MusicCard
-                        key={track.trackIndex}
-                        track={track}
-                        onSelect={() => onMusicSelect?.(track)}
-                      />
-                    ))}
+                    {/* Inline music — parsed from content "music:INDEX|TITLE|DURATION|TAGS|URL" */}
+                    {(() => {
+                      const musicMatches = msg.content.match(/music:\d+\|[^\n]+/g);
+                      if (!musicMatches) return null;
+                      return musicMatches.map((line) => {
+                        const parts = line.replace('music:', '').split('|');
+                        if (parts.length < 5) return null;
+                        const track = { trackIndex: parseInt(parts[0]), title: parts[1], duration: parseFloat(parts[2]), tags: parts[3], audioUrl: parts.slice(4).join('|') };
+                        return (
+                          <MusicCard key={track.trackIndex} track={track}
+                            onSelect={() => onMusicSelect?.(track)} />
+                        );
+                      });
+                    })()}
                   </div>
 
                 </div>
