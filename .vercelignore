@@ -13,5 +13,7 @@ scripts/serve*
 *.heic
 *.HEIC
 progress.md
+__tests__/
+vitest.config.ts
 .playwright-mcp/
 .claude/
