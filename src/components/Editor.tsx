@@ -2134,12 +2134,17 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             `music:${t.trackIndex}|${t.title}|${Math.round(t.duration)}|${t.tags}|${t.audioUrl}`
           ).join('\n');
           const msgId = `music-${musicTaskId}`;
+          const fullContent = `🎵 ${t('status.musicReady')}\n${musicLines}`;
           setMessages(prev => {
             // Update if already exists (second track arriving), otherwise create new
             if (prev.some(m => m.id === msgId)) {
-              return prev.map(m => m.id === msgId ? { ...m, content: musicLines } : m);
+              const updated = prev.map(m => m.id === msgId ? { ...m, content: fullContent } : m);
+              // Re-persist with updated tracks
+              const msg = updated.find(m => m.id === msgId);
+              if (msg) onSaveMessage?.(msg);
+              return updated;
             }
-            const musicMsg: Message = { id: msgId, role: 'assistant', content: `🎵 ${t('status.musicReady')}\n${musicLines}`, timestamp: Date.now() };
+            const musicMsg: Message = { id: msgId, role: 'assistant', content: fullContent, timestamp: Date.now() };
             onSaveMessage?.(musicMsg);
             return [...prev, musicMsg];
           });

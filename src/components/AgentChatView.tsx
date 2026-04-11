@@ -167,9 +167,38 @@ function MusicCard({ track, onSelect }: {
         </button>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-[3px] w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-        <div className="h-full transition-[width] duration-200" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.6)' }} />
+      {/* Progress bar — clickable/draggable to seek */}
+      <div
+        className="h-[12px] w-full flex items-end cursor-pointer"
+        onClick={(e) => {
+          const audio = audioRef.current;
+          if (!audio || !audio.duration) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          audio.currentTime = ratio * audio.duration;
+          setProgress(ratio);
+          setCurrentTime(audio.currentTime);
+        }}
+        onPointerDown={(e) => {
+          const audio = audioRef.current;
+          if (!audio || !audio.duration) return;
+          const bar = e.currentTarget;
+          const seek = (clientX: number) => {
+            const rect = bar.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            audio.currentTime = ratio * audio.duration;
+            setProgress(ratio);
+            setCurrentTime(audio.currentTime);
+          };
+          const onMove = (ev: PointerEvent) => seek(ev.clientX);
+          const onUp = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); };
+          document.addEventListener('pointermove', onMove);
+          document.addEventListener('pointerup', onUp);
+        }}
+      >
+        <div className="h-[3px] w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.6)', transition: playing ? 'none' : 'width 0.15s' }} />
+        </div>
       </div>
     </div>
   );
