@@ -145,10 +145,10 @@ function MusicCard({ track, onSelect }: {
       <audio ref={audioRef} src={track.audioUrl} preload="metadata"
         onEnded={() => { setPlaying(false); setProgress(0); }} />
 
-      <div className="flex items-center gap-2.5 px-3 py-2.5">
+      <div className="flex items-center gap-3 px-3.5 py-3.5">
         {/* Play/pause */}
         <button onClick={toggle}
-          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform"
+          className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform"
           style={{ background: playing ? 'rgba(192,38,211,0.3)' : 'rgba(255,255,255,0.1)' }}>
           {playing ? (
             <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><rect x="1.5" y="1" width="3" height="10" rx="0.8" /><rect x="7.5" y="1" width="3" height="10" rx="0.8" /></svg>
@@ -170,7 +170,7 @@ function MusicCard({ track, onSelect }: {
 
         {/* Download */}
         <button onClick={handleDownload}
-          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-70 transition-all"
+          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-70 transition-all"
           style={{ background: 'rgba(255,255,255,0.06)' }} title="Download">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
@@ -179,7 +179,7 @@ function MusicCard({ track, onSelect }: {
 
         {/* Insert into design */}
         <button onClick={onSelect}
-          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-80 transition-all"
+          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-80 transition-all"
           style={{ background: 'rgba(192,38,211,0.2)', border: '1px solid rgba(192,38,211,0.3)' }} title="Add to design">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgb(192,38,211)" strokeWidth="2.5" strokeLinecap="round">
             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />

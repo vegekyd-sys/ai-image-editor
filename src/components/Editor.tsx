@@ -1304,7 +1304,7 @@ export default function Editor({
     // Path 2 (text-only): no image is OK — Agent will generate one
     // Design snapshots have no image (rendered via Player), skip this check for them
     const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
-    if (!currentImage && !currentSnap?.design && snapshotsRef.current.length > 0) return;
+    if (!currentImage && !currentSnap?.design && snapshotsRef.current.length > 0 && !options?.silent) return;
 
     // Prefer URL (tiny payload) over base64 for API calls — server handles both
     // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
@@ -2449,12 +2449,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
     }).catch(() => {});
-    // Show short user message, but send detailed prompt to agent
+    // Show short user message, then send agent request to inject
     const userDisplay = `🎵 ${track.title}`;
     addMessage('user', userDisplay);
-    // Agent gets the full instruction (silent — no duplicate user msg)
     const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\n\nUse run_code with type "patch" to add <Audio src="${track.audioUrl}" volume={0.3} /> inside the root element of the current design. If no active design, read the latest code from workspace first.`;
-    handleAgentRequest(agentPrompt, undefined, undefined, { silent: true });
+    // Use handleCuiSend-style direct call to avoid image checks in handleAgentRequest
+    handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
   }, [projectId, handleAgentRequest, addMessage]);
 
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
