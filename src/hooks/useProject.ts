@@ -107,10 +107,20 @@ export function useProject(projectId: string, userId: string) {
       delete (snap as any)._designPath
     }
 
+    // Build snapshot lookup: by messageId first, then track unmatched design snapshots
+    const snapshotByMsgId = new Map<string, typeof snapshots[0]>()
+    const unmatchedDesignSnaps: typeof snapshots = []
+    for (const s of snapshots) {
+      if (s.messageId) snapshotByMsgId.set(s.messageId, s)
+      if (s.design && s.messageId && !dbMessages.some(m => m.id === s.messageId)) {
+        unmatchedDesignSnaps.push(s)
+      }
+    }
+
     const messages: Message[] = dbMessages.map((m) => {
       // Restore inline image + design: find the snapshot linked to this message
       const linkedSnapshot = m.has_image
-        ? snapshots.find(s => s.messageId === m.id)
+        ? snapshotByMsgId.get(m.id)
         : undefined
       return {
         id: m.id,
@@ -122,6 +132,16 @@ export function useProject(projectId: string, userId: string) {
         ...(linkedSnapshot?.design ? { design: linkedSnapshot.design } : {}),
       }
     })
+
+    // Attach orphaned design snapshots to nearest assistant message (DualWriter ID mismatch)
+    for (const snap of unmatchedDesignSnaps) {
+      // Find last assistant message that doesn't already have a design
+      const candidate = [...messages].reverse().find(m => m.role === 'assistant' && !m.design && !m.image)
+      if (candidate) {
+        candidate.image = snap.image || snap.imageUrl || ''
+        candidate.design = snap.design
+      }
+    }
 
     const animations: ProjectAnimation[] = (animationRes.data ?? []).map((row: Record<string, unknown>) => ({
       id: row.id as string,
