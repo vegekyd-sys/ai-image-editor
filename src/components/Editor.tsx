@@ -1397,6 +1397,12 @@ export default function Editor({
         }).join('\n')}\n\n`
       : '';
 
+    // When viewing a design snapshot, warn Agent not to analyze_image (it would see a poster/blank, not the actual design)
+    const currentSnapIsDesign = snapIdx !== null && !!snapshotsRef.current[snapIdx]?.design;
+    const designWarning = currentSnapIsDesign
+      ? `[DESIGN MODE] You are viewing a design/video (not a photo). The design code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this design.\n\n`
+      : '';
+
     const annotationWarning = overrideImage
       ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use image_index to switch to another snapshot. Call analyze_image first (without image_index) to see the annotations, then generate_image (without image_index) to edit.\n\n`
       : '';
@@ -1407,7 +1413,7 @@ export default function Editor({
       ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). The image passed to you is this draft preview — edit it directly. Do NOT use image_index to switch to another snapshot.\n\n`
       : '';
 
-    const fullPrompt = `${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
+    const fullPrompt = `${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
