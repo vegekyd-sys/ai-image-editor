@@ -17,7 +17,8 @@ export interface AgentCallbackContext {
   setPendingDesign: (d: DesignPayload | null) => void;
   setPendingNotification?: (n: { text: string; targetIndex: number }) => void;
   setSelectedVideoId?: (id: string) => void;
-  setAnimationState?: (state: import('@/components/Editor').AnimationState) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  setAnimationState?: (state: any) => void;
 
   // Refs
   snapshotsRef: { current: Snapshot[] };
@@ -39,7 +40,8 @@ export interface AgentCallbackContext {
 
   // Callback functions (from Editor)
   cacheImage: (key: string, data: string) => void;
-  fetchTipsForSnapshot: (id: string, img: string, mode: string) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fetchTipsForSnapshot: (...args: any[]) => void;
   onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void;
   onUpdateDescription?: (snapId: string, desc: string) => void;
   triggerProjectNaming?: (text: string) => void;
@@ -47,7 +49,8 @@ export interface AgentCallbackContext {
   compressBase64Image?: (img: string, maxBytes: number) => Promise<string>;
 
   // i18n
-  t: (key: string) => string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  t: (...args: any[]) => string;
 
   // Optional cleanup on done (reconnect uses this to disconnect)
   onCleanup?: () => void;

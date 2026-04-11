@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeAgentCallbacks, type AgentCallbackContext } from '@/lib/agentCallbacks';
+import type { Message } from '@/types';
 
 function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCallbackContext {
   return {
@@ -42,12 +43,12 @@ function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCall
 
 describe('makeAgentCallbacks', () => {
   let ctx: AgentCallbackContext;
-  let messages: { id: string; role: string; content: string; image?: string; timestamp: number }[];
+  let messages: Message[];
 
   beforeEach(() => {
     messages = [];
     ctx = createMockContext({
-      setMessages: vi.fn((updater: (prev: typeof messages) => typeof messages) => {
+      setMessages: vi.fn((updater: (prev: Message[]) => Message[]) => {
         messages = updater(messages);
       }),
     });

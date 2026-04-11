@@ -10,6 +10,7 @@ import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
+import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
@@ -1325,10 +1326,7 @@ export default function Editor({
     setAgentStatus(t('editor.agentThinking'));
     agentAbortRef.current = new AbortController();
 
-    // Mutable local var so onNewTurn can point content to a fresh message
-    let currentMsgId = assistantMsgId;
-    // Track all assistant message IDs created in this run for persistence on done
-    const agentMsgIds: string[] = [assistantMsgId];
+    // currentMsgId and agentMsgIds are now managed by makeAgentCallbacks factory
 
     // Include pre-computed image description only when viewing a real snapshot (not a draft/preview)
     // Draft's image may differ significantly from the parent snapshot's description — skip to avoid mismatch
@@ -1426,247 +1424,26 @@ export default function Editor({
       return '';
     });
 
-    const _agentT0 = performance.now();
-    let _genStartTime = 0;
-    // Track analyze_image results for auto-saving to snapshot.description
-    let _lastAnalyzedIdx: number | null = null;
-    let _analyzedTextBuf = '';
-    const _flushAnalyzedDesc = () => {
-      if (_lastAnalyzedIdx !== null && _analyzedTextBuf.trim()) {
-        const desc = _analyzedTextBuf.split('\n\n')[0].trim().slice(0, 300);
-        const snapIdx = _lastAnalyzedIdx - 1;
-        const snap = snapshotsRef.current[snapIdx];
-        if (snap && !snap.description) {
-          setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, description: desc } : s));
-          onUpdateDescription?.(snap.id, desc);
-        }
-      }
-      _lastAnalyzedIdx = null;
-      _analyzedTextBuf = '';
-    };
+    const { callbacks: agentCallbacks, setCurrentMsgId } = makeAgentCallbacks({
+      projectId: projectId!,
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setPendingNotification, setSelectedVideoId, setAnimationState,
+      snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
+      pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
+      agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
+      pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
+      draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
+      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+      triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
+      t, initialTitle, userPromptText: text,
+    });
+    // Sync factory's currentMsgId with the already-created assistant message
+    setCurrentMsgId(assistantMsgId);
+
     try {
       await streamAgent(
         { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined },
-        {
-          onStatus: (status) => {
-            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
-            console.log(`⏱️ [agent] status="${status}" at +${elapsed}s`);
-            if (status.includes('生成图片') || status.includes('Generating image')) {
-              _genStartTime = performance.now();
-            }
-            setAgentStatus(status);
-          },
-          onImageAnalyzed: (imageIndex) => {
-            _flushAnalyzedDesc(); // flush previous if any
-            _lastAnalyzedIdx = imageIndex;
-            _analyzedTextBuf = '';
-          },
-          onNewTurn: (serverMessageId) => {
-            _flushAnalyzedDesc();
-            const newId = serverMessageId || generateId();
-            currentMsgId = newId;
-            agentMsgIds.push(newId);
-            setMessages((prev) => [...prev, {
-              id: newId,
-              role: 'assistant' as const,
-              content: '',
-              timestamp: Date.now(),
-            }]);
-          },
-          onContent: (delta) => {
-            const id = currentMsgId;
-            setMessages((prev) => prev.map((m) =>
-              m.id === id ? { ...m, content: m.content + delta } : m
-            ));
-            // Accumulate text after analyze_image for auto-saving description
-            if (_lastAnalyzedIdx !== null) {
-              _analyzedTextBuf += delta;
-            }
-          },
-          onImage: (imageData, usedModel, serverSnapshotId, serverImageUrl) => {
-            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
-            const genDuration = _genStartTime ? ((performance.now() - _genStartTime) / 1000).toFixed(1) : '?';
-            console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (${usedModel || 'gemini'} took ${genDuration}s, image ${(imageData.length / 1024).toFixed(0)}KB)`);
-            const snapId = serverSnapshotId || generateId();
-            const editDesc = lastEditPromptRef.current
-              ? `[agent] ${lastEditPromptRef.current.slice(0, 100)}`
-              : undefined;
-            const newSnapshot: Snapshot = {
-              id: snapId,
-              image: imageData,
-              tips: [],
-              messageId: currentMsgId,
-              description: editDesc,
-              ...(serverImageUrl ? { imageUrl: serverImageUrl } : {}),
-            };
-            setSnapshots((prev) => {
-              if (prev.some(s => s.id === snapId)) return prev; // deduplicate
-              return [...prev, newSnapshot];
-            });
-            // Server already uploaded + wrote to snapshots table via DualWriter.
-            // onSaveSnapshot upserts with same ID → idempotent (no duplicate).
-            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
-              setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
-            });
-            if (editDesc) onUpdateDescription?.(snapId, editDesc);
-            cacheImage(`snap:${snapId}`, imageData);
-            const isFirstSnapshot = snapshotsRef.current.length <= 1;
-            fetchTipsForSnapshot(snapId, imageData, isFirstSnapshot ? 'full' : 'none');
-            autoFetchTriggered.current = true; // Prevent auto-fetch effect from double-fetching
-            setAgentStatus(t('status.imageGenerated'));
-            // If user is not on the new snapshot (e.g. viewing draft or earlier snapshot), show "See" button
-            const newSnapIdx = snapshotsRef.current.length; // index after setSnapshots adds it
-            if (draftParentIndexRef.current !== null || viewIndexRef.current !== newSnapIdx) {
-              setPendingNotification({ text: t('status.imageGenerated'), targetIndex: newSnapIdx });
-            }
-            const id = currentMsgId;
-            // Attach the last captured editPrompt and input images to the image message
-            const capturedPrompt = lastEditPromptRef.current;
-            const capturedInputImages = lastEditInputImagesRef.current;
-            lastEditPromptRef.current = null;
-            lastEditInputImagesRef.current = null;
-            setMessages((prev) => prev.map((m) =>
-              m.id === id ? {
-                ...m,
-                image: imageData,
-                editPrompt: capturedPrompt ?? undefined,
-                editModel: usedModel ?? undefined,
-                editInputImages: capturedInputImages ?? undefined,
-              } : m
-            ));
-            // Auto-name project after first image generation (text-to-image projects have no description)
-            if (!hasTriggeredNamingRef.current && (!initialTitle || initialTitle === 'Untitled' || initialTitle === '未命名' || initialTitle === '未命名项目')) {
-              hasTriggeredNamingRef.current = true;
-              triggerProjectNaming(text);
-            }
-          },
-          onToolCall: (tool, input, images) => {
-            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
-            console.log(`⏱️ [agent] tool_call="${tool}" at +${elapsed}s`, tool === 'generate_image' ? `editPrompt="${(input.editPrompt as string)?.slice(0, 80)}..."` : '');
-            // Capture editPrompt and input images from generate_image calls
-            if (tool === 'generate_image' && typeof input.editPrompt === 'string') {
-              lastEditPromptRef.current = input.editPrompt;
-              lastEditInputImagesRef.current = images ?? null;
-            }
-          },
-          onCodeStream: (text, done) => {
-            // Auto-init on first chunk (code_stream arrives before tool_call)
-            if (!codeStreamRef.current && !done && text) {
-              const id = currentMsgId;
-              if (id) {
-                codeStreamRef.current = { msgId: id, code: '', shown: 0 };
-                setMessages(prev => prev.map(m =>
-                  m.id === id ? { ...m, content: (m.content || '') + '\n\n```javascript\n' } : m
-                ));
-              }
-            }
-            const stream = codeStreamRef.current;
-            if (!stream) return;
-            if (done) {
-              setMessages(prev => prev.map(m =>
-                m.id === stream.msgId ? { ...m, content: (m.content || '') + '\n```\n' } : m
-              ));
-              codeStreamRef.current = null;
-            } else {
-              setMessages(prev => prev.map(m =>
-                m.id === stream.msgId ? { ...m, content: (m.content || '') + text } : m
-              ));
-            }
-          },
-          onAnimationTask: (taskId, prompt) => {
-            // CUI-initiated video: add to animations array and start polling
-            const urls = snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
-            const newAnim: ProjectAnimation = {
-              id: taskId,
-              projectId: projectId ?? '',
-              taskId,
-              videoUrl: null,
-              prompt,
-              snapshotUrls: urls,
-              status: 'processing',
-              createdAt: new Date().toISOString(),
-            };
-            setAnimations(prev => [newAnim, ...prev]);
-            setSelectedVideoId(taskId);
-            pendingNavigateToVideoRef.current = true;
-            // Trigger polling status so StatusBar shows "Video rendering M:SS"
-            setAnimationState({
-              imageUrls: urls,
-              status: 'polling',
-              prompt,
-              userHint: '',
-              taskId,
-              videoUrl: null,
-              error: null,
-              duration: null,
-              pollSeconds: 0,
-            });
-          },
-          onNsfwDetected: () => {
-            console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
-            isNsfwRef.current = true;
-          },
-          onRunId: (id) => { agentRunIdRef.current = id; },
-          onMessageId: (serverId) => {
-            // Replace the frontend-generated message ID with server's ID (for DB consistency)
-            const oldId = assistantMsgId;
-            currentMsgId = serverId;
-            agentMsgIds[0] = serverId;
-            setMessages(prev => prev.map(m => m.id === oldId ? { ...m, id: serverId } : m));
-          },
-          onReasoning: () => {
-            if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentThinking');
-          },
-          onCoding: () => {
-            if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentCoding');
-          },
-          onDesign: (design) => {
-            console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
-            setAgentStatus(t('status.renderingDesign'));
-            pendingDesignMsgIdRef.current = currentMsgId;
-            pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
-            // ctx.snapshotImages are URLs — design code/props reference them directly.
-            // No placeholder resolution needed.
-            setPendingDesign(design);
-          },
-          onDone: () => {
-            _flushAnalyzedDesc(); // save any pending analyze_image description
-            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
-            console.log(`⏱️ [agent] DONE total ${elapsed}s`);
-            setAgentStatus(t('editor.done'));
-            // Messages are persisted by DualWriter (server-side) — no frontend save needed
-            // Drain pending CUI-attached images: tips text only, no preview, no analysis
-            const pendingAnalysisList = [...pendingAnalysisRef.current];
-            pendingAnalysisRef.current = [];
-            if (pendingAnalysisList.length > 0) {
-              (async () => {
-                for (const { id, image } of pendingAnalysisList) {
-                  const tipsImg = await compressBase64Image(image, 600_000);
-                  fetchTipsForSnapshot(id, tipsImg, 'none');
-                }
-              })();
-            }
-            {
-              // Drain pending teaser or reset to greeting
-              const pendingTeaser = pendingTeaserRef.current;
-              if (pendingTeaser) {
-                pendingTeaserRef.current = null;
-                setTimeout(() => triggerTipsTeaser(pendingTeaser.snapshotId, pendingTeaser.tips), 400);
-              } else {
-                setTimeout(() => setAgentStatus(t('editor.greeting')), 2000);
-              }
-            }
-          },
-          onError: (msg) => {
-            console.error('Agent error:', msg);
-            const id = currentMsgId;
-            setMessages((prev) => {
-              return prev.map((m) =>
-                m.id === id ? { ...m, content: m.content || t('editor.errorRetry') } : m
-              );
-            });
-          },
-        },
+        agentCallbacks,
         agentAbortRef.current.signal,
       );
     } catch (err) {
@@ -1694,79 +1471,34 @@ export default function Editor({
   }, []);
 
   // ── Reconnect to active background agent run ──
-  // When there's a running agent, CUI is rebuilt entirely from agent_events
-  // (not from loadProject's static messages) so streaming can continue seamlessly.
+  // Uses the same makeAgentCallbacks factory as the SSE path — identical CUI building logic.
   useEffect(() => {
     if (!activeRunId || isAgentActive) return;
     setIsAgentActive(true);
     setAgentStatus(t('editor.reconnecting'));
 
-    let currentMsgId = '';
+    const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
+      projectId: projectId ?? '',
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setPendingNotification, setSelectedVideoId, setAnimationState,
+      snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
+      pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
+      agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
+      pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
+      draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
+      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+      triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
+      t,
+      onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
+    });
 
     agentReconnect({
+      ...reconnectCallbacks,
       onClearRunMessages: (msgIds) => {
-        // Remove static loadProject messages that belong to this run
-        // They'll be rebuilt from agent_events replay below
         if (msgIds.length > 0) {
           const idSet = new Set(msgIds);
           setMessages(prev => prev.filter(m => !idSet.has(m.id)));
         }
-      },
-      onStatus: (status) => { setAgentStatus(status); },
-      onContent: (delta) => {
-        if (!currentMsgId) return;
-        const id = currentMsgId;
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, content: m.content + delta } : m));
-      },
-      onNewTurn: (serverMessageId) => {
-        const newId = serverMessageId || generateId();
-        currentMsgId = newId;
-        setMessages(prev => [...prev, { id: newId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
-      },
-      onImage: (imageUrl, usedModel, snapshotId, serverUrl) => {
-        const snapId = snapshotId || generateId();
-        const url = serverUrl || imageUrl;
-        const newSnapshot: Snapshot = { id: snapId, image: url, imageUrl: url, tips: [], messageId: currentMsgId };
-        setSnapshots(prev => {
-          if (prev.some(s => s.id === snapId)) return prev;
-          return [...prev, newSnapshot];
-        });
-        cacheImage(`snap:${snapId}`, url);
-        fetchTipsForSnapshot(snapId, url, 'none');
-        setAgentStatus(t('status.imageGenerated'));
-        // Set inline image on current message for CUI display
-        if (currentMsgId) {
-          const id = currentMsgId;
-          setMessages(prev => prev.map(m => m.id === id ? { ...m, image: url } : m));
-        }
-      },
-      onToolCall: (tool) => {
-        if (tool === 'generate_image') setAgentStatus(t('editor.generatingImage'));
-      },
-      onAnimationTask: (taskId, prompt) => {
-        const urls = snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
-        const newAnim: ProjectAnimation = {
-          id: taskId, projectId: projectId ?? '', taskId, videoUrl: null,
-          prompt, snapshotUrls: urls, status: 'processing', createdAt: new Date().toISOString(),
-        };
-        setAnimations(prev => [newAnim, ...prev]);
-      },
-      onDesign: (design) => {
-        pendingDesignMsgIdRef.current = currentMsgId;
-        pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
-        setPendingDesign(design);
-      },
-      onNsfwDetected: () => { isNsfwRef.current = true; },
-      onDone: () => {
-        setAgentStatus(t('editor.done'));
-        setTimeout(() => setAgentStatus(t('editor.greeting')), 2000);
-        setIsAgentActive(false);
-        agentDisconnect();
-      },
-      onError: (msg) => {
-        console.error('[reconnect] Agent error:', msg);
-        setIsAgentActive(false);
-        agentDisconnect();
       },
     });
 
