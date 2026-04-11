@@ -320,8 +320,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         setTimeout(() => ctx.setAgentStatus(ctx.t('editor.greeting')), 2000);
       }
 
-      // Delay cleanup to let any pending Realtime events flush (content before done)
-      setTimeout(() => ctx.onCleanup?.(), 500);
+      ctx.onCleanup?.();
     },
 
     onError: (msg) => {
