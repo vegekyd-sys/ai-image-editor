@@ -200,6 +200,7 @@ export default function Editor({
   const [musicTaskId, setMusicTaskId] = useState<string | null>(null);
   const [musicTracks, setMusicTracks] = useState<{ audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }[]>([]);
   const musicMsgIdRef = useRef<string>(''); // which assistant message to attach tracks to
+  const musicPollingRef = useRef(false); // true during music polling — prevents onDone from resetting status
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
   const pendingDesignSnapIdRef = useRef<string>('');
@@ -1442,10 +1443,12 @@ export default function Editor({
       t, initialTitle, userPromptText: text,
       onMusicTaskCreated: (taskId) => {
         setMusicTaskId(taskId);
+        musicPollingRef.current = true;
         setMusicTracks([]);
         musicMsgIdRef.current = getCurrentMsgId();
         setAgentStatus(t('status.generatingMusic'));
       },
+      musicPollingRef,
     });
     // Sync factory's currentMsgId with the already-created assistant message
     setCurrentMsgId(assistantMsgId);
@@ -2151,12 +2154,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           // Check if all tracks done (2 tracks = full SUCCESS)
           if (data.tracks.length >= 2) {
             setMusicTaskId(null);
+            musicPollingRef.current = false;
             setAgentStatus(t('status.musicReady'));
             setTimeout(() => setAgentStatus(t('editor.greeting')), 3000);
           }
         } else if (data.status === 'failed') {
           console.warn('🎵 [music] failed:', data.error);
           setMusicTaskId(null);
+          musicPollingRef.current = false;
           setAgentStatus(t('status.musicFailed'));
           setTimeout(() => setAgentStatus(t('editor.greeting')), 3000);
         }

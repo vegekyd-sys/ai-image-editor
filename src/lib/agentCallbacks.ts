@@ -54,6 +54,8 @@ export interface AgentCallbackContext {
 
   // Music
   onMusicTaskCreated?: (taskId: string) => void;
+  /** When true, onDone won't reset status to greeting (music polling shows its own status) */
+  musicPollingRef?: { current: boolean };
 
   // Optional cleanup on done (reconnect uses this to disconnect)
   onCleanup?: () => void;
@@ -304,7 +306,10 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       flushAnalyzedDesc();
       const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
       console.log(`⏱️ [agent] DONE total ${elapsed}s`);
-      ctx.setAgentStatus(ctx.t('editor.done'));
+      // Don't overwrite music polling status
+      if (!ctx.musicPollingRef?.current) {
+        ctx.setAgentStatus(ctx.t('editor.done'));
+      }
 
       // Drain pending CUI-attached images
       const pendingList = [...ctx.pendingAnalysisRef.current];
@@ -319,12 +324,12 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         })();
       }
 
-      // Drain pending teaser or reset greeting
+      // Drain pending teaser or reset greeting (skip if music polling)
       const pendingTeaser = ctx.pendingTeaserRef.current;
       if (pendingTeaser) {
         ctx.pendingTeaserRef.current = null;
         setTimeout(() => ctx.triggerTipsTeaser?.(pendingTeaser.snapshotId, pendingTeaser.tips), 400);
-      } else {
+      } else if (!ctx.musicPollingRef?.current) {
         setTimeout(() => ctx.setAgentStatus(ctx.t('editor.greeting')), 2000);
       }
 
