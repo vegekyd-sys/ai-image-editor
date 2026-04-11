@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
 
     const { prompt, image, originalImage, referenceImages, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
-            previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw } = await req.json();
+            previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
+            musicReady, musicAudioUrl } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
@@ -92,6 +93,20 @@ export async function POST(req: NextRequest) {
               locale,
             );
             for await (const event of runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true, locale })) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            }
+            return;
+          }
+
+          // musicReady: background music generation completed — agent injects <Audio> into design
+          if (musicReady && musicAudioUrl) {
+            const musicPrompt = withLocale(
+              `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest design code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code to render the updated version with music.`,
+              locale,
+            );
+            for await (const event of runMakaronAgent(musicPrompt, image || '', projectId, {
+              locale, snapshotImages, currentSnapshotIndex, supabase, userId: user.id,
+            })) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             }
             return;

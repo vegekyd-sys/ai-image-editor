@@ -13,6 +13,7 @@
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^4.0.63",
     "@babel/standalone": "^7.29.2",
+    "@fal-ai/client": "^1.9.5",
     "@google/genai": "^1.40.0",
     "@huggingface/inference": "^4.13.14",
     "@modelcontextprotocol/sdk": "^1.27.1",

@@ -193,6 +193,10 @@ export default function Editor({
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
+  const [musicTaskId, setMusicTaskId] = useState<string | null>(null);
+  const musicTaskIdRef = useRef<string | null>(null);
+  const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
+  const musicNotifiedRef = useRef(false);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
   // Streaming code display: tracks which message is receiving run_code chunks
@@ -1559,6 +1563,12 @@ export default function Editor({
               pollSeconds: 0,
             });
           },
+          onMusicTask: (taskId) => {
+            console.log(`🎵 [music] task created: ${taskId}`);
+            setMusicTaskId(taskId); musicTaskIdRef.current = taskId;
+            musicNotifiedRef.current = false;
+            setAgentStatus(t('status.generatingMusic'));
+          },
           onNsfwDetected: () => {
             console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
             isNsfwRef.current = true;
@@ -1581,7 +1591,8 @@ export default function Editor({
             _flushAnalyzedDesc(); // save any pending analyze_image description
             const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
             console.log(`⏱️ [agent] DONE total ${elapsed}s`);
-            setAgentStatus(t('editor.done'));
+            // Don't overwrite music status if music is generating in background
+            if (!musicTaskIdRef.current) setAgentStatus(t('editor.done'));
             // Persist all assistant messages created in this agent run
             setMessages((prev) => {
               const toSave = prev.filter(m => agentMsgIds.includes(m.id) && m.content);
@@ -1606,7 +1617,10 @@ export default function Editor({
                 pendingTeaserRef.current = null;
                 setTimeout(() => triggerTipsTeaser(pendingTeaser.snapshotId, pendingTeaser.tips), 400);
               } else {
-                setTimeout(() => setAgentStatus(t('editor.greeting')), 2000);
+                setTimeout(() => {
+                  // Don't reset if music is generating in background
+                  if (!musicTaskIdRef.current) setAgentStatus(t('editor.greeting'));
+                }, 2000);
               }
             }
           },
@@ -2251,7 +2265,75 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [snapshots, tipsSourceIndex, isTipsFetching, triggerPreviewsReadyNotification]);
 
+  // ── Music polling: poll Suno status when musicTaskId is set ──
+  useEffect(() => {
+    if (!musicTaskId) return;
+    console.log(`🎵 [music] polling started for ${musicTaskId}`);
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/music/${musicTaskId}`);
+        const data = await res.json();
+        if (data.status === 'completed' && data.audioUrl) {
+          console.log(`🎵 [music] completed: ${data.audioUrl}`);
+          setMusicAudioUrl(data.audioUrl);
+          setMusicTaskId(null); musicTaskIdRef.current = null;
+          setAgentStatus(t('status.musicReady'));
+        } else if (data.status === 'failed') {
+          console.warn(`🎵 [music] failed:`, data.error);
+          setMusicTaskId(null); musicTaskIdRef.current = null;
+          setAgentStatus(t('status.musicFailed'));
+        }
+      } catch (e) {
+        console.warn('🎵 [music] poll error:', e);
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [musicTaskId, t]);
 
+  // ── Music ready: notify agent when idle ──
+  useEffect(() => {
+    if (!musicAudioUrl || isAgentActive || musicNotifiedRef.current) return;
+    musicNotifiedRef.current = true;
+    console.log(`🎵 [music] agent idle, sending musicReady notification`);
+    setAgentStatus(t('status.addingMusic'));
+    setIsAgentActive(true);
+    const currentImage = snapshotsRef.current[snapshotsRef.current.length - 1]?.imageUrl || snapshotsRef.current[snapshotsRef.current.length - 1]?.image || '';
+    streamAgent(
+      { prompt: '', image: currentImage, projectId: projectId ?? '', musicReady: true, musicAudioUrl,
+        snapshotImages: snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!),
+        currentSnapshotIndex: snapshotsRef.current.length - 1 },
+      {
+        onStatus: (status) => setAgentStatus(status),
+        onContent: (delta) => {
+          // Add to last assistant message or create new one
+          setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (last?.role === 'assistant') {
+              return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: m.content + delta } : m);
+            }
+            return [...prev, { id: `music-${Date.now()}`, role: 'assistant', content: delta, timestamp: Date.now() }];
+          });
+        },
+        onDesign: (design) => {
+          pendingDesignMsgIdRef.current = `music-design-${Date.now()}`;
+          setMessages(prev => [...prev, { id: pendingDesignMsgIdRef.current, role: 'assistant', content: '', timestamp: Date.now() }]);
+          setPendingDesign(design);
+        },
+        onDone: () => {
+          setIsAgentActive(false);
+          setMusicAudioUrl(null);
+          setAgentStatus(t('editor.greeting'));
+        },
+        onError: (msg) => {
+          setIsAgentActive(false);
+          setMusicAudioUrl(null);
+          setAgentStatus(t('editor.greeting'));
+          console.warn('🎵 [music] musicReady agent error:', msg);
+        },
+      },
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [musicAudioUrl, isAgentActive]);
 
   // When animationState transitions — handle creation flow lifecycle
   const prevAnimStatusRef = useRef(animationState?.status);
@@ -2490,11 +2572,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [snapshots, draftParentIndex, isDesktop, cuiPanelWidth]);
 
   // Agent elapsed timer — DOM updates every 1s keep iOS Safari from dropping SSE
+  // Paused when musicTaskId is active (StatusBar shows music status instead)
   useEffect(() => {
     if (!isAgentActive) {
       agentTimerRef.current = null;
       return;
     }
+    if (musicTaskId) return; // Don't show timer during music polling — StatusBar shows music status
     if (!agentTimerRef.current) {
       agentTimerRef.current = { startTime: Date.now(), phase: t('editor.agentThinking') };
     }
@@ -2505,7 +2589,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setAgentStatus(`${ref.phase} (${elapsed}s)`);
     }, 1000);
     return () => clearInterval(timer);
-  }, [isAgentActive, t]);
+  }, [isAgentActive, musicTaskId, t]);
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message

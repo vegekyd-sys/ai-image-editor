@@ -1277,7 +1277,7 @@ function ProjectCard({
 
       {/* Full-bleed photo — use Supabase transform for smaller thumbnails */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      {lastSnap.image_url ? <img
         src={getThumbnailUrl(lastSnap.image_url, 400, 50, 400)}
         alt={project.title}
         fetchPriority={index < 4 ? 'high' : undefined}
@@ -1292,7 +1292,7 @@ function ProjectCard({
           WebkitUserSelect: 'none',
         }}
         onLoad={() => setLoaded(true)}
-      />
+      /> : null}
 
       {/* Bottom gradient overlay */}
       <div style={{

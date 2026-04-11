@@ -3,7 +3,7 @@ name: video-design
 description: >
   Design mode video creation — cinematic animated compositions using Remotion.
   Makes photos come alive with motion, emotion, and storytelling.
-allowed-tools: run_code analyze_image
+allowed-tools: run_code analyze_image generate_music
 metadata:
   makaron:
     icon: "🎬"
@@ -16,7 +16,23 @@ metadata:
 
 目标：做出让人 WOW 的视频。
 
-## 四问自检（每个视频 design 必须全部通过）
+## 三阶段工作流
+
+### 阶段 1：规划脚本
+分析照片内容、情绪、节奏，写出分镜脚本。每个 shot 标注时长和情绪。
+用四问自检验证脚本，通过后给用户确认。用户可以修改。
+
+### 阶段 2：配乐
+用户确认脚本后，根据脚本节奏写 music prompt：
+- 匹配每个 shot 的时间段和情绪转换
+- 例：`"15s cinematic, atmospheric strings 0-3s, rising tension 3-7s, percussive hit at 7s, epic climax 7-12s, gentle fadeout 12-15s"`
+调 `generate_music` → 系统后台轮询，不等待，直接进入阶段 3。
+
+### 阶段 3：编程渲染
+根据确认的脚本用 `run_code` 创建 Remotion 动画。
+音乐就绪后系统自动通知你注入 `<Audio>`。
+
+## 四问自检（阶段 1 脚本必须全部通过）
 
 **Q1：剪辑方式是素材决定的吗？**
 看这组素材的内容、情绪、节奏——它们自然地暗示了什么样的剪辑方式？
