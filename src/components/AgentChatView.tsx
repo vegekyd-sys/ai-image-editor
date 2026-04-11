@@ -83,6 +83,128 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
 
 /**
  * Fix CommonMark strict closing-delimiter rules that break **text:**
+/** Playable music track card for CUI */
+function MusicCard({ track, onSelect }: {
+  track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number };
+  onSelect: () => void;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const toggle = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) { audio.pause(); setPlaying(false); }
+    else { audio.play(); setPlaying(true); }
+  };
+
+  // Progress + time update
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onTime = () => {
+      const p = audio.duration ? audio.currentTime / audio.duration : 0;
+      setProgress(p);
+      setCurrentTime(audio.currentTime);
+    };
+    audio.addEventListener('timeupdate', onTime);
+    return () => audio.removeEventListener('timeupdate', onTime);
+  }, []);
+
+  const handleDownload = () => {
+    const a = document.createElement('a');
+    a.href = track.audioUrl;
+    a.download = `${track.title || 'music'}.mp3`;
+    a.click();
+  };
+
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+  return (
+    <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <audio ref={audioRef} src={track.audioUrl} preload="metadata"
+        onEnded={() => { setPlaying(false); setProgress(0); }} />
+
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        {/* Play/pause */}
+        <button onClick={toggle}
+          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: playing ? 'rgba(192,38,211,0.3)' : 'rgba(255,255,255,0.1)' }}>
+          {playing ? (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><rect x="1.5" y="1" width="3" height="10" rx="0.8" /><rect x="7.5" y="1" width="3" height="10" rx="0.8" /></svg>
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><path d="M2.5 1v10l8.5-5z" /></svg>
+          )}
+        </button>
+
+        {/* Title + tags */}
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>
+            {track.title || `Track ${track.trackIndex + 1}`}{' '}
+            <span style={{ color: 'rgba(255,255,255,0.3)' }}>#{track.trackIndex + 1}</span>
+          </div>
+          <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            {playing || currentTime > 0 ? `${formatTime(currentTime)} / ${formatTime(track.duration)}` : formatTime(track.duration)} · {track.tags || 'instrumental'}
+          </div>
+        </div>
+
+        {/* Download */}
+        <button onClick={handleDownload} className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.06)' }} title="Download">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
+
+        {/* Insert into design */}
+        <button onClick={onSelect} className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(192,38,211,0.2)', border: '1px solid rgba(192,38,211,0.3)' }} title="Add to design">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgb(192,38,211)" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Progress bar — clickable/draggable to seek */}
+      <div
+        className="h-[12px] w-full flex items-end cursor-pointer"
+        onClick={(e) => {
+          const audio = audioRef.current;
+          if (!audio || !audio.duration) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          audio.currentTime = ratio * audio.duration;
+          setProgress(ratio);
+          setCurrentTime(audio.currentTime);
+        }}
+        onPointerDown={(e) => {
+          const audio = audioRef.current;
+          if (!audio || !audio.duration) return;
+          const bar = e.currentTarget;
+          const seek = (clientX: number) => {
+            const rect = bar.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            audio.currentTime = ratio * audio.duration;
+            setProgress(ratio);
+            setCurrentTime(audio.currentTime);
+          };
+          const onMove = (ev: PointerEvent) => seek(ev.clientX);
+          const onUp = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); };
+          document.addEventListener('pointermove', onMove);
+          document.addEventListener('pointerup', onUp);
+        }}
+      >
+        <div className="h-[3px] w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.6)', transition: playing ? 'none' : 'width 0.15s' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * When closing ** is preceded by punctuation and followed by non-whitespace,
  * it's not recognized as right-flanking. Move the trailing punctuation outside.
  * e.g. "**下一步建议:**在" → "**下一步建议**:在"
@@ -233,6 +355,8 @@ interface AgentChatViewProps {
   onVideoTap?: (rect?: DOMRect, posterSrc?: string, animId?: string) => void;
   /** Design poster captured from visible Player — update snapshot.image */
   onDesignPoster?: (messageId: string, posterDataUrl: string) => void;
+  /** User selected a music track from MusicCard */
+  onMusicSelect?: (track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }) => void;
 }
 
 export default function AgentChatView({
@@ -258,6 +382,7 @@ export default function AgentChatView({
   onNavigateToSnapshot,
   onVideoTap,
   onDesignPoster,
+  onMusicSelect,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -845,7 +970,7 @@ export default function AgentChatView({
                       <div className="markdown-body">
                         <MarkdownBlock
                           key={msg.id}
-                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, ''))}
+                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
                           isPanel={isPanel}
                           snapshots={snapshots}
                           onNavigateToSnapshot={onNavigateToSnapshot}
@@ -922,6 +1047,21 @@ export default function AgentChatView({
                     {msg.editPrompt && (
                       <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
+
+                    {/* Inline music — parsed from content "music:INDEX|TITLE|DURATION|TAGS|URL" */}
+                    {(() => {
+                      const musicMatches = msg.content.match(/music:\d+\|[^\n]+/g);
+                      if (!musicMatches) return null;
+                      return musicMatches.map((line) => {
+                        const parts = line.replace('music:', '').split('|');
+                        if (parts.length < 5) return null;
+                        const track = { trackIndex: parseInt(parts[0]), title: parts[1], duration: parseFloat(parts[2]), tags: parts[3], audioUrl: parts.slice(4).join('|') };
+                        return (
+                          <MusicCard key={track.trackIndex} track={track}
+                            onSelect={() => onMusicSelect?.(track)} />
+                        );
+                      });
+                    })()}
                   </div>
 
                 </div>

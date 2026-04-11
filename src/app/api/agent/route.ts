@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
 
     const { prompt, image, originalImage, referenceImages, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
-            previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw } = await req.json();
+            previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
+            musicReady, musicAudioUrl, currentDesign } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
@@ -133,6 +134,20 @@ export async function POST(req: NextRequest) {
             return;
           }
 
+          // musicReady: background music generation completed — agent injects <Audio> into design
+          if (musicReady && musicAudioUrl) {
+            const musicPrompt = withLocale(
+              `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest design code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code to render the updated version with music.`,
+              locale,
+            );
+            for await (const event of runMakaronAgent(musicPrompt, image || '', projectId, {
+              locale, snapshotImages, currentSnapshotIndex, supabase, userId: user.id,
+            })) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            }
+            return;
+          }
+
           // tipReaction: react to a committed tip in CUI (1-2 sentences)
           if (tipReaction && committedTip) {
             if (process.env.MOCK_AI === 'true') {
@@ -161,7 +176,7 @@ export async function POST(req: NextRequest) {
             try { controller.enqueue(encoder.encode(`: heartbeat\n\n`)); } catch { /* disconnected */ }
           }, 10_000);
           try {
-            for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id })) {
+            for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: currentDesign || undefined })) {
               if (writer) {
                 await writer.processAndEnqueue(event);
               } else {

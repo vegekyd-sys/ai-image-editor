@@ -11,7 +11,6 @@ import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { createMusic } from './skills/create-music';
-import { getMusicStatus } from './skills/get-music-status';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -30,7 +29,7 @@ const bedrock = createAmazonBedrock({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
 });
-const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1');
+const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-sonnet-4-6');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,6 +78,7 @@ export type AgentStreamEvent =
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // @deprecated — backward compat alias for 'render'
+  | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -170,7 +170,23 @@ A good skill is **reusable across any project** — it describes a style, techni
 
 ${manifest}${userSkillLines}
 `;
-  return base + workspaceSection;
+
+  // Memory injection — read user-level and project-level MEMORY.md
+  let memorySection = '';
+  if (supabase && userId) {
+    try {
+      const userMem = await workspace.readFile('memory/MEMORY.md', supabase, userId);
+      if (userMem?.content) memorySection += '\n\n## User Memory\n' + userMem.content;
+    } catch { /* no user memory yet */ }
+    if (projectId) {
+      try {
+        const projMem = await workspace.readFile(`projects/${projectId}/memory/MEMORY.md`, supabase, userId);
+        if (projMem?.content) memorySection += '\n\n## Project Memory\n' + projMem.content;
+      } catch { /* no project memory yet */ }
+    }
+  }
+
+  return base + workspaceSection + memorySection;
 }
 
 // ---------------------------------------------------------------------------
@@ -738,9 +754,8 @@ Your code must return a value:
     }),
 
     generate_music: tool({
-      description: `Generate background music using Suno AI. Returns a taskId immediately.
-Music takes 2-3 minutes — call get_music_status to poll.
-Prompt tips: genre, mood, instruments, and beat structure matching your video timing.
+      description: `Generate background music for the current design/video. The system polls in the background and shows music cards in CUI when ready — you do NOT need to poll or wait.
+Prompt tips: describe genre, mood, instruments, and beat timing to match the video.
 Example: "15-second cinematic, slow strings 0-3s, percussive hit at 3s, rising energy 3-10s, piano fadeout"`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, instruments, beat timing'),
@@ -748,19 +763,9 @@ Example: "15-second cinematic, slow strings 0-3s, percussive hit at 3s, rising e
         style: z.string().optional().describe('Genre/mood tags for custom mode'),
       }),
       execute: async ({ prompt, instrumental, style }) => {
-        return await createMusic({ prompt, instrumental, style });
-      },
-    }),
-
-    get_music_status: tool({
-      description: `Poll music generation status. Returns audioUrl when complete.
-Status: pending → processing → completed (with audioUrl) or failed.
-Poll every 15-20 seconds. When completed, use the audioUrl in <Audio> component.`,
-      inputSchema: z.object({
-        taskId: z.string().describe('Task ID from generate_music'),
-      }),
-      execute: async ({ taskId }) => {
-        return await getMusicStatus({ taskId });
+        const result = await createMusic({ prompt, instrumental, style });
+        if (result.taskId) (ctx as any).musicTaskId = result.taskId;
+        return result;
       },
     }),
 
@@ -790,7 +795,7 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } } },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -807,6 +812,11 @@ export async function* runMakaronAgent(
     supabase: options?.supabase,
     userId: options?.userId,
   };
+
+  // Pre-load design for patch support across sessions
+  if (options?.currentDesign?.code) {
+    (ctx as any).__lastDesignPayload = options.currentDesign;
+  }
 
   const allTools = createTools(ctx);
   let imagesSent = 0;
@@ -1070,6 +1080,10 @@ export async function* runMakaronAgent(
           yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '' };
           ctx.animationTaskId = undefined;
           ctx.animationPrompt = undefined;
+        }
+        if ((ctx as any).musicTaskId) {
+          yield { type: 'music_task', taskId: (ctx as any).musicTaskId };
+          (ctx as any).musicTaskId = undefined;
         }
         continue;
       }

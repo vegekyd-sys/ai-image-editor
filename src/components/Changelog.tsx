@@ -8,6 +8,25 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-11',
+    en: { title: 'Background Agent & Design Reliability', items: [
+      'Background agent: server-side persistence + automatic reconnection on page reload',
+      'Agent switched to Sonnet 4.6 for 3-4x faster code generation',
+      'Design harness: new Function() dry-run catches compile errors before they reach the browser',
+      'Design harness: enhanced URL validation covers src={...} JSX expressions',
+      'Agent memory: user and project MEMORY.md injected into system prompt',
+      'Video Design skill: 3-stage workflow (script → music → render)',
+    ]},
+    zh: { title: '后台 Agent & Design 可靠性', items: [
+      '后台 Agent：服务端持久化 + 页面刷新自动重连',
+      'Agent 切换到 Sonnet 4.6，代码生成速度提升 3-4 倍',
+      'Design 编译保护：new Function() 预检，编译错误在服务端拦截、自动重试',
+      'Design URL 校验增强：覆盖 src={...} JSX 表达式，空 URL 不再漏到前端',
+      'Agent 记忆：用户和项目 MEMORY.md 注入系统 prompt',
+      '视频设计 Skill：三阶段工作流（脚本 → 配乐 → 渲染）',
+    ]},
+  },
+  {
     date: '2026-04-09',
     en: { title: 'Remotion Rendering Engine & Design Persistence', items: [
       'Design mode renders via Remotion: still images use renderStillOnWeb (JPEG), animations use Remotion Player with controls',

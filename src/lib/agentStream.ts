@@ -9,6 +9,7 @@ export interface AgentStreamCallbacks {
   onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onAnimationTask?: (taskId: string, prompt: string) => void;
+  onMusicTask?: (taskId: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onNsfwDetected?: () => void;
   onRunId?: (runId: string) => void;
@@ -34,6 +35,7 @@ export async function streamAgent(
     tipsTeaser?: boolean; tipsPayload?: object[];
     nameProject?: boolean; description?: string;
     previewsReady?: boolean; readyTips?: object[];
+    musicReady?: boolean; musicAudioUrl?: string;
     preferredModel?: string;
     snapshotImages?: string[];
     currentSnapshotIndex?: number;
@@ -100,6 +102,9 @@ export async function streamAgent(
             break;
           case 'animation_task':
             callbacks.onAnimationTask?.(event.taskId, event.prompt || '');
+            break;
+          case 'music_task':
+            callbacks.onMusicTask?.((event as { taskId: string }).taskId);
             break;
           case 'image_analyzed':
             callbacks.onImageAnalyzed?.(event.imageIndex);
