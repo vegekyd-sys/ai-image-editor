@@ -90,6 +90,8 @@ function MusicCard({ track, onSelect }: {
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const progressRef = useRef<number>(0);
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -98,38 +100,79 @@ function MusicCard({ track, onSelect }: {
     else { audio.play(); setPlaying(true); }
   };
 
+  // Progress bar update
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onTime = () => {
+      const p = audio.duration ? audio.currentTime / audio.duration : 0;
+      if (Math.abs(p - progressRef.current) > 0.005) {
+        progressRef.current = p;
+        setProgress(p);
+      }
+    };
+    audio.addEventListener('timeupdate', onTime);
+    return () => audio.removeEventListener('timeupdate', onTime);
+  }, []);
+
+  const handleDownload = () => {
+    const a = document.createElement('a');
+    a.href = track.audioUrl;
+    a.download = `${track.title || 'music'}.mp3`;
+    a.click();
+  };
+
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
   return (
-    <div
-      className="mt-2 flex items-center gap-3 px-3 py-2.5 rounded-xl"
-      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
-    >
-      <audio ref={audioRef} src={track.audioUrl} preload="none"
-        onEnded={() => setPlaying(false)} />
-      {/* Play/pause button */}
-      <button onClick={toggle}
-        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-        style={{ background: playing ? 'rgba(192,38,211,0.3)' : 'rgba(255,255,255,0.1)' }}>
-        {playing ? (
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="white"><rect x="2" y="1" width="3.5" height="12" rx="1" /><rect x="8.5" y="1" width="3.5" height="12" rx="1" /></svg>
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="white"><path d="M3 1.5v11l9.5-5.5z" /></svg>
-        )}
-      </button>
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>
-          {track.title || `Track ${track.trackIndex + 1}`}
+    <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <audio ref={audioRef} src={track.audioUrl} preload="metadata"
+        onEnded={() => { setPlaying(false); setProgress(0); }} />
+
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        {/* Play/pause */}
+        <button onClick={toggle}
+          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: playing ? 'rgba(192,38,211,0.3)' : 'rgba(255,255,255,0.1)' }}>
+          {playing ? (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><rect x="1.5" y="1" width="3" height="10" rx="0.8" /><rect x="7.5" y="1" width="3" height="10" rx="0.8" /></svg>
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><path d="M2.5 1v10l8.5-5z" /></svg>
+          )}
+        </button>
+
+        {/* Title + tags */}
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>
+            {track.title || `Track ${track.trackIndex + 1}`}{' '}
+            <span style={{ color: 'rgba(255,255,255,0.3)' }}>#{track.trackIndex + 1}</span>
+          </div>
+          <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            {formatTime(track.duration)} · {track.tags || 'instrumental'}
+          </div>
         </div>
-        <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          {Math.round(track.duration)}s · {track.tags || 'instrumental'}
-        </div>
+
+        {/* Download */}
+        <button onClick={handleDownload} className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.06)' }} title="Download">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
+
+        {/* Insert into design */}
+        <button onClick={onSelect} className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(192,38,211,0.2)', border: '1px solid rgba(192,38,211,0.3)' }} title="Add to design">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgb(192,38,211)" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
       </div>
-      {/* Select button */}
-      <button onClick={onSelect}
-        className="px-3 py-1.5 rounded-lg text-[12px] font-medium flex-shrink-0"
-        style={{ background: 'rgba(192,38,211,0.2)', color: 'rgb(192,38,211)', border: '1px solid rgba(192,38,211,0.3)' }}>
-        Insert
-      </button>
+
+      {/* Progress bar */}
+      <div className="h-[3px] w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+        <div className="h-full transition-[width] duration-200" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.6)' }} />
+      </div>
     </div>
   );
 }

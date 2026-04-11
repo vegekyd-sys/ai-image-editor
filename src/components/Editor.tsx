@@ -2127,20 +2127,16 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         if (stopped) return;
         if (data.status === 'completed' && data.tracks?.length) {
           setMusicTracks(data.tracks);
-          // Add music tracks as a CUI message
-          const tracksSummary = data.tracks.map((t: { title: string; duration: number }) =>
-            `${t.title} (${Math.round(t.duration)}s)`).join(', ');
+          // Add music tracks as a CUI message (no text, just cards)
           setMessages(prev => {
-            // Don't duplicate if already added
             if (prev.some(m => m.id === `music-${musicTaskId}`)) {
-              // Update with new tracks (second track may have arrived)
               return prev.map(m => m.id === `music-${musicTaskId}`
                 ? { ...m, musicTracks: data.tracks } : m);
             }
             return [...prev, {
               id: `music-${musicTaskId}`,
               role: 'assistant' as const,
-              content: `🎵 ${tracksSummary}`,
+              content: '',
               timestamp: Date.now(),
               musicTracks: data.tracks,
             }];
@@ -2424,7 +2420,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
-  // Music select: user chose a track → send agent request to inject <Audio>
+  // Music select: user chose a track → show short user msg + send agent inject request
   const handleMusicSelect = useCallback((track: { audioUrl: string; duration: number; title: string; tags: string }) => {
     if (!projectId) return;
     console.log(`🎵 [music] user selected: ${track.title} (${track.audioUrl})`);
@@ -2434,10 +2430,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
     }).catch(() => {});
-    // Send as a user action → triggers agent to inject Audio into design
-    const prompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\n\nAdd <Audio src="${track.audioUrl}" volume={0.3} /> to the current design via run_code. Read the latest design code from workspace first, then add the Audio component.`;
-    handleAgentRequest(prompt);
-  }, [projectId, handleAgentRequest]);
+    // Show short user message, but send detailed prompt to agent
+    const userDisplay = `🎵 ${track.title}`;
+    addMessage('user', userDisplay);
+    // Agent gets the full instruction (silent — no duplicate user msg)
+    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\n\nUse run_code with type "patch" to add <Audio src="${track.audioUrl}" volume={0.3} /> inside the root element of the current design. If no active design, read the latest code from workspace first.`;
+    handleAgentRequest(agentPrompt, undefined, undefined, { silent: true });
+  }, [projectId, handleAgentRequest, addMessage]);
 
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
