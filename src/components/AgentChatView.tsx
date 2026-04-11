@@ -190,34 +190,37 @@ function MusicCard({ track, onSelect }: {
         </button>
       </div>
 
-      {/* Progress bar — fused with bottom edge, thickens on touch/hover */}
-      <div className="relative w-full" style={{ height: seeking ? 14 : 6, transition: 'height 0.15s ease' }}>
-        {/* Visual bar at bottom */}
-        <div className="absolute bottom-0 left-0 right-0" style={{ height: seeking ? 6 : 2, transition: 'height 0.15s ease', background: 'rgba(255,255,255,0.06)' }}>
+      {/* Progress bar — fused with bottom edge, thickens on touch */}
+      {/* Visual: 2px bar. Touch area: 20px extending upward (invisible, overlaps button row bottom) */}
+      <div className="relative w-full" style={{ height: 2 }}>
+        {/* Visual bar */}
+        <div className="absolute bottom-0 left-0 right-0" style={{ height: seeking ? 5 : 2, transition: 'height 0.15s ease', background: 'rgba(255,255,255,0.06)' }}>
           <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.8)' }} />
         </div>
-        {/* Invisible native range — full area for easy grab */}
-        <input
-          type="range" min={0} max={1} step={0.001}
-          value={progress}
-          onChange={(e) => {
-            const ratio = parseFloat(e.target.value);
-            const audio = audioRef.current;
-            if (audio && audio.duration) {
-              audio.currentTime = ratio * audio.duration;
-              setCurrentTime(audio.currentTime);
-            }
-            setProgress(ratio);
-          }}
-          onPointerDown={() => setSeeking(true)}
-          onPointerUp={() => setSeeking(false)}
-          onTouchStart={() => setSeeking(true)}
-          onTouchEnd={() => setSeeking(false)}
-          onMouseEnter={() => setSeeking(true)}
-          onMouseLeave={(e) => { if (!e.buttons) setSeeking(false); }}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          style={{ touchAction: 'none' }}
-        />
+        {/* Expanded invisible touch target — 20px tall, extends upward */}
+        <div className="absolute left-0 right-0" style={{ bottom: 0, height: 20 }}>
+          <input
+            type="range" min={0} max={1} step={0.001}
+            value={progress}
+            onChange={(e) => {
+              const ratio = parseFloat(e.target.value);
+              const audio = audioRef.current;
+              if (audio && audio.duration) {
+                audio.currentTime = ratio * audio.duration;
+                setCurrentTime(audio.currentTime);
+              }
+              setProgress(ratio);
+            }}
+            onPointerDown={() => setSeeking(true)}
+            onPointerUp={() => setSeeking(false)}
+            onTouchStart={() => setSeeking(true)}
+            onTouchEnd={() => setSeeking(false)}
+            onMouseEnter={() => setSeeking(true)}
+            onMouseLeave={(e) => { if (!e.buttons) setSeeking(false); }}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            style={{ touchAction: 'none' }}
+          />
+        </div>
       </div>
     </div>
   );
