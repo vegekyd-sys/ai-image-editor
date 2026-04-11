@@ -47,13 +47,18 @@ function autoFixImgTags(code: string): string {
   return fixed;
 }
 
-/** Check that code compiles with Sucrase */
+/** Check that code compiles with Sucrase AND passes new Function() parsing */
 function checkCompile(code: string): string | null {
   try {
-    sucraseTransform(code.trim(), {
+    const { code: compiled } = sucraseTransform(code.trim(), {
       transforms: ['typescript', 'jsx'],
       jsxRuntime: 'classic',
     });
+
+    // Dry-run: verify compiled JS is valid in new Function() (matches browser eval path)
+    const fnName = code.match(/function\s+(\w+)/)?.[1] || 'Design';
+    new Function(compiled + '\nreturn ' + fnName + ';');
+
     return null;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -83,18 +88,26 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
 
 /** Check that image src values in code are valid HTTPS URLs (not empty, undefined, or localhost) */
 function checkImageUrls(code: string): string | null {
-  // Extract all src="..." values from JSX
-  const srcMatches = code.match(/src=["'`]([^"'`]*)["'`]/g) || [];
-  // Also match template literal: src="${...}" after interpolation → src="https://..."
-  const srcValues = srcMatches.map(m => {
+  const srcValues: string[] = [];
+
+  // Match static: src="..." / src='...' / src=`...`
+  const staticMatches = code.match(/src=["'`]([^"'`]*)["'`]/g) || [];
+  for (const m of staticMatches) {
     const match = m.match(/src=["'`]([^"'`]*)["'`]/);
-    return match?.[1] || '';
-  });
+    if (match) srcValues.push(match[1]);
+  }
+
+  // Match JSX expressions: src={'...'} / src={"..."} / src={`...`}
+  const exprMatches = code.match(/src=\{["'`]([^"'`]*)["'`]\}/g) || [];
+  for (const m of exprMatches) {
+    const match = m.match(/src=\{["'`]([^"'`]*)["'`]\}/);
+    if (match) srcValues.push(match[1]);
+  }
 
   for (const src of srcValues) {
     if (!src || src === 'undefined' || src === 'null' || src === '') {
       console.warn(`⚠️ [design-harness] empty/undefined image src found`);
-      return '⚠️ Design rejected: An <img> tag has an empty or undefined src. Make sure all ctx.snapshotImages[N] have valid URLs. Some snapshots may not have uploaded yet — check ctx.snapshotImages values before using them. Regenerate.';
+      return '⚠️ Design rejected: An <Img> tag has an empty or undefined src. Make sure all ctx.snapshotImages[N] have valid URLs. Use direct string interpolation: src="${ctx.snapshotImages[0]}" — never nest template literals. Regenerate.';
     }
     // Must be HTTPS URL (not http localhost, not relative path, not data: unless small)
     if (!src.startsWith('https://') && !src.startsWith('data:image/')) {
