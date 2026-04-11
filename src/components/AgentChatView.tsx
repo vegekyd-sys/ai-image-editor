@@ -141,7 +141,7 @@ function MusicCard({ track, onSelect }: {
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
   return (
-    <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+    <div className="relative mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
       <audio ref={audioRef} src={track.audioUrl} preload="metadata"
         onEnded={() => { setPlaying(false); setProgress(0); }} />
 
@@ -185,9 +185,9 @@ function MusicCard({ track, onSelect }: {
         </button>
       </div>
 
-      {/* Progress bar — clickable/draggable to seek */}
+      {/* Progress bar — flush with bottom edge, clickable/draggable */}
       <div
-        className="relative h-[16px] w-full flex items-center cursor-pointer"
+        className="absolute bottom-0 left-0 right-0 h-[14px] flex items-end cursor-pointer z-10"
         style={{ touchAction: 'none' }}
         onPointerDown={(e) => {
           e.preventDefault();
@@ -209,10 +209,9 @@ function MusicCard({ track, onSelect }: {
           bar.addEventListener('pointerup', onUp);
         }}
       >
-        <div className="h-[3px] w-full rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
-          <div className="h-full rounded-full relative" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.6)', transition: playing ? 'none' : 'width 0.15s' }}>
-            {/* Seek handle */}
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[10px] h-[10px] rounded-full" style={{ background: 'rgb(192,38,211)' }} />
+        <div className="h-[2px] w-full" style={{ background: 'transparent' }}>
+          <div className="h-full relative" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.7)', transition: playing ? 'none' : 'width 0.15s' }}>
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[8px] h-[8px] rounded-full" style={{ background: 'rgb(192,38,211)' }} />
           </div>
         </div>
       </div>
