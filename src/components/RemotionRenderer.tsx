@@ -85,10 +85,13 @@ interface RemotionRendererProps {
   design: DesignPayload;
   onError?: (error: string) => void;
   mode?: 'fill' | 'inline';
+  onContainerRef?: (el: HTMLDivElement | null) => void;
+  onPlayerRef?: (ref: PlayerRef | null) => void;
 }
 
-export default function RemotionRenderer({ design, onError, mode = 'inline' }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onError, mode = 'inline', onContainerRef, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const initRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
@@ -109,12 +112,23 @@ export default function RemotionRenderer({ design, onError, mode = 'inline' }: R
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
+  // Expose container and player refs to parent
+  useEffect(() => {
+    onContainerRef?.(wrapperRef.current);
+    return () => onContainerRef?.(null);
+  }, [onContainerRef, Component]);
+
+  useEffect(() => {
+    onPlayerRef?.(playerRef.current);
+    return () => onPlayerRef?.(null);
+  }, [onPlayerRef, Component]);
+
   if (!Component) return null;
 
   const isFill = mode === 'fill';
 
   return (
-    <div style={isFill ? { width: '100%', height: '100%' } : {
+    <div ref={wrapperRef} style={isFill ? { width: '100%', height: '100%' } : {
       borderRadius: 12, overflow: 'hidden', margin: '8px 0',
     }}>
       <Player

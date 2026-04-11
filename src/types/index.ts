@@ -1,9 +1,21 @@
+export interface EditableField {
+  id: string;           // data-editable value, e.g. "title"
+  type: 'text';         // only text for now
+  label: string;        // UI label, e.g. "标题"
+  propKey: string;      // prop key for text content, e.g. "title"
+  positionProps?: {     // position props (present = draggable)
+    x: string;          // e.g. "titleX"
+    y: string;          // e.g. "titleY"
+  };
+}
+
 export interface DesignPayload {
   code: string;
   width: number;
   height: number;
   props?: Record<string, unknown>;
   animation?: { fps: number; durationInSeconds: number; format?: string };
+  editables?: EditableField[];
 }
 
 export interface Message {

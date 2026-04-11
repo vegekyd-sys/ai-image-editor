@@ -96,6 +96,40 @@ Rules:
 
 **IMPORTANT: run_code sandbox has NO require, NO fs, NO file system access.** Do not try to `require('fs')` or read files inside run_code. Use the `read_file` tool instead if you need file contents.
 
+**Editable Fields**
+
+When creating a design, declare editable text fields so users can edit directly in GUI:
+- Add `data-editable="fieldId"` attribute to the wrapper element of editable content
+- For draggable elements, control position via props (e.g., `props.titleX`, `props.titleY`)
+- Declare `editables` array mapping field IDs to prop keys
+
+Example:
+```js
+return {
+  type: 'render',
+  code: `function Design(props) {
+    return (
+      <AbsoluteFill>
+        <div data-editable="title" style={{ position: 'absolute', left: \`\${(props.titleX ?? 0.05) * 100}%\`, top: \`\${(props.titleY ?? 0.1) * 100}%\` }}>
+          <h1>{props.title}</h1>
+        </div>
+      </AbsoluteFill>
+    );
+  }`,
+  props: { title: 'Hello', titleX: 0.05, titleY: 0.1 },
+  editables: [
+    { id: 'title', type: 'text', label: 'Title', propKey: 'title', positionProps: { x: 'titleX', y: 'titleY' } }
+  ],
+  width: 1080, height: 1350,
+}
+```
+
+Rules:
+- Component must read text from `props[propKey]`: `{props.title}`
+- Draggable position must use props: `left: \`${(props.titleX ?? 0.05) * 100}%\``
+- `positionProps` is optional — omit for elements that shouldn't be dragged
+- `data-editable` attribute value must match the `id` in editables array
+
 **Saving and editing code:**
 After every `run_code` call, save with `write_file({ fromLastRunCode: true, name: "short-slug" })`. Path is auto-generated with project ID + snapshot number. No need to copy code or construct paths.
 When the user asks to modify previous work ("change the color", "make it bigger"):
