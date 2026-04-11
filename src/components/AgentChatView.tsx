@@ -157,13 +157,29 @@ function MusicCard({ track, onSelect }: {
           )}
         </button>
 
-        {/* Title + tags */}
+        {/* Title + progress + tags */}
         <div className="flex-1 min-w-0">
           <div className="text-[12px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>
             {track.title || `Track ${track.trackIndex + 1}`}{' '}
             <span style={{ color: 'rgba(255,255,255,0.3)' }}>#{track.trackIndex + 1}</span>
           </div>
-          <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          {/* Native range slider — smooth on all platforms */}
+          <input
+            type="range" min={0} max={1} step={0.001}
+            value={progress}
+            onChange={(e) => {
+              const ratio = parseFloat(e.target.value);
+              const audio = audioRef.current;
+              if (audio && audio.duration) {
+                audio.currentTime = ratio * audio.duration;
+                setCurrentTime(audio.currentTime);
+              }
+              setProgress(ratio);
+            }}
+            className="music-seek w-full h-[14px] my-0.5"
+            style={{ touchAction: 'none' }}
+          />
+          <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)', marginTop: -2 }}>
             {playing || currentTime > 0 ? `${formatTime(currentTime)} / ${formatTime(track.duration)}` : formatTime(track.duration)} · {track.tags || 'instrumental'}
           </div>
         </div>
@@ -189,53 +205,6 @@ function MusicCard({ track, onSelect }: {
         </button>
       </div>
 
-      {/* Progress bar — 20px touch target, 2px visual bar at bottom */}
-      <div
-        className="relative w-full cursor-pointer"
-        style={{ height: 20, touchAction: 'none' }}
-        onTouchStart={(e) => {
-          const audio = audioRef.current;
-          if (!audio || !audio.duration) return;
-          const bar = e.currentTarget;
-          const seek = (clientX: number) => {
-            const rect = bar.getBoundingClientRect();
-            const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-            audio.currentTime = ratio * audio.duration;
-            setProgress(ratio);
-            setCurrentTime(audio.currentTime);
-          };
-          seek(e.touches[0].clientX);
-          const onMove = (ev: TouchEvent) => { ev.preventDefault(); seek(ev.touches[0].clientX); };
-          const onEnd = () => { bar.removeEventListener('touchmove', onMove); bar.removeEventListener('touchend', onEnd); };
-          bar.addEventListener('touchmove', onMove, { passive: false });
-          bar.addEventListener('touchend', onEnd);
-        }}
-        onPointerDown={(e) => {
-          if (e.pointerType === 'touch') return;
-          e.preventDefault();
-          const audio = audioRef.current;
-          if (!audio || !audio.duration) return;
-          const bar = e.currentTarget;
-          bar.setPointerCapture(e.pointerId);
-          const seek = (clientX: number) => {
-            const rect = bar.getBoundingClientRect();
-            const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-            audio.currentTime = ratio * audio.duration;
-            setProgress(ratio);
-            setCurrentTime(audio.currentTime);
-          };
-          seek(e.clientX);
-          const onMove = (ev: PointerEvent) => seek(ev.clientX);
-          const onUp = () => { bar.removeEventListener('pointermove', onMove); bar.removeEventListener('pointerup', onUp); };
-          bar.addEventListener('pointermove', onMove);
-          bar.addEventListener('pointerup', onUp);
-        }}
-      >
-        {/* Visual bar pinned to bottom of touch area */}
-        <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{ background: 'rgba(255,255,255,0.08)' }}>
-          <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.8)', transition: playing ? 'none' : 'width 0.15s' }} />
-        </div>
-      </div>
     </div>
   );
 }
