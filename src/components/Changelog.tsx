@@ -9,14 +9,22 @@ interface ChangelogEntry {
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-04-11',
-    en: { title: 'Music, Background Agent & Design', items: [
+    en: { title: 'Music, Design Intelligence & Reliability', items: [
       'Music: Suno AI background music — MusicCard with playback, seek, download, auto-inject into design',
+      'Music: polling survives page refresh, status bar shows progress',
+      'Design code injected into Agent context — direct patch editing, no read_file needed',
+      'Design video: auto-generated descriptions, Agent reads code instead of analyzing poster frames',
+      'Design inline: fixed disappearing after refresh (DualWriter render/design type sync)',
       'Background agent: server-side persistence + reconnect on page reload',
       'Agent switched to Sonnet 4.6 (3-4x faster code generation)',
       'Design harness: compile pre-check + URL validation prevents broken renders',
     ]},
-    zh: { title: '音乐配乐、后台 Agent & Design', items: [
+    zh: { title: '音乐、Design 智能化 & 可靠性', items: [
       '音乐：Suno AI 配乐 — MusicCard 支持播放/拖拽进度/下载，选择后自动注入 Design',
+      '音乐：刷新后继续 polling，状态栏显示生成进度',
+      'Design 代码注入 Agent 上下文 — 直接 patch 修改，无需 read_file',
+      'Design 视频：自动生成描述，Agent 看代码而非分析海报帧',
+      'Design inline：修复刷新后消失（DualWriter render/design 类型同步）',
       '后台 Agent：服务端持久化 + 刷新自动重连',
       'Agent 切换到 Sonnet 4.6（代码生成快 3-4 倍）',
       'Design 编译保护：预检 + URL 校验，防止渲染失败',
