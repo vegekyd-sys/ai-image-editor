@@ -58,6 +58,8 @@ interface ImageCanvasProps {
   onSelectEditable?: (id: string | null) => void;
   /** Callback when a design prop is updated via drag or other canvas interaction */
   onUpdateProp?: (key: string, value: unknown) => void;
+  /** Batch update multiple props in one render (for drag x+y) */
+  onUpdateProps?: (updates: Record<string, unknown>) => void;
 }
 
 export default function ImageCanvas({
@@ -76,6 +78,7 @@ export default function ImageCanvas({
   selectedEditableId,
   onSelectEditable,
   onUpdateProp,
+  onUpdateProps,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -859,6 +862,7 @@ export default function ImageCanvas({
                 selectedFieldId={selectedEditableId ?? null}
                 onSelectField={onSelectEditable}
                 onUpdateProp={onUpdateProp}
+                onUpdateProps={onUpdateProps}
                 playerRef={designPlayerRef}
               />
             )}

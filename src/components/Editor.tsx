@@ -2491,6 +2491,17 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }));
   }, [viewIndex, draftParentIndex]);
 
+  // Batch update multiple design props in one render (for drag x+y)
+  const handleDesignPropsUpdate = useCallback((updates: Record<string, unknown>) => {
+    setSnapshots(prev => prev.map((s, i) => {
+      const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
+      if (i === snapIdx && s.design) {
+        return { ...s, design: { ...s.design, props: { ...s.design.props, ...updates } } };
+      }
+      return s;
+    }));
+  }, [viewIndex, draftParentIndex]);
+
   // Auto-capture poster for design snapshots loaded from Supabase without a poster image
   const posterCapturedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -2757,6 +2768,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 selectedEditableId={selectedEditableFieldId}
                 onSelectEditable={setSelectedEditableFieldId}
                 onUpdateProp={handleDesignPropUpdate}
+                onUpdateProps={handleDesignPropsUpdate}
               />
             )}
 

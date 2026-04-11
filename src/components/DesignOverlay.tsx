@@ -10,6 +10,7 @@ interface DesignOverlayProps {
   selectedFieldId: string | null;
   onSelectField: (id: string | null) => void;
   onUpdateProp: (key: string, value: unknown) => void;
+  onUpdateProps?: (updates: Record<string, unknown>) => void; // batch update x+y in one render
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   playerRef?: any;
 }
@@ -31,11 +32,13 @@ export default function DesignOverlay({
   selectedFieldId,
   onSelectField,
   onUpdateProp,
+  onUpdateProps,
   playerRef,
 }: DesignOverlayProps) {
   const [rects, setRects] = useState<MeasuredRect[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const rafRef = useRef<number>(0);
+  const dragThrottleRef = useRef<number>(0);
 
   // Drag state
   const dragRef = useRef<{
@@ -51,6 +54,7 @@ export default function DesignOverlay({
 
   // Measure positions of [data-editable] elements inside the container
   const measure = useCallback(() => {
+    if (dragRef.current?.active) return; // Skip measurement during active drag
     if (!containerEl) { setRects([]); return; }
     const containerRect = containerEl.getBoundingClientRect();
     const elements = containerEl.querySelectorAll('[data-editable]');
@@ -113,6 +117,21 @@ export default function DesignOverlay({
     return () => observer.disconnect();
   }, [containerEl, measure]);
 
+  // Helper: compute normalized position from drag offset
+  const computeNormPos = useCallback((d: NonNullable<typeof dragRef.current>, clientX: number, clientY: number) => {
+    if (!containerEl) return null;
+    const containerRect = containerEl.getBoundingClientRect();
+    const field = editables.find(f => f.id === d.fieldId);
+    if (!field?.positionProps) return null;
+    const newLeft = d.origLeft + (clientX - d.startX);
+    const newTop = d.origTop + (clientY - d.startY);
+    return {
+      field,
+      normX: Math.max(0, Math.min(1, newLeft / containerRect.width)),
+      normY: Math.max(0, Math.min(1, newTop / containerRect.height)),
+    };
+  }, [containerEl, editables]);
+
   // Drag handlers (document-level for smooth dragging)
   useEffect(() => {
     const onMove = (e: MouseEvent | TouchEvent) => {
@@ -128,6 +147,20 @@ export default function DesignOverlay({
         setIsDragging(true);
       }
       setDragDelta({ x: dx, y: dy });
+
+      // Real-time prop update (throttled to ~60fps via rAF)
+      cancelAnimationFrame(dragThrottleRef.current);
+      dragThrottleRef.current = requestAnimationFrame(() => {
+        const pos = computeNormPos(d, clientX, clientY);
+        if (pos) {
+          if (onUpdateProps) {
+            onUpdateProps({ [pos.field.positionProps!.x]: pos.normX, [pos.field.positionProps!.y]: pos.normY });
+          } else {
+            onUpdateProp(pos.field.positionProps!.x, pos.normX);
+            onUpdateProp(pos.field.positionProps!.y, pos.normY);
+          }
+        }
+      });
     };
     const onUp = (e: MouseEvent | TouchEvent) => {
       const d = dragRef.current;
@@ -135,20 +168,18 @@ export default function DesignOverlay({
         dragRef.current = null;
         return;
       }
+      cancelAnimationFrame(dragThrottleRef.current);
       const clientX = 'changedTouches' in e ? e.changedTouches[0].clientX : e.clientX;
       const clientY = 'changedTouches' in e ? e.changedTouches[0].clientY : e.clientY;
 
-      // Calculate new normalized position
-      if (containerEl) {
-        const containerRect = containerEl.getBoundingClientRect();
-        const field = editables.find(f => f.id === d.fieldId);
-        if (field?.positionProps) {
-          const newLeft = d.origLeft + (clientX - d.startX);
-          const newTop = d.origTop + (clientY - d.startY);
-          const normX = newLeft / containerRect.width;
-          const normY = newTop / containerRect.height;
-          onUpdateProp(field.positionProps.x, Math.max(0, Math.min(1, normX)));
-          onUpdateProp(field.positionProps.y, Math.max(0, Math.min(1, normY)));
+      // Final position update (batch x+y)
+      const pos = computeNormPos(d, clientX, clientY);
+      if (pos) {
+        if (onUpdateProps) {
+          onUpdateProps({ [pos.field.positionProps!.x]: pos.normX, [pos.field.positionProps!.y]: pos.normY });
+        } else {
+          onUpdateProp(pos.field.positionProps!.x, pos.normX);
+          onUpdateProp(pos.field.positionProps!.y, pos.normY);
         }
       }
 
@@ -165,8 +196,9 @@ export default function DesignOverlay({
       document.removeEventListener('mouseup', onUp);
       document.removeEventListener('touchmove', onMove);
       document.removeEventListener('touchend', onUp);
+      cancelAnimationFrame(dragThrottleRef.current);
     };
-  }, [containerEl, editables, onUpdateProp]);
+  }, [containerEl, editables, onUpdateProp, onUpdateProps, computeNormPos]);
 
   const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent, rect: MeasuredRect) => {
     const field = editables.find(f => f.id === rect.id);

@@ -178,6 +178,7 @@ export function useProject(projectId: string, userId: string) {
             height: snapshot.design.height,
             animation: snapshot.design.animation,
             props: snapshot.design.props,
+            ...(snapshot.design.editables?.length ? { editables: snapshot.design.editables } : {}),
           })
           const bucket = supabase.storage.from('images')
           const storagePath = `${userId}/workspace/${designPath}`
