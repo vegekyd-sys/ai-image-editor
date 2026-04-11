@@ -2129,24 +2129,17 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         if (stopped) return;
         if (data.status === 'completed' && data.tracks?.length) {
           setMusicTracks(data.tracks);
-          // Encode track URLs into message content (same pattern as video .mp4 inline)
-          // Format: each track as "music:TITLE|DURATION|TAGS|URL" on its own line
+          // Create a new music message at the bottom (same pattern as video inline)
           const musicLines = data.tracks.map((t: { title: string; duration: number; tags: string; audioUrl: string; trackIndex: number }) =>
             `music:${t.trackIndex}|${t.title}|${Math.round(t.duration)}|${t.tags}|${t.audioUrl}`
           ).join('\n');
-          const targetMsgId = musicMsgIdRef.current;
+          const msgId = `music-${musicTaskId}`;
           setMessages(prev => {
-            // Attach to the originating assistant message
-            if (targetMsgId && prev.some(m => m.id === targetMsgId)) {
-              return prev.map(m => {
-                if (m.id !== targetMsgId) return m;
-                // Don't duplicate — only add if not already there
-                if (m.content.includes('music:')) return { ...m, content: m.content.replace(/\nmusic:[\s\S]*$/, '\n' + musicLines) };
-                return { ...m, content: m.content + '\n' + musicLines };
-              });
+            // Update if already exists (second track arriving), otherwise create new
+            if (prev.some(m => m.id === msgId)) {
+              return prev.map(m => m.id === msgId ? { ...m, content: musicLines } : m);
             }
-            // Fallback: create a standalone music message
-            const musicMsg: Message = { id: `music-${musicTaskId}`, role: 'assistant', content: musicLines, timestamp: Date.now() };
+            const musicMsg: Message = { id: msgId, role: 'assistant', content: `🎵 ${t('status.musicReady')}\n${musicLines}`, timestamp: Date.now() };
             onSaveMessage?.(musicMsg);
             return [...prev, musicMsg];
           });

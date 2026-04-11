@@ -91,7 +91,7 @@ function MusicCard({ track, onSelect }: {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const progressRef = useRef<number>(0);
+  const [currentTime, setCurrentTime] = useState(0);
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -100,16 +100,14 @@ function MusicCard({ track, onSelect }: {
     else { audio.play(); setPlaying(true); }
   };
 
-  // Progress bar update
+  // Progress + time update
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     const onTime = () => {
       const p = audio.duration ? audio.currentTime / audio.duration : 0;
-      if (Math.abs(p - progressRef.current) > 0.005) {
-        progressRef.current = p;
-        setProgress(p);
-      }
+      setProgress(p);
+      setCurrentTime(audio.currentTime);
     };
     audio.addEventListener('timeupdate', onTime);
     return () => audio.removeEventListener('timeupdate', onTime);
@@ -148,7 +146,7 @@ function MusicCard({ track, onSelect }: {
             <span style={{ color: 'rgba(255,255,255,0.3)' }}>#{track.trackIndex + 1}</span>
           </div>
           <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>
-            {formatTime(track.duration)} · {track.tags || 'instrumental'}
+            {playing || currentTime > 0 ? `${formatTime(currentTime)} / ${formatTime(track.duration)}` : formatTime(track.duration)} · {track.tags || 'instrumental'}
           </div>
         </div>
 

@@ -140,29 +140,23 @@ export default function ProjectPage() {
         setInitialAnimations(animations)
       }
 
-      // Restore music tracks from project_music table (encode as content lines, same as video .mp4 pattern)
-      const supabase = createClient()
-      const { data: musicRows } = await supabase
-        .from('project_music')
-        .select('suno_task_id, track_index, audio_url, duration, title, tags, status')
-        .eq('project_id', projectId)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: true })
-      if (musicRows?.length && !cancelled) {
-        // Check if any existing message already has music: lines
-        const hasMusic = messages.some(m => m.content?.includes('music:'))
-        if (!hasMusic) {
+      // Restore music from project_music if no message already has music: lines
+      // (music messages are persisted via onSaveMessage, so usually they load from DB.
+      //  This is a fallback for older data before music persistence was added.)
+      const hasMusic = messages.some(m => m.content?.includes('music:'))
+      if (!hasMusic) {
+        const supabase = createClient()
+        const { data: musicRows } = await supabase
+          .from('project_music')
+          .select('suno_task_id, track_index, audio_url, duration, title, tags, status')
+          .eq('project_id', projectId)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: true })
+        if (musicRows?.length && !cancelled) {
           const musicLines = musicRows.map(r =>
             `music:${r.track_index}|${r.title || ''}|${Math.round(Number(r.duration))}|${r.tags || ''}|${r.audio_url}`
           ).join('\n')
-          // Attach to last assistant message, or create standalone
-          const lastAssistantIdx = [...messages].reverse().findIndex(m => m.role === 'assistant')
-          if (lastAssistantIdx >= 0) {
-            const idx = messages.length - 1 - lastAssistantIdx
-            messages[idx] = { ...messages[idx], content: messages[idx].content + '\n' + musicLines }
-          } else {
-            messages.push({ id: `music-restore`, role: 'assistant', content: musicLines, timestamp: Date.now() })
-          }
+          messages.push({ id: 'music-restore', role: 'assistant', content: `🎵\n${musicLines}`, timestamp: Date.now() })
         }
       }
 
