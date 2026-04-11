@@ -187,12 +187,16 @@ export function useProject(projectId: string, userId: string) {
         }
 
         // Upsert snapshot row (upsert handles React StrictMode double-invoke)
+        // Don't overwrite message_id if DualWriter already set it (DualWriter's ID matches messages table)
+        const { data: existing } = await supabase.from('snapshots').select('message_id').eq('id', snapshot.id).maybeSingle()
+        const messageId = existing?.message_id || snapshot.messageId
+
         const { error } = await supabase.from('snapshots').upsert({
           id: snapshot.id,
           project_id: projectId,
           image_url: imageUrl,
           tips: snapshot.tips,
-          message_id: snapshot.messageId,
+          message_id: messageId,
           sort_order: sortOrder,
           ...(snapshot.description ? { description: snapshot.description } : {}),
           ...(snapshot.type ? { type: snapshot.type } : {}),
