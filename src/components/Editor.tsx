@@ -9,6 +9,8 @@ import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
+import { useAgentRun } from '@/hooks/useAgentRun';
+import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
@@ -148,6 +150,7 @@ export default function Editor({
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -193,12 +196,9 @@ export default function Editor({
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
-  const [musicTaskId, setMusicTaskId] = useState<string | null>(null);
-  const musicTaskIdRef = useRef<string | null>(null);
-  const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
-  const musicNotifiedRef = useRef(false);
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
+  const pendingDesignSnapIdRef = useRef<string>('');
   // Streaming code display: tracks which message is receiving run_code chunks
   const codeStreamRef = useRef<{ msgId: string; code: string; shown: number } | null>(null);
   // Agent elapsed timer: tracks start time and current phase for status bar
@@ -211,6 +211,40 @@ export default function Editor({
   const lastEditPromptRef = useRef<string | null>(null); // captures editPrompt from generate_image tool calls
   const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
+  const agentRunIdRef = useRef<string | null>(null); // current run ID from server
+
+  // Sync state when initialSnapshots/Messages props change (Supabase fetch or cache)
+  useEffect(() => {
+    if (!initialSnapshots?.length) return;
+    setSnapshots(prev => {
+      const existingIds = new Set(prev.map(s => s.id));
+      const newItems = initialSnapshots.filter(s => !existingIds.has(s.id));
+      if (newItems.length === 0) return prev;
+      // During reconnect: append new items (don't replace Realtime-created ones)
+      // Normal: if Supabase has more, replace entirely for freshness
+      if (isAgentActive) return [...prev, ...newItems];
+      return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
+    });
+  }, [initialSnapshots, isAgentActive]);
+
+  useEffect(() => {
+    if (!initialMessages?.length) return;
+    setMessages(prev => {
+      const existingIds = new Set(prev.map(m => m.id));
+      const newItems = initialMessages.filter(m => !existingIds.has(m.id));
+      if (newItems.length === 0) return prev;
+      // During reconnect: prepend old history before reconnect messages
+      // Normal: replace with Supabase data
+      if (isAgentActive) return [...newItems, ...prev];
+      return initialMessages.length > prev.length ? initialMessages : [...newItems, ...prev];
+    });
+  }, [initialMessages, isAgentActive]);
+
+  // ── Background Agent reconnection ──────────────────────────────
+  const { activeRunId, isReconnecting, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
+    projectId: projectId ?? '',
+    enabled: !!projectId && (initialSnapshots?.length ?? 0) > 0,
+  });
 
   // ── Hero animation (GUI ↔ CUI transition) ───────────────────────
   const canvasAreaRef = useRef<HTMLDivElement>(null);
@@ -1292,10 +1326,7 @@ export default function Editor({
     setAgentStatus(t('editor.agentThinking'));
     agentAbortRef.current = new AbortController();
 
-    // Mutable local var so onNewTurn can point content to a fresh message
-    let currentMsgId = assistantMsgId;
-    // Track all assistant message IDs created in this run for persistence on done
-    const agentMsgIds: string[] = [assistantMsgId];
+    // currentMsgId and agentMsgIds are now managed by makeAgentCallbacks factory
 
     // Include pre-computed image description only when viewing a real snapshot (not a draft/preview)
     // Draft's image may differ significantly from the parent snapshot's description — skip to avoid mismatch
@@ -1393,251 +1424,26 @@ export default function Editor({
       return '';
     });
 
-    const _agentT0 = performance.now();
-    let _genStartTime = 0;
-    // Track analyze_image results for auto-saving to snapshot.description
-    let _lastAnalyzedIdx: number | null = null;
-    let _analyzedTextBuf = '';
-    const _flushAnalyzedDesc = () => {
-      if (_lastAnalyzedIdx !== null && _analyzedTextBuf.trim()) {
-        const desc = _analyzedTextBuf.split('\n\n')[0].trim().slice(0, 300);
-        const snapIdx = _lastAnalyzedIdx - 1;
-        const snap = snapshotsRef.current[snapIdx];
-        if (snap && !snap.description) {
-          setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, description: desc } : s));
-          onUpdateDescription?.(snap.id, desc);
-        }
-      }
-      _lastAnalyzedIdx = null;
-      _analyzedTextBuf = '';
-    };
+    const { callbacks: agentCallbacks, setCurrentMsgId } = makeAgentCallbacks({
+      projectId: projectId!,
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setPendingNotification, setSelectedVideoId, setAnimationState,
+      snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
+      pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
+      agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
+      pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
+      draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
+      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+      triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
+      t, initialTitle, userPromptText: text,
+    });
+    // Sync factory's currentMsgId with the already-created assistant message
+    setCurrentMsgId(assistantMsgId);
+
     try {
       await streamAgent(
         { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined },
-        {
-          onStatus: (status) => {
-            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
-            console.log(`⏱️ [agent] status="${status}" at +${elapsed}s`);
-            if (status.includes('生成图片') || status.includes('Generating image')) {
-              _genStartTime = performance.now();
-            }
-            setAgentStatus(status);
-          },
-          onImageAnalyzed: (imageIndex) => {
-            _flushAnalyzedDesc(); // flush previous if any
-            _lastAnalyzedIdx = imageIndex;
-            _analyzedTextBuf = '';
-          },
-          onNewTurn: () => {
-            _flushAnalyzedDesc();
-            const newId = generateId();
-            currentMsgId = newId;
-            agentMsgIds.push(newId);
-            setMessages((prev) => [...prev, {
-              id: newId,
-              role: 'assistant' as const,
-              content: '',
-              timestamp: Date.now(),
-            }]);
-          },
-          onContent: (delta) => {
-            const id = currentMsgId;
-            setMessages((prev) => prev.map((m) =>
-              m.id === id ? { ...m, content: m.content + delta } : m
-            ));
-            // Accumulate text after analyze_image for auto-saving description
-            if (_lastAnalyzedIdx !== null) {
-              _analyzedTextBuf += delta;
-            }
-          },
-          onImage: (imageData, usedModel) => {
-            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
-            const genDuration = _genStartTime ? ((performance.now() - _genStartTime) / 1000).toFixed(1) : '?';
-            console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (${usedModel || 'gemini'} took ${genDuration}s, image ${(imageData.length / 1024).toFixed(0)}KB)`);
-            const snapId = generateId();
-            const editDesc = lastEditPromptRef.current
-              ? `[agent] ${lastEditPromptRef.current.slice(0, 100)}`
-              : undefined;
-            const newSnapshot: Snapshot = {
-              id: snapId,
-              image: imageData,
-              tips: [],
-              messageId: currentMsgId,
-              description: editDesc,
-            };
-            setSnapshots((prev) => [...prev, newSnapshot]);
-            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
-              setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
-            });
-            if (editDesc) onUpdateDescription?.(snapId, editDesc);
-            cacheImage(`snap:${snapId}`, imageData);
-            const isFirstSnapshot = snapshotsRef.current.length <= 1;
-            fetchTipsForSnapshot(snapId, imageData, isFirstSnapshot ? 'full' : 'none');
-            autoFetchTriggered.current = true; // Prevent auto-fetch effect from double-fetching
-            setAgentStatus(t('status.imageGenerated'));
-            // If user is not on the new snapshot (e.g. viewing draft or earlier snapshot), show "See" button
-            const newSnapIdx = snapshotsRef.current.length; // index after setSnapshots adds it
-            if (draftParentIndexRef.current !== null || viewIndexRef.current !== newSnapIdx) {
-              setPendingNotification({ text: t('status.imageGenerated'), targetIndex: newSnapIdx });
-            }
-            const id = currentMsgId;
-            // Attach the last captured editPrompt and input images to the image message
-            const capturedPrompt = lastEditPromptRef.current;
-            const capturedInputImages = lastEditInputImagesRef.current;
-            lastEditPromptRef.current = null;
-            lastEditInputImagesRef.current = null;
-            setMessages((prev) => prev.map((m) =>
-              m.id === id ? {
-                ...m,
-                image: imageData,
-                editPrompt: capturedPrompt ?? undefined,
-                editModel: usedModel ?? undefined,
-                editInputImages: capturedInputImages ?? undefined,
-              } : m
-            ));
-            // Auto-name project after first image generation (text-to-image projects have no description)
-            if (!hasTriggeredNamingRef.current && (!initialTitle || initialTitle === 'Untitled' || initialTitle === '未命名' || initialTitle === '未命名项目')) {
-              hasTriggeredNamingRef.current = true;
-              triggerProjectNaming(text);
-            }
-          },
-          onToolCall: (tool, input, images) => {
-            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
-            console.log(`⏱️ [agent] tool_call="${tool}" at +${elapsed}s`, tool === 'generate_image' ? `editPrompt="${(input.editPrompt as string)?.slice(0, 80)}..."` : '');
-            // Capture editPrompt and input images from generate_image calls
-            if (tool === 'generate_image' && typeof input.editPrompt === 'string') {
-              lastEditPromptRef.current = input.editPrompt;
-              lastEditInputImagesRef.current = images ?? null;
-            }
-          },
-          onCodeStream: (text, done) => {
-            // Auto-init on first chunk (code_stream arrives before tool_call)
-            if (!codeStreamRef.current && !done && text) {
-              const id = currentMsgId;
-              if (id) {
-                codeStreamRef.current = { msgId: id, code: '', shown: 0 };
-                setMessages(prev => prev.map(m =>
-                  m.id === id ? { ...m, content: (m.content || '') + '\n\n```javascript\n' } : m
-                ));
-              }
-            }
-            const stream = codeStreamRef.current;
-            if (!stream) return;
-            if (done) {
-              setMessages(prev => prev.map(m =>
-                m.id === stream.msgId ? { ...m, content: (m.content || '') + '\n```\n' } : m
-              ));
-              codeStreamRef.current = null;
-            } else {
-              setMessages(prev => prev.map(m =>
-                m.id === stream.msgId ? { ...m, content: (m.content || '') + text } : m
-              ));
-            }
-          },
-          onAnimationTask: (taskId, prompt) => {
-            // CUI-initiated video: add to animations array and start polling
-            const urls = snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
-            const newAnim: ProjectAnimation = {
-              id: taskId,
-              projectId: projectId ?? '',
-              taskId,
-              videoUrl: null,
-              prompt,
-              snapshotUrls: urls,
-              status: 'processing',
-              createdAt: new Date().toISOString(),
-            };
-            setAnimations(prev => [newAnim, ...prev]);
-            setSelectedVideoId(taskId);
-            pendingNavigateToVideoRef.current = true;
-            // Trigger polling status so StatusBar shows "Video rendering M:SS"
-            setAnimationState({
-              imageUrls: urls,
-              status: 'polling',
-              prompt,
-              userHint: '',
-              taskId,
-              videoUrl: null,
-              error: null,
-              duration: null,
-              pollSeconds: 0,
-            });
-          },
-          onMusicTask: (taskId) => {
-            console.log(`🎵 [music] task created: ${taskId}`);
-            setMusicTaskId(taskId); musicTaskIdRef.current = taskId;
-            musicNotifiedRef.current = false;
-            setAgentStatus(t('status.generatingMusic'));
-          },
-          onNsfwDetected: () => {
-            console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
-            isNsfwRef.current = true;
-          },
-          onReasoning: () => {
-            if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentThinking');
-          },
-          onCoding: () => {
-            if (agentTimerRef.current) agentTimerRef.current.phase = t('editor.agentCoding');
-          },
-          onDesign: (design) => {
-            console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
-            setAgentStatus(t('status.renderingDesign'));
-            pendingDesignMsgIdRef.current = currentMsgId;
-            // ctx.snapshotImages are URLs — design code/props reference them directly.
-            // No placeholder resolution needed.
-            setPendingDesign(design);
-          },
-          onDone: () => {
-            _flushAnalyzedDesc(); // save any pending analyze_image description
-            const elapsed = ((performance.now() - _agentT0) / 1000).toFixed(1);
-            console.log(`⏱️ [agent] DONE total ${elapsed}s`);
-            // Don't overwrite music status if music is generating in background
-            if (!musicTaskIdRef.current) setAgentStatus(t('editor.done'));
-            // Persist all assistant messages created in this agent run
-            setMessages((prev) => {
-              const toSave = prev.filter(m => agentMsgIds.includes(m.id) && m.content);
-              toSave.forEach(m => onSaveMessage?.(m));
-              return prev;
-            });
-            // Drain pending CUI-attached images: tips text only, no preview, no analysis
-            const pendingAnalysisList = [...pendingAnalysisRef.current];
-            pendingAnalysisRef.current = [];
-            if (pendingAnalysisList.length > 0) {
-              (async () => {
-                for (const { id, image } of pendingAnalysisList) {
-                  const tipsImg = await compressBase64Image(image, 600_000);
-                  fetchTipsForSnapshot(id, tipsImg, 'none');
-                }
-              })();
-            }
-            {
-              // Drain pending teaser or reset to greeting
-              const pendingTeaser = pendingTeaserRef.current;
-              if (pendingTeaser) {
-                pendingTeaserRef.current = null;
-                setTimeout(() => triggerTipsTeaser(pendingTeaser.snapshotId, pendingTeaser.tips), 400);
-              } else {
-                setTimeout(() => {
-                  // Don't reset if music is generating in background
-                  if (!musicTaskIdRef.current) setAgentStatus(t('editor.greeting'));
-                }, 2000);
-              }
-            }
-          },
-          onError: (msg) => {
-            console.error('Agent error:', msg);
-            const id = currentMsgId;
-            setMessages((prev) => {
-              const updated = prev.map((m) =>
-                m.id === id ? { ...m, content: m.content || t('editor.errorRetry') } : m
-              );
-              // Persist whatever content we have
-              const toSave = updated.filter(m => agentMsgIds.includes(m.id) && m.content);
-              toSave.forEach(m => onSaveMessage?.(m));
-              return updated;
-            });
-          },
-        },
+        agentCallbacks,
         agentAbortRef.current.signal,
       );
     } catch (err) {
@@ -1663,6 +1469,42 @@ export default function Editor({
       return prev;
     });
   }, []);
+
+  // ── Reconnect to active background agent run ──
+  // Uses the same makeAgentCallbacks factory as the SSE path — identical CUI building logic.
+  useEffect(() => {
+    if (!activeRunId || isAgentActive) return;
+    setIsAgentActive(true);
+    setAgentStatus(t('editor.reconnecting'));
+
+    const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
+      projectId: projectId ?? '',
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setPendingNotification, setSelectedVideoId, setAnimationState,
+      snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
+      pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
+      agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
+      pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
+      draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
+      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+      triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
+      t,
+      onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
+    });
+
+    agentReconnect({
+      ...reconnectCallbacks,
+      onClearRunMessages: (msgIds) => {
+        if (msgIds.length > 0) {
+          const idSet = new Set(msgIds);
+          setMessages(prev => prev.filter(m => !idSet.has(m.id)));
+        }
+      },
+    });
+
+    return () => { agentDisconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRunId]);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
   // NOTE: no compressBase64 here — annotated image is used as generation base,
@@ -2265,75 +2107,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [snapshots, tipsSourceIndex, isTipsFetching, triggerPreviewsReadyNotification]);
 
-  // ── Music polling: poll Suno status when musicTaskId is set ──
-  useEffect(() => {
-    if (!musicTaskId) return;
-    console.log(`🎵 [music] polling started for ${musicTaskId}`);
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/music/${musicTaskId}`);
-        const data = await res.json();
-        if (data.status === 'completed' && data.audioUrl) {
-          console.log(`🎵 [music] completed: ${data.audioUrl}`);
-          setMusicAudioUrl(data.audioUrl);
-          setMusicTaskId(null); musicTaskIdRef.current = null;
-          setAgentStatus(t('status.musicReady'));
-        } else if (data.status === 'failed') {
-          console.warn(`🎵 [music] failed:`, data.error);
-          setMusicTaskId(null); musicTaskIdRef.current = null;
-          setAgentStatus(t('status.musicFailed'));
-        }
-      } catch (e) {
-        console.warn('🎵 [music] poll error:', e);
-      }
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [musicTaskId, t]);
 
-  // ── Music ready: notify agent when idle ──
-  useEffect(() => {
-    if (!musicAudioUrl || isAgentActive || musicNotifiedRef.current) return;
-    musicNotifiedRef.current = true;
-    console.log(`🎵 [music] agent idle, sending musicReady notification`);
-    setAgentStatus(t('status.addingMusic'));
-    setIsAgentActive(true);
-    const currentImage = snapshotsRef.current[snapshotsRef.current.length - 1]?.imageUrl || snapshotsRef.current[snapshotsRef.current.length - 1]?.image || '';
-    streamAgent(
-      { prompt: '', image: currentImage, projectId: projectId ?? '', musicReady: true, musicAudioUrl,
-        snapshotImages: snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!),
-        currentSnapshotIndex: snapshotsRef.current.length - 1 },
-      {
-        onStatus: (status) => setAgentStatus(status),
-        onContent: (delta) => {
-          // Add to last assistant message or create new one
-          setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (last?.role === 'assistant') {
-              return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: m.content + delta } : m);
-            }
-            return [...prev, { id: `music-${Date.now()}`, role: 'assistant', content: delta, timestamp: Date.now() }];
-          });
-        },
-        onDesign: (design) => {
-          pendingDesignMsgIdRef.current = `music-design-${Date.now()}`;
-          setMessages(prev => [...prev, { id: pendingDesignMsgIdRef.current, role: 'assistant', content: '', timestamp: Date.now() }]);
-          setPendingDesign(design);
-        },
-        onDone: () => {
-          setIsAgentActive(false);
-          setMusicAudioUrl(null);
-          setAgentStatus(t('editor.greeting'));
-        },
-        onError: (msg) => {
-          setIsAgentActive(false);
-          setMusicAudioUrl(null);
-          setAgentStatus(t('editor.greeting'));
-          console.warn('🎵 [music] musicReady agent error:', msg);
-        },
-      },
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [musicAudioUrl, isAgentActive]);
 
   // When animationState transitions — handle creation flow lifecycle
   const prevAnimStatusRef = useRef(animationState?.status);
@@ -2572,13 +2346,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [snapshots, draftParentIndex, isDesktop, cuiPanelWidth]);
 
   // Agent elapsed timer — DOM updates every 1s keep iOS Safari from dropping SSE
-  // Paused when musicTaskId is active (StatusBar shows music status instead)
   useEffect(() => {
     if (!isAgentActive) {
       agentTimerRef.current = null;
       return;
     }
-    if (musicTaskId) return; // Don't show timer during music polling — StatusBar shows music status
     if (!agentTimerRef.current) {
       agentTimerRef.current = { startTime: Date.now(), phase: t('editor.agentThinking') };
     }
@@ -2589,7 +2361,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setAgentStatus(`${ref.phase} (${elapsed}s)`);
     }, 1000);
     return () => clearInterval(timer);
-  }, [isAgentActive, musicTaskId, t]);
+  }, [isAgentActive, t]);
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
@@ -2611,6 +2383,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       }
     }
   }, [onSaveSnapshot, fetchTipsForSnapshot]);
+
+  // Auto-capture poster for design snapshots loaded from Supabase without a poster image
+  const posterCapturedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const snap of snapshots) {
+      if (snap.design && !snap.image && !posterCapturedRef.current.has(snap.id)) {
+        posterCapturedRef.current.add(snap.id);
+        import('@/components/RemotionRenderer').then(({ captureDesignPoster }) =>
+          captureDesignPoster(snap.design!).then(poster => {
+            if (poster) handleDesignPoster(snap.messageId, poster);
+          })
+        ).catch(() => {});
+      }
+    }
+  }, [snapshots, handleDesignPoster]);
 
   const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string) => {
     if (videoTimelineIndex < 0) return;
@@ -3263,6 +3050,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           <AgentChatView
             mode="panel"
             messages={messages}
+            messagesLoading={messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0}
             isAgentActive={isAgentActive}
             agentStatus={agentStatus}
             currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
@@ -3284,6 +3072,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       </>) : viewMode === 'cui' ? (
         <AgentChatView
           messages={messages}
+          messagesLoading={messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0}
           isAgentActive={isAgentActive}
           agentStatus={agentStatus}
           currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
@@ -3458,7 +3247,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         const msgId = pendingDesignMsgIdRef.current;
         if (msgId) {
           pendingDesignMsgIdRef.current = '';
-          const snapId = generateId();
+          const snapId = pendingDesignSnapIdRef.current || generateId();
+          pendingDesignSnapIdRef.current = '';
           const currentDesign = pendingDesign;
           const newSnapshot: Snapshot = {
             id: snapId,
@@ -3469,7 +3259,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             design: currentDesign,
           };
           queueMicrotask(() => {
-            setSnapshots(prev => [...prev, newSnapshot]);
+            setSnapshots(prev => {
+              if (prev.some(s => s.id === snapId)) return prev; // deduplicate
+              return [...prev, newSnapshot];
+            });
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });

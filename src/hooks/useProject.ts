@@ -76,18 +76,26 @@ export function useProject(projectId: string, userId: string) {
     // Load persisted designs from workspace (async, non-blocking)
     // Derive userId from first snapshot's image_url if userId param is empty (race condition on page load)
     const resolvedUserId = userId || (() => {
-      const firstUrl = dbSnapshots[0]?.image_url || ''
-      const match = firstUrl.match(/\/images\/([^/]+)\//)
-      return match?.[1] || ''
+      // Extract userId (UUID) from any snapshot's image_url — skip non-user paths like /images/skills/
+      const uuidRe = /\/images\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//
+      for (const s of dbSnapshots) {
+        if (!s.image_url) continue
+        const match = s.image_url.match(uuidRe)
+        if (match) return match[1]
+      }
+      return ''
     })()
     for (const snap of snapshots) {
       const dp = (snap as any)._designPath as string | undefined
-      if (!dp || !resolvedUserId) continue
+      if (!dp || !resolvedUserId) { delete (snap as any)._designPath; continue }
       try {
         const storagePath = `${resolvedUserId}/workspace/${dp}`
         const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
         if (urlData?.publicUrl) {
-          const res = await fetch(urlData.publicUrl)
+          const res = await Promise.race([
+            fetch(urlData.publicUrl),
+            new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+          ])
           if (res.ok) {
             const design = await res.json()
             snap.design = design

@@ -149,6 +149,7 @@ const zh = {
   'editor.multiImageAnalyzing': '收到了你的 {count} 张图片，我来分析下，大约 1 分钟 ⏳',
   'editor.tipsSuffix': '\n\n正在为你想一些好玩的修图点子~',
   'editor.agentThinking': 'Agent 正在思考...',
+  'editor.reconnecting': '正在恢复 Agent 进度...',
   'editor.agentCoding': '正在生成代码...',
   'editor.makeVideo': '✨ 帮我把这些照片做成一段视频',
 

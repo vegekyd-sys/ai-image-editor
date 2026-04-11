@@ -828,7 +828,7 @@ export default function ImageCanvas({
               onError={(err) => console.error('[canvas design]', err)}
             />
           </div>
-        ) : (
+        ) : displayImage ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             ref={imgElRef}
@@ -843,6 +843,11 @@ export default function ImageCanvas({
             draggable={false}
             onLoad={() => { setImageLoaded(true); updateImageRect(); }}
           />
+        ) : (
+          /* Design snapshot without poster — placeholder until captureDesignPoster runs */
+          <div className="w-full h-full flex items-center justify-center text-white/30 text-sm">
+            Rendering...
+          </div>
         )}
 
         {/* Annotation overlay */}

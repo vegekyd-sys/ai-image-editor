@@ -19,7 +19,7 @@ export default function ProjectPage() {
   const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle } =
     useProject(projectId, user?.id ?? '')
 
-  // Synchronous init from memory cache — eliminates spinner on same-session return visits
+  // Sync cache for instant render (snapshots + messages from IDB/memory)
   const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
     return sync ? sync.snapshots as Snapshot[] : null
@@ -67,14 +67,12 @@ export default function ProjectPage() {
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
-  // If memory cache has data WITH snapshots, start loaded=true — no spinner at all
-  // Empty snapshots (e.g. new text-to-image project whose upload was still in-flight) don't count
+  // GUI can render immediately if snapshot cache exists
   const [loaded, setLoaded] = useState(() => {
     if (typeof window === 'undefined') return false
     const sync = getCachedProjectDataSync(projectId)
     return sync !== null && (sync.snapshots as Snapshot[]).length > 0
   })
-  // Tracks whether we've already shown content (cache or Supabase) to avoid double-set
   const shownRef = useRef(loaded)
 
   useEffect(() => {
@@ -106,14 +104,16 @@ export default function ProjectPage() {
     }))
   }
 
-  // Effect 1: Load from project cache immediately (no auth dependency)
-  // This runs before Supabase fetch and shows Editor instantly on return visits
+  // DISABLED: Effect 1 (cache) — always wait for Supabase to ensure data consistency
+  // TODO: Re-enable with proper cache invalidation when background agent is active
+  // useEffect(() => {
+  //   if (pendingImages) return
+  // Effect 1: Load from IDB cache (no auth needed, fast)
   useEffect(() => {
-    if (pendingImages) return  // New project flow: skip cache, use pendingImages directly
+    if (pendingImages || shownRef.current) return
     let cancelled = false
     getCachedProjectData(projectId).then(async (cached) => {
       if (!cached || cancelled || shownRef.current) return
-      // Skip empty-snapshot caches (e.g. text-to-image project where upload was in-flight)
       if ((cached.snapshots as Snapshot[]).length === 0) return
       const patched = await patchFromImageCache(cached.snapshots as Snapshot[])
       if (cancelled || shownRef.current) return
@@ -127,33 +127,21 @@ export default function ProjectPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  // Effect 2: Fetch from Supabase (runs when user is available)
-  // If Effect 1 already showed data, this runs silently in background to update cache
+  // Effect 2: Fetch from Supabase — always updates all data
   useEffect(() => {
     if (!user || !projectId) return
     let cancelled = false
 
     loadProject().then(async ({ snapshots, messages, title, animations }) => {
       if (cancelled) return
-      // Always update project cache with fresh Supabase data
       cacheProjectData(projectId, snapshots, messages, title)
 
-      // Always set animation data (even if already showing from cache)
       if (animations.length > 0) {
         setInitialAnimations(animations)
       }
 
-      if (shownRef.current) {
-        // Already showing from cache — background refresh done, cover update only
-        if (snapshots.length > 0 && snapshots[0].imageUrl) {
-          updateCover(snapshots[0].imageUrl)
-        }
-        return
-      }
-
-      // Cache was empty or this won the race — show from Supabase
       const patched = await patchFromImageCache(snapshots)
-      if (cancelled || shownRef.current) return
+      if (cancelled) return
       shownRef.current = true
       setInitialSnapshots(patched)
       setInitialMessages(messages)
