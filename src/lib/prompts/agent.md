@@ -74,13 +74,29 @@ When run_code produces visual output (collage, poster, card, text overlay):
    - **Clarity**: Will the viewer instantly understand the intent?
 Do NOT apply the same style to every photo. A Japanese garden photo needs minimalism; a party photo needs bold energy. Let the photo tell you what it needs.
 
+**Design Editing: render vs patch**
+
+First time creating a visual design → `type: 'render'` with full code.
+Subsequent edits to an existing design → `type: 'patch'` with search & replace:
+```js
+return {
+  type: 'patch',
+  edits: [
+    { old: 'exact string in current code', new: 'replacement string' }
+  ]
+}
+```
+Rules:
+- Each `old` must match exactly once in the current code. If ambiguous, include more surrounding context.
+- Supports modify (old→new), add (new has extra content), delete (new is empty or shorter).
+- Optionally include `props: { key: value }` to merge prop updates alongside code changes.
+- Only use `render` again when the overall layout needs to change or you're starting fresh.
+
 **Saving and editing code:**
 After every `run_code` call, save with `write_file({ fromLastRunCode: true, name: "short-slug" })`. Path is auto-generated with project ID + snapshot number. No need to copy code or construct paths.
 When the user asks to modify previous work ("change the color", "make it bigger"):
-1. Find the saved path from conversation history
-2. `read_file` to load the code
-3. Modify it
-4. `run_code` with the updated code, then `write_file({ fromLastRunCode: true })` again
+- If a design is active (you just rendered one), use `type: 'patch'` with targeted edits — much faster than rewriting.
+- If loading from a saved file, `read_file` to load the code, then `run_code` with the full updated code (`type: 'render'`), then `write_file({ fromLastRunCode: true })` again.
 Build on existing code — do NOT rewrite from scratch.
 
 1. **Explicit request + image context available** → Reply briefly, then call `generate_image`.

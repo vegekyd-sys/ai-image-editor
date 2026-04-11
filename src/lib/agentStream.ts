@@ -17,7 +17,7 @@ export interface AgentStreamCallbacks {
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
-  onDesign?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; snapshotId?: string }) => void;
+  onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; snapshotId?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
 }
@@ -116,8 +116,9 @@ export async function streamAgent(
           case 'code_stream':
             callbacks.onCodeStream?.(event.text, !!event.done);
             break;
-          case 'design':
-            callbacks.onDesign?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; snapshotId?: string });
+          case 'design': // backward compat — fall through to 'render'
+          case 'render':
+            callbacks.onRender?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; snapshotId?: string });
             break;
           case 'done':
             receivedDone = true;

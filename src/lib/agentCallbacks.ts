@@ -284,8 +284,8 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentCoding');
     },
 
-    onDesign: (design) => {
-      console.log(`🎨 [agent] design received: ${design.width}x${design.height}, code ${design.code.length} chars`);
+    onRender: (design) => {
+      console.log(`🎨 [agent] render received: ${design.width}x${design.height}, code ${design.code.length} chars`);
       ctx.setAgentStatus(ctx.t('status.renderingDesign'));
       ctx.pendingDesignMsgIdRef.current = currentMsgId;
       ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';

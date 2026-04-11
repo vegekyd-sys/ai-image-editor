@@ -181,12 +181,12 @@ describe('makeAgentCallbacks', () => {
     });
   });
 
-  describe('onDesign', () => {
+  describe('onRender', () => {
     it('triggers pendingDesign with snapshotId', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.('msg-1');
       const design = { code: 'function D(){}', width: 1080, height: 1350, snapshotId: 'design-snap' };
-      callbacks.onDesign?.(design as never);
+      callbacks.onRender?.(design as never);
 
       expect(ctx.setPendingDesign).toHaveBeenCalled();
       expect(ctx.pendingDesignMsgIdRef.current).toBe('msg-1');

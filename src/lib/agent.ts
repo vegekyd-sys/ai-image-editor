@@ -77,7 +77,8 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // Agent React design for browser rendering
+  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // Agent React design for browser rendering
+  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // @deprecated — backward compat alias for 'render'
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -497,12 +498,12 @@ Available in your code:
 Your code must return a value:
 - Image (sharp output): return Buffer directly, or \`{ type: 'image', data: base64, mimeType: 'image/jpeg' }\`
 - Text: return \`{ type: 'text', content: 'result' }\`
-- **Design (React)**: return \`{ type: 'design', code: '...', width: 1080, height: 1350 }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill. Rendered by the browser with full CSS + Google Fonts support.
+- **Render (React design)**: return \`{ type: 'render', code: '...', width: 1080, height: 1350 }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill. Rendered by the browser with full CSS + Google Fonts support.
   **IMPORTANT: Use \`<Img>\` (Remotion) instead of \`<img>\` for all images.** \`<Img>\` ensures images are fully loaded before rendering/screenshot. Plain \`<img>\` causes blank images on mobile.
   **Embed image URLs directly in code using template literals** — do NOT use props for images:
   \`\`\`
   return {
-    type: 'design',
+    type: 'render',
     width: 1080, height: 1350,
     code: \\\`function Design() {
       return (<div style={{width:'100%',height:'100%'}}><Img src="\${ctx.snapshotImages[0]}" style={{width:'100%',height:'100%',objectFit:'cover'}} /></div>);
@@ -511,6 +512,7 @@ Your code must return a value:
   \`\`\`
   - **Still** (default): omit \`duration\` — renders as a single image.
   - **Animation**: add \`duration: 5\` (seconds) — renders as a playable video with Remotion Player. Use \`useCurrentFrame()\` + \`interpolate()\` for animation.
+- **Patch (incremental edit)**: return \`{ type: 'patch', edits: [{ old: '...', new: '...' }] }\`. Search & replace on current design code. Each edit.old must match exactly once in the code. Use for text changes, style tweaks, minor additions/removals. Optionally include \`props: {...}\` to merge prop updates.
 - Error: return \`{ type: 'error', message: 'what went wrong' }\`
 
 **Default to design for all visual output.** Design supports text, layout, images (embed URLs via template literal \\\`\${ctx.snapshotImages[N]}\\\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
@@ -607,8 +609,40 @@ Your code must return a value:
             ctx.currentImage = dataUrl;
           };
 
-          // { type: 'design', code: '...' } — Store for event loop to emit as SSE
-          if (result?.type === 'design' && typeof result.code === 'string') {
+          // { type: 'patch', edits: [...] } — Incremental search & replace on last design
+          if (result?.type === 'patch' && Array.isArray(result.edits)) {
+            const lastDesign = (ctx as any).__lastDesignPayload;
+            if (!lastDesign) {
+              return { type: 'text' as const, content: 'No active design to patch. Use type: "render" to create a design first.' };
+            }
+            let code = lastDesign.code;
+            for (const edit of result.edits) {
+              if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
+                return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
+              }
+              const count = code.split(edit.old).length - 1;
+              if (count === 0) return { type: 'text' as const, content: `Patch failed: old_string not found in current code.\n"${edit.old.slice(0, 100)}"` };
+              if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
+              code = code.replace(edit.old, edit.new);
+            }
+            const mergedProps = result.props ? { ...(lastDesign.props || {}), ...result.props } : lastDesign.props;
+            const patched = { ...lastDesign, code, props: mergedProps };
+            if (result.editables) patched.editables = result.editables;
+
+            const harnessError = validateDesign({ code: patched.code, props: patched.props });
+            if (harnessError) return { type: 'text' as const, content: harnessError };
+
+            (ctx as any).__pendingDesign = patched;
+            (ctx as any).__lastDesignPayload = patched;
+            (ctx as any).__lastRunCode = JSON.stringify(patched, null, 2);
+            const newIdx = ctx.snapshotImages.length + 1;
+            ctx.snapshotImages.push(''); // placeholder — real URL set after frontend upload
+            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+            return { type: 'text' as const, content: `Patched ${result.edits.length} edit(s) — rendering in browser as <<<image_${newIdx}>>>. Save now: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
+          }
+
+          // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
+          if ((result?.type === 'render' || result?.type === 'design') && typeof result.code === 'string') {
             // Normalize animation struct — agent may return { fps, duration } or { animation: { fps, durationInSeconds } }
             let animation = result.animation;
             if (!animation && (result.fps || result.duration || result.durationInSeconds)) {
@@ -632,6 +666,7 @@ Your code must return a value:
               animation,
             };
             (ctx as any).__pendingDesign = designPayload;
+            (ctx as any).__lastDesignPayload = designPayload;
             // Store for write_file({ fromLastRunCode: true })
             (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
             // Design screenshot is rendered on the frontend — not available server-side.
@@ -1005,8 +1040,8 @@ export async function* runMakaronAgent(
           // Design output stored in ctx.__pendingDesign → emit as SSE event
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
-            console.log(`🎨 [agent] emitting design SSE: ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars`);
-            yield { type: 'design', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation };
+            console.log(`🎨 [agent] emitting render SSE: ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars`);
+            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation };
             (ctx as any).__pendingDesign = null;
           } else {
             console.log(`🔍 [agent] run_code result: no __pendingDesign found`);
