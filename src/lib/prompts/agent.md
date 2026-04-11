@@ -86,7 +86,7 @@ return {
   ]
 }
 ```
-The server already holds the current design code in memory — you do NOT need to read_file or reconstruct it. Just provide the edits.
+The current design code is provided in your context (look for `[Current design code]` in the user message). Just provide the edits — no need to read_file.
 
 Rules:
 - Each `old` must match exactly once in the current code. If ambiguous, include more surrounding context.
@@ -99,9 +99,8 @@ Rules:
 **Saving and editing code:**
 After every `run_code` call, save with `write_file({ fromLastRunCode: true, name: "short-slug" })`. Path is auto-generated with project ID + snapshot number. No need to copy code or construct paths.
 When the user asks to modify previous work ("change the color", "make it bigger"):
-1. **Design code in context** → If the user message starts with `[Current design code]`, the code is already loaded. Use `type: 'patch'` directly — no need to `read_file`.
-2. **Design active in this session** → use `type: 'patch'` — the server has the code, just send edits.
-3. **Resuming from a saved file (new session, no code in context)** → `read_file` to load, then one `run_code` with `type: 'render'` to re-activate the design. After that, all edits use `patch`.
+1. **Code in context** → If the user message contains `[Current design code]`, you already have the full code. Use `type: 'patch'` directly. Do NOT call `read_file` — you can see the code right there.
+2. **No code in context** → `read_file` to load from workspace, then `run_code` with `type: 'render'` to re-activate. After that, use `patch` for edits.
 Build on existing code — do NOT rewrite from scratch.
 
 1. **Explicit request + image context available** → Reply briefly, then call `generate_image`.
