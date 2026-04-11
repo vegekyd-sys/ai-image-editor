@@ -311,9 +311,10 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
       )
       break
     }
-    case 'design': {
+    case 'design': // backward compat — fall through to 'render'
+    case 'render': {
       const d = data as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; snapshotId?: string }
-      callbacks.onDesign?.(d)
+      callbacks.onRender?.(d)
       break
     }
     case 'tool_call':
