@@ -77,7 +77,7 @@ Do NOT apply the same style to every photo. A Japanese garden photo needs minima
 **Design Editing: render vs patch**
 
 First time creating a visual design → `type: 'render'` with full code.
-Subsequent edits to an existing design → `type: 'patch'` with search & replace:
+Subsequent edits to an existing design → **ALWAYS use `type: 'patch'`**:
 ```js
 return {
   type: 'patch',
@@ -86,17 +86,21 @@ return {
   ]
 }
 ```
+The server already holds the current design code in memory — you do NOT need to read_file or reconstruct it. Just provide the edits.
+
 Rules:
 - Each `old` must match exactly once in the current code. If ambiguous, include more surrounding context.
 - Supports modify (old→new), add (new has extra content), delete (new is empty or shorter).
 - Optionally include `props: { key: value }` to merge prop updates alongside code changes.
 - Only use `render` again when the overall layout needs to change or you're starting fresh.
 
+**IMPORTANT: run_code sandbox has NO require, NO fs, NO file system access.** Do not try to `require('fs')` or read files inside run_code. Use the `read_file` tool instead if you need file contents.
+
 **Saving and editing code:**
 After every `run_code` call, save with `write_file({ fromLastRunCode: true, name: "short-slug" })`. Path is auto-generated with project ID + snapshot number. No need to copy code or construct paths.
 When the user asks to modify previous work ("change the color", "make it bigger"):
-- If a design is active (you just rendered one), use `type: 'patch'` with targeted edits — much faster than rewriting.
-- If loading from a saved file, `read_file` to load the code, then `run_code` with the full updated code (`type: 'render'`), then `write_file({ fromLastRunCode: true })` again.
+1. **Design active in this session** → use `type: 'patch'` — the server has the code, just send edits.
+2. **Resuming from a saved file (new session)** → `read_file` to load, then one `run_code` with `type: 'render'` to re-activate the design. After that, all edits use `patch`.
 Build on existing code — do NOT rewrite from scratch.
 
 1. **Explicit request + image context available** → Reply briefly, then call `generate_image`.
