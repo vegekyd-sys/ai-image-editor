@@ -2596,6 +2596,28 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [viewMode, isDesktop]);
 
+  // ── Shared props for AgentChatView — single source of truth ──
+  // Both desktop panel and mobile overlay use these. Add new props HERE
+  // to avoid desktop/mobile divergence bugs (e.g. missing onMusicSelect).
+  const cuiSharedProps = {
+    messages,
+    messagesLoading: messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0,
+    isAgentActive,
+    agentStatus,
+    currentImage: isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex],
+    onSendMessage: handleCuiSend,
+    onAbort: handleAgentAbort,
+    onInputBarHeight: (h: number) => { cuiInputBarH.current = h; },
+    onImageTap: handleImageTap,
+    onVideoTap: handleVideoTap,
+    snapshots,
+    currentSnapshotIndex: isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
+    preferredModel: preferredModel as PreferredModel,
+    onModelChange: setPreferredModel,
+    onDesignPoster: handleDesignPoster,
+    onMusicSelect: handleMusicSelect,
+  };
+
   return (
     <div
       data-testid="editor"
@@ -3140,57 +3162,27 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         </div>
         <div ref={cuiPanelRef} className="flex-shrink-0 border-l border-white/[0.08]" style={{ width: cuiPanelWidth }}>
           <AgentChatView
+            {...cuiSharedProps}
             mode="panel"
-            messages={messages}
-            messagesLoading={messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0}
-            isAgentActive={isAgentActive}
-            agentStatus={agentStatus}
-            currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
-            onSendMessage={handleCuiSend}
-            onAbort={handleAgentAbort}
             onBack={() => {}}
             onPipTap={() => {}}
-            onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
-            onImageTap={handleImageTap}
-            onVideoTap={handleVideoTap}
-            snapshots={snapshots}
-            currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
-            preferredModel={preferredModel}
-            onModelChange={setPreferredModel}
             onNavigateToSnapshot={handleNavigateToSnapshot}
-            onDesignPoster={handleDesignPoster}
-            onMusicSelect={handleMusicSelect}
           />
         </div>
       </>) : viewMode === 'cui' ? (
         <AgentChatView
-          messages={messages}
-          messagesLoading={messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0}
-          isAgentActive={isAgentActive}
-          agentStatus={agentStatus}
-          currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
-          onSendMessage={handleCuiSend}
-          onAbort={handleAgentAbort}
+          {...cuiSharedProps}
           onBack={() => {
             if (snapshots.length === 0 && onBack) {
-              onBack(); // No snapshots (text-only before image generated) → go to projects
+              onBack();
             } else {
-              window.history.back(); // Normal: CUI → GUI
+              window.history.back();
             }
           }}
           onPipTap={handlePipTap}
           hidePip={heroAnim !== null || pullProgress !== null}
-          onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
-          onImageTap={handleImageTap}
-          onVideoTap={handleVideoTap}
           focusOnOpen={isViewingDraft}
-          snapshots={snapshots}
-          currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
-          preferredModel={preferredModel}
-          onModelChange={setPreferredModel}
           onNavigateToSnapshot={undefined}
-          onDesignPoster={handleDesignPoster}
-          onMusicSelect={handleMusicSelect}
         />
       ) : null}
 
