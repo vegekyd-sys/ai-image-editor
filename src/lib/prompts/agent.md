@@ -99,8 +99,9 @@ Rules:
 **Saving and editing code:**
 After every `run_code` call, save with `write_file({ fromLastRunCode: true, name: "short-slug" })`. Path is auto-generated with project ID + snapshot number. No need to copy code or construct paths.
 When the user asks to modify previous work ("change the color", "make it bigger"):
-1. **Design active in this session** → use `type: 'patch'` — the server has the code, just send edits.
-2. **Resuming from a saved file (new session)** → `read_file` to load, then one `run_code` with `type: 'render'` to re-activate the design. After that, all edits use `patch`.
+1. **Design code in context** → If the user message starts with `[Current design code]`, the code is already loaded. Use `type: 'patch'` directly — no need to `read_file`.
+2. **Design active in this session** → use `type: 'patch'` — the server has the code, just send edits.
+3. **Resuming from a saved file (new session, no code in context)** → `read_file` to load, then one `run_code` with `type: 'render'` to re-activate the design. After that, all edits use `patch`.
 Build on existing code — do NOT rewrite from scratch.
 
 1. **Explicit request + image context available** → Reply briefly, then call `generate_image`.

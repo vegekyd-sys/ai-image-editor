@@ -871,7 +871,11 @@ export async function* runMakaronAgent(
       ),
     ];
   } else {
-    userContent = analysisOnly ? analysisPrompt : prompt;
+    // Inject current design code into prompt so Agent can patch without read_file
+    const designInjection = options?.currentDesign?.code
+      ? `[Current design code — modify with run_code patch mode, no need to read_file]\n\`\`\`json\n${JSON.stringify({ code: options.currentDesign.code, width: options.currentDesign.width, height: options.currentDesign.height, animation: options.currentDesign.animation })}\n\`\`\`\n\n`
+      : '';
+    userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
   }
 
   // Build system prompt: base agent.md + workspace manifest (lightweight, not full templates)
