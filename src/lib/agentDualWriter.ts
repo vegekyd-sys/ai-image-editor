@@ -109,26 +109,16 @@ export class AgentDualWriter {
         return;
       }
 
-      case 'render': {
-        // render events are handled by the frontend (snapshot + poster capture).
-        // DualWriter only passes through — do NOT create snapshot here to avoid duplicates.
-        await this.flushContent();
-        await this.insertEvent('render', {
-          code: event.code, width: event.width, height: event.height,
-          props: event.props, animation: event.animation,
-          description: (event as Record<string, unknown>).description,
-        });
-        this.tryEnqueue(event);
-        return;
-      }
+      case 'render':  // agent.ts now yields 'render'; 'design' kept for backward compat
       case 'design': {
         await this.flushContent();
         const snapId = crypto.randomUUID();
         const designPath = `code/${snapId}.json`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const designDesc = (event as any).description as string | undefined;
         const designJson = JSON.stringify({
           code: event.code, width: event.width, height: event.height,
           props: event.props, animation: event.animation,
-          description: (event as Record<string, unknown>).description,
         });
 
         // Upload design JSON to workspace
@@ -149,7 +139,7 @@ export class AgentDualWriter {
           tips: [],
           message_id: this.currentMessageId,
           sort_order: sortOrder,
-          description: (event as Record<string, unknown>).description as string || '[design]',
+          description: designDesc || '[design]',
           design_path: designPath,
         }, { onConflict: 'id' }).then(({ error }) => {
           if (error) console.error('[DualWriter] design snapshot upsert error:', error);
@@ -157,13 +147,13 @@ export class AgentDualWriter {
         this.currentMessageHasImage = true;
 
         // Write agent_events
-        await this.insertEvent('design', {
+        await this.insertEvent(event.type, {
           code: event.code, width: event.width, height: event.height,
           props: event.props, animation: event.animation, snapshotId: snapId,
         });
 
-        // SSE: enriched with snapshotId
-        this.tryEnqueue({ ...event, snapshotId: snapId });
+        // SSE: enriched with snapshotId, normalize type to 'render'
+        this.tryEnqueue({ ...event, type: 'render', snapshotId: snapId });
         return;
       }
 

@@ -108,7 +108,7 @@ export function useProject(projectId: string, userId: string) {
     }
 
     const messages: Message[] = dbMessages.map((m) => {
-      // Restore inline image: find the snapshot linked to this message
+      // Restore inline image + design: find the snapshot linked to this message
       const linkedSnapshot = m.has_image
         ? snapshots.find(s => s.messageId === m.id)
         : undefined
@@ -119,6 +119,7 @@ export function useProject(projectId: string, userId: string) {
         timestamp: new Date(m.created_at).getTime(),
         projectId: m.project_id,
         ...(linkedSnapshot ? { image: linkedSnapshot.image } : {}),
+        ...(linkedSnapshot?.design ? { design: linkedSnapshot.design } : {}),
       }
     })
 
