@@ -674,13 +674,21 @@ Your code must return a value:
             }
 
             // ── Harness passed — store design ──
+            // Auto-generate description if Agent didn't provide one
+            const autoDesc = desc || (() => {
+              const type = animation ? `${animation.durationInSeconds}s video` : 'still design';
+              // Extract text content from code (string literals in JSX)
+              const textMatches = result.code.match(/>([^<>{}\n]{3,60})</g)?.slice(0, 5).map((m: string) => m.slice(1).trim()).filter(Boolean);
+              const textHint = textMatches?.length ? `: "${textMatches.slice(0, 3).join('", "')}"` : '';
+              return `${type} (${result.width || 1080}x${result.height || 1350})${textHint}`;
+            })();
             const designPayload = {
               code: result.code,
               width: result.width || 1080,
               height: result.height || 1350,
               props: result.props,
               animation,
-              description: desc, // Agent's brief description of the design
+              description: autoDesc,
             };
             (ctx as any).__pendingDesign = designPayload;
             (ctx as any).__lastDesignPayload = designPayload;
