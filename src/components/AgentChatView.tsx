@@ -163,23 +163,33 @@ function MusicCard({ track, onSelect }: {
             {track.title || `Track ${track.trackIndex + 1}`}{' '}
             <span style={{ color: 'rgba(255,255,255,0.3)' }}>#{track.trackIndex + 1}</span>
           </div>
-          {/* Native range slider — smooth on all platforms */}
-          <input
-            type="range" min={0} max={1} step={0.001}
-            value={progress}
-            onChange={(e) => {
-              const ratio = parseFloat(e.target.value);
-              const audio = audioRef.current;
-              if (audio && audio.duration) {
-                audio.currentTime = ratio * audio.duration;
-                setCurrentTime(audio.currentTime);
-              }
-              setProgress(ratio);
-            }}
-            className="music-seek w-full h-[14px] my-0.5"
-            style={{ touchAction: 'none' }}
-          />
-          <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)', marginTop: -2 }}>
+          {/* Custom slider: visual div + transparent native range overlay */}
+          <div className="relative w-full h-[16px] flex items-center my-0.5">
+            {/* Visual track + filled portion */}
+            <div className="absolute inset-x-0 h-[3px] rounded-full" style={{ top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.08)' }}>
+              <div className="h-full rounded-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.7)' }} />
+            </div>
+            {/* Visual thumb */}
+            <div className="absolute w-[10px] h-[10px] rounded-full pointer-events-none"
+              style={{ left: `calc(${progress * 100}% - 5px)`, top: '50%', transform: 'translateY(-50%)', background: 'rgb(192,38,211)', boxShadow: '0 0 6px rgba(192,38,211,0.5)' }} />
+            {/* Invisible native range for smooth drag on all platforms */}
+            <input
+              type="range" min={0} max={1} step={0.001}
+              value={progress}
+              onChange={(e) => {
+                const ratio = parseFloat(e.target.value);
+                const audio = audioRef.current;
+                if (audio && audio.duration) {
+                  audio.currentTime = ratio * audio.duration;
+                  setCurrentTime(audio.currentTime);
+                }
+                setProgress(ratio);
+              }}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer"
+              style={{ touchAction: 'none', height: 16 }}
+            />
+          </div>
+          <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>
             {playing || currentTime > 0 ? `${formatTime(currentTime)} / ${formatTime(track.duration)}` : formatTime(track.duration)} · {track.tags || 'instrumental'}
           </div>
         </div>
