@@ -185,9 +185,9 @@ function MusicCard({ track, onSelect }: {
         </button>
       </div>
 
-      {/* Progress bar — flush with bottom edge, clickable/draggable */}
+      {/* Progress bar — bottom edge, Spotify style: thin default, thick on hover/drag */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-[14px] flex items-end cursor-pointer z-10"
+        className="absolute bottom-0 left-0 right-0 cursor-pointer z-10 group"
         style={{ touchAction: 'none' }}
         onPointerDown={(e) => {
           e.preventDefault();
@@ -209,10 +209,11 @@ function MusicCard({ track, onSelect }: {
           bar.addEventListener('pointerup', onUp);
         }}
       >
-        <div className="h-[2px] w-full" style={{ background: 'transparent' }}>
-          <div className="h-full relative" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.7)', transition: playing ? 'none' : 'width 0.15s' }}>
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[8px] h-[8px] rounded-full" style={{ background: 'rgb(192,38,211)' }} />
-          </div>
+        {/* Invisible hit area */}
+        <div className="h-[14px]" />
+        {/* Visible bar — 2px default, 4px on hover */}
+        <div className="h-[2px] group-hover:h-[4px] transition-[height] duration-150 w-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.8)', transition: playing ? 'none' : 'width 0.15s' }} />
         </div>
       </div>
     </div>
