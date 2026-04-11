@@ -2450,10 +2450,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
     }).catch(() => {});
-    // Use handleCuiSend which is the same path as user typing in CUI — proven to work on mobile
-    const prompt = `🎵 ${track.title}\n\nUser selected this background music (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\nAdd <Audio src="${track.audioUrl}" volume={0.3} /> to the current design via run_code patch.`;
-    handleCuiSend(prompt);
-  }, [projectId, isAgentActive, handleCuiSend]);
+    // Show short user message
+    addMessage('user', `🎵 ${track.title}`);
+    // Send full instruction to agent (silent — no duplicate user msg shown)
+    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\nAdd <Audio src="${track.audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
+    handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
+  }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
@@ -3188,6 +3190,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           onModelChange={setPreferredModel}
           onNavigateToSnapshot={undefined}
           onDesignPoster={handleDesignPoster}
+          onMusicSelect={handleMusicSelect}
         />
       ) : null}
 
