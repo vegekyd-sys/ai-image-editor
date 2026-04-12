@@ -100,11 +100,10 @@ export default function ImageCanvas({
   const [videoError, setVideoError] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
-  // Remotion Player custom controls
+  // Remotion Player custom controls — frame tracked via ref (no re-render during playback)
   const remotionRef = useRef<PlayerRef | null>(null);
   const [remotionPlaying, setRemotionPlaying] = useState(false);
-  const [remotionFrame, setRemotionFrame] = useState(0);
-  const remotionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const remotionFrameRef = useRef(0);
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
@@ -553,27 +552,46 @@ export default function ImageCanvas({
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
 
+  // Update seek bar + time badge via DOM (no React re-render during playback)
+  const updateRemotionUI = useCallback(() => {
+    const frame = remotionRef.current?.getCurrentFrame() ?? 0;
+    remotionFrameRef.current = frame;
+    const progress = remotionTotalFrames > 1 ? frame / (remotionTotalFrames - 1) : 0;
+    // Direct DOM updates — zero re-renders
+    const fill = document.querySelector('[data-remotion-fill]') as HTMLElement;
+    if (fill) fill.style.width = `${progress * 100}%`;
+    const time = document.querySelector('[data-remotion-time]');
+    if (time) {
+      const cur = frame / remotionFps;
+      time.textContent = `${formatTime(cur)} / ${formatTime(remotionDuration)}`;
+    }
+  }, [remotionTotalFrames, remotionFps, remotionDuration]);
+
+  // RAF loop during playback — lightweight, no state updates
   useEffect(() => {
-    if (!remotionRef.current || !currentDesign?.animation) return;
-    const timer = setInterval(() => {
-      const frame = remotionRef.current?.getCurrentFrame() ?? 0;
-      setRemotionFrame(frame);
-      // Detect end of playback
-      if (frame >= remotionTotalFrames - 1 && remotionPlaying) {
+    if (!remotionPlaying || !remotionRef.current) return;
+    let raf = 0;
+    const tick = () => {
+      updateRemotionUI();
+      // Detect end
+      if (remotionFrameRef.current >= remotionTotalFrames - 1) {
         setRemotionPlaying(false);
         remotionRef.current?.pause();
+        return;
       }
-    }, 100);
-    remotionTimerRef.current = timer;
-    return () => clearInterval(timer);
-  }, [currentDesign, remotionTotalFrames, remotionPlaying]);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
-  // Reset Remotion state when switching snapshots
+  // Reset when switching snapshots
   useEffect(() => {
     setRemotionPlaying(false);
-    setRemotionFrame(0);
+    remotionFrameRef.current = 0;
     remotionRef.current?.seekTo(0);
-  }, [currentIndex]);
+    updateRemotionUI();
+  }, [currentIndex, updateRemotionUI]);
 
   const toggleRemotionPlay = useCallback(() => {
     const p = remotionRef.current;
@@ -582,12 +600,11 @@ export default function ImageCanvas({
       p.pause();
       setRemotionPlaying(false);
     } else {
-      // If at end, restart from beginning
-      if (remotionFrame >= remotionTotalFrames - 1) p.seekTo(0);
+      if (remotionFrameRef.current >= remotionTotalFrames - 1) p.seekTo(0);
       p.play();
       setRemotionPlaying(true);
     }
-  }, [remotionPlaying, remotionFrame, remotionTotalFrames]);
+  }, [remotionPlaying, remotionTotalFrames]);
 
   const seekRemotion = useCallback((clientX: number) => {
     const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
@@ -596,8 +613,9 @@ export default function ImageCanvas({
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const frame = Math.round(ratio * (remotionTotalFrames - 1));
     remotionRef.current.seekTo(frame);
-    setRemotionFrame(frame);
-  }, [remotionTotalFrames]);
+    remotionFrameRef.current = frame;
+    updateRemotionUI();
+  }, [remotionTotalFrames, updateRemotionUI]);
 
   // Non-Supabase video URLs (Kling CDN etc.) are proxied to avoid CORS and expiry issues
   const effectiveVideoUrl = videoUrl && !videoUrl.includes('supabase.co')
@@ -901,30 +919,32 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Time badge — same as video */}
+            {/* Time badge — updated via DOM (data-remotion-time) */}
             {currentDesign?.animation && (
               <div className="absolute z-20 pointer-events-none" style={{ bottom: 14, right: 10 }}>
-                <span className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
+                <span data-remotion-time className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
                   style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}>
-                  {formatTime(remotionFrame / remotionFps)}<span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>{formatTime(remotionDuration)}
+                  {formatTime(0)} / {formatTime(remotionDuration)}
                 </span>
               </div>
             )}
 
-            {/* Seek bar — same style as video, Spotify-style thicken on hover */}
+            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag */}
             {currentDesign?.animation && (
               <div
                 data-remotion-seek
                 className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
-                style={{ height: 20, touchAction: 'none' }}
+                style={{ height: 24, touchAction: 'none' }}
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  // Pause playback when dragging seek bar
                   if (remotionPlaying) {
                     remotionRef.current?.pause();
                     setRemotionPlaying(false);
                   }
+                  // Thicken bar on drag (mobile)
+                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
+                  if (track) track.style.height = '6px';
                   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                   seekRemotion(e.clientX);
                 }}
@@ -932,13 +952,16 @@ export default function ImageCanvas({
                   if (e.buttons) seekRemotion(e.clientX);
                 }}
                 onPointerUp={(e) => {
+                  // Shrink bar back
+                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
+                  if (track) track.style.height = '';
                   (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[4px] transition-[height] duration-150">
+                <div data-remotion-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
                   <div className="absolute inset-0 bg-white/12" />
-                  <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${remotionTotalFrames > 1 ? (remotionFrame / (remotionTotalFrames - 1)) * 100 : 0}%` }} />
+                  <div data-remotion-fill className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: '0%' }} />
                 </div>
               </div>
             )}
