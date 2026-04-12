@@ -76,7 +76,7 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; description?: string }  // Agent React design for browser rendering
+  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | { type: 'done' }
@@ -1080,7 +1080,7 @@ export async function* runMakaronAgent(
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
             console.log(`🎨 [agent] emitting render SSE: ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars`);
-            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, description: pendingDesign.description };
+            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation };
             (ctx as any).__pendingDesign = null;
           } else {
             console.log(`🔍 [agent] run_code result: no __pendingDesign found`);

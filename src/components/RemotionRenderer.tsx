@@ -152,29 +152,31 @@ export default function RemotionRenderer({ design, onError, mode = 'inline' }: R
 
 // ─── MP4 Export ──────────────────────────────────────────────────────────────
 
-/** Pre-fetch remote audio URLs in design code → data URLs (fixes iOS CORS) */
-async function resolveAudioUrls(code: string): Promise<string> {
+/** Pre-fetch remote audio URLs via server proxy → blob URLs (fixes CORS + avoids massive data URLs) */
+async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   const audioUrlPattern = /<Audio[^>]+src=["']?(https?:\/\/[^"'\s>]+\.(?:mp3|wav|m4a|aac|ogg)[^"'\s>]*)["']?/g;
   const matches = [...code.matchAll(audioUrlPattern)];
-  if (!matches.length) return code;
+  if (!matches.length) return { code, blobUrls: [] };
 
   let resolved = code;
+  const blobUrls: string[] = [];
   for (const match of matches) {
     const url = match[1];
     try {
-      const res = await fetch(url);
+      // Fetch via server-side proxy to bypass CORS restrictions
+      const proxyUrl = `/api/proxy-audio?url=${encodeURIComponent(url)}`;
+      const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
       const blob = await res.blob();
-      const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-      resolved = resolved.replace(url, dataUrl);
+      // Use blob URL instead of data URL — short string, same-origin, no 13MB base64
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrls.push(blobUrl);
+      resolved = resolved.replace(url, blobUrl);
     } catch (e) {
       console.warn('[exportDesignVideo] failed to resolve audio URL:', url, e);
     }
   }
-  return resolved;
+  return { code: resolved, blobUrls };
 }
 
 export async function exportDesignVideo(
@@ -182,8 +184,21 @@ export async function exportDesignVideo(
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
   preloadBabel().catch(() => {});
-  // Resolve remote audio URLs to data URLs before compile (iOS CORS fix)
-  const resolvedCode = await resolveAudioUrls(design.code);
+
+  // Pre-flight check: can the browser encode h264/mp4?
+  const { canRenderMediaOnWeb } = await import('@remotion/web-renderer');
+  const check = await canRenderMediaOnWeb({
+    container: 'mp4', videoCodec: 'h264',
+    width: design.width, height: design.height,
+  });
+  if (!check.canRender) {
+    throw new Error(`Video export not supported: ${check.issues.map(i => i.message).join('; ')}`);
+  }
+
+  // Resolve remote image URLs → data URLs (CORS workaround, same as captureDesignPoster)
+  const imageResolved = await resolveCodeUrls(design.code);
+  // Resolve remote audio URLs → blob URLs via server proxy (CORS + avoid massive data URLs)
+  const { code: resolvedCode, blobUrls } = await resolveAudioUrls(imageResolved);
   const Component = evalRemotionJSX(resolvedCode);
   if (!Component) throw new Error('Failed to compile design code');
 
@@ -192,18 +207,23 @@ export async function exportDesignVideo(
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
-  const result = await renderMediaOnWeb({
-    composition: {
-      component: Component,
-      durationInFrames, fps,
-      width: design.width, height: design.height,
-      id: 'agent-design-export',
-      calculateMetadata: null, defaultProps: {},
-    },
-    inputProps: (design.props || {}) as Record<string, unknown>,
-    videoCodec: 'h264', container: 'mp4',
-    onProgress: onProgress || null,
-  });
+  try {
+    const result = await renderMediaOnWeb({
+      composition: {
+        component: Component,
+        durationInFrames, fps,
+        width: design.width, height: design.height,
+        id: 'agent-design-export',
+        calculateMetadata: null, defaultProps: {},
+      },
+      inputProps: (design.props || {}) as Record<string, unknown>,
+      videoCodec: 'h264', container: 'mp4',
+      onProgress: onProgress || null,
+    });
 
-  return result.getBlob();
+    return result.getBlob();
+  } finally {
+    // Clean up blob URLs to prevent memory leaks
+    blobUrls.forEach(url => URL.revokeObjectURL(url));
+  }
 }
