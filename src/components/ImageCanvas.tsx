@@ -58,6 +58,8 @@ interface ImageCanvasProps {
   onSelectEditable?: (id: string | null) => void;
   /** Callback when a design prop is updated via canvas interaction */
   onUpdateProp?: (key: string, value: unknown) => void;
+  /** Callback with list of editable field IDs visible at the current frame */
+  onVisibleEditableFields?: (visibleIds: string[]) => void;
 }
 
 export default function ImageCanvas({
@@ -76,6 +78,7 @@ export default function ImageCanvas({
   selectedEditableId,
   onSelectEditable,
   onUpdateProp,
+  onVisibleEditableFields,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -867,6 +870,7 @@ export default function ImageCanvas({
                 selectedFieldId={selectedEditableId ?? null}
                 onSelectField={onSelectEditable}
                 onUpdateProp={onUpdateProp}
+                onVisibleFieldsChange={onVisibleEditableFields}
                 playerRef={designPlayerRef}
               />
             )}

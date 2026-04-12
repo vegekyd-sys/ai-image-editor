@@ -10,6 +10,7 @@ interface DesignOverlayProps {
   selectedFieldId: string | null;
   onSelectField: (id: string | null) => void;
   onUpdateProp: (key: string, value: unknown) => void;
+  onVisibleFieldsChange?: (visibleIds: string[]) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   playerRef?: any;
 }
@@ -28,11 +29,14 @@ export default function DesignOverlay({
   props,
   selectedFieldId,
   onSelectField,
+  onVisibleFieldsChange,
   playerRef,
 }: DesignOverlayProps) {
   const [rects, setRects] = useState<MeasuredRect[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const rafRef = useRef<number>(0);
+  const onVisibleFieldsChangeRef = useRef(onVisibleFieldsChange);
+  onVisibleFieldsChangeRef.current = onVisibleFieldsChange;
 
   // Track overlay container ref — used as coordinate base in measure()
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -65,6 +69,9 @@ export default function DesignOverlay({
       });
     });
     setRects(newRects);
+    // Notify parent which fields are visible at the current frame
+    const visibleIds = newRects.map(r => r.id);
+    onVisibleFieldsChangeRef.current?.(visibleIds);
   }, [containerEl, editables]);
 
   // Measure on mount, on prop changes
@@ -78,7 +85,7 @@ export default function DesignOverlay({
       overlayMountedRef.current = true;
       measure();
     }
-  });
+  }, [measure]);
 
   // Listen for frameupdate from Remotion Player (for animated designs)
   useEffect(() => {
@@ -157,8 +164,8 @@ export default function DesignOverlay({
               border: isSelected
                 ? '1px dashed rgb(217,70,239)'
                 : isHovered
-                  ? '1px dashed rgba(255,255,255,0.6)'
-                  : '1px dashed rgba(255,255,255,0.3)',
+                  ? '1px dashed rgba(255,255,255,0.4)'
+                  : '1px solid transparent',
               cursor: 'pointer',
               transition: 'border-color 0.15s',
               boxSizing: 'border-box',

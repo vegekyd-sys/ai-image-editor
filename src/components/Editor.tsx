@@ -201,6 +201,13 @@ export default function Editor({
   // Design editable state
   const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
+  const [visibleEditableIds, _setVisibleEditableIds] = useState<string[]>([]);
+  const handleVisibleEditableFields = useCallback((ids: string[]) => {
+    _setVisibleEditableIds(prev => {
+      if (prev.length === ids.length && prev.every((id, i) => id === ids[i])) return prev;
+      return ids;
+    });
+  }, []);
   const setSelectedEditableFieldId = useCallback((id: string | null) => {
     _setSelectedEditableFieldId(id);
     if (!id) setEditingDesignFieldId(null); // deselect also closes editor
@@ -2772,6 +2779,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 selectedEditableId={selectedEditableFieldId}
                 onSelectEditable={setSelectedEditableFieldId}
                 onUpdateProp={handleDesignPropUpdate}
+                onVisibleEditableFields={handleVisibleEditableFields}
               />
             )}
 
@@ -3089,7 +3097,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                   />
                 ) : isViewingDesign ? (
                   <DesignEditPanel
-                    editables={currentDesignSnap!.design!.editables!}
+                    editables={visibleEditableIds.length > 0
+                      ? currentDesignSnap!.design!.editables!.filter(f => visibleEditableIds.includes(f.id))
+                      : currentDesignSnap!.design!.editables!}
                     props={(currentDesignSnap!.design!.props || {}) as Record<string, unknown>}
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}
