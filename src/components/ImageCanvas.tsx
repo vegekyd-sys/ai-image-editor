@@ -947,7 +947,9 @@ export default function ImageCanvas({
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
-          }`}>
+          }`}
+            onClick={() => { toggleRemotionPlay(); }}
+          >
             <RemotionRenderer
               design={animatedDesigns.get(currentIndex)!}
               mode="fill"
@@ -1050,7 +1052,14 @@ export default function ImageCanvas({
                 editables={editableFields}
                 props={designProps}
                 selectedFieldId={selectedEditableId ?? null}
-                onSelectField={onSelectEditable}
+                onSelectField={(id) => {
+                  // Pause playback when selecting an editable field
+                  if (remotionPlaying && remotionRef.current) {
+                    remotionRef.current.pause();
+                    setRemotionPlaying(false);
+                  }
+                  onSelectEditable(id);
+                }}
                 onUpdateProp={onUpdateProp}
                 onStartEdit={onStartEditEditable}
                 onVisibleFieldsChange={onVisibleEditableFields}
