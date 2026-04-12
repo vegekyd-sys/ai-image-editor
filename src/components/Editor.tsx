@@ -118,6 +118,7 @@ interface EditorProps {
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
   onUpdateDescription?: (snapshotId: string, description: string) => void;
+  onSaveDesignProps?: (snapshotId: string, design: DesignPayload) => void;
   initialTitle?: string;
   onRenameProject?: (title: string) => void;
   onBack?: () => void;
@@ -138,6 +139,7 @@ export default function Editor({
   onSaveMessage,
   onUpdateTips,
   onUpdateDescription,
+  onSaveDesignProps,
   initialTitle,
   onRenameProject,
   onBack,
@@ -2502,15 +2504,27 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [onSaveSnapshot, fetchTipsForSnapshot]);
 
   // Update a design prop (text edit or drag position) — immediate re-render via Remotion
+  const designPropsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleDesignPropUpdate = useCallback((key: string, value: unknown) => {
-    setSnapshots(prev => prev.map((s, i) => {
+    setSnapshots(prev => {
       const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
-      if (i === snapIdx && s.design) {
-        return { ...s, design: { ...s.design, props: { ...s.design.props, [key]: value } } };
+      const updated = prev.map((s, i) => {
+        if (i === snapIdx && s.design) {
+          return { ...s, design: { ...s.design, props: { ...s.design.props, [key]: value } } };
+        }
+        return s;
+      });
+      // Debounced persist to workspace (500ms)
+      if (onSaveDesignProps && snapIdx != null) {
+        if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
+        designPropsSaveTimer.current = setTimeout(() => {
+          const snap = updated[snapIdx];
+          if (snap?.design) onSaveDesignProps(snap.id, snap.design);
+        }, 500);
       }
-      return s;
-    }));
-  }, [viewIndex, draftParentIndex]);
+      return updated;
+    });
+  }, [viewIndex, draftParentIndex, onSaveDesignProps]);
 
 
   // Auto-capture poster for design snapshots loaded from Supabase without a poster image

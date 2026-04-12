@@ -205,6 +205,29 @@ export function useProject(projectId: string, userId: string) {
     })
   }, [projectId, userId])
 
+  // Re-upload design JSON when props change (e.g. GUI text editing)
+  const saveDesignProps = useCallback((snapshotId: string, design: import('@/types').DesignPayload) => {
+    Promise.resolve().then(async () => {
+      try {
+        const supabase = getSupabase()
+        const designPath = `code/${snapshotId}.json`
+        const designJson = JSON.stringify({
+          code: design.code,
+          width: design.width,
+          height: design.height,
+          animation: design.animation,
+          props: design.props,
+          ...(design.editables?.length ? { editables: design.editables } : {}),
+        })
+        const bucket = supabase.storage.from('images')
+        const storagePath = `${userId}/workspace/${designPath}`
+        await bucket.upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
+      } catch (err) {
+        console.warn('saveDesignProps error:', err)
+      }
+    })
+  }, [userId])
+
   const saveMessage = useCallback((message: Message) => {
     Promise.resolve().then(async () => {
       try {
@@ -332,5 +355,6 @@ export function useProject(projectId: string, userId: string) {
     updateDescription,
     updateCover,
     updateTitle,
+    saveDesignProps,
   }
 }
