@@ -145,8 +145,13 @@ export default function ImageCanvas({
     }
   }, []);
 
+  // Check if touch is inside Remotion Player — let Player handle its own controls
+  const isInsidePlayer = useCallback((e: React.TouchEvent) => {
+    return (e.target as HTMLElement).closest('[data-remotion]') !== null;
+  }, []);
+
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (annotationMode) return;
+    if (annotationMode || isInsidePlayer(e)) return;
     if (e.touches.length === 2) {
       // Pinch start — skip for video entry
       if (isVideoEntry) return;
@@ -189,10 +194,10 @@ export default function ImageCanvas({
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, isInsidePlayer]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (annotationMode) return;
+    if (annotationMode || isInsidePlayer(e)) return;
     if (e.touches.length === 2 && isPinching.current) {
       // Pinch move
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -250,7 +255,7 @@ export default function ImageCanvas({
   }, [scale, isComparing, clearLongPress, annotationMode, isVideoEntry, isDraft, isDesktop, onPullDown]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (annotationMode) return;
+    if (annotationMode || isInsidePlayer(e)) return;
     clearLongPress();
 
     // End pull-down gesture
@@ -824,7 +829,7 @@ export default function ImageCanvas({
           </div>
         ) : animatedDesigns?.get(currentIndex) && !isComparing ? (
           /* Animated design — rendered via Remotion Player (skip during before/after) */
-          <div data-remotion className={`w-full h-full flex items-center justify-center transition-all duration-150 ${
+          <div data-remotion className={`w-full h-full flex items-center justify-center transition-all duration-150 touch-auto ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
