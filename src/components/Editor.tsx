@@ -388,11 +388,18 @@ export default function Editor({
 
   // Map timeline index → DesignPayload for animated designs (rendered via Player)
   // All design snapshots (still + animated) render via Player in ImageCanvas
+  // Map timeline index → design payload (accounts for virtual draft insertion)
   const designsMap = useMemo(() => {
     const map = new Map<number, import('@/types').DesignPayload>();
-    snapshots.forEach((s, i) => { if (s.design) map.set(i, s.design); });
+    const hasDraft = draftParentIndex !== null;
+    snapshots.forEach((s, i) => {
+      if (!s.design) return;
+      // When draft is active, snapshots after draftParentIndex shift +1 in timeline
+      const timelineIdx = hasDraft && i > draftParentIndex! ? i + 1 : i;
+      map.set(timelineIdx, s.design);
+    });
     return map;
-  }, [snapshots]);
+  }, [snapshots, draftParentIndex]);
 
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
