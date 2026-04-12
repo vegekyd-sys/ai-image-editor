@@ -815,8 +815,8 @@ export default function ImageCanvas({
             </div>
             <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
-        ) : animatedDesigns?.get(currentIndex) ? (
-          /* Animated design — rendered via Remotion Player */
+        ) : animatedDesigns?.get(currentIndex) && !isComparing ? (
+          /* Animated design — rendered via Remotion Player (skip during before/after comparison) */
           <div className={`w-full h-full flex items-center justify-center transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :

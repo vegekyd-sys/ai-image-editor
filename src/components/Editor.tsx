@@ -335,7 +335,8 @@ export default function Editor({
     if (draftParentIndex === null || previewingTipIndex === null) return null;
     const parentTips = snapshots[draftParentIndex]?.tips ?? [];
     const tip = parentTips[previewingTipIndex];
-    return tip?.previewImage || snapshots[draftParentIndex]?.image || null;
+    const parent = snapshots[draftParentIndex];
+    return tip?.previewImage || parent?.imageUrl || parent?.image || null;
   }, [draftParentIndex, previewingTipIndex, snapshots]);
 
   const draftImage = useMemo(() => {
@@ -1807,10 +1808,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   const previousImage = useMemo(() => {
     let img: string | undefined;
     if (isViewingDraft && draftParentIndex !== null) {
-      img = snapshots[draftParentIndex]?.image;
+      const parent = snapshots[draftParentIndex];
+      img = parent?.imageUrl || parent?.image || undefined; // design poster may be in imageUrl
     } else {
       const snapIdx = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
-      img = snapIdx > 0 ? snapshots[snapIdx - 1]?.image : undefined;
+      if (snapIdx > 0) {
+        const prev = snapshots[snapIdx - 1];
+        img = prev?.imageUrl || prev?.image || undefined; // prefer URL (design poster)
+      }
     }
     // URL images: route through optimized path (same quality as canvas)
     if (img && img.startsWith('http')) return getOptimizedUrl(img);
