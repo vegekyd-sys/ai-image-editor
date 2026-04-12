@@ -152,12 +152,39 @@ export default function RemotionRenderer({ design, onError, mode = 'inline' }: R
 
 // ─── MP4 Export ──────────────────────────────────────────────────────────────
 
+/** Pre-fetch remote audio URLs in design code → data URLs (fixes iOS CORS) */
+async function resolveAudioUrls(code: string): Promise<string> {
+  const audioUrlPattern = /<Audio[^>]+src=["']?(https?:\/\/[^"'\s>]+\.(?:mp3|wav|m4a|aac|ogg)[^"'\s>]*)["']?/g;
+  const matches = [...code.matchAll(audioUrlPattern)];
+  if (!matches.length) return code;
+
+  let resolved = code;
+  for (const match of matches) {
+    const url = match[1];
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+      resolved = resolved.replace(url, dataUrl);
+    } catch (e) {
+      console.warn('[exportDesignVideo] failed to resolve audio URL:', url, e);
+    }
+  }
+  return resolved;
+}
+
 export async function exportDesignVideo(
   design: DesignPayload,
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
   preloadBabel().catch(() => {});
-  const Component = evalRemotionJSX(design.code);
+  // Resolve remote audio URLs to data URLs before compile (iOS CORS fix)
+  const resolvedCode = await resolveAudioUrls(design.code);
+  const Component = evalRemotionJSX(resolvedCode);
   if (!Component) throw new Error('Failed to compile design code');
 
   const fps = design.animation?.fps || 30;
