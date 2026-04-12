@@ -618,12 +618,20 @@ export default function ImageCanvas({
     return () => cancelAnimationFrame(raf);
   }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
-  // Reset when switching snapshots
+  // Reset + auto-play when switching to a design snapshot
   useEffect(() => {
     setRemotionPlaying(false);
     remotionFrameRef.current = 0;
     remotionStartedRef.current = false;
-    // Don't seekTo(0) here — RemotionRenderer's seekTo(0) in onPlayerRef handles first frame
+    // Auto-play after short delay (let poster show, then start)
+    if (currentDesign?.animation && remotionRef.current) {
+      const timer = setTimeout(() => {
+        remotionRef.current?.play();
+        remotionStartedRef.current = true;
+        setRemotionPlaying(true);
+      }, 600);
+      return () => clearTimeout(timer);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex]);
 
@@ -932,9 +940,7 @@ export default function ImageCanvas({
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
-          }`}
-            onClick={toggleRemotionPlay}
-          >
+          }`}>
             <RemotionRenderer
               design={animatedDesigns.get(currentIndex)!}
               mode="fill"
@@ -956,14 +962,19 @@ export default function ImageCanvas({
               />
             )}
 
-            {/* Center play button — same as video */}
-            {!remotionPlaying && currentDesign?.animation && (
-              <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-                <div className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
-                  <svg width="22" height="22" viewBox="0 0 10 10" fill="white">
-                    <polygon points="3,1 9,5 3,9" />
-                  </svg>
-                </div>
+            {/* Play/pause button — bottom-left, large */}
+            {currentDesign?.animation && (
+              <div className="absolute z-10" style={{ bottom: 28, left: 12 }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleRemotionPlay(); }}
+                  className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+                >
+                  {remotionPlaying ? (
+                    <svg width="16" height="16" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+                  )}
+                </button>
               </div>
             )}
 
@@ -983,6 +994,9 @@ export default function ImageCanvas({
                 data-remotion-seek
                 className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
                 style={{ height: 24, touchAction: 'none' }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
