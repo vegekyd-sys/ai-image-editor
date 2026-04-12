@@ -621,9 +621,9 @@ export default function ImageCanvas({
   useEffect(() => {
     setRemotionPlaying(false);
     remotionFrameRef.current = 0;
-    remotionRef.current?.seekTo(0);
-    updateRemotionUI();
-  }, [currentIndex, updateRemotionUI]);
+    // Don't seekTo(0) here — RemotionRenderer's seekTo(0) in onPlayerRef handles first frame
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex]);
 
   const toggleRemotionPlay = useCallback(() => {
     const p = remotionRef.current;
