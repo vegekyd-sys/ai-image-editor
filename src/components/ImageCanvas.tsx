@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import type { PlayerRef } from '@remotion/player';
 import type { AnnotationEntry, DesignPayload } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
 import { containRect } from '@/lib/image/geometry';
@@ -99,6 +100,11 @@ export default function ImageCanvas({
   const [videoError, setVideoError] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
+  // Remotion Player custom controls
+  const remotionRef = useRef<PlayerRef | null>(null);
+  const [remotionPlaying, setRemotionPlaying] = useState(false);
+  const [remotionFrame, setRemotionFrame] = useState(0);
+  const remotionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
@@ -541,6 +547,58 @@ export default function ImageCanvas({
     }
   }, [videoPlayTrigger, isVideoEntry, videoUrl]);
 
+  // Remotion Player: poll current frame for custom seek bar
+  const currentDesign = animatedDesigns?.get(currentIndex);
+  const remotionFps = currentDesign?.animation?.fps || 30;
+  const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
+  const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
+
+  useEffect(() => {
+    if (!remotionRef.current || !currentDesign?.animation) return;
+    const timer = setInterval(() => {
+      const frame = remotionRef.current?.getCurrentFrame() ?? 0;
+      setRemotionFrame(frame);
+      // Detect end of playback
+      if (frame >= remotionTotalFrames - 1 && remotionPlaying) {
+        setRemotionPlaying(false);
+        remotionRef.current?.pause();
+      }
+    }, 100);
+    remotionTimerRef.current = timer;
+    return () => clearInterval(timer);
+  }, [currentDesign, remotionTotalFrames, remotionPlaying]);
+
+  // Reset Remotion state when switching snapshots
+  useEffect(() => {
+    setRemotionPlaying(false);
+    setRemotionFrame(0);
+    remotionRef.current?.seekTo(0);
+  }, [currentIndex]);
+
+  const toggleRemotionPlay = useCallback(() => {
+    const p = remotionRef.current;
+    if (!p) return;
+    if (remotionPlaying) {
+      p.pause();
+      setRemotionPlaying(false);
+    } else {
+      // If at end, restart from beginning
+      if (remotionFrame >= remotionTotalFrames - 1) p.seekTo(0);
+      p.play();
+      setRemotionPlaying(true);
+    }
+  }, [remotionPlaying, remotionFrame, remotionTotalFrames]);
+
+  const seekRemotion = useCallback((clientX: number) => {
+    const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
+    if (!bar || !remotionRef.current) return;
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const frame = Math.round(ratio * (remotionTotalFrames - 1));
+    remotionRef.current.seekTo(frame);
+    setRemotionFrame(frame);
+  }, [remotionTotalFrames]);
+
   // Non-Supabase video URLs (Kling CDN etc.) are proxied to avoid CORS and expiry issues
   const effectiveVideoUrl = videoUrl && !videoUrl.includes('supabase.co')
     ? `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`
@@ -816,17 +874,69 @@ export default function ImageCanvas({
             <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
         ) : animatedDesigns?.get(currentIndex) && !isComparing ? (
-          /* Animated design — rendered via Remotion Player (skip during before/after) */
-          <div className={`w-full h-full flex items-center justify-center transition-all duration-150 ${
+          /* Animated design — Remotion Player with custom controls (same as video) */
+          <div className={`relative w-full h-full transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
-          }`}>
+          }`}
+            onClick={toggleRemotionPlay}
+          >
             <RemotionRenderer
               design={animatedDesigns.get(currentIndex)!}
               mode="fill"
+              hideControls
+              onPlayerRef={(ref) => { remotionRef.current = ref; }}
               onError={(err) => console.error('[canvas design]', err)}
             />
+
+            {/* Center play button — same as video */}
+            {!remotionPlaying && currentDesign?.animation && (
+              <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+                <div className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+                  <svg width="22" height="22" viewBox="0 0 10 10" fill="white">
+                    <polygon points="3,1 9,5 3,9" />
+                  </svg>
+                </div>
+              </div>
+            )}
+
+            {/* Time badge — same as video */}
+            {currentDesign?.animation && (
+              <div className="absolute z-20 pointer-events-none" style={{ bottom: 14, right: 10 }}>
+                <span className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
+                  style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}>
+                  {formatTime(remotionFrame / remotionFps)}<span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>{formatTime(remotionDuration)}
+                </span>
+              </div>
+            )}
+
+            {/* Seek bar — same style as video, Spotify-style thicken on hover */}
+            {currentDesign?.animation && (
+              <div
+                data-remotion-seek
+                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
+                style={{ height: 20, touchAction: 'none' }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                  seekRemotion(e.clientX);
+                }}
+                onPointerMove={(e) => {
+                  if (e.buttons) seekRemotion(e.clientX);
+                }}
+                onPointerUp={(e) => {
+                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[4px] transition-[height] duration-150">
+                  <div className="absolute inset-0 bg-white/12" />
+                  <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${remotionTotalFrames > 1 ? (remotionFrame / (remotionTotalFrames - 1)) * 100 : 0}%` }} />
+                </div>
+              </div>
+            )}
           </div>
         ) : displayImage ? (
           /* eslint-disable-next-line @next/next/no-img-element */

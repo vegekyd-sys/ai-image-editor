@@ -85,9 +85,13 @@ interface RemotionRendererProps {
   design: DesignPayload;
   onError?: (error: string) => void;
   mode?: 'fill' | 'inline';
+  /** Hide built-in controls — parent provides custom controls via onPlayerRef */
+  hideControls?: boolean;
+  /** Expose player ref for external control (play/pause/seekTo) */
+  onPlayerRef?: (ref: PlayerRef | null) => void;
 }
 
-export default function RemotionRenderer({ design, onError, mode = 'inline' }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const initRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,6 +112,12 @@ export default function RemotionRenderer({ design, onError, mode = 'inline' }: R
     setComponent(() => comp);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
+
+  // Expose player ref to parent for custom controls
+  useEffect(() => {
+    onPlayerRef?.(playerRef.current);
+    return () => onPlayerRef?.(null);
+  }, [Component, onPlayerRef]);
 
   // Pause Remotion Player when a MusicCard starts playing
   useEffect(() => {
@@ -136,9 +146,9 @@ export default function RemotionRenderer({ design, onError, mode = 'inline' }: R
           ? { width: '100%', height: '100%' }
           : { width: '100%', borderRadius: 12 }
         }
-        controls={!isStill}
-        loop={!isStill}
-        autoPlay={!isStill}
+        controls={!isStill && !hideControls}
+        loop={false}
+        autoPlay={false}
         acknowledgeRemotionLicense
         errorFallback={({ error }) => (
           <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
