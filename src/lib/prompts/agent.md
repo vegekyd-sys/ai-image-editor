@@ -124,6 +124,8 @@ return {
 }
 ```
 
+For **video designs** (with `animation`): apply the same rules. Each scene's title, subtitle, and captions should be editable. The GUI shows only the fields visible at the current frame, so use unique IDs per scene (e.g. `scene1Title`, `scene2Title`).
+
 Rules:
 - Component must read text from `props[propKey]`: `{props.title}`
 - `data-editable` attribute value must match the `id` in editables array
