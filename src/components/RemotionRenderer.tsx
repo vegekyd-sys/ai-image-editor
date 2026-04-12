@@ -85,14 +85,14 @@ interface RemotionRendererProps {
   design: DesignPayload;
   onError?: (error: string) => void;
   mode?: 'fill' | 'inline';
-  /** Hide built-in controls — parent provides custom controls via onPlayerRef */
   hideControls?: boolean;
-  /** Expose player ref for external control (play/pause/seekTo) */
+  onContainerRef?: (el: HTMLDivElement | null) => void;
   onPlayerRef?: (ref: PlayerRef | null) => void;
 }
 
-export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, onPlayerRef }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, onContainerRef, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const initRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
@@ -113,11 +113,16 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
-  // Expose player ref to parent for custom controls
+  // Expose container and player refs to parent
+  useEffect(() => {
+    onContainerRef?.(wrapperRef.current);
+    return () => onContainerRef?.(null);
+  }, [onContainerRef, Component]);
+
   useEffect(() => {
     onPlayerRef?.(playerRef.current);
     return () => onPlayerRef?.(null);
-  }, [Component, onPlayerRef]);
+  }, [onPlayerRef, Component]);
 
   // Pause Remotion Player when a MusicCard starts playing
   useEffect(() => {
@@ -131,7 +136,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const isFill = mode === 'fill';
 
   return (
-    <div style={isFill ? { width: '100%', height: '100%' } : {
+    <div ref={wrapperRef} style={isFill ? { width: '100%', height: '100%' } : {
       borderRadius: 12, overflow: 'hidden', margin: '8px 0',
     }}>
       <Player

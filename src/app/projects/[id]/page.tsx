@@ -16,7 +16,7 @@ export default function ProjectPage() {
   const params = useParams()
   const projectId = params.id as string
 
-  const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle } =
+  const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle, saveDesignProps } =
     useProject(projectId, user?.id ?? '')
 
   // Sync cache for instant render (snapshots + messages from IDB/memory)
@@ -242,6 +242,7 @@ export default function ProjectPage() {
       onSaveMessage={handleSaveMessage}
       onUpdateTips={handleUpdateTips}
       onUpdateDescription={updateDescription}
+      onSaveDesignProps={saveDesignProps}
       initialTitle={initialTitle}
       onRenameProject={updateTitle}
       onBack={() => router.push('/projects')}

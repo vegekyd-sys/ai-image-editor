@@ -96,6 +96,37 @@ Rules:
 
 **IMPORTANT: run_code sandbox has NO require, NO fs, NO file system access.** Do not try to `require('fs')` or read files inside run_code. Use the `read_file` tool instead if you need file contents.
 
+**Editable Fields**
+
+When creating a design, declare editable text fields so users can edit directly in GUI:
+- Add `data-editable="fieldId"` attribute to the wrapper element of editable content
+- Declare `editables` array mapping field IDs to prop keys
+
+Example:
+```js
+return {
+  type: 'render',
+  code: `function Design(props) {
+    return (
+      <AbsoluteFill>
+        <div data-editable="title">
+          <h1>{props.title}</h1>
+        </div>
+      </AbsoluteFill>
+    );
+  }`,
+  props: { title: 'Hello' },
+  editables: [
+    { id: 'title', type: 'text', label: 'Title', propKey: 'title' }
+  ],
+  width: 1080, height: 1350,
+}
+```
+
+Rules:
+- Component must read text from `props[propKey]`: `{props.title}`
+- `data-editable` attribute value must match the `id` in editables array
+
 **Saving and editing code:**
 After every `run_code` call, save with `write_file({ fromLastRunCode: true, name: "short-slug" })`. Path is auto-generated with project ID + snapshot number. No need to copy code or construct paths.
 When the user asks to modify previous work ("change the color", "make it bigger"):

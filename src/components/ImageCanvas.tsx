@@ -2,9 +2,9 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import type { PlayerRef } from '@remotion/player';
-import type { AnnotationEntry, DesignPayload } from '@/types';
+import type { AnnotationEntry, DesignPayload, EditableField } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
+import DesignOverlay from '@/components/DesignOverlay';
 import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
 
@@ -48,6 +48,18 @@ interface ImageCanvasProps {
   referenceCount?: number;
   /** Map of timeline index → DesignPayload for animated designs (rendered via Player) */
   animatedDesigns?: Map<number, DesignPayload>;
+  /** Editable fields declared by the Agent for the current design */
+  editableFields?: EditableField[];
+  /** Current design props for editable field values */
+  designProps?: Record<string, unknown>;
+  /** Currently selected editable field ID (bidirectional with DesignEditPanel) */
+  selectedEditableId?: string | null;
+  /** Callback when an editable field is selected/deselected in the canvas overlay */
+  onSelectEditable?: (id: string | null) => void;
+  /** Callback when a design prop is updated via canvas interaction */
+  onUpdateProp?: (key: string, value: unknown) => void;
+  /** Callback with list of editable field IDs visible at the current frame */
+  onVisibleEditableFields?: (visibleIds: string[]) => void;
 }
 
 export default function ImageCanvas({
@@ -61,6 +73,12 @@ export default function ImageCanvas({
   videoPlayTrigger,
   referenceCount = 0,
   animatedDesigns,
+  editableFields,
+  designProps,
+  selectedEditableId,
+  onSelectEditable,
+  onUpdateProp,
+  onVisibleEditableFields,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -75,6 +93,17 @@ export default function ImageCanvas({
   const isPinching = useRef(false);
   const lastPanPos = useRef({ x: 0, y: 0 });
   const isPanning = useRef(false);
+
+  // Design overlay refs (for editable designs)
+  const [designContainerEl, setDesignContainerEl] = useState<HTMLDivElement | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [designPlayerRef, setDesignPlayerRef] = useState<any>(null);
+
+  // When an editable is selected: pause player
+  useEffect(() => {
+    if (!selectedEditableId || !designPlayerRef) return;
+    try { designPlayerRef.pause(); } catch { /* ignore */ }
+  }, [selectedEditableId, designPlayerRef]);
 
   // Long press compare
   const [isComparing, setIsComparing] = useState(false);
@@ -340,7 +369,9 @@ export default function ImageCanvas({
     }
     if (annotationMode) return;
     if (isDraft) onDismissDraft?.();
-  }, [isDraft, onDismissDraft, annotationMode]);
+    // Deselect editable field when clicking canvas background
+    if (selectedEditableId) onSelectEditable?.(null);
+  }, [isDraft, onDismissDraft, annotationMode, selectedEditableId, onSelectEditable]);
 
   // Desktop: unified mouse handler — mirrors all touch interactions
   // (pan when zoomed, long-press compare, swipe navigate, double-click reset zoom)
@@ -906,6 +937,8 @@ export default function ImageCanvas({
               hideControls
               onPlayerRef={(ref) => { remotionRef.current = ref; }}
               onError={(err) => console.error('[canvas design]', err)}
+              onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
+              onPlayerRef={editableFields?.length ? setDesignPlayerRef : undefined}
             />
 
             {/* Center play button — same as video */}
@@ -964,6 +997,18 @@ export default function ImageCanvas({
                   <div data-remotion-fill className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: '0%' }} />
                 </div>
               </div>
+            {/* Editable design overlay */}
+            {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
+              <DesignOverlay
+                containerEl={designContainerEl}
+                editables={editableFields}
+                props={designProps}
+                selectedFieldId={selectedEditableId ?? null}
+                onSelectField={onSelectEditable}
+                onUpdateProp={onUpdateProp}
+                onVisibleFieldsChange={onVisibleEditableFields}
+                playerRef={designPlayerRef}
+              />
             )}
           </div>
         ) : displayImage ? (

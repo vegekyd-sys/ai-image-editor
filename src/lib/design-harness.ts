@@ -5,10 +5,12 @@
  */
 
 import { transform as sucraseTransform } from 'sucrase';
+import type { EditableField } from '@/types';
 
 export interface DesignResult {
   code: string;
   props?: Record<string, unknown>;
+  editables?: EditableField[];
   [key: string]: unknown;
 }
 
@@ -33,7 +35,22 @@ export function validateDesign(result: DesignResult): string | null {
   const urlError = checkImageUrls(result.code);
   if (urlError) return urlError;
 
+  // ── Check 4: Editables validation ──
+  const editablesError = validateEditables(result.editables);
+  if (editablesError) return editablesError;
+
   return null; // all checks passed
+}
+
+/** Validate editable fields declaration. Returns error message or null. */
+export function validateEditables(editables?: EditableField[]): string | null {
+  if (!editables || editables.length === 0) return null;
+  for (const field of editables) {
+    if (!field.id || !field.type || !field.propKey) {
+      return '⚠️ Editable field missing required properties (id, type, propKey). Each editable must have { id, type, label, propKey }.';
+    }
+  }
+  return null;
 }
 
 /** Replace HTML <img with Remotion <Img so renderStillOnWeb waits for image loading */
