@@ -825,9 +825,6 @@ export default function ImageCanvas({
         ) : animatedDesigns?.get(currentIndex) && !isComparing ? (
           /* Animated design — rendered via Remotion Player (skip during before/after) */
           <div data-remotion
-            onTouchStart={e => e.stopPropagation()}
-            onTouchMove={e => e.stopPropagation()}
-            onTouchEnd={e => e.stopPropagation()}
             className={`w-full h-full flex items-center justify-center transition-all duration-150 touch-auto ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
