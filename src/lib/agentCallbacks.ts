@@ -101,6 +101,18 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     analyzedTextBuf = '';
   };
 
+  // Tool status minimum display time (2s) — prevents "Thinking" from immediately overriding tool statuses
+  const MIN_TOOL_DISPLAY_MS = 2000;
+  let toolStatusSetAt = 0;
+  let pendingThinking: string | null = null;
+  let minDisplayTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const isThinkingStatus = (s: string) =>
+    s.includes('Thinking') || s.includes('正在思考');
+
+  const isToolStatus = (s: string) =>
+    !isThinkingStatus(s) && !s.includes('Done') && !s.includes('完成') && !s.includes('greeting');
+
   const callbacks: AgentStreamCallbacks = {
     onStatus: (status) => {
       const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
@@ -108,7 +120,35 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (status.includes('生成图片') || status.includes('Generating image')) {
         genStartTime = performance.now();
       }
-      ctx.setAgentStatus(status);
+
+      if (isToolStatus(status)) {
+        // Tool status: display immediately, record timestamp
+        pendingThinking = null;
+        if (minDisplayTimer) { clearTimeout(minDisplayTimer); minDisplayTimer = null; }
+        toolStatusSetAt = performance.now();
+        ctx.setAgentStatus(status);
+      } else if (isThinkingStatus(status)) {
+        // Thinking: defer if tool status hasn't been shown long enough
+        const remaining = MIN_TOOL_DISPLAY_MS - (performance.now() - toolStatusSetAt);
+        if (remaining > 0 && toolStatusSetAt > 0) {
+          pendingThinking = status;
+          if (minDisplayTimer) clearTimeout(minDisplayTimer);
+          minDisplayTimer = setTimeout(() => {
+            if (pendingThinking) {
+              ctx.setAgentStatus(pendingThinking);
+              pendingThinking = null;
+            }
+            minDisplayTimer = null;
+          }, remaining);
+        } else {
+          ctx.setAgentStatus(status);
+        }
+      } else {
+        // Other statuses (done, error, etc): display immediately
+        pendingThinking = null;
+        if (minDisplayTimer) { clearTimeout(minDisplayTimer); minDisplayTimer = null; }
+        ctx.setAgentStatus(status);
+      }
     },
 
     onImageAnalyzed: (imageIndex) => {

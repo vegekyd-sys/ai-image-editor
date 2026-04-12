@@ -374,6 +374,8 @@ interface AgentChatViewProps {
   onDesignPoster?: (messageId: string, posterDataUrl: string) => void;
   /** User selected a music track from MusicCard */
   onMusicSelect?: (track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }) => void;
+  /** Background task running (music generation, video rendering) — show status even when agent is idle */
+  hasBackgroundTask?: boolean;
 }
 
 export default function AgentChatView({
@@ -400,6 +402,7 @@ export default function AgentChatView({
   onVideoTap,
   onDesignPoster,
   onMusicSelect,
+  hasBackgroundTask = false,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -1087,7 +1090,7 @@ export default function AgentChatView({
           ))}
 
           {/* Agent status line — below last message */}
-          {isAgentActive && agentStatus && (
+          {(isAgentActive || hasBackgroundTask) && agentStatus && (
             <div className="flex items-center gap-2 pl-0.5">
               <div className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse flex-shrink-0" />
               <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.30)' }}>
