@@ -2515,11 +2515,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         return s;
       });
       // Debounced persist to workspace (500ms)
-      if (onSaveDesignProps && snapIdx != null) {
+      if (snapIdx != null) {
         if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
+        const capturedIdx = snapIdx;
         designPropsSaveTimer.current = setTimeout(() => {
-          const snap = updated[snapIdx];
-          if (snap?.design) onSaveDesignProps(snap.id, snap.design);
+          const snap = updated[capturedIdx];
+          if (snap?.design && onSaveDesignProps) {
+            console.log('[design] saving props for', snap.id);
+            onSaveDesignProps(snap.id, snap.design);
+          }
         }, 500);
       }
       return updated;
