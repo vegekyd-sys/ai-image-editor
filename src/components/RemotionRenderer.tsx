@@ -121,10 +121,6 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
   useEffect(() => {
     onPlayerRef?.(playerRef.current);
-    // Seek to frame 0 to render first frame (avoids black screen with autoPlay=false)
-    if (playerRef.current) {
-      setTimeout(() => playerRef.current?.seekTo(0), 100);
-    }
     return () => onPlayerRef?.(null);
   }, [onPlayerRef, Component]);
 

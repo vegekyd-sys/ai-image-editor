@@ -944,6 +944,15 @@ export default function ImageCanvas({
               }}
             />
 
+            {/* Poster overlay when paused — avoids Remotion black frame */}
+            {!remotionPlaying && displayImage && (
+              <img
+                src={displayImage}
+                alt="poster"
+                className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none z-[1]"
+              />
+            )}
+
             {/* Center play button — same as video */}
             {!remotionPlaying && currentDesign?.animation && (
               <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
