@@ -185,20 +185,8 @@ export async function exportDesignVideo(
 ): Promise<Blob> {
   preloadBabel().catch(() => {});
 
-  // Pre-flight check: can the browser encode h264/mp4?
-  const { canRenderMediaOnWeb } = await import('@remotion/web-renderer');
-  const check = await canRenderMediaOnWeb({
-    container: 'mp4', videoCodec: 'h264',
-    width: design.width, height: design.height,
-  });
-  if (!check.canRender) {
-    throw new Error(`Video export not supported: ${check.issues.map(i => i.message).join('; ')}`);
-  }
-
-  // Resolve remote image URLs → data URLs (CORS workaround, same as captureDesignPoster)
-  const imageResolved = await resolveCodeUrls(design.code);
-  // Resolve remote audio URLs → blob URLs via server proxy (CORS + avoid massive data URLs)
-  const { code: resolvedCode, blobUrls } = await resolveAudioUrls(imageResolved);
+  // Pre-fetch remote image URLs → data URLs so <Img> doesn't need network during render
+  const resolvedCode = await resolveCodeUrls(design.code);
   const Component = evalRemotionJSX(resolvedCode);
   if (!Component) throw new Error('Failed to compile design code');
 
@@ -207,23 +195,19 @@ export async function exportDesignVideo(
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
-  try {
-    const result = await renderMediaOnWeb({
-      composition: {
-        component: Component,
-        durationInFrames, fps,
-        width: design.width, height: design.height,
-        id: 'agent-design-export',
-        calculateMetadata: null, defaultProps: {},
-      },
-      inputProps: (design.props || {}) as Record<string, unknown>,
-      videoCodec: 'h264', container: 'mp4',
-      onProgress: onProgress || null,
-    });
+  const result = await renderMediaOnWeb({
+    composition: {
+      component: Component,
+      durationInFrames, fps,
+      width: design.width, height: design.height,
+      id: 'agent-design-export',
+      calculateMetadata: null, defaultProps: {},
+    },
+    inputProps: (design.props || {}) as Record<string, unknown>,
+    videoCodec: 'h264', container: 'mp4',
+    onProgress: onProgress || null,
+    delayRenderTimeoutInMilliseconds: 30000,
+  });
 
-    return result.getBlob();
-  } finally {
-    // Clean up blob URLs to prevent memory leaks
-    blobUrls.forEach(url => URL.revokeObjectURL(url));
-  }
+  return result.getBlob();
 }

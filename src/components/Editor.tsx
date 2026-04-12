@@ -157,6 +157,7 @@ export default function Editor({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
+  const pendingVideoRef = useRef<{ blob: Blob; filename: string } | null>(null);
   // Babel CDN loading status for UI feedback
   const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
   useEffect(() => subscribeBabelStatus(() => setBabelStatus(getBabelStatus().status)), []);
@@ -2343,27 +2344,46 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     const snapIdx = snapFromTimeline(viewIndex, draftParentIndexRef.current);
     const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     if (currentSnap?.design?.animation) {
+      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+
+      // Mobile step 2: video already exported → share with fresh user gesture
+      if (isMobile && pendingVideoRef.current) {
+        const { blob, filename } = pendingVideoRef.current;
+        pendingVideoRef.current = null;
+        const file = new File([blob], filename, { type: 'video/mp4' });
+        try {
+          await navigator.share({ files: [file] });
+        } catch { /* user cancelled share sheet */ }
+        setAgentStatus(t('editor.done'));
+        showSaveToast();
+        return;
+      }
+
       setIsSaving(true);
       try {
         const { exportDesignVideo } = await import('@/components/RemotionRenderer');
         const blob = await exportDesignVideo(currentSnap.design, (p) => {
           setAgentStatus(`Exporting video... ${Math.round(p.progress * 100)}%`);
         });
-        const filename = `makaron-design-${Date.now()}.mp4`;
-        const file = new File([blob], filename, { type: 'video/mp4' });
-        if (navigator.share && navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
-          await navigator.share({ files: [file] });
+
+        if (isMobile) {
+          // Mobile: store blob, prompt user to tap Share
+          pendingVideoRef.current = { blob, filename: `makaron-design-${Date.now()}.mp4` };
+          setIsSaving(false);
+          setAgentStatus(t('editor.videoReady'));
         } else {
+          // Desktop: download directly
+          const filename = `makaron-design-${Date.now()}.mp4`;
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
           link.download = filename;
           link.click();
-          URL.revokeObjectURL(url);
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          setIsSaving(false);
+          setAgentStatus(t('editor.done'));
+          showSaveToast();
         }
-        setIsSaving(false);
-        setAgentStatus(t('editor.done'));
-        showSaveToast();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('MP4 export failed:', msg, e);
@@ -2901,7 +2921,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                           </svg>
                           Saving
                         </span>
-                      ) : 'Save'}
+                      ) : pendingVideoRef.current && /iPhone|iPad|Android/i.test(navigator.userAgent) ? t('editor.share') : 'Save'}
                     </button>
                   )}
                 </div>
