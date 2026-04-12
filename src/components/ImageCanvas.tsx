@@ -134,6 +134,7 @@ export default function ImageCanvas({
   const remotionRef = useRef<PlayerRef | null>(null);
   const [remotionPlaying, setRemotionPlaying] = useState(false);
   const remotionFrameRef = useRef(0);
+  const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
@@ -621,6 +622,7 @@ export default function ImageCanvas({
   useEffect(() => {
     setRemotionPlaying(false);
     remotionFrameRef.current = 0;
+    remotionStartedRef.current = false;
     // Don't seekTo(0) here — RemotionRenderer's seekTo(0) in onPlayerRef handles first frame
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex]);
@@ -634,6 +636,7 @@ export default function ImageCanvas({
     } else {
       if (remotionFrameRef.current >= remotionTotalFrames - 1) p.seekTo(0);
       p.play();
+      remotionStartedRef.current = true;
       setRemotionPlaying(true);
     }
   }, [remotionPlaying, remotionTotalFrames]);
@@ -944,8 +947,8 @@ export default function ImageCanvas({
               }}
             />
 
-            {/* Poster overlay when paused — avoids Remotion black frame */}
-            {!remotionPlaying && displayImage && (
+            {/* Poster — only shown before first play (covers Remotion black first frame) */}
+            {!remotionStartedRef.current && displayImage && (
               <img
                 src={displayImage}
                 alt="poster"
