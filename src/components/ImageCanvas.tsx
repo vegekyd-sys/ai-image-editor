@@ -815,19 +815,31 @@ export default function ImageCanvas({
             </div>
             <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
-        ) : animatedDesigns?.get(currentIndex) && !isComparing ? (
-          /* Animated design — rendered via Remotion Player (skip during before/after comparison) */
-          <div className={`w-full h-full flex items-center justify-center transition-all duration-150 ${
-            pullDownActive ? 'opacity-[0.15] grayscale' :
-            animDir === 'left' ? 'opacity-0 -translate-x-8' :
-            animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
-          }`}>
-            <RemotionRenderer
-              design={animatedDesigns.get(currentIndex)!}
-              mode="fill"
-              onError={(err) => console.error('[canvas design]', err)}
-            />
-          </div>
+        ) : animatedDesigns?.get(currentIndex) ? (
+          /* Animated design — Player + hidden poster img for smooth before/after */
+          <>
+            <div className={`absolute inset-0 w-full h-full flex items-center justify-center transition-opacity duration-150 ${
+              isComparing ? 'opacity-0 pointer-events-none' :
+              pullDownActive ? 'opacity-[0.15] grayscale' :
+              animDir === 'left' ? 'opacity-0' :
+              animDir === 'right' ? 'opacity-0' : 'opacity-100'
+            }`}>
+              <RemotionRenderer
+                design={animatedDesigns.get(currentIndex)!}
+                mode="fill"
+                onError={(err) => console.error('[canvas design]', err)}
+              />
+            </div>
+            {/* Poster image shown during before/after comparison */}
+            {isComparing && displayImage && (
+              <img
+                src={displayImage}
+                alt="comparison"
+                className="w-full h-full object-contain select-none pointer-events-none"
+                style={{ position: 'absolute', inset: 0 }}
+              />
+            )}
+          </>
         ) : displayImage ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
