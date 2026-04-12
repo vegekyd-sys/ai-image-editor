@@ -29,7 +29,7 @@ const bedrock = createAmazonBedrock({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
 });
-const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-sonnet-4-6');
+const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1');
 
 // ---------------------------------------------------------------------------
 // Types
