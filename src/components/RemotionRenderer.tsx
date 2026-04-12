@@ -201,7 +201,9 @@ export async function exportDesignVideo(
   preloadBabel().catch(() => {});
 
   // Pre-fetch remote image URLs → data URLs so <Img> doesn't need network during render
-  const resolvedCode = await resolveCodeUrls(design.code);
+  const imageResolved = await resolveCodeUrls(design.code);
+  // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
+  const { code: resolvedCode, blobUrls } = await resolveAudioUrls(imageResolved);
   const Component = evalRemotionJSX(resolvedCode);
   if (!Component) throw new Error('Failed to compile design code');
 
@@ -210,19 +212,23 @@ export async function exportDesignVideo(
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
-  const result = await renderMediaOnWeb({
-    composition: {
-      component: Component,
-      durationInFrames, fps,
-      width: design.width, height: design.height,
-      id: 'agent-design-export',
-      calculateMetadata: null, defaultProps: {},
-    },
-    inputProps: (design.props || {}) as Record<string, unknown>,
-    videoCodec: 'h264', container: 'mp4',
-    onProgress: onProgress || null,
-    delayRenderTimeoutInMilliseconds: 30000,
-  });
+  try {
+    const result = await renderMediaOnWeb({
+      composition: {
+        component: Component,
+        durationInFrames, fps,
+        width: design.width, height: design.height,
+        id: 'agent-design-export',
+        calculateMetadata: null, defaultProps: {},
+      },
+      inputProps: (design.props || {}) as Record<string, unknown>,
+      videoCodec: 'h264', container: 'mp4',
+      onProgress: onProgress || null,
+      delayRenderTimeoutInMilliseconds: 30000,
+    });
 
-  return result.getBlob();
+    return result.getBlob();
+  } finally {
+    blobUrls.forEach(url => URL.revokeObjectURL(url));
+  }
 }
