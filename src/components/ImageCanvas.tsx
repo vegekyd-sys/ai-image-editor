@@ -619,16 +619,20 @@ export default function ImageCanvas({
   }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
   // Reset + auto-play when switching to a design snapshot
+  const remotionAutoPlayRef = useRef(false);
   useEffect(() => {
     setRemotionPlaying(false);
     remotionFrameRef.current = 0;
     remotionStartedRef.current = false;
-    // Auto-play after short delay (let poster show, then start)
+    // Mark for auto-play — actual play triggered when Player ref arrives
+    remotionAutoPlayRef.current = !!currentDesign?.animation;
+    // Try auto-play now if ref already available
     if (currentDesign?.animation && remotionRef.current) {
       const timer = setTimeout(() => {
         remotionRef.current?.play();
         remotionStartedRef.current = true;
         setRemotionPlaying(true);
+        remotionAutoPlayRef.current = false;
       }, 600);
       return () => clearTimeout(timer);
     }
@@ -950,6 +954,15 @@ export default function ImageCanvas({
               onPlayerRef={(ref) => {
                 remotionRef.current = ref;
                 if (editableFields?.length) setDesignPlayerRef(ref);
+                // Auto-play if pending (ref wasn't ready during useEffect)
+                if (ref && remotionAutoPlayRef.current) {
+                  remotionAutoPlayRef.current = false;
+                  setTimeout(() => {
+                    ref.play();
+                    remotionStartedRef.current = true;
+                    setRemotionPlaying(true);
+                  }, 600);
+                }
               }}
             />
 
