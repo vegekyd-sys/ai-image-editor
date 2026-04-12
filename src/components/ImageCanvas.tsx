@@ -948,7 +948,14 @@ export default function ImageCanvas({
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
           }`}
-            onClick={() => { toggleRemotionPlay(); }}
+            onClick={() => {
+              // If an editable field is selected, deselect it instead of toggling play
+              if (selectedEditableId) {
+                onSelectEditable?.(null);
+              } else {
+                toggleRemotionPlay();
+              }
+            }}
           >
             <RemotionRenderer
               design={animatedDesigns.get(currentIndex)!}
