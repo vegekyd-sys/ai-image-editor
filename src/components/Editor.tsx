@@ -2365,9 +2365,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         setAgentStatus(t('editor.done'));
         showSaveToast();
       } catch (e) {
-        console.error('MP4 export failed:', e);
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('MP4 export failed:', msg, e);
         setIsSaving(false);
-        setAgentStatus('Export failed');
+        setAgentStatus(`Export failed: ${msg.slice(0, 100)}`);
       }
       return;
     }
@@ -3360,7 +3361,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
         }
       `}</style>
-      {/* pendingDesign: create snapshot + capture poster via renderStillOnWeb (no Player needed) */}
+      {/* pendingDesign: capture poster FIRST, then create snapshot with poster image */}
       {pendingDesign && (() => {
         const msgId = pendingDesignMsgIdRef.current;
         if (msgId) {
@@ -3369,33 +3370,37 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           pendingDesignSnapIdRef.current = '';
           const currentDesign = pendingDesign;
           const designDesc = (currentDesign as unknown as Record<string, unknown>).description as string | undefined;
-          const newSnapshot: Snapshot = {
-            id: snapId,
-            image: '', // poster captured async below
-            tips: [],
-            messageId: msgId,
-            description: designDesc || '[design]',
-            design: currentDesign,
-          };
-          queueMicrotask(() => {
+          setPendingDesign(null);
+          setAgentStatus(t('status.renderingDesign'));
+          // Poster-first: wait 500ms for fonts/images to load, capture poster, THEN add snapshot
+          queueMicrotask(async () => {
+            let posterImage = '';
+            try {
+              const { captureDesignPoster } = await import('@/components/RemotionRenderer');
+              await new Promise(r => setTimeout(r, 500)); // wait for fonts/images
+              posterImage = await captureDesignPoster(currentDesign) || '';
+            } catch (e) {
+              console.warn('[design] poster capture failed:', e);
+            }
+            const newSnapshot: Snapshot = {
+              id: snapId,
+              image: posterImage, // poster already captured — all existing code works
+              tips: [],
+              messageId: msgId,
+              description: designDesc || '[design]',
+              design: currentDesign,
+            };
             setSnapshots(prev => {
-              if (prev.some(s => s.id === snapId)) return prev; // deduplicate
+              if (prev.some(s => s.id === snapId)) return prev;
               return [...prev, newSnapshot];
             });
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
             setMessages((prev) => prev.map((m) =>
-              m.id === msgId ? { ...m, design: currentDesign } : m
+              m.id === msgId ? { ...m, image: posterImage, design: currentDesign } : m
             ));
             setAgentStatus(t('status.designCreated'));
-            setPendingDesign(null);
-            // Capture poster async — no Player mount needed
-            import('@/components/RemotionRenderer').then(({ captureDesignPoster }) =>
-              captureDesignPoster(currentDesign).then((poster) => {
-                if (poster) handleDesignPoster(msgId, poster);
-              })
-            );
           });
         }
         return null;
