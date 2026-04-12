@@ -920,6 +920,11 @@ export default function ImageCanvas({
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  // Pause playback when dragging seek bar
+                  if (remotionPlaying) {
+                    remotionRef.current?.pause();
+                    setRemotionPlaying(false);
+                  }
                   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                   seekRemotion(e.clientX);
                 }}
