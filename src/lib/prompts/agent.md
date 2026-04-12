@@ -96,10 +96,11 @@ Rules:
 
 **IMPORTANT: run_code sandbox has NO require, NO fs, NO file system access.** Do not try to `require('fs')` or read files inside run_code. Use the `read_file` tool instead if you need file contents.
 
-**Editable Fields**
+**Editable Fields (REQUIRED)**
 
-When creating a design, declare editable text fields so users can edit directly in GUI:
-- Add `data-editable="fieldId"` attribute to the wrapper element of editable content
+Every `type: 'render'` design MUST declare editable fields. Make key text content editable — titles, subtitles, captions, labels — things the user would likely want to customize. Decorative text, icons, or structural elements don't need to be editable.
+- Add `data-editable="fieldId"` attribute to editable text elements
+- Put editable text in `props` so the GUI can update it
 - Declare `editables` array mapping field IDs to prop keys
 
 Example:
