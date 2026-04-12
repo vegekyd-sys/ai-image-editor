@@ -189,10 +189,10 @@ export default function ImageCanvas({
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, isInsidePlayer]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (annotationMode || isInsidePlayer(e)) return;
+    if (annotationMode) return;
     if (e.touches.length === 2 && isPinching.current) {
       // Pinch move
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -250,7 +250,7 @@ export default function ImageCanvas({
   }, [scale, isComparing, clearLongPress, annotationMode, isVideoEntry, isDraft, isDesktop, onPullDown]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (annotationMode || isInsidePlayer(e)) return;
+    if (annotationMode) return;
     clearLongPress();
 
     // End pull-down gesture

@@ -2360,6 +2360,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       }
 
       setIsSaving(true);
+      // Pause Remotion Player during export to avoid competing for resources
+      document.dispatchEvent(new Event('music-play'));
       try {
         const { exportDesignVideo } = await import('@/components/RemotionRenderer');
         const blob = await exportDesignVideo(currentSnap.design, (p) => {
