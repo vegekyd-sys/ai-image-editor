@@ -10,6 +10,7 @@ interface DesignOverlayProps {
   selectedFieldId: string | null;
   onSelectField: (id: string | null) => void;
   onUpdateProp: (key: string, value: unknown) => void;
+  onStartEdit?: (fieldId: string) => void;
   onVisibleFieldsChange?: (visibleIds: string[]) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   playerRef?: any;
@@ -29,6 +30,7 @@ export default function DesignOverlay({
   props,
   selectedFieldId,
   onSelectField,
+  onStartEdit,
   onVisibleFieldsChange,
   playerRef,
 }: DesignOverlayProps) {
@@ -174,7 +176,11 @@ export default function DesignOverlay({
             onTouchStart={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              onSelectField(isSelected ? null : rect.id);
+              if (isSelected) {
+                onStartEdit?.(rect.id); // already selected → enter edit
+              } else {
+                onSelectField(rect.id); // first click → select
+              }
             }}
             onMouseEnter={() => setHoveredId(rect.id)}
             onMouseLeave={() => setHoveredId(null)}
