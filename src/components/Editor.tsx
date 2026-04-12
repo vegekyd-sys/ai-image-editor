@@ -1478,14 +1478,11 @@ export default function Editor({
         if (hasAllUrls()) break;
       }
     }
-    // Build snapshot images: prefer Storage URLs, base64 fallback for current image only
-    const snapshotImagesForApi = snapshotsRef.current.map((s, i) => {
+    // Build snapshot images: prefer Storage URLs, base64 fallback for all snapshots
+    // (Agent needs URLs for all images to reference in designs, not just current)
+    const snapshotImagesForApi = snapshotsRef.current.map((s) => {
       if (s.imageUrl) return s.imageUrl;
-      // Current image fallback to base64 (for vision/analyze_image)
-      if (i === contextSnapshotIndex) {
-        return getImageForApi(s) || '';
-      }
-      return '';
+      return getImageForApi(s) || '';
     });
 
     const { callbacks: agentCallbacks, setCurrentMsgId, getCurrentMsgId } = makeAgentCallbacks({
