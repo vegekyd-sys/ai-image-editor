@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import type { PlayerRef } from '@remotion/player';
 import type { AnnotationEntry, DesignPayload, EditableField } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
 import DesignOverlay from '@/components/DesignOverlay';
@@ -935,10 +936,12 @@ export default function ImageCanvas({
               design={animatedDesigns.get(currentIndex)!}
               mode="fill"
               hideControls
-              onPlayerRef={(ref) => { remotionRef.current = ref; }}
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
-              onPlayerRef={editableFields?.length ? setDesignPlayerRef : undefined}
+              onPlayerRef={(ref) => {
+                remotionRef.current = ref;
+                if (editableFields?.length) setDesignPlayerRef(ref);
+              }}
             />
 
             {/* Center play button — same as video */}
@@ -997,6 +1000,7 @@ export default function ImageCanvas({
                   <div data-remotion-fill className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: '0%' }} />
                 </div>
               </div>
+            )}
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay
