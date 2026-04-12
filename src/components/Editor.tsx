@@ -35,6 +35,7 @@ import { newAnnotationId } from '@/features/annotation/annotationIds';
 import AnimateSheet from '@/components/AnimateSheet';
 import VideoResultCard from '@/components/VideoResultCard';
 import DesignEditPanel from '@/components/DesignEditPanel';
+import DesignTextEditor from '@/components/DesignTextEditor';
 import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
@@ -198,7 +199,12 @@ export default function Editor({
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   // Design editable state
-  const [selectedEditableFieldId, setSelectedEditableFieldId] = useState<string | null>(null);
+  const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
+  const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
+  const setSelectedEditableFieldId = useCallback((id: string | null) => {
+    _setSelectedEditableFieldId(id);
+    if (!id) setEditingDesignFieldId(null); // deselect also closes editor
+  }, []);
 
   // Music generation state
   const [musicTaskId, setMusicTaskId] = useState<string | null>(null);
@@ -422,6 +428,14 @@ export default function Editor({
   // Design editable: current snapshot has a design with editables
   const currentDesignSnap = snapshots[snapFromTimeline(viewIndex, draftParentIndex) ?? 0];
   const isViewingDesign = !isViewingVideo && !!currentDesignSnap?.design?.editables?.length;
+  const editingDesignField = editingDesignFieldId
+    ? currentDesignSnap?.design?.editables?.find(f => f.id === editingDesignFieldId) ?? null
+    : null;
+
+  // Clear editing state when view changes (index, mode, or design disappears)
+  useEffect(() => {
+    setEditingDesignFieldId(null);
+  }, [viewIndex, viewMode]);
 
   // Draft occupies the slot immediately after its parent snapshot
   const isViewingDraft = isDraft && draftParentIndex !== null && viewIndex === draftParentIndex + 1;
@@ -2491,16 +2505,6 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }));
   }, [viewIndex, draftParentIndex]);
 
-  // Batch update multiple design props in one render (for drag x+y)
-  const handleDesignPropsUpdate = useCallback((updates: Record<string, unknown>) => {
-    setSnapshots(prev => prev.map((s, i) => {
-      const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
-      if (i === snapIdx && s.design) {
-        return { ...s, design: { ...s.design, props: { ...s.design.props, ...updates } } };
-      }
-      return s;
-    }));
-  }, [viewIndex, draftParentIndex]);
 
   // Auto-capture poster for design snapshots loaded from Supabase without a poster image
   const posterCapturedRef = useRef<Set<string>>(new Set());
@@ -2768,7 +2772,6 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 selectedEditableId={selectedEditableFieldId}
                 onSelectEditable={setSelectedEditableFieldId}
                 onUpdateProp={handleDesignPropUpdate}
-                onUpdateProps={handleDesignPropsUpdate}
               />
             )}
 
@@ -2892,7 +2895,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               position: 'absolute',
               top: 56, left: 12,
               zIndex: 201,
-              maxWidth: 480,
+              width: 340,
             } : {
               position: 'fixed',
               bottom: 0, left: 0, right: 0,
@@ -2960,6 +2963,30 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                   setTextEditPos(null);
                   setTextEditValue('');
                 }}
+              />
+            </div>
+          )}
+
+          {/* Design text editor — floating panel (like AnnotationToolbar) */}
+          {editingDesignField && currentDesignSnap?.design && (
+            <div style={isDesktop ? {
+              position: 'absolute',
+              bottom: 160, left: 12,
+              zIndex: 201,
+              width: 340,
+            } : {
+              position: 'fixed',
+              bottom: 0, left: 0, right: 0,
+              zIndex: 201,
+              maxWidth: 480,
+              margin: '0 auto',
+            }}>
+              <DesignTextEditor
+                field={editingDesignField}
+                value={String(currentDesignSnap.design.props?.[editingDesignField.propKey] ?? '')}
+                onChangeValue={(v) => handleDesignPropUpdate(editingDesignField.propKey, v)}
+                onClose={() => setEditingDesignFieldId(null)}
+                isDesktop={isDesktop}
               />
             </div>
           )}
@@ -3067,6 +3094,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}
                     onSelectField={setSelectedEditableFieldId}
+                    onStartEdit={setEditingDesignFieldId}
                     isDesktop={isDesktop}
                   />
                 ) : (

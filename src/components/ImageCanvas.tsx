@@ -56,10 +56,8 @@ interface ImageCanvasProps {
   selectedEditableId?: string | null;
   /** Callback when an editable field is selected/deselected in the canvas overlay */
   onSelectEditable?: (id: string | null) => void;
-  /** Callback when a design prop is updated via drag or other canvas interaction */
+  /** Callback when a design prop is updated via canvas interaction */
   onUpdateProp?: (key: string, value: unknown) => void;
-  /** Batch update multiple props in one render (for drag x+y) */
-  onUpdateProps?: (updates: Record<string, unknown>) => void;
 }
 
 export default function ImageCanvas({
@@ -78,7 +76,6 @@ export default function ImageCanvas({
   selectedEditableId,
   onSelectEditable,
   onUpdateProp,
-  onUpdateProps,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -98,6 +95,12 @@ export default function ImageCanvas({
   const [designContainerEl, setDesignContainerEl] = useState<HTMLDivElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [designPlayerRef, setDesignPlayerRef] = useState<any>(null);
+
+  // When an editable is selected: pause player
+  useEffect(() => {
+    if (!selectedEditableId || !designPlayerRef) return;
+    try { designPlayerRef.pause(); } catch { /* ignore */ }
+  }, [selectedEditableId, designPlayerRef]);
 
   // Long press compare
   const [isComparing, setIsComparing] = useState(false);
@@ -359,7 +362,9 @@ export default function ImageCanvas({
     }
     if (annotationMode) return;
     if (isDraft) onDismissDraft?.();
-  }, [isDraft, onDismissDraft, annotationMode]);
+    // Deselect editable field when clicking canvas background
+    if (selectedEditableId) onSelectEditable?.(null);
+  }, [isDraft, onDismissDraft, annotationMode, selectedEditableId, onSelectEditable]);
 
   // Desktop: unified mouse handler — mirrors all touch interactions
   // (pan when zoomed, long-press compare, swipe navigate, double-click reset zoom)
@@ -862,7 +867,6 @@ export default function ImageCanvas({
                 selectedFieldId={selectedEditableId ?? null}
                 onSelectField={onSelectEditable}
                 onUpdateProp={onUpdateProp}
-                onUpdateProps={onUpdateProps}
                 playerRef={designPlayerRef}
               />
             )}

@@ -10,7 +10,6 @@ interface DesignOverlayProps {
   selectedFieldId: string | null;
   onSelectField: (id: string | null) => void;
   onUpdateProp: (key: string, value: unknown) => void;
-  onUpdateProps?: (updates: Record<string, unknown>) => void; // batch update x+y in one render
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   playerRef?: any;
 }
@@ -23,52 +22,44 @@ interface MeasuredRect {
   height: number;
 }
 
-const DRAG_THRESHOLD = 3;
-
 export default function DesignOverlay({
   containerEl,
   editables,
   props,
   selectedFieldId,
   onSelectField,
-  onUpdateProp,
-  onUpdateProps,
   playerRef,
 }: DesignOverlayProps) {
   const [rects, setRects] = useState<MeasuredRect[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const rafRef = useRef<number>(0);
-  const dragThrottleRef = useRef<number>(0);
 
-  // Drag state
-  const dragRef = useRef<{
-    fieldId: string;
-    startX: number;
-    startY: number;
-    origLeft: number;
-    origTop: number;
-    active: boolean;
-  } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
+  // Track overlay container ref — used as coordinate base in measure()
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const overlayMountedRef = useRef(false);
 
-  // Measure positions of [data-editable] elements inside the container
+  // Measure positions of [data-editable] elements relative to the overlay itself
   const measure = useCallback(() => {
-    if (dragRef.current?.active) return; // Skip measurement during active drag
-    if (!containerEl) { setRects([]); return; }
+    if (!containerEl || !overlayRef.current) { setRects([]); return; }
+    const baseRect = overlayRef.current.getBoundingClientRect();
     const containerRect = containerEl.getBoundingClientRect();
     const elements = containerEl.querySelectorAll('[data-editable]');
     const newRects: MeasuredRect[] = [];
+    const seen = new Set<string>();
     elements.forEach((el) => {
       const id = el.getAttribute('data-editable');
-      if (!id) return;
-      // Only show overlay for declared editables
+      if (!id || seen.has(id)) return;
       if (!editables.some(f => f.id === id)) return;
       const elRect = el.getBoundingClientRect();
+      // Skip elements outside the visible Remotion Player area
+      if (elRect.width < 1 || elRect.height < 1) return;
+      if (elRect.right <= containerRect.left || elRect.left >= containerRect.right) return;
+      if (elRect.bottom <= containerRect.top || elRect.top >= containerRect.bottom) return;
+      seen.add(id);
       newRects.push({
         id,
-        left: elRect.left - containerRect.left,
-        top: elRect.top - containerRect.top,
+        left: elRect.left - baseRect.left,
+        top: elRect.top - baseRect.top,
         width: elRect.width,
         height: elRect.height,
       });
@@ -76,10 +67,18 @@ export default function DesignOverlay({
     setRects(newRects);
   }, [containerEl, editables]);
 
-  // Measure on mount, on prop changes, and periodically for animations
+  // Measure on mount, on prop changes
   useEffect(() => {
     measure();
   }, [measure, props]);
+
+  // Re-measure once overlay div mounts
+  useEffect(() => {
+    if (overlayRef.current && !overlayMountedRef.current) {
+      overlayMountedRef.current = true;
+      measure();
+    }
+  });
 
   // Listen for frameupdate from Remotion Player (for animated designs)
   useEffect(() => {
@@ -117,109 +116,26 @@ export default function DesignOverlay({
     return () => observer.disconnect();
   }, [containerEl, measure]);
 
-  // Helper: compute normalized position from drag offset
-  const computeNormPos = useCallback((d: NonNullable<typeof dragRef.current>, clientX: number, clientY: number) => {
-    if (!containerEl) return null;
-    const containerRect = containerEl.getBoundingClientRect();
-    const field = editables.find(f => f.id === d.fieldId);
-    if (!field?.positionProps) return null;
-    const newLeft = d.origLeft + (clientX - d.startX);
-    const newTop = d.origTop + (clientY - d.startY);
-    return {
-      field,
-      normX: Math.max(0, Math.min(1, newLeft / containerRect.width)),
-      normY: Math.max(0, Math.min(1, newTop / containerRect.height)),
-    };
-  }, [containerEl, editables]);
-
-  // Drag handlers (document-level for smooth dragging)
+  // Re-measure when selection changes (input bar toggles → layout shift)
   useEffect(() => {
-    const onMove = (e: MouseEvent | TouchEvent) => {
-      const d = dragRef.current;
-      if (!d) return;
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-      const dx = clientX - d.startX;
-      const dy = clientY - d.startY;
-      if (!d.active) {
-        if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
-        d.active = true;
-        setIsDragging(true);
-      }
-      setDragDelta({ x: dx, y: dy });
+    const t = setTimeout(measure, 50);
+    return () => clearTimeout(t);
+  }, [selectedFieldId, measure]);
 
-      // Real-time prop update (throttled to ~60fps via rAF)
-      cancelAnimationFrame(dragThrottleRef.current);
-      dragThrottleRef.current = requestAnimationFrame(() => {
-        const pos = computeNormPos(d, clientX, clientY);
-        if (pos) {
-          if (onUpdateProps) {
-            onUpdateProps({ [pos.field.positionProps!.x]: pos.normX, [pos.field.positionProps!.y]: pos.normY });
-          } else {
-            onUpdateProp(pos.field.positionProps!.x, pos.normX);
-            onUpdateProp(pos.field.positionProps!.y, pos.normY);
-          }
-        }
-      });
-    };
-    const onUp = (e: MouseEvent | TouchEvent) => {
-      const d = dragRef.current;
-      if (!d || !d.active) {
-        dragRef.current = null;
-        return;
-      }
-      cancelAnimationFrame(dragThrottleRef.current);
-      const clientX = 'changedTouches' in e ? e.changedTouches[0].clientX : e.clientX;
-      const clientY = 'changedTouches' in e ? e.changedTouches[0].clientY : e.clientY;
-
-      // Final position update (batch x+y)
-      const pos = computeNormPos(d, clientX, clientY);
-      if (pos) {
-        if (onUpdateProps) {
-          onUpdateProps({ [pos.field.positionProps!.x]: pos.normX, [pos.field.positionProps!.y]: pos.normY });
-        } else {
-          onUpdateProp(pos.field.positionProps!.x, pos.normX);
-          onUpdateProp(pos.field.positionProps!.y, pos.normY);
-        }
-      }
-
-      dragRef.current = null;
-      setIsDragging(false);
-      setDragDelta({ x: 0, y: 0 });
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onUp);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onUp);
-      cancelAnimationFrame(dragThrottleRef.current);
-    };
-  }, [containerEl, editables, onUpdateProp, onUpdateProps, computeNormPos]);
-
-  const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent, rect: MeasuredRect) => {
-    const field = editables.find(f => f.id === rect.id);
-    if (!field?.positionProps) return; // not draggable
-    e.stopPropagation();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    dragRef.current = {
-      fieldId: rect.id,
-      startX: clientX,
-      startY: clientY,
-      origLeft: rect.left,
-      origTop: rect.top,
-      active: false,
-    };
-  }, [editables]);
-
-  if (rects.length === 0) return null;
+  // ResizeObserver on containerEl to catch layout changes
+  useEffect(() => {
+    if (!containerEl) return;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(measure);
+    });
+    ro.observe(containerEl);
+    return () => ro.disconnect();
+  }, [containerEl, measure]);
 
   return (
     <div
+      ref={overlayRef}
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 15 }}
     >
@@ -228,19 +144,14 @@ export default function DesignOverlay({
         if (!field) return null;
         const isSelected = selectedFieldId === rect.id;
         const isHovered = hoveredId === rect.id;
-        const isDraggable = !!field.positionProps;
-        const isBeingDragged = isDragging && dragRef.current?.fieldId === rect.id;
-
-        const left = isBeingDragged ? rect.left + dragDelta.x : rect.left;
-        const top = isBeingDragged ? rect.top + dragDelta.y : rect.top;
 
         return (
           <div
             key={rect.id}
             className="absolute pointer-events-auto"
             style={{
-              left,
-              top,
+              left: rect.left,
+              top: rect.top,
               width: rect.width,
               height: rect.height,
               border: isSelected
@@ -248,18 +159,18 @@ export default function DesignOverlay({
                 : isHovered
                   ? '1px dashed rgba(255,255,255,0.6)'
                   : '1px dashed rgba(255,255,255,0.3)',
-              cursor: isDraggable ? (isBeingDragged ? 'grabbing' : 'grab') : 'pointer',
-              transition: isBeingDragged ? 'none' : 'border-color 0.15s',
+              cursor: 'pointer',
+              transition: 'border-color 0.15s',
               boxSizing: 'border-box',
             }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              if (!isDragging) onSelectField(isSelected ? null : rect.id);
+              onSelectField(isSelected ? null : rect.id);
             }}
             onMouseEnter={() => setHoveredId(rect.id)}
             onMouseLeave={() => setHoveredId(null)}
-            onMouseDown={(e) => handlePointerDown(e, rect)}
-            onTouchStart={(e) => handlePointerDown(e, rect)}
           >
             {/* Label tag at top */}
             {isSelected && (

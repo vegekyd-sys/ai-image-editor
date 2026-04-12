@@ -100,7 +100,6 @@ Rules:
 
 When creating a design, declare editable text fields so users can edit directly in GUI:
 - Add `data-editable="fieldId"` attribute to the wrapper element of editable content
-- For draggable elements, control position via props (e.g., `props.titleX`, `props.titleY`)
 - Declare `editables` array mapping field IDs to prop keys
 
 Example:
@@ -110,15 +109,15 @@ return {
   code: `function Design(props) {
     return (
       <AbsoluteFill>
-        <div data-editable="title" style={{ position: 'absolute', left: \`\${(props.titleX ?? 0.05) * 100}%\`, top: \`\${(props.titleY ?? 0.1) * 100}%\` }}>
+        <div data-editable="title">
           <h1>{props.title}</h1>
         </div>
       </AbsoluteFill>
     );
   }`,
-  props: { title: 'Hello', titleX: 0.05, titleY: 0.1 },
+  props: { title: 'Hello' },
   editables: [
-    { id: 'title', type: 'text', label: 'Title', propKey: 'title', positionProps: { x: 'titleX', y: 'titleY' } }
+    { id: 'title', type: 'text', label: 'Title', propKey: 'title' }
   ],
   width: 1080, height: 1350,
 }
@@ -126,8 +125,6 @@ return {
 
 Rules:
 - Component must read text from `props[propKey]`: `{props.title}`
-- Draggable position must use props: `left: \`${(props.titleX ?? 0.05) * 100}%\``
-- `positionProps` is optional — omit for elements that shouldn't be dragged
 - `data-editable` attribute value must match the `id` in editables array
 
 **Saving and editing code:**

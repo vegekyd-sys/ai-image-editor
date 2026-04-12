@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import type { EditableField } from '@/types';
+import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 
 interface DesignEditPanelProps {
   editables: EditableField[];
@@ -9,142 +10,135 @@ interface DesignEditPanelProps {
   onUpdateProp: (key: string, value: string) => void;
   selectedFieldId: string | null;
   onSelectField: (id: string | null) => void;
+  onStartEdit: (fieldId: string) => void;
   isDesktop?: boolean;
 }
 
 export default function DesignEditPanel({
   editables,
   props,
-  onUpdateProp,
   selectedFieldId,
   onSelectField,
+  onStartEdit,
   isDesktop,
 }: DesignEditPanelProps) {
-  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { scrollRef, isDragging, scrollIntoView, dragHandlers } = useHorizontalScroll(!!isDesktop);
 
-  // Scroll selected card into view when canvas overlay selection changes
+  // Scroll selected card into view
   useEffect(() => {
     if (!selectedFieldId) return;
     const el = cardRefs.current.get(selectedFieldId);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    }
-  }, [selectedFieldId]);
-
-  // Auto-focus textarea when editing
-  useEffect(() => {
-    if (editingFieldId && textareaRef.current) {
-      textareaRef.current.focus();
-      // Move cursor to end
-      const len = textareaRef.current.value.length;
-      textareaRef.current.setSelectionRange(len, len);
-    }
-  }, [editingFieldId]);
+    scrollIntoView(el ?? null);
+  }, [selectedFieldId, scrollIntoView]);
 
   const handleCardClick = useCallback((field: EditableField) => {
+    if (isDragging) return; // don't select during drag-scroll
     onSelectField(field.id);
-    setEditingFieldId(field.id);
-  }, [onSelectField]);
-
-  const handleBlur = useCallback(() => {
-    setEditingFieldId(null);
-  }, []);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      setEditingFieldId(null);
-    }
-    if (e.key === 'Escape') {
-      setEditingFieldId(null);
-      onSelectField(null);
-    }
-  }, [onSelectField]);
+  }, [onSelectField, isDragging]);
 
   return (
-    <div className="w-full">
-      {/* Category label row */}
-      <div className="flex items-center px-3 pt-1.5 pb-0.5">
-        <span className="text-[11px] font-medium" style={{ color: 'rgba(217,70,239,0.7)' }}>
-          Editable Fields
-        </span>
-        <span className="text-[11px] ml-1.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
-          {editables.length}
-        </span>
-      </div>
-
-      {/* Horizontal scrollable cards */}
+    <div className="flex flex-col w-full">
+      {/* Pill carousel (mirrors TipsBar / VideoResultCard layout) */}
       <div
-        ref={scrollContainerRef}
-        className={`flex items-end gap-2 px-3 pt-1 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
+        ref={scrollRef}
+        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
+        {...dragHandlers}
       >
         {editables.map((field) => {
           const isSelected = selectedFieldId === field.id;
-          const isEditing = editingFieldId === field.id;
           const value = String(props[field.propKey] ?? '');
+          const showEditButton = isSelected;
 
           return (
-            <div
-              key={field.id}
-              ref={(el) => {
-                if (el) cardRefs.current.set(field.id, el);
-                else cardRefs.current.delete(field.id);
-              }}
-              className="flex-shrink-0 animate-tip-in"
-            >
+            <div key={field.id} className="flex items-stretch flex-shrink-0">
               <div
-                onClick={() => handleCardClick(field)}
-                className={`${isDesktop ? 'w-[176px]' : 'w-[200px]'} text-left border overflow-hidden cursor-pointer transition-all duration-150 ${
+                ref={(el) => {
+                  if (el) cardRefs.current.set(field.id, el);
+                  else cardRefs.current.delete(field.id);
+                }}
+                className={`flex items-stretch overflow-hidden border transition-all cursor-pointer active:scale-[0.97] ${isDesktop ? 'w-[176px]' : 'w-[200px]'} ${
                   isSelected
-                    ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
-                    : 'border-white/10 hover:border-white/20'
+                    ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50 rounded-l-2xl rounded-r-none border-r-0'
+                    : 'border-white/10 hover:border-white/20 rounded-2xl'
                 }`}
                 style={{
-                  borderRadius: 16,
-                  background: 'rgba(217,70,239,0.06)',
+                  background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)',
+                }}
+                onClick={() => handleCardClick(field)}
+              >
+                {/* Icon / type indicator — matches TipsBar thumbnail size */}
+                <div
+                  className={`flex-shrink-0 flex items-center justify-center bg-white/5 ${isDesktop ? 'w-[64px] h-[64px]' : 'w-[72px] h-[72px]'}`}
+                >
+                  <span className="text-white/30 text-[20px]">T</span>
+                </div>
+
+                {/* Text info */}
+                <div className={`flex-1 min-w-0 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
+                  <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
+                    {field.label}
+                  </div>
+                  <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
+                    {value || '\u00A0'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit button — slides out from right with width animation (like TipsBar commit button) */}
+              <div
+                className="overflow-hidden flex-shrink-0"
+                style={{
+                  width: showEditButton ? (isDesktop ? 64 : 72) : 0,
+                  transition: 'width 0.2s ease-out',
                 }}
               >
-                <div className="p-3 flex flex-col gap-1">
-                  {/* Field label */}
-                  <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    {field.label}
-                    {field.positionProps && (
-                      <span className="ml-1" style={{ color: 'rgba(255,255,255,0.2)' }}>drag</span>
-                    )}
+                <button
+                  onClick={() => onStartEdit(field.id)}
+                  className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full flex flex-col items-center justify-center gap-1.5 rounded-r-2xl border border-l-0 border-fuchsia-500 active:scale-95 overflow-hidden relative group cursor-pointer`}
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.32) 100%)',
+                    transition: 'transform 0.1s',
+                  }}
+                >
+                  {/* Hover shimmer */}
+                  <div
+                    className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(217,70,239,0.12) 0%, rgba(192,38,211,0.22) 100%)',
+                      transition: 'opacity 0.2s',
+                    }}
+                  />
+                  {/* Pencil icon */}
+                  <svg
+                    width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className="text-fuchsia-300 relative z-10"
+                  >
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                    <path d="m15 5 4 4" />
+                  </svg>
+                  {/* Label */}
+                  <span className="text-fuchsia-200 text-[10px] font-semibold tracking-wide leading-tight text-center relative z-10 whitespace-nowrap">
+                    Edit
                   </span>
-
-                  {/* Value display or textarea */}
-                  {isEditing ? (
-                    <textarea
-                      ref={textareaRef}
-                      value={value}
-                      onChange={(e) => onUpdateProp(field.propKey, e.target.value)}
-                      onBlur={handleBlur}
-                      onKeyDown={handleKeyDown}
-                      className="w-full bg-transparent text-white text-sm resize-none outline-none"
-                      style={{
-                        minHeight: 32,
-                        maxHeight: 80,
-                        lineHeight: '1.4',
-                      }}
-                      rows={1}
-                    />
-                  ) : (
-                    <span
-                      className="text-sm text-white/80 truncate block"
-                      style={{ lineHeight: '1.4' }}
-                    >
-                      {value || '\u00A0'}
-                    </span>
-                  )}
-                </div>
+                </button>
               </div>
             </div>
           );
         })}
+      </div>
+
+      {/* Bottom label row (centered, matching VideoResultCard) */}
+      <div className="flex items-center justify-center px-3 pb-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-medium" style={{ color: 'rgba(217,70,239,0.7)' }}>
+            Design
+          </span>
+          <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+            · {editables.length} editable{editables.length !== 1 ? 's' : ''}
+          </span>
+        </div>
       </div>
     </div>
   );

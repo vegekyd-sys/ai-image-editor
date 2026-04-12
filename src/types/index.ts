@@ -3,10 +3,6 @@ export interface EditableField {
   type: 'text';         // only text for now
   label: string;        // UI label, e.g. "标题"
   propKey: string;      // prop key for text content, e.g. "title"
-  positionProps?: {     // position props (present = draggable)
-    x: string;          // e.g. "titleX"
-    y: string;          // e.g. "titleY"
-  };
 }
 
 export interface DesignPayload {

@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { compressImageFile } from '@/lib/imageUtils';
 import { useLocale } from '@/lib/i18n';
+import FloatingPanel from '@/components/FloatingPanel';
 
 export const ANNOTATION_COLOR = '#dc2626';
 
@@ -30,9 +31,6 @@ interface AnnotationToolbarProps {
   isDesktop: boolean;
 }
 
-const DRAG_THRESHOLD = 3; // px — must move this far before drag starts
-const NO_DRAG_TAGS = new Set(['BUTTON', 'INPUT', 'A', 'SELECT']); // skip buttons/sliders, but allow textarea
-
 export default function AnnotationToolbar({
   activeTool, onToolChange, onUndo, onRedo, onCancel,
   canUndo, canRedo, onSend, isSending, hasEntries,
@@ -45,81 +43,8 @@ export default function AnnotationToolbar({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const canSend = hasEntries || input.trim();
 
-  // Desktop drag state — threshold-based: click works normally, drag after 3px movement
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; active: boolean } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!isDesktop) return;
-    let el = e.target as HTMLElement;
-    while (el && el !== e.currentTarget) {
-      if (NO_DRAG_TAGS.has(el.tagName) || el.getAttribute('role') === 'button') return;
-      el = el.parentElement!;
-    }
-    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: dragOffset.x, origY: dragOffset.y, active: false };
-  }, [isDesktop, dragOffset]);
-
-  useEffect(() => {
-    if (!isDesktop) return;
-    const onMove = (e: MouseEvent) => {
-      const d = dragRef.current;
-      if (!d) return;
-      const dx = e.clientX - d.startX;
-      const dy = e.clientY - d.startY;
-      if (!d.active) {
-        if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
-        d.active = true;
-        setIsDragging(true);
-        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-      }
-      setDragOffset({ x: d.origX + dx, y: d.origY + dy });
-    };
-    const onUp = () => {
-      dragRef.current = null;
-      if (isDragging) setIsDragging(false);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-  }, [isDesktop, isDragging]);
-
   return (
-    <div
-      className="px-3 pb-3 pt-1"
-      style={isDesktop ? {
-        transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
-        cursor: isDragging ? 'grabbing' : undefined,
-      } : undefined}
-    >
-      {/* × close — outside box, top-left */}
-      <button
-        onClick={onCancel}
-        className="w-7 h-7 flex items-center justify-center rounded-full cursor-pointer mb-1.5"
-        style={{
-          background: '#1a1a1a',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
-        }}
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="3" strokeLinecap="round">
-          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      </button>
-
-      <div
-        className="rounded-2xl"
-        style={{
-          background: '#1a1a1a',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
-          cursor: isDesktop ? (isDragging ? 'grabbing' : 'grab') : undefined,
-        }}
-        onMouseDown={handleMouseDown}
-      >
+    <FloatingPanel onClose={onCancel} isDesktop={isDesktop}>
         {/* Hidden file input for reference image */}
         <input
           ref={imageInputRef}
@@ -273,7 +198,6 @@ export default function AnnotationToolbar({
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: 'scaleX(-1)' }}><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" /></svg>
           </button>
         </div>
-      </div>
 
       <style>{`
         .annotation-slider {
@@ -306,6 +230,6 @@ export default function AnnotationToolbar({
           cursor: pointer;
         }
       `}</style>
-    </div>
+    </FloatingPanel>
   );
 }
