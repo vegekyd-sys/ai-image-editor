@@ -2797,6 +2797,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 selectedEditableId={selectedEditableFieldId}
                 onSelectEditable={setSelectedEditableFieldId}
                 onUpdateProp={handleDesignPropUpdate}
+                onStartEditEditable={setEditingDesignFieldId}
                 onVisibleEditableFields={handleVisibleEditableFields}
               />
             )}
