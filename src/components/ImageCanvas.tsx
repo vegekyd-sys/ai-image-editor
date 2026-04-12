@@ -164,6 +164,13 @@ export default function ImageCanvas({
     touchStartX.current = touch.clientX;
     touchStartY.current = touch.clientY;
 
+    // Skip swipe/longpress when touching inside Remotion Player area
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-remotion]')) {
+      swiping.current = false;
+      return;
+    }
+
     if (!isVideoEntry && scale > 1) {
       // Pan mode when zoomed (not for video)
       isPanning.current = true;
@@ -817,7 +824,7 @@ export default function ImageCanvas({
           </div>
         ) : animatedDesigns?.get(currentIndex) && !isComparing ? (
           /* Animated design — rendered via Remotion Player (skip during before/after) */
-          <div className={`w-full h-full flex items-center justify-center transition-all duration-150 ${
+          <div data-remotion className={`w-full h-full flex items-center justify-center transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
