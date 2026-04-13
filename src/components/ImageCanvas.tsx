@@ -978,8 +978,8 @@ export default function ImageCanvas({
               }}
             />
 
-            {/* Poster — only shown before first play (covers Remotion black first frame) */}
-            {!remotionStartedRef.current && displayImage && (
+            {/* Poster — only for animated designs before first play (covers black first frame) */}
+            {!remotionStartedRef.current && currentDesign?.animation && displayImage && (
               <img
                 src={displayImage}
                 alt="poster"
