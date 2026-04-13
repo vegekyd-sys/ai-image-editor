@@ -3157,6 +3157,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                   } : undefined}
                   hasVideo={hasVideo}
                 />
+                {/* Fixed-height content area — prevents canvas jitter when switching between TipsBar/DesignEditPanel/VideoResultCard */}
+                <div className={isDesktop ? 'min-h-[100px]' : 'min-h-[108px]'}>
                 {isViewingVideo ? (
                   <VideoResultCard
                     animations={animations}
@@ -3236,6 +3238,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     onRetryAll={retryAllTips}
                   />
                 )}
+                </div>
               </div>
           )}
 
