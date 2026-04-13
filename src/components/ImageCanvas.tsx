@@ -827,18 +827,27 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Center play button (paused, controls visible, no error) */}
-            {!videoPlaying && !videoLoading && !videoError && showControls && (
-              <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-                <div className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
-                  <svg width="22" height="22" viewBox="0 0 10 10" fill="white">
-                    <polygon points="3,1 9,5 3,9" />
-                  </svg>
-                </div>
+            {/* Play/pause button — bottom-left (same as Remotion) */}
+            {!videoError && showControls && (
+              <div className="absolute z-10" style={{ bottom: 28, left: 12 }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (videoPlaying) { videoRef.current?.pause(); }
+                    else { videoRef.current?.play().catch(() => {}); }
+                  }}
+                  className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+                >
+                  {videoPlaying ? (
+                    <svg width="16" height="16" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+                  )}
+                </button>
               </div>
             )}
 
-            {/* Time badge — bottom-right, fades with controls */}
+            {/* Time badge — bottom-right (same as Remotion) */}
             {!videoError && (
               <div
                 className={`absolute z-20 pointer-events-none transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
@@ -853,15 +862,21 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Seek bar — sits at canvas/tips boundary (bottom-0), always visible */}
+            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag (same as Remotion) */}
             {!videoError && (
               <div
                 ref={seekBarRef}
-                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer"
-                style={{ height: 20, touchAction: 'none' }}
+                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
+                style={{ height: 24, touchAction: 'none' }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (videoPlaying) videoRef.current?.pause();
+                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
+                  if (track) track.style.height = '6px';
                   seekDragging.current = true;
                   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                   doSeek(e.clientX);
@@ -873,26 +888,17 @@ export default function ImageCanvas({
                 }}
                 onPointerUp={(e) => {
                   seekDragging.current = false;
+                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
+                  if (track) track.style.height = '';
                   (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* 2px visual track at very bottom */}
-                <div className="absolute bottom-0 left-0 right-0" style={{ height: 2 }}>
+                <div data-video-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
                   <div className="absolute inset-0 bg-white/12" />
                   <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${videoBuffered * 100}%` }} />
                   <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }} />
                 </div>
-                {/* Subtle handle dot */}
-                <div
-                  className="absolute rounded-full bg-white/45"
-                  style={{
-                    width: 6, height: 6,
-                    bottom: -2,
-                    left: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%`,
-                    transform: 'translateX(-50%)',
-                  }}
-                />
               </div>
             )}
           </div>
