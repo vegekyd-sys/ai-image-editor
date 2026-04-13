@@ -829,7 +829,7 @@ export default function ImageCanvas({
 
             {/* Play/pause button — bottom-left (same as Remotion) */}
             {!videoError && showControls && (
-              <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
+              <div className="absolute z-30" style={{ bottom: 32, left: 16 }}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -995,7 +995,7 @@ export default function ImageCanvas({
 
             {/* Play/pause button — bottom-left, large */}
             {currentDesign?.animation && (
-              <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
+              <div className="absolute z-30" style={{ bottom: 32, left: 16 }}>
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleRemotionPlay(); }}
                   className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
