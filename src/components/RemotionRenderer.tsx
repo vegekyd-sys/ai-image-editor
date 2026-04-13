@@ -257,8 +257,8 @@ export async function exportDesignVideo(
       inputProps: (design.props || {}) as Record<string, unknown>,
       videoCodec: 'h264', container: 'mp4',
       scale: 2,
-      // Skip first 3 frames (~100ms) to avoid black first frame from fade-in animations
-      frameRange: durationInFrames > 3 ? [3, null] : null,
+      // Skip first/last 3 frames (~100ms each) to avoid black frames from fade-in/out animations
+      frameRange: durationInFrames > 6 ? [3, durationInFrames - 3] : null,
       onProgress: onProgress || null,
       delayRenderTimeoutInMilliseconds: 30000,
     });
