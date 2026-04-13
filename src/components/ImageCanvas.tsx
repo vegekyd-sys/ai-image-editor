@@ -213,15 +213,16 @@ export default function ImageCanvas({
       swiping.current = true;
     }
 
-    // Long press detection — skip for video entry
-    if (previousImage && !isVideoEntry) {
+    // Long press detection — skip for video entry and animated designs
+    const isAnimatedDesign = !!animatedDesigns?.get(currentIndex)?.animation;
+    if (previousImage && !isVideoEntry && !isAnimatedDesign) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, animatedDesigns, currentIndex]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
@@ -397,15 +398,16 @@ export default function ImageCanvas({
       lastMousePos.current = { x: e.clientX, y: e.clientY };
     }
 
-    // Long press → compare (works at any zoom level, same as touch)
-    if (previousImage) {
+    // Long press → compare (works at any zoom level, same as touch) — skip for animated designs
+    const isAnimatedDesign = !!animatedDesigns?.get(currentIndex)?.animation;
+    if (previousImage && !isAnimatedDesign) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         mousePanning.current = false; // stop panning when comparing
       }, 200);
     }
-  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale]);
+  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, animatedDesigns, currentIndex]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!mouseStartPos.current) return;
@@ -955,6 +957,7 @@ export default function ImageCanvas({
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
           }`}
             onClick={() => {
+              if (isComparing) return;
               // If an editable field is selected, deselect it instead of toggling play
               if (selectedEditableId) {
                 onSelectEditable?.(null);
