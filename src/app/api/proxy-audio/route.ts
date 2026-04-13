@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
+  const supabase = await createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const url = req.nextUrl.searchParams.get('url')
   if (!url || !url.startsWith('https://')) {
     return NextResponse.json({ error: 'Missing or invalid url parameter' }, { status: 400 })
@@ -15,6 +22,9 @@ export async function GET(req: NextRequest) {
     }
 
     const contentType = res.headers.get('Content-Type') || 'audio/mpeg'
+    if (!contentType.startsWith('audio/')) {
+      return NextResponse.json({ error: 'Not an audio resource' }, { status: 403 })
+    }
     const responseHeaders: Record<string, string> = {
       'Content-Type': contentType,
       'Cache-Control': 'public, max-age=3600',
