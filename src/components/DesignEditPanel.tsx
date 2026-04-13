@@ -41,7 +41,7 @@ export default function DesignEditPanel({
 
   const toolbar = (
     <div className="flex items-center gap-1.5">
-      <span className="text-[11px] font-medium" style={{ color: 'rgba(217,70,239,0.7)' }}>
+      <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.28)' }}>
         Design
       </span>
       <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
