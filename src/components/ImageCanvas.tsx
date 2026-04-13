@@ -45,6 +45,7 @@ function SeekBar({ progress, buffered, onSeekStart, onSeek, onSeekEnd, trackData
   onSeekStart: (clientX: number) => void; onSeek: (clientX: number) => void; onSeekEnd: () => void;
   trackDataAttr?: string; fillDataAttr?: string;
 }) {
+  const dragging = useRef(false);
   return (
     <div
       className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
@@ -55,13 +56,15 @@ function SeekBar({ progress, buffered, onSeekStart, onSeek, onSeekEnd, trackData
       onPointerDown={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        dragging.current = true;
         const track = e.currentTarget.querySelector('[data-seek-track]') as HTMLElement;
         if (track) track.style.height = '6px';
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         onSeekStart(e.clientX);
       }}
-      onPointerMove={(e) => { if (e.buttons) onSeek(e.clientX); }}
+      onPointerMove={(e) => { if (dragging.current) onSeek(e.clientX); }}
       onPointerUp={(e) => {
+        dragging.current = false;
         const track = e.currentTarget.querySelector('[data-seek-track]') as HTMLElement;
         if (track) track.style.height = '';
         (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
