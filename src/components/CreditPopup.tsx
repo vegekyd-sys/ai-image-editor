@@ -16,11 +16,13 @@ interface CreditPopupProps {
   needed?: number;
   subscription?: { planId: string; status: string } | null;
   projectId?: string;
-  /** Show success celebration screen */
+  /** Show success celebration screen (with fireworks) */
   success?: boolean;
+  /** Waiting for payment webhook — show loading state */
+  waiting?: boolean;
 }
 
-export default function CreditPopup({ open, onClose, balance, needed, subscription, projectId, success }: CreditPopupProps) {
+export default function CreditPopup({ open, onClose, balance, needed, subscription, projectId, success, waiting }: CreditPopupProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<string>('pro');
   const [selectedPlan, setSelectedPlan] = useState<string>('basic');
@@ -109,26 +111,71 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
           animation: 'creditScaleIn 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }}
       >
-        {/* ══════ SUCCESS STATE ══════ */}
-        {success ? (
+        {/* ══════ WAITING STATE ══════ */}
+        {waiting && !success ? (
           <div style={{ padding: '48px 24px 36px', textAlign: 'center' }}>
-            {/* Celebration icon */}
+            <div style={{
+              width: 48, height: 48, margin: '0 auto 20px',
+              border: '3px solid rgba(192,38,211,0.2)',
+              borderTopColor: '#e879f9',
+              borderRadius: '50%',
+              animation: 'creditSpin 0.8s linear infinite',
+            }} />
+            <div style={{ fontSize: 18, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+              Processing payment...
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 6 }}>
+              This usually takes a few seconds
+            </div>
+          </div>
+
+        ) : success ? (
+          /* ══════ SUCCESS STATE + FIREWORKS ══════ */
+          <div style={{ padding: '48px 24px 36px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+            {/* Fireworks particles */}
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+              {Array.from({ length: 24 }).map((_, i) => {
+                const angle = (i / 24) * 360;
+                const dist = 60 + Math.random() * 80;
+                const size = 4 + Math.random() * 4;
+                const delay = Math.random() * 0.3;
+                const colors = ['#e879f9', '#a855f7', '#fbbf24', '#f472b6', '#818cf8', '#34d399'];
+                const color = colors[i % colors.length];
+                return (
+                  <div key={i} style={{
+                    position: 'absolute',
+                    left: '50%', top: '40%',
+                    width: size, height: size,
+                    borderRadius: '50%',
+                    background: color,
+                    opacity: 0,
+                    animation: `creditFirework 1s ${delay}s ease-out forwards`,
+                    // @ts-expect-error CSS custom properties
+                    '--fw-x': `${Math.cos(angle * Math.PI / 180) * dist}px`,
+                    '--fw-y': `${Math.sin(angle * Math.PI / 180) * dist}px`,
+                  }} />
+                );
+              })}
+            </div>
+
+            {/* Checkmark icon */}
             <div style={{
               width: 64, height: 64, borderRadius: '50%', margin: '0 auto 20px',
-              background: 'linear-gradient(135deg, rgba(217,70,239,0.2), rgba(168,85,247,0.2))',
+              background: 'linear-gradient(135deg, rgba(217,70,239,0.25), rgba(168,85,247,0.25))',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               animation: 'creditSuccessPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              position: 'relative', zIndex: 1,
             }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#e879f9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
 
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.95)', letterSpacing: '-0.02em' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.95)', letterSpacing: '-0.02em', position: 'relative', zIndex: 1 }}>
               Credits Added!
             </div>
 
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 6 }}>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 6, position: 'relative', zIndex: 1 }}>
               Your balance has been updated
             </div>
 
@@ -138,6 +185,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
               borderRadius: 16,
               background: 'rgba(192,38,211,0.06)',
               border: '1px solid rgba(192,38,211,0.15)',
+              position: 'relative', zIndex: 1,
             }}>
               <div style={{
                 fontSize: 48, fontWeight: 800, letterSpacing: '-0.03em',
@@ -162,6 +210,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
                 color: '#fff', fontSize: 15, fontWeight: 600,
                 cursor: 'pointer',
                 boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
+                position: 'relative', zIndex: 1,
               }}
             >
               Continue Creating
@@ -383,6 +432,13 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
         @keyframes creditSuccessPop {
           from { transform: scale(0.5); opacity: 0 }
           to { transform: scale(1); opacity: 1 }
+        }
+        @keyframes creditSpin {
+          to { transform: rotate(360deg) }
+        }
+        @keyframes creditFirework {
+          0% { transform: translate(0, 0) scale(1); opacity: 1 }
+          100% { transform: translate(var(--fw-x), var(--fw-y)) scale(0); opacity: 0 }
         }
       `}</style>
     </>

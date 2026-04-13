@@ -189,6 +189,7 @@ export default function Editor({
   const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(null);
   const [creditExhausted, setCreditExhausted] = useState(false);
   const [creditSuccess, setCreditSuccess] = useState(false);
+  const [creditWaiting, setCreditWaiting] = useState(false);
 
   // Detect ?topped_up=1 after Stripe redirect
   useEffect(() => {
@@ -198,26 +199,31 @@ export default function Editor({
       window.history.replaceState({}, '', window.location.pathname);
       setMessages(prev => prev.filter(m => !m.content?.startsWith('[CREDITS_EXHAUSTED:')));
       setCreditExhausted(false);
-      // Poll for balance update — webhook may take a few seconds after Stripe redirect
+      // Show waiting state immediately
+      setCreditWaiting(true);
+      setCreditSuccess(false);
+      setCreditPopupOpen(true);
+      setCreditBalance(0);
+      // Poll every 1s until balance > 0 (webhook may take a few seconds)
       let attempts = 0;
       const poll = () => {
+        attempts++;
         fetch('/api/billing/credits').then(r => r.json()).then(data => {
-          const bal = data.balance ?? 0;
           setCreditSubscription(data.subscription ?? null);
-          if (bal > 0 || attempts >= 8) {
-            // Balance updated (or timed out) — show success
+          const bal = data.balance ?? 0;
+          if (bal > 0) {
             setCreditBalance(bal);
             setCreditSuccess(true);
-            setCreditPopupOpen(true);
+          } else if (attempts < 20) {
+            setTimeout(poll, 1000);
           } else {
-            // Webhook not yet processed — retry in 2s
-            attempts++;
-            setTimeout(poll, 2000);
+            // Timed out — show anyway
+            setCreditBalance(bal);
+            setCreditSuccess(true);
           }
-        }).catch(() => {});
+        }).catch(() => { if (attempts < 20) setTimeout(poll, 1000); });
       };
-      // First attempt after 1.5s delay (give webhook time)
-      setTimeout(poll, 1500);
+      poll();
     }
   }, []);
   // Camera rotation panel
@@ -3599,11 +3605,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       {/* Credit popup */}
       <CreditPopup
         open={creditPopupOpen}
-        onClose={() => { setCreditPopupOpen(false); setCreditExhausted(false); setCreditSuccess(false); }}
+        onClose={() => { setCreditPopupOpen(false); setCreditExhausted(false); setCreditSuccess(false); setCreditWaiting(false); }}
         balance={creditBalance}
         subscription={creditSubscription}
         projectId={projectId ?? undefined}
         success={creditSuccess}
+        waiting={creditWaiting}
       />
     </div>
   );
