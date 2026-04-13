@@ -827,40 +827,32 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Play/pause button — bottom-left (same as Remotion) */}
-            {!videoError && showControls && (
-              <div className="absolute z-10" style={{ bottom: 28, left: 12 }}>
+            {/* Controls bar — play button left, time badge right, aligned */}
+            {!videoError && (
+              <div className={`absolute left-0 right-0 z-10 flex items-center justify-between px-3 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`} style={{ bottom: 10 }}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     if (videoPlaying) { videoRef.current?.pause(); }
                     else { videoRef.current?.play().catch(() => {}); }
                   }}
-                  className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+                  className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
                 >
                   {videoPlaying ? (
-                    <svg width="16" height="16" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
+                    <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
                   ) : (
-                    <svg width="16" height="16" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+                    <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
                   )}
                 </button>
-              </div>
-            )}
-
-            {/* Time badge — bottom-right (same as Remotion) */}
-            {!videoError && (
-              <div
-                className={`absolute z-20 pointer-events-none transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
-                style={{ bottom: 14, right: 10 }}
-              >
                 <span
-                  className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
+                  className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none pointer-events-none"
                   style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}
                 >
                   {formatTime(videoCurrentTime)}<span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>{formatTime(videoDuration)}
                 </span>
               </div>
             )}
+
 
             {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag (same as Remotion) */}
             {!videoError && (
@@ -993,26 +985,20 @@ export default function ImageCanvas({
               />
             )}
 
-            {/* Play/pause button — bottom-left, large */}
+            {/* Controls bar — play button left, time badge right, aligned */}
             {currentDesign?.animation && (
-              <div className="absolute z-10" style={{ bottom: 28, left: 12 }}>
+              <div className="absolute left-0 right-0 z-10 flex items-center justify-between px-3" style={{ bottom: 10 }}>
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleRemotionPlay(); }}
-                  className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+                  className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
                 >
                   {remotionPlaying ? (
-                    <svg width="16" height="16" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
+                    <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
                   ) : (
-                    <svg width="16" height="16" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+                    <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
                   )}
                 </button>
-              </div>
-            )}
-
-            {/* Time badge — updated via DOM (data-remotion-time) */}
-            {currentDesign?.animation && (
-              <div className="absolute z-20 pointer-events-none" style={{ bottom: 14, right: 10 }}>
-                <span data-remotion-time className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
+                <span data-remotion-time className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none pointer-events-none"
                   style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}>
                   {formatTime(0)} / {formatTime(remotionDuration)}
                 </span>
