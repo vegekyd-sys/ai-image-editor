@@ -13,6 +13,73 @@ const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), 
 
 const VIDEO_SENTINEL = '__VIDEO__';
 
+/** Shared controls bar for video and Remotion Player */
+function PlaybackControls({ playing, timeLabel, visible, onToggle, dataTimeLabelAttr }: {
+  playing: boolean; timeLabel: string; visible: boolean;
+  onToggle: () => void; dataTimeLabelAttr?: string;
+}) {
+  return (
+    <div className={`absolute left-0 right-0 z-10 flex items-center justify-between px-3 transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} style={{ bottom: 10 }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+      >
+        {playing ? (
+          <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+        )}
+      </button>
+      <span {...(dataTimeLabelAttr ? { [dataTimeLabelAttr]: '' } : {})}
+        className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none pointer-events-none"
+        style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}>
+        {timeLabel}
+      </span>
+    </div>
+  );
+}
+
+/** Shared seek bar for video and Remotion Player */
+function SeekBar({ progress, buffered, onSeekStart, onSeek, onSeekEnd, trackDataAttr, fillDataAttr }: {
+  progress: number; buffered?: number;
+  onSeekStart: (clientX: number) => void; onSeek: (clientX: number) => void; onSeekEnd: () => void;
+  trackDataAttr?: string; fillDataAttr?: string;
+}) {
+  return (
+    <div
+      className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
+      style={{ height: 24, touchAction: 'none' }}
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const track = e.currentTarget.querySelector('[data-seek-track]') as HTMLElement;
+        if (track) track.style.height = '6px';
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        onSeekStart(e.clientX);
+      }}
+      onPointerMove={(e) => { if (e.buttons) onSeek(e.clientX); }}
+      onPointerUp={(e) => {
+        const track = e.currentTarget.querySelector('[data-seek-track]') as HTMLElement;
+        if (track) track.style.height = '';
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        onSeekEnd();
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div data-seek-track {...(trackDataAttr ? { [trackDataAttr]: '' } : {})}
+        className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
+        <div className="absolute inset-0 bg-white/12" />
+        {buffered !== undefined && <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${buffered * 100}%` }} />}
+        <div {...(fillDataAttr ? { [fillDataAttr]: '' } : {})}
+          className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${progress * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
 interface ImageCanvasProps {
   timeline: string[];
   currentIndex: number;
@@ -827,71 +894,22 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Controls bar — play button left, time badge right, aligned */}
             {!videoError && (
-              <div className={`absolute left-0 right-0 z-10 flex items-center justify-between px-3 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`} style={{ bottom: 10 }}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (videoPlaying) { videoRef.current?.pause(); }
-                    else { videoRef.current?.play().catch(() => {}); }
-                  }}
-                  className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
-                >
-                  {videoPlaying ? (
-                    <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
-                  ) : (
-                    <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
-                  )}
-                </button>
-                <span
-                  className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none pointer-events-none"
-                  style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}
-                >
-                  {formatTime(videoCurrentTime)}<span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>{formatTime(videoDuration)}
-                </span>
-              </div>
+              <PlaybackControls
+                playing={videoPlaying}
+                visible={showControls}
+                timeLabel={`${formatTime(videoCurrentTime)} / ${formatTime(videoDuration)}`}
+                onToggle={() => { if (videoPlaying) videoRef.current?.pause(); else videoRef.current?.play().catch(() => {}); }}
+              />
             )}
-
-
-            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag (same as Remotion) */}
             {!videoError && (
-              <div
-                ref={seekBarRef}
-                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
-                style={{ height: 24, touchAction: 'none' }}
-                onTouchStart={(e) => e.stopPropagation()}
-                onTouchMove={(e) => e.stopPropagation()}
-                onTouchEnd={(e) => e.stopPropagation()}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (videoPlaying) videoRef.current?.pause();
-                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
-                  if (track) track.style.height = '6px';
-                  seekDragging.current = true;
-                  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                  doSeek(e.clientX);
-                  resetControlsTimer();
-                }}
-                onPointerMove={(e) => {
-                  if (!seekDragging.current) return;
-                  doSeek(e.clientX);
-                }}
-                onPointerUp={(e) => {
-                  seekDragging.current = false;
-                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
-                  if (track) track.style.height = '';
-                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div data-video-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
-                  <div className="absolute inset-0 bg-white/12" />
-                  <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${videoBuffered * 100}%` }} />
-                  <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }} />
-                </div>
-              </div>
+              <SeekBar
+                progress={videoDuration ? videoCurrentTime / videoDuration : 0}
+                buffered={videoBuffered}
+                onSeekStart={(x) => { if (videoPlaying) videoRef.current?.pause(); seekDragging.current = true; doSeek(x); resetControlsTimer(); }}
+                onSeek={(x) => { if (seekDragging.current) doSeek(x); }}
+                onSeekEnd={() => { seekDragging.current = false; }}
+              />
             )}
           </div>
         ) : isVideoEntry && !videoUrl && videoProcessing && videoPosterImage ? (
@@ -985,64 +1003,24 @@ export default function ImageCanvas({
               />
             )}
 
-            {/* Controls bar — play button left, time badge right, aligned */}
             {currentDesign?.animation && (
-              <div className="absolute left-0 right-0 z-10 flex items-center justify-between px-3" style={{ bottom: 10 }}>
-                <button
-                  onClick={(e) => { e.stopPropagation(); toggleRemotionPlay(); }}
-                  className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
-                >
-                  {remotionPlaying ? (
-                    <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
-                  ) : (
-                    <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
-                  )}
-                </button>
-                <span data-remotion-time className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none pointer-events-none"
-                  style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}>
-                  {formatTime(0)} / {formatTime(remotionDuration)}
-                </span>
-              </div>
+              <PlaybackControls
+                playing={remotionPlaying}
+                visible={true}
+                timeLabel={`${formatTime(0)} / ${formatTime(remotionDuration)}`}
+                onToggle={toggleRemotionPlay}
+                dataTimeLabelAttr="data-remotion-time"
+              />
             )}
-
-            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag */}
             {currentDesign?.animation && (
-              <div
-                data-remotion-seek
-                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
-                style={{ height: 24, touchAction: 'none' }}
-                onTouchStart={(e) => e.stopPropagation()}
-                onTouchMove={(e) => e.stopPropagation()}
-                onTouchEnd={(e) => e.stopPropagation()}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (remotionPlaying) {
-                    remotionRef.current?.pause();
-                    setRemotionPlaying(false);
-                  }
-                  // Thicken bar on drag (mobile)
-                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
-                  if (track) track.style.height = '6px';
-                  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                  seekRemotion(e.clientX);
-                }}
-                onPointerMove={(e) => {
-                  if (e.buttons) seekRemotion(e.clientX);
-                }}
-                onPointerUp={(e) => {
-                  // Shrink bar back
-                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
-                  if (track) track.style.height = '';
-                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div data-remotion-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
-                  <div className="absolute inset-0 bg-white/12" />
-                  <div data-remotion-fill className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: '0%' }} />
-                </div>
-              </div>
+              <SeekBar
+                progress={0}
+                onSeekStart={(x) => { if (remotionPlaying) { remotionRef.current?.pause(); setRemotionPlaying(false); } seekRemotion(x); }}
+                onSeek={seekRemotion}
+                onSeekEnd={() => {}}
+                trackDataAttr="data-remotion-track"
+                fillDataAttr="data-remotion-fill"
+              />
             )}
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
