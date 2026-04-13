@@ -188,22 +188,23 @@ export default function Editor({
   const [creditBalance, setCreditBalance] = useState<number>(0);
   const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(null);
   const [creditExhausted, setCreditExhausted] = useState(false);
-  const [toppedUpToast, setToppedUpToast] = useState(false);
+  const [creditSuccess, setCreditSuccess] = useState(false);
 
   // Detect ?topped_up=1 after Stripe redirect
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('topped_up')) {
-      // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
-      // Remove credit exhausted cards from messages
       setMessages(prev => prev.filter(m => !m.content?.startsWith('[CREDITS_EXHAUSTED:')));
       setCreditExhausted(false);
-      setCreditPopupOpen(false);
-      // Show toast
-      setToppedUpToast(true);
-      setTimeout(() => setToppedUpToast(false), 3000);
+      // Fetch updated balance then show success popup
+      fetch('/api/billing/credits').then(r => r.json()).then(data => {
+        setCreditBalance(data.balance ?? 0);
+        setCreditSubscription(data.subscription ?? null);
+        setCreditSuccess(true);
+        setCreditPopupOpen(true);
+      }).catch(() => {});
     }
   }, []);
   // Camera rotation panel
@@ -3582,27 +3583,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         return null;
       })()}
 
-      {/* Topped up toast */}
-      {toppedUpToast && (
-        <div style={{
-          position: 'fixed', top: 'env(safe-area-inset-top, 16px)', left: '50%', transform: 'translateX(-50%)',
-          zIndex: 400, padding: '10px 24px', borderRadius: 12,
-          background: 'rgba(192,38,211,0.9)', backdropFilter: 'blur(8px)',
-          color: '#fff', fontSize: 14, fontWeight: 600,
-          boxShadow: '0 8px 32px rgba(192,38,211,0.4)',
-          animation: 'creditFadeIn 0.3s ease-out',
-        }}>
-          Credits added! Let&apos;s continue creating.
-        </div>
-      )}
-
       {/* Credit popup */}
       <CreditPopup
         open={creditPopupOpen}
-        onClose={() => { setCreditPopupOpen(false); setCreditExhausted(false); }}
+        onClose={() => { setCreditPopupOpen(false); setCreditExhausted(false); setCreditSuccess(false); }}
         balance={creditBalance}
         subscription={creditSubscription}
         projectId={projectId ?? undefined}
+        success={creditSuccess}
       />
     </div>
   );
