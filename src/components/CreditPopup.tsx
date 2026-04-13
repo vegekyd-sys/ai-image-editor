@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { CREDIT_TIERS } from '@/lib/billing/tiers';
-// i18n keys to be added later; using inline strings for now
 
 const PLANS = [
   { id: 'basic', name: 'Basic', monthlyPrice: 990, credits: 1200 },
@@ -19,15 +18,16 @@ interface CreditPopupProps {
 }
 
 export default function CreditPopup({ open, onClose, balance, needed, subscription }: CreditPopupProps) {
-  // placeholder — will use useLocale() after adding i18n keys
   const [loading, setLoading] = useState<string | null>(null);
-  const [selectedTier, setSelectedTier] = useState<string>('starter');
+  const [selectedTier, setSelectedTier] = useState<string>('pro');
+  const [tab, setTab] = useState<'subscribe' | 'topup'>(
+    subscription && subscription.status !== 'canceled' ? 'topup' : 'subscribe'
+  );
 
   if (!open) return null;
 
   const hasSubscription = subscription && subscription.status !== 'canceled';
   const currentPlanIndex = hasSubscription ? PLANS.findIndex(p => p.id === subscription.planId) : -1;
-  const upgradePlan = currentPlanIndex >= 0 && currentPlanIndex < PLANS.length - 1 ? PLANS[currentPlanIndex + 1] : null;
 
   const handleCheckout = async (tier: string) => {
     setLoading(tier);
@@ -66,188 +66,216 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
         onClick={onClose}
         style={{
           position: 'fixed', inset: 0, zIndex: 300,
-          background: 'rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(4px)',
-          animation: 'fadeIn 0.2s ease-out',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(8px)',
+          animation: 'creditFadeIn 0.2s ease-out',
         }}
       />
 
-      {/* Popup */}
+      {/* Modal — centered on desktop, bottom sheet on mobile */}
       <div
         style={{
           position: 'fixed', zIndex: 301,
-          left: '50%', bottom: 0, transform: 'translateX(-50%)',
-          width: '100%', maxWidth: 420,
-          background: 'linear-gradient(180deg, #141416 0%, #0c0c0e 100%)',
-          borderRadius: '24px 24px 0 0',
-          border: '1px solid rgba(255,255,255,0.06)',
-          borderBottom: 'none',
-          padding: '24px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)',
-          animation: 'slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          /* Desktop: centered */
+          left: '50%', top: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '92%', maxWidth: 480,
+          maxHeight: '85dvh',
+          overflowY: 'auto',
+          background: 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
+          borderRadius: 20,
+          border: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04)',
+          animation: 'creditScaleIn 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }}
       >
-        {/* Handle bar */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.12)' }} />
-        </div>
-
-        {/* Title */}
-        <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#fbbf24', letterSpacing: '-0.01em' }}>
-            Credits Exhausted
-          </div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 6 }}>
-            Balance: {balance} credits
-            {needed ? ` · $need ~${needed}` : ''}
-            {hasSubscription ? ` · ${subscription.planId} $plan` : ''}
-          </div>
-        </div>
-
-        {!hasSubscription ? (
-          /* ── A: No subscription → recommend subscribing ── */
-          <>
-            {/* Recommended plan card */}
-            <div style={{
-              background: 'rgba(217,70,239,0.08)',
-              border: '1px solid rgba(217,70,239,0.25)',
-              borderRadius: 16,
-              padding: '16px 20px',
-              marginBottom: 16,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
-                    Basic · ${(PLANS[0].monthlyPrice / 100).toFixed(2)}/mo
-                  </div>
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
-                    Monthly {PLANS[0].credits.toLocaleString()} credits
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleSubscribe('basic')}
-                  disabled={!!loading}
-                  style={{
-                    padding: '8px 20px',
-                    borderRadius: 10,
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: loading ? 'wait' : 'pointer',
-                    opacity: loading ? 0.5 : 1,
-                    boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
-                  }}
-                >
-                  {loading === 'sub-basic' ? '...' : 'Subscribe'}
-                </button>
-              </div>
+        {/* Header */}
+        <div style={{ padding: '24px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.02em' }}>
+              Get More Credits
             </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
+              Balance: <span style={{ color: balance === 0 ? '#fbbf24' : 'rgba(255,255,255,0.6)' }}>{balance}</span> credits
+              {needed ? <> &middot; ~{needed} needed</> : null}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.06)', border: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: 'rgba(255,255,255,0.4)',
+              fontSize: 16, lineHeight: 1,
+            }}
+          >
+            &times;
+          </button>
+        </div>
 
-            {/* Secondary: one-time top-up links */}
-            <div style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>
-              Or top up:
-              {CREDIT_TIERS.map((tier, i) => (
-                <span key={tier.id}>
-                  {i > 0 && ' · '}
-                  <button
-                    onClick={() => handleCheckout(tier.id)}
-                    disabled={!!loading}
+        {/* Tab bar */}
+        <div style={{ display: 'flex', gap: 4, margin: '16px 24px 0', padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
+          <button
+            onClick={() => setTab('subscribe')}
+            style={{
+              flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              background: tab === 'subscribe' ? 'rgba(192,38,211,0.2)' : 'transparent',
+              color: tab === 'subscribe' ? '#e879f9' : 'rgba(255,255,255,0.35)',
+              transition: 'all 0.15s',
+            }}
+          >
+            Subscribe
+          </button>
+          <button
+            onClick={() => setTab('topup')}
+            style={{
+              flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              background: tab === 'topup' ? 'rgba(192,38,211,0.2)' : 'transparent',
+              color: tab === 'topup' ? '#e879f9' : 'rgba(255,255,255,0.35)',
+              transition: 'all 0.15s',
+            }}
+          >
+            Top Up
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '16px 24px 24px' }}>
+
+          {/* ── Subscribe tab ── */}
+          {tab === 'subscribe' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {PLANS.map((plan, idx) => {
+                const isCurrent = hasSubscription && subscription.planId === plan.id;
+                const isDowngrade = hasSubscription && idx < currentPlanIndex;
+                return (
+                  <div
+                    key={plan.id}
                     style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'rgba(255,255,255,0.5)', fontSize: 12, textDecoration: 'underline',
-                      textUnderlineOffset: 2, padding: '2px 0',
+                      padding: '16px 18px',
+                      borderRadius: 14,
+                      border: isCurrent
+                        ? '1.5px solid rgba(192,38,211,0.5)'
+                        : '1px solid rgba(255,255,255,0.06)',
+                      background: isCurrent
+                        ? 'rgba(192,38,211,0.06)'
+                        : 'rgba(255,255,255,0.02)',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      opacity: isDowngrade ? 0.4 : 1,
                     }}
                   >
-                    {loading === tier.id ? '...' : `$${(tier.price / 100).toFixed(0)}`}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
+                          {plan.name}
+                        </span>
+                        {isCurrent && (
+                          <span style={{
+                            fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+                            background: 'rgba(192,38,211,0.2)', color: '#e879f9',
+                          }}>
+                            Current
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 3 }}>
+                        {plan.credits.toLocaleString()} credits/month &middot; ${(plan.monthlyPrice / 100).toFixed(2)}/mo
+                      </div>
+                    </div>
+                    {!isCurrent && !isDowngrade && (
+                      <button
+                        onClick={() => handleSubscribe(plan.id)}
+                        disabled={!!loading}
+                        style={{
+                          padding: '8px 18px', borderRadius: 10, border: 'none',
+                          background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
+                          color: '#fff', fontSize: 12, fontWeight: 600,
+                          cursor: loading ? 'wait' : 'pointer',
+                          opacity: loading ? 0.5 : 1,
+                          boxShadow: '0 4px 16px rgba(217,70,239,0.25)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {loading === `sub-${plan.id}` ? '...' : (hasSubscription ? 'Upgrade' : 'Subscribe')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Top Up tab ── */}
+          {tab === 'topup' && (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {CREDIT_TIERS.map(tier => (
+                  <button
+                    key={tier.id}
+                    onClick={() => setSelectedTier(tier.id)}
+                    style={{
+                      padding: '14px 18px',
+                      borderRadius: 14,
+                      border: selectedTier === tier.id
+                        ? '1.5px solid rgba(192,38,211,0.5)'
+                        : '1px solid rgba(255,255,255,0.06)',
+                      background: selectedTier === tier.id
+                        ? 'rgba(192,38,211,0.06)'
+                        : 'rgba(255,255,255,0.02)',
+                      cursor: 'pointer',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      transition: 'all 0.15s',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
+                        {tier.credits.toLocaleString()} credits
+                      </div>
+                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                        {tier.unitPrice}/credit
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: selectedTier === tier.id ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
+                      ${(tier.price / 100).toFixed(0)}
+                    </div>
                   </button>
-                </span>
-              ))}
-            </div>
-          </>
-        ) : (
-          /* ── B: Has subscription → top up + upgrade ── */
-          <>
-            {/* Top up tier cards */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {CREDIT_TIERS.map(tier => (
-                <button
-                  key={tier.id}
-                  onClick={() => setSelectedTier(tier.id)}
-                  style={{
-                    flex: 1,
-                    padding: '12px 8px',
-                    borderRadius: 12,
-                    border: selectedTier === tier.id
-                      ? '1.5px solid rgba(217,70,239,0.6)'
-                      : '1px solid rgba(255,255,255,0.08)',
-                    background: selectedTier === tier.id
-                      ? 'rgba(217,70,239,0.1)'
-                      : 'rgba(255,255,255,0.03)',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
-                    {tier.credits.toLocaleString()}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                    ${(tier.price / 100).toFixed(0)}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Top up action button */}
-            <button
-              onClick={() => handleCheckout(selectedTier)}
-              disabled={!!loading}
-              style={{
-                width: '100%',
-                padding: 14,
-                borderRadius: 14,
-                border: 'none',
-                background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: loading ? 'wait' : 'pointer',
-                opacity: loading ? 0.5 : 1,
-                boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
-                marginBottom: 16,
-              }}
-            >
-              {loading === selectedTier ? '...' : `Top Up ${CREDIT_TIERS.find(c => c.id === selectedTier)?.credits.toLocaleString()} Credits · $${((CREDIT_TIERS.find(c => c.id === selectedTier)?.price ?? 0) / 100).toFixed(0)}`}
-            </button>
-
-            {/* Secondary: upgrade suggestion */}
-            {upgradePlan && (
-              <div style={{ textAlign: 'center' }}>
-                <button
-                  onClick={() => handleSubscribe(upgradePlan.id)}
-                  disabled={!!loading}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'rgba(255,255,255,0.4)', fontSize: 12,
-                  }}
-                >
-                  {loading === `sub-${upgradePlan.id}` ? '...' : (
-                    <>
-                      Upgrade to {upgradePlan.name} · ${(upgradePlan.monthlyPrice / 100).toFixed(2)}/mo · {upgradePlan.credits.toLocaleString()} credits
-                    </>
-                  )}
-                </button>
+                ))}
               </div>
-            )}
-          </>
-        )}
+
+              <button
+                onClick={() => handleCheckout(selectedTier)}
+                disabled={!!loading}
+                style={{
+                  width: '100%', marginTop: 16,
+                  padding: 14, borderRadius: 14, border: 'none',
+                  background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
+                  color: '#fff', fontSize: 14, fontWeight: 600,
+                  cursor: loading ? 'wait' : 'pointer',
+                  opacity: loading ? 0.5 : 1,
+                  boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
+                }}
+              >
+                {loading === selectedTier
+                  ? '...'
+                  : `Top Up ${CREDIT_TIERS.find(c => c.id === selectedTier)?.credits.toLocaleString()} Credits`}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <style>{`
-        @keyframes fadeIn {
+        @keyframes creditFadeIn {
           from { opacity: 0 }
           to { opacity: 1 }
+        }
+        @keyframes creditScaleIn {
+          from { opacity: 0; transform: translate(-50%, -50%) scale(0.95) }
+          to { opacity: 1; transform: translate(-50%, -50%) scale(1) }
         }
       `}</style>
     </>

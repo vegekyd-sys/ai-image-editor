@@ -391,7 +391,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     },
 
     onInsufficientCredits: (balance) => {
-      // Insert a system message in CUI with credits exhausted marker
+      // Insert a system message in CUI — popup only opens when user taps "Top Up"
       const sysMsg: import('@/types').Message = {
         id: `credits-${Date.now()}`,
         role: 'assistant',
@@ -400,7 +400,6 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       };
       ctx.setMessages(prev => [...prev, sysMsg]);
       ctx.setAgentStatus('');
-      ctx.onInsufficientCredits?.(balance);
       ctx.onCleanup?.();
     },
   };
