@@ -8,8 +8,23 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-13',
+    en: { title: 'Editable Text in Designs', items: [
+      'Edit text directly: click any text element in a design to select, click Edit to modify — no Agent needed',
+      'Frame-aware: video designs show only the text fields visible at the current frame',
+      'Floating editor: shared panel with annotation toolbar — draggable on desktop, fixed on mobile',
+      'Auto-persist: text edits saved to workspace automatically (debounced)',
+    ]},
+    zh: { title: 'Design 文字可编辑', items: [
+      '直接编辑文字：点击 Design 中的文字选中，点 Edit 即可修改 — 无需 Agent',
+      '帧感知：视频 Design 只显示当前帧可见的文字字段',
+      '浮动编辑器：与标注工具共享面板 — 桌面可拖拽，移动端固定底部',
+      '自动保存：文字编辑自动持久化到 workspace',
+    ]},
+  },
+  {
     date: '2026-04-12',
-    en: { title: 'Remotion Design Engine, Music & Background Agent', items: [
+    en: { title: 'Remotion Engine, Music & Background Agent', items: [
       'Remotion rendering: Agent generates React/CSS code → browser renders stills and animations with Remotion Player',
       'MP4 export: animated designs export as h264/mp4 directly in the browser',
       'Patch mode: edit existing designs incrementally (change text, colors, layout) without rewriting code',
@@ -19,7 +34,7 @@ const CHANGELOG: ChangelogEntry[] = [
       'Design intelligence: Agent sees design code in context, patches directly without reading files',
       'Video Design skill: cinematic 4-question self-check + 花字 (fancy text) guidelines',
     ]},
-    zh: { title: 'Remotion Design 引擎、音乐配乐 & 后台 Agent', items: [
+    zh: { title: 'Remotion 引擎、音乐配乐 & 后台 Agent', items: [
       'Remotion 渲染：Agent 生成 React/CSS 代码 → 浏览器渲染静态图和动画',
       'MP4 导出：animated design 直接在浏览器导出 h264/mp4',
       'Patch 模式：增量编辑现有 design（改文字、颜色、布局），无需重写代码',
