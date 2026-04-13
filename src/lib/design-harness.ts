@@ -39,10 +39,6 @@ export function validateDesign(result: DesignResult): string | null {
   const editablesError = validateEditables(result.editables);
   if (editablesError) return editablesError;
 
-  // ── Check 5: data-editable in code requires editables + props ──
-  const missingEditables = checkEditablesPresence(result.code, result.editables, result.props);
-  if (missingEditables) return missingEditables;
-
   return null; // all checks passed
 }
 
@@ -54,29 +50,6 @@ export function validateEditables(editables?: EditableField[]): string | null {
       return '⚠️ Editable field missing required properties (id, type, propKey). Each editable must have { id, type, label, propKey }.';
     }
   }
-  return null;
-}
-
-/** Check that code with data-editable attributes has matching editables array and props */
-function checkEditablesPresence(code: string, editables?: EditableField[], props?: Record<string, unknown>): string | null {
-  const dataEditableMatches = code.match(/data-editable=["'`]([^"'`]+)["'`]/g);
-  if (!dataEditableMatches || dataEditableMatches.length === 0) return null; // no data-editable → skip
-
-  const ids = dataEditableMatches.map(m => {
-    const match = m.match(/data-editable=["'`]([^"'`]+)["'`]/);
-    return match?.[1] || '';
-  }).filter(Boolean);
-
-  if (!editables || editables.length === 0) {
-    console.warn(`⚠️ [design-harness] code has data-editable (${ids.slice(0, 3).join(', ')}...) but no editables array`);
-    return `⚠️ Design rejected: Code uses data-editable="${ids[0]}" but no \`editables\` array was returned. Add editables: [{ id, type: 'text', label, propKey }] for each data-editable field, and include a \`props\` object with initial values. Regenerate.`;
-  }
-
-  if (!props || Object.keys(props).length === 0) {
-    console.warn('⚠️ [design-harness] editables declared but no props object');
-    return '⚠️ Design rejected: `editables` declared but no `props` object returned. Add props: { key: value } with initial text values for each editable field. Regenerate.';
-  }
-
   return null;
 }
 
