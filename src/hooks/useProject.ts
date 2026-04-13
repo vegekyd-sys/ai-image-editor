@@ -205,6 +205,9 @@ export function useProject(projectId: string, userId: string) {
         }, { onConflict: 'id' })
 
         if (error) console.warn('saveSnapshot error:', error)
+
+        // Touch project updated_at so projects page stale-check detects the change
+        await supabase.from('projects').update({ updated_at: new Date().toISOString() }).eq('id', projectId)
       } catch (err) {
         console.warn('saveSnapshot error:', err)
       }
