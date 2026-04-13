@@ -183,10 +183,11 @@ export default function Editor({
   const [textColor, setTextColor] = useState('#ec4899');
   const [textBgEnabled, setTextBgEnabled] = useState(true);
   const [showAnimateSheet, setShowAnimateSheet] = useState(false);
-  // Credit popup
+  // Credit popup + status bar notification
   const [creditPopupOpen, setCreditPopupOpen] = useState(false);
   const [creditBalance, setCreditBalance] = useState<number>(0);
   const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(null);
+  const [creditExhausted, setCreditExhausted] = useState(false);
   // Camera rotation panel
   const [showCameraPanel, setShowCameraPanel] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
@@ -863,6 +864,7 @@ export default function Editor({
 
       if (res.status === 402) {
         try { const d = await res.json(); setCreditBalance(d.balance ?? 0); } catch { /* */ }
+        setCreditExhausted(true);
         setCreditPopupOpen(true);
         return;
       }
@@ -1519,7 +1521,7 @@ export default function Editor({
       t, initialTitle, userPromptText: text,
       onInsufficientCredits: (balance) => {
         setCreditBalance(balance);
-        setCreditPopupOpen(true);
+        setCreditExhausted(true);
       },
       onMusicTaskCreated: (taskId) => {
         setMusicTaskId(taskId);
@@ -1582,7 +1584,7 @@ export default function Editor({
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t,
-      onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditPopupOpen(true); },
+      onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
       onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
     });
 
@@ -3167,8 +3169,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
                   snapshotCount={snapshots.length}
-                  notification={pendingNotification}
-                  onSeeNotification={handleSeeNotification}
+                  notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : pendingNotification}
+                  onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : handleSeeNotification}
                   onAnimate={snapshots.length >= 1 ? () => {
                     if (hasAnyAnimation) {
                       setViewIndex(videoTimelineIndex);
@@ -3565,7 +3567,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       {/* Credit popup */}
       <CreditPopup
         open={creditPopupOpen}
-        onClose={() => setCreditPopupOpen(false)}
+        onClose={() => { setCreditPopupOpen(false); setCreditExhausted(false); }}
         balance={creditBalance}
         subscription={creditSubscription}
       />

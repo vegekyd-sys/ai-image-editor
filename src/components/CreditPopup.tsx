@@ -20,6 +20,7 @@ interface CreditPopupProps {
 export default function CreditPopup({ open, onClose, balance, needed, subscription }: CreditPopupProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<string>('pro');
+  const [selectedPlan, setSelectedPlan] = useState<string>('basic');
   const [tab, setTab] = useState<'subscribe' | 'topup'>(
     subscription && subscription.status !== 'canceled' ? 'topup' : 'subscribe'
   );
@@ -145,67 +146,85 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
         {/* Content */}
         <div style={{ padding: '16px 24px 24px' }}>
 
-          {/* ── Subscribe tab ── */}
+          {/* ── Subscribe tab — same card style as Top Up ── */}
           {tab === 'subscribe' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {PLANS.map((plan, idx) => {
-                const isCurrent = hasSubscription && subscription.planId === plan.id;
-                const isDowngrade = hasSubscription && idx < currentPlanIndex;
-                return (
-                  <div
-                    key={plan.id}
-                    style={{
-                      padding: '16px 18px',
-                      borderRadius: 14,
-                      border: isCurrent
-                        ? '1.5px solid rgba(192,38,211,0.5)'
-                        : '1px solid rgba(255,255,255,0.06)',
-                      background: isCurrent
-                        ? 'rgba(192,38,211,0.06)'
-                        : 'rgba(255,255,255,0.02)',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      opacity: isDowngrade ? 0.4 : 1,
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
-                          {plan.name}
-                        </span>
-                        {isCurrent && (
-                          <span style={{
-                            fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
-                            background: 'rgba(192,38,211,0.2)', color: '#e879f9',
-                          }}>
-                            Current
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {PLANS.map((plan, idx) => {
+                  const isCurrent = hasSubscription && subscription.planId === plan.id;
+                  const isDowngrade = hasSubscription && idx < currentPlanIndex;
+                  const isSelected = selectedPlan === plan.id;
+                  return (
+                    <button
+                      key={plan.id}
+                      onClick={() => !isCurrent && !isDowngrade && setSelectedPlan(plan.id)}
+                      disabled={!!(isCurrent || isDowngrade)}
+                      style={{
+                        padding: '14px 18px',
+                        borderRadius: 14,
+                        border: isCurrent
+                          ? '1.5px solid rgba(192,38,211,0.5)'
+                          : isSelected
+                            ? '1.5px solid rgba(192,38,211,0.5)'
+                            : '1px solid rgba(255,255,255,0.06)',
+                        background: isCurrent
+                          ? 'rgba(192,38,211,0.06)'
+                          : isSelected
+                            ? 'rgba(192,38,211,0.06)'
+                            : 'rgba(255,255,255,0.02)',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        opacity: isDowngrade ? 0.4 : 1,
+                        cursor: isCurrent || isDowngrade ? 'default' : 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
+                            {plan.name}
                           </span>
-                        )}
+                          {isCurrent && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+                              background: 'rgba(192,38,211,0.2)', color: '#e879f9',
+                            }}>
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                          {plan.credits.toLocaleString()} credits/month
+                        </div>
                       </div>
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 3 }}>
-                        {plan.credits.toLocaleString()} credits/month &middot; ${(plan.monthlyPrice / 100).toFixed(2)}/mo
+                      <div style={{ fontSize: 16, fontWeight: 700, color: isSelected && !isCurrent ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
+                        ${(plan.monthlyPrice / 100).toFixed(2)}<span style={{ fontSize: 11, fontWeight: 400 }}>/mo</span>
                       </div>
-                    </div>
-                    {!isCurrent && !isDowngrade && (
-                      <button
-                        onClick={() => handleSubscribe(plan.id)}
-                        disabled={!!loading}
-                        style={{
-                          padding: '8px 18px', borderRadius: 10, border: 'none',
-                          background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
-                          color: '#fff', fontSize: 12, fontWeight: 600,
-                          cursor: loading ? 'wait' : 'pointer',
-                          opacity: loading ? 0.5 : 1,
-                          boxShadow: '0 4px 16px rgba(217,70,239,0.25)',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {loading === `sub-${plan.id}` ? '...' : (hasSubscription ? 'Upgrade' : 'Subscribe')}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => handleSubscribe(selectedPlan)}
+                disabled={!!loading || !!(hasSubscription && subscription.planId === selectedPlan)}
+                style={{
+                  width: '100%', marginTop: 16,
+                  padding: 14, borderRadius: 14, border: 'none',
+                  background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
+                  color: '#fff', fontSize: 14, fontWeight: 600,
+                  cursor: loading ? 'wait' : 'pointer',
+                  opacity: loading || (hasSubscription && subscription.planId === selectedPlan) ? 0.4 : 1,
+                  boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
+                }}
+              >
+                {loading?.startsWith('sub-')
+                  ? '...'
+                  : hasSubscription
+                    ? `Upgrade to ${PLANS.find(p => p.id === selectedPlan)?.name}`
+                    : `Subscribe to ${PLANS.find(p => p.id === selectedPlan)?.name}`}
+              </button>
+            </>
           )}
 
           {/* ── Top Up tab ── */}
