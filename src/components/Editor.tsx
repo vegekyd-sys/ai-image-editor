@@ -198,13 +198,26 @@ export default function Editor({
       window.history.replaceState({}, '', window.location.pathname);
       setMessages(prev => prev.filter(m => !m.content?.startsWith('[CREDITS_EXHAUSTED:')));
       setCreditExhausted(false);
-      // Fetch updated balance then show success popup
-      fetch('/api/billing/credits').then(r => r.json()).then(data => {
-        setCreditBalance(data.balance ?? 0);
-        setCreditSubscription(data.subscription ?? null);
-        setCreditSuccess(true);
-        setCreditPopupOpen(true);
-      }).catch(() => {});
+      // Poll for balance update — webhook may take a few seconds after Stripe redirect
+      let attempts = 0;
+      const poll = () => {
+        fetch('/api/billing/credits').then(r => r.json()).then(data => {
+          const bal = data.balance ?? 0;
+          setCreditSubscription(data.subscription ?? null);
+          if (bal > 0 || attempts >= 8) {
+            // Balance updated (or timed out) — show success
+            setCreditBalance(bal);
+            setCreditSuccess(true);
+            setCreditPopupOpen(true);
+          } else {
+            // Webhook not yet processed — retry in 2s
+            attempts++;
+            setTimeout(poll, 2000);
+          }
+        }).catch(() => {});
+      };
+      // First attempt after 1.5s delay (give webhook time)
+      setTimeout(poll, 1500);
     }
   }, []);
   // Camera rotation panel
