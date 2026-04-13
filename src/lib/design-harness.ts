@@ -23,8 +23,8 @@ export function validateDesign(result: DesignResult): string | null {
   // ── Auto-fix: Replace <img> with Remotion <Img> for delayRender support ──
   result.code = autoFixImgTags(result.code);
 
-  // ── Check 1: Compile ──
-  const compileError = checkCompile(result.code);
+  // ── Check 1: Compile + execute with mock scope ──
+  const compileError = checkCompile(result.code, result);
   if (compileError) return compileError;
 
   // ── Check 2: Image references ──
@@ -64,8 +64,8 @@ function autoFixImgTags(code: string): string {
   return fixed;
 }
 
-/** Check that code compiles with Sucrase AND passes new Function() parsing */
-function checkCompile(code: string): string | null {
+/** Compile code with Sucrase then execute component with mock scope to catch runtime errors */
+function checkCompile(code: string, result?: DesignResult | null): string | null {
   try {
     const { code: compiled } = sucraseTransform(code.trim(), {
       transforms: ['typescript', 'jsx'],
@@ -74,7 +74,28 @@ function checkCompile(code: string): string | null {
 
     // Dry-run: verify compiled JS is valid in new Function() (matches browser eval path)
     const fnName = code.match(/function\s+(\w+)/)?.[1] || 'Design';
-    new Function(compiled + '\nreturn ' + fnName + ';');
+
+    // Execute the component with mock scope to catch runtime errors
+    // (props undefined, missing variables, wrong API usage, etc.)
+    const mockElement = (...args: unknown[]) => ({ type: 'div', props: args[1] || {}, children: args.slice(2) });
+    const noop = () => {};
+    const mockScope: Record<string, unknown> = {
+      React: { createElement: mockElement, Fragment: 'Fragment' },
+      useState: (init: unknown) => [typeof init === 'function' ? (init as () => unknown)() : init, noop],
+      useEffect: noop, useCallback: (fn: unknown) => fn, useMemo: (fn: () => unknown) => fn(),
+      useRef: (init: unknown) => ({ current: init }),
+      useCurrentFrame: () => 0,
+      useVideoConfig: () => ({ width: 1080, height: 1350, fps: 30, durationInFrames: 1 }),
+      interpolate: (frame: number) => frame,
+      spring: () => 0,
+      Sequence: 'Sequence', Series: 'Series', Img: 'Img', AbsoluteFill: 'AbsoluteFill', Audio: 'Audio',
+    };
+    const scopeKeys = Object.keys(mockScope);
+    const scopeValues = Object.values(mockScope);
+    const factory = new Function(...scopeKeys, compiled + '\nreturn ' + fnName + ';');
+    const Component = factory(...scopeValues);
+    // Call with empty props — catches "props is not defined", ReferenceError, TypeError, etc.
+    Component(result?.props || {});
 
     return null;
   } catch (err) {
