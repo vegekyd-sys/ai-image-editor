@@ -18,6 +18,7 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import animatePrompt from './prompts/animate.md';
+import agentCodingPrompt from './prompts/agent-coding.md';
 import type { Tip } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -494,6 +495,8 @@ Set fromLastRunCode=true to save the last run_code output — path is auto-gener
 
     run_code: tool({
       description: `Execute JavaScript code with access to image processing libraries and project context.
+
+${agentCodingPrompt}
 
 Use this for any task that requires computation:
 - Visual output: design mode (React/CSS) — covers text, layout, images, overlays, animations
