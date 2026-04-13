@@ -94,10 +94,11 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
     return '⚠️ Design rejected: ctx.snapshotImages[N] was passed as a string literal instead of being evaluated. Use template literal interpolation: `${ctx.snapshotImages[N]}` to embed the actual URL. Regenerate.';
   }
 
-  // Large base64 embedded in code or props (>10KB = likely an image)
-  if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{10000,}/.test(serialized)) {
-    console.warn('⚠️ [design-harness] found large base64 in design');
-    return '⚠️ Design rejected: Large base64 image data found in code/props. Use ctx.snapshotImages[N] URLs instead of converting images to base64. Regenerate.';
+  // Large base64 embedded in code or props (>500KB base64 = too heavy for rendering)
+  // Small base64 (<500KB) is allowed for thumbnails, icons, etc.
+  if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{512000,}/.test(serialized)) {
+    console.warn('⚠️ [design-harness] found large base64 (>500KB) in design');
+    return '⚠️ Design rejected: Base64 image data >500KB found in code/props. Use ctx.snapshotImages[N] URLs for full-size images. Regenerate.';
   }
 
   return null;

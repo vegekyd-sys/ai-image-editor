@@ -92,13 +92,32 @@ function MusicCard({ track, onSelect }: {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [seeking, setSeeking] = useState(false);
 
   const toggle = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (playing) { audio.pause(); setPlaying(false); }
-    else { audio.play(); setPlaying(true); }
+    if (playing) {
+      audio.pause(); setPlaying(false);
+    } else {
+      // Pause all other audio (MusicCards + Remotion Player)
+      document.dispatchEvent(new CustomEvent('music-play', { detail: track.audioUrl }));
+      audio.play(); setPlaying(true);
+    }
   };
+
+  // Listen for other MusicCards starting — pause this one
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const url = (e as CustomEvent).detail;
+      if (url !== track.audioUrl && audioRef.current) {
+        audioRef.current.pause();
+        setPlaying(false);
+      }
+    };
+    document.addEventListener('music-play', handler);
+    return () => document.removeEventListener('music-play', handler);
+  }, [track.audioUrl]);
 
   // Progress + time update
   useEffect(() => {
@@ -127,19 +146,19 @@ function MusicCard({ track, onSelect }: {
       <audio ref={audioRef} src={track.audioUrl} preload="metadata"
         onEnded={() => { setPlaying(false); setProgress(0); }} />
 
-      <div className="flex items-center gap-2.5 px-3 py-2.5">
+      <div className="flex items-center gap-3 px-3.5 py-3.5">
         {/* Play/pause */}
-        <button onClick={toggle}
-          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+        <button onClick={toggle} onTouchEnd={(e) => { e.preventDefault(); toggle(); }}
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform"
           style={{ background: playing ? 'rgba(192,38,211,0.3)' : 'rgba(255,255,255,0.1)' }}>
           {playing ? (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><rect x="1.5" y="1" width="3" height="10" rx="0.8" /><rect x="7.5" y="1" width="3" height="10" rx="0.8" /></svg>
+            <svg width="14" height="14" viewBox="0 0 12 12" fill="white"><rect x="1.5" y="1" width="3" height="10" rx="0.8" /><rect x="7.5" y="1" width="3" height="10" rx="0.8" /></svg>
           ) : (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><path d="M2.5 1v10l8.5-5z" /></svg>
+            <svg width="14" height="14" viewBox="0 0 12 12" fill="white"><path d="M2.5 1v10l8.5-5z" /></svg>
           )}
         </button>
 
-        {/* Title + tags */}
+        {/* Title + progress + tags */}
         <div className="flex-1 min-w-0">
           <div className="text-[12px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>
             {track.title || `Track ${track.trackIndex + 1}`}{' '}
@@ -151,15 +170,19 @@ function MusicCard({ track, onSelect }: {
         </div>
 
         {/* Download */}
-        <button onClick={handleDownload} className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+        <button onClick={handleDownload} onTouchEnd={(e) => { e.preventDefault(); handleDownload(); }}
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-70 transition-all"
           style={{ background: 'rgba(255,255,255,0.06)' }} title="Download">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
           </svg>
         </button>
 
-        {/* Insert into design */}
-        <button onClick={onSelect} className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+        {/* Insert into design — onTouchEnd for reliable mobile tap */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onSelect(); }}
+          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(); }}
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-80 transition-all"
           style={{ background: 'rgba(192,38,211,0.2)', border: '1px solid rgba(192,38,211,0.3)' }} title="Add to design">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgb(192,38,211)" strokeWidth="2.5" strokeLinecap="round">
             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -167,38 +190,32 @@ function MusicCard({ track, onSelect }: {
         </button>
       </div>
 
-      {/* Progress bar — clickable/draggable to seek */}
-      <div
-        className="h-[12px] w-full flex items-end cursor-pointer"
-        onClick={(e) => {
-          const audio = audioRef.current;
-          if (!audio || !audio.duration) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-          audio.currentTime = ratio * audio.duration;
-          setProgress(ratio);
-          setCurrentTime(audio.currentTime);
-        }}
-        onPointerDown={(e) => {
-          const audio = audioRef.current;
-          if (!audio || !audio.duration) return;
-          const bar = e.currentTarget;
-          const seek = (clientX: number) => {
-            const rect = bar.getBoundingClientRect();
-            const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-            audio.currentTime = ratio * audio.duration;
-            setProgress(ratio);
-            setCurrentTime(audio.currentTime);
-          };
-          const onMove = (ev: PointerEvent) => seek(ev.clientX);
-          const onUp = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); };
-          document.addEventListener('pointermove', onMove);
-          document.addEventListener('pointerup', onUp);
-        }}
-      >
-        <div className="h-[3px] w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-          <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.6)', transition: playing ? 'none' : 'width 0.15s' }} />
+      {/* Progress bar — fused with bottom edge, thickens on touch/drag */}
+      <div className="relative w-full" style={{ height: 2 }}>
+        {/* Visual bar */}
+        <div className="absolute bottom-0 left-0 right-0" style={{ height: seeking ? 5 : 2, transition: 'height 0.15s ease', background: 'rgba(255,255,255,0.06)' }}>
+          <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.8)' }} />
         </div>
+        {/* Touch target: 40px centered on bar (20px up + 20px down), direct slide triggers seek */}
+        <input
+          type="range" min={0} max={1} step={0.001}
+          value={progress}
+          onChange={(e) => {
+            setSeeking(true);
+            const ratio = parseFloat(e.target.value);
+            const audio = audioRef.current;
+            if (audio && audio.duration) {
+              audio.currentTime = ratio * audio.duration;
+              setCurrentTime(audio.currentTime);
+            }
+            setProgress(ratio);
+          }}
+          onPointerUp={() => setSeeking(false)}
+          onTouchEnd={() => setSeeking(false)}
+          onMouseLeave={(e) => { if (!e.buttons) setSeeking(false); }}
+          className="absolute left-0 right-0 opacity-0 cursor-pointer"
+          style={{ touchAction: 'none', height: 40, top: -19 }}
+        />
       </div>
     </div>
   );
@@ -357,6 +374,8 @@ interface AgentChatViewProps {
   onDesignPoster?: (messageId: string, posterDataUrl: string) => void;
   /** User selected a music track from MusicCard */
   onMusicSelect?: (track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }) => void;
+  /** Background task running (music generation, video rendering) — show status even when agent is idle */
+  hasBackgroundTask?: boolean;
 }
 
 export default function AgentChatView({
@@ -383,6 +402,7 @@ export default function AgentChatView({
   onVideoTap,
   onDesignPoster,
   onMusicSelect,
+  hasBackgroundTask = false,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -1070,7 +1090,7 @@ export default function AgentChatView({
           ))}
 
           {/* Agent status line — below last message */}
-          {isAgentActive && agentStatus && (
+          {(isAgentActive || hasBackgroundTask) && agentStatus && (
             <div className="flex items-center gap-2 pl-0.5">
               <div className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse flex-shrink-0" />
               <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.30)' }}>

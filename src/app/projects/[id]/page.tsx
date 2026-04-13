@@ -33,6 +33,7 @@ export default function ProjectPage() {
     return sync ? sync.title : 'Untitled'
   })
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
+  const [initialMusicTaskId, setInitialMusicTaskId] = useState<string | null>(null)
   const [pendingImages] = useState<string[] | null>(() => {
     if (typeof window === 'undefined') return null
     // New multi-image path
@@ -140,20 +141,25 @@ export default function ProjectPage() {
         setInitialAnimations(animations)
       }
 
-      // Restore music from project_music if no message already has music: lines
-      // (music messages are persisted via onSaveMessage, so usually they load from DB.
-      //  This is a fallback for older data before music persistence was added.)
-      const hasMusic = messages.some(m => m.content?.includes('music:'))
-      if (!hasMusic) {
-        const supabase = createClient()
-        const { data: musicRows } = await supabase
-          .from('project_music')
-          .select('suno_task_id, track_index, audio_url, duration, title, tags, status')
-          .eq('project_id', projectId)
-          .eq('status', 'completed')
-          .order('created_at', { ascending: true })
-        if (musicRows?.length && !cancelled) {
-          const musicLines = musicRows.map(r =>
+      // Restore music from project_music
+      const supabase = createClient()
+      const { data: musicRows } = await supabase
+        .from('project_music')
+        .select('suno_task_id, track_index, audio_url, duration, title, tags, status')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: true })
+
+      if (musicRows?.length && !cancelled) {
+        // Resume polling for pending/processing tasks
+        const pendingTask = musicRows.find(r => r.status === 'pending' || r.status === 'processing')
+        if (pendingTask) {
+          setInitialMusicTaskId(pendingTask.suno_task_id)
+        }
+        // Restore completed tracks to messages
+        const completedRows = musicRows.filter(r => r.status === 'completed' && r.audio_url)
+        const hasMusic = messages.some(m => m.content?.includes('music:'))
+        if (completedRows.length && !hasMusic) {
+          const musicLines = completedRows.map(r =>
             `music:${r.track_index}|${r.title || ''}|${Math.round(Number(r.duration))}|${r.tags || ''}|${r.audio_url}`
           ).join('\n')
           messages.push({ id: 'music-restore', role: 'assistant', content: `🎵\n${musicLines}`, timestamp: Date.now() })
@@ -242,6 +248,7 @@ export default function ProjectPage() {
       onBack={() => router.push('/projects')}
       onNewProject={handleNewProject}
       initialAnimations={initialAnimations}
+      initialMusicTaskId={initialMusicTaskId}
     />
     </div>
   )

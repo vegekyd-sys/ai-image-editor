@@ -85,11 +85,12 @@ interface RemotionRendererProps {
   design: DesignPayload;
   onError?: (error: string) => void;
   mode?: 'fill' | 'inline';
+  hideControls?: boolean;
   onContainerRef?: (el: HTMLDivElement | null) => void;
   onPlayerRef?: (ref: PlayerRef | null) => void;
 }
 
-export default function RemotionRenderer({ design, onError, mode = 'inline', onContainerRef, onPlayerRef }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, onContainerRef, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const initRef = useRef(false);
@@ -123,6 +124,13 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', onC
     return () => onPlayerRef?.(null);
   }, [onPlayerRef, Component]);
 
+  // Pause Remotion Player when a MusicCard starts playing
+  useEffect(() => {
+    const handler = () => { playerRef.current?.pause(); };
+    document.addEventListener('music-play', handler);
+    return () => document.removeEventListener('music-play', handler);
+  }, []);
+
   if (!Component) return null;
 
   const isFill = mode === 'fill';
@@ -143,9 +151,9 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', onC
           ? { width: '100%', height: '100%' }
           : { width: '100%', borderRadius: 12 }
         }
-        controls={!isStill}
-        loop={!isStill}
-        autoPlay={!isStill}
+        controls={!isStill && !hideControls}
+        loop={false}
+        autoPlay={false}
         acknowledgeRemotionLicense
         errorFallback={({ error }) => (
           <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
@@ -159,12 +167,44 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', onC
 
 // ─── MP4 Export ──────────────────────────────────────────────────────────────
 
+/** Pre-fetch remote audio URLs via server proxy → blob URLs (fixes CORS + avoids massive data URLs) */
+async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
+  const audioUrlPattern = /<Audio[^>]+src=["']?(https?:\/\/[^"'\s>]+\.(?:mp3|wav|m4a|aac|ogg)[^"'\s>]*)["']?/g;
+  const matches = [...code.matchAll(audioUrlPattern)];
+  if (!matches.length) return { code, blobUrls: [] };
+
+  let resolved = code;
+  const blobUrls: string[] = [];
+  for (const match of matches) {
+    const url = match[1];
+    try {
+      // Fetch via server-side proxy to bypass CORS restrictions
+      const proxyUrl = `/api/proxy-audio?url=${encodeURIComponent(url)}`;
+      const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
+      const blob = await res.blob();
+      // Use blob URL instead of data URL — short string, same-origin, no 13MB base64
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrls.push(blobUrl);
+      resolved = resolved.replace(url, blobUrl);
+    } catch (e) {
+      console.warn('[exportDesignVideo] failed to resolve audio URL:', url, e);
+    }
+  }
+  return { code: resolved, blobUrls };
+}
+
 export async function exportDesignVideo(
   design: DesignPayload,
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
   preloadBabel().catch(() => {});
-  const Component = evalRemotionJSX(design.code);
+
+  // Pre-fetch remote image URLs → data URLs so <Img> doesn't need network during render
+  const imageResolved = await resolveCodeUrls(design.code);
+  // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
+  const { code: resolvedCode, blobUrls } = await resolveAudioUrls(imageResolved);
+  const Component = evalRemotionJSX(resolvedCode);
   if (!Component) throw new Error('Failed to compile design code');
 
   const fps = design.animation?.fps || 30;
@@ -172,18 +212,23 @@ export async function exportDesignVideo(
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
-  const result = await renderMediaOnWeb({
-    composition: {
-      component: Component,
-      durationInFrames, fps,
-      width: design.width, height: design.height,
-      id: 'agent-design-export',
-      calculateMetadata: null, defaultProps: {},
-    },
-    inputProps: (design.props || {}) as Record<string, unknown>,
-    videoCodec: 'h264', container: 'mp4',
-    onProgress: onProgress || null,
-  });
+  try {
+    const result = await renderMediaOnWeb({
+      composition: {
+        component: Component,
+        durationInFrames, fps,
+        width: design.width, height: design.height,
+        id: 'agent-design-export',
+        calculateMetadata: null, defaultProps: {},
+      },
+      inputProps: (design.props || {}) as Record<string, unknown>,
+      videoCodec: 'h264', container: 'mp4',
+      onProgress: onProgress || null,
+      delayRenderTimeoutInMilliseconds: 30000,
+    });
 
-  return result.getBlob();
+    return result.getBlob();
+  } finally {
+    blobUrls.forEach(url => URL.revokeObjectURL(url));
+  }
 }

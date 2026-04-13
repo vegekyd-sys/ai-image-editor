@@ -107,6 +107,37 @@ export async function uploadVideo(
   }
 }
 
+/**
+ * Upload an audio binary to Supabase Storage.
+ * Returns the public URL on success, null on failure.
+ */
+export async function uploadAudio(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+  taskId: string,
+  trackIndex: number,
+  buffer: Uint8Array,
+): Promise<string | null> {
+  try {
+    const path = `${userId}/${projectId}/audio/${taskId}-${trackIndex}.mp3`
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(path, buffer, {
+        contentType: 'audio/mpeg',
+        upsert: true,
+      })
+    if (error) {
+      console.warn('Audio upload error:', error)
+      return null
+    }
+    return getPublicUrl(supabase, path)
+  } catch (err) {
+    console.warn('uploadAudio error:', err)
+    return null
+  }
+}
+
 export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
   const base = url.replace(

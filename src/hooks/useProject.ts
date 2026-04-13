@@ -85,9 +85,9 @@ export function useProject(projectId: string, userId: string) {
       }
       return ''
     })()
-    for (const snap of snapshots) {
+    await Promise.all(snapshots.map(async (snap) => {
       const dp = (snap as any)._designPath as string | undefined
-      if (!dp || !resolvedUserId) { delete (snap as any)._designPath; continue }
+      if (!dp || !resolvedUserId) { delete (snap as any)._designPath; return }
       try {
         const storagePath = `${resolvedUserId}/workspace/${dp}`
         const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
@@ -105,10 +105,11 @@ export function useProject(projectId: string, userId: string) {
         console.warn('Failed to load design from workspace:', dp, e)
       }
       delete (snap as any)._designPath
-    }
+    }))
 
     const messages: Message[] = dbMessages.map((m) => {
-      // Restore inline image: find the snapshot linked to this message
+      // Restore inline image + design: find the snapshot linked to this message
+      // Try by messageId first, then by has_image flag matching any snapshot with this message_id
       const linkedSnapshot = m.has_image
         ? snapshots.find(s => s.messageId === m.id)
         : undefined
@@ -119,6 +120,7 @@ export function useProject(projectId: string, userId: string) {
         timestamp: new Date(m.created_at).getTime(),
         projectId: m.project_id,
         ...(linkedSnapshot ? { image: linkedSnapshot.image } : {}),
+        ...(linkedSnapshot?.design ? { design: linkedSnapshot.design } : {}),
       }
     })
 
@@ -186,12 +188,16 @@ export function useProject(projectId: string, userId: string) {
         }
 
         // Upsert snapshot row (upsert handles React StrictMode double-invoke)
+        // Don't overwrite message_id if DualWriter already set it (DualWriter's ID matches messages table)
+        const { data: existing } = await supabase.from('snapshots').select('message_id').eq('id', snapshot.id).maybeSingle()
+        const messageId = existing?.message_id || snapshot.messageId
+
         const { error } = await supabase.from('snapshots').upsert({
           id: snapshot.id,
           project_id: projectId,
           image_url: imageUrl,
           tips: snapshot.tips,
-          message_id: snapshot.messageId,
+          message_id: messageId,
           sort_order: sortOrder,
           ...(snapshot.description ? { description: snapshot.description } : {}),
           ...(snapshot.type ? { type: snapshot.type } : {}),
@@ -199,6 +205,9 @@ export function useProject(projectId: string, userId: string) {
         }, { onConflict: 'id' })
 
         if (error) console.warn('saveSnapshot error:', error)
+
+        // Touch project updated_at so projects page stale-check detects the change
+        await supabase.from('projects').update({ updated_at: new Date().toISOString() }).eq('id', projectId)
       } catch (err) {
         console.warn('saveSnapshot error:', err)
       }

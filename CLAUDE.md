@@ -258,8 +258,15 @@ Key components in `src/components/`:
 `src/components/RemotionRenderer.tsx` — Remotion 渲染:
 - **Still**: `renderStillOnWeb` → JPEG 截图（offscreen）
 - **Animation**: `@remotion/player` Player + `renderStillOnWeb` frame 0 poster
-- **MP4 导出**: `exportDesignVideo` → `renderMediaOnWeb`（h264/mp4）
-- **跨域图片**: `resolvePropsUrls` 预取 Supabase URL → data URL
+- **MP4 导出**: `exportDesignVideo` → `renderMediaOnWeb`（h264/mp4）+ `resolveAudioUrls` 音频 CORS 代理
+- **跨域图片**: `resolveCodeUrls` 预取 Supabase URL → data URL
+
+**Design Snapshot 架构原则（Poster-First）**:
+- 每个 design snapshot 必须先 capture poster（500ms 等字体加载），拿到 poster 后才入 `snapshots` 数组
+- `snapshot.image` = poster 图（base64/URL），保证 timeline/before-after/draft/CUI inline 全部正常
+- Remotion Player 是 optional enhancement（Canvas 里有 design 且不在比较模式时才用）
+- DualWriter 和前端都写 snapshot：`saveSnapshot` 保护不覆盖 DualWriter 的 `message_id`（确保刷新后 ID 匹配）
+- `designsMap` 用 timeline index（考虑 draft 插入偏移），不是 snapshot index
 
 `src/lib/comfyui-qwen.ts` — Qwen Edit AIO ComfyUI 客户端（img2img + rotate）
 `src/lib/comfyui-sdxl.ts` — Pony/WAI 共用 SDXL ComfyUI 函数（txt2img + danbooru 翻译）

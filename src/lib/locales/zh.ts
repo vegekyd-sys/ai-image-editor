@@ -38,6 +38,8 @@ const zh = {
   'editor.current': '当前',
   'editor.versions': '个版本',
   'editor.done': '完成',
+  'editor.videoReady': '视频已就绪 — 点击分享保存',
+  'editor.share': '分享',
   'editor.count': (n: number) => `${n} 个`,
 
   // AI status

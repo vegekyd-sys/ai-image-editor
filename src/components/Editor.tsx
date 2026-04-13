@@ -124,6 +124,7 @@ interface EditorProps {
   onBack?: () => void;
   onNewProject?: (file: File) => void;
   initialAnimations?: ProjectAnimation[];
+  initialMusicTaskId?: string | null;
 }
 
 export default function Editor({
@@ -145,6 +146,7 @@ export default function Editor({
   onBack,
   onNewProject,
   initialAnimations,
+  initialMusicTaskId,
 }: EditorProps = {}) {
   // Merge legacy single + new multi into one array
   const pendingImages = pendingImagesProp ?? (pendingImage ? [pendingImage] : undefined);
@@ -159,6 +161,7 @@ export default function Editor({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
+  const pendingVideoRef = useRef<{ blob: Blob; filename: string } | null>(null);
   // Babel CDN loading status for UI feedback
   const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
   useEffect(() => subscribeBabelStatus(() => setBabelStatus(getBabelStatus().status)), []);
@@ -216,9 +219,10 @@ export default function Editor({
   }, []);
 
   // Music generation state
-  const [musicTaskId, setMusicTaskId] = useState<string | null>(null);
+  const [musicTaskId, setMusicTaskId] = useState<string | null>(initialMusicTaskId ?? null);
   const [musicTracks, setMusicTracks] = useState<{ audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }[]>([]);
   const musicMsgIdRef = useRef<string>(''); // which assistant message to attach tracks to
+  const musicPollingRef = useRef(!!initialMusicTaskId); // true during music polling — prevents onDone from resetting status
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
   const pendingDesignSnapIdRef = useRef<string>('');
@@ -351,7 +355,8 @@ export default function Editor({
     if (draftParentIndex === null || previewingTipIndex === null) return null;
     const parentTips = snapshots[draftParentIndex]?.tips ?? [];
     const tip = parentTips[previewingTipIndex];
-    return tip?.previewImage || snapshots[draftParentIndex]?.image || null;
+    const parent = snapshots[draftParentIndex];
+    return tip?.previewImage || parent?.imageUrl || parent?.image || null;
   }, [draftParentIndex, previewingTipIndex, snapshots]);
 
   const draftImage = useMemo(() => {
@@ -403,11 +408,18 @@ export default function Editor({
 
   // Map timeline index → DesignPayload for animated designs (rendered via Player)
   // All design snapshots (still + animated) render via Player in ImageCanvas
+  // Map timeline index → design payload (accounts for virtual draft insertion)
   const designsMap = useMemo(() => {
     const map = new Map<number, import('@/types').DesignPayload>();
-    snapshots.forEach((s, i) => { if (s.design) map.set(i, s.design); });
+    const hasDraft = draftParentIndex !== null;
+    snapshots.forEach((s, i) => {
+      if (!s.design) return;
+      // When draft is active, snapshots after draftParentIndex shift +1 in timeline
+      const timelineIdx = hasDraft && i > draftParentIndex! ? i + 1 : i;
+      map.set(timelineIdx, s.design);
+    });
     return map;
-  }, [snapshots]);
+  }, [snapshots, draftParentIndex]);
 
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
@@ -1334,7 +1346,7 @@ export default function Editor({
     // Path 2 (text-only): no image is OK — Agent will generate one
     // Design snapshots have no image (rendered via Player), skip this check for them
     const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
-    if (!currentImage && !currentSnap?.design && snapshotsRef.current.length > 0) return;
+    if (!currentImage && !currentSnap?.design && snapshotsRef.current.length > 0 && !options?.silent) return;
 
     // Prefer URL (tiny payload) over base64 for API calls — server handles both
     // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
@@ -1411,15 +1423,24 @@ export default function Editor({
     const snapshotIndexContext = snapshotsRef.current.length > 1
       ? `[图片索引 / Image Index — ${snapshotsRef.current.length} snapshots]\n${snapshotsRef.current.map((s, i) => {
           const isRef = s.type === 'reference';
+          const isDesign = !!s.design;
           const desc = isRef
             ? (s.description || 'Skill reference image')
-            : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
-              ? (s.description || '原图 / Original upload')
-              : (s.description || '(use analyze_image to see this snapshot)');
-          const tag = isRef ? ' (reference)' : '';
+            : isDesign
+              ? (s.description || '[design/video — use code in context to modify, do NOT analyze_image]')
+              : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
+                ? (s.description || '原图 / Original upload')
+                : (s.description || '(use analyze_image to see this snapshot)');
+          const tag = isRef ? ' (reference)' : isDesign ? ' (design)' : '';
           const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
           return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}`;
         }).join('\n')}\n\n`
+      : '';
+
+    // When viewing a design snapshot, warn Agent not to analyze_image (it would see a poster/blank, not the actual design)
+    const currentSnapIsDesign = snapIdx !== null && !!snapshotsRef.current[snapIdx]?.design;
+    const designWarning = currentSnapIsDesign
+      ? `[DESIGN MODE] You are viewing a design/video (not a photo). The design code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this design.\n\n`
       : '';
 
     const annotationWarning = overrideImage
@@ -1440,7 +1461,7 @@ export default function Editor({
         ).join('\n')}\nUser may have edited these values in the GUI. To modify the design, use run_code with { type: 'patch', edits: [...] }.\n\n`
       : '';
 
-    const fullPrompt = `${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
+    const fullPrompt = `${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
@@ -1457,14 +1478,11 @@ export default function Editor({
         if (hasAllUrls()) break;
       }
     }
-    // Build snapshot images: prefer Storage URLs, base64 fallback for current image only
-    const snapshotImagesForApi = snapshotsRef.current.map((s, i) => {
+    // Build snapshot images: prefer Storage URLs, base64 fallback for all snapshots
+    // (Agent needs URLs for all images to reference in designs, not just current)
+    const snapshotImagesForApi = snapshotsRef.current.map((s) => {
       if (s.imageUrl) return s.imageUrl;
-      // Current image fallback to base64 (for vision/analyze_image)
-      if (i === contextSnapshotIndex) {
-        return getImageForApi(s) || '';
-      }
-      return '';
+      return getImageForApi(s) || '';
     });
 
     const { callbacks: agentCallbacks, setCurrentMsgId, getCurrentMsgId } = makeAgentCallbacks({
@@ -1481,10 +1499,12 @@ export default function Editor({
       t, initialTitle, userPromptText: text,
       onMusicTaskCreated: (taskId) => {
         setMusicTaskId(taskId);
+        musicPollingRef.current = true;
         setMusicTracks([]);
         musicMsgIdRef.current = getCurrentMsgId();
         setAgentStatus(t('status.generatingMusic'));
       },
+      musicPollingRef,
     });
     // Sync factory's currentMsgId with the already-created assistant message
     setCurrentMsgId(assistantMsgId);
@@ -1832,10 +1852,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   const previousImage = useMemo(() => {
     let img: string | undefined;
     if (isViewingDraft && draftParentIndex !== null) {
-      img = snapshots[draftParentIndex]?.image;
+      const parent = snapshots[draftParentIndex];
+      img = parent?.imageUrl || parent?.image || undefined; // design poster may be in imageUrl
     } else {
       const snapIdx = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
-      img = snapIdx > 0 ? snapshots[snapIdx - 1]?.image : undefined;
+      if (snapIdx > 0) {
+        const prev = snapshots[snapIdx - 1];
+        img = prev?.imageUrl || prev?.image || undefined; // prefer URL (design poster)
+      }
     }
     // URL images: route through optimized path (same quality as canvas)
     if (img && img.startsWith('http')) return getOptimizedUrl(img);
@@ -2051,6 +2075,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [snapshots, pendingImages, fetchTipsForSnapshot]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
+  // Pick up late-arriving initialMusicTaskId (from Supabase fetch after cache-init)
+  const musicInitRef = useRef(!!initialMusicTaskId);
+  useEffect(() => {
+    if (musicInitRef.current || !initialMusicTaskId) return;
+    musicInitRef.current = true;
+    setMusicTaskId(initialMusicTaskId);
+    musicPollingRef.current = true;
+  }, [initialMusicTaskId]);
+
   const animationInitRef = useRef((initialAnimations ?? []).length > 0);
   useEffect(() => {
     if (animationInitRef.current || !initialAnimations?.length) return;
@@ -2190,12 +2223,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           // Check if all tracks done (2 tracks = full SUCCESS)
           if (data.tracks.length >= 2) {
             setMusicTaskId(null);
+            musicPollingRef.current = false;
             setAgentStatus(t('status.musicReady'));
             setTimeout(() => setAgentStatus(t('editor.greeting')), 3000);
           }
         } else if (data.status === 'failed') {
           console.warn('🎵 [music] failed:', data.error);
           setMusicTaskId(null);
+          musicPollingRef.current = false;
           setAgentStatus(t('status.musicFailed'));
           setTimeout(() => setAgentStatus(t('editor.greeting')), 3000);
         }
@@ -2288,11 +2323,18 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setAgentStatus(t('status.submittingVideo'));
     } else {
       const processingCount = animations.filter(a => a.status === 'processing').length;
-      if (processingCount > 0 && !isAgentActive) {
+      if (processingCount > 0 && !isAgentActive && !musicTaskId) {
         setAgentStatus(t('status.videoRenderingEllipsis'));
       }
     }
-  }, [animationState?.status, animations, isAgentActive]);
+  }, [animationState?.status, animations, isAgentActive, musicTaskId]);
+
+  // Update StatusBar with music generation progress (same pattern as video)
+  useEffect(() => {
+    if (musicTaskId && !isAgentActive) {
+      setAgentStatus(t('status.generatingMusic'));
+    }
+  }, [musicTaskId, isAgentActive, t]);
 
   const showSaveToast = useCallback(() => {
     setSaveToast(true);
@@ -2338,31 +2380,53 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     const snapIdx = snapFromTimeline(viewIndex, draftParentIndexRef.current);
     const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     if (currentSnap?.design?.animation) {
+      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+
+      // Mobile step 2: video already exported → share with fresh user gesture
+      if (isMobile && pendingVideoRef.current) {
+        const { blob, filename } = pendingVideoRef.current;
+        pendingVideoRef.current = null;
+        const file = new File([blob], filename, { type: 'video/mp4' });
+        try {
+          await navigator.share({ files: [file] });
+        } catch { /* user cancelled share sheet */ }
+        setAgentStatus(t('editor.done'));
+        showSaveToast();
+        return;
+      }
+
       setIsSaving(true);
+      // Pause Remotion Player during export to avoid competing for resources
+      document.dispatchEvent(new Event('music-play'));
       try {
         const { exportDesignVideo } = await import('@/components/RemotionRenderer');
         const blob = await exportDesignVideo(currentSnap.design, (p) => {
           setAgentStatus(`Exporting video... ${Math.round(p.progress * 100)}%`);
         });
-        const filename = `makaron-design-${Date.now()}.mp4`;
-        const file = new File([blob], filename, { type: 'video/mp4' });
-        if (navigator.share && navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
-          await navigator.share({ files: [file] });
+
+        if (isMobile) {
+          // Mobile: store blob, prompt user to tap Share
+          pendingVideoRef.current = { blob, filename: `makaron-design-${Date.now()}.mp4` };
+          setIsSaving(false);
+          setAgentStatus(t('editor.videoReady'));
         } else {
+          // Desktop: download directly
+          const filename = `makaron-design-${Date.now()}.mp4`;
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
           link.download = filename;
           link.click();
-          URL.revokeObjectURL(url);
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          setIsSaving(false);
+          setAgentStatus(t('editor.done'));
+          showSaveToast();
         }
-        setIsSaving(false);
-        setAgentStatus(t('editor.done'));
-        showSaveToast();
       } catch (e) {
-        console.error('MP4 export failed:', e);
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('MP4 export failed:', msg, e);
         setIsSaving(false);
-        setAgentStatus('Export failed');
+        setAgentStatus(`Export failed: ${msg.slice(0, 100)}`);
       }
       return;
     }
@@ -2468,21 +2532,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   // Design poster captured from CUI's visible Player — update snapshot + message
   // Music select: user chose a track → show short user msg + send agent inject request
   const handleMusicSelect = useCallback((track: { audioUrl: string; duration: number; title: string; tags: string }) => {
-    if (!projectId) return;
-    console.log(`🎵 [music] user selected: ${track.title} (${track.audioUrl})`);
+    if (!projectId) { console.warn('🎵 [music] no projectId'); return; }
+    if (isAgentActive) { console.warn('🎵 [music] agent busy, skipping'); return; }
+    console.log(`🎵 [music] user selected: ${track.title}`);
     // Mark selected in DB
     fetch('/api/music/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
     }).catch(() => {});
-    // Show short user message, but send detailed prompt to agent
-    const userDisplay = `🎵 ${track.title}`;
-    addMessage('user', userDisplay);
-    // Agent gets the full instruction (silent — no duplicate user msg)
-    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\n\nUse run_code with type "patch" to add <Audio src="${track.audioUrl}" volume={0.3} /> inside the root element of the current design. If no active design, read the latest code from workspace first.`;
-    handleAgentRequest(agentPrompt, undefined, undefined, { silent: true });
-  }, [projectId, handleAgentRequest, addMessage]);
+    // Show short user message
+    addMessage('user', `🎵 ${track.title}`);
+    // Send full instruction to agent (silent — no duplicate user msg shown)
+    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\nAdd <Audio src="${track.audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
+    handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
+  }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
@@ -2650,6 +2714,29 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       window.history.back(); // listener already removed by cleanup above — silently pops
     }
   }, [viewMode, isDesktop]);
+
+  // ── Shared props for AgentChatView — single source of truth ──
+  // Both desktop panel and mobile overlay use these. Add new props HERE
+  // to avoid desktop/mobile divergence bugs (e.g. missing onMusicSelect).
+  const cuiSharedProps = {
+    messages,
+    messagesLoading: messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0,
+    isAgentActive,
+    agentStatus,
+    currentImage: isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex],
+    onSendMessage: handleCuiSend,
+    onAbort: handleAgentAbort,
+    onInputBarHeight: (h: number) => { cuiInputBarH.current = h; },
+    onImageTap: handleImageTap,
+    onVideoTap: handleVideoTap,
+    snapshots,
+    currentSnapshotIndex: isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
+    preferredModel: preferredModel as PreferredModel,
+    onModelChange: setPreferredModel,
+    onDesignPoster: handleDesignPoster,
+    onMusicSelect: handleMusicSelect,
+    hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling',
+  };
 
   return (
     <div
@@ -2908,7 +2995,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                           </svg>
                           Saving
                         </span>
-                      ) : 'Save'}
+                      ) : pendingVideoRef.current && /iPhone|iPad|Android/i.test(navigator.userAgent) ? t('editor.share') : 'Save'}
                     </button>
                   )}
                 </div>
@@ -3238,56 +3325,27 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         </div>
         <div ref={cuiPanelRef} className="flex-shrink-0 border-l border-white/[0.08]" style={{ width: cuiPanelWidth }}>
           <AgentChatView
+            {...cuiSharedProps}
             mode="panel"
-            messages={messages}
-            messagesLoading={messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0}
-            isAgentActive={isAgentActive}
-            agentStatus={agentStatus}
-            currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
-            onSendMessage={handleCuiSend}
-            onAbort={handleAgentAbort}
             onBack={() => {}}
             onPipTap={() => {}}
-            onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
-            onImageTap={handleImageTap}
-            onVideoTap={handleVideoTap}
-            snapshots={snapshots}
-            currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
-            preferredModel={preferredModel}
-            onModelChange={setPreferredModel}
             onNavigateToSnapshot={handleNavigateToSnapshot}
-            onDesignPoster={handleDesignPoster}
-            onMusicSelect={handleMusicSelect}
           />
         </div>
       </>) : viewMode === 'cui' ? (
         <AgentChatView
-          messages={messages}
-          messagesLoading={messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0}
-          isAgentActive={isAgentActive}
-          agentStatus={agentStatus}
-          currentImage={isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex]}
-          onSendMessage={handleCuiSend}
-          onAbort={handleAgentAbort}
+          {...cuiSharedProps}
           onBack={() => {
             if (snapshots.length === 0 && onBack) {
-              onBack(); // No snapshots (text-only before image generated) → go to projects
+              onBack();
             } else {
-              window.history.back(); // Normal: CUI → GUI
+              window.history.back();
             }
           }}
           onPipTap={handlePipTap}
           hidePip={heroAnim !== null || pullProgress !== null}
-          onInputBarHeight={(h) => { cuiInputBarH.current = h; }}
-          onImageTap={handleImageTap}
-          onVideoTap={handleVideoTap}
           focusOnOpen={isViewingDraft}
-          snapshots={snapshots}
-          currentSnapshotIndex={isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1}
-          preferredModel={preferredModel}
-          onModelChange={setPreferredModel}
           onNavigateToSnapshot={undefined}
-          onDesignPoster={handleDesignPoster}
         />
       ) : null}
 
@@ -3433,7 +3491,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
         }
       `}</style>
-      {/* pendingDesign: create snapshot + capture poster via renderStillOnWeb (no Player needed) */}
+      {/* pendingDesign: capture poster FIRST, then create snapshot with poster image */}
       {pendingDesign && (() => {
         const msgId = pendingDesignMsgIdRef.current;
         if (msgId) {
@@ -3441,33 +3499,38 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           const snapId = pendingDesignSnapIdRef.current || generateId();
           pendingDesignSnapIdRef.current = '';
           const currentDesign = pendingDesign;
-          const newSnapshot: Snapshot = {
-            id: snapId,
-            image: '', // poster captured async below
-            tips: [],
-            messageId: msgId,
-            description: '[run_code design]',
-            design: currentDesign,
-          };
-          queueMicrotask(() => {
+          const designDesc = (currentDesign as unknown as Record<string, unknown>).description as string | undefined;
+          setPendingDesign(null);
+          setAgentStatus(t('status.renderingDesign'));
+          // Poster-first: wait 500ms for fonts/images to load, capture poster, THEN add snapshot
+          queueMicrotask(async () => {
+            let posterImage = '';
+            try {
+              const { captureDesignPoster } = await import('@/components/RemotionRenderer');
+              await new Promise(r => setTimeout(r, 500)); // wait for fonts/images
+              posterImage = await captureDesignPoster(currentDesign) || '';
+            } catch (e) {
+              console.warn('[design] poster capture failed:', e);
+            }
+            const newSnapshot: Snapshot = {
+              id: snapId,
+              image: posterImage, // poster already captured — all existing code works
+              tips: [],
+              messageId: msgId,
+              description: designDesc || '[design]',
+              design: currentDesign,
+            };
             setSnapshots(prev => {
-              if (prev.some(s => s.id === snapId)) return prev; // deduplicate
+              if (prev.some(s => s.id === snapId)) return prev;
               return [...prev, newSnapshot];
             });
             onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
             setMessages((prev) => prev.map((m) =>
-              m.id === msgId ? { ...m, design: currentDesign } : m
+              m.id === msgId ? { ...m, image: posterImage, design: currentDesign } : m
             ));
             setAgentStatus(t('status.designCreated'));
-            setPendingDesign(null);
-            // Capture poster async — no Player mount needed
-            import('@/components/RemotionRenderer').then(({ captureDesignPoster }) =>
-              captureDesignPoster(currentDesign).then((poster) => {
-                if (poster) handleDesignPoster(msgId, poster);
-              })
-            );
           });
         }
         return null;

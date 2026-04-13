@@ -177,3 +177,46 @@ textarea {
 .animate-fade-in-fast {
   animation: fadeInFast 0.3s ease-out forwards;
 }
+
+/* Music seek slider — cross-browser styled range input */
+.music-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+.music-seek::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+}
+.music-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(192,38,211);
+  margin-top: -3.5px;
+  border: none;
+  box-shadow: 0 0 4px rgba(192,38,211,0.4);
+}
+.music-seek::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+  border: none;
+}
+.music-seek::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(192,38,211);
+  border: none;
+  box-shadow: 0 0 4px rgba(192,38,211,0.4);
+}
+.music-seek::-moz-range-progress {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(192,38,211,0.8);
+}

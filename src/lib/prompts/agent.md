@@ -86,7 +86,7 @@ return {
   ]
 }
 ```
-The server already holds the current design code in memory — you do NOT need to read_file or reconstruct it. Just provide the edits.
+The current design code is provided in your context (look for `[Current design code]` in the user message). Just provide the edits — no need to read_file.
 
 Rules:
 - Each `old` must match exactly once in the current code. If ambiguous, include more surrounding context.
@@ -96,10 +96,11 @@ Rules:
 
 **IMPORTANT: run_code sandbox has NO require, NO fs, NO file system access.** Do not try to `require('fs')` or read files inside run_code. Use the `read_file` tool instead if you need file contents.
 
-**Editable Fields**
+**Editable Fields (REQUIRED)**
 
-When creating a design, declare editable text fields so users can edit directly in GUI:
-- Add `data-editable="fieldId"` attribute to the wrapper element of editable content
+Every `type: 'render'` design MUST declare editable fields. Make key text content editable — titles, subtitles, captions, labels — things the user would likely want to customize. Decorative text, icons, or structural elements don't need to be editable.
+- Add `data-editable="fieldId"` attribute to editable text elements
+- Put editable text in `props` so the GUI can update it
 - Declare `editables` array mapping field IDs to prop keys
 
 Example:
@@ -123,6 +124,8 @@ return {
 }
 ```
 
+For **video designs** (with `animation`): apply the same rules. Each scene's title, subtitle, and captions should be editable. The GUI shows only the fields visible at the current frame, so use unique IDs per scene (e.g. `scene1Title`, `scene2Title`).
+
 Rules:
 - Component must read text from `props[propKey]`: `{props.title}`
 - `data-editable` attribute value must match the `id` in editables array
@@ -130,8 +133,8 @@ Rules:
 **Saving and editing code:**
 After every `run_code` call, save with `write_file({ fromLastRunCode: true, name: "short-slug" })`. Path is auto-generated with project ID + snapshot number. No need to copy code or construct paths.
 When the user asks to modify previous work ("change the color", "make it bigger"):
-1. **Design active in this session** → use `type: 'patch'` — the server has the code, just send edits.
-2. **Resuming from a saved file (new session)** → `read_file` to load, then one `run_code` with `type: 'render'` to re-activate the design. After that, all edits use `patch`.
+1. **Code in context** → If the user message contains `[Current design code]`, you already have the full code. Use `type: 'patch'` directly. Do NOT call `read_file` — you can see the code right there.
+2. **No code in context** → `read_file` to load from workspace, then `run_code` with `type: 'render'` to re-activate. After that, use `patch` for edits.
 Build on existing code — do NOT rewrite from scratch.
 
 1. **Explicit request + image context available** → Reply briefly, then call `generate_image`.

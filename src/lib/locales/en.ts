@@ -38,6 +38,8 @@ const en = {
   'editor.current': 'Current',
   'editor.versions': 'versions',
   'editor.done': 'Done',
+  'editor.videoReady': 'Video ready — tap Share to save',
+  'editor.share': 'Share',
   'editor.count': (n: number) => `${n}`,
 
   // AI status

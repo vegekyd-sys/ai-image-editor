@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import type { PlayerRef } from '@remotion/player';
 import type { AnnotationEntry, DesignPayload, EditableField } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
 import DesignOverlay from '@/components/DesignOverlay';
@@ -132,6 +133,11 @@ export default function ImageCanvas({
   const [videoError, setVideoError] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
+  // Remotion Player custom controls — frame tracked via ref (no re-render during playback)
+  const remotionRef = useRef<PlayerRef | null>(null);
+  const [remotionPlaying, setRemotionPlaying] = useState(false);
+  const remotionFrameRef = useRef(0);
+  const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
@@ -207,15 +213,16 @@ export default function ImageCanvas({
       swiping.current = true;
     }
 
-    // Long press detection — skip for video entry
-    if (previousImage && !isVideoEntry) {
+    // Long press detection — skip for video entry and animated designs
+    const isAnimatedDesign = !!animatedDesigns?.get(currentIndex)?.animation;
+    if (previousImage && !isVideoEntry && !isAnimatedDesign) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, animatedDesigns, currentIndex]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
@@ -391,15 +398,16 @@ export default function ImageCanvas({
       lastMousePos.current = { x: e.clientX, y: e.clientY };
     }
 
-    // Long press → compare (works at any zoom level, same as touch)
-    if (previousImage) {
+    // Long press → compare (works at any zoom level, same as touch) — skip for animated designs
+    const isAnimatedDesign = !!animatedDesigns?.get(currentIndex)?.animation;
+    if (previousImage && !isAnimatedDesign) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         mousePanning.current = false; // stop panning when comparing
       }, 200);
     }
-  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale]);
+  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, animatedDesigns, currentIndex]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!mouseStartPos.current) return;
@@ -576,6 +584,91 @@ export default function ImageCanvas({
     }
   }, [videoPlayTrigger, isVideoEntry, videoUrl]);
 
+  // Remotion Player: poll current frame for custom seek bar
+  const currentDesign = animatedDesigns?.get(currentIndex);
+  const remotionFps = currentDesign?.animation?.fps || 30;
+  const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
+  const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
+
+  // Update seek bar + time badge via DOM (no React re-render during playback)
+  const updateRemotionUI = useCallback(() => {
+    const frame = remotionRef.current?.getCurrentFrame() ?? 0;
+    remotionFrameRef.current = frame;
+    const progress = remotionTotalFrames > 1 ? frame / (remotionTotalFrames - 1) : 0;
+    // Direct DOM updates — zero re-renders
+    const fill = document.querySelector('[data-remotion-fill]') as HTMLElement;
+    if (fill) fill.style.width = `${progress * 100}%`;
+    const time = document.querySelector('[data-remotion-time]');
+    if (time) {
+      const cur = frame / remotionFps;
+      time.textContent = `${formatTime(cur)} / ${formatTime(remotionDuration)}`;
+    }
+  }, [remotionTotalFrames, remotionFps, remotionDuration]);
+
+  // RAF loop during playback — lightweight, no state updates
+  useEffect(() => {
+    if (!remotionPlaying || !remotionRef.current) return;
+    let raf = 0;
+    const tick = () => {
+      updateRemotionUI();
+      // Detect end
+      if (remotionFrameRef.current >= remotionTotalFrames - 1) {
+        setRemotionPlaying(false);
+        remotionRef.current?.pause();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
+
+  // Reset + auto-play when switching to a design snapshot
+  const remotionAutoPlayRef = useRef(false);
+  useEffect(() => {
+    setRemotionPlaying(false);
+    remotionFrameRef.current = 0;
+    remotionStartedRef.current = false;
+    // Mark for auto-play — actual play triggered when Player ref arrives
+    remotionAutoPlayRef.current = !!currentDesign?.animation;
+    // Try auto-play now if ref already available
+    if (currentDesign?.animation && remotionRef.current) {
+      const timer = setTimeout(() => {
+        remotionRef.current?.play();
+        remotionStartedRef.current = true;
+        setRemotionPlaying(true);
+        remotionAutoPlayRef.current = false;
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex]);
+
+  const toggleRemotionPlay = useCallback(() => {
+    const p = remotionRef.current;
+    if (!p) return;
+    if (remotionPlaying) {
+      p.pause();
+      setRemotionPlaying(false);
+    } else {
+      if (remotionFrameRef.current >= remotionTotalFrames - 1) p.seekTo(0);
+      p.play();
+      remotionStartedRef.current = true;
+      setRemotionPlaying(true);
+    }
+  }, [remotionPlaying, remotionTotalFrames]);
+
+  const seekRemotion = useCallback((clientX: number) => {
+    const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
+    if (!bar || !remotionRef.current) return;
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const frame = Math.round(ratio * (remotionTotalFrames - 1));
+    remotionRef.current.seekTo(frame);
+    remotionFrameRef.current = frame;
+    updateRemotionUI();
+  }, [remotionTotalFrames, updateRemotionUI]);
+
   // Non-Supabase video URLs (Kling CDN etc.) are proxied to avoid CORS and expiry issues
   const effectiveVideoUrl = videoUrl && !videoUrl.includes('supabase.co')
     ? `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`
@@ -736,18 +829,27 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Center play button (paused, controls visible, no error) */}
-            {!videoPlaying && !videoLoading && !videoError && showControls && (
-              <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-                <div className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
-                  <svg width="22" height="22" viewBox="0 0 10 10" fill="white">
-                    <polygon points="3,1 9,5 3,9" />
-                  </svg>
-                </div>
+            {/* Play/pause button — bottom-left (same as Remotion) */}
+            {!videoError && showControls && (
+              <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (videoPlaying) { videoRef.current?.pause(); }
+                    else { videoRef.current?.play().catch(() => {}); }
+                  }}
+                  className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+                >
+                  {videoPlaying ? (
+                    <svg width="18" height="18" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+                  )}
+                </button>
               </div>
             )}
 
-            {/* Time badge — bottom-right, fades with controls */}
+            {/* Time badge — bottom-right (same as Remotion) */}
             {!videoError && (
               <div
                 className={`absolute z-20 pointer-events-none transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
@@ -762,15 +864,21 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Seek bar — sits at canvas/tips boundary (bottom-0), always visible */}
+            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag (same as Remotion) */}
             {!videoError && (
               <div
                 ref={seekBarRef}
-                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer"
-                style={{ height: 20, touchAction: 'none' }}
+                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
+                style={{ height: 24, touchAction: 'none' }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (videoPlaying) videoRef.current?.pause();
+                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
+                  if (track) track.style.height = '6px';
                   seekDragging.current = true;
                   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                   doSeek(e.clientX);
@@ -782,26 +890,17 @@ export default function ImageCanvas({
                 }}
                 onPointerUp={(e) => {
                   seekDragging.current = false;
+                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
+                  if (track) track.style.height = '';
                   (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* 2px visual track at very bottom */}
-                <div className="absolute bottom-0 left-0 right-0" style={{ height: 2 }}>
+                <div data-video-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
                   <div className="absolute inset-0 bg-white/12" />
                   <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${videoBuffered * 100}%` }} />
                   <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }} />
                 </div>
-                {/* Subtle handle dot */}
-                <div
-                  className="absolute rounded-full bg-white/45"
-                  style={{
-                    width: 6, height: 6,
-                    bottom: -2,
-                    left: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%`,
-                    transform: 'translateX(-50%)',
-                  }}
-                />
               </div>
             )}
           </div>
@@ -850,20 +949,118 @@ export default function ImageCanvas({
             </div>
             <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
-        ) : animatedDesigns?.get(currentIndex) ? (
-          /* Animated design — rendered via Remotion Player */
-          <div className={`w-full h-full flex items-center justify-center transition-all duration-150 ${
+        ) : animatedDesigns?.get(currentIndex) && !isComparing ? (
+          /* Animated design — Remotion Player with custom controls (same as video) */
+          <div className={`relative w-full h-full transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
-          }`}>
+          }`}
+            onClick={() => {
+              if (isComparing) return;
+              // If an editable field is selected, deselect it instead of toggling play
+              if (selectedEditableId) {
+                onSelectEditable?.(null);
+              } else {
+                toggleRemotionPlay();
+              }
+            }}
+          >
             <RemotionRenderer
               design={animatedDesigns.get(currentIndex)!}
               mode="fill"
+              hideControls
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
-              onPlayerRef={editableFields?.length ? setDesignPlayerRef : undefined}
+              onPlayerRef={(ref) => {
+                remotionRef.current = ref;
+                if (editableFields?.length) setDesignPlayerRef(ref);
+                // Auto-play if pending (ref wasn't ready during useEffect)
+                if (ref && remotionAutoPlayRef.current) {
+                  remotionAutoPlayRef.current = false;
+                  setTimeout(() => {
+                    ref.play();
+                    remotionStartedRef.current = true;
+                    setRemotionPlaying(true);
+                  }, 600);
+                }
+              }}
             />
+
+            {/* Poster — only for animated designs before first play (covers black first frame) */}
+            {!remotionStartedRef.current && currentDesign?.animation && displayImage && (
+              <img
+                src={displayImage}
+                alt="poster"
+                className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none z-[1]"
+              />
+            )}
+
+            {/* Play/pause button — bottom-left, large */}
+            {currentDesign?.animation && (
+              <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleRemotionPlay(); }}
+                  className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+                >
+                  {remotionPlaying ? (
+                    <svg width="18" height="18" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Time badge — updated via DOM (data-remotion-time) */}
+            {currentDesign?.animation && (
+              <div className="absolute z-20 pointer-events-none" style={{ bottom: 14, right: 10 }}>
+                <span data-remotion-time className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
+                  style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}>
+                  {formatTime(0)} / {formatTime(remotionDuration)}
+                </span>
+              </div>
+            )}
+
+            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag */}
+            {currentDesign?.animation && (
+              <div
+                data-remotion-seek
+                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
+                style={{ height: 24, touchAction: 'none' }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (remotionPlaying) {
+                    remotionRef.current?.pause();
+                    setRemotionPlaying(false);
+                  }
+                  // Thicken bar on drag (mobile)
+                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
+                  if (track) track.style.height = '6px';
+                  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                  seekRemotion(e.clientX);
+                }}
+                onPointerMove={(e) => {
+                  if (e.buttons) seekRemotion(e.clientX);
+                }}
+                onPointerUp={(e) => {
+                  // Shrink bar back
+                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
+                  if (track) track.style.height = '';
+                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div data-remotion-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
+                  <div className="absolute inset-0 bg-white/12" />
+                  <div data-remotion-fill className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: '0%' }} />
+                </div>
+              </div>
+            )}
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay
@@ -871,7 +1068,14 @@ export default function ImageCanvas({
                 editables={editableFields}
                 props={designProps}
                 selectedFieldId={selectedEditableId ?? null}
-                onSelectField={onSelectEditable}
+                onSelectField={(id) => {
+                  // Pause playback when selecting an editable field
+                  if (remotionPlaying && remotionRef.current) {
+                    remotionRef.current.pause();
+                    setRemotionPlaying(false);
+                  }
+                  onSelectEditable(id);
+                }}
                 onUpdateProp={onUpdateProp}
                 onStartEdit={onStartEditEditable}
                 onVisibleFieldsChange={onVisibleEditableFields}

@@ -29,7 +29,7 @@ const bedrock = createAmazonBedrock({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
 });
-const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-sonnet-4-6');
+const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -534,7 +534,7 @@ Your code must return a value:
 **Default to design for all visual output.** Design supports text, layout, images (embed URLs via template literal \\\`\${ctx.snapshotImages[N]}\\\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
-        description: z.string().optional().describe('Brief description of what this code does'),
+        description: z.string().optional().describe('Brief description of what this code does. For designs/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         image_refs: z.array(z.number()).optional().describe('1-based snapshot indices to pre-fetch as Buffers (e.g. [2, 3] for <<<image_2>>> and <<<image_3>>>). Available in code as images[0], images[1], ... (Buffer order matches this array).'),
       }),
       execute: async ({ code, description: desc, image_refs }) => {
@@ -674,12 +674,21 @@ Your code must return a value:
             }
 
             // ── Harness passed — store design ──
+            // Auto-generate description if Agent didn't provide one
+            const autoDesc = desc || (() => {
+              const type = animation ? `${animation.durationInSeconds}s video` : 'still design';
+              // Extract text content from code (string literals in JSX)
+              const textMatches = result.code.match(/>([^<>{}\n]{3,60})</g)?.slice(0, 5).map((m: string) => m.slice(1).trim()).filter(Boolean);
+              const textHint = textMatches?.length ? `: "${textMatches.slice(0, 3).join('", "')}"` : '';
+              return `${type} (${result.width || 1080}x${result.height || 1350})${textHint}`;
+            })();
             const designPayload = {
               code: result.code,
               width: result.width || 1080,
               height: result.height || 1350,
               props: result.props,
               animation,
+              description: autoDesc,
               ...(result.editables ? { editables: result.editables } : {}),
             };
             (ctx as any).__pendingDesign = designPayload;
@@ -775,8 +784,9 @@ Your code must return a value:
 
     generate_music: tool({
       description: `Generate background music for the current design/video. The system polls in the background and shows music cards in CUI when ready — you do NOT need to poll or wait.
-Prompt tips: describe genre, mood, instruments, and beat timing to match the video.
-Example: "15-second cinematic, slow strings 0-3s, percussive hit at 3s, rising energy 3-10s, piano fadeout"`,
+IMPORTANT: Start the prompt with the exact video duration, e.g. "15-second ...". Check the current design's animation.durationInSeconds for the length. This ensures the generated music matches the video.
+Prompt tips: genre, mood, instruments, and beat-synced timing sections.
+Example for a 15s video: "15-second cinematic, slow strings 0-3s, percussive hit at 3s, rising energy 3-10s, piano fadeout 10-15s"`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, instruments, beat timing'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
@@ -784,7 +794,22 @@ Example: "15-second cinematic, slow strings 0-3s, percussive hit at 3s, rising e
       }),
       execute: async ({ prompt, instrumental, style }) => {
         const result = await createMusic({ prompt, instrumental, style });
-        if (result.taskId) (ctx as any).musicTaskId = result.taskId;
+        if (result.taskId) {
+          (ctx as any).musicTaskId = result.taskId;
+          // Fire-and-forget: write pending rows to DB for polling resume after reload
+          if (ctx.supabase && ctx.userId) {
+            Promise.all([0, 1].map(idx =>
+              ctx.supabase.from('project_music').upsert({
+                suno_task_id: result.taskId,
+                track_index: idx,
+                project_id: ctx.projectId,
+                user_id: ctx.userId,
+                prompt,
+                status: 'pending',
+              }, { onConflict: 'suno_task_id,track_index' })
+            )).catch(() => {});
+          }
+        }
         return result;
       },
     }),
@@ -875,7 +900,11 @@ export async function* runMakaronAgent(
       ),
     ];
   } else {
-    userContent = analysisOnly ? analysisPrompt : prompt;
+    // Inject current design code into prompt so Agent can patch without read_file
+    const designInjection = options?.currentDesign?.code
+      ? `[Current design code — modify with run_code patch mode, no need to read_file]\n\`\`\`json\n${JSON.stringify({ code: options.currentDesign.code, width: options.currentDesign.width, height: options.currentDesign.height, animation: options.currentDesign.animation })}\n\`\`\`\n\n`
+      : '';
+    userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
   }
 
   // Build system prompt: base agent.md + workspace manifest (lightweight, not full templates)

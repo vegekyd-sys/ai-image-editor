@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ProjectAnimation } from '@/types';
 import { useLocale } from '@/lib/i18n';
+import PillCarousel from '@/components/PillCarousel';
 
 function ElapsedTimer({ since }: { since: string }) {
   const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - new Date(since).getTime()) / 1000));
@@ -34,10 +35,8 @@ export default function VideoResultCard({
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
-  /** Extract a short title from the video prompt (first meaningful segment, max ~12 chars) */
   function videoTitle(prompt: string, index: number): string {
     if (!prompt.trim()) return t('video.title', index + 1);
-    // Take first line, strip markdown/special chars, truncate
     const firstLine = prompt.split('\n').find(l => l.trim())?.trim() || '';
     const clean = firstLine.replace(/^[#*\->]+\s*/, '').replace(/<<<[^>]*>>>/g, '').trim();
     if (!clean) return t('video.title', index + 1);
@@ -52,25 +51,26 @@ export default function VideoResultCard({
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
 
-  // Auto-scroll selected pill into view when selection changes
   const selectedPillRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     selectedPillRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
   }, [selectedVideoId]);
 
+  const toolbar = (
+    <span className={`text-white/20 tracking-wide font-medium ${isDesktop ? 'text-[10px]' : 'text-[11px]'}`}>
+      {t('video.count', all.length)}
+    </span>
+  );
+
   return (
-    <div className="flex flex-col">
+    <>
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
       `}</style>
-
-      {/* Horizontal pill carousel — mirrors TipsBar layout exactly */}
-      <div
-        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
-      >
+      <PillCarousel toolbar={toolbar} isDesktop={isDesktop}>
         {all.map((anim, idx) => {
           const isSelected = anim.id === selectedVideoId;
           const isCompleted = anim.status === 'completed' && !!anim.videoUrl;
@@ -79,7 +79,6 @@ export default function VideoResultCard({
           const thumbUrl = anim.snapshotUrls[0];
           const title = videoTitle(anim.prompt, idx);
 
-          // Status line
           let statusText: React.ReactNode;
           if (isCompleted) {
             statusText = anim.duration ? `${anim.duration}s · ${t('video.completed')}` : t('video.completed');
@@ -95,14 +94,13 @@ export default function VideoResultCard({
             <div
               key={anim.id}
               ref={isSelected ? selectedPillRef : undefined}
-              className={`flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all ${
+              className={`flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all animate-tip-in ${
                 isSelected
                   ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
                   : 'border-white/10'
               }`}
               style={{ background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)' }}
             >
-              {/* Main card — click to switch video */}
               <button
                 onClick={() => { if (isCompleted) onSelectVideo(anim.id); }}
                 className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
@@ -114,7 +112,6 @@ export default function VideoResultCard({
                 }}
               >
                 <div className="flex">
-                  {/* Thumbnail */}
                   <div
                     className="flex-shrink-0 bg-white/5 relative overflow-hidden"
                     style={{ width: thumbSize, height: thumbSize }}
@@ -125,13 +122,11 @@ export default function VideoResultCard({
                     ) : (
                       <div className="w-full h-full bg-zinc-800" />
                     )}
-                    {/* Play overlay for completed */}
                     {isCompleted && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
                       </div>
                     )}
-                    {/* Spinner for processing */}
                     {isProcessing && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d946ef" strokeWidth="2.5" style={{ animation: 'spin 1s linear infinite' }}>
@@ -140,7 +135,6 @@ export default function VideoResultCard({
                         </svg>
                       </div>
                     )}
-                    {/* Duration badge on thumbnail */}
                     {anim.duration && (
                       <div className="absolute bottom-0.5 right-0.5 bg-black/70 rounded text-white/85 leading-none"
                         style={{ fontSize: '0.56rem', padding: '1px 4px' }}
@@ -150,7 +144,6 @@ export default function VideoResultCard({
                     )}
                   </div>
 
-                  {/* Text */}
                   <div className={`flex-1 min-w-0 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
                     <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
                       {title}
@@ -171,7 +164,6 @@ export default function VideoResultCard({
                 </div>
               </button>
 
-              {/* Detail ">" button */}
               <button
                 onClick={() => onViewDetail(anim)}
                 className="flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
@@ -201,7 +193,6 @@ export default function VideoResultCard({
           );
         })}
 
-        {/* "+ 新视频" dashed card — wider than TipsBar "更多" */}
         <button
           onClick={onCreateNew}
           className={`flex-shrink-0 rounded-2xl border border-dashed border-fuchsia-500/30 flex flex-row items-center justify-center gap-1.5 active:scale-95 transition-transform cursor-pointer px-4 ${isDesktop ? 'h-[64px]' : 'h-[72px]'}`}
@@ -213,7 +204,6 @@ export default function VideoResultCard({
           <span className={`font-medium text-fuchsia-400/70 ${isDesktop ? 'text-[11px]' : 'text-[12px]'}`}>{t('video.newVideo')}</span>
         </button>
 
-        {/* Empty state */}
         {all.length === 0 && (
           <div className={`flex-shrink-0 rounded-2xl border border-white/5 flex items-center justify-center text-white/20 ${isDesktop ? 'w-[176px] h-[64px] text-[11px]' : 'w-[200px] h-[72px] text-[12px]'}`}
             style={{ background: 'rgba(255,255,255,0.02)' }}
@@ -221,14 +211,7 @@ export default function VideoResultCard({
             {t('video.noVideos')}
           </div>
         )}
-      </div>
-
-      {/* Bottom spacer row — matches TipsBar category toolbar height (~32px) */}
-      <div className="flex items-center justify-center py-2">
-        <span className={`text-white/20 tracking-wide font-medium ${isDesktop ? 'text-[10px]' : 'text-[11px]'}`}>
-          {t('video.count', all.length)}
-        </span>
-      </div>
-    </div>
+      </PillCarousel>
+    </>
   );
 }
