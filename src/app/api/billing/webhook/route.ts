@@ -85,10 +85,12 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Subscription invoice paid (recurring credit top-up) ───────
-  if (event.type === 'invoice.paid') {
+  // Stripe API 2026-03-25.dahlia uses invoice.payment_succeeded (not invoice.paid)
+  if (event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const invoice = event.data.object as any
-    const subscriptionId = invoice.subscription as string | null
+    // New Stripe API: subscription is in parent.subscription_details.subscription
+    const subscriptionId = (invoice.subscription ?? invoice.parent?.subscription_details?.subscription) as string | null
     if (!subscriptionId) return NextResponse.json({ received: true })
 
     // Idempotency: check if we already processed this invoice
@@ -113,8 +115,11 @@ export async function POST(req: NextRequest) {
     if (!sub) {
       // Subscription might not be in our DB yet (race with checkout.session.completed)
       // Try to resolve from invoice line items
-      const lineItem = invoice.lines?.data?.[0] as { price?: { id?: string } | string } | undefined
-      const priceId = typeof lineItem?.price === 'string' ? lineItem.price : (lineItem?.price as { id?: string })?.id
+      const lineItem = invoice.lines?.data?.[0] as Record<string, unknown> | undefined
+      // New API: pricing.price_details.price; Old API: price.id
+      const priceId = (lineItem?.pricing as Record<string, unknown>)?.price_details
+        ? ((lineItem?.pricing as Record<string, Record<string, string>>)?.price_details?.price)
+        : (typeof lineItem?.price === 'string' ? lineItem.price : (lineItem?.price as { id?: string })?.id)
       const plan = priceId ? getPlanByPriceId(priceId) : null
       if (!plan) {
         console.warn(`[Stripe webhook] invoice.paid but no subscription found: ${subscriptionId}`)
