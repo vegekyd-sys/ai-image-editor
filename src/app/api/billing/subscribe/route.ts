@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { planId, interval } = await req.json() as { planId: PlanId; interval: 'month' | 'year' }
+  const { planId, interval, returnPath } = await req.json() as { planId: PlanId; interval: 'month' | 'year'; returnPath?: string }
 
   const plan = SUBSCRIPTION_PLANS.find(p => p.id === planId)
   if (!plan) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
       interval,
     },
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${origin}/dashboard?subscription=success`,
-    cancel_url: `${origin}/dashboard?subscription=cancelled`,
+    success_url: returnPath ? `${origin}${returnPath}?topped_up=1` : `${origin}/dashboard?subscription=success`,
+    cancel_url: returnPath ? `${origin}${returnPath}` : `${origin}/dashboard?subscription=cancelled`,
   })
 
   return NextResponse.json({ url: session.url })

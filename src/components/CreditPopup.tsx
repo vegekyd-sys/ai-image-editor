@@ -15,9 +15,10 @@ interface CreditPopupProps {
   balance: number;
   needed?: number;
   subscription?: { planId: string; status: string } | null;
+  projectId?: string;
 }
 
-export default function CreditPopup({ open, onClose, balance, needed, subscription }: CreditPopupProps) {
+export default function CreditPopup({ open, onClose, balance, needed, subscription, projectId }: CreditPopupProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<string>('pro');
   const [selectedPlan, setSelectedPlan] = useState<string>('basic');
@@ -36,7 +37,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ tier, returnPath: projectId ? `/projects/${projectId}` : undefined }),
       });
       const data = await res.json();
       if (data.url) window.open(data.url, '_blank');
@@ -51,7 +52,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
       const res = await fetch('/api/billing/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId, interval: 'month' }),
+        body: JSON.stringify({ planId, interval: 'month', returnPath: projectId ? `/projects/${projectId}` : undefined }),
       });
       const data = await res.json();
       if (data.url) window.open(data.url, '_blank');
