@@ -70,6 +70,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing metadata' }, { status: 400 })
     }
 
+    // Idempotency: check if we already processed this session
+    const { data: existingPurchase } = await admin
+      .from('credit_purchases')
+      .select('id')
+      .eq('stripe_session_id', session.id)
+      .single()
+
+    if (existingPurchase) {
+      console.log(`[Stripe webhook] checkout.session already processed: ${session.id}`)
+      return NextResponse.json({ received: true })
+    }
+
     await addCredits(userId, credits)
 
     await admin.from('credit_purchases').insert({
@@ -85,23 +97,28 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Subscription invoice paid (recurring credit top-up) ───────
-  // Stripe API 2026-03-25.dahlia uses invoice.payment_succeeded (not invoice.paid)
-  if (event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded') {
+  // Use invoice.paid only (Stripe docs recommended). Do NOT also listen for
+  // invoice.payment_succeeded or invoice_payment.paid — Stripe fires all three
+  // for the same payment, causing triple credit grants.
+  if (event.type === 'invoice.paid') {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const invoice = event.data.object as any
-    // New Stripe API: subscription is in parent.subscription_details.subscription
+    const invoiceId = invoice.id as string
+    const amountPaid = invoice.amount_paid ?? 0
+    // Stripe 2026 API: subscription in parent.subscription_details.subscription
     const subscriptionId = (invoice.subscription ?? invoice.parent?.subscription_details?.subscription) as string | null
+
     if (!subscriptionId) return NextResponse.json({ received: true })
 
     // Idempotency: check if we already processed this invoice
     const { data: existing } = await admin
       .from('credit_purchases')
       .select('id')
-      .eq('stripe_invoice_id', invoice.id)
+      .eq('stripe_invoice_id', invoiceId)
       .single()
 
     if (existing) {
-      console.log(`[Stripe webhook] invoice.paid already processed: ${invoice.id}`)
+      console.log(`[Stripe webhook] invoice already processed: ${invoiceId}`)
       return NextResponse.json({ received: true })
     }
 
@@ -113,20 +130,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (!sub) {
-      // Subscription might not be in our DB yet (race with checkout.session.completed)
-      // Try to resolve from invoice line items
-      const lineItem = invoice.lines?.data?.[0] as Record<string, unknown> | undefined
-      // New API: pricing.price_details.price; Old API: price.id
-      const priceId = (lineItem?.pricing as Record<string, unknown>)?.price_details
-        ? ((lineItem?.pricing as Record<string, Record<string, string>>)?.price_details?.price)
-        : (typeof lineItem?.price === 'string' ? lineItem.price : (lineItem?.price as { id?: string })?.id)
-      const plan = priceId ? getPlanByPriceId(priceId) : null
-      if (!plan) {
-        console.warn(`[Stripe webhook] invoice.paid but no subscription found: ${subscriptionId}`)
-        return NextResponse.json({ received: true })
-      }
-      // We can't credit without a user_id — log and skip
-      console.warn(`[Stripe webhook] invoice.paid but subscription not in DB yet, skipping credit: ${subscriptionId}`)
+      console.warn(`[Stripe webhook] invoice paid but subscription not in DB: ${subscriptionId}`)
       return NextResponse.json({ received: true })
     }
 
