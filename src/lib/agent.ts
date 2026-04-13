@@ -686,12 +686,31 @@ Your code must return a value:
             (ctx as any).__lastDesignPayload = designPayload;
             // Store for write_file({ fromLastRunCode: true })
             (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
-            // Design screenshot is rendered on the frontend — not available server-side.
-            // Tell Agent to review its own code if changes needed, not call analyze_image.
+
             const newIdx = ctx.snapshotImages.length + 1;
             ctx.snapshotImages.push(''); // placeholder — real URL set after frontend upload
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-            return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>. Save now: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
+
+            // Server-side Remotion: render a preview frame so Agent can see its own work
+            let previewNote = '';
+            try {
+              const { renderDesignFrame } = await import('./remotion-server');
+              const fps = animation?.fps || 30;
+              const totalFrames = animation ? Math.max(1, Math.round(fps * animation.durationInSeconds)) : 1;
+              // Pick a frame: still → frame 0, video → ~30% through (past intro)
+              const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
+              const jpegBuffer = await renderDesignFrame(designPayload, previewFrame);
+              const previewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
+              // Store as a server-side preview the Agent can reference
+              (ctx as any).__designPreview = previewBase64;
+              previewNote = ` Server preview captured (frame ${previewFrame}) — use analyze_image on <<<image_${newIdx}>>> to inspect it.`;
+              console.log(`🖼️ [agent] design preview captured: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB`);
+            } catch (err) {
+              console.warn('⚠️ [agent] design preview failed (non-blocking):', (err as Error).message);
+              previewNote = ' (Server preview unavailable — frontend will render.)';
+            }
+
+            return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>.${previewNote} Save now: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
 
           // Buffer or Uint8Array → treat as image
