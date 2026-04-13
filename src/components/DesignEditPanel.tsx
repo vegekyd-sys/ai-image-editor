@@ -129,8 +129,8 @@ export default function DesignEditPanel({
         })}
       </div>
 
-      {/* Bottom label row (centered, matching VideoResultCard) */}
-      <div className="flex items-center justify-center px-3 pb-1">
+      {/* Bottom label row — py-2 matches TipsBar category toolbar and VideoResultCard */}
+      <div className="flex items-center justify-center py-2">
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] font-medium" style={{ color: 'rgba(217,70,239,0.7)' }}>
             Design
