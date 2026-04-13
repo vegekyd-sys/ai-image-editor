@@ -989,38 +989,39 @@ export default function AgentChatView({
                 /* Assistant — no bubble, full-width text */
                 <div className="flex flex-col gap-2.5">
                   <div className={`${isPanel ? 'text-[17px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
-                    {/* Credits exhausted inline card */}
+                    {/* Credits exhausted inline card — MusicCard style */}
                     {msg.content?.startsWith('[CREDITS_EXHAUSTED:') && (() => {
                       const bal = parseInt(msg.content.match(/\d+/)?.[0] || '0');
                       return (
-                        <div style={{
-                          background: 'rgba(251,191,36,0.08)',
-                          border: '1px solid rgba(251,191,36,0.25)',
-                          borderRadius: 14,
-                          padding: '14px 18px',
-                          marginTop: 4,
-                        }}>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: '#fbbf24' }}>Credits Exhausted</div>
-                          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
-                            Balance: {bal} credits. Top up to continue.
+                        <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(251,191,36,0.15)' }}>
+                          <div className="flex items-center gap-3 px-3.5 py-3.5">
+                            {/* Icon */}
+                            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                              style={{ background: 'rgba(251,191,36,0.15)' }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                              </svg>
+                            </div>
+
+                            {/* Text */}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[12px] font-medium" style={{ color: '#fbbf24' }}>Credits exhausted</div>
+                              <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                {bal} remaining · top up to continue
+                              </div>
+                            </div>
+
+                            {/* CTA */}
+                            <button
+                              onClick={() => onOpenCreditPopup?.()}
+                              className="px-3 py-1.5 rounded-full flex-shrink-0 active:scale-90 transition-transform text-[11px] font-semibold"
+                              style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
+                            >
+                              Top Up
+                            </button>
                           </div>
-                          <button
-                            onClick={() => onOpenCreditPopup?.()}
-                            style={{
-                              marginTop: 10,
-                              padding: '8px 20px',
-                              borderRadius: 10,
-                              border: 'none',
-                              background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
-                              color: '#fff',
-                              fontSize: 13,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
-                            }}
-                          >
-                            Top Up
-                          </button>
+                          {/* Amber accent bar */}
+                          <div style={{ height: 2, background: 'rgba(251,191,36,0.3)' }} />
                         </div>
                       );
                     })()}

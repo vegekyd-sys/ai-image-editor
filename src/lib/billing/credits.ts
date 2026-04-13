@@ -36,7 +36,7 @@ export async function requireCredits(
     .select('balance')
     .eq('user_id', userId)
     .single()
-  const balance = data?.balance ?? 0
+  const balance = Number(data?.balance ?? 0)
 
   if (balance >= estimatedCredits) {
     return { ok: true, balance }
