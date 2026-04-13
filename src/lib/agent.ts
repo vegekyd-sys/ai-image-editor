@@ -79,6 +79,7 @@ export type AgentStreamEvent =
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[] }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[] }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
+  | { type: 'usage'; inputTokens: number; outputTokens: number; model: string }  // token usage for billing
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -1140,6 +1141,16 @@ export async function* runMakaronAgent(
     }
 
     console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
+
+    // Emit token usage for billing
+    try {
+      const usage = await result.usage;
+      if (usage) {
+        const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
+        yield { type: 'usage', inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0, model: modelId };
+      }
+    } catch { /* best effort — don't fail the stream if usage unavailable */ }
+
     yield { type: 'done' };
   } catch (err) {
     console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${err instanceof Error ? err.message : String(err)}`);

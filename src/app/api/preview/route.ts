@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateImage } from '@/lib/model-router';
+import { requireCredits, deductByTokens, deductCredits } from '@/lib/billing/credits';
 
 export const maxDuration = 120;
 
@@ -14,6 +15,10 @@ export async function POST(req: NextRequest) {
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
+
+    // Pre-flight credit check
+    const creditCheck = await requireCredits(user.id, 2);
+    if (!creditCheck.ok) return creditCheck.response;
 
     const { image, editPrompt, aspectRatio, category, isNsfw, referenceImages } = await req.json();
 
@@ -44,6 +49,17 @@ export async function POST(req: NextRequest) {
         JSON.stringify({ error: 'Failed to generate preview' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Deduct credits (fire-and-forget)
+    if (result.usage) {
+      // Token-based billing for Gemini
+      deductByTokens(user.id, 'preview', result.usage.modelId, result.usage.inputTokens, result.usage.outputTokens)
+        .catch(e => console.error('[billing] preview deduct error:', e));
+    } else if (result.model !== 'gemini') {
+      // Per-action billing for ComfyUI backends (qwen/pony/wai)
+      deductCredits(user.id, null, `edit_image_${result.model}`)
+        .catch(e => console.error('[billing] preview deduct error:', e));
     }
 
     return new Response(

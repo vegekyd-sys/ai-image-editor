@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
+import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 
 export const maxDuration = 300;
 
@@ -15,6 +16,10 @@ export async function POST(req: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
+
+    // Pre-flight credit check
+    const creditCheck = await requireCredits(user.id, 5);
+    if (!creditCheck.ok) return creditCheck.response;
 
     const { prompt, image, originalImage, referenceImages, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
@@ -62,6 +67,17 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        // Track token usage for billing
+        let usageEvent: { inputTokens: number; outputTokens: number; model: string } | null = null;
+
+        // Helper: iterate agent stream, capture usage event
+        async function iterateAgent(gen: AsyncIterable<import('@/lib/agent').AgentStreamEvent>, ctrl: ReadableStreamDefaultController) {
+          for await (const event of gen) {
+            if (event.type === 'usage') { usageEvent = event; continue; } // capture, don't send to client
+            ctrl.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          }
+        }
+
         // Create dual writer if normal mode with a valid run
         const writer = (runId && isNormalMode)
           ? new AgentDualWriter(runId, supabase, user!.id, projectId, controller, encoder)
@@ -89,9 +105,7 @@ export async function POST(req: NextRequest) {
               `Here are edit suggestions for a photo:\n${tipsSummary}\n\nPick the most interesting one. Write a single teaser sentence (under 15 words) starting with "Try...". Output only that sentence.`,
               locale,
             );
-            for await (const event of runMakaronAgent(teaserPrompt, '', projectId, { tipReactionOnly: true, locale })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            await iterateAgent(runMakaronAgent(teaserPrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
             return;
           }
 
@@ -107,9 +121,7 @@ export async function POST(req: NextRequest) {
               `Based on this photo description, give a concise project name (2-4 words): ${desc}. Output only the name, no punctuation or explanation.`,
               locale,
             );
-            for await (const event of runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            await iterateAgent(runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
             return;
           }
 
@@ -128,9 +140,7 @@ export async function POST(req: NextRequest) {
               `All ${tips.length} edit suggestion previews are ready:\n${tipsSummary}\n\nIn 1-2 sentences, tell the user previews are ready and they can scroll TipsBar. Comment on one interesting one. Friendly tone, don't start with "I".`,
               locale,
             );
-            for await (const event of runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true, locale })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            await iterateAgent(runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
             return;
           }
 
@@ -140,11 +150,9 @@ export async function POST(req: NextRequest) {
               `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest design code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code to render the updated version with music.`,
               locale,
             );
-            for await (const event of runMakaronAgent(musicPrompt, image || '', projectId, {
+            await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {
               locale, snapshotImages, currentSnapshotIndex, supabase, userId: user.id,
-            })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            }), controller);
             return;
           }
 
@@ -160,9 +168,7 @@ export async function POST(req: NextRequest) {
               `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}\n\nReact naturally in 1 sentence, like a friend. Then in 1 short sentence, inspire what direction they could explore next with this photo (e.g. mood, lighting, story element) — but do NOT recommend specific tips. Don't start with "I".`,
               locale,
             );
-            for await (const event of runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true, locale })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            await iterateAgent(runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true, locale }), controller);
             return;
           }
 
@@ -177,6 +183,7 @@ export async function POST(req: NextRequest) {
           }, 10_000);
           try {
             for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: currentDesign || undefined })) {
+              if (event.type === 'usage') { usageEvent = event; continue; }
               if (writer) {
                 await writer.processAndEnqueue(event);
               } else {
@@ -207,6 +214,12 @@ export async function POST(req: NextRequest) {
             } catch { /* best effort */ }
           }
         } finally {
+          // Deduct credits based on token usage (fire-and-forget)
+          if (usageEvent) {
+            deductByTokens(user!.id, 'agent', usageEvent.model, usageEvent.inputTokens, usageEvent.outputTokens)
+              .catch(e => console.error('[billing] agent deduct error:', e));
+          }
+
           if (writer) await writer.flush();
           // Mark run as completed HERE (agent truly finished), not in after()
           // after() fires when Response ends (client disconnect), which is too early

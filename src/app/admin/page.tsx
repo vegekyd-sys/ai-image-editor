@@ -26,12 +26,25 @@ interface CreditPricing {
   updated_at: string
 }
 
+interface TokenRateEntry {
+  model_id: string
+  display_name: string
+  input_per_1m: number
+  output_per_1m: number
+  markup: number
+  is_active: boolean
+  updated_at: string
+}
+
 export default function AdminPage() {
   const [tab, setTab] = useState<'codes' | 'waitlist' | 'billing'>('codes')
   const [codes, setCodes] = useState<InviteCode[]>([])
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
   const [pricing, setPricing] = useState<CreditPricing[]>([])
   const [editingPricing, setEditingPricing] = useState<Record<string, { credits?: string; supplier_cost?: string }>>({})
+  const [tokenRates, setTokenRates] = useState<TokenRateEntry[]>([])
+  const [editingRates, setEditingRates] = useState<Record<string, { input_per_1m?: string; output_per_1m?: string; markup?: string }>>({})
+  const [newRate, setNewRate] = useState({ model_id: '', display_name: '', input_per_1m: '', output_per_1m: '', markup: '2.0' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -61,10 +74,17 @@ export default function AdminPage() {
     if (Array.isArray(data)) setPricing(data)
   }, [])
 
+  const fetchTokenRates = useCallback(async () => {
+    const res = await fetch('/api/admin/token-rates')
+    if (res.status === 403) return
+    const data = await res.json()
+    if (Array.isArray(data)) setTokenRates(data)
+  }, [])
+
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing()]).finally(() => setLoading(false))
-  }, [fetchCodes, fetchWaitlist, fetchPricing])
+    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing(), fetchTokenRates()]).finally(() => setLoading(false))
+  }, [fetchCodes, fetchWaitlist, fetchPricing, fetchTokenRates])
 
   const handleCreate = async () => {
     if (!newCode.trim()) return
@@ -337,6 +357,184 @@ export default function AdminPage() {
           </div>
           {pricing.length === 0 && (
             <p className="text-white/30 text-sm text-center py-8">No pricing entries</p>
+          )}
+
+          {/* ── Token Rates ── */}
+          <h3 className="text-sm font-medium text-white/60 mt-8 mb-3">Token Rates (per-token billing)</h3>
+
+          {/* Add new rate */}
+          <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/10">
+            <div className="grid grid-cols-5 gap-2">
+              <input
+                type="text"
+                value={newRate.model_id}
+                onChange={(e) => setNewRate(prev => ({ ...prev, model_id: e.target.value }))}
+                placeholder="model_id"
+                className="px-2 py-1.5 rounded bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none font-mono"
+              />
+              <input
+                type="text"
+                value={newRate.display_name}
+                onChange={(e) => setNewRate(prev => ({ ...prev, display_name: e.target.value }))}
+                placeholder="Display Name"
+                className="px-2 py-1.5 rounded bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+              />
+              <input
+                type="number"
+                step="0.01"
+                value={newRate.input_per_1m}
+                onChange={(e) => setNewRate(prev => ({ ...prev, input_per_1m: e.target.value }))}
+                placeholder="In $/1M"
+                className="px-2 py-1.5 rounded bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none text-right"
+              />
+              <input
+                type="number"
+                step="0.01"
+                value={newRate.output_per_1m}
+                onChange={(e) => setNewRate(prev => ({ ...prev, output_per_1m: e.target.value }))}
+                placeholder="Out $/1M"
+                className="px-2 py-1.5 rounded bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none text-right"
+              />
+              <button
+                onClick={async () => {
+                  if (!newRate.model_id || !newRate.display_name) return
+                  await fetch('/api/admin/token-rates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      model_id: newRate.model_id,
+                      display_name: newRate.display_name,
+                      input_per_1m: parseFloat(newRate.input_per_1m) || 0,
+                      output_per_1m: parseFloat(newRate.output_per_1m) || 0,
+                      markup: parseFloat(newRate.markup) || 2.0,
+                    }),
+                  })
+                  setNewRate({ model_id: '', display_name: '', input_per_1m: '', output_per_1m: '', markup: '2.0' })
+                  fetchTokenRates()
+                }}
+                disabled={!newRate.model_id || !newRate.display_name}
+                className="px-3 py-1.5 rounded bg-fuchsia-600 text-white text-xs font-medium hover:bg-fuchsia-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-white/50 text-xs">
+                  <th className="text-left px-4 py-3 font-medium">Model</th>
+                  <th className="text-left px-4 py-3 font-medium">Name</th>
+                  <th className="text-right px-4 py-3 font-medium">In $/1M</th>
+                  <th className="text-right px-4 py-3 font-medium">Out $/1M</th>
+                  <th className="text-right px-4 py-3 font-medium">Markup</th>
+                  <th className="text-right px-4 py-3 font-medium w-20"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {tokenRates.map((r) => {
+                  const editing = editingRates[r.model_id]
+                  return (
+                    <tr key={r.model_id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                      <td className="px-4 py-3 font-mono text-xs max-w-[200px] truncate" title={r.model_id}>
+                        {r.model_id}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-white/60">{r.display_name}</td>
+                      <td className="px-4 py-3 text-right">
+                        {editing ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editing.input_per_1m ?? String(r.input_per_1m)}
+                            onChange={(e) => setEditingRates(prev => ({
+                              ...prev,
+                              [r.model_id]: { ...prev[r.model_id], input_per_1m: e.target.value }
+                            }))}
+                            className="w-20 px-2 py-1 rounded bg-white/10 text-white text-xs text-right border border-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+                          />
+                        ) : (
+                          <span className="text-white/60">${Number(r.input_per_1m).toFixed(2)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {editing ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editing.output_per_1m ?? String(r.output_per_1m)}
+                            onChange={(e) => setEditingRates(prev => ({
+                              ...prev,
+                              [r.model_id]: { ...prev[r.model_id], output_per_1m: e.target.value }
+                            }))}
+                            className="w-20 px-2 py-1 rounded bg-white/10 text-white text-xs text-right border border-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+                          />
+                        ) : (
+                          <span className="text-fuchsia-400 font-medium">${Number(r.output_per_1m).toFixed(2)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {editing ? (
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={editing.markup ?? String(r.markup)}
+                            onChange={(e) => setEditingRates(prev => ({
+                              ...prev,
+                              [r.model_id]: { ...prev[r.model_id], markup: e.target.value }
+                            }))}
+                            className="w-16 px-2 py-1 rounded bg-white/10 text-white text-xs text-right border border-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+                          />
+                        ) : (
+                          <span className="text-white/40">{Number(r.markup).toFixed(1)}x</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {editing ? (
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              onClick={async () => {
+                                await fetch('/api/admin/token-rates', {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    model_id: r.model_id,
+                                    ...(editing.input_per_1m !== undefined ? { input_per_1m: parseFloat(editing.input_per_1m) } : {}),
+                                    ...(editing.output_per_1m !== undefined ? { output_per_1m: parseFloat(editing.output_per_1m) } : {}),
+                                    ...(editing.markup !== undefined ? { markup: parseFloat(editing.markup) } : {}),
+                                  }),
+                                })
+                                setEditingRates(prev => { const n = { ...prev }; delete n[r.model_id]; return n })
+                                fetchTokenRates()
+                              }}
+                              className="px-2 py-1 rounded bg-fuchsia-600 text-white text-xs hover:bg-fuchsia-500"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingRates(prev => { const n = { ...prev }; delete n[r.model_id]; return n })}
+                              className="px-2 py-1 rounded bg-white/10 text-white/50 text-xs hover:text-white/70"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setEditingRates(prev => ({ ...prev, [r.model_id]: {} }))}
+                            className="px-2 py-1 rounded text-white/30 text-xs hover:text-white/60 hover:bg-white/5"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          {tokenRates.length === 0 && (
+            <p className="text-white/30 text-sm text-center py-4">No token rates configured</p>
           )}
         </>
       )}

@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { streamTipsByCategory, ContentBlockedError } from '@/lib/gemini';
+import { streamTipsByCategory, ContentBlockedError, type UsageAccum } from '@/lib/gemini';
 import { getSkill } from '@/lib/workspace';
+import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 
 export const maxDuration = 60;
 
@@ -15,6 +16,11 @@ export async function POST(req: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
+
+    // Pre-flight credit check
+    const creditCheck = await requireCredits(session.user.id, 1);
+    if (!creditCheck.ok) return creditCheck.response;
+
     const { image, category, metadata, count = 2, existingLabels, skillName } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
@@ -35,10 +41,12 @@ export async function POST(req: NextRequest) {
     }
 
     const encoder = new TextEncoder();
+    const usageAccum: UsageAccum = { inputTokens: 0, outputTokens: 0, model: '' };
+
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const tip of streamTipsByCategory(image, category, metadata, count, existingLabels, locale, skillContext)) {
+          for await (const tip of streamTipsByCategory(image, category, metadata, count, existingLabels, locale, skillContext, usageAccum)) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(tip)}\n\n`));
           }
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
@@ -50,6 +58,11 @@ export async function POST(req: NextRequest) {
             console.error('Tips stream error:', err);
           }
         } finally {
+          // Deduct credits based on token usage (fire-and-forget)
+          if (usageAccum.inputTokens > 0 && usageAccum.model) {
+            deductByTokens(session.user.id, 'tips', usageAccum.model, usageAccum.inputTokens, usageAccum.outputTokens)
+              .catch(e => console.error('[billing] tips deduct error:', e));
+          }
           controller.close();
         }
       },

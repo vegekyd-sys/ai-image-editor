@@ -946,6 +946,9 @@ export async function* streamAllTips(imageBase64: string): AsyncGenerator<Tip> {
 
 // ── Streaming Tips Generation (per-category) ────────────────────
 
+/** Token usage accumulator for billing */
+export interface UsageAccum { inputTokens: number; outputTokens: number; model: string }
+
 export async function* streamTipsByCategory(
   imageBase64: string,
   category: TipCategory,
@@ -954,6 +957,7 @@ export async function* streamTipsByCategory(
   existingLabels?: string[],
   locale?: string,
   skillContext?: string,
+  usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
   if (process.env.MOCK_AI === 'true') {
     const mockTips: Record<string, Tip[]> = {
@@ -996,10 +1000,10 @@ export async function* streamTipsByCategory(
   for (const [index, provider] of providers.entries()) {
     try {
       const source = provider === 'bedrock'
-        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale, skillContext)
+        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum)
         : provider === 'openrouter'
-          ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale, skillContext)
-          : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale, skillContext);
+          ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum)
+          : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum);
 
       for await (const tip of source) {
         if (tip.label && !labels.has(tip.label) && labels.size >= count) continue;
@@ -1035,6 +1039,7 @@ async function* streamTipsByCategoryGoogle(
   existingLabels?: string[],
   locale?: string,
   skillContext?: string,
+  usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
   const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
 
@@ -1070,10 +1075,26 @@ async function* streamTipsByCategoryGoogle(
     config,
   });
 
+  // Wrap stream to capture usageMetadata from last chunk
+  let lastUsage: { promptTokenCount?: number; candidatesTokenCount?: number } | undefined;
+  async function* streamWithUsageCapture() {
+    for await (const chunk of stream) {
+      if (chunk.usageMetadata) lastUsage = chunk.usageMetadata;
+      yield chunk;
+    }
+  }
+
   yield* withEditPromptRetry(
-    parseIncrementalTipsFromStream(streamToTextIterator(stream), `google:${category}`, category),
+    parseIncrementalTipsFromStream(streamToTextIterator(streamWithUsageCapture()), `google:${category}`, category),
     imageBase64, category, `google:${category}`,
   );
+
+  // Capture token usage for billing
+  if (usageAccum && lastUsage) {
+    usageAccum.inputTokens += lastUsage.promptTokenCount ?? 0;
+    usageAccum.outputTokens += lastUsage.candidatesTokenCount ?? 0;
+    usageAccum.model = MODEL;
+  }
 }
 
 // --- OpenRouter Provider ---
@@ -1085,6 +1106,7 @@ async function* streamTipsByCategoryOpenRouter(
   existingLabels?: string[],
   locale?: string,
   skillContext?: string,
+  usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
   const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
   // OpenRouter uses effort: minimal/low/medium/high
@@ -1125,6 +1147,13 @@ async function* streamTipsByCategoryOpenRouter(
     parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`), `or:${category}`, category),
     imageBase64, category, `or:${category}`,
   );
+
+  // OpenRouter streaming doesn't reliably expose usage in SSE chunks.
+  // Set model for billing; tokens will be estimated if not available.
+  if (usageAccum && !usageAccum.model) {
+    usageAccum.model = OPENROUTER_MODEL;
+  }
+
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
 }
 
@@ -1137,6 +1166,7 @@ async function* streamTipsByCategoryBedrock(
   existingLabels?: string[],
   locale?: string,
   skillContext?: string,
+  usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
   const imageContent = imageBase64.startsWith('http')
     ? new URL(imageBase64)
@@ -1166,6 +1196,19 @@ async function* streamTipsByCategoryBedrock(
     parseIncrementalTipsFromStream(result.textStream, `bedrock:${category}`, category),
     imageBase64, category, `bedrock:${category}`,
   );
+
+  // Capture token usage for billing
+  if (usageAccum) {
+    try {
+      const usage = await result.usage;
+      if (usage) {
+        usageAccum.inputTokens += usage.inputTokens ?? 0;
+        usageAccum.outputTokens += usage.outputTokens ?? 0;
+        usageAccum.model = 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
+      }
+    } catch { /* best effort */ }
+  }
+
   tlog(`[tips:bedrock:${category}] done at +${Date.now() - t0}ms`);
 }
 

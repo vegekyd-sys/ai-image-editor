@@ -12,10 +12,10 @@ export const waiBackend: ModelBackend = {
     return !!process.env.COMFYUI_WAI_URL;
   },
 
-  async generate(req: GenerateImageRequest): Promise<string | null> {
-    if (req.image) return null; // img2img not supported
+  async generate(req: GenerateImageRequest): Promise<{ image: string | null }> {
+    if (req.image) return { image: null }; // img2img not supported
     const { translateForWai, generateTextToImageWithWai } = await import('../comfyui-sdxl');
     const translated = await translateForWai(req.prompt);
-    return generateTextToImageWithWai(translated);
+    return { image: await generateTextToImageWithWai(translated) };
   },
 };

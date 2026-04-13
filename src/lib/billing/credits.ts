@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getToolPrice, resolveToolName } from './pricing'
+import { getTokenRate, tokensToCredits } from './token-rates'
 
 /**
  * Check if user has enough credits for a tool call.
@@ -20,11 +21,48 @@ export async function checkBalance(userId: string, toolName: string): Promise<{ 
 }
 
 /**
- * Deduct credits after a successful tool call.
+ * Pre-flight credit check for App API routes.
+ * Returns a 402 Response if insufficient credits, so the route can short-circuit:
+ *   const check = await requireCredits(userId, 5);
+ *   if (!check.ok) return check.response;
+ */
+export async function requireCredits(
+  userId: string,
+  estimatedCredits: number = 1,
+): Promise<{ ok: true; balance: number } | { ok: false; balance: number; response: Response }> {
+  const admin = getSupabaseAdmin()
+  const { data } = await admin
+    .from('credit_balances')
+    .select('balance')
+    .eq('user_id', userId)
+    .single()
+  const balance = data?.balance ?? 0
+
+  if (balance >= estimatedCredits) {
+    return { ok: true, balance }
+  }
+
+  return {
+    ok: false,
+    balance,
+    response: new Response(
+      JSON.stringify({
+        error: 'insufficient_credits',
+        balance,
+        needed: estimatedCredits,
+        upgradeUrl: 'https://www.makaron.app/dashboard',
+      }),
+      { status: 402, headers: { 'Content-Type': 'application/json' } },
+    ),
+  }
+}
+
+/**
+ * Deduct credits after a successful tool call (per-action pricing from credit_pricing table).
  */
 export async function deductCredits(
   userId: string,
-  apiKeyId: string,
+  apiKeyId: string | null,
   mcpToolName: string,
   model?: string,
   durationMs?: number,
@@ -34,49 +72,98 @@ export async function deductCredits(
   if (!price || price.isFree) return { charged: 0, remaining: 0 }
 
   const credits = price.credits
+  const remaining = await atomicDeduct(userId, credits)
+
+  // Log usage
+  const admin = getSupabaseAdmin()
+  await admin.from('usage_logs').insert({
+    user_id: userId,
+    api_key_id: apiKeyId || null,
+    tool_name: toolName,
+    model_used: model,
+    credits_charged: credits,
+    duration_ms: durationMs,
+    source: apiKeyId ? 'mcp' : 'app',
+  })
+
+  return { charged: credits, remaining }
+}
+
+/**
+ * Deduct credits based on actual token usage (for OpenRouter/Bedrock/Google calls).
+ * Computes credit cost from token_rates table, then deducts atomically.
+ */
+export async function deductByTokens(
+  userId: string,
+  toolName: string,
+  modelId: string,
+  inputTokens: number,
+  outputTokens: number,
+  durationMs?: number,
+  apiKeyId?: string | null,
+): Promise<{ charged: number; remaining: number }> {
+  const rate = await getTokenRate(modelId)
+  if (!rate) {
+    console.warn(`[billing] No token rate found for model "${modelId}", skipping deduction`)
+    return { charged: 0, remaining: 0 }
+  }
+
+  const credits = tokensToCredits(rate, inputTokens, outputTokens)
+  if (credits <= 0) return { charged: 0, remaining: 0 }
+
+  const remaining = await atomicDeduct(userId, credits)
+
+  // Log usage with token details
+  const admin = getSupabaseAdmin()
+  await admin.from('usage_logs').insert({
+    user_id: userId,
+    api_key_id: apiKeyId || null,
+    tool_name: toolName,
+    model_used: modelId,
+    credits_charged: credits,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    duration_ms: durationMs,
+    source: apiKeyId ? 'mcp' : 'app',
+  })
+
+  return { charged: credits, remaining }
+}
+
+/**
+ * Atomic credit deduction via RPC with manual fallback.
+ * Returns remaining balance.
+ */
+async function atomicDeduct(userId: string, credits: number): Promise<number> {
   const admin = getSupabaseAdmin()
 
-  // Atomic deduction
+  // Try atomic RPC first
   const { data, error } = await admin.rpc('deduct_credits', {
     p_user_id: userId,
     p_amount: credits,
   })
 
-  // Fallback if RPC doesn't exist: manual update
-  let remaining = 0
-  if (error) {
-    // Manual deduction
-    const { data: bal } = await admin
-      .from('credit_balances')
-      .select('balance, lifetime_used')
-      .eq('user_id', userId)
-      .single()
-    if (bal) {
-      remaining = Math.max(0, bal.balance - credits)
-      await admin
-        .from('credit_balances')
-        .update({
-          balance: remaining,
-          lifetime_used: (bal.lifetime_used || 0) + credits,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-    }
-  } else {
-    remaining = data ?? 0
-  }
+  if (!error) return data ?? 0
 
-  // Log usage
-  await admin.from('usage_logs').insert({
-    user_id: userId,
-    api_key_id: apiKeyId,
-    tool_name: toolName,
-    model_used: model,
-    credits_charged: credits,
-    duration_ms: durationMs,
-  })
+  // Fallback: manual update
+  const { data: bal } = await admin
+    .from('credit_balances')
+    .select('balance, lifetime_used')
+    .eq('user_id', userId)
+    .single()
+  if (!bal) return 0
 
-  return { charged: credits, remaining }
+  const remaining = Math.max(0, bal.balance - credits)
+  await admin
+    .from('credit_balances')
+    .update({
+      balance: remaining,
+      lifetime_used: (bal.lifetime_used || 0) + credits,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+
+  return remaining
 }
 
 /**
