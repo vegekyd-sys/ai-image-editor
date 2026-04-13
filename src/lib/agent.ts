@@ -652,9 +652,26 @@ Your code must return a value:
             (ctx as any).__lastDesignPayload = patched;
             (ctx as any).__lastRunCode = JSON.stringify(patched, null, 2);
             const newIdx = ctx.snapshotImages.length + 1;
-            ctx.snapshotImages.push(''); // placeholder — real URL set after frontend upload
+
+            // Server-side preview for patch (same as render)
+            let patchPreview = '';
+            try {
+              const { renderDesignFrame } = await import('./remotion-server');
+              const fps = patched.animation?.fps || 30;
+              const totalFrames = patched.animation ? Math.max(1, Math.round(fps * patched.animation.durationInSeconds)) : 1;
+              const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
+              const jpegBuffer = await renderDesignFrame(patched, previewFrame);
+              const previewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
+              ctx.snapshotImages.push(previewBase64); // Agent can analyze this via <<<image_N>>>
+              patchPreview = ` Preview captured (frame ${previewFrame}).`;
+              console.log(`🖼️ [agent] patch preview captured: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB`);
+            } catch (err) {
+              ctx.snapshotImages.push(''); // fallback placeholder
+              console.warn('⚠️ [agent] patch preview failed:', (err as Error).message);
+            }
+
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-            return { type: 'text' as const, content: `Patched ${result.edits.length} edit(s) — rendering in browser as <<<image_${newIdx}>>>. Save now: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
+            return { type: 'text' as const, content: `Patched ${result.edits.length} edit(s) — rendering as <<<image_${newIdx}>>>.${patchPreview} Save: write_file({ fromLastRunCode: true, name: "slug" })` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -697,8 +714,6 @@ Your code must return a value:
             (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
 
             const newIdx = ctx.snapshotImages.length + 1;
-            ctx.snapshotImages.push(''); // placeholder — real URL set after frontend upload
-            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
 
             // Server-side Remotion: render a preview frame so Agent can see its own work
             let previewNote = '';
@@ -706,18 +721,17 @@ Your code must return a value:
               const { renderDesignFrame } = await import('./remotion-server');
               const fps = animation?.fps || 30;
               const totalFrames = animation ? Math.max(1, Math.round(fps * animation.durationInSeconds)) : 1;
-              // Pick a frame: still → frame 0, video → ~30% through (past intro)
               const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
               const jpegBuffer = await renderDesignFrame(designPayload, previewFrame);
               const previewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-              // Store as a server-side preview the Agent can reference
-              (ctx as any).__designPreview = previewBase64;
-              previewNote = ` Server preview captured (frame ${previewFrame}) — use analyze_image on <<<image_${newIdx}>>> to inspect it.`;
+              ctx.snapshotImages.push(previewBase64); // Agent can analyze this via <<<image_N>>>
+              previewNote = ` Preview captured (frame ${previewFrame}).`;
               console.log(`🖼️ [agent] design preview captured: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB`);
             } catch (err) {
-              console.warn('⚠️ [agent] design preview failed (non-blocking):', (err as Error).message);
-              previewNote = ' (Server preview unavailable — frontend will render.)';
+              ctx.snapshotImages.push(''); // fallback placeholder
+              console.warn('⚠️ [agent] design preview failed:', (err as Error).message);
             }
+            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
 
             return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>.${previewNote} Save now: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
