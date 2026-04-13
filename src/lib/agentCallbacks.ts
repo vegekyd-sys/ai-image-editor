@@ -400,6 +400,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       };
       ctx.setMessages(prev => [...prev, sysMsg]);
       ctx.setAgentStatus('');
+      ctx.onInsufficientCredits?.(balance); // triggers StatusBar notification
       ctx.onCleanup?.();
     },
   };
