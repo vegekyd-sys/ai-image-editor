@@ -9,28 +9,55 @@ import type { DesignPayload } from '@/types';
 export type { DesignPayload };
 export type { RenderMediaOnWebProgress };
 
-/** Resolve HTTP image URLs in code to data URLs (CORS workaround for renderStillOnWeb) */
-async function resolveCodeUrls(code: string): Promise<string> {
+/** Resolve HTTP image URLs in code to blob URLs (same-origin, no base64 overhead).
+ *  Caller must revoke blobUrls after use. */
+async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   const urlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi;
   const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi;
   const urls = new Set<string>();
   for (const m of code.matchAll(urlPattern)) urls.add(m[0]);
   for (const m of code.matchAll(storagePattern)) urls.add(m[0]);
-  if (urls.size === 0) return code;
+  if (urls.size === 0) return { code, blobUrls: [] };
   let resolved = code;
+  const blobUrls: string[] = [];
   await Promise.all([...urls].map(async (url) => {
     try {
       const res = await fetch(url);
       const blob = await res.blob();
-      const dataUrl = await new Promise<string>((r) => {
-        const reader = new FileReader();
-        reader.onloadend = () => r(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-      while (resolved.includes(url)) resolved = resolved.replace(url, dataUrl);
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrls.push(blobUrl);
+      while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
     } catch { /* skip */ }
   }));
-  return resolved;
+  return { code: resolved, blobUrls };
+}
+
+/** Preload Google Fonts referenced in design code so they're available before rendering. */
+async function preloadFontsFromCode(code: string): Promise<void> {
+  const fontUrls = new Set<string>();
+  for (const m of code.matchAll(/@import\s+url\(['"]?(https:\/\/fonts\.googleapis\.com\/[^'")\s]+)['"]?\)/g))
+    fontUrls.add(m[1]);
+  for (const m of code.matchAll(/href=["'](https:\/\/fonts\.googleapis\.com\/[^"']+)["']/g))
+    fontUrls.add(m[1]);
+  if (fontUrls.size === 0) return;
+
+  const fontFamilies = new Set<string>();
+  await Promise.all([...fontUrls].map(async url => {
+    try {
+      const css = await fetch(url).then(r => r.text());
+      const style = document.createElement('style');
+      style.textContent = css;
+      document.head.appendChild(style);
+      for (const m of css.matchAll(/font-family:\s*['"]?([^;'"]+)['"]?\s*;/g))
+        fontFamilies.add(m[1].trim());
+    } catch { /* skip */ }
+  }));
+
+  // Force-load all discovered font families
+  await Promise.all([...fontFamilies].map(f =>
+    document.fonts.load(`1em "${f}"`).catch(() => {})
+  ));
+  await document.fonts.ready;
 }
 
 // ─── Standalone poster capture (no DOM needed) ─────────────────────────────
@@ -41,9 +68,11 @@ async function resolveCodeUrls(code: string): Promise<string> {
  * Returns JPEG data URL, or empty string on failure.
  */
 export async function captureDesignPoster(design: DesignPayload): Promise<string> {
+  let imageBlobUrls: string[] = [];
   try {
     await preloadBabel().catch(() => {});
-    const resolvedCode = await resolveCodeUrls(design.code);
+    const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
+    imageBlobUrls = blobUrls;
     const comp = evalRemotionJSX(resolvedCode);
     if (!comp) return '';
 
@@ -76,6 +105,8 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
   } catch (e) {
     console.warn('🎨 [design] poster capture failed:', e);
     return '';
+  } finally {
+    imageBlobUrls.forEach(url => URL.revokeObjectURL(url));
   }
 }
 
@@ -200,10 +231,12 @@ export async function exportDesignVideo(
 ): Promise<Blob> {
   preloadBabel().catch(() => {});
 
-  // Pre-fetch remote image URLs → data URLs so <Img> doesn't need network during render
-  const imageResolved = await resolveCodeUrls(design.code);
+  // Pre-fetch remote image URLs → blob URLs (same-origin, native browser handling)
+  const { code: imageResolved, blobUrls: imageBlobUrls } = await resolveCodeUrls(design.code);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
-  const { code: resolvedCode, blobUrls } = await resolveAudioUrls(imageResolved);
+  const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
+  // Preload Google Fonts before rendering (ensures text renders correctly)
+  await preloadFontsFromCode(resolvedCode);
   const Component = evalRemotionJSX(resolvedCode);
   if (!Component) throw new Error('Failed to compile design code');
 
@@ -223,12 +256,15 @@ export async function exportDesignVideo(
       },
       inputProps: (design.props || {}) as Record<string, unknown>,
       videoCodec: 'h264', container: 'mp4',
+      scale: 2,
+      // Skip first 3 frames (~100ms) to avoid black first frame from fade-in animations
+      frameRange: durationInFrames > 3 ? [3, null] : null,
       onProgress: onProgress || null,
       delayRenderTimeoutInMilliseconds: 30000,
     });
 
     return result.getBlob();
   } finally {
-    blobUrls.forEach(url => URL.revokeObjectURL(url));
+    [...imageBlobUrls, ...audioBlobUrls].forEach(url => URL.revokeObjectURL(url));
   }
 }
