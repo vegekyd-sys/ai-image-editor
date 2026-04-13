@@ -8,6 +8,7 @@ import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
+import CreditPopup from '@/components/CreditPopup';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
@@ -182,6 +183,10 @@ export default function Editor({
   const [textColor, setTextColor] = useState('#ec4899');
   const [textBgEnabled, setTextBgEnabled] = useState(true);
   const [showAnimateSheet, setShowAnimateSheet] = useState(false);
+  // Credit popup
+  const [creditPopupOpen, setCreditPopupOpen] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<number>(0);
+  const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(null);
   // Camera rotation panel
   const [showCameraPanel, setShowCameraPanel] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
@@ -856,6 +861,11 @@ export default function Editor({
         signal: previewAbortRef.current.signal,
       });
 
+      if (res.status === 402) {
+        try { const d = await res.json(); setCreditBalance(d.balance ?? 0); } catch { /* */ }
+        setCreditPopupOpen(true);
+        return;
+      }
       if (!res.ok) throw new Error('Preview failed');
       const { image, contentBlocked } = await res.json();
       if (contentBlocked) isNsfwRef.current = true;
@@ -965,6 +975,11 @@ export default function Editor({
               skillName: activeSkillRef.current || undefined,
             }),
           });
+          if (res.status === 402) {
+            try { const d = await res.json(); setCreditBalance(d.balance ?? 0); } catch { /* */ }
+            setCreditPopupOpen(true);
+            return;
+          }
           if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
 
           const reader = res.body!.getReader();
@@ -1074,6 +1089,11 @@ export default function Editor({
               metadata: snapshotsRef.current.find(s => s.id === req.snapshotId)?.metadata,
             }),
           });
+          if (res.status === 402) {
+            try { const d = await res.json(); setCreditBalance(d.balance ?? 0); } catch { /* */ }
+            setCreditPopupOpen(true);
+            return;
+          }
           if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
 
           const reader = res.body!.getReader();
@@ -1497,6 +1517,10 @@ export default function Editor({
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t, initialTitle, userPromptText: text,
+      onInsufficientCredits: (balance) => {
+        setCreditBalance(balance);
+        setCreditPopupOpen(true);
+      },
       onMusicTaskCreated: (taskId) => {
         setMusicTaskId(taskId);
         musicPollingRef.current = true;
@@ -1558,6 +1582,7 @@ export default function Editor({
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t,
+      onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditPopupOpen(true); },
       onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
     });
 
@@ -2736,6 +2761,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling',
+    onOpenCreditPopup: () => setCreditPopupOpen(true),
   };
 
   return (
@@ -3535,6 +3561,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         }
         return null;
       })()}
+
+      {/* Credit popup */}
+      <CreditPopup
+        open={creditPopupOpen}
+        onClose={() => setCreditPopupOpen(false)}
+        balance={creditBalance}
+        subscription={creditSubscription}
+      />
     </div>
   );
 }

@@ -376,6 +376,8 @@ interface AgentChatViewProps {
   onMusicSelect?: (track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }) => void;
   /** Background task running (music generation, video rendering) — show status even when agent is idle */
   hasBackgroundTask?: boolean;
+  /** Open CreditPopup when credits are exhausted */
+  onOpenCreditPopup?: () => void;
 }
 
 export default function AgentChatView({
@@ -403,6 +405,7 @@ export default function AgentChatView({
   onDesignPoster,
   onMusicSelect,
   hasBackgroundTask = false,
+  onOpenCreditPopup,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -986,7 +989,42 @@ export default function AgentChatView({
                 /* Assistant — no bubble, full-width text */
                 <div className="flex flex-col gap-2.5">
                   <div className={`${isPanel ? 'text-[17px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
-                    {msg.content && (
+                    {/* Credits exhausted inline card */}
+                    {msg.content?.startsWith('[CREDITS_EXHAUSTED:') && (() => {
+                      const bal = parseInt(msg.content.match(/\d+/)?.[0] || '0');
+                      return (
+                        <div style={{
+                          background: 'rgba(251,191,36,0.08)',
+                          border: '1px solid rgba(251,191,36,0.25)',
+                          borderRadius: 14,
+                          padding: '14px 18px',
+                          marginTop: 4,
+                        }}>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: '#fbbf24' }}>Credits Exhausted</div>
+                          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+                            Balance: {bal} credits. Top up to continue.
+                          </div>
+                          <button
+                            onClick={() => onOpenCreditPopup?.()}
+                            style={{
+                              marginTop: 10,
+                              padding: '8px 20px',
+                              borderRadius: 10,
+                              border: 'none',
+                              background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
+                              color: '#fff',
+                              fontSize: 13,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
+                            }}
+                          >
+                            Top Up
+                          </button>
+                        </div>
+                      );
+                    })()}
+                    {msg.content && !msg.content.startsWith('[CREDITS_EXHAUSTED:') && (
                       <div className="markdown-body">
                         <MarkdownBlock
                           key={msg.id}

@@ -21,6 +21,7 @@ export interface AgentStreamCallbacks {
   onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
+  onInsufficientCredits?: (balance: number) => void;
 }
 
 export async function streamAgent(
@@ -52,6 +53,15 @@ export async function streamAgent(
   });
 
   if (!res.ok) {
+    if (res.status === 402) {
+      try {
+        const data = await res.json();
+        callbacks.onInsufficientCredits?.(data.balance ?? 0);
+      } catch {
+        callbacks.onInsufficientCredits?.(0);
+      }
+      return;
+    }
     const text = await res.text().catch(() => 'Unknown error');
     callbacks.onError?.(text);
     return;

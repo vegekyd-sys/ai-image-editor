@@ -57,6 +57,9 @@ export interface AgentCallbackContext {
   /** When true, onDone won't reset status to greeting (music polling shows its own status) */
   musicPollingRef?: { current: boolean };
 
+  // Credits exhausted — show CreditPopup
+  onInsufficientCredits?: (balance: number) => void;
+
   // Optional cleanup on done (reconnect uses this to disconnect)
   onCleanup?: () => void;
 
@@ -384,6 +387,20 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
           m.id === id ? { ...m, content: m.content || ctx.t('editor.errorRetry') } : m,
         ));
       }
+      ctx.onCleanup?.();
+    },
+
+    onInsufficientCredits: (balance) => {
+      // Insert a system message in CUI with credits exhausted marker
+      const sysMsg: import('@/types').Message = {
+        id: `credits-${Date.now()}`,
+        role: 'assistant',
+        content: `[CREDITS_EXHAUSTED:${balance}]`,
+        timestamp: Date.now(),
+      };
+      ctx.setMessages(prev => [...prev, sysMsg]);
+      ctx.setAgentStatus('');
+      ctx.onInsufficientCredits?.(balance);
       ctx.onCleanup?.();
     },
   };
