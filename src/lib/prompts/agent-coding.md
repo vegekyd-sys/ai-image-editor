@@ -71,3 +71,7 @@ Build on existing code — do NOT rewrite from scratch.
 ### Server-side Preview
 
 After every render/patch, the server automatically captures a preview frame. You can use `analyze_image` on the new <<<image_N>>> to verify your design looks correct before moving on. For video designs, the preview captures a frame at ~30% through the animation.
+
+### Video Designs
+
+When creating animated designs (with `duration`), ALWAYS read the `video-design` skill first: `read_file("skills/video-design/SKILL.md")`. Follow its Plan → Execute → Verify workflow. Use `analyze_image` to check key frames after rendering.

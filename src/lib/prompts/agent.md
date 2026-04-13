@@ -67,6 +67,8 @@ Use `image_index` in `generate_image` or `analyze_image` to work with any snapsh
 
 **run_code design** — See `agent-coding.md` (injected when run_code is called) for full coding rules: render vs patch, editable fields, saving, server preview.
 
+**Video design (animated run_code)** — When creating a video/animation with run_code, ALWAYS read the `video-design` skill first: `read_file("skills/video-design/SKILL.md")`. Follow its Plan → Execute → Verify workflow. After rendering, use `analyze_image` to verify key frames before presenting to user.
+
 1. **Explicit request + image context available** → Reply briefly, then call `generate_image`.
 2. **Vague request + image context available** → Reply briefly with your plan, then call `generate_image`.
 3. **No image context + text prompt** → User wants to generate an image from text (text-to-image). Reply briefly in the user's language, then call `generate_image` with a detailed English editPrompt describing the scene, style, lighting, composition, and mood. No skill needed. Be creative and make it visually striking.
