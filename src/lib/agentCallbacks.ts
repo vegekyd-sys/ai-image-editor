@@ -108,6 +108,9 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
   let toolStatusSetAt = 0;
   let pendingThinking: string | null = null;
   let minDisplayTimer: ReturnType<typeof setTimeout> | null = null;
+  // Track last status set by this callback instance (for conditional greeting reset)
+  let lastSetStatus = '';
+  const setStatus = (s: string) => { lastSetStatus = s; ctx.setAgentStatus(s); };
 
   const isThinkingStatus = (s: string) =>
     s.includes('Thinking') || s.includes('正在思考');
@@ -128,7 +131,9 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         pendingThinking = null;
         if (minDisplayTimer) { clearTimeout(minDisplayTimer); minDisplayTimer = null; }
         toolStatusSetAt = performance.now();
-        ctx.setAgentStatus(status);
+        // Sync timer phase so the 1s interval doesn't overwrite this status
+        if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = status;
+        setStatus(status);
       } else if (isThinkingStatus(status)) {
         // Thinking: defer if tool status hasn't been shown long enough
         const remaining = MIN_TOOL_DISPLAY_MS - (performance.now() - toolStatusSetAt);
@@ -137,19 +142,19 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
           if (minDisplayTimer) clearTimeout(minDisplayTimer);
           minDisplayTimer = setTimeout(() => {
             if (pendingThinking) {
-              ctx.setAgentStatus(pendingThinking);
+              setStatus(pendingThinking);
               pendingThinking = null;
             }
             minDisplayTimer = null;
           }, remaining);
         } else {
-          ctx.setAgentStatus(status);
+          setStatus(status);
         }
       } else {
         // Other statuses (done, error, etc): display immediately
         pendingThinking = null;
         if (minDisplayTimer) { clearTimeout(minDisplayTimer); minDisplayTimer = null; }
-        ctx.setAgentStatus(status);
+        setStatus(status);
       }
     },
 
@@ -215,7 +220,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const isFirstSnapshot = ctx.snapshotsRef.current.length <= 1;
       ctx.fetchTipsForSnapshot(snapId, imageData, isFirstSnapshot ? 'full' : 'none');
       ctx.autoFetchTriggered.current = true;
-      ctx.setAgentStatus(ctx.t('status.imageGenerated'));
+      setStatus(ctx.t('status.imageGenerated'));
 
       // "See" button if user is not on the new snapshot
       const newSnapIdx = ctx.snapshotsRef.current.length;
@@ -340,7 +345,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const published = (design as Record<string, unknown>).published === true;
       const previewUrl = (design as Record<string, unknown>).previewUrl as string | undefined;
       console.log(`🎨 [agent] render received (published=${published}): ${design.width}x${design.height}, code ${design.code.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
-      ctx.setAgentStatus(ctx.t('status.renderingDesign'));
+      setStatus(ctx.t('status.renderingDesign'));
 
       // Show preview image in CUI (so user sees what Agent sees)
       if (previewUrl && currentMsgId) {
@@ -350,14 +355,12 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }
 
       if (published) {
-        // Published: create real Snapshot via poster-first flow
         ctx.pendingDesignMsgIdRef.current = currentMsgId;
         ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
         ctx.setDraftDesign?.(null);
         ctx.setDesignDraftParent?.(null);
         ctx.setPendingDesign(design);
       } else {
-        // Draft: show as virtual slot in timeline (like tips draft)
         ctx.setDraftDesign?.(design);
         const lastSnapIdx = ctx.snapshotsRef.current.length - 1;
         ctx.setDesignDraftParent?.(lastSnapIdx >= 0 ? lastSnapIdx : 0);
@@ -370,7 +373,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       console.log(`⏱️ [agent] DONE total ${elapsed}s`);
       // Don't overwrite music polling status
       if (!ctx.musicPollingRef?.current) {
-        ctx.setAgentStatus(ctx.t('editor.done'));
+        setStatus(ctx.t('editor.done'));
       }
 
       // Drain pending CUI-attached images
@@ -392,7 +395,11 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         ctx.pendingTeaserRef.current = null;
         setTimeout(() => ctx.triggerTipsTeaser?.(pendingTeaser.snapshotId, pendingTeaser.tips), 400);
       } else if (!ctx.musicPollingRef?.current) {
-        setTimeout(() => ctx.setAgentStatus(ctx.t('editor.greeting')), 2000);
+        // Only reset to greeting if status is still "Done" — don't overwrite newer status
+        const doneText = ctx.t('editor.done');
+        setTimeout(() => {
+          if (lastSetStatus === doneText) setStatus(ctx.t('editor.greeting'));
+        }, 2000);
       }
 
       ctx.onCleanup?.();
