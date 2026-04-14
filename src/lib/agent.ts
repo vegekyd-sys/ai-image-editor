@@ -389,6 +389,11 @@ Parameters:
         if (skillResult.image) {
           ctx.currentImage = skillResult.image;
           ctx.generatedImages.push(skillResult.image);
+          // Bill for camera rotation (per-action)
+          import('./billing/credits').then(({ deductCredits }) =>
+            deductCredits(ctx.userId ?? '', null, 'rotate_camera')
+              .catch(e => console.error('[billing] rotate_camera deduct error:', e))
+          );
         }
         return { success: skillResult.success as true, message: skillResult.message };
       },
