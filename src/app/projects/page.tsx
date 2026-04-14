@@ -563,11 +563,11 @@ export default function ProjectsPage() {
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.18)',
+                color: 'rgba(255,255,255,0.45)',
                 transition: 'color 0.2s',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.18)')}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
             >
               Sign out
             </button>
