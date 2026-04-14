@@ -621,6 +621,7 @@ export async function generatePreviewImageOpenRouter(
   const downloadMs = Date.now() - t1;
   console.log(`[OpenRouter] TTFB=${ttfb}ms download=${downloadMs}ms total=${Date.now() - t0}ms`);
 
+
   const orUsage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, modelId: OPENROUTER_MODEL } : undefined;
 
   const choice = data.choices?.[0]?.message;

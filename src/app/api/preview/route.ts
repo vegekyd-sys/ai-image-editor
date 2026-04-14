@@ -44,23 +44,22 @@ export async function POST(req: NextRequest) {
 
     const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw, references });
 
+    // Deduct credits regardless of success (API tokens already consumed)
+    if (result.usage) {
+      deductByTokens(user.id, 'preview', result.usage.modelId, result.usage.inputTokens, result.usage.outputTokens)
+        .catch(e => console.error('[billing] preview deduct error:', e));
+    } else if (result.image) {
+      // Only charge per-action if image was actually generated (ComfyUI or no-usage Gemini)
+      const toolName = result.model === 'gemini' ? 'preview' : `edit_image_${result.model}`;
+      deductCredits(user.id, null, toolName)
+        .catch(e => console.error('[billing] preview deduct error:', e));
+    }
+
     if (!result.image) {
       return new Response(
         JSON.stringify({ error: 'Failed to generate preview' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
-    }
-
-    // Deduct credits (fire-and-forget)
-    if (result.usage) {
-      // Token-based billing (Gemini/OpenRouter with usage data)
-      deductByTokens(user.id, 'preview', result.usage.modelId, result.usage.inputTokens, result.usage.outputTokens)
-        .catch(e => console.error('[billing] preview deduct error:', e));
-    } else {
-      // Per-action fallback (ComfyUI or Gemini without usage)
-      const toolName = result.model === 'gemini' ? 'preview' : `edit_image_${result.model}`;
-      deductCredits(user.id, null, toolName)
-        .catch(e => console.error('[billing] preview deduct error:', e));
     }
 
     return new Response(
