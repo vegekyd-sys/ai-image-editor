@@ -590,6 +590,10 @@ export default function ImageCanvas({
   // Remotion Player: poll current frame for custom seek bar
   // draftDesign overrides the committed design — it's the Agent's latest preview
   const currentDesign = draftDesign || animatedDesigns?.get(currentIndex);
+  // Debug: log when draftDesign changes
+  useEffect(() => {
+    if (draftDesign) console.log(`🎨 [canvas] draftDesign updated: ${draftDesign.code?.length} chars, props keys: ${Object.keys(draftDesign.props || {}).join(',')}`);
+  }, [draftDesign]);
   const remotionFps = currentDesign?.animation?.fps || 30;
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
