@@ -59,12 +59,35 @@ function compileAndEval(code: string): React.ComponentType<Record<string, unknow
 }
 
 /** Preload Google Fonts from @import/href in design code. Ensures fonts render in headless Chrome. */
+/** Check if code contains CJK characters (Chinese/Japanese/Korean) */
+function hasCJK(code: string): boolean {
+  return /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(code);
+}
+
+/** Default CJK font URL — injected when code has CJK text but no explicit CJK font */
+const CJK_FALLBACK_FONT_URL = 'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&display=swap';
+
 async function preloadFonts(code: string): Promise<void> {
   const fontUrls = new Set<string>();
+
+  // Match @import url('...') in CSS
   for (const m of code.matchAll(/@import\s+url\(['"]?(https:\/\/fonts\.googleapis\.com\/[^'")\s]+)['"]?\)/g))
     fontUrls.add(m[1]);
+  // Match href="..." in HTML attributes
   for (const m of code.matchAll(/href=["'](https:\/\/fonts\.googleapis\.com\/[^"']+)["']/g))
     fontUrls.add(m[1]);
+  // Match href: "..." in JS object properties (React.createElement style)
+  for (const m of code.matchAll(/href:\s*["'](https:\/\/fonts\.googleapis\.com\/[^"']+)["']/g))
+    fontUrls.add(m[1]);
+
+  // If code has CJK characters but no CJK-capable font, inject Noto Sans SC
+  if (hasCJK(code)) {
+    const hasCJKFont = [...fontUrls].some(url =>
+      /Noto\+Sans\+(SC|TC|JP|KR|HK)|ZCOOL|Ma\+Shan|LXGW|Source\+Han/i.test(url)
+    );
+    if (!hasCJKFont) fontUrls.add(CJK_FALLBACK_FONT_URL);
+  }
+
   if (fontUrls.size === 0) return;
 
   const fontFamilies = new Set<string>();
@@ -91,6 +114,12 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
   const propsObj = (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>;
   const Component = useMemo(() => compileAndEval(codeStr), [codeStr]);
 
+  // Combine code + props values for font detection (CJK text often lives in props)
+  const fontDetectionText = useMemo(() => {
+    const propsStr = Object.values(propsObj).filter(v => typeof v === 'string').join(' ');
+    return codeStr + '\n' + propsStr;
+  }, [codeStr, propsObj]);
+
   // Wait for Google Fonts before rendering (critical for headless/Sandbox)
   const [fontsReady, setFontsReady] = useState(false);
   const handleRef = useRef<number | null>(null);
@@ -100,7 +129,7 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
     const handle = delayRender('Loading fonts for design');
     handleRef.current = handle;
 
-    preloadFonts(codeStr)
+    preloadFonts(fontDetectionText)
       .then(() => {
         setFontsReady(true);
         continueRender(handle);
