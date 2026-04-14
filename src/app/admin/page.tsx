@@ -45,6 +45,8 @@ export default function AdminPage() {
   const [tokenRates, setTokenRates] = useState<TokenRateEntry[]>([])
   const [editingRates, setEditingRates] = useState<Record<string, { input_per_1m?: string; output_per_1m?: string; markup?: string }>>({})
   const [newRate, setNewRate] = useState({ model_id: '', display_name: '', input_per_1m: '', output_per_1m: '', markup: '2.0' })
+  const [billingEnabled, setBillingEnabled] = useState(false)
+  const [billingToggling, setBillingToggling] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -81,10 +83,17 @@ export default function AdminPage() {
     if (Array.isArray(data)) setTokenRates(data)
   }, [])
 
+  const fetchBillingToggle = useCallback(async () => {
+    const res = await fetch('/api/admin/billing-toggle')
+    if (res.status === 403) return
+    const data = await res.json()
+    setBillingEnabled(data.enabled ?? false)
+  }, [])
+
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing(), fetchTokenRates()]).finally(() => setLoading(false))
-  }, [fetchCodes, fetchWaitlist, fetchPricing, fetchTokenRates])
+    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle()]).finally(() => setLoading(false))
+  }, [fetchCodes, fetchWaitlist, fetchPricing, fetchTokenRates, fetchBillingToggle])
 
   const handleCreate = async () => {
     if (!newCode.trim()) return
@@ -259,6 +268,33 @@ export default function AdminPage() {
       {/* ══════ BILLING TAB ══════ */}
       {tab === 'billing' && (
         <>
+          {/* Billing master switch */}
+          <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/10 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium">Billing</div>
+              <div className="text-xs text-white/40 mt-0.5">
+                {billingEnabled ? 'Active — users are charged for AI usage' : 'Off — all AI usage is free'}
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                setBillingToggling(true)
+                const next = !billingEnabled
+                await fetch('/api/admin/billing-toggle', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ enabled: next }),
+                })
+                setBillingEnabled(next)
+                setBillingToggling(false)
+              }}
+              disabled={billingToggling}
+              className={`relative w-12 h-6 rounded-full transition-all ${billingEnabled ? 'bg-fuchsia-600' : 'bg-white/20'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${billingEnabled ? 'left-6' : 'left-0.5'}`} />
+            </button>
+          </div>
+
           <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
             <table className="w-full text-sm">
               <thead>

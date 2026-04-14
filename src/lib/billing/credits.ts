@@ -2,6 +2,22 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getToolPrice, resolveToolName } from './pricing'
 import { getTokenRate, tokensToCredits } from './token-rates'
 
+// Billing kill switch — cached from DB app_settings
+let _billingEnabled: boolean | null = null
+let _billingCheckedAt = 0
+const BILLING_CACHE_TTL = 60_000 // 1 minute
+
+export async function isBillingEnabled(): Promise<boolean> {
+  if (_billingEnabled !== null && Date.now() - _billingCheckedAt < BILLING_CACHE_TTL) return _billingEnabled
+  const admin = getSupabaseAdmin()
+  const { data } = await admin.from('app_settings').select('value').eq('key', 'billing_enabled').single()
+  _billingEnabled = data?.value === 'true'
+  _billingCheckedAt = Date.now()
+  return _billingEnabled
+}
+
+export function invalidateBillingCache() { _billingEnabled = null }
+
 /**
  * Check if user has enough credits for a tool call.
  */
@@ -30,6 +46,7 @@ export async function requireCredits(
   userId: string,
   estimatedCredits: number = 1,
 ): Promise<{ ok: true; balance: number } | { ok: false; balance: number; response: Response }> {
+  if (!(await isBillingEnabled())) return { ok: true, balance: 0 }
   const admin = getSupabaseAdmin()
   const { data } = await admin
     .from('credit_balances')
@@ -67,6 +84,7 @@ export async function deductCredits(
   model?: string,
   durationMs?: number,
 ): Promise<{ charged: number; remaining: number }> {
+  if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   const toolName = resolveToolName(mcpToolName, model)
   const price = await getToolPrice(toolName)
   if (!price || price.isFree) return { charged: 0, remaining: 0 }
@@ -102,6 +120,7 @@ export async function deductByTokens(
   durationMs?: number,
   apiKeyId?: string | null,
 ): Promise<{ charged: number; remaining: number }> {
+  if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   const rate = await getTokenRate(modelId)
   if (!rate) {
     console.warn(`[billing] No token rate found for model "${modelId}", skipping deduction`)

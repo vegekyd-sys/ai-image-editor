@@ -12,6 +12,13 @@ vi.mock('@/lib/supabase/service', () => ({
   getSupabaseAdmin: () => mockSupabaseAdmin,
 }));
 
+// Default: billing enabled for all tests
+const billingSettingsChain = {
+  select: vi.fn().mockReturnThis(),
+  eq: vi.fn().mockReturnThis(),
+  single: vi.fn().mockResolvedValue({ data: { value: 'true' }, error: null }),
+};
+
 // Helper to set up chain mocking for Supabase queries
 function mockQuery(data: unknown, error: unknown = null) {
   const chain = {
@@ -28,10 +35,22 @@ function mockQuery(data: unknown, error: unknown = null) {
 
 // ─── token-rates.ts tests ───────────────────────────────────────
 
+// Wrap mockFrom to always handle app_settings (billing enabled)
+const originalMockFrom = mockFrom;
+function setupBillingMock() {
+  const prevImpl = originalMockFrom.getMockImplementation();
+  mockFrom.mockImplementation((table: string) => {
+    if (table === 'app_settings') return billingSettingsChain;
+    if (prevImpl) return prevImpl(table);
+    return mockQuery(null);
+  });
+}
+
 describe('token-rates', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    setupBillingMock();
   });
 
   it('tokensToCredits computes correctly for Opus', async () => {
@@ -156,12 +175,13 @@ describe('credits', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    setupBillingMock();
   });
 
   describe('requireCredits', () => {
     it('returns ok when balance is sufficient', async () => {
       const chain = mockQuery({ balance: 100 });
-      mockFrom.mockReturnValue(chain);
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : chain);
 
       const { requireCredits } = await import('@/lib/billing/credits');
       const result = await requireCredits('user-1', 5);
@@ -173,7 +193,7 @@ describe('credits', () => {
 
     it('returns 402 response when balance is insufficient', async () => {
       const chain = mockQuery({ balance: 2 });
-      mockFrom.mockReturnValue(chain);
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : chain);
 
       const { requireCredits } = await import('@/lib/billing/credits');
       const result = await requireCredits('user-1', 5);
@@ -190,7 +210,7 @@ describe('credits', () => {
 
     it('treats missing balance as 0', async () => {
       const chain = mockQuery(null);
-      mockFrom.mockReturnValue(chain);
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : chain);
 
       const { requireCredits } = await import('@/lib/billing/credits');
       const result = await requireCredits('user-1', 1);
@@ -205,6 +225,7 @@ describe('credits', () => {
       const balanceChain = mockQuery({ balance: 100 });
 
       mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
         if (table === 'token_rates') return ratesChain;
         return balanceChain;
       });
@@ -233,6 +254,7 @@ describe('credits', () => {
       mockRpc.mockResolvedValue({ data: 40, error: null }); // remaining = 40
 
       mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
         if (table === 'token_rates') return ratesChain;
         if (table === 'usage_logs') return usageChain;
         return mockQuery(null);
@@ -281,6 +303,7 @@ describe('credits', () => {
       mockRpc.mockResolvedValue({ data: 888, error: null });
 
       mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
         if (table === 'credit_pricing') return pricingChain;
         if (table === 'usage_logs') return usageChain;
         return mockQuery(null);
