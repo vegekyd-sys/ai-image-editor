@@ -8,6 +8,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-15',
+    en: { title: 'Frame Preview & Draft Timeline', items: [
+      'preview_frame: Agent captures any frame of a video design to check its own work before publishing',
+      'Draft → Publish: run_code creates drafts, write_file publishes — only final designs land on timeline',
+      'Multi-frame chat display: preview frames shown as scrollable gallery in conversation',
+      'Agent model upgraded to Opus 4.6',
+    ]},
+    zh: { title: '逐帧预览 & 草稿时间线', items: [
+      'preview_frame：Agent 可以截取视频任意帧来检查自己的作品，发布前自行校验',
+      '草稿 → 发布：run_code 生成草稿，write_file 发布 — 时间线上只出现最终稿',
+      '多帧聊天展示：截帧预览在对话中横向滚动展示',
+      'Agent 模型升级到 Opus 4.6',
+    ]},
+  },
+  {
     date: '2026-04-13',
     en: { title: 'Editable Text in Designs', items: [
       'Edit text directly: click any text element in a design to select, click Edit to modify — no Agent needed',
