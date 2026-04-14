@@ -74,7 +74,7 @@ When you're satisfied with the result, call `write_file({ fromLastRunCode: true,
 
 You control what appears on the timeline. Only publish designs you're happy with.
 
-**Verifying your draft**: Each draft preview is saved to workspace at `{projectId}/drafts/draft-{N}.jpg`. Use `read_file` to see the preview image, or `analyze_image` on a draft URL to check your work before publishing.
+**Verifying your draft**: Each draft preview is saved to workspace. The preview URL is returned in the tool response (e.g. `Preview uploaded: https://...`). To see your draft, use `read_file` on that URL path, or pass the full URL to `analyze_image`. Do NOT use `<<<image_N>>>` to check drafts — those only reference published snapshots, not drafts.
 
 ### Editing existing code
 
@@ -85,7 +85,7 @@ Build on existing code — do NOT rewrite from scratch.
 
 ### Server-side Preview
 
-After every render/patch, the server automatically captures a preview frame. You can use `analyze_image` on the new <<<image_N>>> to verify your design looks correct before moving on. For video designs, the preview captures a frame at ~30% through the animation.
+After every render/patch, the server captures a preview frame and uploads it to workspace. The preview URL appears in the tool response. To verify your draft, use `read_file` on the workspace path (e.g. `{projectId}/drafts/draft-1.jpg`) — this returns the actual rendered image. Do NOT use `<<<image_N>>>` to verify drafts — those reference published snapshots only.
 
 ### Video Designs
 
