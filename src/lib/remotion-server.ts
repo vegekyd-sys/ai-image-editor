@@ -94,7 +94,14 @@ async function renderSandbox(design: DesignPayload, frame: number): Promise<Buff
     await renderStillOnVercel({
       sandbox,
       compositionId: 'dynamic-design',
-      inputProps: { code: design.code, designProps: design.props || {} },
+      inputProps: {
+        code: design.code,
+        designProps: design.props || {},
+        fps,
+        durationInFrames,
+        width: design.width || 1080,
+        height: design.height || 1350,
+      },
       imageFormat: 'jpeg',
       jpegQuality: 90,
       frame: Math.min(frame, durationInFrames - 1),
