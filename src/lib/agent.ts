@@ -1142,8 +1142,8 @@ export async function* runMakaronAgent(
         if (event.toolName === 'analyze_image') {
           const q = (event.input as { question?: string }).question;
           yield { type: 'status', text: isEnLocale
-            ? (q ? `Analyzing image: ${q.slice(0, 30)}` : 'Analyzing image')
-            : (q ? `分析图片：${q.slice(0, 25)}` : '分析图片') };
+            ? (q ? `Analyzing image: ${q.slice(0, 50)}` : 'Analyzing image')
+            : (q ? `分析图片：${q.slice(0, 40)}` : '分析图片') };
         } else if (event.toolName === 'preview_frame') {
           const f = (event.input as { frame?: number; timestamp?: number }).frame;
           const ts = (event.input as { frame?: number; timestamp?: number }).timestamp;
