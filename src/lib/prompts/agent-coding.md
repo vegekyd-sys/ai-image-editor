@@ -74,6 +74,8 @@ When you're satisfied with the result, call `write_file({ fromLastRunCode: true,
 
 You control what appears on the timeline. Only publish designs you're happy with.
 
+**Verifying your draft**: Each draft preview is saved to workspace at `{projectId}/drafts/draft-{N}.jpg`. Use `read_file` to see the preview image, or `analyze_image` on a draft URL to check your work before publishing.
+
 ### Editing existing code
 
 When the user asks to modify previous work ("change the color", "make it bigger"):

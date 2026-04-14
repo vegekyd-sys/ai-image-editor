@@ -316,7 +316,7 @@ function createTools(ctx: AgentContext) {
         }
 
         if (!imageSource || imageSource.startsWith('__design_pending_')) {
-          return { base64Data: '', mimeType: 'image/jpeg', question, error: imageSource?.startsWith('__design_pending_') ? 'This is a design snapshot — the image was rendered in the browser and is not available for server-side analysis. You can describe it based on the code you wrote.' : 'No image available to analyze. Generate an image first using generate_image.' };
+          return { base64Data: '', mimeType: 'image/jpeg', question, error: 'No image available to analyze. Generate an image first using generate_image.' };
         }
 
         const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
