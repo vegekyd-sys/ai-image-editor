@@ -173,6 +173,35 @@ describe('onPreviewFrame callback', () => {
   });
 });
 
+describe('onCaptureFrame callback', () => {
+  it('calls captureDesignFrame when capture_frame event received', () => {
+    const captureDesignFrame = vi.fn().mockResolvedValue(undefined);
+    const ctx = createMockContext({ captureDesignFrame });
+    const { callbacks } = makeAgentCallbacks(ctx);
+
+    callbacks.onCaptureFrame?.(30, 'proj/drafts/design-snap3-frame30.jpg', 'capture-123');
+
+    expect(captureDesignFrame).toHaveBeenCalledWith(30, 'proj/drafts/design-snap3-frame30.jpg');
+  });
+
+  it('does not crash if captureDesignFrame is not provided', () => {
+    const ctx = createMockContext();
+    const { callbacks } = makeAgentCallbacks(ctx);
+
+    // Should not throw
+    callbacks.onCaptureFrame?.(0, 'path.jpg', 'id');
+  });
+
+  it('handles captureDesignFrame rejection gracefully', () => {
+    const captureDesignFrame = vi.fn().mockRejectedValue(new Error('render failed'));
+    const ctx = createMockContext({ captureDesignFrame });
+    const { callbacks } = makeAgentCallbacks(ctx);
+
+    // Should not throw (error caught internally)
+    callbacks.onCaptureFrame?.(0, 'path.jpg', 'id');
+  });
+});
+
 describe('onRender — draft without previewUrl', () => {
   let ctx: AgentCallbackContext;
 
