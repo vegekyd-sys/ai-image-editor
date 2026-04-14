@@ -1234,7 +1234,7 @@ export async function* runMakaronAgent(
         // Emit preview_frame_captured so frontend shows the screenshot in CUI
         if (toolName === 'preview_frame') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const toolOutput = (event as any).result as { workspaceUrl?: string } | undefined;
+          const toolOutput = (event as any).output as { workspaceUrl?: string } | undefined;
           const wsUrl = toolOutput?.workspaceUrl;
           if (wsUrl) {
             yield { type: 'preview_frame_captured' as const, workspaceUrl: wsUrl };
