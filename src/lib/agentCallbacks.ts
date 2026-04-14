@@ -317,6 +317,16 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       ctx.onMusicTaskCreated?.(taskId);
     },
 
+    onPreviewFrame: (workspaceUrl) => {
+      // Show the preview frame screenshot inline in CUI
+      if (workspaceUrl && currentMsgId) {
+        const id = currentMsgId;
+        ctx.setMessages(prev => prev.map(m =>
+          m.id === id ? { ...m, image: workspaceUrl } : m
+        ));
+      }
+    },
+
     onNsfwDetected: () => {
       console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
       ctx.isNsfwRef.current = true;

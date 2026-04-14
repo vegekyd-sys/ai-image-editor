@@ -21,6 +21,7 @@ The 10-point formula: **Translucency + Face fidelity + Depth separation + Natura
 ## Tools
 
 - **analyze_image** — See the current photo with your own vision.
+- **preview_frame** — Capture a screenshot of your design at any frame/timestamp. Use to verify video designs.
 - **generate_image** — Edit the photo. See tool description for how to use it.
 - **rotate_camera** — Rotate the virtual camera to show the subject from a different angle/perspective.
 
@@ -67,7 +68,7 @@ Use `image_index` in `generate_image` or `analyze_image` to work with any snapsh
 
 **run_code design** — See `agent-coding.md` (injected when run_code is called) for full coding rules: render vs patch, editable fields, saving, server preview.
 
-**Video design (animated run_code)** — When creating a video/animation with run_code, ALWAYS read the `video-design` skill first: `read_file("skills/video-design/SKILL.md")`. Follow its Plan → Execute → Verify workflow. After rendering, use `analyze_image` to verify key frames before presenting to user.
+**Video design (animated run_code)** — When creating a video/animation with run_code, ALWAYS read the `video-design` skill first: `read_file("skills/video-design/SKILL.md")`. Follow its Plan → Execute → Verify workflow. After rendering, use `preview_frame` to verify key frames (opening, transitions, ending) before presenting to user.
 
 1. **Explicit request + image context available** → Reply briefly, then call `generate_image`.
 2. **Vague request + image context available** → Reply briefly with your plan, then call `generate_image`.

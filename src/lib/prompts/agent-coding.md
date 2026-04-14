@@ -82,14 +82,17 @@ Note: `generate_image` is the exception — it publishes directly to the timelin
 - Check colors, font sizes, border widths — do they match your intent?
 - Check image URLs — are they valid ctx.snapshotImages references?
 
-**Screenshot when needed**: Use `read_file` on the workspace draft URL to see the rendered result when:
-- You need to verify visual positioning (is the circle actually on the apple?)
-- You need to check overall composition or overlap
-- You're about to publish (write_file) and want to confirm quality
+**`preview_frame` when needed**: Call `preview_frame` to see the rendered result:
+- `preview_frame({ frame: 0 })` — check the opening frame
+- `preview_frame({ timestamp: 3.5 })` — check a specific moment
+- `preview_frame({ frame: totalFrames - 1 })` — check the ending
+- Use for: visual positioning, composition, overlap, scene transitions, image loading
+- For video designs, check at least the opening and one scene transition before publishing
+- Screenshots are saved to workspace (e.g. `{projectId}/drafts/design-snap5-frame0.jpg`) and shown to the user in chat
 
-Don't screenshot after every render/patch. Ask yourself: "Can I answer my question by reading the code?"
+Don't preview after every render/patch. Ask yourself: "Can I answer my question by reading the code?"
 
-Each draft preview is saved to workspace. The preview URL is returned in the tool response (e.g. `Preview uploaded: https://...`). Do NOT use `<<<image_N>>>` to check drafts — those only reference published snapshots, not drafts.
+Do NOT use `<<<image_N>>>` to check drafts — those only reference published snapshots, not drafts.
 
 ### Editing existing code
 
@@ -97,10 +100,6 @@ When the user asks to modify previous work ("change the color", "make it bigger"
 1. **Code in context** → If the user message contains `[Current design code]`, use `type: 'patch'` directly. Do NOT call `read_file`.
 2. **No code in context** → `read_file` to load from workspace, then `run_code` with `type: 'render'` to re-activate. After that, use `patch` for edits.
 Build on existing code — do NOT rewrite from scratch.
-
-### Server-side Preview
-
-After every render/patch, the server captures a preview frame and uploads it to workspace. The preview URL appears in the tool response. To verify your draft, use `read_file` on the workspace path (e.g. `{projectId}/drafts/draft-1.jpg`) — this returns the actual rendered image. Do NOT use `<<<image_N>>>` to verify drafts — those reference published snapshots only.
 
 ### Video Designs
 

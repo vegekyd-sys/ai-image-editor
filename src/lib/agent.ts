@@ -73,6 +73,7 @@ export type AgentStreamEvent =
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
   | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
+  | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
   | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
   | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
@@ -341,6 +342,84 @@ function createTools(ctx: AgentContext) {
                 ? `Analyze the image above, focusing on: ${output.question}`
                 : 'Analyze this image in detail for photo editing purposes.',
             },
+          ],
+        };
+      },
+    }),
+
+    preview_frame: tool({
+      description: `Capture a screenshot of your current design at a specific frame or time.
+Use this to verify visual output — check key moments in video designs (opening, scene transitions, ending).
+For still designs, frame 0 is the only frame.
+Returns the rendered image so you can see it with your vision.
+The screenshot is saved to workspace and shown to the user in chat.`,
+      inputSchema: z.object({
+        frame: z.number().optional().describe('0-based frame number.'),
+        timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
+        question: z.string().optional().describe('What to focus on when viewing this frame.'),
+      }),
+      execute: async ({ frame, timestamp, question }) => {
+        const design = (ctx as any).__lastDesignPayload;
+        if (!design) return { error: 'No active design. Use run_code with type: "render" first.' };
+
+        const fps = design.animation?.fps || 30;
+        const dur = design.animation?.durationInSeconds || 0;
+        const totalFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
+
+        let targetFrame = 0;
+        if (frame !== undefined) {
+          targetFrame = Math.max(0, Math.min(frame, totalFrames - 1));
+        } else if (timestamp !== undefined) {
+          targetFrame = Math.max(0, Math.min(Math.round(timestamp * fps), totalFrames - 1));
+        }
+
+        const { renderDesignFrame } = await import('./remotion-server');
+        const jpegBuffer = await renderDesignFrame(design, targetFrame);
+
+        // Update draft previewBase64 (used as poster when publishing)
+        const drafts = (ctx as any).__runCodeDrafts || [];
+        const b64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
+        if (drafts.length > 0) {
+          drafts[drafts.length - 1].previewBase64 = b64;
+        }
+
+        // Upload to workspace with semantic filename
+        let wsUrl = '';
+        const snapN = ctx.snapshotImages.length;
+        const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
+        if (ctx.supabase && ctx.userId) {
+          const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+          if (ws.storageUrl) {
+            wsUrl = ws.storageUrl;
+            if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
+          }
+        }
+
+        console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB${wsUrl ? ' → workspace' : ''}`);
+
+        return {
+          base64Data: jpegBuffer.toString('base64'),
+          mimeType: 'image/jpeg',
+          frame: targetFrame,
+          totalFrames,
+          fps,
+          question,
+          workspaceUrl: wsUrl,
+          workspacePath: wsPath,
+        };
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toModelOutput({ output }: { output: any }) {
+        if (output.error) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        const time = (output.frame / output.fps).toFixed(1);
+        const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
+        return {
+          type: 'content' as const,
+          value: [
+            { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
+            { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}` : ''}` },
           ],
         };
       },
@@ -694,42 +773,16 @@ Your code must return a value:
             // Track draft for potential later publish via write_file
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
-            // Server-side preview for patch + upload to workspace
-            let patchPreview = '';
-            let draftPreviewBase64 = '';
-            let draftPreviewUrl = '';
-            try {
-              const { renderDesignFrame } = await import('./remotion-server');
-              const fps = patched.animation?.fps || 30;
-              const totalFrames = patched.animation ? Math.max(1, Math.round(fps * patched.animation.durationInSeconds)) : 1;
-              const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
-              const jpegBuffer = await renderDesignFrame(patched, previewFrame);
-              draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-              // Upload draft preview to workspace so Agent can reference it
-              if (ctx.supabase && ctx.userId) {
-                const draftN = ((ctx as any).__runCodeDrafts?.length || 0) + 1;
-                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
-                const wsResult = await workspace.writeFile(draftPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
-                if (wsResult.storageUrl) draftPreviewUrl = wsResult.storageUrl;
-              }
-              patchPreview = draftPreviewUrl
-                ? ` Preview uploaded: ${draftPreviewUrl}`
-                : ` Preview captured (frame ${previewFrame}).`;
-              console.log(`🖼️ [agent] patch preview: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB${draftPreviewUrl ? ' → workspace' : ''}`);
-            } catch (err) {
-              console.warn('⚠️ [agent] patch preview failed:', (err as Error).message);
-            }
-
             // Update last draft (patch updates existing draft, doesn't create new one)
             const drafts = (ctx as any).__runCodeDrafts;
             if (drafts.length > 0) {
-              drafts[drafts.length - 1] = { type: 'design', payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl };
+              drafts[drafts.length - 1] = { type: 'design', payload: patched };
             } else {
-              drafts.push({ type: 'design', payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
+              drafts.push({ type: 'design', payload: patched });
             }
 
             const draftIdx = drafts.length;
-            return { type: 'text' as const, content: `Patched — draft ${draftIdx} updated.${patchPreview} Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
+            return { type: 'text' as const, content: `Patched — draft ${draftIdx} updated. Use preview_frame to verify key frames. Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -775,37 +828,11 @@ Your code must return a value:
             // Track draft for potential later publish via write_file
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
-            // Server-side Remotion: render a preview frame + upload to workspace
-            let previewNote = '';
-            let draftPreviewBase64 = '';
-            let draftPreviewUrl = '';
-            try {
-              const { renderDesignFrame } = await import('./remotion-server');
-              const fps = animation?.fps || 30;
-              const totalFrames = animation ? Math.max(1, Math.round(fps * animation.durationInSeconds)) : 1;
-              const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
-              const jpegBuffer = await renderDesignFrame(designPayload, previewFrame);
-              draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-              // Upload draft preview to workspace so Agent can reference it
-              if (ctx.supabase && ctx.userId) {
-                const draftN = ((ctx as any).__runCodeDrafts?.length || 0) + 1;
-                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
-                const wsResult = await workspace.writeFile(draftPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
-                if (wsResult.storageUrl) draftPreviewUrl = wsResult.storageUrl;
-              }
-              previewNote = draftPreviewUrl
-                ? ` Preview uploaded: ${draftPreviewUrl}`
-                : ` Preview captured (frame ${previewFrame}).`;
-              console.log(`🖼️ [agent] design preview: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB${draftPreviewUrl ? ' → workspace' : ''}`);
-            } catch (err) {
-              console.warn('⚠️ [agent] design preview failed:', (err as Error).message);
-            }
-
-            // Push new draft
-            (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
+            // Push new draft (no auto-screenshot — Agent uses preview_frame tool to check)
+            (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, content: `Design ready — draft preview ${draftIdx}.${previewNote} Publish to timeline: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
+            return { type: 'text' as const, content: `Design ready — draft ${draftIdx}. Use preview_frame to check key frames, then publish: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
 
           // Helper: handle image result from run_code — store as draft + upload preview
@@ -1111,6 +1138,11 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: isEnLocale
             ? (q ? `Analyzing image: ${q.slice(0, 30)}` : 'Analyzing image')
             : (q ? `分析图片：${q.slice(0, 25)}` : '分析图片') };
+        } else if (event.toolName === 'preview_frame') {
+          const f = (event.input as { frame?: number; timestamp?: number }).frame;
+          const ts = (event.input as { frame?: number; timestamp?: number }).timestamp;
+          const hint = f !== undefined ? `frame ${f}` : ts !== undefined ? `${ts}s` : 'frame 0';
+          yield { type: 'status', text: isEnLocale ? `Capturing ${hint}...` : `截帧 ${hint}...` };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
         } else if (event.toolName === 'list_files') {
@@ -1197,6 +1229,16 @@ export async function* runMakaronAgent(
           const analyzeInput = (event as any).input as { image_index?: number } | undefined;
           const analyzedIdx = analyzeInput?.image_index ?? (ctx.currentSnapshotIndex + 1);
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
+        }
+
+        // Emit preview_frame_captured so frontend shows the screenshot in CUI
+        if (toolName === 'preview_frame') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const toolOutput = (event as any).result as { workspaceUrl?: string } | undefined;
+          const wsUrl = toolOutput?.workspaceUrl;
+          if (wsUrl) {
+            yield { type: 'preview_frame_captured' as const, workspaceUrl: wsUrl };
+          }
         }
 
         // run_code / write_file output handling — emit design SSE with published flag
