@@ -1101,7 +1101,7 @@ async function* streamTipsByCategoryGoogle(
   if (usageAccum && lastUsage) {
     usageAccum.inputTokens += lastUsage.promptTokenCount ?? 0;
     usageAccum.outputTokens += lastUsage.candidatesTokenCount ?? 0;
-    usageAccum.model = MODEL;
+    usageAccum.model = MODEL + ':text'; // Tips output is text, use text token rate
   }
 }
 
@@ -1156,9 +1156,9 @@ async function* streamTipsByCategoryOpenRouter(
     imageBase64, category, `or:${category}`,
   );
 
-  // Set model for billing (usage tokens already captured from SSE final chunk)
+  // Set model for billing — Tips output is text, use :text rate suffix
   if (usageAccum) {
-    usageAccum.model = OPENROUTER_MODEL;
+    usageAccum.model = OPENROUTER_MODEL + ':text';
   }
 
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
@@ -1211,7 +1211,7 @@ async function* streamTipsByCategoryBedrock(
       if (usage) {
         usageAccum.inputTokens += usage.inputTokens ?? 0;
         usageAccum.outputTokens += usage.outputTokens ?? 0;
-        usageAccum.model = 'anthropic.claude-sonnet-4-6';
+        usageAccum.model = 'anthropic.claude-sonnet-4-6'; // Sonnet is always text output, rate is correct
       }
     } catch { /* best effort */ }
   }
