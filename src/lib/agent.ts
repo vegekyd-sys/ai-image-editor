@@ -373,40 +373,46 @@ The screenshot is saved to workspace and shown to the user in chat.`,
           targetFrame = Math.max(0, Math.min(Math.round(timestamp * fps), totalFrames - 1));
         }
 
-        const { renderDesignFrame } = await import('./remotion-server');
-        const jpegBuffer = await renderDesignFrame(design, targetFrame);
+        try {
+          const { renderDesignFrame } = await import('./remotion-server');
+          const jpegBuffer = await renderDesignFrame(design, targetFrame);
 
-        // Update draft previewBase64 (used as poster when publishing)
-        const drafts = (ctx as any).__runCodeDrafts || [];
-        const b64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-        if (drafts.length > 0) {
-          drafts[drafts.length - 1].previewBase64 = b64;
-        }
-
-        // Upload to workspace with semantic filename
-        let wsUrl = '';
-        const snapN = ctx.snapshotImages.length;
-        const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
-        if (ctx.supabase && ctx.userId) {
-          const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
-          if (ws.storageUrl) {
-            wsUrl = ws.storageUrl;
-            if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
+          // Update draft previewBase64 (used as poster when publishing)
+          const drafts = (ctx as any).__runCodeDrafts || [];
+          const b64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
+          if (drafts.length > 0) {
+            drafts[drafts.length - 1].previewBase64 = b64;
           }
+
+          // Upload to workspace with semantic filename
+          let wsUrl = '';
+          const snapN = ctx.snapshotImages.length;
+          const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
+          if (ctx.supabase && ctx.userId) {
+            const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+            if (ws.storageUrl) {
+              wsUrl = ws.storageUrl;
+              if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
+            }
+          }
+
+          console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB${wsUrl ? ' → workspace' : ''}`);
+
+          return {
+            base64Data: jpegBuffer.toString('base64'),
+            mimeType: 'image/jpeg',
+            frame: targetFrame,
+            totalFrames,
+            fps,
+            question,
+            workspaceUrl: wsUrl,
+            workspacePath: wsPath,
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`⚠️ [agent] preview_frame failed: ${msg}`);
+          return { error: `Failed to capture frame ${targetFrame}: ${msg}` };
         }
-
-        console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB${wsUrl ? ' → workspace' : ''}`);
-
-        return {
-          base64Data: jpegBuffer.toString('base64'),
-          mimeType: 'image/jpeg',
-          frame: targetFrame,
-          totalFrames,
-          fps,
-          question,
-          workspaceUrl: wsUrl,
-          workspacePath: wsPath,
-        };
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toModelOutput({ output }: { output: any }) {
