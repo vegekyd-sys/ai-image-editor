@@ -73,6 +73,7 @@ export type AgentStreamEvent =
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
   | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
+  | { type: 'capture_frame'; frame: number; uploadPath: string; captureId: string }  // request frontend to capture a frame via renderStillOnWeb
   | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
   | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
   | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
@@ -362,57 +363,58 @@ The screenshot is saved to workspace and shown to the user in chat.`,
         const design = (ctx as any).__lastDesignPayload;
         if (!design) return { error: 'No active design. Use run_code with type: "render" first.' };
 
-        const fps = design.animation?.fps || 30;
-        const dur = design.animation?.durationInSeconds || 0;
-        const totalFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
+        // Capture info was pre-computed in the tool-call handler and sent to frontend via SSE
+        const capture = (ctx as any).__pendingFrameCapture as {
+          captureId: string; frame: number; uploadPath: string; totalFrames: number; fps: number;
+        } | undefined;
+        if (!capture) return { error: 'No pending capture request. This is a bug.' };
+        (ctx as any).__pendingFrameCapture = null;
 
-        let targetFrame = 0;
-        if (frame !== undefined) {
-          targetFrame = Math.max(0, Math.min(frame, totalFrames - 1));
-        } else if (timestamp !== undefined) {
-          targetFrame = Math.max(0, Math.min(Math.round(timestamp * fps), totalFrames - 1));
-        }
+        const { frame: targetFrame, uploadPath: wsPath, totalFrames, fps: capturedFps } = capture;
 
-        try {
-          const { renderDesignFrame } = await import('./remotion-server');
-          const jpegBuffer = await renderDesignFrame(design, targetFrame);
+        // Poll workspace for the file (frontend captures + uploads)
+        const MAX_WAIT = 15_000;
+        const POLL_INTERVAL = 500;
+        let elapsed = 0;
+        let result: { content: string; contentType: string; storageUrl?: string } | null = null;
 
-          // Update draft previewBase64 (used as poster when publishing)
-          const drafts = (ctx as any).__runCodeDrafts || [];
-          const b64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-          if (drafts.length > 0) {
-            drafts[drafts.length - 1].previewBase64 = b64;
-          }
-
-          // Upload to workspace with semantic filename
-          let wsUrl = '';
-          const snapN = ctx.snapshotImages.length;
-          const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
-          if (ctx.supabase && ctx.userId) {
-            const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
-            if (ws.storageUrl) {
-              wsUrl = ws.storageUrl;
-              if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
+        while (elapsed < MAX_WAIT) {
+          await new Promise(r => setTimeout(r, POLL_INTERVAL));
+          elapsed += POLL_INTERVAL;
+          try {
+            const wsResult = await workspace.readFile(wsPath, ctx.supabase, ctx.userId);
+            if (wsResult && wsResult.content) {
+              result = wsResult;
+              break;
             }
-          }
-
-          console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB${wsUrl ? ' → workspace' : ''}`);
-
-          return {
-            base64Data: jpegBuffer.toString('base64'),
-            mimeType: 'image/jpeg',
-            frame: targetFrame,
-            totalFrames,
-            fps,
-            question,
-            workspaceUrl: wsUrl,
-            workspacePath: wsPath,
-          };
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`⚠️ [agent] preview_frame failed: ${msg}`);
-          return { error: `Failed to capture frame ${targetFrame}: ${msg}` };
+          } catch { /* not yet */ }
         }
+
+        if (!result) {
+          console.warn(`⚠️ [agent] preview_frame timed out waiting for frontend capture (${MAX_WAIT / 1000}s)`);
+          return { error: `Frame capture timed out. The browser may not have the design loaded.` };
+        }
+
+        // Update draft preview
+        const drafts = (ctx as any).__runCodeDrafts || [];
+        if (drafts.length > 0) {
+          drafts[drafts.length - 1].previewBase64 = result.content;
+          if (result.storageUrl) drafts[drafts.length - 1].previewUrl = result.storageUrl;
+        }
+
+        const raw = result.content.replace(/^data:image\/\w+;base64,/, '');
+        console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / capturedFps).toFixed(1)}s), ${(raw.length * 0.75 / 1024).toFixed(0)} KB (client-side capture)`);
+
+        return {
+          base64Data: raw,
+          mimeType: 'image/jpeg',
+          frame: targetFrame,
+          totalFrames,
+          fps: capturedFps,
+          question,
+          workspaceUrl: result.storageUrl || '',
+          workspacePath: wsPath,
+        };
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toModelOutput({ output }: { output: any }) {
@@ -1145,9 +1147,23 @@ export async function* runMakaronAgent(
             ? (q ? `Analyzing image: ${q.slice(0, 50)}` : 'Analyzing image')
             : (q ? `分析图片：${q.slice(0, 40)}` : '分析图片') };
         } else if (event.toolName === 'preview_frame') {
-          const f = (event.input as { frame?: number; timestamp?: number }).frame;
-          const ts = (event.input as { frame?: number; timestamp?: number }).timestamp;
-          const hint = f !== undefined ? `frame ${f}` : ts !== undefined ? `${ts}s` : 'frame 0';
+          const input = event.input as { frame?: number; timestamp?: number };
+          const design = (ctx as any).__lastDesignPayload;
+          const fps = design?.animation?.fps || 30;
+          const dur = design?.animation?.durationInSeconds || 0;
+          const totalFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
+          let targetFrame = 0;
+          if (input.frame !== undefined) targetFrame = Math.max(0, Math.min(input.frame, totalFrames - 1));
+          else if (input.timestamp !== undefined) targetFrame = Math.max(0, Math.min(Math.round(input.timestamp * fps), totalFrames - 1));
+
+          const captureId = `capture-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const snapN = ctx.snapshotImages.length;
+          const uploadPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
+          // Store for tool execute to poll
+          (ctx as any).__pendingFrameCapture = { captureId, frame: targetFrame, uploadPath, totalFrames, fps };
+          // SSE to frontend — triggers client-side renderStillOnWeb + upload
+          yield { type: 'capture_frame' as const, frame: targetFrame, uploadPath, captureId };
+          const hint = `frame ${targetFrame}`;
           yield { type: 'status', text: isEnLocale ? `Capturing ${hint}...` : `截帧 ${hint}...` };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };

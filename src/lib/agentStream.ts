@@ -11,6 +11,7 @@ export interface AgentStreamCallbacks {
   onAnimationTask?: (taskId: string, prompt: string) => void;
   onMusicTask?: (taskId: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
+  onCaptureFrame?: (frame: number, uploadPath: string, captureId: string) => void;
   onPreviewFrame?: (workspaceUrl: string) => void;
   onNsfwDetected?: () => void;
   onRunId?: (runId: string) => void;
@@ -109,6 +110,13 @@ export async function streamAgent(
             break;
           case 'image_analyzed':
             callbacks.onImageAnalyzed?.(event.imageIndex);
+            break;
+          case 'capture_frame':
+            callbacks.onCaptureFrame?.(
+              (event as { frame: number }).frame,
+              (event as { uploadPath: string }).uploadPath,
+              (event as { captureId: string }).captureId,
+            );
             break;
           case 'preview_frame_captured':
             callbacks.onPreviewFrame?.((event as { workspaceUrl: string }).workspaceUrl);

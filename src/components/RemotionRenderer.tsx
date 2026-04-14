@@ -110,6 +110,47 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
   }
 }
 
+/**
+ * Capture a specific frame of a design as a JPEG Blob.
+ * Used by preview_frame tool — frontend renders, server polls for result.
+ */
+export async function captureDesignFrame(design: DesignPayload, frame: number): Promise<Blob | null> {
+  let imageBlobUrls: string[] = [];
+  try {
+    await preloadBabel().catch(() => {});
+    const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
+    imageBlobUrls = blobUrls;
+    await preloadFontsFromCode(resolvedCode);
+    const comp = evalRemotionJSX(resolvedCode);
+    if (!comp) return null;
+
+    const fps = design.animation?.fps || 30;
+    const durationInFrames = design.animation
+      ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
+      : 1;
+
+    const result = await renderStillOnWeb({
+      composition: {
+        component: comp,
+        durationInFrames, fps,
+        width: design.width, height: design.height,
+        id: 'agent-design-frame',
+        calculateMetadata: null, defaultProps: {},
+      },
+      frame: Math.min(frame, durationInFrames - 1),
+      imageFormat: 'jpeg',
+      inputProps: (design.props || {}) as Record<string, unknown>,
+    });
+
+    return result.blob;
+  } catch (e) {
+    console.warn('🎨 [design] frame capture failed:', e);
+    return null;
+  } finally {
+    imageBlobUrls.forEach(url => URL.revokeObjectURL(url));
+  }
+}
+
 // ─── Player component (for interactive playback only) ───────────────────────
 
 interface RemotionRendererProps {

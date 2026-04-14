@@ -205,6 +205,11 @@ export default function Editor({
   const [pendingDesign, setPendingDesign] = useState<DesignPayload | null>(null);
   const [draftDesign, setDraftDesign] = useState<DesignPayload | null>(null);
   const [draftDesignPoster, setDraftDesignPoster] = useState<string>('');
+  // Refs to track latest design for async capture callbacks
+  const draftDesignRef = useRef<DesignPayload | null>(null);
+  const pendingDesignRef = useRef<DesignPayload | null>(null);
+  useEffect(() => { draftDesignRef.current = draftDesign; }, [draftDesign]);
+  useEffect(() => { pendingDesignRef.current = pendingDesign; }, [pendingDesign]);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
@@ -1544,6 +1549,28 @@ export default function Editor({
         setAgentStatus(t('status.generatingMusic'));
       },
       musicPollingRef,
+      captureDesignFrame: async (frame, uploadPath) => {
+        // Get current design from draft or pending
+        const design = draftDesignRef.current || pendingDesignRef.current;
+        if (!design) { console.warn('⚠️ captureDesignFrame: no active design'); return; }
+        try {
+          const { captureDesignFrame: capture } = await import('@/components/RemotionRenderer');
+          const blob = await capture(design, frame);
+          if (!blob) throw new Error('capture returned null');
+          // Upload to Supabase Storage at workspace path
+          const supabase = (await import('@/lib/supabase/client')).createClient();
+          const userId = (await supabase.auth.getUser()).data.user?.id;
+          if (!userId) throw new Error('no user');
+          const storagePath = `${userId}/workspace/${uploadPath}`;
+          const { error } = await supabase.storage.from('images').upload(storagePath, blob, {
+            contentType: 'image/jpeg', upsert: true,
+          });
+          if (error) throw error;
+          console.log(`📸 [captureDesignFrame] frame ${frame} uploaded → ${storagePath}`);
+        } catch (err) {
+          console.error('⚠️ captureDesignFrame failed:', err);
+        }
+      },
     });
     // Sync factory's currentMsgId with the already-created assistant message
     setCurrentMsgId(assistantMsgId);

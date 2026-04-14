@@ -59,6 +59,9 @@ export interface AgentCallbackContext {
   /** When true, onDone won't reset status to greeting (music polling shows its own status) */
   musicPollingRef?: { current: boolean };
 
+  // Frame capture (frontend renderStillOnWeb → upload to workspace)
+  captureDesignFrame?: (frame: number, uploadPath: string) => Promise<void>;
+
   // Optional cleanup on done (reconnect uses this to disconnect)
   onCleanup?: () => void;
 
@@ -315,6 +318,13 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     onMusicTask: (taskId) => {
       console.log(`🎵 [agent] music task created: ${taskId}`);
       ctx.onMusicTaskCreated?.(taskId);
+    },
+
+    onCaptureFrame: (frame, uploadPath, _captureId) => {
+      // Frontend captures the frame and uploads — fire and forget
+      ctx.captureDesignFrame?.(frame, uploadPath).catch(err => {
+        console.warn('⚠️ [agent] captureDesignFrame failed:', err);
+      });
     },
 
     onPreviewFrame: (workspaceUrl) => {
