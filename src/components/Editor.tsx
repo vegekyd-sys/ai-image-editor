@@ -200,6 +200,7 @@ export default function Editor({
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
   const [pendingDesign, setPendingDesign] = useState<DesignPayload | null>(null);
+  const [draftDesign, setDraftDesign] = useState<DesignPayload | null>(null);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
@@ -1487,7 +1488,7 @@ export default function Editor({
 
     const { callbacks: agentCallbacks, setCurrentMsgId, getCurrentMsgId } = makeAgentCallbacks({
       projectId: projectId!,
-      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
       setPendingNotification, setSelectedVideoId, setAnimationState,
       snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
       pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
@@ -1548,7 +1549,7 @@ export default function Editor({
 
     const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
       projectId: projectId ?? '',
-      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
       setPendingNotification, setSelectedVideoId, setAnimationState,
       snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
       pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
@@ -2823,6 +2824,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 onIndexChange={handleIndexChange}
                 referenceCount={referenceCount}
                 animatedDesigns={designsMap}
+                draftDesign={draftDesign}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
                 isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
@@ -3501,6 +3503,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           const currentDesign = pendingDesign;
           const designDesc = (currentDesign as unknown as Record<string, unknown>).description as string | undefined;
           setPendingDesign(null);
+          setDraftDesign(null); // clear draft — published design replaces it
           setAgentStatus(t('status.renderingDesign'));
           // Poster-first: wait 500ms for fonts/images to load, capture poster, THEN add snapshot
           queueMicrotask(async () => {

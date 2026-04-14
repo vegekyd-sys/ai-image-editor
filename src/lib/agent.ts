@@ -77,8 +77,8 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[] }  // Agent React design for browser rendering
-  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[] }  // @deprecated — backward compat alias for 'render'
+  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // Agent React design for browser rendering
+  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | { type: 'done' }
   | { type: 'error'; message: string };
@@ -436,12 +436,13 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-Set fromLastRunCode=true to save the last run_code output — path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.`,
+Set fromLastRunCode=true to PUBLISH the last run_code design — this creates a real Snapshot on the timeline that the user can see. Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.
+Every run_code render/patch is a draft (canvas preview only). Call write_file({ fromLastRunCode: true }) to publish when you're satisfied with the result.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Path is auto-generated with project ID + snapshot number.'),
+        fromLastRunCode: z.boolean().optional().describe('Save and PUBLISH the last run_code design to timeline. Path is auto-generated with project ID + snapshot number.'),
       }),
       execute: async ({ path: filePath, name, content, fromLastRunCode }) => {
         if (!ctx.supabase || !ctx.userId) {
@@ -469,9 +470,36 @@ Set fromLastRunCode=true to save the last run_code output — path is auto-gener
           return { success: false, message: 'No content to write. Provide content or set fromLastRunCode=true.' };
         }
         const result = await workspace.writeFile(savePath, fileContent, ctx.supabase, ctx.userId);
-        return result.success
-          ? { success: true, message: `Saved: ${savePath}`, storageUrl: result.storageUrl }
-          : { success: false, message: `Write failed: ${result.error}` };
+        if (!result.success) {
+          return { success: false, message: `Write failed: ${result.error}` };
+        }
+
+        // Publish: when fromLastRunCode, promote the draft design to a real Snapshot
+        if (fromLastRunCode) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const lastDesign = (ctx as any).__lastDesignPayload;
+          if (lastDesign) {
+            // Get preview from drafts
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const drafts = (ctx as any).__designDrafts || [];
+            const lastDraft = drafts[drafts.length - 1];
+            const preview = lastDraft?.previewBase64 || '';
+
+            // Push to snapshotImages so <<<image_N>>> reference is correct
+            ctx.snapshotImages.push(preview);
+            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+
+            // Set up pendingDesign for SSE emission with published flag
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (ctx as any).__pendingDesign = lastDesign;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (ctx as any).__pendingDesignPublished = true; // published — creates real Snapshot
+
+            console.log(`📌 [agent] design published via write_file: <<<image_${ctx.snapshotImages.length}>>>`);
+          }
+        }
+
+        return { success: true, message: `Saved: ${savePath}`, storageUrl: result.storageUrl };
       },
     }),
 
@@ -652,29 +680,40 @@ Your code must return a value:
             if (harnessError) return { type: 'text' as const, content: harnessError };
 
             (ctx as any).__pendingDesign = patched;
+            (ctx as any).__pendingDesignPublished = false; // draft — canvas preview only, no snapshot
             (ctx as any).__lastDesignPayload = patched;
             (ctx as any).__lastRunCode = JSON.stringify(patched, null, 2);
-            const newIdx = ctx.snapshotImages.length + 1;
+
+            // Track draft for potential later publish via write_file
+            if (!(ctx as any).__designDrafts) (ctx as any).__designDrafts = [];
 
             // Server-side preview for patch (same as render)
             let patchPreview = '';
+            let draftPreviewBase64 = '';
             try {
               const { renderDesignFrame } = await import('./remotion-server');
               const fps = patched.animation?.fps || 30;
               const totalFrames = patched.animation ? Math.max(1, Math.round(fps * patched.animation.durationInSeconds)) : 1;
               const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
               const jpegBuffer = await renderDesignFrame(patched, previewFrame);
-              const previewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-              ctx.snapshotImages.push(previewBase64); // Agent can analyze this via <<<image_N>>>
+              draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
               patchPreview = ` Preview captured (frame ${previewFrame}).`;
               console.log(`🖼️ [agent] patch preview captured: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB`);
             } catch (err) {
-              ctx.snapshotImages.push(''); // fallback placeholder
               console.warn('⚠️ [agent] patch preview failed:', (err as Error).message);
             }
 
-            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-            return { type: 'text' as const, content: `Patched ${result.edits.length} edit(s) — rendering as <<<image_${newIdx}>>>.${patchPreview} Save: write_file({ fromLastRunCode: true, name: "slug" })` };
+            // Update last draft (patch updates existing draft, doesn't create new one)
+            const drafts = (ctx as any).__designDrafts;
+            if (drafts.length > 0) {
+              drafts[drafts.length - 1] = { payload: patched, previewBase64: draftPreviewBase64 };
+            } else {
+              drafts.push({ payload: patched, previewBase64: draftPreviewBase64 });
+            }
+
+            // Draft preview: Agent can still reference it for analyze_image
+            const draftIdx = drafts.length;
+            return { type: 'text' as const, content: `Patched ${result.edits.length} edit(s) — draft preview updated (draft ${draftIdx}).${patchPreview} Publish to timeline: write_file({ fromLastRunCode: true, name: "slug" })` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -712,31 +751,35 @@ Your code must return a value:
               ...(result.editables ? { editables: result.editables } : {}),
             };
             (ctx as any).__pendingDesign = designPayload;
+            (ctx as any).__pendingDesignPublished = false; // draft — canvas preview only, no snapshot
             (ctx as any).__lastDesignPayload = designPayload;
             // Store for write_file({ fromLastRunCode: true })
             (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
 
-            const newIdx = ctx.snapshotImages.length + 1;
+            // Track draft for potential later publish via write_file
+            if (!(ctx as any).__designDrafts) (ctx as any).__designDrafts = [];
 
             // Server-side Remotion: render a preview frame so Agent can see its own work
             let previewNote = '';
+            let draftPreviewBase64 = '';
             try {
               const { renderDesignFrame } = await import('./remotion-server');
               const fps = animation?.fps || 30;
               const totalFrames = animation ? Math.max(1, Math.round(fps * animation.durationInSeconds)) : 1;
               const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
               const jpegBuffer = await renderDesignFrame(designPayload, previewFrame);
-              const previewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-              ctx.snapshotImages.push(previewBase64); // Agent can analyze this via <<<image_N>>>
+              draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
               previewNote = ` Preview captured (frame ${previewFrame}).`;
               console.log(`🖼️ [agent] design preview captured: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB`);
             } catch (err) {
-              ctx.snapshotImages.push(''); // fallback placeholder
               console.warn('⚠️ [agent] design preview failed:', (err as Error).message);
             }
-            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
 
-            return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>.${previewNote} Save now: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
+            // Push new draft
+            (ctx as any).__designDrafts.push({ payload: designPayload, previewBase64: draftPreviewBase64 });
+            const draftIdx = (ctx as any).__designDrafts.length;
+
+            return { type: 'text' as const, content: `Design ready — draft preview ${draftIdx}.${previewNote} Publish to timeline: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
 
           // Buffer or Uint8Array → treat as image
@@ -1111,15 +1154,17 @@ export async function* runMakaronAgent(
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
         }
 
-        // run_code output handling
-        if (toolName === 'run_code') {
+        // run_code / write_file output handling — emit design SSE with published flag
+        if (toolName === 'run_code' || toolName === 'write_file') {
           // Design output stored in ctx.__pendingDesign → emit as SSE event
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
-            console.log(`🎨 [agent] emitting render SSE: ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars`);
-            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables };
+            const published = (ctx as any).__pendingDesignPublished ?? false;
+            console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars`);
+            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published };
             (ctx as any).__pendingDesign = null;
-          } else {
+            (ctx as any).__pendingDesignPublished = undefined;
+          } else if (toolName === 'run_code') {
             console.log(`🔍 [agent] run_code result: no __pendingDesign found`);
           }
           // Image output (from toModelOutput won't have base64Data here, but pushImage in execute already handled it)

@@ -15,6 +15,7 @@ export interface AgentCallbackContext {
   setAgentStatus: (status: string) => void;
   setAnimations: (updater: (prev: ProjectAnimation[]) => ProjectAnimation[]) => void;
   setPendingDesign: (d: DesignPayload | null) => void;
+  setDraftDesign?: (d: DesignPayload | null) => void;
   setPendingNotification?: (n: { text: string; targetIndex: number }) => void;
   setSelectedVideoId?: (id: string) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -335,11 +336,19 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     },
 
     onRender: (design) => {
-      console.log(`🎨 [agent] render received: ${design.width}x${design.height}, code ${design.code.length} chars`);
+      const published = (design as Record<string, unknown>).published === true;
+      console.log(`🎨 [agent] render received (published=${published}): ${design.width}x${design.height}, code ${design.code.length} chars`);
       ctx.setAgentStatus(ctx.t('status.renderingDesign'));
-      ctx.pendingDesignMsgIdRef.current = currentMsgId;
-      ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
-      ctx.setPendingDesign(design);
+      if (published) {
+        // Published: create real Snapshot via poster-first flow
+        ctx.pendingDesignMsgIdRef.current = currentMsgId;
+        ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
+        ctx.setDraftDesign?.(null); // clear any draft preview
+        ctx.setPendingDesign(design);
+      } else {
+        // Draft: preview in canvas only, no Snapshot
+        ctx.setDraftDesign?.(design);
+      }
     },
 
     onDone: () => {

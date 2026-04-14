@@ -60,9 +60,22 @@ Rules:
 - Component must read text from `props[propKey]`: `{props.title}`
 - `data-editable` attribute value must match the `id` in editables array
 
-### Saving and editing code
+### Draft vs Publish (Timeline Control)
 
-After every `run_code` call, save with `write_file({ fromLastRunCode: true, name: "short-slug" })`. Path is auto-generated with project ID + snapshot number.
+Every `run_code` render/patch creates a **draft** — the user sees a live preview in the canvas, but it does NOT appear on the timeline. You can iterate freely: render, patch, render again — no timeline clutter.
+
+When you're satisfied with the result, call `write_file({ fromLastRunCode: true, name: "short-slug" })` to **publish** the design. This creates a real Snapshot on the user's timeline.
+
+**Workflow**:
+1. `run_code` (render) → draft preview in canvas
+2. `run_code` (patch) → draft updated in canvas
+3. ... iterate as needed ...
+4. `write_file({ fromLastRunCode: true, name: "slug" })` → published to timeline
+
+You control what appears on the timeline. Only publish designs you're happy with.
+
+### Editing existing code
+
 When the user asks to modify previous work ("change the color", "make it bigger"):
 1. **Code in context** → If the user message contains `[Current design code]`, use `type: 'patch'` directly. Do NOT call `read_file`.
 2. **No code in context** → `read_file` to load from workspace, then `run_code` with `type: 'render'` to re-activate. After that, use `patch` for edits.

@@ -49,6 +49,8 @@ interface ImageCanvasProps {
   referenceCount?: number;
   /** Map of timeline index → DesignPayload for animated designs (rendered via Player) */
   animatedDesigns?: Map<number, DesignPayload>;
+  /** Draft design from Agent — shown in canvas as preview, not committed to timeline */
+  draftDesign?: DesignPayload | null;
   /** Editable fields declared by the Agent for the current design */
   editableFields?: EditableField[];
   /** Current design props for editable field values */
@@ -76,6 +78,7 @@ export default function ImageCanvas({
   videoPlayTrigger,
   referenceCount = 0,
   animatedDesigns,
+  draftDesign,
   editableFields,
   designProps,
   selectedEditableId,
@@ -213,16 +216,16 @@ export default function ImageCanvas({
       swiping.current = true;
     }
 
-    // Long press detection — skip for video entry and animated designs
-    const isAnimatedDesign = !!animatedDesigns?.get(currentIndex)?.animation;
-    if (previousImage && !isVideoEntry && !isAnimatedDesign) {
+    // Long press detection — skip for video entry, animated designs, and draft previews
+    const isAnimatedDesign = !!(draftDesign?.animation || animatedDesigns?.get(currentIndex)?.animation);
+    if (previousImage && !isVideoEntry && !isAnimatedDesign && !draftDesign) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, animatedDesigns, currentIndex]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, animatedDesigns, currentIndex, draftDesign]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
@@ -398,16 +401,16 @@ export default function ImageCanvas({
       lastMousePos.current = { x: e.clientX, y: e.clientY };
     }
 
-    // Long press → compare (works at any zoom level, same as touch) — skip for animated designs
-    const isAnimatedDesign = !!animatedDesigns?.get(currentIndex)?.animation;
-    if (previousImage && !isAnimatedDesign) {
+    // Long press → compare (works at any zoom level, same as touch) — skip for animated designs and drafts
+    const isAnimatedDesign = !!(draftDesign?.animation || animatedDesigns?.get(currentIndex)?.animation);
+    if (previousImage && !isAnimatedDesign && !draftDesign) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         mousePanning.current = false; // stop panning when comparing
       }, 200);
     }
-  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, animatedDesigns, currentIndex]);
+  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, animatedDesigns, currentIndex, draftDesign]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!mouseStartPos.current) return;
@@ -585,7 +588,8 @@ export default function ImageCanvas({
   }, [videoPlayTrigger, isVideoEntry, videoUrl]);
 
   // Remotion Player: poll current frame for custom seek bar
-  const currentDesign = animatedDesigns?.get(currentIndex);
+  // draftDesign overrides the committed design — it's the Agent's latest preview
+  const currentDesign = draftDesign || animatedDesigns?.get(currentIndex);
   const remotionFps = currentDesign?.animation?.fps || 30;
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
@@ -949,8 +953,8 @@ export default function ImageCanvas({
             </div>
             <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
-        ) : animatedDesigns?.get(currentIndex) && !isComparing ? (
-          /* Animated design — Remotion Player with custom controls (same as video) */
+        ) : (draftDesign || animatedDesigns?.get(currentIndex)) && !isComparing ? (
+          /* Animated design (or draft preview) — Remotion Player with custom controls (same as video) */
           <div className={`relative w-full h-full transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
@@ -967,7 +971,7 @@ export default function ImageCanvas({
             }}
           >
             <RemotionRenderer
-              design={animatedDesigns.get(currentIndex)!}
+              design={(draftDesign || animatedDesigns?.get(currentIndex))!}
               mode="fill"
               hideControls
               onError={(err) => console.error('[canvas design]', err)}
