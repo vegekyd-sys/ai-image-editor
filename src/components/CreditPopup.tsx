@@ -27,6 +27,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
   const [selectedTier, setSelectedTier] = useState<string>('pro');
   const [selectedPlan, setSelectedPlan] = useState<string>('basic');
   const [animatedBalance, setAnimatedBalance] = useState(0);
+  const [balanceBefore, setBalanceBefore] = useState(0);
 
   const hasSubscription = !!(subscription && subscription.status !== 'canceled');
 
@@ -38,21 +39,29 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
   }, [hasSubscription]);
   const currentPlanIndex = hasSubscription ? PLANS.findIndex(p => p.id === subscription!.planId) : -1;
 
-  // Animate balance count-up on success
+  // Remember balance when popup opens (before top-up)
+  useEffect(() => {
+    if (open && !success && !waiting) {
+      setBalanceBefore(balance);
+    }
+  }, [open, success, waiting, balance]);
+
+  // Animate balance count-up on success: from balanceBefore → balance
   useEffect(() => {
     if (!success || !open) return;
-    setAnimatedBalance(0);
-    const target = balance;
+    const from = balanceBefore;
+    const to = balance;
+    setAnimatedBalance(from);
     const duration = 1200;
     const start = performance.now();
     const step = (now: number) => {
       const progress = Math.min((now - start) / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-      setAnimatedBalance(Math.round(eased * target));
+      setAnimatedBalance(Math.round(from + (to - from) * eased));
       if (progress < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
-  }, [success, open, balance]);
+  }, [success, open, balance, balanceBefore]);
 
   if (!open) return null;
 
