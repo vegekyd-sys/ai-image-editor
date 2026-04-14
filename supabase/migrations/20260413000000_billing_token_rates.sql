@@ -20,9 +20,9 @@ INSERT INTO token_rates (model_id, display_name, input_per_1m, output_per_1m, ma
   ('gemini-3.1-pro-preview', 'Gemini 3.1 Pro', 2.00, 12.00, 2.0),
   ('gemini-2.5-pro', 'Gemini 2.5 Pro', 1.25, 10.00, 2.0),
   ('gemini-2.5-flash', 'Gemini 2.5 Flash', 0.30, 2.50, 2.0),
-  -- OpenRouter (Google Gemini) — image output pricing same as direct
-  ('google/gemini-3.1-flash-image-preview', 'OR Gemini 3.1 Flash', 0.50, 30.00, 2.0),
-  ('google/gemini-3-pro-image-preview', 'OR Gemini 3 Pro', 2.00, 120.00, 2.0),
+  -- OpenRouter (Google Gemini) — OR adds markup on image output tokens
+  ('google/gemini-3.1-flash-image-preview', 'OR Gemini 3.1 Flash', 0.50, 60.00, 2.0),
+  ('google/gemini-3-pro-image-preview', 'OR Gemini 3 Pro', 2.00, 240.00, 2.0),
   ('google/gemini-2.5-pro-preview-03-25', 'OR Gemini 2.5 Pro', 1.25, 10.00, 2.0),
   -- OpenRouter (other)
   ('x-ai/grok-3', 'OR Grok 3', 3.00, 15.00, 2.0)
