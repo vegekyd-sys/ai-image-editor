@@ -186,6 +186,36 @@ async function atomicDeduct(userId: string, credits: number): Promise<number> {
 }
 
 /**
+ * Deduct a fixed number of credits (for dynamic pricing like per-second video billing).
+ */
+export async function deductFixedCredits(
+  userId: string,
+  credits: number,
+  toolName: string,
+  model?: string,
+  durationMs?: number,
+  apiKeyId?: string | null,
+): Promise<{ charged: number; remaining: number }> {
+  if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
+  if (credits <= 0) return { charged: 0, remaining: 0 }
+
+  const remaining = await atomicDeduct(userId, credits)
+
+  const admin = getSupabaseAdmin()
+  await admin.from('usage_logs').insert({
+    user_id: userId,
+    api_key_id: apiKeyId || null,
+    tool_name: toolName,
+    model_used: model,
+    credits_charged: credits,
+    duration_ms: durationMs,
+    source: apiKeyId ? 'mcp' : 'app',
+  })
+
+  return { charged: credits, remaining }
+}
+
+/**
  * Get user's current credit balance.
  */
 export async function getBalance(userId: string): Promise<{ balance: number; lifetimePurchased: number; lifetimeUsed: number }> {

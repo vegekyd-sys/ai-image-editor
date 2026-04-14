@@ -66,13 +66,18 @@ async function handleMcp(req: Request): Promise<Response> {
     } : undefined,
 
     // Post-complete: deduct credits (token-based if usage available, else per-action)
-    onToolComplete: auth.type === 'user' ? async (toolName, model, durationMs, usage) => {
+    onToolComplete: auth.type === 'user' ? async (toolName, model, durationMs, usage, meta) => {
       lastToolModel = model;
       if (usage) {
         // Token-based billing — Gemini/OpenRouter tools that return usage
         await deductByTokens(auth.userId!, toolName, usage.modelId, usage.inputTokens, usage.outputTokens, durationMs, auth.keyId);
+      } else if (meta?.videoDurationSec) {
+        // Video: per-second billing — 22 credits/s ($0.11/s × 2x markup)
+        const videoCredits = Math.ceil(meta.videoDurationSec * 22);
+        const { deductFixedCredits } = await import('@/lib/billing/credits');
+        await deductFixedCredits(auth.userId!, videoCredits, toolName, model, durationMs, auth.keyId);
       } else {
-        // Per-action billing — ComfyUI, Kling, Suno etc.
+        // Per-action billing — ComfyUI, Suno etc.
         await deductCredits(auth.userId!, auth.keyId!, toolName, model, durationMs);
       }
     } : undefined,

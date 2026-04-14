@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
-import { requireCredits, deductCredits } from '@/lib/billing/credits'
+import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 
 export const maxDuration = 30
 
@@ -64,7 +64,9 @@ export async function POST(req: NextRequest) {
     if (error) throw error
 
     // Deduct credits for video generation (fire-and-forget)
-    deductCredits(user.id, null, 'create_video')
+    // Per-second billing: 22 credits/s ($0.11/s × 2x markup), default 10s if smart mode
+    const videoSec = duration || 10
+    deductFixedCredits(user.id, Math.ceil(videoSec * 22), 'create_video', undefined, undefined)
       .catch(e => console.error('[billing] animate deduct error:', e))
 
     return NextResponse.json({ animationId: animation.id, taskId })
