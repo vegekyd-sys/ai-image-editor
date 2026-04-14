@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { CREDIT_TIERS } from '@/lib/billing/tiers';
+import { useLocale } from '@/lib/i18n';
 
 const PLANS = [
   { id: 'basic', name: 'Basic', monthlyPrice: 990, credits: 1200 },
@@ -23,6 +24,7 @@ interface CreditPopupProps {
 }
 
 export default function CreditPopup({ open, onClose, balance, needed, subscription, projectId, success, waiting }: CreditPopupProps) {
+  const { t } = useLocale();
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<string>('pro');
   const [selectedPlan, setSelectedPlan] = useState<string>('basic');
@@ -137,10 +139,10 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
               animation: 'creditSpin 0.8s linear infinite',
             }} />
             <div style={{ fontSize: 18, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
-              Processing payment...
+              {t('billing.processingPayment')}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 6 }}>
-              This usually takes a few seconds
+              {t('billing.usuallyFewSeconds')}
             </div>
           </div>
 
@@ -187,11 +189,11 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
             </div>
 
             <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.95)', letterSpacing: '-0.02em', position: 'relative', zIndex: 1 }}>
-              Credits Added!
+              {t('billing.creditsAdded')}
             </div>
 
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 6, position: 'relative', zIndex: 1 }}>
-              Your balance has been updated
+              {t('billing.balanceUpdated')}
             </div>
 
             {/* Animated balance */}
@@ -211,7 +213,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
                 {animatedBalance.toLocaleString()}
               </div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                credits available
+                {t('billing.creditsAvailable')}
               </div>
             </div>
 
@@ -228,7 +230,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
                 position: 'relative', zIndex: 1,
               }}
             >
-              Continue Creating
+              {t('billing.continueCreating')}
             </button>
           </div>
         ) : (
@@ -238,7 +240,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
             <div style={{ padding: '24px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.02em' }}>
-                  Get More Credits
+                  {t('billing.getMoreCredits')}
                 </div>
                 <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
                   Balance: <span style={{ color: balance === 0 ? '#fbbf24' : 'rgba(255,255,255,0.6)' }}>{balance}</span> credits
@@ -335,12 +337,12 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
                                   fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
                                   background: 'rgba(192,38,211,0.2)', color: '#e879f9',
                                 }}>
-                                  Current
+                                  {t('billing.current')}
                                 </span>
                               )}
                             </div>
                             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                              {plan.credits.toLocaleString()} credits/month
+                              {plan.credits.toLocaleString()} {t('billing.creditsPerMonth')}
                             </div>
                           </div>
                           <div style={{ fontSize: 16, fontWeight: 700, color: isSelected && !isCurrent ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
@@ -367,8 +369,8 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
                     {loading?.startsWith('sub-')
                       ? '...'
                       : hasSubscription
-                        ? `Upgrade to ${PLANS.find(p => p.id === selectedPlan)?.name}`
-                        : `Subscribe to ${PLANS.find(p => p.id === selectedPlan)?.name}`}
+                        ? `${t('billing.upgradeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`
+                        : `${t('billing.subscribeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`}
                   </button>
                 </>
               )}
@@ -426,7 +428,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
                   >
                     {loading === selectedTier
                       ? '...'
-                      : `Top Up ${CREDIT_TIERS.find(c => c.id === selectedTier)?.credits.toLocaleString()} Credits`}
+                      : `${t('billing.topUp')} ${CREDIT_TIERS.find(c => c.id === selectedTier)?.credits.toLocaleString()} ${t('billing.credits')}`}
                   </button>
                 </>
               )}

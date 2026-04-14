@@ -199,6 +199,28 @@ const zh = {
   'landing.cta.sub': '修图、故事板、探索、视频。免费开始。',
   'landing.cta.button': '打开 Makaron',
 
+  // 计费
+  'billing.credits': '点数',
+  'billing.balance': '余额',
+  'billing.topUp': '充值',
+  'billing.getMoreCredits': '获取更多点数',
+  'billing.subscribe': '订阅',
+  'billing.upgrade': '升级',
+  'billing.perMonth': '/月',
+  'billing.creditsPerMonth': '点数/月',
+  'billing.exhausted': '点数已用尽',
+  'billing.topUpToContinue': '充值以继续',
+  'billing.creditsAdded': '点数已到账！',
+  'billing.balanceUpdated': '你的余额已更新',
+  'billing.continueCreating': '继续创作',
+  'billing.processingPayment': '正在处理支付...',
+  'billing.usuallyFewSeconds': '通常需要几秒钟',
+  'billing.orTopUp': '或一次性充值',
+  'billing.creditsAvailable': '点数可用',
+  'billing.subscribeTo': '订阅',
+  'billing.upgradeTo': '升级到',
+  'billing.current': '当前',
+
   // Misc
   'misc.toolUse': '工具调用',
   'misc.error': '错误',

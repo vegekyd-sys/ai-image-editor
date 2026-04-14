@@ -1006,10 +1006,10 @@ export default function AgentChatView({
                             {/* Text */}
                             <div className="flex-1 min-w-0">
                               <div className="text-[12px] font-medium" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                                Credits exhausted
+                                {t('billing.exhausted')}
                               </div>
                               <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                {bal} remaining · <span style={{ color: '#fbbf24' }}>top up to continue</span>
+                                {bal} remaining · <span style={{ color: '#fbbf24' }}>{t('billing.topUpToContinue')}</span>
                               </div>
                             </div>
 
@@ -1019,7 +1019,7 @@ export default function AgentChatView({
                               className="px-3 py-1.5 rounded-full flex-shrink-0 active:scale-90 transition-transform text-[11px] font-semibold"
                               style={{ background: 'rgba(192,38,211,0.2)', color: '#e879f9', border: '1px solid rgba(192,38,211,0.3)' }}
                             >
-                              Top Up
+                              {t('billing.topUp')}
                             </button>
                           </div>
                           {/* Accent bar */}
