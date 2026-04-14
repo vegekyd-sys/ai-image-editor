@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { streamTipsByCategory, ContentBlockedError, type UsageAccum } from '@/lib/gemini';
 import { getSkill } from '@/lib/workspace';
-import { requireCredits, deductByTokens } from '@/lib/billing/credits';
+import { requireCredits, deductByTokens, deductCredits } from '@/lib/billing/credits';
 
 export const maxDuration = 60;
 
@@ -58,9 +58,12 @@ export async function POST(req: NextRequest) {
             console.error('Tips stream error:', err);
           }
         } finally {
-          // Deduct credits based on token usage (fire-and-forget)
+          // Deduct credits: token-based if usage available, else per-action
           if (usageAccum.inputTokens > 0 && usageAccum.model) {
             deductByTokens(session.user.id, 'tips', usageAccum.model, usageAccum.inputTokens, usageAccum.outputTokens)
+              .catch(e => console.error('[billing] tips deduct error:', e));
+          } else {
+            deductCredits(session.user.id, null, 'tips')
               .catch(e => console.error('[billing] tips deduct error:', e));
           }
           controller.close();

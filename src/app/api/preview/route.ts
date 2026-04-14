@@ -53,12 +53,13 @@ export async function POST(req: NextRequest) {
 
     // Deduct credits (fire-and-forget)
     if (result.usage) {
-      // Token-based billing for Gemini
+      // Token-based billing (Gemini/OpenRouter with usage data)
       deductByTokens(user.id, 'preview', result.usage.modelId, result.usage.inputTokens, result.usage.outputTokens)
         .catch(e => console.error('[billing] preview deduct error:', e));
-    } else if (result.model !== 'gemini') {
-      // Per-action billing for ComfyUI backends (qwen/pony/wai)
-      deductCredits(user.id, null, `edit_image_${result.model}`)
+    } else {
+      // Per-action fallback (ComfyUI or Gemini without usage)
+      const toolName = result.model === 'gemini' ? 'preview' : `edit_image_${result.model}`;
+      deductCredits(user.id, null, toolName)
         .catch(e => console.error('[billing] preview deduct error:', e));
     }
 

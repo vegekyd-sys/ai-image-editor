@@ -506,7 +506,7 @@ export async function generatePreviewImageGoogle(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
-): Promise<string | null> {
+): Promise<{ image: string | null; usage?: { inputTokens: number; outputTokens: number; modelId: string } }> {
   const config: Record<string, unknown> = {
     responseModalities: ['IMAGE'],
   };
@@ -535,10 +535,14 @@ export async function generatePreviewImageGoogle(
   });
 
   checkBlockReason(result, 'Google');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const usageMeta = (result as any).usageMetadata;
+  const usage = usageMeta ? { inputTokens: usageMeta.promptTokenCount ?? 0, outputTokens: usageMeta.candidatesTokenCount ?? 0, modelId: MODEL } : undefined;
+
   const parts = result.candidates?.[0]?.content?.parts;
   if (!parts) {
     console.warn('[Google] No parts in response — model returned empty');
-    return null;
+    return { image: null, usage };
   }
   let text = '';
   let image: string | null = null;
@@ -560,7 +564,7 @@ export async function generatePreviewImageGoogle(
   } else {
     console.warn('[Google] No image in response parts');
   }
-  return image;
+  return { image, usage };
 }
 
 export async function generatePreviewImageOpenRouter(
@@ -568,7 +572,7 @@ export async function generatePreviewImageOpenRouter(
   editPrompt: string,
   aspectRatio?: string,
   thinkingEffort?: 'minimal' | 'high',
-): Promise<string | null> {
+): Promise<{ image: string | null; usage?: { inputTokens: number; outputTokens: number; modelId: string } }> {
   // Text-only generation (no input image) uses a different system prompt
   const isTextToImage = !imageBase64;
   const systemPrompt = isTextToImage
@@ -609,7 +613,7 @@ export async function generatePreviewImageOpenRouter(
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
     console.error(`[OpenRouter] ${res.status} (TTFB ${ttfb}ms): ${errText.slice(0, 200)}`);
-    return null;
+    return { image: null };
   }
 
   const t1 = Date.now();
@@ -617,10 +621,12 @@ export async function generatePreviewImageOpenRouter(
   const downloadMs = Date.now() - t1;
   console.log(`[OpenRouter] TTFB=${ttfb}ms download=${downloadMs}ms total=${Date.now() - t0}ms`);
 
+  const orUsage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, modelId: OPENROUTER_MODEL } : undefined;
+
   const choice = data.choices?.[0]?.message;
   if (!choice) {
     console.error('[OpenRouter] No choice in response:', JSON.stringify(data).slice(0, 300));
-    return null;
+    return { image: null, usage: orUsage };
   }
 
   // Log text content (may contain refusal or explanation)
@@ -638,12 +644,12 @@ export async function generatePreviewImageOpenRouter(
         const t2 = Date.now();
         const result = await ensureJpeg(url);
         console.log(`[OpenRouter] Image generated: input=${(inputLen/1024).toFixed(0)}KB output=${(outputLen/1024).toFixed(0)}KB ensureJpeg=${Date.now() - t2}ms`);
-        return result;
+        return { image: result, usage: orUsage };
       }
     }
   }
   console.warn('[OpenRouter] No image in response, content:', (choice.content || '').slice(0, 100));
-  return null;
+  return { image: null, usage: orUsage };
 }
 
 // ── Multi-Reference Image Generation ────────────────────────────
@@ -681,9 +687,10 @@ export async function generateImageWithReferences(
   // NOTE: images[0] is currentImage (edit base), images[last] is originalImage (reference only)
   console.warn('⚠️ [generateImageWithReferences] multi-image failed, falling back to single image');
   const base = images[0].url;
-  return PROVIDER === 'openrouter'
-    ? generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort)
-    : generatePreviewImageGoogle(base, editPrompt, aspectRatio);
+  const fallback = PROVIDER === 'openrouter'
+    ? await generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort)
+    : await generatePreviewImageGoogle(base, editPrompt, aspectRatio);
+  return fallback.image;
 }
 
 // ── Multi-Image Generation (for experiments) ─────────────────────
@@ -1144,13 +1151,12 @@ async function* streamTipsByCategoryOpenRouter(
 
   tlog(`[tips:openrouter:${category}] headers received at +${Date.now() - t0}ms`);
   yield* withEditPromptRetry(
-    parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`), `or:${category}`, category),
+    parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`, usageAccum), `or:${category}`, category),
     imageBase64, category, `or:${category}`,
   );
 
-  // OpenRouter streaming doesn't reliably expose usage in SSE chunks.
-  // Set model for billing; tokens will be estimated if not available.
-  if (usageAccum && !usageAccum.model) {
+  // Set model for billing (usage tokens already captured from SSE final chunk)
+  if (usageAccum) {
     usageAccum.model = OPENROUTER_MODEL;
   }
 
@@ -1225,7 +1231,7 @@ async function* streamToTextIterator(
   }
 }
 
-async function* sseToTextIterator(res: Response, label: string): AsyncGenerator<string> {
+async function* sseToTextIterator(res: Response, label: string, usageOut?: UsageAccum): AsyncGenerator<string> {
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -1258,6 +1264,11 @@ async function* sseToTextIterator(res: Response, label: string): AsyncGenerator<
         const choice = chunk.choices?.[0];
         if (choice?.finish_reason === 'content_filter') {
           throw new ContentBlockedError('content_filter');
+        }
+        // Capture usage from final chunk (OpenRouter includes it in last SSE event)
+        if (chunk.usage && usageOut) {
+          usageOut.inputTokens = chunk.usage.prompt_tokens ?? 0;
+          usageOut.outputTokens = chunk.usage.completion_tokens ?? 0;
         }
         const text = choice?.delta?.content;
         if (text) {

@@ -37,19 +37,19 @@ export const geminiBackend: ModelBackend = {
 
     // Standard single-image or text-to-image
     if (PROVIDER === 'openrouter') {
-      const image = await generatePreviewImageOpenRouter(
+      const result = await generatePreviewImageOpenRouter(
         req.image ?? '',
         req.prompt,
         req.aspectRatio,
         req.thinkingEffort,
       );
-      return { image };
+      return { image: result.image, usage: result.usage };
     }
-    const image = await generatePreviewImageGoogle(
+    const result = await generatePreviewImageGoogle(
       req.image ?? '',
       req.prompt,
       req.aspectRatio,
     );
-    return { image };
+    return { image: result.image, usage: result.usage };
   },
 };
