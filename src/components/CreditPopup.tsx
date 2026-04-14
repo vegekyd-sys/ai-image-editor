@@ -30,8 +30,12 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
 
   const hasSubscription = !!(subscription && subscription.status !== 'canceled');
 
-  // Tab: no subscription → subscribe only; has subscription → topup default
-  const [tab, setTab] = useState<'subscribe' | 'topup'>(hasSubscription ? 'topup' : 'subscribe');
+  const [tab, setTab] = useState<'subscribe' | 'topup'>('subscribe');
+
+  // Sync tab when subscription status changes (async fetch)
+  useEffect(() => {
+    setTab(hasSubscription ? 'topup' : 'subscribe');
+  }, [hasSubscription]);
   const currentPlanIndex = hasSubscription ? PLANS.findIndex(p => p.id === subscription!.planId) : -1;
 
   // Animate balance count-up on success

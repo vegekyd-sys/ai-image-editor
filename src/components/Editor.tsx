@@ -191,6 +191,14 @@ export default function Editor({
   const [creditSuccess, setCreditSuccess] = useState(false);
   const [creditWaiting, setCreditWaiting] = useState(false);
 
+  // Fetch credit balance + subscription info on mount
+  useEffect(() => {
+    fetch('/api/billing/credits').then(r => r.json()).then(data => {
+      setCreditBalance(data.balance ?? 0);
+      setCreditSubscription(data.subscription ?? null);
+    }).catch(() => {});
+  }, []);
+
   // Detect ?topped_up=1 after Stripe redirect
   useEffect(() => {
     if (typeof window === 'undefined') return;
