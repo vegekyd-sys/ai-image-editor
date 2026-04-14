@@ -61,7 +61,7 @@ function getBedrockForTips() {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
   });
-  return _bedrockForTips('us.anthropic.claude-sonnet-4-5-20250929-v1:0');
+  return _bedrockForTips('anthropic.claude-sonnet-4-6');
 }
 
 // ── Google SDK singleton ────────────────────────────────────────
@@ -1204,7 +1204,7 @@ async function* streamTipsByCategoryBedrock(
       if (usage) {
         usageAccum.inputTokens += usage.inputTokens ?? 0;
         usageAccum.outputTokens += usage.outputTokens ?? 0;
-        usageAccum.model = 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
+        usageAccum.model = 'anthropic.claude-sonnet-4-6';
       }
     } catch { /* best effort */ }
   }

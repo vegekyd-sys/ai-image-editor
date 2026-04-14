@@ -9,14 +9,17 @@ CREATE TABLE IF NOT EXISTS token_rates (
   updated_at timestamptz DEFAULT now()
 );
 
--- Seed initial token rates
+-- Seed initial token rates (official prices as of 2026-04-14)
 INSERT INTO token_rates (model_id, display_name, input_per_1m, output_per_1m, markup) VALUES
-  -- Bedrock
-  ('us.anthropic.claude-opus-4-6-v1', 'Claude Opus 4.6', 15.00, 75.00, 2.0),
-  ('us.anthropic.claude-sonnet-4-5-20250929-v1:0', 'Claude Sonnet 4.5', 3.00, 15.00, 2.0),
+  -- Bedrock Claude (official Anthropic pricing)
+  ('us.anthropic.claude-opus-4-6-v1', 'Claude Opus 4.6', 5.00, 25.00, 2.0),
+  ('anthropic.claude-sonnet-4-6', 'Claude Sonnet 4.6', 3.00, 15.00, 2.0),
   -- Google direct
   ('gemini-3.1-flash-image-preview', 'Gemini 3.1 Flash', 0.10, 0.40, 2.0),
   ('gemini-3-pro-image-preview', 'Gemini 3 Pro', 1.25, 5.00, 2.0),
+  ('gemini-3.1-pro-preview', 'Gemini 3.1 Pro', 2.00, 12.00, 2.0),
+  ('gemini-2.5-pro', 'Gemini 2.5 Pro', 1.25, 10.00, 2.0),
+  ('gemini-2.5-flash', 'Gemini 2.5 Flash', 0.30, 2.50, 2.0),
   -- OpenRouter (Google Gemini)
   ('google/gemini-3.1-flash-image-preview', 'OR Gemini 3.1 Flash', 0.10, 0.40, 2.0),
   ('google/gemini-3-pro-image-preview', 'OR Gemini 3 Pro', 1.25, 5.00, 2.0),
