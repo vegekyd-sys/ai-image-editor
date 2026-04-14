@@ -128,18 +128,17 @@ describe('onPreviewFrame callback', () => {
     });
   });
 
-  it('sets message.image when preview URL received', () => {
+  it('appends to message.images array', () => {
     const { callbacks } = makeAgentCallbacks(ctx);
     callbacks.onNewTurn?.('msg-1');
     callbacks.onPreviewFrame?.('https://storage.example.com/drafts/design-snap3-frame0.jpg');
 
     expect(messages).toHaveLength(1);
-    expect(messages[0].image).toBe('https://storage.example.com/drafts/design-snap3-frame0.jpg');
+    expect(messages[0].images).toEqual(['https://storage.example.com/drafts/design-snap3-frame0.jpg']);
   });
 
   it('does nothing if no current message', () => {
     const { callbacks } = makeAgentCallbacks(ctx);
-    // No onNewTurn called → no currentMsgId
     callbacks.onPreviewFrame?.('https://storage.example.com/some-url.jpg');
     expect(messages).toHaveLength(0);
   });
@@ -153,20 +152,24 @@ describe('onPreviewFrame callback', () => {
 
     callbacks.onPreviewFrame?.('https://storage.example.com/frame-42.jpg');
 
-    // Should update msg-2 (the current message), not msg-1
     const msg1 = messages.find(m => m.id === 'msg-1');
     const msg2 = messages.find(m => m.id === 'msg-2');
-    expect(msg1?.image).toBeUndefined();
-    expect(msg2?.image).toBe('https://storage.example.com/frame-42.jpg');
+    expect(msg1?.images).toBeUndefined();
+    expect(msg2?.images).toEqual(['https://storage.example.com/frame-42.jpg']);
   });
 
-  it('overwrites previous preview image on same message', () => {
+  it('accumulates multiple preview frames on same message', () => {
     const { callbacks } = makeAgentCallbacks(ctx);
     callbacks.onNewTurn?.('msg-1');
     callbacks.onPreviewFrame?.('https://storage.example.com/frame-0.jpg');
     callbacks.onPreviewFrame?.('https://storage.example.com/frame-100.jpg');
+    callbacks.onPreviewFrame?.('https://storage.example.com/frame-200.jpg');
 
-    expect(messages[0].image).toBe('https://storage.example.com/frame-100.jpg');
+    expect(messages[0].images).toEqual([
+      'https://storage.example.com/frame-0.jpg',
+      'https://storage.example.com/frame-100.jpg',
+      'https://storage.example.com/frame-200.jpg',
+    ]);
   });
 });
 

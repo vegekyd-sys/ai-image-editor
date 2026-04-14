@@ -318,11 +318,11 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     },
 
     onPreviewFrame: (workspaceUrl) => {
-      // Show the preview frame screenshot inline in CUI
+      // Append preview frame to images array (supports multiple frames per message)
       if (workspaceUrl && currentMsgId) {
         const id = currentMsgId;
         ctx.setMessages(prev => prev.map(m =>
-          m.id === id ? { ...m, image: workspaceUrl } : m
+          m.id === id ? { ...m, images: [...(m.images || []), workspaceUrl] } : m
         ));
       }
     },
