@@ -295,20 +295,24 @@ export default function AdminPage() {
             </button>
           </div>
 
+          <h3 className="text-sm font-medium text-white/60 mb-3">Per-action tools (fixed credits)</h3>
+          <p className="text-xs text-white/30 mb-3">Video tools: credits = per second. Music/ComfyUI: per task. Token-based tools (Gemini, Claude) use Token Rates below.</p>
+
           <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-white/50 text-xs">
                   <th className="text-left px-4 py-3 font-medium">Tool</th>
-                  <th className="text-right px-4 py-3 font-medium">Supplier Cost</th>
+                  <th className="text-right px-4 py-3 font-medium">Supplier $</th>
                   <th className="text-right px-4 py-3 font-medium">Credits</th>
-                  <th className="text-center px-4 py-3 font-medium">Free?</th>
+                  <th className="text-center px-4 py-3 font-medium">Unit</th>
                   <th className="text-right px-4 py-3 font-medium w-20"></th>
                 </tr>
               </thead>
               <tbody>
                 {pricing.map((p) => {
                   const editing = editingPricing[p.tool_name]
+                  const isVideo = p.tool_name.includes('video') && !p.tool_name.includes('status')
                   return (
                     <tr key={p.tool_name} className="border-b border-white/5 hover:bg-white/[0.02]">
                       <td className="px-4 py-3 font-mono text-xs">{p.tool_name}</td>
@@ -344,8 +348,8 @@ export default function AdminPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`text-xs ${p.is_free ? 'text-green-400' : 'text-white/20'}`}>
-                          {p.is_free ? '✓' : '—'}
+                        <span className="text-xs text-white/30">
+                          {p.is_free ? 'free' : isVideo ? '/sec' : '/task'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
