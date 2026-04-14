@@ -77,7 +77,7 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // Agent React design for browser rendering
+  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | { type: 'done' }
@@ -1179,8 +1179,11 @@ export async function* runMakaronAgent(
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
             const published = (ctx as any).__pendingDesignPublished ?? false;
-            console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars`);
-            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published };
+            // Get preview URL from latest draft (if available)
+            const drafts = (ctx as any).__designDrafts as { previewUrl?: string }[] | undefined;
+            const previewUrl = drafts?.[drafts.length - 1]?.previewUrl || undefined;
+            console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
+            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published, previewUrl };
             (ctx as any).__pendingDesign = null;
             (ctx as any).__pendingDesignPublished = undefined;
           } else if (toolName === 'run_code') {

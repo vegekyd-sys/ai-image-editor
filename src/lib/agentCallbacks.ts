@@ -338,19 +338,27 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
 
     onRender: (design) => {
       const published = (design as Record<string, unknown>).published === true;
-      console.log(`🎨 [agent] render received (published=${published}): ${design.width}x${design.height}, code ${design.code.length} chars`);
+      const previewUrl = (design as Record<string, unknown>).previewUrl as string | undefined;
+      console.log(`🎨 [agent] render received (published=${published}): ${design.width}x${design.height}, code ${design.code.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
       ctx.setAgentStatus(ctx.t('status.renderingDesign'));
+
+      // Show preview image in CUI (so user sees what Agent sees)
+      if (previewUrl && currentMsgId) {
+        ctx.setMessages(prev => prev.map(m =>
+          m.id === currentMsgId ? { ...m, image: previewUrl } : m
+        ));
+      }
+
       if (published) {
         // Published: create real Snapshot via poster-first flow
         ctx.pendingDesignMsgIdRef.current = currentMsgId;
         ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
-        ctx.setDraftDesign?.(null); // clear any draft preview
-        ctx.setDesignDraftParent?.(null); // clear design draft virtual slot
+        ctx.setDraftDesign?.(null);
+        ctx.setDesignDraftParent?.(null);
         ctx.setPendingDesign(design);
       } else {
         // Draft: show as virtual slot in timeline (like tips draft)
         ctx.setDraftDesign?.(design);
-        // Set draftParentIndex to latest snapshot for virtual slot placement
         const lastSnapIdx = ctx.snapshotsRef.current.length - 1;
         ctx.setDesignDraftParent?.(lastSnapIdx >= 0 ? lastSnapIdx : 0);
       }
