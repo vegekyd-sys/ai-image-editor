@@ -332,4 +332,54 @@ describe('credits', () => {
       }));
     });
   });
+
+  describe('billing kill switch', () => {
+    const billingDisabledChain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { value: 'false' }, error: null }),
+    };
+
+    it('requireCredits passes when billing is off, even with 0 balance', async () => {
+      const chain = mockQuery({ balance: 0 });
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingDisabledChain : chain);
+
+      const { requireCredits } = await import('@/lib/billing/credits');
+      const result = await requireCredits('user-1', 100);
+      expect(result.ok).toBe(true);
+    });
+
+    it('deductByTokens returns 0 charged when billing is off', async () => {
+      const rates = [
+        { model_id: 'us.anthropic.claude-opus-4-6-v1', display_name: 'Opus', input_per_1m: 15, output_per_1m: 75, markup: 2, is_active: true },
+      ];
+      const ratesChain = mockQuery(rates);
+      ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
+
+      mockFrom.mockImplementation((t: string) => {
+        if (t === 'app_settings') return billingDisabledChain;
+        if (t === 'token_rates') return ratesChain;
+        return mockQuery(null);
+      });
+
+      const { deductByTokens } = await import('@/lib/billing/credits');
+      const result = await deductByTokens('user-1', 'agent', 'us.anthropic.claude-opus-4-6-v1', 15000, 1000);
+      expect(result.charged).toBe(0);
+      expect(result.remaining).toBe(0);
+      // RPC should NOT have been called
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    it('deductCredits returns 0 charged when billing is off', async () => {
+      mockFrom.mockImplementation((t: string) => {
+        if (t === 'app_settings') return billingDisabledChain;
+        return mockQuery(null);
+      });
+
+      const { deductCredits } = await import('@/lib/billing/credits');
+      const result = await deductCredits('user-1', null, 'create_video');
+      expect(result.charged).toBe(0);
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+  });
 });
