@@ -232,6 +232,19 @@ function createTools(ctx: AgentContext) {
           { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           { currentImage: editTarget, originalImage: ctx.originalImage, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
+        // Bill for image generation (separate from Agent LLM tokens)
+        if (skillResult.usage) {
+          import('./billing/credits').then(({ deductByTokens }) =>
+            deductByTokens(ctx.userId ?? '', 'generate_image', skillResult.usage!.modelId, skillResult.usage!.inputTokens, skillResult.usage!.outputTokens)
+              .catch(e => console.error('[billing] generate_image deduct error:', e))
+          );
+        } else if (skillResult.usedModel && skillResult.usedModel !== 'gemini') {
+          // Per-action for ComfyUI models
+          import('./billing/credits').then(({ deductCredits }) =>
+            deductCredits(ctx.userId ?? '', null, `edit_image_${skillResult.usedModel}`)
+              .catch(e => console.error('[billing] generate_image deduct error:', e))
+          );
+        }
         // NSFW detection: flag session so all subsequent calls skip Gemini
         if (skillResult.contentBlocked) ctx.isNsfw = true;
         if (skillResult.image) {
