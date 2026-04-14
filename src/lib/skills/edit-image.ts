@@ -72,6 +72,7 @@ export async function editImage(
   let usedModel: ModelId = 'gemini';
   let lastFailedModels: ModelId[] | undefined;
   let contentBlocked = false;
+  let lastUsage: { inputTokens: number; outputTokens: number; modelId: string } | undefined;
   const MAX_ATTEMPTS = 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -91,6 +92,7 @@ export async function editImage(
     usedModel = genResult.model;
     lastFailedModels = genResult.failedModels;
     if (genResult.contentBlocked) contentBlocked = true;
+    if (genResult.usage) lastUsage = genResult.usage;
 
     if (result) break;
     if (attempt < MAX_ATTEMPTS) {
@@ -108,5 +110,5 @@ export async function editImage(
   }
 
   console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel}`);
-  return { success: true, message: 'Image generated successfully.', image: result, usedModel, contentBlocked };
+  return { success: true, message: 'Image generated successfully.', image: result, usedModel, contentBlocked, usage: lastUsage };
 }

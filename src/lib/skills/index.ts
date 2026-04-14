@@ -12,4 +12,5 @@ export interface SkillResult {
   image?: string;              // base64 result image (data URL)
   usedModel?: ModelId;         // which model generated the image
   contentBlocked?: boolean;    // Gemini refused content (NSFW) — caller should set isNsfw flag
+  usage?: { inputTokens: number; outputTokens: number; modelId: string };  // token usage for billing
 }
