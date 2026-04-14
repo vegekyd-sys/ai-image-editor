@@ -16,6 +16,7 @@ export interface AgentCallbackContext {
   setAnimations: (updater: (prev: ProjectAnimation[]) => ProjectAnimation[]) => void;
   setPendingDesign: (d: DesignPayload | null) => void;
   setDraftDesign?: (d: DesignPayload | null) => void;
+  setDesignDraftParent?: (idx: number | null) => void;
   setPendingNotification?: (n: { text: string; targetIndex: number }) => void;
   setSelectedVideoId?: (id: string) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -344,10 +345,14 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         ctx.pendingDesignMsgIdRef.current = currentMsgId;
         ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
         ctx.setDraftDesign?.(null); // clear any draft preview
+        ctx.setDesignDraftParent?.(null); // clear design draft virtual slot
         ctx.setPendingDesign(design);
       } else {
-        // Draft: preview in canvas only, no Snapshot
+        // Draft: show as virtual slot in timeline (like tips draft)
         ctx.setDraftDesign?.(design);
+        // Set draftParentIndex to latest snapshot for virtual slot placement
+        const lastSnapIdx = ctx.snapshotsRef.current.length - 1;
+        ctx.setDesignDraftParent?.(lastSnapIdx >= 0 ? lastSnapIdx : 0);
       }
     },
 

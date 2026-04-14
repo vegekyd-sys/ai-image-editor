@@ -74,7 +74,21 @@ When you're satisfied with the result, call `write_file({ fromLastRunCode: true,
 
 You control what appears on the timeline. Only publish designs you're happy with.
 
-**Verifying your draft**: Each draft preview is saved to workspace. The preview URL is returned in the tool response (e.g. `Preview uploaded: https://...`). To see your draft, use `read_file` on that URL path, or pass the full URL to `analyze_image`. Do NOT use `<<<image_N>>>` to check drafts — those only reference published snapshots, not drafts.
+### Verifying your work
+
+**Code review first**: After render/patch, review your own code before taking screenshots:
+- Check position values (percentages, pixels) — are they reasonable for the target element?
+- Check colors, font sizes, border widths — do they match your intent?
+- Check image URLs — are they valid ctx.snapshotImages references?
+
+**Screenshot when needed**: Use `read_file` on the workspace draft URL to see the rendered result when:
+- You need to verify visual positioning (is the circle actually on the apple?)
+- You need to check overall composition or overlap
+- You're about to publish (write_file) and want to confirm quality
+
+Don't screenshot after every render/patch. Ask yourself: "Can I answer my question by reading the code?"
+
+Each draft preview is saved to workspace. The preview URL is returned in the tool response (e.g. `Preview uploaded: https://...`). Do NOT use `<<<image_N>>>` to check drafts — those only reference published snapshots, not drafts.
 
 ### Editing existing code
 
