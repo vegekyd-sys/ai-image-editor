@@ -15,6 +15,8 @@ export interface AgentCallbackContext {
   setAgentStatus: (status: string) => void;
   setAnimations: (updater: (prev: ProjectAnimation[]) => ProjectAnimation[]) => void;
   setPendingDesign: (d: DesignPayload | null) => void;
+  setDraftDesign?: (d: DesignPayload | null) => void;
+  setDesignDraftParent?: (idx: number | null) => void;
   setPendingNotification?: (n: { text: string; targetIndex: number }) => void;
   setSelectedVideoId?: (id: string) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -340,11 +342,29 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     },
 
     onRender: (design) => {
-      console.log(`🎨 [agent] render received: ${design.width}x${design.height}, code ${design.code.length} chars`);
+      const published = (design as Record<string, unknown>).published === true;
+      const previewUrl = (design as Record<string, unknown>).previewUrl as string | undefined;
+      console.log(`🎨 [agent] render received (published=${published}): ${design.width}x${design.height}, code ${design.code.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
       setStatus(ctx.t('status.renderingDesign'));
-      ctx.pendingDesignMsgIdRef.current = currentMsgId;
-      ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
-      ctx.setPendingDesign(design);
+
+      // Show preview image in CUI (so user sees what Agent sees)
+      if (previewUrl && currentMsgId) {
+        ctx.setMessages(prev => prev.map(m =>
+          m.id === currentMsgId ? { ...m, image: previewUrl } : m
+        ));
+      }
+
+      if (published) {
+        ctx.pendingDesignMsgIdRef.current = currentMsgId;
+        ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
+        ctx.setDraftDesign?.(null);
+        ctx.setDesignDraftParent?.(null);
+        ctx.setPendingDesign(design);
+      } else {
+        ctx.setDraftDesign?.(design);
+        const lastSnapIdx = ctx.snapshotsRef.current.length - 1;
+        ctx.setDesignDraftParent?.(lastSnapIdx >= 0 ? lastSnapIdx : 0);
+      }
     },
 
     onDone: () => {

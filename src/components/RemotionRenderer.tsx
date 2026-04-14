@@ -124,7 +124,6 @@ interface RemotionRendererProps {
 export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, onContainerRef, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const initRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
 
@@ -135,8 +134,6 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     : 1;
 
   useEffect(() => {
-    if (initRef.current) return;
-    initRef.current = true;
     preloadBabel().catch(() => {});
     const comp = evalRemotionJSX(design.code);
     if (!comp) { onError?.('Failed to compile design code'); return; }

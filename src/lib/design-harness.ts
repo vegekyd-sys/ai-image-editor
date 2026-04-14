@@ -23,8 +23,8 @@ export function validateDesign(result: DesignResult): string | null {
   // ── Auto-fix: Replace <img> with Remotion <Img> for delayRender support ──
   result.code = autoFixImgTags(result.code);
 
-  // ── Check 1: Compile ──
-  const compileError = checkCompile(result.code);
+  // ── Check 1: Compile + execute with mock scope ──
+  const compileError = checkCompile(result.code, result);
   if (compileError) return compileError;
 
   // ── Check 2: Image references ──
@@ -64,8 +64,8 @@ function autoFixImgTags(code: string): string {
   return fixed;
 }
 
-/** Check that code compiles with Sucrase AND passes new Function() parsing */
-function checkCompile(code: string): string | null {
+/** Compile code with Sucrase then execute component with mock scope to catch runtime errors */
+function checkCompile(code: string, result?: DesignResult | null): string | null {
   try {
     const { code: compiled } = sucraseTransform(code.trim(), {
       transforms: ['typescript', 'jsx'],
@@ -74,7 +74,28 @@ function checkCompile(code: string): string | null {
 
     // Dry-run: verify compiled JS is valid in new Function() (matches browser eval path)
     const fnName = code.match(/function\s+(\w+)/)?.[1] || 'Design';
-    new Function(compiled + '\nreturn ' + fnName + ';');
+
+    // Execute the component with mock scope to catch runtime errors
+    // (props undefined, missing variables, wrong API usage, etc.)
+    const mockElement = (...args: unknown[]) => ({ type: 'div', props: args[1] || {}, children: args.slice(2) });
+    const noop = () => {};
+    const mockScope: Record<string, unknown> = {
+      React: { createElement: mockElement, Fragment: 'Fragment' },
+      useState: (init: unknown) => [typeof init === 'function' ? (init as () => unknown)() : init, noop],
+      useEffect: noop, useCallback: (fn: unknown) => fn, useMemo: (fn: () => unknown) => fn(),
+      useRef: (init: unknown) => ({ current: init }),
+      useCurrentFrame: () => 0,
+      useVideoConfig: () => ({ width: 1080, height: 1350, fps: 30, durationInFrames: 1 }),
+      interpolate: (frame: number) => frame,
+      spring: () => 0,
+      Sequence: 'Sequence', Series: 'Series', Img: 'Img', AbsoluteFill: 'AbsoluteFill', Audio: 'Audio',
+    };
+    const scopeKeys = Object.keys(mockScope);
+    const scopeValues = Object.values(mockScope);
+    const factory = new Function(...scopeKeys, compiled + '\nreturn ' + fnName + ';');
+    const Component = factory(...scopeValues);
+    // Call with empty props — catches "props is not defined", ReferenceError, TypeError, etc.
+    Component(result?.props || {});
 
     return null;
   } catch (err) {
@@ -94,11 +115,11 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
     return '⚠️ Design rejected: ctx.snapshotImages[N] was passed as a string literal instead of being evaluated. Use template literal interpolation: `${ctx.snapshotImages[N]}` to embed the actual URL. Regenerate.';
   }
 
-  // Large base64 embedded in code or props (>500KB base64 = too heavy for rendering)
-  // Small base64 (<500KB) is allowed for thumbnails, icons, etc.
-  if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{512000,}/.test(serialized)) {
-    console.warn('⚠️ [design-harness] found large base64 (>500KB) in design');
-    return '⚠️ Design rejected: Base64 image data >500KB found in code/props. Use ctx.snapshotImages[N] URLs for full-size images. Regenerate.';
+  // Large base64 embedded in code or props (>5MB base64 = too heavy for rendering)
+  // Smaller base64 (<5MB) is allowed for thumbnails, icons, workspace draft images, etc.
+  if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{5120000,}/.test(serialized)) {
+    console.warn('⚠️ [design-harness] found large base64 (>5MB) in design');
+    return '⚠️ Design rejected: Base64 image data >5MB found in code/props. Use ctx.snapshotImages[N] URLs for full-size images. Regenerate.';
   }
 
   return null;

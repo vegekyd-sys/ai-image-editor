@@ -30,7 +30,7 @@ const bedrock = createAmazonBedrock({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
 });
-const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-sonnet-4-6');
+const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,8 +77,8 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[] }  // Agent React design for browser rendering
-  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[] }  // @deprecated — backward compat alias for 'render'
+  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
+  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | { type: 'done' }
   | { type: 'error'; message: string };
@@ -316,7 +316,7 @@ function createTools(ctx: AgentContext) {
         }
 
         if (!imageSource || imageSource.startsWith('__design_pending_')) {
-          return { base64Data: '', mimeType: 'image/jpeg', question, error: imageSource?.startsWith('__design_pending_') ? 'This is a design snapshot — the image was rendered in the browser and is not available for server-side analysis. You can describe it based on the code you wrote.' : 'No image available to analyze. Generate an image first using generate_image.' };
+          return { base64Data: '', mimeType: 'image/jpeg', question, error: 'No image available to analyze. Generate an image first using generate_image.' };
         }
 
         const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
@@ -436,12 +436,13 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-Set fromLastRunCode=true to save the last run_code output — path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.`,
+Set fromLastRunCode=true to PUBLISH the last run_code output (design or image) — this creates a real Snapshot on the timeline that the user can see. Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.
+Every run_code output is a draft (preview only). Call write_file({ fromLastRunCode: true }) to publish when you're satisfied with the result.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Path is auto-generated with project ID + snapshot number.'),
+        fromLastRunCode: z.boolean().optional().describe('Save and PUBLISH the last run_code output (design or image) to timeline. Path is auto-generated with project ID + snapshot number.'),
       }),
       execute: async ({ path: filePath, name, content, fromLastRunCode }) => {
         if (!ctx.supabase || !ctx.userId) {
@@ -469,9 +470,42 @@ Set fromLastRunCode=true to save the last run_code output — path is auto-gener
           return { success: false, message: 'No content to write. Provide content or set fromLastRunCode=true.' };
         }
         const result = await workspace.writeFile(savePath, fileContent, ctx.supabase, ctx.userId);
-        return result.success
-          ? { success: true, message: `Saved: ${savePath}`, storageUrl: result.storageUrl }
-          : { success: false, message: `Write failed: ${result.error}` };
+        if (!result.success) {
+          return { success: false, message: `Write failed: ${result.error}` };
+        }
+
+        // Publish: when fromLastRunCode, promote the last draft to a real Snapshot
+        if (fromLastRunCode) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const drafts = (ctx as any).__runCodeDrafts || [];
+          const lastDraft = drafts[drafts.length - 1];
+
+          if (lastDraft?.type === 'design') {
+            // Design draft → publish via pendingDesign (renders on frontend)
+            const designPayload = lastDraft.payload;
+            const preview = lastDraft.previewBase64 || '';
+
+            ctx.snapshotImages.push(preview);
+            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (ctx as any).__pendingDesign = designPayload;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (ctx as any).__pendingDesignPublished = true;
+
+            console.log(`📌 [agent] design published via write_file: <<<image_${ctx.snapshotImages.length}>>>`);
+          } else if (lastDraft?.type === 'image') {
+            // Image draft → push to snapshotImages + emit via generatedImages
+            const imageData = lastDraft.imageBase64;
+            ctx.snapshotImages.push(imageData);
+            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+            ctx.generatedImages.push(imageData);
+
+            console.log(`📌 [agent] image published via write_file: <<<image_${ctx.snapshotImages.length}>>>`);
+          }
+        }
+
+        return { success: true, message: `Saved: ${savePath}`, storageUrl: result.storageUrl };
       },
     }),
 
@@ -620,12 +654,13 @@ Your code must return a value:
             return null;
           };
 
-          // Helper: push image to generatedImages so it shows in CUI
+          // Helper: store image as draft (published via write_file)
           const pushImage = (b64: string, mime: string) => {
             const dataUrl = `data:${mime};base64,${b64}`;
-            ctx.generatedImages.push(dataUrl);
-            ctx.snapshotImages.push(dataUrl);
             ctx.currentImage = dataUrl;
+            // Store as draft — published to timeline via write_file({ fromLastRunCode: true })
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+            (ctx as any).__runCodeDrafts.push({ type: 'image', imageBase64: dataUrl, previewBase64: dataUrl });
           };
 
           // { type: 'patch', edits: [...] } — Incremental search & replace on last design
@@ -652,12 +687,49 @@ Your code must return a value:
             if (harnessError) return { type: 'text' as const, content: harnessError };
 
             (ctx as any).__pendingDesign = patched;
+            (ctx as any).__pendingDesignPublished = false; // draft — canvas preview only, no snapshot
             (ctx as any).__lastDesignPayload = patched;
             (ctx as any).__lastRunCode = JSON.stringify(patched, null, 2);
-            const newIdx = ctx.snapshotImages.length + 1;
-            ctx.snapshotImages.push(''); // placeholder — real URL set after frontend upload
-            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-            return { type: 'text' as const, content: `Patched ${result.edits.length} edit(s) — rendering in browser as <<<image_${newIdx}>>>. Save now: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
+
+            // Track draft for potential later publish via write_file
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+
+            // Server-side preview for patch + upload to workspace
+            let patchPreview = '';
+            let draftPreviewBase64 = '';
+            let draftPreviewUrl = '';
+            try {
+              const { renderDesignFrame } = await import('./remotion-server');
+              const fps = patched.animation?.fps || 30;
+              const totalFrames = patched.animation ? Math.max(1, Math.round(fps * patched.animation.durationInSeconds)) : 1;
+              const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
+              const jpegBuffer = await renderDesignFrame(patched, previewFrame);
+              draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
+              // Upload draft preview to workspace so Agent can reference it
+              if (ctx.supabase && ctx.userId) {
+                const draftN = ((ctx as any).__runCodeDrafts?.length || 0) + 1;
+                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
+                const wsResult = await workspace.writeFile(draftPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+                if (wsResult.storageUrl) draftPreviewUrl = wsResult.storageUrl;
+              }
+              patchPreview = draftPreviewUrl
+                ? ` Preview uploaded: ${draftPreviewUrl}`
+                : ` Preview captured (frame ${previewFrame}).`;
+              console.log(`🖼️ [agent] patch preview: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB${draftPreviewUrl ? ' → workspace' : ''}`);
+            } catch (err) {
+              console.warn('⚠️ [agent] patch preview failed:', (err as Error).message);
+            }
+
+            // Update last draft (patch updates existing draft, doesn't create new one)
+            const drafts = (ctx as any).__runCodeDrafts;
+            if (drafts.length > 0) {
+              drafts[drafts.length - 1] = { type: 'design', payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl };
+            } else {
+              drafts.push({ type: 'design', payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
+            }
+
+            const draftIdx = drafts.length;
+            return { type: 'text' as const, content: `Patched — draft ${draftIdx} updated.${patchPreview} Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -695,37 +767,86 @@ Your code must return a value:
               ...(result.editables ? { editables: result.editables } : {}),
             };
             (ctx as any).__pendingDesign = designPayload;
+            (ctx as any).__pendingDesignPublished = false; // draft — canvas preview only, no snapshot
             (ctx as any).__lastDesignPayload = designPayload;
             // Store for write_file({ fromLastRunCode: true })
             (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
-            // Design screenshot is rendered on the frontend — not available server-side.
-            // Tell Agent to review its own code if changes needed, not call analyze_image.
-            const newIdx = ctx.snapshotImages.length + 1;
-            ctx.snapshotImages.push(''); // placeholder — real URL set after frontend upload
-            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-            return { type: 'text' as const, content: `Design ready — rendering in browser as <<<image_${newIdx}>>>. Save now: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
+
+            // Track draft for potential later publish via write_file
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+
+            // Server-side Remotion: render a preview frame + upload to workspace
+            let previewNote = '';
+            let draftPreviewBase64 = '';
+            let draftPreviewUrl = '';
+            try {
+              const { renderDesignFrame } = await import('./remotion-server');
+              const fps = animation?.fps || 30;
+              const totalFrames = animation ? Math.max(1, Math.round(fps * animation.durationInSeconds)) : 1;
+              const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
+              const jpegBuffer = await renderDesignFrame(designPayload, previewFrame);
+              draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
+              // Upload draft preview to workspace so Agent can reference it
+              if (ctx.supabase && ctx.userId) {
+                const draftN = ((ctx as any).__runCodeDrafts?.length || 0) + 1;
+                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
+                const wsResult = await workspace.writeFile(draftPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+                if (wsResult.storageUrl) draftPreviewUrl = wsResult.storageUrl;
+              }
+              previewNote = draftPreviewUrl
+                ? ` Preview uploaded: ${draftPreviewUrl}`
+                : ` Preview captured (frame ${previewFrame}).`;
+              console.log(`🖼️ [agent] design preview: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB${draftPreviewUrl ? ' → workspace' : ''}`);
+            } catch (err) {
+              console.warn('⚠️ [agent] design preview failed:', (err as Error).message);
+            }
+
+            // Push new draft
+            (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
+            const draftIdx = (ctx as any).__runCodeDrafts.length;
+
+            return { type: 'text' as const, content: `Design ready — draft preview ${draftIdx}.${previewNote} Publish to timeline: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
+
+          // Helper: handle image result from run_code — store as draft + upload preview
+          const handleImageResult = async (b64: string, mime: string): Promise<{ type: 'image'; base64Data: string; mimeType: string; description?: string }> => {
+            pushImage(b64, mime);
+            // Upload preview to workspace so it shows in CUI
+            const drafts = (ctx as any).__runCodeDrafts || [];
+            const lastDraft = drafts[drafts.length - 1];
+            if (lastDraft && ctx.supabase && ctx.userId) {
+              try {
+                const buf = Buffer.from(b64, 'base64');
+                const draftN = drafts.length;
+                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
+                const wsResult = await workspace.writeFile(draftPath, buf, ctx.supabase, ctx.userId, mime);
+                if (wsResult.storageUrl) lastDraft.previewUrl = wsResult.storageUrl;
+              } catch (err) {
+                console.warn('⚠️ [agent] image draft upload failed:', (err as Error).message);
+              }
+            }
+            const draftIdx = drafts.length;
+            const previewNote = lastDraft?.previewUrl ? ` Preview: ${lastDraft.previewUrl}` : '';
+            return { type: 'image' as const, base64Data: b64, mimeType: mime, description: `Image draft ${draftIdx}.${previewNote} Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
+          };
 
           // Buffer or Uint8Array → treat as image
           const directB64 = toBase64(result);
           if (directB64) {
-            pushImage(directB64, 'image/jpeg');
-            return { type: 'image' as const, base64Data: directB64, mimeType: 'image/jpeg', description: desc };
+            return handleImageResult(directB64, 'image/jpeg');
           }
 
           // { type: 'image', data: ... } — standard format
           if (result.type === 'image' && result.data) {
             const b64 = toBase64(result.data) || String(result.data);
-            pushImage(b64, result.mimeType || 'image/jpeg');
-            return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
+            return handleImageResult(b64, result.mimeType || 'image/jpeg');
           }
 
           // { buffer: ... } — sharp output shorthand
           if (result.buffer) {
             const b64 = toBase64(result.buffer);
             if (b64) {
-              pushImage(b64, result.mimeType || 'image/jpeg');
-              return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
+              return handleImageResult(b64, result.mimeType || 'image/jpeg');
             }
           }
 
@@ -1078,15 +1199,20 @@ export async function* runMakaronAgent(
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
         }
 
-        // run_code output handling
-        if (toolName === 'run_code') {
+        // run_code / write_file output handling — emit design SSE with published flag
+        if (toolName === 'run_code' || toolName === 'write_file') {
           // Design output stored in ctx.__pendingDesign → emit as SSE event
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
-            console.log(`🎨 [agent] emitting render SSE: ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars`);
-            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables };
+            const published = (ctx as any).__pendingDesignPublished ?? false;
+            // Get preview URL from latest draft (if available)
+            const drafts = (ctx as any).__runCodeDrafts as { previewUrl?: string }[] | undefined;
+            const previewUrl = drafts?.[drafts.length - 1]?.previewUrl || undefined;
+            console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
+            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published, previewUrl };
             (ctx as any).__pendingDesign = null;
-          } else {
+            (ctx as any).__pendingDesignPublished = undefined;
+          } else if (toolName === 'run_code') {
             console.log(`🔍 [agent] run_code result: no __pendingDesign found`);
           }
           // Image output (from toModelOutput won't have base64Data here, but pushImage in execute already handled it)

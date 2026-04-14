@@ -197,9 +197,14 @@ export default function Editor({
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [draftFullLoaded, setDraftFullLoaded] = useState(false);
+  // Draft type: makes the implicit mutual exclusion between tips draft and design draft explicit.
+  // 'tips' = tip preview selected, 'design' = Agent render draft, null = no draft active.
+  const [activeDraftType, setActiveDraftType] = useState<'tips' | 'design' | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
   const [pendingDesign, setPendingDesign] = useState<DesignPayload | null>(null);
+  const [draftDesign, setDraftDesign] = useState<DesignPayload | null>(null);
+  const [draftDesignPoster, setDraftDesignPoster] = useState<string>('');
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
@@ -360,14 +365,22 @@ export default function Editor({
   }, [draftParentIndex, previewingTipIndex, snapshots]);
 
   const draftImage = useMemo(() => {
-    if (!draftFullUrl) return null;
-    // base64 or non-URL: use directly (no loading needed)
-    if (!draftFullUrl.startsWith('http')) return draftFullUrl;
-    // Full image loaded: high-quality WebP (no visible downscale)
-    if (draftFullLoaded) return getOptimizedUrl(draftFullUrl);
-    // Not loaded yet: small proportional thumbnail (contain = keeps original aspect ratio)
-    return getThumbnailUrl(draftFullUrl, 144, 60, 144, 'contain');
-  }, [draftFullUrl, draftFullLoaded]);
+    if (activeDraftType === 'design') {
+      // Design draft: use captured poster (or empty string while capturing)
+      return draftDesignPoster || '';
+    }
+    if (activeDraftType === 'tips') {
+      // Tips draft: use tip preview image
+      if (!draftFullUrl) return null;
+      // base64 or non-URL: use directly (no loading needed)
+      if (!draftFullUrl.startsWith('http')) return draftFullUrl;
+      // Full image loaded: high-quality WebP (no visible downscale)
+      if (draftFullLoaded) return getOptimizedUrl(draftFullUrl);
+      // Not loaded yet: small proportional thumbnail (contain = keeps original aspect ratio)
+      return getThumbnailUrl(draftFullUrl, 144, 60, 144, 'contain');
+    }
+    return null;
+  }, [activeDraftType, draftDesignPoster, draftFullUrl, draftFullLoaded]);
 
   // Preload full draft image and flip flag when done
   useEffect(() => {
@@ -377,6 +390,18 @@ export default function Editor({
     img.src = getOptimizedUrl(draftFullUrl);
     img.onload = () => setDraftFullLoaded(true);
   }, [draftFullUrl]);
+
+  // Capture poster for design draft (async — shown as timeline thumbnail)
+  useEffect(() => {
+    if (!draftDesign) { setDraftDesignPoster(''); return; }
+    let cancelled = false;
+    import('@/components/RemotionRenderer').then(({ captureDesignPoster }) =>
+      captureDesignPoster(draftDesign).then(poster => {
+        if (!cancelled && poster) setDraftDesignPoster(poster);
+      })
+    ).catch(() => {});
+    return () => { cancelled = true; };
+  }, [draftDesign]);
 
   // Timeline: committed snapshots with the virtual draft inserted right after its parent
   // + optional video sentinel at the end (when ANY animation exists)
@@ -498,6 +523,7 @@ export default function Editor({
     if (!pendingNotification) return;
     // Exit draft mode
     if (draftParentIndex !== null) {
+      setActiveDraftType(null);
       setPreviewingTipIndex(null);
       setDraftParentIndex(null);
     }
@@ -1487,7 +1513,20 @@ export default function Editor({
 
     const { callbacks: agentCallbacks, setCurrentMsgId, getCurrentMsgId } = makeAgentCallbacks({
       projectId: projectId!,
-      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+      setDesignDraftParent: (idx) => {
+        if (idx !== null) {
+          // Design draft: clear any active tips draft (mutually exclusive)
+          setActiveDraftType('design');
+          setPreviewingTipIndex(null);
+          setDraftParentIndex(idx);
+          setViewIndex(idx + 1); // navigate to the virtual draft slot
+        } else {
+          // Clear design draft slot (published or dismissed)
+          setActiveDraftType(null);
+          setDraftParentIndex(null);
+        }
+      },
       setPendingNotification, setSelectedVideoId, setAnimationState,
       snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
       pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
@@ -1548,7 +1587,18 @@ export default function Editor({
 
     const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
       projectId: projectId ?? '',
-      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+      setDesignDraftParent: (idx) => {
+        if (idx !== null) {
+          setActiveDraftType('design');
+          setPreviewingTipIndex(null);
+          setDraftParentIndex(idx);
+          setViewIndex(idx + 1);
+        } else {
+          setActiveDraftType(null);
+          setDraftParentIndex(null);
+        }
+      },
       setPendingNotification, setSelectedVideoId, setAnimationState,
       snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
       pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
@@ -1734,6 +1784,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
     // Clear draft and jump to the newly committed snapshot
     setViewIndex(snapshots.length);
+    setActiveDraftType(null);
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
     setCommittedCategory(tip.category as Tip['category']);
@@ -1811,6 +1862,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     // If tip is still generating, ignore click
     if (tip.previewStatus === 'pending' || tip.previewStatus === 'generating') return;
 
+    // Clear any active design draft (tips draft and design draft are mutually exclusive)
+    if (activeDraftType === 'design') {
+      setDraftDesign(null);
+      setDraftDesignPoster('');
+    }
+    setActiveDraftType('tips');
+
     // Update tip selection (switches draft image via draftImage memo)
     setPreviewingTipIndex(tipIndex);
 
@@ -1824,7 +1882,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setDraftParentIndex(currentSnapIdx);
       setViewIndex(currentSnapIdx + 1);
     }
-  }, [draftParentIndex, viewIndex, snapshots, previewingTipIndex, generatePreviewForTip]);
+  }, [activeDraftType, draftParentIndex, viewIndex, snapshots, previewingTipIndex, generatePreviewForTip]);
 
   // Retry a failed preview generation
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1872,8 +1930,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     // so the auto-clamp doesn't fall back to the last snapshot instead.
     // While draft exists, draftParentIndex === its timeline index (no earlier draft slot).
     if (draftParentIndex !== null) setViewIndex(draftParentIndex);
+    setActiveDraftType(null);
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
+    setDraftDesign(null);
+    setDraftDesignPoster('');
   }, [draftParentIndex]);
 
   // Navigate timeline: keep draft alive so user can swipe back
@@ -1885,6 +1946,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     if (!file.type.startsWith('image/') && !isHeicFile(file)) return;
 
     previewAbortRef.current.abort();
+    setActiveDraftType(null);
     setPreviewingTipIndex(null);
     setDraftParentIndex(null);
     setMessages([]);
@@ -2823,9 +2885,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 onIndexChange={handleIndexChange}
                 referenceCount={referenceCount}
                 animatedDesigns={designsMap}
+                draftDesign={draftDesign}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
-                isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
+                isDraftLoading={isViewingDraft && (activeDraftType === 'design' ? !draftDesignPoster : activeDraftType === 'tips' ? (!draftFullLoaded && !!draftFullUrl?.startsWith('http')) : false)}
                 draftTimelineIndex={draftParentIndex !== null ? draftParentIndex + 1 : undefined}
                 onDismissDraft={dismissDraft}
                 previousImage={previousImage}
@@ -3501,6 +3564,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           const currentDesign = pendingDesign;
           const designDesc = (currentDesign as unknown as Record<string, unknown>).description as string | undefined;
           setPendingDesign(null);
+          setActiveDraftType(null); // clear draft type — published design replaces virtual draft
+          setDraftDesign(null); // clear draft — published design replaces it
+          setDraftParentIndex(null); // clear virtual draft slot — published replaces it
           setAgentStatus(t('status.renderingDesign'));
           // Poster-first: wait 500ms for fonts/images to load, capture poster, THEN add snapshot
           queueMicrotask(async () => {
