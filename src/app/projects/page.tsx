@@ -77,6 +77,7 @@ export default function ProjectsPage() {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
   const [skillsExpanded, setSkillsExpanded] = useState(false)
+  const [creditBalance, setCreditBalance] = useState<number | null>(null)
   const [skillDragOver, setSkillDragOver] = useState(false)
   const [skillUploading, setSkillUploading] = useState(false)
   const [skillUploadError, setSkillUploadError] = useState<string | null>(null)
@@ -395,6 +396,14 @@ export default function ProjectsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
+  // Fetch credit balance
+  useEffect(() => {
+    if (!user) return
+    fetch('/api/billing/credits').then(r => r.json()).then(d => {
+      setCreditBalance(d.balance ?? 0)
+    }).catch(() => {})
+  }, [user])
+
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
     if (!user || creating || (files.length === 0 && !prompt)) return
     setCreating(true)
@@ -558,7 +567,32 @@ export default function ProjectsPage() {
               {locale === 'zh' ? '更新日志' : "What's new"}
             </button>
           </div>
-          <button
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {creditBalance !== null && (
+              <Link
+                href="/dashboard"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '4px 10px', borderRadius: 8,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  textDecoration: 'none',
+                  transition: 'all 0.2s',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={creditBalance < 20 ? '#fbbf24' : '#e879f9'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 600,
+                  color: creditBalance < 20 ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+                }}>
+                  {creditBalance.toLocaleString()}
+                </span>
+              </Link>
+            )}
+            <button
               onClick={() => signOut()}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
@@ -571,6 +605,7 @@ export default function ProjectsPage() {
             >
               Sign out
             </button>
+          </div>
         </div>
 
         {/* ═══════════════════════════════
