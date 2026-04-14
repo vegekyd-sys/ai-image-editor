@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CREDIT_TIERS } from '@/lib/billing/tiers';
 
 const PLANS = [
@@ -27,7 +27,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
   const [selectedTier, setSelectedTier] = useState<string>('pro');
   const [selectedPlan, setSelectedPlan] = useState<string>('basic');
   const [animatedBalance, setAnimatedBalance] = useState(0);
-  const [balanceBefore, setBalanceBefore] = useState(0);
+  const animatingRef = useRef(false);
 
   const hasSubscription = !!(subscription && subscription.status !== 'canceled');
 
@@ -39,29 +39,31 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
   }, [hasSubscription]);
   const currentPlanIndex = hasSubscription ? PLANS.findIndex(p => p.id === subscription!.planId) : -1;
 
-  // Remember balance when popup opens (before top-up)
+  // Animate balance count-up on success
+  // Simple: animate from 0 to balance, ensure no negative values
   useEffect(() => {
-    if (open && !success && !waiting) {
-      setBalanceBefore(balance);
-    }
-  }, [open, success, waiting, balance]);
-
-  // Animate balance count-up on success: from balanceBefore → balance
-  useEffect(() => {
-    if (!success || !open) return;
-    const from = balanceBefore;
-    const to = balance;
-    setAnimatedBalance(from);
-    const duration = 1200;
-    const start = performance.now();
-    const step = (now: number) => {
-      const progress = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-      setAnimatedBalance(Math.round(from + (to - from) * eased));
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }, [success, open, balance, balanceBefore]);
+    if (!success || !open || animatingRef.current) return;
+    animatingRef.current = true;
+    const target = Math.max(0, balance);
+    setAnimatedBalance(0);
+    // Small delay so the "0" renders first, then count up
+    const timer = setTimeout(() => {
+      const duration = 1200;
+      const start = performance.now();
+      const step = (now: number) => {
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setAnimatedBalance(Math.max(0, Math.round(eased * target)));
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          animatingRef.current = false;
+        }
+      };
+      requestAnimationFrame(step);
+    }, 100);
+    return () => { clearTimeout(timer); animatingRef.current = false; };
+  }, [success, open, balance]);
 
   if (!open) return null;
 
