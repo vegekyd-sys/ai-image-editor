@@ -307,6 +307,14 @@ function createTools(ctx: AgentContext) {
 
           ctx.animationTaskId = taskId;
           ctx.animationPrompt = story_prompt;
+
+          // Bill for video generation (per-second)
+          const videoSec = duration || 10;
+          import('./billing/credits').then(({ deductFixedCredits }) =>
+            deductFixedCredits(ctx.userId ?? '', Math.ceil(videoSec * 22), 'create_video', undefined, undefined)
+              .catch(e => console.error('[billing] generate_animation deduct error:', e))
+          );
+
           return { success: true as const, taskId, message: 'Video generation task created! It takes about 3–5 minutes. The result will appear here when done.' };
         } catch (e) {
           return { success: false as const, message: String(e) };
@@ -791,6 +799,11 @@ Example for a 15s video: "15-second cinematic, slow strings 0-3s, percussive hit
         const result = await createMusic({ prompt, instrumental, style });
         if (result.taskId) {
           (ctx as any).musicTaskId = result.taskId;
+          // Bill for music generation
+          import('./billing/credits').then(({ deductCredits }) =>
+            deductCredits(ctx.userId ?? '', null, 'create_music')
+              .catch(e => console.error('[billing] generate_music deduct error:', e))
+          );
           // Fire-and-forget: write pending rows to DB for polling resume after reload
           if (ctx.supabase && ctx.userId) {
             Promise.all([0, 1].map(idx =>
