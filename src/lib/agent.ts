@@ -687,9 +687,10 @@ Your code must return a value:
             // Track draft for potential later publish via write_file
             if (!(ctx as any).__designDrafts) (ctx as any).__designDrafts = [];
 
-            // Server-side preview for patch (same as render)
+            // Server-side preview for patch + upload to workspace
             let patchPreview = '';
             let draftPreviewBase64 = '';
+            let draftPreviewUrl = '';
             try {
               const { renderDesignFrame } = await import('./remotion-server');
               const fps = patched.animation?.fps || 30;
@@ -697,8 +698,17 @@ Your code must return a value:
               const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
               const jpegBuffer = await renderDesignFrame(patched, previewFrame);
               draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-              patchPreview = ` Preview captured (frame ${previewFrame}).`;
-              console.log(`🖼️ [agent] patch preview captured: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB`);
+              // Upload draft preview to workspace so Agent can reference it
+              if (ctx.supabase && ctx.userId) {
+                const draftN = ((ctx as any).__designDrafts?.length || 0) + 1;
+                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
+                const wsResult = await workspace.writeFile(draftPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+                if (wsResult.storageUrl) draftPreviewUrl = wsResult.storageUrl;
+              }
+              patchPreview = draftPreviewUrl
+                ? ` Preview uploaded: ${draftPreviewUrl}`
+                : ` Preview captured (frame ${previewFrame}).`;
+              console.log(`🖼️ [agent] patch preview: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB${draftPreviewUrl ? ' → workspace' : ''}`);
             } catch (err) {
               console.warn('⚠️ [agent] patch preview failed:', (err as Error).message);
             }
@@ -706,14 +716,13 @@ Your code must return a value:
             // Update last draft (patch updates existing draft, doesn't create new one)
             const drafts = (ctx as any).__designDrafts;
             if (drafts.length > 0) {
-              drafts[drafts.length - 1] = { payload: patched, previewBase64: draftPreviewBase64 };
+              drafts[drafts.length - 1] = { payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl };
             } else {
-              drafts.push({ payload: patched, previewBase64: draftPreviewBase64 });
+              drafts.push({ payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
             }
 
-            // Draft preview: Agent can still reference it for analyze_image
             const draftIdx = drafts.length;
-            return { type: 'text' as const, content: `Patched ${result.edits.length} edit(s) — draft preview updated (draft ${draftIdx}).${patchPreview} Publish to timeline: write_file({ fromLastRunCode: true, name: "slug" })` };
+            return { type: 'text' as const, content: `Patched — draft ${draftIdx} updated.${patchPreview} Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -759,9 +768,10 @@ Your code must return a value:
             // Track draft for potential later publish via write_file
             if (!(ctx as any).__designDrafts) (ctx as any).__designDrafts = [];
 
-            // Server-side Remotion: render a preview frame so Agent can see its own work
+            // Server-side Remotion: render a preview frame + upload to workspace
             let previewNote = '';
             let draftPreviewBase64 = '';
+            let draftPreviewUrl = '';
             try {
               const { renderDesignFrame } = await import('./remotion-server');
               const fps = animation?.fps || 30;
@@ -769,14 +779,23 @@ Your code must return a value:
               const previewFrame = totalFrames > 1 ? Math.min(Math.floor(totalFrames * 0.3), totalFrames - 1) : 0;
               const jpegBuffer = await renderDesignFrame(designPayload, previewFrame);
               draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-              previewNote = ` Preview captured (frame ${previewFrame}).`;
-              console.log(`🖼️ [agent] design preview captured: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB`);
+              // Upload draft preview to workspace so Agent can reference it
+              if (ctx.supabase && ctx.userId) {
+                const draftN = ((ctx as any).__designDrafts?.length || 0) + 1;
+                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
+                const wsResult = await workspace.writeFile(draftPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+                if (wsResult.storageUrl) draftPreviewUrl = wsResult.storageUrl;
+              }
+              previewNote = draftPreviewUrl
+                ? ` Preview uploaded: ${draftPreviewUrl}`
+                : ` Preview captured (frame ${previewFrame}).`;
+              console.log(`🖼️ [agent] design preview: frame ${previewFrame}, ${(jpegBuffer.length / 1024).toFixed(0)} KB${draftPreviewUrl ? ' → workspace' : ''}`);
             } catch (err) {
               console.warn('⚠️ [agent] design preview failed:', (err as Error).message);
             }
 
             // Push new draft
-            (ctx as any).__designDrafts.push({ payload: designPayload, previewBase64: draftPreviewBase64 });
+            (ctx as any).__designDrafts.push({ payload: designPayload, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
             const draftIdx = (ctx as any).__designDrafts.length;
 
             return { type: 'text' as const, content: `Design ready — draft preview ${draftIdx}.${previewNote} Publish to timeline: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
