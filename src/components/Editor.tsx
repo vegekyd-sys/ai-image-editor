@@ -1550,22 +1550,31 @@ export default function Editor({
       },
       musicPollingRef,
       captureDesignFrame: async (frame, uploadPath) => {
-        // Get current design from draft or pending
         const design = draftDesignRef.current || pendingDesignRef.current;
         if (!design) { console.warn('⚠️ captureDesignFrame: no active design'); return; }
         try {
           const { captureDesignFrame: capture } = await import('@/components/RemotionRenderer');
           const blob = await capture(design, frame);
           if (!blob) throw new Error('capture returned null');
-          // Upload to Supabase Storage at workspace path
           const supabase = (await import('@/lib/supabase/client')).createClient();
           const userId = (await supabase.auth.getUser()).data.user?.id;
           if (!userId) throw new Error('no user');
+          // Upload to Storage
           const storagePath = `${userId}/workspace/${uploadPath}`;
           const { error } = await supabase.storage.from('images').upload(storagePath, blob, {
             contentType: 'image/jpeg', upsert: true,
           });
           if (error) throw error;
+          // Get public URL + upsert workspace_files index (so server readFile can find it)
+          const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath);
+          await supabase.from('workspace_files').upsert({
+            user_id: userId,
+            path: uploadPath,
+            content_type: 'image/jpeg',
+            size_bytes: blob.size,
+            storage_url: urlData?.publicUrl || '',
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,path' });
           console.log(`📸 [captureDesignFrame] frame ${frame} uploaded → ${storagePath}`);
         } catch (err) {
           console.error('⚠️ captureDesignFrame failed:', err);
