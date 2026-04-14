@@ -1907,21 +1907,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [snapshots, tipsSourceIndex, generatePreviewForTip]);
 
   // Previous image for long-press compare
+  // Must match timeline precedence: prefer base64 from IndexedDB (instant) over URL (network fetch)
   const previousImage = useMemo(() => {
-    let img: string | undefined;
+    let snap: typeof snapshots[number] | undefined;
     if (isViewingDraft && draftParentIndex !== null) {
-      const parent = snapshots[draftParentIndex];
-      img = parent?.imageUrl || parent?.image || undefined; // design poster may be in imageUrl
+      snap = snapshots[draftParentIndex];
     } else {
       const snapIdx = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
-      if (snapIdx > 0) {
-        const prev = snapshots[snapIdx - 1];
-        img = prev?.imageUrl || prev?.image || undefined; // prefer URL (design poster)
-      }
+      if (snapIdx > 0) snap = snapshots[snapIdx - 1];
     }
-    // URL images: route through optimized path (same quality as canvas)
-    if (img && img.startsWith('http')) return getOptimizedUrl(img);
-    return img;
+    if (!snap) return undefined;
+    // base64 from cache → use directly, no network cost (same logic as timeline)
+    if (snap.image && !snap.image.startsWith('http')) return snap.image;
+    const url = snap.image || snap.imageUrl || '';
+    if (!url) return undefined;
+    return getOptimizedUrl(url);
   }, [isViewingDraft, draftParentIndex, snapshots, viewIndex]);
 
   // Dismiss draft: remove virtual draft entry, return to parent
