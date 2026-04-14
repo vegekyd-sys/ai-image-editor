@@ -436,13 +436,13 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-Set fromLastRunCode=true to PUBLISH the last run_code design — this creates a real Snapshot on the timeline that the user can see. Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.
-Every run_code render/patch is a draft (canvas preview only). Call write_file({ fromLastRunCode: true }) to publish when you're satisfied with the result.`,
+Set fromLastRunCode=true to PUBLISH the last run_code output (design or image) — this creates a real Snapshot on the timeline that the user can see. Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.
+Every run_code output is a draft (preview only). Call write_file({ fromLastRunCode: true }) to publish when you're satisfied with the result.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save and PUBLISH the last run_code design to timeline. Path is auto-generated with project ID + snapshot number.'),
+        fromLastRunCode: z.boolean().optional().describe('Save and PUBLISH the last run_code output (design or image) to timeline. Path is auto-generated with project ID + snapshot number.'),
       }),
       execute: async ({ path: filePath, name, content, fromLastRunCode }) => {
         if (!ctx.supabase || !ctx.userId) {
@@ -474,28 +474,34 @@ Every run_code render/patch is a draft (canvas preview only). Call write_file({ 
           return { success: false, message: `Write failed: ${result.error}` };
         }
 
-        // Publish: when fromLastRunCode, promote the draft design to a real Snapshot
+        // Publish: when fromLastRunCode, promote the last draft to a real Snapshot
         if (fromLastRunCode) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const lastDesign = (ctx as any).__lastDesignPayload;
-          if (lastDesign) {
-            // Get preview from drafts
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const drafts = (ctx as any).__designDrafts || [];
-            const lastDraft = drafts[drafts.length - 1];
-            const preview = lastDraft?.previewBase64 || '';
+          const drafts = (ctx as any).__runCodeDrafts || [];
+          const lastDraft = drafts[drafts.length - 1];
 
-            // Push to snapshotImages so <<<image_N>>> reference is correct
+          if (lastDraft?.type === 'design') {
+            // Design draft → publish via pendingDesign (renders on frontend)
+            const designPayload = lastDraft.payload;
+            const preview = lastDraft.previewBase64 || '';
+
             ctx.snapshotImages.push(preview);
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
 
-            // Set up pendingDesign for SSE emission with published flag
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (ctx as any).__pendingDesign = lastDesign;
+            (ctx as any).__pendingDesign = designPayload;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (ctx as any).__pendingDesignPublished = true; // published — creates real Snapshot
+            (ctx as any).__pendingDesignPublished = true;
 
             console.log(`📌 [agent] design published via write_file: <<<image_${ctx.snapshotImages.length}>>>`);
+          } else if (lastDraft?.type === 'image') {
+            // Image draft → push to snapshotImages + emit via generatedImages
+            const imageData = lastDraft.imageBase64;
+            ctx.snapshotImages.push(imageData);
+            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+            ctx.generatedImages.push(imageData);
+
+            console.log(`📌 [agent] image published via write_file: <<<image_${ctx.snapshotImages.length}>>>`);
           }
         }
 
@@ -648,12 +654,13 @@ Your code must return a value:
             return null;
           };
 
-          // Helper: push image to generatedImages so it shows in CUI
+          // Helper: store image as draft (published via write_file)
           const pushImage = (b64: string, mime: string) => {
             const dataUrl = `data:${mime};base64,${b64}`;
-            ctx.generatedImages.push(dataUrl);
-            ctx.snapshotImages.push(dataUrl);
             ctx.currentImage = dataUrl;
+            // Store as draft — published to timeline via write_file({ fromLastRunCode: true })
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+            (ctx as any).__runCodeDrafts.push({ type: 'image', imageBase64: dataUrl, previewBase64: dataUrl });
           };
 
           // { type: 'patch', edits: [...] } — Incremental search & replace on last design
@@ -685,7 +692,7 @@ Your code must return a value:
             (ctx as any).__lastRunCode = JSON.stringify(patched, null, 2);
 
             // Track draft for potential later publish via write_file
-            if (!(ctx as any).__designDrafts) (ctx as any).__designDrafts = [];
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
             // Server-side preview for patch + upload to workspace
             let patchPreview = '';
@@ -700,7 +707,7 @@ Your code must return a value:
               draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
               // Upload draft preview to workspace so Agent can reference it
               if (ctx.supabase && ctx.userId) {
-                const draftN = ((ctx as any).__designDrafts?.length || 0) + 1;
+                const draftN = ((ctx as any).__runCodeDrafts?.length || 0) + 1;
                 const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
                 const wsResult = await workspace.writeFile(draftPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
                 if (wsResult.storageUrl) draftPreviewUrl = wsResult.storageUrl;
@@ -714,11 +721,11 @@ Your code must return a value:
             }
 
             // Update last draft (patch updates existing draft, doesn't create new one)
-            const drafts = (ctx as any).__designDrafts;
+            const drafts = (ctx as any).__runCodeDrafts;
             if (drafts.length > 0) {
-              drafts[drafts.length - 1] = { payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl };
+              drafts[drafts.length - 1] = { type: 'design', payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl };
             } else {
-              drafts.push({ payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
+              drafts.push({ type: 'design', payload: patched, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
             }
 
             const draftIdx = drafts.length;
@@ -766,7 +773,7 @@ Your code must return a value:
             (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
 
             // Track draft for potential later publish via write_file
-            if (!(ctx as any).__designDrafts) (ctx as any).__designDrafts = [];
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
             // Server-side Remotion: render a preview frame + upload to workspace
             let previewNote = '';
@@ -781,7 +788,7 @@ Your code must return a value:
               draftPreviewBase64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
               // Upload draft preview to workspace so Agent can reference it
               if (ctx.supabase && ctx.userId) {
-                const draftN = ((ctx as any).__designDrafts?.length || 0) + 1;
+                const draftN = ((ctx as any).__runCodeDrafts?.length || 0) + 1;
                 const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
                 const wsResult = await workspace.writeFile(draftPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
                 if (wsResult.storageUrl) draftPreviewUrl = wsResult.storageUrl;
@@ -795,32 +802,51 @@ Your code must return a value:
             }
 
             // Push new draft
-            (ctx as any).__designDrafts.push({ payload: designPayload, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
-            const draftIdx = (ctx as any).__designDrafts.length;
+            (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload, previewBase64: draftPreviewBase64, previewUrl: draftPreviewUrl });
+            const draftIdx = (ctx as any).__runCodeDrafts.length;
 
             return { type: 'text' as const, content: `Design ready — draft preview ${draftIdx}.${previewNote} Publish to timeline: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
 
+          // Helper: handle image result from run_code — store as draft + upload preview
+          const handleImageResult = async (b64: string, mime: string): Promise<{ type: 'image'; base64Data: string; mimeType: string; description?: string }> => {
+            pushImage(b64, mime);
+            // Upload preview to workspace so it shows in CUI
+            const drafts = (ctx as any).__runCodeDrafts || [];
+            const lastDraft = drafts[drafts.length - 1];
+            if (lastDraft && ctx.supabase && ctx.userId) {
+              try {
+                const buf = Buffer.from(b64, 'base64');
+                const draftN = drafts.length;
+                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
+                const wsResult = await workspace.writeFile(draftPath, buf, ctx.supabase, ctx.userId, mime);
+                if (wsResult.storageUrl) lastDraft.previewUrl = wsResult.storageUrl;
+              } catch (err) {
+                console.warn('⚠️ [agent] image draft upload failed:', (err as Error).message);
+              }
+            }
+            const draftIdx = drafts.length;
+            const previewNote = lastDraft?.previewUrl ? ` Preview: ${lastDraft.previewUrl}` : '';
+            return { type: 'image' as const, base64Data: b64, mimeType: mime, description: `Image draft ${draftIdx}.${previewNote} Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
+          };
+
           // Buffer or Uint8Array → treat as image
           const directB64 = toBase64(result);
           if (directB64) {
-            pushImage(directB64, 'image/jpeg');
-            return { type: 'image' as const, base64Data: directB64, mimeType: 'image/jpeg', description: desc };
+            return handleImageResult(directB64, 'image/jpeg');
           }
 
           // { type: 'image', data: ... } — standard format
           if (result.type === 'image' && result.data) {
             const b64 = toBase64(result.data) || String(result.data);
-            pushImage(b64, result.mimeType || 'image/jpeg');
-            return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
+            return handleImageResult(b64, result.mimeType || 'image/jpeg');
           }
 
           // { buffer: ... } — sharp output shorthand
           if (result.buffer) {
             const b64 = toBase64(result.buffer);
             if (b64) {
-              pushImage(b64, result.mimeType || 'image/jpeg');
-              return { type: 'image' as const, base64Data: b64, mimeType: result.mimeType || 'image/jpeg', description: desc };
+              return handleImageResult(b64, result.mimeType || 'image/jpeg');
             }
           }
 
@@ -1180,7 +1206,7 @@ export async function* runMakaronAgent(
           if (pendingDesign) {
             const published = (ctx as any).__pendingDesignPublished ?? false;
             // Get preview URL from latest draft (if available)
-            const drafts = (ctx as any).__designDrafts as { previewUrl?: string }[] | undefined;
+            const drafts = (ctx as any).__runCodeDrafts as { previewUrl?: string }[] | undefined;
             const previewUrl = drafts?.[drafts.length - 1]?.previewUrl || undefined;
             console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
             yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published, previewUrl };

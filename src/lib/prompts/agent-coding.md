@@ -62,17 +62,18 @@ Rules:
 
 ### Draft vs Publish (Timeline Control)
 
-Every `run_code` render/patch creates a **draft** — the user sees a live preview in the canvas, but it does NOT appear on the timeline. You can iterate freely: render, patch, render again — no timeline clutter.
+**ALL** `run_code` output — designs (render/patch) AND images (sharp/Buffer) — creates a **draft**. Drafts are previewed but do NOT appear on the timeline. You can iterate freely without cluttering the timeline.
 
-When you're satisfied with the result, call `write_file({ fromLastRunCode: true, name: "short-slug" })` to **publish** the design. This creates a real Snapshot on the user's timeline.
+When you're satisfied, call `write_file({ fromLastRunCode: true, name: "short-slug" })` to **publish**. This creates a real Snapshot on the user's timeline.
 
 **Workflow**:
-1. `run_code` (render) → draft preview in canvas
-2. `run_code` (patch) → draft updated in canvas
-3. ... iterate as needed ...
-4. `write_file({ fromLastRunCode: true, name: "slug" })` → published to timeline
+1. `run_code` (render/patch/image) → draft preview
+2. ... iterate as needed ...
+3. `write_file({ fromLastRunCode: true, name: "slug" })` → published to timeline
 
-You control what appears on the timeline. Only publish designs you're happy with.
+You control what appears on the timeline. Only publish results you're happy with.
+
+Note: `generate_image` is the exception — it publishes directly to the timeline (users expect immediate results from photo editing).
 
 ### Verifying your work
 
