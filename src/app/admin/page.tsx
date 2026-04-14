@@ -47,6 +47,9 @@ export default function AdminPage() {
   const [newRate, setNewRate] = useState({ model_id: '', display_name: '', input_per_1m: '', output_per_1m: '', markup: '2.0' })
   const [billingEnabled, setBillingEnabled] = useState(false)
   const [billingToggling, setBillingToggling] = useState(false)
+  const [welcomeCredits, setWelcomeCredits] = useState(500)
+  const [editingWelcome, setEditingWelcome] = useState(false)
+  const [welcomeInput, setWelcomeInput] = useState('500')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -88,6 +91,8 @@ export default function AdminPage() {
     if (res.status === 403) return
     const data = await res.json()
     setBillingEnabled(data.enabled ?? false)
+    setWelcomeCredits(data.welcomeCredits ?? 500)
+    setWelcomeInput(String(data.welcomeCredits ?? 500))
   }, [])
 
   useEffect(() => {
@@ -293,6 +298,44 @@ export default function AdminPage() {
             >
               <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${billingEnabled ? 'left-6' : 'left-0.5'}`} />
             </button>
+          </div>
+
+          {/* Welcome credits config */}
+          <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/10 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium">Welcome Credits</div>
+              <div className="text-xs text-white/40 mt-0.5">Granted to new users on activation</div>
+            </div>
+            <div className="flex items-center gap-2">
+              {editingWelcome ? (
+                <>
+                  <input
+                    type="number"
+                    value={welcomeInput}
+                    onChange={(e) => setWelcomeInput(e.target.value)}
+                    className="w-20 px-2 py-1 rounded bg-white/10 text-white text-sm text-right border border-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+                  />
+                  <button
+                    onClick={async () => {
+                      await fetch('/api/admin/billing-toggle', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ welcomeCredits: parseInt(welcomeInput) || 500 }),
+                      })
+                      setWelcomeCredits(parseInt(welcomeInput) || 500)
+                      setEditingWelcome(false)
+                    }}
+                    className="px-2 py-1 rounded bg-fuchsia-600 text-white text-xs"
+                  >Save</button>
+                  <button onClick={() => { setEditingWelcome(false); setWelcomeInput(String(welcomeCredits)); }} className="px-2 py-1 rounded bg-white/10 text-white/50 text-xs">✕</button>
+                </>
+              ) : (
+                <>
+                  <span className="text-fuchsia-400 font-medium text-sm">{welcomeCredits}</span>
+                  <button onClick={() => setEditingWelcome(true)} className="px-2 py-1 rounded text-white/30 text-xs hover:text-white/60 hover:bg-white/5">Edit</button>
+                </>
+              )}
+            </div>
           </div>
 
           <h3 className="text-sm font-medium text-white/60 mb-3">Per-action tools (fixed credits)</h3>
