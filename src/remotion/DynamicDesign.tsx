@@ -1,6 +1,6 @@
 /**
  * DynamicDesign — a Remotion composition that compiles and renders Agent-generated JSX code.
- * Used by server-side renderStill to preview designs.
+ * Used by both browser-side Player and server-side Sandbox (renderStillOnVercel).
  * Mirrors the browser-side evalRemotionJSX logic.
  */
 
@@ -58,35 +58,44 @@ function compileAndEval(code: string): React.ComponentType<Record<string, unknow
   }
 }
 
-/** Preload Google Fonts from @import/href in design code. Ensures fonts render in headless Chrome. */
-/** Check if code contains CJK characters (Chinese/Japanese/Korean) */
-function hasCJK(code: string): boolean {
-  return /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(code);
+// ─── Font loading ─────────────────────────────────────────────────────────────
+
+/** Check if text contains CJK characters */
+function hasCJK(text: string): boolean {
+  return /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text);
 }
 
-/** Default CJK font URL — injected when code has CJK text but no explicit CJK font */
-const CJK_FALLBACK_FONT_URL = 'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&display=swap';
+/**
+ * Load Noto Sans SC via @remotion/google-fonts (type-safe, with waitUntilDone).
+ * Works in both browser and headless Chrome (Sandbox).
+ */
+async function loadCJKFont(): Promise<void> {
+  try {
+    const { loadFont } = await import('@remotion/google-fonts/NotoSansSC');
+    const { waitUntilDone } = loadFont('normal', {
+      weights: ['400', '700', '900'],
+    });
+    await waitUntilDone();
+  } catch (e) {
+    console.warn('[DynamicDesign] CJK font load failed:', e);
+  }
+}
 
-async function preloadFonts(code: string): Promise<void> {
+/**
+ * Dynamically load Google Fonts referenced in code via @import/href.
+ * Fetches CSS → injects @font-face → waits for fonts.ready.
+ */
+async function loadFontsFromCode(code: string): Promise<void> {
   const fontUrls = new Set<string>();
-
-  // Match @import url('...') in CSS
+  // @import url('...')
   for (const m of code.matchAll(/@import\s+url\(['"]?(https:\/\/fonts\.googleapis\.com\/[^'")\s]+)['"]?\)/g))
     fontUrls.add(m[1]);
-  // Match href="..." in HTML attributes
+  // href="..." (HTML)
   for (const m of code.matchAll(/href=["'](https:\/\/fonts\.googleapis\.com\/[^"']+)["']/g))
     fontUrls.add(m[1]);
-  // Match href: "..." in JS object properties (React.createElement style)
+  // href: "..." (JSX)
   for (const m of code.matchAll(/href:\s*["'](https:\/\/fonts\.googleapis\.com\/[^"']+)["']/g))
     fontUrls.add(m[1]);
-
-  // If code has CJK characters but no CJK-capable font, inject Noto Sans SC
-  if (hasCJK(code)) {
-    const hasCJKFont = [...fontUrls].some(url =>
-      /Noto\+Sans\+(SC|TC|JP|KR|HK)|ZCOOL|Ma\+Shan|LXGW|Source\+Han/i.test(url)
-    );
-    if (!hasCJKFont) fontUrls.add(CJK_FALLBACK_FONT_URL);
-  }
 
   if (fontUrls.size === 0) return;
 
@@ -102,25 +111,26 @@ async function preloadFonts(code: string): Promise<void> {
     } catch { /* skip */ }
   }));
 
-  // Force-load all discovered font families
   await Promise.all([...fontFamilies].map(f =>
     document.fonts.load(`1em "${f}"`).catch(() => {})
   ));
   await document.fonts.ready;
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designProps }) => {
   const codeStr = typeof code === 'string' ? code : '';
   const propsObj = (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>;
   const Component = useMemo(() => compileAndEval(codeStr), [codeStr]);
 
-  // Combine code + props values for font detection (CJK text often lives in props)
-  const fontDetectionText = useMemo(() => {
+  // Combine code + props for font detection
+  const allText = useMemo(() => {
     const propsStr = Object.values(propsObj).filter(v => typeof v === 'string').join(' ');
     return codeStr + '\n' + propsStr;
   }, [codeStr, propsObj]);
 
-  // Wait for Google Fonts before rendering (critical for headless/Sandbox)
+  // Wait for fonts before rendering (critical for headless/Sandbox)
   const [fontsReady, setFontsReady] = useState(false);
   const handleRef = useRef<number | null>(null);
 
@@ -129,27 +139,35 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
     const handle = delayRender('Loading fonts for design');
     handleRef.current = handle;
 
-    preloadFonts(fontDetectionText)
+    const fontPromises: Promise<void>[] = [];
+
+    // Layer 1: CJK → Noto Sans SC via @remotion/google-fonts
+    if (hasCJK(allText)) {
+      fontPromises.push(loadCJKFont());
+    }
+
+    // Layer 2: Dynamic Google Fonts from code URLs
+    fontPromises.push(loadFontsFromCode(codeStr));
+
+    Promise.all(fontPromises)
       .then(() => {
         setFontsReady(true);
         continueRender(handle);
         handleRef.current = null;
       })
       .catch(() => {
-        // Don't block render forever if fonts fail
         setFontsReady(true);
         continueRender(handle);
         handleRef.current = null;
       });
 
     return () => {
-      // Cleanup: if component unmounts before fonts load, release the delay
       if (handleRef.current !== null) {
         continueRender(handleRef.current);
         handleRef.current = null;
       }
     };
-  }, [codeStr]);
+  }, [codeStr, allText]);
 
   if (!Component || !fontsReady) {
     return (

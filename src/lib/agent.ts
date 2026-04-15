@@ -20,6 +20,7 @@ import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import animatePrompt from './prompts/animate.md';
 import agentCodingPrompt from './prompts/agent-coding.md';
 import type { Tip } from '@/types';
+import { toPublicStorageUrl } from '@/lib/supabase/storage';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -363,58 +364,58 @@ The screenshot is saved to workspace and shown to the user in chat.`,
         const design = (ctx as any).__lastDesignPayload;
         if (!design) return { error: 'No active design. Use run_code with type: "render" first.' };
 
-        // Capture info was pre-computed in the tool-call handler and sent to frontend via SSE
-        const capture = (ctx as any).__pendingFrameCapture as {
-          captureId: string; frame: number; uploadPath: string; totalFrames: number; fps: number;
-        } | undefined;
-        if (!capture) return { error: 'No pending capture request. This is a bug.' };
-        (ctx as any).__pendingFrameCapture = null;
+        const fps = design.animation?.fps || 30;
+        const dur = design.animation?.durationInSeconds || 0;
+        const totalFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
 
-        const { frame: targetFrame, uploadPath: wsPath, totalFrames, fps: capturedFps } = capture;
+        let targetFrame = 0;
+        if (frame !== undefined) {
+          targetFrame = Math.max(0, Math.min(frame, totalFrames - 1));
+        } else if (timestamp !== undefined) {
+          targetFrame = Math.max(0, Math.min(Math.round(timestamp * fps), totalFrames - 1));
+        }
 
-        // Poll workspace for the file (frontend captures + uploads)
-        const MAX_WAIT = 15_000;
-        const POLL_INTERVAL = 500;
-        let elapsed = 0;
-        let result: { content: string; contentType: string; storageUrl?: string } | null = null;
+        try {
+          // Server-side Sandbox rendering
+          const { renderDesignFrame } = await import('./remotion-server');
+          const jpegBuffer = await renderDesignFrame(design, targetFrame);
 
-        while (elapsed < MAX_WAIT) {
-          await new Promise(r => setTimeout(r, POLL_INTERVAL));
-          elapsed += POLL_INTERVAL;
-          try {
-            const wsResult = await workspace.readFile(wsPath, ctx.supabase, ctx.userId);
-            if (wsResult && wsResult.content) {
-              result = wsResult;
-              break;
+          // Update draft preview for publish poster
+          const drafts = (ctx as any).__runCodeDrafts || [];
+          const b64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
+          if (drafts.length > 0) {
+            drafts[drafts.length - 1].previewBase64 = b64;
+          }
+
+          // Upload to workspace
+          let wsUrl = '';
+          const snapN = ctx.snapshotImages.length;
+          const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
+          if (ctx.supabase && ctx.userId) {
+            const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+            if (ws.storageUrl) {
+              wsUrl = ws.storageUrl;
+              if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
             }
-          } catch { /* not yet */ }
+          }
+
+          console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB (sandbox)`);
+
+          return {
+            base64Data: jpegBuffer.toString('base64'),
+            mimeType: 'image/jpeg',
+            frame: targetFrame,
+            totalFrames,
+            fps,
+            question,
+            workspaceUrl: wsUrl,
+            workspacePath: wsPath,
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`⚠️ [agent] preview_frame failed: ${msg}`);
+          return { error: `Failed to capture frame ${targetFrame}: ${msg}` };
         }
-
-        if (!result) {
-          console.warn(`⚠️ [agent] preview_frame timed out waiting for frontend capture (${MAX_WAIT / 1000}s)`);
-          return { error: `Frame capture timed out. The browser may not have the design loaded.` };
-        }
-
-        // Update draft preview
-        const drafts = (ctx as any).__runCodeDrafts || [];
-        if (drafts.length > 0) {
-          drafts[drafts.length - 1].previewBase64 = result.content;
-          if (result.storageUrl) drafts[drafts.length - 1].previewUrl = result.storageUrl;
-        }
-
-        const raw = result.content.replace(/^data:image\/\w+;base64,/, '');
-        console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / capturedFps).toFixed(1)}s), ${(raw.length * 0.75 / 1024).toFixed(0)} KB (client-side capture)`);
-
-        return {
-          base64Data: raw,
-          mimeType: 'image/jpeg',
-          frame: targetFrame,
-          totalFrames,
-          fps: capturedFps,
-          question,
-          workspaceUrl: result.storageUrl || '',
-          workspacePath: wsPath,
-        };
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toModelOutput({ output }: { output: any }) {
@@ -592,7 +593,7 @@ Every run_code output is a draft (preview only). Call write_file({ fromLastRunCo
           }
         }
 
-        return { success: true, message: `Saved: ${savePath}`, storageUrl: result.storageUrl };
+        return { success: true, message: `Saved: ${savePath}`, storageUrl: toPublicStorageUrl(result.storageUrl || '') };
       },
     }),
 
@@ -689,7 +690,8 @@ Your code must return a value:
           // Helper: save file to workspace directly from run_code (avoids passing large base64 back to Agent)
           const saveToWorkspace = async (path: string, content: string | Buffer, contentType?: string) => {
             if (!ctx.supabase || !ctx.userId) return { success: false, error: 'No Supabase connection' };
-            return workspace.writeFile(path, content, ctx.supabase, ctx.userId, contentType);
+            const result = await workspace.writeFile(path, content, ctx.supabase, ctx.userId, contentType);
+            return { ...result, storageUrl: result.storageUrl ? toPublicStorageUrl(result.storageUrl) : undefined };
           };
 
           const JSZip = (await import('jszip')).default;
@@ -1148,22 +1150,7 @@ export async function* runMakaronAgent(
             : (q ? `分析图片：${q.slice(0, 40)}` : '分析图片') };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number };
-          const design = (ctx as any).__lastDesignPayload;
-          const fps = design?.animation?.fps || 30;
-          const dur = design?.animation?.durationInSeconds || 0;
-          const totalFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
-          let targetFrame = 0;
-          if (input.frame !== undefined) targetFrame = Math.max(0, Math.min(input.frame, totalFrames - 1));
-          else if (input.timestamp !== undefined) targetFrame = Math.max(0, Math.min(Math.round(input.timestamp * fps), totalFrames - 1));
-
-          const captureId = `capture-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-          const snapN = ctx.snapshotImages.length;
-          const uploadPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
-          // Store for tool execute to poll
-          (ctx as any).__pendingFrameCapture = { captureId, frame: targetFrame, uploadPath, totalFrames, fps };
-          // SSE to frontend — triggers client-side renderStillOnWeb + upload
-          yield { type: 'capture_frame' as const, frame: targetFrame, uploadPath, captureId };
-          const hint = `frame ${targetFrame}`;
+          const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
           yield { type: 'status', text: isEnLocale ? `Capturing ${hint}...` : `截帧 ${hint}...` };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };

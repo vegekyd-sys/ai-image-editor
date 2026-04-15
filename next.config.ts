@@ -2,7 +2,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
-  serverExternalPackages: [],
+  serverExternalPackages: ['@remotion/renderer', '@remotion/bundler', '@remotion/vercel', '@vercel/sandbox'],
+  async rewrites() {
+    return [
+      {
+        source: '/storage/:path*',
+        destination: 'https://sdyrtztrjgmmpnirswxt.supabase.co/storage/:path*',
+      },
+    ];
+  },
   turbopack: {
     rules: {
       "*.md": {
