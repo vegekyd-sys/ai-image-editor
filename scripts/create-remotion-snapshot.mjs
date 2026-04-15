@@ -63,6 +63,27 @@ const { createSandbox, renderStillOnVercel } = await import('@remotion/vercel');
 const sandbox = await createSandbox({ resources: { vcpus: 4 } });
 console.log(`✅ Sandbox created: ${((Date.now() - t1) / 1000).toFixed(1)}s (${sandbox.sandboxId})\n`);
 
+// ─── Step 2.5: Install system fonts ──────────────────────────────────────
+
+console.log('🔤 Step 2.5: Installing system fonts...');
+const t25 = Date.now();
+try {
+  await sandbox.runCommand({
+    cmd: 'sudo',
+    args: ['dnf', 'install', '-y',
+      'liberation-fonts',           // Liberation Sans/Serif/Mono → metric-compatible with Arial/Times New Roman/Courier
+      'dejavu-fonts-all',           // DejaVu Sans/Serif/Mono → covers Verdana, Georgia, etc.
+      'google-noto-sans-cjk-ttc-fonts',  // Noto Sans CJK → system-level Chinese/Japanese/Korean
+      'google-droid-fonts-all',     // Droid Sans/Serif → Android-style fonts
+      'fontawesome-fonts',          // FontAwesome icons
+    ],
+    sudo: true,
+  });
+  console.log(`✅ System fonts installed: ${((Date.now() - t25) / 1000).toFixed(1)}s\n`);
+} catch (e) {
+  console.warn(`⚠️ System font install failed (non-fatal): ${e.message}\n`);
+}
+
 // ─── Step 3: Upload bundle ───────────────────────────────────────────────
 
 console.log('📤 Step 3: Uploading bundle to Sandbox...');
