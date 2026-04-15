@@ -1,10 +1,9 @@
 /**
  * DynamicDesign — a Remotion composition that compiles and renders Agent-generated JSX code.
  * Used by both browser-side Player and server-side Sandbox (renderStillOnVercel).
- * Mirrors the browser-side evalRemotionJSX logic.
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   useCurrentFrame,
   useVideoConfig,
@@ -18,6 +17,7 @@ import {
   continueRender,
 } from 'remotion';
 import { Audio } from '@remotion/media';
+import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 
 const REMOTION_SCOPE: Record<string, unknown> = {
@@ -58,70 +58,36 @@ function compileAndEval(code: string): React.ComponentType<Record<string, unknow
   }
 }
 
-// ─── Font loading ─────────────────────────────────────────────────────────────
+// ─── Font loading via @remotion/google-fonts ──────────────────────────────
+
+const ALL_FONTS = getAvailableFonts();
+
+/**
+ * Scan code + props for any Google Font family names and load them.
+ * Uses @remotion/google-fonts — no regex parsing of CSS needed.
+ * Just checks if the font name appears anywhere in the text.
+ */
+async function loadGoogleFontsFromText(text: string): Promise<void> {
+  const fontsToLoad = ALL_FONTS.filter(f => text.includes(f.fontFamily));
+  if (fontsToLoad.length === 0) return;
+
+  await Promise.all(fontsToLoad.map(async (font) => {
+    try {
+      const loaded = await font.load();
+      const { waitUntilDone } = loaded.loadFont();
+      await waitUntilDone();
+    } catch (e) {
+      console.warn(`[DynamicDesign] font load failed: ${font.fontFamily}`, e);
+    }
+  }));
+}
 
 /** Check if text contains CJK characters */
 function hasCJK(text: string): boolean {
   return /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text);
 }
 
-/**
- * Load Noto Sans SC via @remotion/google-fonts (type-safe, with waitUntilDone).
- * Works in both browser and headless Chrome (Sandbox).
- */
-async function loadCJKFont(): Promise<void> {
-  try {
-    const { loadFont } = await import('@remotion/google-fonts/NotoSansSC');
-    const { fontFamily, waitUntilDone } = loadFont('normal', {
-      weights: ['400', '700', '900'],
-    });
-    await waitUntilDone();
-    // Inject global fallback so CJK text renders even without explicit fontFamily
-    const fallbackStyle = document.createElement('style');
-    fallbackStyle.textContent = `*, *::before, *::after { font-family: ${fontFamily}, sans-serif; }`;
-    document.head.appendChild(fallbackStyle);
-  } catch (e) {
-    console.warn('[DynamicDesign] CJK font load failed:', e);
-  }
-}
-
-/**
- * Dynamically load Google Fonts referenced in code via @import/href.
- * Fetches CSS → injects @font-face → waits for fonts.ready.
- */
-async function loadFontsFromCode(code: string): Promise<void> {
-  const fontUrls = new Set<string>();
-  // @import url('...')
-  for (const m of code.matchAll(/@import\s+url\(['"]?(https:\/\/fonts\.googleapis\.com\/[^'")\s]+)['"]?\)/g))
-    fontUrls.add(m[1]);
-  // href="..." (HTML)
-  for (const m of code.matchAll(/href=["'](https:\/\/fonts\.googleapis\.com\/[^"']+)["']/g))
-    fontUrls.add(m[1]);
-  // href: "..." (JSX)
-  for (const m of code.matchAll(/href:\s*["'](https:\/\/fonts\.googleapis\.com\/[^"']+)["']/g))
-    fontUrls.add(m[1]);
-
-  if (fontUrls.size === 0) return;
-
-  const fontFamilies = new Set<string>();
-  await Promise.all([...fontUrls].map(async url => {
-    try {
-      const css = await fetch(url).then(r => r.text());
-      const style = document.createElement('style');
-      style.textContent = css;
-      document.head.appendChild(style);
-      for (const m of css.matchAll(/font-family:\s*['"]?([^;'"]+)['"]?\s*;/g))
-        fontFamilies.add(m[1].trim());
-    } catch { /* skip */ }
-  }));
-
-  await Promise.all([...fontFamilies].map(f =>
-    document.fonts.load(`1em "${f}"`).catch(() => {})
-  ));
-  await document.fonts.ready;
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────
 
 export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designProps }) => {
   const codeStr = typeof code === 'string' ? code : '';
@@ -134,7 +100,6 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
     return codeStr + '\n' + propsStr;
   }, [codeStr, propsObj]);
 
-  // Wait for fonts before rendering (critical for headless/Sandbox)
   const [fontsReady, setFontsReady] = useState(false);
   const handleRef = useRef<number | null>(null);
 
@@ -143,27 +108,24 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
     const handle = delayRender('Loading fonts for design');
     handleRef.current = handle;
 
-    const fontPromises: Promise<void>[] = [];
+    (async () => {
+      try {
+        // Load all Google Fonts referenced in code + props
+        await loadGoogleFontsFromText(allText);
 
-    // Layer 1: CJK → Noto Sans SC via @remotion/google-fonts
-    if (hasCJK(allText)) {
-      fontPromises.push(loadCJKFont());
-    }
+        // If CJK text present, inject global fallback font-family
+        // so text renders even when Agent doesn't specify fontFamily
+        if (hasCJK(allText)) {
+          const style = document.createElement('style');
+          style.textContent = `*, *::before, *::after { font-family: 'Noto Sans SC', sans-serif; }`;
+          document.head.appendChild(style);
+        }
+      } catch { /* continue even if fonts fail */ }
 
-    // Layer 2: Dynamic Google Fonts from code URLs
-    fontPromises.push(loadFontsFromCode(codeStr));
-
-    Promise.all(fontPromises)
-      .then(() => {
-        setFontsReady(true);
-        continueRender(handle);
-        handleRef.current = null;
-      })
-      .catch(() => {
-        setFontsReady(true);
-        continueRender(handle);
-        handleRef.current = null;
-      });
+      setFontsReady(true);
+      continueRender(handle);
+      handleRef.current = null;
+    })();
 
     return () => {
       if (handleRef.current !== null) {
