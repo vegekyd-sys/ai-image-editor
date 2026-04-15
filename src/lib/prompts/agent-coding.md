@@ -139,7 +139,7 @@ When creating animated designs (with `duration`), follow this complete workflow.
 
 Before writing code, output a structured plan. The user sees this streaming in real-time.
 
-**Output plan text, then call `run_code` IN THE SAME TURN.** Do not stop after the plan to wait for user feedback. The plan is for the user to read while you code — it is not a proposal that needs approval. If the user already confirmed ("OK", "可以了", "做吧"), skip the plan and call `run_code` directly.
+**Plan once, then immediately code. Do NOT ask for confirmation.** Output the plan → in the same turn, call `run_code`. If the user says "OK", "可以了", "做吧" or anything confirmatory, go straight to `run_code` — do NOT re-plan. Only re-plan if the user explicitly asks to change the plan ("换个方式", "改一下场景2").
 
 This plan has two audiences: **the user sees it streaming** (natural language they can understand), and **you use it as your coding guide** (specific enough to code from). No CSS values, no function names, no frame numbers — describe what the viewer SEES.
 
