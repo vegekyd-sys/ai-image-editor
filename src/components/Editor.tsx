@@ -1659,15 +1659,7 @@ export default function Editor({
       onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
     });
 
-    agentReconnect({
-      ...reconnectCallbacks,
-      onClearRunMessages: (msgIds) => {
-        if (msgIds.length > 0) {
-          const idSet = new Set(msgIds);
-          setMessages(prev => prev.filter(m => !idSet.has(m.id)));
-        }
-      },
-    });
+    agentReconnect(reconnectCallbacks);
 
     return () => { agentDisconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -159,24 +159,6 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
 
       setIsReconnecting(false)
 
-      // 2. Check if run already completed (could have finished while we were loading)
-      const { data: runNow } = await supabase
-        .from('agent_runs')
-        .select('status')
-        .eq('id', activeRunId)
-        .single()
-
-      if (runNow?.status === 'completed' || runNow?.status === 'aborted') {
-        callbacks.onDone?.()
-        setActiveRunId(null)
-        return
-      }
-      if (runNow?.status === 'failed') {
-        callbacks.onError?.('Agent run failed')
-        setActiveRunId(null)
-        return
-      }
-
       // Helper: fetch and replay any events we missed (gap between lastSeenSeq and DB)
       const catchUpMissedEvents = async () => {
         const { data: missed } = await supabase
@@ -192,6 +174,26 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
             dispatchEvent(ev as AgentEventRow, callbacks)
           }
         }
+      }
+
+      // 2. Check if run already completed (could have finished while we were loading)
+      const { data: runNow } = await supabase
+        .from('agent_runs')
+        .select('status')
+        .eq('id', activeRunId)
+        .single()
+
+      if (runNow?.status === 'completed' || runNow?.status === 'aborted') {
+        await catchUpMissedEvents()
+        callbacks.onDone?.()
+        setActiveRunId(null)
+        return
+      }
+      if (runNow?.status === 'failed') {
+        await catchUpMissedEvents()
+        callbacks.onError?.('Agent run failed')
+        setActiveRunId(null)
+        return
       }
 
       // 3. Subscribe to new events via Realtime
@@ -246,9 +248,12 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
 
       channelsRef.current.push(runChannel)
 
-      // 5. Polling safety net — Realtime might fail silently
+      // 5. Polling — primary mechanism for catching up events (Realtime is unreliable on Nano plan)
       const pollTimer = setInterval(async () => {
         try {
+          // Always catch up missed events (not just on completion)
+          await catchUpMissedEvents()
+
           const { data: run } = await supabase
             .from('agent_runs')
             .select('status')
@@ -256,13 +261,13 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
             .single()
           if (run?.status === 'completed' || run?.status === 'failed' || run?.status === 'aborted') {
             clearInterval(pollTimer)
-            await catchUpMissedEvents()
+            await catchUpMissedEvents() // final catch-up
             if (run.status === 'completed') callbacks.onDone?.()
             else callbacks.onError?.('Agent run failed')
             disconnect()
           }
         } catch { /* polling is best-effort */ }
-      }, 5000)
+      }, 2000)
 
       // Store poll timer for cleanup
       const origDisconnect = disconnect
