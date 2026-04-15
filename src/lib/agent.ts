@@ -353,8 +353,7 @@ function createTools(ctx: AgentContext) {
       description: `Capture a screenshot of your current design at a specific frame or time.
 Use this to verify visual output — check key moments in video designs.
 For still designs, frame 0 is the only frame.
-Returns the rendered image so you can see it with your vision.
-Note: emoji characters may appear as blank squares in screenshots — this is a known rendering limitation. Ignore missing emojis when reviewing.`,
+Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
