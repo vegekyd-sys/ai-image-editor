@@ -186,9 +186,6 @@ interface RemotionRendererProps {
   onPlayerRef?: (ref: PlayerRef | null) => void;
 }
 
-/** Detect iOS (iPhone/iPad) — used to cap fps for heavy designs */
-const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent);
-
 export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, onContainerRef, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -197,10 +194,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const [compileError, setCompileError] = useState<string | null>(null);
 
   const isStill = !design.animation;
-  // iOS: cap fps at 15 for designs with heavy code (>10KB) to prevent GPU OOM crash
-  const isHeavy = design.code.length > 10000;
-  const baseFps = design.animation?.fps || 30;
-  const fps = (isIOS && isHeavy) ? Math.min(baseFps, 15) : baseFps;
+  const fps = design.animation?.fps || 30;
   const durationInFrames = design.animation
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;

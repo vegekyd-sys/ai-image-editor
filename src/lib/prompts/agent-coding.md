@@ -208,19 +208,19 @@ When reviewing the screenshots, focus on two things:
 These videos play on all platforms. Every effect you use must render correctly on iOS Safari, Android Chrome, and desktop browsers. Follow these rules to avoid platform-specific rendering failures.
 
 **Performance budget (CRITICAL — iOS Safari will CRASH if exceeded):**
-- Each scene should only have **1-2 `<Img>` tags** mounted at a time. Use `{frame >= sceneStart && frame < sceneEnd && (...)}` to conditionally render scenes — do NOT mount all scenes at once with `opacity: 0`
-- Use `<Sequence from={sceneStart} durationInFrames={sceneDuration}>` to automatically mount/unmount scenes at the right time
-- Total `<Img>` tags simultaneously in DOM: **≤ 3** (1 current scene + 1 crossfade overlap)
-- Keep total `<div>` count under **40** across all scenes
+- Use `<Sequence from={sceneStart} durationInFrames={sceneDuration}>` to mount/unmount scenes — do NOT mount all scenes with `opacity: 0`
+- Total `<Img>` tags simultaneously in DOM: **≤ 3** (1 current + 1 crossfade overlap). No duplicated images for backgrounds.
 - Max **3 filter** effects on any single element
-- Max **2 textShadow** layers per text element (not 4-5)
-- These are hard limits — iOS Safari OOM-kills the page above these thresholds
+- Max **2 textShadow** layers per text element
+- **NEVER use a second `<Img>` of the same image as blur background** — this doubles memory and crashes iOS. Use CSS gradients instead (see below).
 
-**Blur（模糊背景/毛玻璃）**
-- Wrap blurred element in `overflow: hidden` container — prevents edge bleed (white/black fringe on iOS)
-- Scale blurred image 20%+ larger than container — hides the fringe that overflow clips
-- Add `transform: translate3d(0,0,0)` — forces GPU compositing, prevents repaint jank on mobile
-- blur ≤ 30px for animated blur, static blur can be any value
+**Landscape image in portrait canvas（横图在竖屏中展示——不用 blur 背景）**
+Do NOT duplicate the image with `filter: blur()` as background — this doubles GPU memory and crashes iOS Safari.
+Instead, use CSS gradients that match the image's mood:
+- Dark atmosphere: `background: linear-gradient(to bottom, #1a1a2e, #16213e, #0f3460)`
+- Warm: `background: radial-gradient(ellipse at 50% 40%, rgba(255,160,60,0.3), #1a0a00 70%)`
+- Cool: `background: linear-gradient(to bottom, #0a0a1a, #1a1a3e)`
+The gradient fills the canvas, the image sits in the upper 50-60% with `objectFit: 'contain'`, text goes below.
 ```jsx
 <div style={{overflow:'hidden', position:'absolute', inset:0}}>
   <Img src={url} style={{width:'100%',height:'100%',objectFit:'cover',
@@ -266,22 +266,24 @@ These videos play on all platforms. Every effect you use must render correctly o
 
 These are high-quality effect references. Understand the principles, then combine and transform freely. The four questions drive creativity; patterns just lower the coding barrier.
 
-**Landscape-in-portrait "short video mode" + blur background:**
+**Landscape-in-portrait "short video mode" (gradient background, NOT blur):**
 ```jsx
-const breathe = interpolate(frame, [0, 90], [20, 30], { extrapolateRight: 'clamp' });
-const bgScale = interpolate(frame, [0, 90], [1.2, 1.3], { extrapolateRight: 'clamp' });
-<AbsoluteFill>
-  {/* Blur background — see Cross-Platform Effects: Blur rules */}
-  <div style={{overflow:'hidden', position:'absolute', inset:0}}>
-    <Img src={url} style={{width:'100%',height:'100%',objectFit:'cover',
-      filter:`blur(${breathe}px) brightness(0.3) saturate(1.4)`,
-      transform:`scale(${bgScale}) translate3d(0,0,0)`}} />
-  </div>
-  {/* Main image floating above */}
-  <div style={{position:'absolute',top:0,left:0,right:0,height:'55%',
+// Gradient background + floating image — NO second <Img> for blur
+<AbsoluteFill style={{background:'linear-gradient(to bottom, #1a1a2e 0%, #16213e 40%, #0f3460 100%)'}}>
+  {/* Main image floating in upper half */}
+  <div style={{position:'absolute',top:'5%',left:0,right:0,height:'55%',
     display:'flex',alignItems:'center',justifyContent:'center'}}>
     <Img src={url} style={{maxWidth:'92%',maxHeight:'92%',objectFit:'contain',
       borderRadius:4, boxShadow:'0 20px 60px rgba(0,0,0,0.6)'}} />
+  </div>
+  {/* Warm glow behind image */}
+  <div style={{position:'absolute',top:'10%',left:'20%',right:'20%',height:'40%',
+    background:'radial-gradient(ellipse, rgba(255,160,60,0.15) 0%, transparent 70%)',
+    pointerEvents:'none'}} />
+  {/* Text area below */}
+  <div style={{position:'absolute',bottom:0,left:0,right:0,height:'40%',
+    display:'flex',alignItems:'center',justifyContent:'center',padding:40}}>
+    {/* kinetic text here */}
   </div>
 </AbsoluteFill>
 ```

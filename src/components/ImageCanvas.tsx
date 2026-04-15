@@ -141,7 +141,6 @@ export default function ImageCanvas({
   const [remotionPlaying, setRemotionPlaying] = useState(false);
   const remotionFrameRef = useRef(0);
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
-  const [remotionMounted, setRemotionMounted] = useState(false); // lazy-mount Player to prevent iOS crash
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
@@ -629,25 +628,28 @@ export default function ImageCanvas({
     return () => cancelAnimationFrame(raf);
   }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
-  // Reset when switching to a design snapshot — lazy mount (don't mount Player until user plays)
+  // Reset + auto-play when switching to a design snapshot
   const remotionAutoPlayRef = useRef(false);
   useEffect(() => {
     setRemotionPlaying(false);
     remotionFrameRef.current = 0;
     remotionStartedRef.current = false;
-    setRemotionMounted(false); // unmount Player on snapshot switch
-    // Mark for auto-play — will mount + play when user taps play button
-    remotionAutoPlayRef.current = false;
+    // Mark for auto-play — actual play triggered when Player ref arrives
+    remotionAutoPlayRef.current = !!currentDesign?.animation;
+    // Try auto-play now if ref already available
+    if (currentDesign?.animation && remotionRef.current) {
+      const timer = setTimeout(() => {
+        remotionRef.current?.play();
+        remotionStartedRef.current = true;
+        setRemotionPlaying(true);
+        remotionAutoPlayRef.current = false;
+      }, 600);
+      return () => clearTimeout(timer);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex]);
 
   const toggleRemotionPlay = useCallback(() => {
-    // Lazy mount: first play triggers Player mount, actual play starts via onPlayerRef callback
-    if (!remotionMounted) {
-      setRemotionMounted(true);
-      remotionAutoPlayRef.current = true; // will auto-play once Player ref arrives
-      return;
-    }
     const p = remotionRef.current;
     if (!p) return;
     if (remotionPlaying) {
@@ -659,7 +661,7 @@ export default function ImageCanvas({
       remotionStartedRef.current = true;
       setRemotionPlaying(true);
     }
-  }, [remotionPlaying, remotionTotalFrames, remotionMounted]);
+  }, [remotionPlaying, remotionTotalFrames]);
 
   const seekRemotion = useCallback((clientX: number) => {
     const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
@@ -969,32 +971,29 @@ export default function ImageCanvas({
               }
             }}
           >
-            {/* Lazy-mount Player — only after user taps play (prevents iOS crash from heavy designs) */}
-            {remotionMounted && (
-              <RemotionRenderer
-                design={currentDesign!}
-                mode="fill"
-                hideControls
-                onError={(err) => console.error('[canvas design]', err)}
-                onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
-                onPlayerRef={(ref) => {
-                  remotionRef.current = ref;
-                  if (editableFields?.length) setDesignPlayerRef(ref);
-                  // Auto-play after lazy mount
-                  if (ref && remotionAutoPlayRef.current) {
-                    remotionAutoPlayRef.current = false;
-                    setTimeout(() => {
-                      ref.play();
-                      remotionStartedRef.current = true;
-                      setRemotionPlaying(true);
-                    }, 600);
-                  }
-                }}
-              />
-            )}
+            <RemotionRenderer
+              design={currentDesign!}
+              mode="fill"
+              hideControls
+              onError={(err) => console.error('[canvas design]', err)}
+              onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
+              onPlayerRef={(ref) => {
+                remotionRef.current = ref;
+                if (editableFields?.length) setDesignPlayerRef(ref);
+                // Auto-play if pending (ref wasn't ready during useEffect)
+                if (ref && remotionAutoPlayRef.current) {
+                  remotionAutoPlayRef.current = false;
+                  setTimeout(() => {
+                    ref.play();
+                    remotionStartedRef.current = true;
+                    setRemotionPlaying(true);
+                  }, 600);
+                }
+              }}
+            />
 
-            {/* Poster — show until Player is mounted and playing */}
-            {(!remotionMounted || !remotionStartedRef.current) && displayImage && (
+            {/* Poster — only for animated designs before first play (covers black first frame) */}
+            {!remotionStartedRef.current && currentDesign?.animation && displayImage && (
               <img
                 src={displayImage}
                 alt="poster"
