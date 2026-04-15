@@ -257,8 +257,8 @@ The gradient fills the canvas, the image sits in the upper 50-60% with `objectFi
 **Fonts**
 - Google Fonts load automatically — Remotion waits for them before rendering
 - **Do NOT use Chinese Google Fonts** (ZCOOL, Ma Shan Zheng, Noto Serif SC, etc.) — CJK fonts are 4-8MB each, loading them crashes iOS Safari. Use system fonts for Chinese text: `fontFamily: '"PingFang SC", "Noto Sans SC", sans-serif'`
-- English display fonts are fine (small file size): Bebas Neue, Playfair Display, Permanent Marker, Anton
-- **Max 1 English display font + system fonts** per video
+- English display fonts are fine (small file size): Bebas Neue, Playfair Display, Permanent Marker, Anton, Righteous, Oswald, Poppins, Montserrat
+- English fonts can be mixed freely — different scenes can use different fonts for visual rhythm
 
 #### Composition Patterns (reference library — combine freely, don't copy mechanically)
 
