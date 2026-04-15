@@ -191,11 +191,21 @@ export class ReplayEngine {
 
       case 'content': {
         const text = (d.text as string) ?? ''
-        if (currentMsgId) {
-          state.messages = state.messages.map(m =>
-            m.id === currentMsgId ? { ...m, content: m.content + text } : m,
-          )
+        let msgId = currentMsgId
+        // Auto-create message if none exists (first message in a run may lack new_turn)
+        if (!msgId) {
+          msgId = event.run_id ? `auto-${event.run_id}-0` : `auto-${event.seq}`
+          setMsgId(msgId)
+          state.messages = [...state.messages, {
+            id: msgId,
+            role: 'assistant' as const,
+            content: '',
+            timestamp: new Date(event.created_at).getTime(),
+          }]
         }
+        state.messages = state.messages.map(m =>
+          m.id === msgId ? { ...m, content: m.content + text } : m,
+        )
         break
       }
 
