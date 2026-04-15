@@ -141,6 +141,7 @@ export default function ImageCanvas({
   const [remotionPlaying, setRemotionPlaying] = useState(false);
   const remotionFrameRef = useRef(0);
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
+  const [remotionMounted, setRemotionMounted] = useState(false); // lazy-mount Player to prevent iOS crash
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
@@ -216,17 +217,16 @@ export default function ImageCanvas({
       swiping.current = true;
     }
 
-    // Long press detection — skip for video entry, animated designs, and draft previews
-    const viewingDraft = isDraft && draftTimelineIndex !== undefined && currentIndex === draftTimelineIndex;
+    // Long press detection — skip for video entry and animated designs
     const hasAnimation = !!(draftDesign?.animation || animatedDesigns?.get(currentIndex)?.animation);
-    if (previousImage && !isVideoEntry && !hasAnimation && !viewingDraft) {
+    if (previousImage && !isVideoEntry && !hasAnimation) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, isDraft, draftTimelineIndex, currentIndex, draftDesign, animatedDesigns]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, currentIndex, draftDesign, animatedDesigns]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
@@ -402,17 +402,16 @@ export default function ImageCanvas({
       lastMousePos.current = { x: e.clientX, y: e.clientY };
     }
 
-    // Long press → compare (works at any zoom level, same as touch) — skip for animated designs and drafts
-    const viewingDraftMouse = isDraft && draftTimelineIndex !== undefined && currentIndex === draftTimelineIndex;
+    // Long press → compare (works at any zoom level, same as touch) — skip for animated designs
     const hasAnimationMouse = !!(draftDesign?.animation || animatedDesigns?.get(currentIndex)?.animation);
-    if (previousImage && !hasAnimationMouse && !viewingDraftMouse) {
+    if (previousImage && !hasAnimationMouse) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         mousePanning.current = false; // stop panning when comparing
       }, 200);
     }
-  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, isDraft, draftTimelineIndex, currentIndex, draftDesign, animatedDesigns]);
+  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, currentIndex, draftDesign, animatedDesigns]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!mouseStartPos.current) return;
@@ -630,28 +629,25 @@ export default function ImageCanvas({
     return () => cancelAnimationFrame(raf);
   }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
-  // Reset + auto-play when switching to a design snapshot
+  // Reset when switching to a design snapshot — lazy mount (don't mount Player until user plays)
   const remotionAutoPlayRef = useRef(false);
   useEffect(() => {
     setRemotionPlaying(false);
     remotionFrameRef.current = 0;
     remotionStartedRef.current = false;
-    // Mark for auto-play — actual play triggered when Player ref arrives
-    remotionAutoPlayRef.current = !!currentDesign?.animation;
-    // Try auto-play now if ref already available
-    if (currentDesign?.animation && remotionRef.current) {
-      const timer = setTimeout(() => {
-        remotionRef.current?.play();
-        remotionStartedRef.current = true;
-        setRemotionPlaying(true);
-        remotionAutoPlayRef.current = false;
-      }, 600);
-      return () => clearTimeout(timer);
-    }
+    setRemotionMounted(false); // unmount Player on snapshot switch
+    // Mark for auto-play — will mount + play when user taps play button
+    remotionAutoPlayRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex]);
 
   const toggleRemotionPlay = useCallback(() => {
+    // Lazy mount: first play triggers Player mount, actual play starts via onPlayerRef callback
+    if (!remotionMounted) {
+      setRemotionMounted(true);
+      remotionAutoPlayRef.current = true; // will auto-play once Player ref arrives
+      return;
+    }
     const p = remotionRef.current;
     if (!p) return;
     if (remotionPlaying) {
@@ -663,7 +659,7 @@ export default function ImageCanvas({
       remotionStartedRef.current = true;
       setRemotionPlaying(true);
     }
-  }, [remotionPlaying, remotionTotalFrames]);
+  }, [remotionPlaying, remotionTotalFrames, remotionMounted]);
 
   const seekRemotion = useCallback((clientX: number) => {
     const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
@@ -973,29 +969,32 @@ export default function ImageCanvas({
               }
             }}
           >
-            <RemotionRenderer
-              design={currentDesign!}
-              mode="fill"
-              hideControls
-              onError={(err) => console.error('[canvas design]', err)}
-              onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
-              onPlayerRef={(ref) => {
-                remotionRef.current = ref;
-                if (editableFields?.length) setDesignPlayerRef(ref);
-                // Auto-play if pending (ref wasn't ready during useEffect)
-                if (ref && remotionAutoPlayRef.current) {
-                  remotionAutoPlayRef.current = false;
-                  setTimeout(() => {
-                    ref.play();
-                    remotionStartedRef.current = true;
-                    setRemotionPlaying(true);
-                  }, 600);
-                }
-              }}
-            />
+            {/* Lazy-mount Player — only after user taps play (prevents iOS crash from heavy designs) */}
+            {remotionMounted && (
+              <RemotionRenderer
+                design={currentDesign!}
+                mode="fill"
+                hideControls
+                onError={(err) => console.error('[canvas design]', err)}
+                onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
+                onPlayerRef={(ref) => {
+                  remotionRef.current = ref;
+                  if (editableFields?.length) setDesignPlayerRef(ref);
+                  // Auto-play after lazy mount
+                  if (ref && remotionAutoPlayRef.current) {
+                    remotionAutoPlayRef.current = false;
+                    setTimeout(() => {
+                      ref.play();
+                      remotionStartedRef.current = true;
+                      setRemotionPlaying(true);
+                    }, 600);
+                  }
+                }}
+              />
+            )}
 
-            {/* Poster — only for animated designs before first play (covers black first frame) */}
-            {!remotionStartedRef.current && currentDesign?.animation && displayImage && (
+            {/* Poster — show until Player is mounted and playing */}
+            {(!remotionMounted || !remotionStartedRef.current) && displayImage && (
               <img
                 src={displayImage}
                 alt="poster"
