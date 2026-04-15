@@ -151,6 +151,30 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
   }
 }
 
+// ─── Error Boundary (prevents design crash from taking down the whole page) ──
+
+class DesignErrorBoundary extends React.Component<
+  { children: React.ReactNode; onError?: (msg: string) => void },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) {
+    console.error('[RemotionRenderer] ErrorBoundary caught:', error);
+    this.props.onError?.(error.message);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
+          Design crashed: {this.state.error.message}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ─── Player component (for interactive playback only) ───────────────────────
 
 interface RemotionRendererProps {
@@ -167,6 +191,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const wrapperRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
+  const [compileError, setCompileError] = useState<string | null>(null);
 
   const isStill = !design.animation;
   const fps = design.animation?.fps || 30;
@@ -175,10 +200,22 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     : 1;
 
   useEffect(() => {
-    preloadBabel().catch(() => {});
-    const comp = evalRemotionJSX(design.code);
-    if (!comp) { onError?.('Failed to compile design code'); return; }
-    setComponent(() => comp);
+    try {
+      preloadBabel().catch(() => {});
+      const comp = evalRemotionJSX(design.code);
+      if (!comp) {
+        setCompileError('Failed to compile design code');
+        onError?.('Failed to compile design code');
+        return;
+      }
+      setCompileError(null);
+      setComponent(() => comp);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[RemotionRenderer] evalRemotionJSX crashed:', msg);
+      setCompileError(msg);
+      onError?.(msg);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
@@ -200,37 +237,47 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     return () => document.removeEventListener('music-play', handler);
   }, []);
 
+  if (compileError) {
+    return (
+      <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
+        Design error: {compileError}
+      </div>
+    );
+  }
+
   if (!Component) return null;
 
   const isFill = mode === 'fill';
 
   return (
-    <div ref={wrapperRef} style={isFill ? { width: '100%', height: '100%' } : {
-      borderRadius: 12, overflow: 'hidden', margin: '8px 0',
-    }}>
-      <Player
-        ref={playerRef}
-        component={Component}
-        inputProps={design.props || {}}
-        compositionWidth={design.width}
-        compositionHeight={design.height}
-        durationInFrames={durationInFrames}
-        fps={fps}
-        style={isFill
-          ? { width: '100%', height: '100%' }
-          : { width: '100%', borderRadius: 12 }
-        }
-        controls={!isStill && !hideControls}
-        loop={false}
-        autoPlay={false}
-        acknowledgeRemotionLicense
-        errorFallback={({ error }) => (
-          <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
-            Render error: {error.message}
-          </div>
-        )}
-      />
-    </div>
+    <DesignErrorBoundary onError={onError}>
+      <div ref={wrapperRef} style={isFill ? { width: '100%', height: '100%' } : {
+        borderRadius: 12, overflow: 'hidden', margin: '8px 0',
+      }}>
+        <Player
+          ref={playerRef}
+          component={Component}
+          inputProps={design.props || {}}
+          compositionWidth={design.width}
+          compositionHeight={design.height}
+          durationInFrames={durationInFrames}
+          fps={fps}
+          style={isFill
+            ? { width: '100%', height: '100%' }
+            : { width: '100%', borderRadius: 12 }
+          }
+          controls={!isStill && !hideControls}
+          loop={false}
+          autoPlay={false}
+          acknowledgeRemotionLicense
+          errorFallback={({ error }) => (
+            <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
+              Render error: {error.message}
+            </div>
+          )}
+        />
+      </div>
+    </DesignErrorBoundary>
   );
 }
 
