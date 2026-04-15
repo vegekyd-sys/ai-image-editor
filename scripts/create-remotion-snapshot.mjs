@@ -71,11 +71,14 @@ try {
   await sandbox.runCommand({
     cmd: 'sudo',
     args: ['dnf', 'install', '-y',
-      'liberation-fonts',           // Liberation Sans/Serif/Mono → metric-compatible with Arial/Times New Roman/Courier
-      'dejavu-fonts-all',           // DejaVu Sans/Serif/Mono → covers Verdana, Georgia, etc.
-      'google-noto-sans-cjk-ttc-fonts',  // Noto Sans CJK → system-level Chinese/Japanese/Korean
-      'google-droid-fonts-all',     // Droid Sans/Serif → Android-style fonts
-      'fontawesome-fonts',          // FontAwesome icons
+      'liberation-fonts',                // Liberation Sans/Serif/Mono → Arial/Times New Roman/Courier compatible
+      'dejavu-fonts-all',                // DejaVu Sans/Serif/Mono → Verdana, Georgia, Courier New compatible
+      'google-noto-sans-cjk-ttc-fonts',  // Noto Sans CJK → system Chinese/Japanese/Korean
+      'google-noto-emoji-color-fonts',   // Noto Color Emoji → 🎉✌️📍 etc.
+      'google-droid-fonts-all',          // Droid Sans/Serif → Android-style
+      'fontawesome-fonts',               // FontAwesome icons
+      'adobe-source-sans-pro-fonts',     // Source Sans Pro → clean sans-serif
+      'adobe-source-code-pro-fonts',     // Source Code Pro → monospace
     ],
     sudo: true,
   });
