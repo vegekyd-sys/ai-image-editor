@@ -388,7 +388,7 @@ Note: emoji characters may appear as blank squares in screenshots — this is a 
 
           let wsUrl = '';
           const snapN = ctx.snapshotImages.length;
-          const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
+          const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}-${Date.now()}.jpg`;
           if (ctx.supabase && ctx.userId) {
             const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
             if (ws.storageUrl) {
