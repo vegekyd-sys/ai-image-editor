@@ -72,10 +72,14 @@ function hasCJK(text: string): boolean {
 async function loadCJKFont(): Promise<void> {
   try {
     const { loadFont } = await import('@remotion/google-fonts/NotoSansSC');
-    const { waitUntilDone } = loadFont('normal', {
+    const { fontFamily, waitUntilDone } = loadFont('normal', {
       weights: ['400', '700', '900'],
     });
     await waitUntilDone();
+    // Inject global fallback so CJK text renders even without explicit fontFamily
+    const fallbackStyle = document.createElement('style');
+    fallbackStyle.textContent = `*, *::before, *::after { font-family: ${fontFamily}, sans-serif; }`;
+    document.head.appendChild(fallbackStyle);
   } catch (e) {
     console.warn('[DynamicDesign] CJK font load failed:', e);
   }
