@@ -128,12 +128,44 @@ export default function ProjectPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  // Effect 2: Fetch from Supabase — always updates all data
+  // Effect 2: Fetch from Supabase — try Replay events first, fallback to loadProject
   useEffect(() => {
     if (!user || !projectId) return
     let cancelled = false
 
-    loadProject().then(async ({ snapshots, messages, title, animations }) => {
+    // Try loading from events (new projects with full event history)
+    const tryReplayLoad = async (): Promise<boolean> => {
+      try {
+        const { loadReplayEvents, ReplayEngine } = await import('@/lib/replayEngine')
+        const supabase = createClient()
+        const events = await loadReplayEvents(supabase, projectId)
+        // Only use events if they contain snapshots (image_upload or image events = complete history)
+        const hasSnapshots = events.some(e => e.type === 'image_upload' || e.type === 'image')
+        if (!hasSnapshots || events.length === 0) return false
+        const state = ReplayEngine.buildState(events)
+        if (cancelled) return true
+        cacheProjectData(projectId, state.snapshots, state.messages, state.title)
+        if (state.animations.length > 0) setInitialAnimations(state.animations)
+        const patched = await patchFromImageCache(state.snapshots)
+        if (cancelled) return true
+        shownRef.current = true
+        setInitialSnapshots(patched)
+        setInitialMessages(state.messages)
+        setInitialTitle(state.title)
+        setLoaded(true)
+        if (state.snapshots.length > 0 && state.snapshots[0].imageUrl) {
+          updateCover(state.snapshots[0].imageUrl)
+        }
+        return true
+      } catch {
+        return false // fallback to loadProject
+      }
+    }
+
+    tryReplayLoad().then(async (loaded) => {
+      if (loaded || cancelled) return
+      // Fallback: traditional loadProject (old projects without event history)
+      return loadProject().then(async ({ snapshots, messages, title, animations }) => {
       if (cancelled) return
       cacheProjectData(projectId, snapshots, messages, title)
 
@@ -177,17 +209,16 @@ export default function ProjectPage() {
       if (snapshots.length > 0 && snapshots[0].imageUrl) {
         updateCover(snapshots[0].imageUrl)
       }
-    }).catch((err) => {
-      if (cancelled) return
-      console.error('Failed to load project:', err)
-      if (!shownRef.current) {
-        // No cache + no network: show empty editor
-        shownRef.current = true
-        setInitialSnapshots([])
-        setInitialMessages([])
-        setLoaded(true)
-      }
-      // If cache already showed something, stay on it (offline mode)
+      }).catch((err: unknown) => {
+        if (cancelled) return
+        console.error('Failed to load project:', err)
+        if (!shownRef.current) {
+          shownRef.current = true
+          setInitialSnapshots([])
+          setInitialMessages([])
+          setLoaded(true)
+        }
+      })
     })
 
     return () => { cancelled = true }
