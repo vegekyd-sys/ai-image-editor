@@ -135,6 +135,12 @@ When creating animated designs (with `duration`), follow this complete workflow.
 例：京都寺庙 + 红叶 → "千年等一场红" / "御朱印收集中" / "抹茶味的秋天"
 花字和画面的关系：看到文字就能猜到画面是什么，看到画面就觉得这句话说得对。
 
+**Q4 补充：每个场景多条花字**
+一个场景不是只能有一句花字——多条花字分层出现，画面才丰富。
+例：蛋糕特写 → 主标题 "太甜了！"（大字弹入）+ 副标题 "Nintendo World 大阪"（小字淡入）+ 角标 "Day 1"（角落滑入）
+不同层级用不同大小、不同位置、不同入场时机——有先有后，有主有次。
+所有文字都要大到一眼能看到，不同层用不同入场时机交错出现 = 画面有节奏感。
+
 #### Phase 1 — Plan（编码蓝图）
 
 Before writing code, output a structured plan. The user sees this streaming in real-time.
