@@ -19,7 +19,7 @@ export interface AgentRunRow {
   id: string
   project_id: string
   user_id: string
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'completed' | 'failed' | 'aborted'
   prompt: string | null
   started_at: string
   ended_at: string | null
@@ -166,7 +166,7 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
         .eq('id', activeRunId)
         .single()
 
-      if (runNow?.status === 'completed') {
+      if (runNow?.status === 'completed' || runNow?.status === 'aborted') {
         callbacks.onDone?.()
         setActiveRunId(null)
         return
@@ -234,7 +234,7 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
           filter: `id=eq.${activeRunId}`,
         }, async (payload) => {
           const newStatus = (payload.new as AgentRunRow).status
-          if (newStatus === 'completed' || newStatus === 'failed') {
+          if (newStatus === 'completed' || newStatus === 'failed' || newStatus === 'aborted') {
             // Catch up ALL remaining events before signaling done
             await catchUpMissedEvents()
             if (newStatus === 'completed') callbacks.onDone?.()
@@ -254,7 +254,7 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
             .select('status')
             .eq('id', activeRunId)
             .single()
-          if (run?.status === 'completed' || run?.status === 'failed') {
+          if (run?.status === 'completed' || run?.status === 'failed' || run?.status === 'aborted') {
             clearInterval(pollTimer)
             await catchUpMissedEvents()
             if (run.status === 'completed') callbacks.onDone?.()

@@ -175,12 +175,25 @@ export async function POST(req: NextRequest) {
           const heartbeat = setInterval(() => {
             try { controller.enqueue(encoder.encode(`: heartbeat\n\n`)); } catch { /* disconnected */ }
           }, 10_000);
+          // Periodically check if run was aborted (user clicked abort in CUI)
+          let abortCheckCount = 0;
+          const isAborted = async () => {
+            if (!runId || ++abortCheckCount % 10 !== 0) return false; // check every ~10 events
+            const { data } = await supabase.from('agent_runs').select('status').eq('id', runId).single();
+            return data?.status === 'aborted';
+          };
+
           try {
             for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: currentDesign || undefined })) {
               if (writer) {
                 await writer.processAndEnqueue(event);
               } else {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              }
+              // Check abort after processing event
+              if (await isAborted()) {
+                console.log('[agent] Run aborted by user');
+                break;
               }
             }
           } finally {
