@@ -184,6 +184,12 @@ Duration: 12-25s (3 images → 12-15s, 5 → 15-20s, 7 → 20-25s).
 
 Write the full video in a single `run_code` (type: render). Before calling, output 1-2 sentences about what you're building.
 
+**Frame math — get this right or the video will freeze partway:**
+Total frames = fps × duration in seconds. For 20s @ 30fps = 600 frames.
+If your scenes are 0-3s, 3-7s, 7-11s, 11-15s, 15-20s, the frame ranges are:
+`[0,90], [90,210], [210,330], [330,450], [450,600]`
+Self-check: does your last interpolate/Sequence end at frame `fps × duration`? If it ends earlier, the video will freeze on a static frame for the remaining time.
+
 After code is complete, save to workspace: `write_file({ fromLastRunCode: true, name: "video-slug" })`.
 
 You can use `patch` anytime to iterate — fix issues, adjust animations, refine typography.
