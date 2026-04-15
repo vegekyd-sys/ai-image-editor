@@ -207,6 +207,15 @@ When reviewing the screenshots, focus on two things:
 
 These videos play on all platforms. Every effect you use must render correctly on iOS Safari, Android Chrome, and desktop browsers. Follow these rules to avoid platform-specific rendering failures.
 
+**Performance budget (CRITICAL — iOS Safari will CRASH if exceeded):**
+- Each scene should only have **1-2 `<Img>` tags** mounted at a time. Use `{frame >= sceneStart && frame < sceneEnd && (...)}` to conditionally render scenes — do NOT mount all scenes at once with `opacity: 0`
+- Use `<Sequence from={sceneStart} durationInFrames={sceneDuration}>` to automatically mount/unmount scenes at the right time
+- Total `<Img>` tags simultaneously in DOM: **≤ 3** (1 current scene + 1 crossfade overlap)
+- Keep total `<div>` count under **40** across all scenes
+- Max **3 filter** effects on any single element
+- Max **2 textShadow** layers per text element (not 4-5)
+- These are hard limits — iOS Safari OOM-kills the page above these thresholds
+
 **Blur（模糊背景/毛玻璃）**
 - Wrap blurred element in `overflow: hidden` container — prevents edge bleed (white/black fringe on iOS)
 - Scale blurred image 20%+ larger than container — hides the fringe that overflow clips
