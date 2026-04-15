@@ -667,6 +667,30 @@ Your code must return a value:
         const startTime = Date.now();
         // Store raw code for write_file({ fromLastRunCode: true })
         (ctx as any).__lastRunCode = code;
+
+        // Refresh snapshotImages URLs from DB — ensures URLs are valid
+        // (fixes race condition where upload is still in progress at request time)
+        if (ctx.supabase && ctx.projectId) {
+          try {
+            const { data: dbSnaps } = await ctx.supabase
+              .from('snapshots')
+              .select('image_url, sort_order')
+              .eq('project_id', ctx.projectId)
+              .order('sort_order');
+            if (dbSnaps?.length) {
+              for (let i = 0; i < Math.min(dbSnaps.length, ctx.snapshotImages.length); i++) {
+                const dbUrl = dbSnaps[i]?.image_url;
+                if (dbUrl && !ctx.snapshotImages[i].startsWith('http')) {
+                  console.log(`📸 [run_code] refreshed snapshotImages[${i}]: base64 → ${dbUrl.substring(0, 80)}`);
+                  ctx.snapshotImages[i] = dbUrl;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ [run_code] failed to refresh snapshot URLs:', e);
+          }
+        }
+
         // Debug: log snapshot image URLs available to run_code
         console.log(`📸 [run_code] ctx.snapshotImages (${ctx.snapshotImages.length}):`);
         ctx.snapshotImages.forEach((img, i) => {
