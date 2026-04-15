@@ -2,6 +2,15 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 const BUCKET = 'images'
 
+const SUPABASE_STORAGE_HOST = 'sdyrtztrjgmmpnirswxt.supabase.co'
+const PUBLIC_STORAGE_HOST = 'www.makaron.app'
+
+/** Convert a Supabase storage URL to a public makaron.app URL for user-facing links. */
+export function toPublicStorageUrl(url: string): string {
+  if (!url) return url
+  return url.replace(`https://${SUPABASE_STORAGE_HOST}/storage/`, `https://${PUBLIC_STORAGE_HOST}/storage/`)
+}
+
 /**
  * Upload a base64 data URL image to Supabase Storage.
  * Returns the public URL on success, null on failure.

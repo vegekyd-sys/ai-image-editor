@@ -19,9 +19,18 @@ Example: user says "use the background from image_2 and the person from image_3"
 RULE: If your editPrompt says "Image 2" but you didn't set reference_image_indices → the model only sees 1 image and will hallucinate Image 2. Always pass the actual images.
 
 --- SKILL PARAMETER ---
-Only use `skill` for user-created custom skills (e.g. skill='makaron-mascot') that have reference images or specific style guides.
+Use `skill` to auto-inject a proven quality template into the prompt. When skill is set,
+write only the specific creative direction in editPrompt — the template rules are injected automatically.
 
-When no skill is set, write the complete editPrompt yourself — you have full creative freedom.
+When to use each skill:
+- skill='creative' → user wants something fun/interesting added: "好玩点", "有趣",
+                     "加个什么", "创意", "搞笑", general "p一下" requests
+- skill='wild'     → user wants exaggerated/crazy transformation of existing elements:
+                     "疯狂一下", "脑洞", "夸张", "wild", "变形"
+- skill='captions' → user wants text/captions added to the image
+- (no skill)       → explicit specific requests ("把背景换成XX"), follow-up tweaks,
+                     or any request that doesn't fit the above categories
+
 
 --- DEFAULT: SINGLE IMAGE MODE ---
 By default (useOriginalAsReference=false), only the current photo is sent to Gemini.
