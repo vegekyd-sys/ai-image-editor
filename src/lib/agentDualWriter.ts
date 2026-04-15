@@ -15,8 +15,6 @@ import { uploadImage } from './supabase/storage';
  */
 export class AgentDualWriter {
   private seq = 0;
-  private contentBuffer = '';
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private sseDisconnected = false;
 
   // Message accumulation
@@ -42,8 +40,6 @@ export class AgentDualWriter {
       );
     } catch {
       this.sseDisconnected = true;
-      // Flush any pending content to DB immediately so reconnect sees it
-      void this.flushContent();
     }
   }
 
@@ -54,16 +50,11 @@ export class AgentDualWriter {
   async processAndEnqueue(event: AgentStreamEvent): Promise<void> {
     switch (event.type) {
       case 'content': {
-        this.contentBuffer += event.text;
         this.messageText += event.text;
-        // SSE: send original content event immediately
+        // SSE: send immediately
         this.tryEnqueue(event);
-        // DB: batch content writes
-        if (this.contentBuffer.length >= 50) {
-          await this.flushContent();
-        } else if (!this.flushTimer) {
-          this.flushTimer = setTimeout(() => this.flushContent(), 500);
-        }
+        // DB: store each content delta individually (1:1 with SSE for Replay fidelity)
+        await this.insertEvent('content', { text: event.text });
         return;
       }
 
@@ -234,23 +225,20 @@ export class AgentDualWriter {
         return;
       }
 
-      default:
-        // Unknown event types (reasoning, coding, code_stream): pass through SSE only
+      default: {
+        // ALL events persisted to agent_events (reasoning, coding, code_stream, etc.)
+        // This ensures Replay can reconstruct the exact SSE experience
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { type: _type, ...rest } = event as Record<string, unknown>;
+        await this.insertEvent(event.type, rest);
         this.tryEnqueue(event);
         return;
+      }
     }
   }
 
-  /** Flush pending content buffer to agent_events. */
-  async flushContent() {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-    if (!this.contentBuffer) return;
-    await this.insertEvent('content', { text: this.contentBuffer });
-    this.contentBuffer = '';
-  }
+  /** No-op — content is now written per-delta, not batched. Kept for caller compat. */
+  async flushContent() {}
 
   /** Call in after() or finally block. */
   async flush() {
