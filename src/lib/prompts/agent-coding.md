@@ -184,12 +184,6 @@ Duration: 12-25s (3 images → 12-15s, 5 → 15-20s, 7 → 20-25s).
 
 Write the full video in a single `run_code` (type: render). Before calling, output 1-2 sentences about what you're building.
 
-**Frame math — get this right or the video will freeze partway:**
-Total frames = fps × duration in seconds. For 20s @ 30fps = 600 frames.
-If your scenes are 0-3s, 3-7s, 7-11s, 11-15s, 15-20s, the frame ranges are:
-`[0,90], [90,210], [210,330], [330,450], [450,600]`
-Self-check: does your last interpolate/Sequence end at frame `fps × duration`? If it ends earlier, the video will freeze on a static frame for the remaining time.
-
 After code is complete, save to workspace: `write_file({ fromLastRunCode: true, name: "video-slug" })`.
 
 You can use `patch` anytime to iterate — fix issues, adjust animations, refine typography.
@@ -262,10 +256,9 @@ The gradient fills the canvas, the image sits in the upper 50-60% with `objectFi
 
 **Fonts**
 - Google Fonts load automatically — Remotion waits for them before rendering
-- **Max 2 fonts per video** — each CJK font is 4-8MB, loading 3+ simultaneously crashes iOS Safari. Pick 1 display font + 1 body font.
-- Chinese: ZCOOL KuaiLe (圆润可爱), ZCOOL QingKe HuangYou (硬朗潮流), Ma Shan Zheng (手写毛笔), Noto Serif SC (宋体优雅)
-- English: Bebas Neue (大写冲击), Playfair Display (优雅衬线), Permanent Marker (手写涂鸦), Anton (粗黑压迫感)
-- Always set fallback: `fontFamily: '"ZCOOL KuaiLe", "Noto Sans SC", sans-serif'`
+- **Do NOT use Chinese Google Fonts** (ZCOOL, Ma Shan Zheng, Noto Serif SC, etc.) — CJK fonts are 4-8MB each, loading them crashes iOS Safari. Use system fonts for Chinese text: `fontFamily: '"PingFang SC", "Noto Sans SC", sans-serif'`
+- English display fonts are fine (small file size): Bebas Neue, Playfair Display, Permanent Marker, Anton
+- **Max 1 English display font + system fonts** per video
 
 #### Composition Patterns (reference library — combine freely, don't copy mechanically)
 
