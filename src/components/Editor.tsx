@@ -2099,10 +2099,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         if (workSnapshots.length > 0) setViewIndex(refSnapshots.length);
       }
 
-      // ── Step 4: Persist + cache ──
+      // ── Step 4: Persist + cache + log events ──
       allSnapshots.forEach((snap, i) => {
         onSaveSnapshot?.(snap, i, (url) => {
           setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+          // Log image_upload event with the uploaded URL (for Replay)
+          if (projectId && snap.type !== 'reference') {
+            ProjectEvents.imageUpload(projectId, snap.id, url, i === 0);
+          }
         });
         if (snap.type !== 'reference') {
           cacheImage(`snap:${snap.id}`, snap.image);
