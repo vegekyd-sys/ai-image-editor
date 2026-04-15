@@ -87,6 +87,24 @@ function hasCJK(text: string): boolean {
   return /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text);
 }
 
+/** Check if text contains emoji characters */
+function hasEmoji(text: string): boolean {
+  return /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA00}-\u{1FA9F}]/u.test(text);
+}
+
+/** Load Noto Color Emoji font */
+async function loadEmojiFont(): Promise<void> {
+  try {
+    const font = ALL_FONTS.find(f => f.fontFamily === 'Noto Color Emoji');
+    if (!font) return;
+    const loaded = await font.load();
+    const { waitUntilDone } = loaded.loadFont();
+    await waitUntilDone();
+  } catch (e) {
+    console.warn('[DynamicDesign] emoji font load failed:', e);
+  }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────
 
 export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designProps }) => {
@@ -112,6 +130,11 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
       try {
         // Load all Google Fonts referenced in code + props
         await loadGoogleFontsFromText(allText);
+
+        // Emoji font — headless Chrome has no emoji font installed
+        if (hasEmoji(allText)) {
+          await loadEmojiFont();
+        }
 
         // If CJK text present, inject global fallback font-family
         // so text renders even when Agent doesn't specify fontFamily

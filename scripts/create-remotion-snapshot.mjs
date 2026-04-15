@@ -40,6 +40,8 @@ const PRELOAD_FONTS = [
   'Lato', 'Inter', 'Roboto', 'Bebas Neue',
   'Dancing Script', 'Pacifico', 'Lobster', 'Anton',
   'Caveat', 'Raleway',
+  // Emoji
+  'Noto Color Emoji',
 ];
 
 // ─── Step 1: Bundle ───────────────────────────────────────────────────────
