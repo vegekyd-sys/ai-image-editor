@@ -38,6 +38,10 @@ export class ReplayEngine {
    * in sequence (grouped by run_id), then merging results by timestamp.
    */
   static buildState(events: AgentEventRow[]): ProjectState {
+    // Reset static capture state
+    ReplayEngine._lastEditPrompt = null
+    ReplayEngine._lastEditModel = null
+
     // Group events by run_id (null run_id = user events, processed separately)
     const runGroups = new Map<string, AgentEventRow[]>()
     const userEvents: AgentEventRow[] = []
@@ -169,6 +173,10 @@ export class ReplayEngine {
 
   // ── Shared: Event → State reducer ──
 
+  // Per-call mutable state for capturing editPrompt across tool_call → image sequence
+  private static _lastEditPrompt: string | null = null
+  private static _lastEditModel: string | null = null
+
   private static applyEvent(
     event: AgentEventRow,
     state: ProjectState,
@@ -218,10 +226,20 @@ export class ReplayEngine {
               messageId: currentMsgId || '',
             }]
           }
-          // Set inline image on current message
+          // Set inline image + editPrompt on current message
           if (currentMsgId) {
+            const capturedPrompt = ReplayEngine._lastEditPrompt
+            const capturedModel = ReplayEngine._lastEditModel
+            ReplayEngine._lastEditPrompt = null
+            ReplayEngine._lastEditModel = null
             state.messages = state.messages.map(m =>
-              m.id === currentMsgId ? { ...m, image: imageUrl } : m,
+              m.id === currentMsgId ? {
+                ...m,
+                image: imageUrl,
+                ...(capturedPrompt ? { editPrompt: capturedPrompt } : {}),
+                ...(capturedModel ? { editModel: capturedModel } : {}),
+                ...(d.usedModel ? { editModel: d.usedModel as string } : {}),
+              } : m,
             )
           }
         }
@@ -281,7 +299,16 @@ export class ReplayEngine {
         break
       }
 
-      case 'tool_call':
+      case 'tool_call': {
+        // Capture editPrompt from generate_image calls (for EditPromptCard in CUI)
+        const tool = d.tool as string
+        const input = d.input as Record<string, unknown> | undefined
+        if (tool === 'generate_image' && input?.editPrompt) {
+          ReplayEngine._lastEditPrompt = input.editPrompt as string
+        }
+        break
+      }
+
       case 'status':
       case 'reasoning':
       case 'coding':
@@ -289,8 +316,6 @@ export class ReplayEngine {
       case 'nsfw_detected':
       case 'done':
       case 'error':
-        // These don't produce visible state for buildState (instant mode).
-        // Playback mode can use them for UI indicators.
         break
 
       case 'animation_task': {
