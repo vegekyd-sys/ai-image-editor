@@ -254,13 +254,12 @@ The gradient fills the canvas, the image sits in the upper 50-60% with `objectFi
 - Avoid `box-shadow` with blur > 60px on animated elements (iOS repaint cost)
 - For glow effects, prefer `textShadow` over `filter: drop-shadow` (more predictable cross-platform)
 
-**Fonts — use diverse fonts, don't default to one font for everything**
+**Fonts**
 - Google Fonts load automatically — Remotion waits for them before rendering
-- Mix fonts for contrast: a bold display font for titles + a clean sans-serif for subtitles
-- Chinese: ZCOOL KuaiLe (圆润可爱), ZCOOL QingKe HuangYou (硬朗潮流), Ma Shan Zheng (手写毛笔), Noto Serif SC (宋体优雅), Liu Jian Mao Cao (狂草)
-- English: Bebas Neue (大写冲击), Playfair Display (优雅衬线), Permanent Marker (手写涂鸦), Righteous (圆润标题), Anton (粗黑压迫感)
+- **Max 2 fonts per video** — each CJK font is 4-8MB, loading 3+ simultaneously crashes iOS Safari. Pick 1 display font + 1 body font.
+- Chinese: ZCOOL KuaiLe (圆润可爱), ZCOOL QingKe HuangYou (硬朗潮流), Ma Shan Zheng (手写毛笔), Noto Serif SC (宋体优雅)
+- English: Bebas Neue (大写冲击), Playfair Display (优雅衬线), Permanent Marker (手写涂鸦), Anton (粗黑压迫感)
 - Always set fallback: `fontFamily: '"ZCOOL KuaiLe", "Noto Sans SC", sans-serif'`
-- Different scenes can use different fonts — font variety adds visual rhythm to the video
 
 #### Composition Patterns (reference library — combine freely, don't copy mechanically)
 
