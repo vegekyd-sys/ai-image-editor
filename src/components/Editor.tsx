@@ -1605,14 +1605,24 @@ export default function Editor({
     setAgentStatus(t('editor.greeting'));
     // Remove the last empty/partial assistant message (the one being streamed)
     setMessages(prev => {
-      // Find the last assistant message — if it has no meaningful content, remove it
       const lastIdx = prev.length - 1;
       if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
         return prev.slice(0, lastIdx);
       }
       return prev;
     });
-  }, []);
+    // Abort the background agent run so server stops processing
+    if (agentRunIdRef.current) {
+      fetch('/api/agent/abort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: agentRunIdRef.current }),
+      }).catch(() => {});
+      agentRunIdRef.current = null;
+    }
+    // If reconnected via Realtime, disconnect
+    agentDisconnect();
+  }, [agentDisconnect]);
 
   // ── Reconnect to active background agent run ──
   // Uses the same makeAgentCallbacks factory as the SSE path — identical CUI building logic.
