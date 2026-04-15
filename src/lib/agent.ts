@@ -375,40 +375,68 @@ The screenshot is saved to workspace and shown to the user in chat.`,
           targetFrame = Math.max(0, Math.min(Math.round(timestamp * fps), totalFrames - 1));
         }
 
+        // Capture path set by tool-call handler (before execute runs)
+        const wsPath = (ctx as any).__pendingCapturePath as string || `${ctx.projectId}/drafts/design-snap${ctx.snapshotImages.length}-frame${targetFrame}.jpg`;
+        const pendingTs = (ctx as any).__pendingCaptureTs as number || 0;
+        (ctx as any).__pendingCapturePath = null;
+        (ctx as any).__pendingCaptureTs = null;
+
         try {
-          // Debug: dump full design to file for reproduction
-          const codeUrls = (design.code.match(/https:\/\/[^\s"'`\\]+/g) || []).filter((u: string) => u.includes('storage'));
-          console.log(`🔍 [preview_frame] URLs in code (${codeUrls.length}): ${codeUrls.map((u: string) => '...' + u.slice(-40)).join(', ')}`);
-          try {
-            const fs = await import('fs');
-            fs.writeFileSync('/tmp/preview-frame-debug.json', JSON.stringify({
-              code: design.code,
-              props: design.props,
-              width: design.width,
-              height: design.height,
-              animation: design.animation,
-              targetFrame,
+          // ── Path 1: Frontend capture (fast, emoji+fonts perfect) ──
+          // tool-call handler already sent capture_frame SSE to frontend.
+          // Poll workspace for the uploaded file (frontend renderStillOnWeb + upload).
+          const FRONTEND_TIMEOUT = 8_000;
+          const POLL_INTERVAL = 500;
+          let elapsed = 0;
+          let frontendResult: { content: string; contentType: string; storageUrl?: string } | null = null;
+
+          while (elapsed < FRONTEND_TIMEOUT) {
+            await new Promise(r => setTimeout(r, POLL_INTERVAL));
+            elapsed += POLL_INTERVAL;
+            try {
+              const wsResult = await workspace.readFile(wsPath, ctx.supabase, ctx.userId);
+              if (wsResult && wsResult.content) {
+                // Freshness check: only accept files written after our request
+                // (workspace_files.updated_at should be recent)
+                frontendResult = wsResult;
+                break;
+              }
+            } catch { /* not yet */ }
+          }
+
+          if (frontendResult) {
+            // Frontend captured successfully
+            const drafts = (ctx as any).__runCodeDrafts || [];
+            if (drafts.length > 0) {
+              drafts[drafts.length - 1].previewBase64 = frontendResult.content;
+              if (frontendResult.storageUrl) drafts[drafts.length - 1].previewUrl = frontendResult.storageUrl;
+            }
+            const raw = frontendResult.content.replace(/^data:image\/\w+;base64,/, '');
+            console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(raw.length * 0.75 / 1024).toFixed(0)} KB (frontend)`);
+            return {
+              base64Data: raw,
+              mimeType: 'image/jpeg',
+              frame: targetFrame,
               totalFrames,
               fps,
-            }, null, 2));
-            console.log(`🔍 [preview_frame] Design dumped to /tmp/preview-frame-debug.json (code: ${design.code.length} chars)`);
-          } catch { /* ignore */ }
+              question,
+              workspaceUrl: frontendResult.storageUrl || '',
+              workspacePath: wsPath,
+            };
+          }
 
-          // Server-side Sandbox rendering
+          // ── Path 2: Sandbox fallback (user offline / reconnect) ──
+          console.log(`⚠️ [agent] preview_frame: frontend timeout (${FRONTEND_TIMEOUT / 1000}s), falling back to Sandbox`);
           const { renderDesignFrame } = await import('./remotion-server');
           const jpegBuffer = await renderDesignFrame(design, targetFrame);
 
-          // Update draft preview for publish poster
           const drafts = (ctx as any).__runCodeDrafts || [];
           const b64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
           if (drafts.length > 0) {
             drafts[drafts.length - 1].previewBase64 = b64;
           }
 
-          // Upload to workspace
           let wsUrl = '';
-          const snapN = ctx.snapshotImages.length;
-          const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
           if (ctx.supabase && ctx.userId) {
             const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
             if (ws.storageUrl) {
@@ -417,8 +445,7 @@ The screenshot is saved to workspace and shown to the user in chat.`,
             }
           }
 
-          console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB (sandbox)`);
-
+          console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB (sandbox fallback)`);
           return {
             base64Data: jpegBuffer.toString('base64'),
             mimeType: 'image/jpeg',
@@ -1192,7 +1219,23 @@ export async function* runMakaronAgent(
             : (q ? `分析图片：${q.slice(0, 40)}` : '分析图片') };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number };
-          const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
+          const design = (ctx as any).__lastDesignPayload;
+          const pfFps = design?.animation?.fps || 30;
+          const pfDur = design?.animation?.durationInSeconds || 0;
+          const pfTotal = pfDur > 0 ? Math.max(1, Math.round(pfFps * pfDur)) : 1;
+          let pfFrame = 0;
+          if (input.frame !== undefined) pfFrame = Math.max(0, Math.min(input.frame, pfTotal - 1));
+          else if (input.timestamp !== undefined) pfFrame = Math.max(0, Math.min(Math.round(input.timestamp * pfFps), pfTotal - 1));
+
+          const captureId = `cap-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const snapN = ctx.snapshotImages.length;
+          const uploadPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${pfFrame}.jpg`;
+          // Store for execute to use
+          (ctx as any).__pendingCapturePath = uploadPath;
+          (ctx as any).__pendingCaptureTs = Date.now();
+          // SSE to frontend — triggers client-side renderStillOnWeb + upload
+          yield { type: 'capture_frame' as const, frame: pfFrame, uploadPath, captureId };
+          const hint = `frame ${pfFrame}`;
           yield { type: 'status', text: isEnLocale ? `Capturing ${hint}...` : `截帧 ${hint}...` };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
