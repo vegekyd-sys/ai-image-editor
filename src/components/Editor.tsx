@@ -2071,8 +2071,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         }
       });
 
-      // ── Step 5: Tips (if images exist) ──
-      if (hasImages) {
+      // ── Step 5: Tips (if images exist, and auto-tips enabled) ──
+      const autoTips = typeof window !== 'undefined' ? (localStorage.getItem('mkr_auto_tips') ?? 'auto') : 'auto';
+      if (hasImages && autoTips !== 'off') {
         const tipsImage = (img: string) =>
           img.startsWith('http') ? Promise.resolve(img) : compressBase64Image(img, 600_000);
         if (hasPrompt) {
