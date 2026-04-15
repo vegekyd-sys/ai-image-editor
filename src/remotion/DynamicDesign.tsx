@@ -135,12 +135,14 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
     };
   }, [codeStr, allText]);
 
-  if (!Component || !fontsReady) {
+  if (!Component) {
     return (
       <AbsoluteFill style={{ background: '#1a1a2e', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontSize: 14 }}>
-        {!Component ? 'Failed to compile design code' : 'Loading fonts...'}
+        Failed to compile design code
       </AbsoluteFill>
     );
   }
+  // Always render Component so <Img> can register its own delayRender for image loading.
+  // Font delayRender runs in parallel — Remotion waits for ALL handles before capturing.
   return <Component {...propsObj} />;
 };
