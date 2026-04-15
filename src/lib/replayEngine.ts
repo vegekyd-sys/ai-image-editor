@@ -1,45 +1,68 @@
 import type { AgentEventRow } from '@/hooks/useAgentRun'
-import type { Message, Snapshot } from '@/types'
+import type { Message, Snapshot, ProjectAnimation } from '@/types'
 
-export interface ReplayState {
-  messages: Message[]
+export interface ProjectState {
   snapshots: Snapshot[]
-  currentStatus: string
-  /** Which tool is currently being called (for UI display) */
-  activeToolCall: string | null
+  messages: Message[]
+  title: string
+  animations: ProjectAnimation[]
 }
 
 export interface ReplayCallbacks {
-  onStateChange: (state: ReplayState) => void
+  onStateChange: (state: ProjectState) => void
   onComplete: () => void
 }
 
 /**
- * Replays agent events with timing, simulating the creation process.
+ * Unified project state builder from agent_events.
  *
- * Events are played in sequence with delays derived from their timestamps.
- * Speed multiplier and max delay cap keep the experience snappy.
+ * Two modes:
+ * - `buildState(events)`: instant — processes all events synchronously, returns final state
+ * - `new ReplayEngine(events).play()`: playback — processes events with timing for animation
  */
 export class ReplayEngine {
   private events: AgentEventRow[]
   private currentIndex = 0
-  private state: ReplayState
+  private state: ProjectState
   private speed = 1
   private _isPlaying = false
   private timer: ReturnType<typeof setTimeout> | null = null
   private callbacks: ReplayCallbacks
   private currentMsgId: string | null = null
 
-  constructor(events: AgentEventRow[], callbacks: ReplayCallbacks) {
-    this.events = events.sort(
+  // ── Static: Instant mode (替代 loadProject) ──
+
+  /**
+   * Build complete project state from events in one pass.
+   * No animation, no delays — just the final result.
+   */
+  static buildState(events: AgentEventRow[]): ProjectState {
+    const sorted = [...events].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || a.seq - b.seq,
     )
-    this.state = {
-      messages: [],
+
+    const state: ProjectState = {
       snapshots: [],
-      currentStatus: '',
-      activeToolCall: null,
+      messages: [],
+      title: 'Untitled',
+      animations: [],
     }
+    let currentMsgId: string | null = null
+
+    for (const event of sorted) {
+      ReplayEngine.applyEvent(event, state, currentMsgId, (id) => { currentMsgId = id })
+    }
+
+    return state
+  }
+
+  // ── Instance: Playback mode (回放动画) ──
+
+  constructor(events: AgentEventRow[], callbacks: ReplayCallbacks) {
+    this.events = [...events].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || a.seq - b.seq,
+    )
+    this.state = { snapshots: [], messages: [], title: 'Untitled', animations: [] }
     this.callbacks = callbacks
   }
 
@@ -57,41 +80,27 @@ export class ReplayEngine {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
   }
 
-  setSpeed(speed: number) {
-    this.speed = speed
-  }
+  setSpeed(speed: number) { this.speed = speed }
 
-  /** Seek to a specific event index — replays all events up to that point instantly. */
   seekTo(index: number) {
-    // Reset state
-    this.state = {
-      messages: [],
-      snapshots: [],
-      currentStatus: '',
-      activeToolCall: null,
-    }
+    this.state = { snapshots: [], messages: [], title: 'Untitled', animations: [] }
     this.currentMsgId = null
     this.currentIndex = 0
 
-    // Replay up to target instantly
     const target = Math.min(index, this.events.length)
     for (let i = 0; i < target; i++) {
-      this.applyEvent(this.events[i])
+      ReplayEngine.applyEvent(this.events[i], this.state, this.currentMsgId, (id) => { this.currentMsgId = id })
       this.currentIndex = i + 1
     }
-
     this.callbacks.onStateChange({ ...this.state })
 
-    // Continue playing from this point if was playing
     if (this._isPlaying) {
       if (this.timer) { clearTimeout(this.timer); this.timer = null }
       this.scheduleNext()
     }
   }
 
-  destroy() {
-    this.pause()
-  }
+  destroy() { this.pause() }
 
   private scheduleNext() {
     if (this.currentIndex >= this.events.length) {
@@ -101,7 +110,7 @@ export class ReplayEngine {
     }
 
     const current = this.events[this.currentIndex]
-    this.applyEvent(current)
+    ReplayEngine.applyEvent(current, this.state, this.currentMsgId, (id) => { this.currentMsgId = id })
     this.callbacks.onStateChange({ ...this.state })
     this.currentIndex++
 
@@ -116,44 +125,43 @@ export class ReplayEngine {
     const next = this.events[this.currentIndex]
     const rawDelay = new Date(next.created_at).getTime() - new Date(current.created_at).getTime()
 
-    // Content events should flow fast (typing effect)
-    const maxDelay = current.type === 'content' ? 80 : 3000
-    const delay = Math.min(Math.max(rawDelay / this.speed, 16), maxDelay)
+    // Content/code_stream: fast typing effect; reasoning/coding: skip quickly; others: cap at 3s
+    let maxDelay = 3000
+    if (current.type === 'content' || current.type === 'code_stream') maxDelay = 50
+    else if (current.type === 'reasoning' || current.type === 'coding' || current.type === 'status') maxDelay = 200
 
-    this.timer = setTimeout(() => {
-      this.timer = null
-      this.scheduleNext()
-    }, delay)
+    const delay = Math.min(Math.max(rawDelay / this.speed, 16), maxDelay)
+    this.timer = setTimeout(() => { this.timer = null; this.scheduleNext() }, delay)
   }
 
-  private applyEvent(event: AgentEventRow) {
+  // ── Shared: Event → State reducer ──
+
+  private static applyEvent(
+    event: AgentEventRow,
+    state: ProjectState,
+    currentMsgId: string | null,
+    setMsgId: (id: string) => void,
+  ) {
     const { type, data } = event
+    const d = data as Record<string, unknown>
 
     switch (type) {
+      // ── Agent chat events ──
+
       case 'content': {
-        const text = (data as { text: string }).text ?? ''
-        if (this.currentMsgId) {
-          this.state.messages = this.state.messages.map(m =>
-            m.id === this.currentMsgId ? { ...m, content: m.content + text } : m,
+        const text = (d.text as string) ?? ''
+        if (currentMsgId) {
+          state.messages = state.messages.map(m =>
+            m.id === currentMsgId ? { ...m, content: m.content + text } : m,
           )
-        } else {
-          // First content event — create a message
-          const id = `replay-${event.seq}`
-          this.currentMsgId = id
-          this.state.messages = [...this.state.messages, {
-            id,
-            role: 'assistant' as const,
-            content: text,
-            timestamp: new Date(event.created_at).getTime(),
-          }]
         }
         break
       }
 
       case 'new_turn': {
-        const id = `replay-${event.seq}`
-        this.currentMsgId = id
-        this.state.messages = [...this.state.messages, {
+        const id = (d.messageId as string) || `replay-${event.seq}`
+        setMsgId(id)
+        state.messages = [...state.messages, {
           id,
           role: 'assistant' as const,
           content: '',
@@ -163,67 +171,210 @@ export class ReplayEngine {
       }
 
       case 'image': {
-        const { imageUrl, snapshotId } = data as { imageUrl?: string; snapshotId?: string }
+        const imageUrl = d.imageUrl as string | undefined
+        const snapshotId = d.snapshotId as string | undefined
         if (imageUrl) {
           const snapId = snapshotId || `replay-snap-${event.seq}`
-          this.state.snapshots = [...this.state.snapshots, {
-            id: snapId,
+          // Deduplicate
+          if (!state.snapshots.some(s => s.id === snapId)) {
+            state.snapshots = [...state.snapshots, {
+              id: snapId,
+              image: imageUrl,
+              imageUrl,
+              tips: [],
+              messageId: currentMsgId || '',
+            }]
+          }
+          // Set inline image on current message
+          if (currentMsgId) {
+            state.messages = state.messages.map(m =>
+              m.id === currentMsgId ? { ...m, image: imageUrl } : m,
+            )
+          }
+        }
+        break
+      }
+
+      case 'render':
+      case 'design': {
+        const code = d.code as string
+        const snapshotId = d.snapshotId as string | undefined
+        const published = d.published as boolean | undefined
+        if (code && published !== false) {
+          const snapId = snapshotId || `replay-design-${event.seq}`
+          if (!state.snapshots.some(s => s.id === snapId)) {
+            state.snapshots = [...state.snapshots, {
+              id: snapId,
+              image: '', // poster captured client-side
+              tips: [],
+              messageId: currentMsgId || '',
+              description: '[run_code design]',
+              design: {
+                code,
+                width: (d.width as number) || 1080,
+                height: (d.height as number) || 1350,
+                props: d.props as Record<string, unknown> | undefined,
+                animation: d.animation as { fps: number; durationInSeconds: number; format?: string } | undefined,
+              },
+            }]
+          }
+        }
+        break
+      }
+
+      case 'code_stream': {
+        // Append code to current message (like CUI streaming)
+        const text = (d.text as string) ?? ''
+        const done = d.done as boolean
+        if (currentMsgId) {
+          if (text && !done) {
+            // Check if we need to start a code block
+            const msg = state.messages.find(m => m.id === currentMsgId)
+            if (msg && !msg.content.includes('```javascript')) {
+              state.messages = state.messages.map(m =>
+                m.id === currentMsgId ? { ...m, content: m.content + '\n\n```javascript\n' + text } : m,
+              )
+            } else {
+              state.messages = state.messages.map(m =>
+                m.id === currentMsgId ? { ...m, content: m.content + text } : m,
+              )
+            }
+          } else if (done) {
+            state.messages = state.messages.map(m =>
+              m.id === currentMsgId ? { ...m, content: m.content + '\n```\n' } : m,
+            )
+          }
+        }
+        break
+      }
+
+      case 'tool_call':
+      case 'status':
+      case 'reasoning':
+      case 'coding':
+      case 'image_analyzed':
+      case 'nsfw_detected':
+      case 'done':
+      case 'error':
+        // These don't produce visible state for buildState (instant mode).
+        // Playback mode can use them for UI indicators.
+        break
+
+      case 'animation_task': {
+        const taskId = d.taskId as string
+        const prompt = (d.prompt as string) ?? ''
+        state.animations = [...state.animations, {
+          id: taskId,
+          projectId: (d.projectId as string) ?? '',
+          taskId,
+          videoUrl: null,
+          prompt,
+          snapshotUrls: [],
+          status: 'processing',
+          createdAt: event.created_at,
+        }]
+        break
+      }
+
+      // ── User action events (from projectEventLogger) ──
+
+      case 'user_message': {
+        const messageId = (d.messageId as string) || `user-${event.seq}`
+        const content = (d.content as string) ?? ''
+        state.messages = [...state.messages, {
+          id: messageId,
+          role: 'user' as const,
+          content,
+          timestamp: new Date(event.created_at).getTime(),
+        }]
+        break
+      }
+
+      case 'image_upload': {
+        const snapshotId = d.snapshotId as string
+        const imageUrl = d.imageUrl as string
+        if (snapshotId && imageUrl && !state.snapshots.some(s => s.id === snapshotId)) {
+          state.snapshots = [...state.snapshots, {
+            id: snapshotId,
             image: imageUrl,
             imageUrl,
             tips: [],
-            messageId: this.currentMsgId || '',
+            messageId: '',
           }]
         }
-        this.state.activeToolCall = null
         break
       }
 
-      case 'tool_call': {
-        const tool = (data as { tool: string }).tool
-        this.state.activeToolCall = tool
+      case 'tips_generated': {
+        const snapshotId = d.snapshotId as string
+        const tips = d.tips as unknown[]
+        if (snapshotId && tips) {
+          state.snapshots = state.snapshots.map(s =>
+            s.id === snapshotId ? { ...s, tips: tips as Snapshot['tips'] } : s,
+          )
+        }
         break
       }
 
-      case 'status': {
-        this.state.currentStatus = (data as { text: string }).text ?? ''
+      case 'tip_committed': {
+        const newSnapshotId = d.newSnapshotId as string
+        const imageUrl = d.imageUrl as string
+        if (newSnapshotId && imageUrl && !state.snapshots.some(s => s.id === newSnapshotId)) {
+          state.snapshots = [...state.snapshots, {
+            id: newSnapshotId,
+            image: imageUrl,
+            imageUrl,
+            tips: [],
+            messageId: '',
+          }]
+        }
         break
       }
 
-      case 'done':
-      case 'error':
-        this.state.activeToolCall = null
-        this.state.currentStatus = type === 'done' ? 'Done' : (data as { message?: string }).message || 'Error'
+      case 'project_named': {
+        const title = d.title as string
+        if (title) state.title = title
         break
+      }
 
-      // Other event types (animation_task, image_analyzed, nsfw_detected, code_complete) — skip for replay display
+      case 'video_completed': {
+        const animId = d.animationId as string
+        const videoUrl = d.videoUrl as string
+        if (animId && videoUrl) {
+          state.animations = state.animations.map(a =>
+            a.id === animId ? { ...a, videoUrl, status: 'completed' as const } : a,
+          )
+        }
+        break
+      }
+
+      case 'description_set': {
+        const snapshotId = d.snapshotId as string
+        const description = d.description as string
+        if (snapshotId && description) {
+          state.snapshots = state.snapshots.map(s =>
+            s.id === snapshotId ? { ...s, description } : s,
+          )
+        }
+        break
+      }
     }
   }
 }
 
 /**
- * Load all replay events for a project from Supabase.
+ * Load all events for a project from Supabase.
+ * Uses project_id directly (covers both agent events and user events).
  */
 export async function loadReplayEvents(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   projectId: string,
 ): Promise<AgentEventRow[]> {
-  // Get all runs for this project
-  const { data: runs } = await supabase
-    .from('agent_runs')
-    .select('id')
-    .eq('project_id', projectId)
-    .order('started_at', { ascending: true })
-
-  if (!runs?.length) return []
-
-  const runIds = runs.map((r: { id: string }) => r.id)
-
-  // Get all events for all runs
   const { data: events } = await supabase
     .from('agent_events')
     .select('*')
-    .in('run_id', runIds)
+    .eq('project_id', projectId)
     .order('created_at', { ascending: true })
 
   return (events ?? []) as AgentEventRow[]
