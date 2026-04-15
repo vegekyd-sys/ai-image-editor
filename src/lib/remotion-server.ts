@@ -18,25 +18,12 @@ async function ensureSandbox(): Promise<SandboxInstance> {
   const { Sandbox } = await import('@vercel/sandbox');
 
   // Try to reuse existing sandbox
-  if (_sandboxPromise && _sandboxId) {
+  if (_sandboxPromise) {
     try {
       const sandbox = await _sandboxPromise;
       if (sandbox.status === 'running') return sandbox;
-    } catch { /* sandbox died */ }
+    } catch { /* sandbox died or 410 */ }
     _sandboxPromise = null;
-    _sandboxId = null;
-  }
-
-  // Try to reconnect to a previously created sandbox
-  if (_sandboxId) {
-    try {
-      const sandbox = await Sandbox.get({ sandboxId: _sandboxId });
-      if (sandbox.status === 'running') {
-        _sandboxPromise = Promise.resolve(sandbox);
-        console.log(`🖥️ [remotion-server] Reconnected to Sandbox ${_sandboxId}`);
-        return sandbox;
-      }
-    } catch { /* expired */ }
     _sandboxId = null;
   }
 
@@ -72,37 +59,52 @@ export async function renderDesignFrame(
   frame = 0,
 ): Promise<Buffer> {
   const { renderStillOnVercel } = await import('@remotion/vercel');
-  const sandbox = await ensureSandbox();
 
   const fps = design.animation?.fps || 30;
   const dur = design.animation?.durationInSeconds || 0;
   const durationInFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
-
   const outputFile = '/tmp/still.jpeg';
-  console.log(`🎨 [remotion-server] Rendering frame ${frame} (${design.width}x${design.height})...`);
-  const t0 = Date.now();
 
-  await renderStillOnVercel({
-    sandbox,
-    compositionId: 'dynamic-design',
-    inputProps: {
-      code: design.code,
-      designProps: design.props || {},
-      fps,
-      durationInFrames,
-      width: design.width || 1080,
-      height: design.height || 1350,
-    },
-    imageFormat: 'jpeg',
-    jpegQuality: 90,
-    frame: Math.min(frame, durationInFrames - 1),
-    outputFile,
-    timeoutInMilliseconds: 30000,
-  });
+  // Retry once if Sandbox is gone (410/expired)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const sandbox = await ensureSandbox();
+    console.log(`🎨 [remotion-server] Rendering frame ${frame} (${design.width}x${design.height})${attempt > 0 ? ' [retry]' : ''}...`);
+    const t0 = Date.now();
 
-  const buffer = await sandbox.readFileToBuffer({ path: outputFile });
-  if (!buffer) throw new Error('Rendered file not found in Sandbox');
+    try {
+      await renderStillOnVercel({
+        sandbox,
+        compositionId: 'dynamic-design',
+        inputProps: {
+          code: design.code,
+          designProps: design.props || {},
+          fps,
+          durationInFrames,
+          width: design.width || 1080,
+          height: design.height || 1350,
+        },
+        imageFormat: 'jpeg',
+        jpegQuality: 90,
+        frame: Math.min(frame, durationInFrames - 1),
+        outputFile,
+        timeoutInMilliseconds: 30000,
+      });
 
-  console.log(`✅ [remotion-server] Frame rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s: ${(buffer.length / 1024).toFixed(0)} KB`);
-  return buffer;
+      const buffer = await sandbox.readFileToBuffer({ path: outputFile });
+      if (!buffer) throw new Error('Rendered file not found in Sandbox');
+
+      console.log(`✅ [remotion-server] Frame rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s: ${(buffer.length / 1024).toFixed(0)} KB`);
+      return buffer;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt === 0 && (msg.includes('410') || msg.includes('gone') || msg.includes('not ok'))) {
+        console.warn(`⚠️ [remotion-server] Sandbox expired, recreating...`);
+        _sandboxPromise = null;
+        _sandboxId = null;
+        continue; // retry with fresh sandbox
+      }
+      throw err;
+    }
+  }
+  throw new Error('renderDesignFrame: all attempts failed');
 }
