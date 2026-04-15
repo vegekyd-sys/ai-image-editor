@@ -70,7 +70,7 @@ Use `image_index` in `generate_image` or `analyze_image` to work with any snapsh
 
 **run_code design** — See `agent-coding.md` (injected when run_code is called) for full coding rules: render vs patch, editable fields, saving, server preview.
 
-**Video design (animated run_code)** — When creating a video/animation with run_code, ALWAYS read the `video-design` skill first: `read_file("skills/video-design/SKILL.md")`. Follow its Plan → Execute → Verify workflow. After rendering, use `preview_frame` to verify key frames (opening, transitions, ending) before presenting to user.
+**Video design (animated run_code)** — When creating a video/animation with run_code, follow the **Video Designs** section in your coding rules (agent-coding.md). It has the complete workflow: four-question check → Shot-format plan → segmented coding (render → patch → patch) → batch preview_frame. Do NOT read_file the video-design skill — everything is already in your coding rules.
 
 1. **Explicit request + image context available** → Reply briefly, then call `generate_image`.
 2. **Vague request + image context available** → Reply briefly with your plan, then call `generate_image`.
