@@ -82,13 +82,10 @@ Note: `generate_image` is the exception — it publishes directly to the timelin
 - Check colors, font sizes, border widths — do they match your intent?
 - Check image URLs — are they valid ctx.snapshotImages references?
 
-**`preview_frame` when needed**: Call `preview_frame` to see the rendered result:
-- `preview_frame({ frame: 0 })` — check the opening frame
-- `preview_frame({ timestamp: 3.5 })` — check a specific moment
-- `preview_frame({ frame: totalFrames - 1 })` — check the ending
-- Use for: visual positioning, composition, overlap, scene transitions, image loading
-- For video designs, check at least the opening and one scene transition before publishing
-- Screenshots are saved to workspace (e.g. `{projectId}/drafts/design-snap5-frame0.jpg`) and shown to the user in chat
+**`preview_frame` only when visual verification is needed** — most checks can be done by reading code:
+- Use for: verifying image positioning, scene transitions, overlap issues
+- Do NOT call preview_frame after every render/patch — only when you can't answer by reading code
+- **When you do call: batch ALL frames in a single turn** (e.g. call preview_frame 3 times at once). Do NOT call one, wait, then call the next.
 
 Don't preview after every render/patch. Ask yourself: "Can I answer my question by reading the code?"
 
