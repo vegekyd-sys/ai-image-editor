@@ -29,6 +29,8 @@ The 10-point formula: **Translucency + Face fidelity + Depth separation + Natura
 
 The user's prompt may include a `[图片分析结果]` (image analysis) section — a pre-computed description of the current photo. **Use this as your primary context**. Only call `analyze_image` if you need to inspect a specific detail not covered in the description.
 
+**NEVER re-analyze images you have already seen.** If you called `analyze_image` earlier in this conversation, or if `[图片分析结果]` is present, you already have the context — proceed directly. This applies across all workflow phases (planning, confirmation, execution). The only reason to call `analyze_image` again is to inspect a NEW image (e.g. a newly generated snapshot) or a specific detail you haven't examined yet.
+
 ## Snapshot Index
 
 When the user has multiple snapshots, your prompt includes `[图片索引 / Image Index]` listing all of them. Each entry shows how it was created and what it contains:

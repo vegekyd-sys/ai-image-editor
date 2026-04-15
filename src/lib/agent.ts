@@ -376,6 +376,24 @@ The screenshot is saved to workspace and shown to the user in chat.`,
         }
 
         try {
+          // Debug: dump full design to file for reproduction
+          const codeUrls = (design.code.match(/https:\/\/[^\s"'`\\]+/g) || []).filter((u: string) => u.includes('storage'));
+          console.log(`🔍 [preview_frame] URLs in code (${codeUrls.length}): ${codeUrls.map((u: string) => '...' + u.slice(-40)).join(', ')}`);
+          try {
+            const fs = await import('fs');
+            fs.writeFileSync('/tmp/preview-frame-debug.json', JSON.stringify({
+              code: design.code,
+              props: design.props,
+              width: design.width,
+              height: design.height,
+              animation: design.animation,
+              targetFrame,
+              totalFrames,
+              fps,
+            }, null, 2));
+            console.log(`🔍 [preview_frame] Design dumped to /tmp/preview-frame-debug.json (code: ${design.code.length} chars)`);
+          } catch { /* ignore */ }
+
           // Server-side Sandbox rendering
           const { renderDesignFrame } = await import('./remotion-server');
           const jpegBuffer = await renderDesignFrame(design, targetFrame);
@@ -694,7 +712,7 @@ Your code must return a value:
         // Debug: log snapshot image URLs available to run_code
         console.log(`📸 [run_code] ctx.snapshotImages (${ctx.snapshotImages.length}):`);
         ctx.snapshotImages.forEach((img, i) => {
-          console.log(`  [${i}] ${img ? (img.startsWith('http') ? img.substring(0, 80) : `base64:${img.length}chars`) : 'EMPTY'}`);
+          console.log(`  [${i}] ${img ? (img.startsWith('http') ? img : `base64:${img.length}chars`) : 'EMPTY'}`);
         });
         try {
           // Pre-fetch requested snapshot images as Buffers
