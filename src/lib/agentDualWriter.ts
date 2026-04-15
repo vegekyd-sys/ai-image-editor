@@ -284,6 +284,7 @@ export class AgentDualWriter {
     try {
       await this.supabase.from('agent_events').insert({
         run_id: this.runId,
+        project_id: this.projectId,
         type,
         data,
         seq: this.seq++,

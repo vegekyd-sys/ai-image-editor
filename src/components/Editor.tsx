@@ -11,6 +11,7 @@ import AnnotationToolbar from '@/components/AnnotationToolbar';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
+import { ProjectEvents } from '@/lib/projectEventLogger';
 import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
@@ -620,7 +621,7 @@ export default function Editor({
         { prompt: '', image: '', projectId, nameProject: true, description },
         {
           onContent: (delta) => { name += delta; },
-          onDone: () => { if (name.trim()) onRenameProject(name.trim()); },
+          onDone: () => { if (name.trim()) { onRenameProject(name.trim()); if (projectId) ProjectEvents.projectNamed(projectId, name.trim()); } },
           onError: () => {},
         },
       );
@@ -1389,6 +1390,7 @@ export default function Editor({
     // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
     if (!options?.silent) {
       addMessage('user', text, undefined, overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
+      if (projectId) ProjectEvents.userMessage(projectId, generateId(), text, !!overrideImage || !!(attachedImages?.length));
     }
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
@@ -1827,6 +1829,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     setSnapshots((prev) => [...prev, newSnapshot]);
     cacheImage(`snap:${snapId}`, newSnapshot.image);
     onUpdateDescription?.(snapId, tipDesc);
+    if (projectId) ProjectEvents.tipCommitted(projectId, snapshots[draftParentIndex]?.id ?? '', previewingTipIndex, snapId, tip.previewImage);
 
     // Clear draft and jump to the newly committed snapshot
     setViewIndex(snapshots.length);
