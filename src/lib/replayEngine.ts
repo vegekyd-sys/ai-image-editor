@@ -34,24 +34,57 @@ export class ReplayEngine {
 
   /**
    * Build complete project state from events in one pass.
-   * No animation, no delays — just the final result.
+   * Handles parallel runs correctly by processing each run's events
+   * in sequence (grouped by run_id), then merging results by timestamp.
    */
   static buildState(events: AgentEventRow[]): ProjectState {
-    const sorted = [...events].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || a.seq - b.seq,
-    )
+    // Group events by run_id (null run_id = user events, processed separately)
+    const runGroups = new Map<string, AgentEventRow[]>()
+    const userEvents: AgentEventRow[] = []
 
+    for (const event of events) {
+      if (!event.run_id) {
+        userEvents.push(event)
+      } else {
+        const group = runGroups.get(event.run_id) || []
+        group.push(event)
+        runGroups.set(event.run_id, group)
+      }
+    }
+
+    // Process each run independently (no cross-run currentMsgId contamination)
     const state: ProjectState = {
       snapshots: [],
       messages: [],
       title: 'Untitled',
       animations: [],
     }
-    let currentMsgId: string | null = null
 
-    for (const event of sorted) {
-      ReplayEngine.applyEvent(event, state, currentMsgId, (id) => { currentMsgId = id })
+    // 1. Process user events first (image_upload, user_message, project_named, etc.)
+    userEvents.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    let userMsgId: string | null = null
+    for (const event of userEvents) {
+      ReplayEngine.applyEvent(event, state, userMsgId, (id) => { userMsgId = id })
     }
+
+    // 2. Process each agent run in chronological order (by run start time)
+    const sortedRuns = [...runGroups.entries()].sort((a, b) => {
+      const aFirst = a[1][0]?.created_at ?? ''
+      const bFirst = b[1][0]?.created_at ?? ''
+      return aFirst.localeCompare(bFirst)
+    })
+
+    for (const [, runEvents] of sortedRuns) {
+      // Sort within run by seq (not created_at — seq is the authoritative order within a run)
+      runEvents.sort((a, b) => a.seq - b.seq)
+      let runMsgId: string | null = null
+      for (const event of runEvents) {
+        ReplayEngine.applyEvent(event, state, runMsgId, (id) => { runMsgId = id })
+      }
+    }
+
+    // 3. Sort messages by timestamp for correct CUI display order
+    state.messages.sort((a, b) => a.timestamp - b.timestamp)
 
     return state
   }
@@ -365,17 +398,30 @@ export class ReplayEngine {
 /**
  * Load all events for a project from Supabase.
  * Uses project_id directly (covers both agent events and user events).
+ * Paginates to bypass Supabase's default 1000 row limit.
  */
 export async function loadReplayEvents(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   projectId: string,
 ): Promise<AgentEventRow[]> {
-  const { data: events } = await supabase
-    .from('agent_events')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: true })
+  const PAGE_SIZE = 1000
+  const allEvents: AgentEventRow[] = []
+  let offset = 0
 
-  return (events ?? []) as AgentEventRow[]
+  while (true) {
+    const { data } = await supabase
+      .from('agent_events')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1)
+
+    if (!data?.length) break
+    allEvents.push(...(data as AgentEventRow[]))
+    if (data.length < PAGE_SIZE) break
+    offset += PAGE_SIZE
+  }
+
+  return allEvents
 }
