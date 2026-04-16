@@ -637,7 +637,7 @@ Available in your code:
 Your code must return a value:
 - Image (sharp output): return Buffer directly, or \`{ type: 'image', data: base64, mimeType: 'image/jpeg' }\`
 - Text: return \`{ type: 'text', content: 'result' }\`
-- **Render (React design)**: return \`{ type: 'render', code: '...', width: 1080, height: 1350 }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio. Rendered by the browser with full CSS + Google Fonts support.
+- **Render (React design)**: return \`{ type: 'render', code: '...', width: 1080, height: 1350 }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio, evolvePath/getLength/getPointAtLength/getTangentAtLength/interpolatePath/parsePath/resetPath/cutPath (from @remotion/paths — SVG path animation, stroke drawing, path morphing), noise2D/noise3D (from @remotion/noise — organic textures, smoke, waves), opentype (from opentype.js — extract SVG paths from English font glyphs for stroke animation; do NOT use with CJK fonts). Rendered by the browser with full CSS + Google Fonts support.
   **IMPORTANT: Use \`<Img>\` (Remotion) instead of \`<img>\` for all images.** \`<Img>\` ensures images are fully loaded before rendering/screenshot. Plain \`<img>\` causes blank images on mobile.
   **Embed image URLs directly in code using template literals** — do NOT use props for images:
   \`\`\`
