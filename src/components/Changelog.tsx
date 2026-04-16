@@ -8,6 +8,27 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-16',
+    en: { title: 'Video Design Pro & Sandbox Rendering', items: [
+      'Smarter video creation: 4-question creative check drives the entire workflow — plan, code, verify',
+      'Rich kinetic typography: per-character animation, multi-layer text per scene, text that tells the story',
+      'Remotion Sandbox: server-side frame rendering on Vercel — Agent previews any frame without browser',
+      'CJK fonts + emoji in Sandbox: system Noto fonts + 30 pre-cached Google Fonts in Snapshot',
+      'Cross-platform safe: iOS-friendly effects, gradient backgrounds, no heavy CJK web fonts',
+      'Auto-save & publish: Agent saves code after every edit, publishes when satisfied',
+      'Abort Agent: cancel background Agent from CUI',
+    ]},
+    zh: { title: 'Video Design Pro & Sandbox 渲染', items: [
+      '更聪明的视频创作：四问创意自检驱动全流程 — 规划、编码、验证',
+      '丰富的花字动效：逐字动画、每场景多层文字、文字就是画面的一部分',
+      'Remotion Sandbox：服务端逐帧渲染 — Agent 无需浏览器即可预览任意帧',
+      'Sandbox 中日韩字体 + Emoji：系统 Noto 字体 + 30 个预缓存 Google Fonts',
+      '跨平台安全：iOS 友好特效，渐变背景代替模糊，不加载大型中文网络字体',
+      '自动保存 & 发布：Agent 每次编辑后自动存代码，满意后发布',
+      '中断 Agent：CUI 中可取消后台 Agent',
+    ]},
+  },
+  {
     date: '2026-04-15',
     en: { title: 'Frame Preview & Draft Timeline', items: [
       'preview_frame: Agent captures any frame of a video design to check its own work before publishing',
