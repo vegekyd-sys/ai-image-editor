@@ -209,9 +209,12 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
       try {
         await preloadBabel().catch(() => {});
         // Pre-fetch remote images → same-origin blob URLs so <Img> renders instantly
-        const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
-        if (cancelled) { blobUrls.forEach(u => URL.revokeObjectURL(u)); return; }
-        blobUrlsRef.current = blobUrls;
+        const { code: imageResolved, blobUrls: imgBlobs } = await resolveCodeUrls(design.code);
+        if (cancelled) { imgBlobs.forEach(u => URL.revokeObjectURL(u)); return; }
+        // Pre-fetch remote audio → same-origin blob URLs (Suno CDN may be slow/CORS)
+        const { code: resolvedCode, blobUrls: audioBlobs } = await resolveAudioUrls(imageResolved);
+        if (cancelled) { [...imgBlobs, ...audioBlobs].forEach(u => URL.revokeObjectURL(u)); return; }
+        blobUrlsRef.current = [...imgBlobs, ...audioBlobs];
         // Preload Google Fonts before rendering
         await preloadFontsFromCode(resolvedCode);
         if (cancelled) return;
@@ -295,9 +298,9 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
             <img src={posterImage} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : undefined}
           showPosterWhenUnplayed={!!posterImage}
-          showPosterWhenBuffering={!!posterImage}
+          showPosterWhenBuffering={false}
           posterFillMode="player-size"
-          bufferStateDelayInMilliseconds={200}
+          bufferStateDelayInMilliseconds={0}
           errorFallback={({ error }) => (
             <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
               Render error: {error.message}

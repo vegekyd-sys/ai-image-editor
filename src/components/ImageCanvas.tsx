@@ -649,6 +649,30 @@ export default function ImageCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex]);
 
+  // Pause on buffering, resume when assets ready — like a real video player
+  const wasPlayingBeforeBufferRef = useRef(false);
+  useEffect(() => {
+    const player = remotionRef.current;
+    if (!player) return;
+    const onWaiting = () => {
+      wasPlayingBeforeBufferRef.current = remotionPlaying;
+      player.pause();
+      setRemotionPlaying(false);
+    };
+    const onResume = () => {
+      if (wasPlayingBeforeBufferRef.current || remotionStartedRef.current) {
+        player.play();
+        setRemotionPlaying(true);
+      }
+    };
+    player.addEventListener('waiting', onWaiting);
+    player.addEventListener('resume', onResume);
+    return () => {
+      player.removeEventListener('waiting', onWaiting);
+      player.removeEventListener('resume', onResume);
+    };
+  });
+
   const toggleRemotionPlay = useCallback(() => {
     const p = remotionRef.current;
     if (!p) return;
