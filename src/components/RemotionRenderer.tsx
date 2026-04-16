@@ -200,23 +200,42 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
+  // Track blob URLs for cleanup
+  const blobUrlsRef = useRef<string[]>([]);
+
   useEffect(() => {
-    try {
-      preloadBabel().catch(() => {});
-      const comp = evalRemotionJSX(design.code);
-      if (!comp) {
-        setCompileError('Failed to compile design code');
-        onError?.('Failed to compile design code');
-        return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await preloadBabel().catch(() => {});
+        // Pre-fetch remote images → same-origin blob URLs so <Img> renders instantly
+        const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
+        if (cancelled) { blobUrls.forEach(u => URL.revokeObjectURL(u)); return; }
+        blobUrlsRef.current = blobUrls;
+        // Preload Google Fonts before rendering
+        await preloadFontsFromCode(resolvedCode);
+        if (cancelled) return;
+        const comp = evalRemotionJSX(resolvedCode);
+        if (!comp) {
+          setCompileError('Failed to compile design code');
+          onError?.('Failed to compile design code');
+          return;
+        }
+        setCompileError(null);
+        setComponent(() => comp);
+      } catch (e) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[RemotionRenderer] init failed:', msg);
+        setCompileError(msg);
+        onError?.(msg);
       }
-      setCompileError(null);
-      setComponent(() => comp);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error('[RemotionRenderer] evalRemotionJSX crashed:', msg);
-      setCompileError(msg);
-      onError?.(msg);
-    }
+    })();
+    return () => {
+      cancelled = true;
+      blobUrlsRef.current.forEach(u => URL.revokeObjectURL(u));
+      blobUrlsRef.current = [];
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
