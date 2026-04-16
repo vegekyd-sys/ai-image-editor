@@ -24,7 +24,7 @@ export interface Message {
   editModel?: string;    // which model generated the image ('gemini' | 'qwen')
   editInputImages?: string[]; // images passed to Gemini as input (1 = normal, 2 = face restoration)
   design?: DesignPayload; // Remotion design from run_code
-  thinking?: string;     // Agent's reasoning/thinking text (extended thinking delta)
+  thinking?: string[];   // Agent's reasoning/thinking segments (one per thinking round)
   timestamp: number;
   projectId?: string;
 }

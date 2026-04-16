@@ -992,16 +992,16 @@ export default function AgentChatView({
                 /* Assistant — no bubble, full-width text */
                 <div className="flex flex-col gap-2.5">
                   <div className={`${isPanel ? 'text-[17px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
-                    {msg.thinking && (
-                      <details className="mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    {msg.thinking?.map((segment, ti) => segment && (
+                      <details key={ti} className="mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
                         <summary className="cursor-pointer select-none text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                          Thinking...
+                          Thinking{msg.thinking!.length > 1 ? ` (${ti + 1})` : ''}...
                         </summary>
                         <div className="mt-1 text-[13px] leading-[1.6] whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                          {msg.thinking}
+                          {segment}
                         </div>
                       </details>
-                    )}
+                    ))}
                     {msg.content && (
                       <div className="markdown-body">
                         <MarkdownBlock

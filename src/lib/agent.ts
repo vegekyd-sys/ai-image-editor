@@ -77,7 +77,8 @@ export type AgentStreamEvent =
   | { type: 'capture_frame'; frame: number; uploadPath: string; captureId: string }  // request frontend to capture a frame via renderStillOnWeb
   | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
   | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
-  | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
+  | { type: 'reasoning_start' }           // new thinking round started
+  | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
@@ -1094,9 +1095,13 @@ export async function* runMakaronAgent(
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
 
     for await (const event of result.fullStream) {
-      // ── Reasoning delta — forward to CUI as thinking text ──
+      // ── Reasoning events — forward to CUI ──
+      if (event.type === 'reasoning-start') {
+        yield { type: 'reasoning_start' as const };
+        continue;
+      }
       if (event.type === 'reasoning-delta') {
-        yield { type: 'reasoning' as const, text: (event as any).text || (event as any).delta || '' };
+        yield { type: 'reasoning' as const, text: (event as any).delta || '' };
         continue;
       }
 
