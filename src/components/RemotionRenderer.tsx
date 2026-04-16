@@ -201,26 +201,18 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
 
-  // Track blob URLs for cleanup
-  const blobUrlsRef = useRef<string[]>([]);
-
   useEffect(() => {
     let cancelled = false;
     onLoading?.(true);
     (async () => {
       try {
         await preloadBabel().catch(() => {});
-        // Pre-fetch remote images → same-origin blob URLs so <Img> renders instantly
-        const { code: imageResolved, blobUrls: imgBlobs } = await resolveCodeUrls(design.code);
-        if (cancelled) { imgBlobs.forEach(u => URL.revokeObjectURL(u)); return; }
-        // Pre-fetch remote audio → same-origin blob URLs (Suno CDN may be slow/CORS)
-        const { code: resolvedCode, blobUrls: audioBlobs } = await resolveAudioUrls(imageResolved);
-        if (cancelled) { [...imgBlobs, ...audioBlobs].forEach(u => URL.revokeObjectURL(u)); return; }
-        blobUrlsRef.current = [...imgBlobs, ...audioBlobs];
-        // Preload Google Fonts before rendering
-        await preloadFontsFromCode(resolvedCode);
+        // Preload Google Fonts (must be ready before rendering — text layout depends on it)
+        await preloadFontsFromCode(design.code);
         if (cancelled) return;
-        const comp = evalRemotionJSX(resolvedCode);
+        // Compile directly with original URLs — <Img> handles loading via delayRender,
+        // Player pauses on waiting event when assets aren't ready (stream-style loading)
+        const comp = evalRemotionJSX(design.code);
         if (!comp) {
           setCompileError('Failed to compile design code');
           onError?.('Failed to compile design code');
@@ -239,11 +231,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         onLoading?.(false);
       }
     })();
-    return () => {
-      cancelled = true;
-      blobUrlsRef.current.forEach(u => URL.revokeObjectURL(u));
-      blobUrlsRef.current = [];
-    };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
