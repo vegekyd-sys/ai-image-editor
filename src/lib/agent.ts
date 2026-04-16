@@ -520,15 +520,16 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-Set fromLastRunCode=true to PUBLISH the last run_code output (design or image) — this creates a real Snapshot on the timeline that the user can see. Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.
-Every run_code output is a draft (preview only). Call write_file({ fromLastRunCode: true }) to publish when you're satisfied with the result.`,
+Set fromLastRunCode=true to save the last run_code output. By default this also PUBLISHES to the timeline. Set publish=false to save code to workspace WITHOUT publishing — useful for saving work-in-progress before you're ready to show the user.
+Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save and PUBLISH the last run_code output (design or image) to timeline. Path is auto-generated with project ID + snapshot number.'),
+        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output (design or image). By default also publishes to timeline. Set publish=false to save only.'),
+        publish: z.boolean().optional().describe('Whether to publish to timeline. Default true. Set false to save code to workspace without creating a Snapshot.'),
       }),
-      execute: async ({ path: filePath, name, content, fromLastRunCode }) => {
+      execute: async ({ path: filePath, name, content, fromLastRunCode, publish: shouldPublish }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, message: 'Workspace not available (no Supabase connection).' };
         }
@@ -558,8 +559,8 @@ Every run_code output is a draft (preview only). Call write_file({ fromLastRunCo
           return { success: false, message: `Write failed: ${result.error}` };
         }
 
-        // Publish: when fromLastRunCode, promote the last draft to a real Snapshot
-        if (fromLastRunCode) {
+        // Publish: when fromLastRunCode and publish !== false, promote the last draft to a real Snapshot
+        if (fromLastRunCode && shouldPublish !== false) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const drafts = (ctx as any).__runCodeDrafts || [];
           const lastDraft = drafts[drafts.length - 1];

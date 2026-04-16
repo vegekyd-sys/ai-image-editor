@@ -60,20 +60,20 @@ Rules:
 - Component must read text from `props[propKey]`: `{props.title}`
 - `data-editable` attribute value must match the `id` in editables array
 
-### Draft vs Publish (Timeline Control)
+### Draft, Save, and Publish
 
-**ALL** `run_code` output — designs (render/patch) AND images (sharp/Buffer) — creates a **draft**. Drafts are previewed but do NOT appear on the timeline. You can iterate freely without cluttering the timeline.
+**ALL** `run_code` output — designs (render/patch) AND images (sharp/Buffer) — creates a **draft**. Drafts are previewed but do NOT appear on the timeline.
 
-When you're satisfied, call `write_file({ fromLastRunCode: true, name: "short-slug" })` to **publish**. This creates a real Snapshot on the user's timeline.
+**Two ways to save:**
+- `write_file({ fromLastRunCode: true, name: "slug", publish: false })` → **save only** — persists code to workspace (survives page refresh), does NOT create a timeline Snapshot. Use while iterating.
+- `write_file({ fromLastRunCode: true, name: "slug" })` → **save + publish** — persists code AND creates a real Snapshot on the user's timeline. Use when the result is ready.
 
 **Workflow**:
-1. `run_code` (render/patch/image) → draft preview
-2. ... iterate as needed ...
-3. `write_file({ fromLastRunCode: true, name: "slug" })` → published to timeline
+1. `run_code` (render) → draft preview → `write_file({ ..., publish: false })` to save
+2. `run_code` (patch) → iterate → `write_file({ ..., publish: false })` to save
+3. When satisfied → `write_file({ fromLastRunCode: true, name: "slug" })` to publish
 
-You control what appears on the timeline. Only publish results you're happy with.
-
-Note: `generate_image` is the exception — it publishes directly to the timeline (users expect immediate results from photo editing).
+Note: `generate_image` is the exception — it publishes directly to the timeline.
 
 ### Verifying your work
 
@@ -190,7 +190,10 @@ Duration: 12-25s (3 images → 12-15s, 5 → 15-20s, 7 → 20-25s).
 
 Write the full video in a single `run_code` (type: render). Before calling, output 1-2 sentences about what you're building.
 
-**After EVERY `run_code` (render or patch), immediately call `write_file({ fromLastRunCode: true, name: "video-slug" })`** to save code to workspace and publish to timeline. Do not skip this — if you don't save, the code only exists in memory and is lost on page refresh.
+**After EVERY `run_code` (render or patch), save your code:**
+- Save without publishing: `write_file({ fromLastRunCode: true, name: "video-slug", publish: false })` — saves code to workspace, does NOT create a timeline Snapshot. Use this while iterating.
+- Save and publish: `write_file({ fromLastRunCode: true, name: "video-slug" })` — saves code AND publishes to timeline. Use when the result is ready for the user.
+- Do not skip saving — if you don't, the code only exists in memory and is lost on page refresh.
 
 #### Phase 3 — Verify（batch preview_frame）
 
