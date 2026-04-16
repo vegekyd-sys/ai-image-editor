@@ -21,6 +21,7 @@ import {
   AbsoluteFill,
 } from 'remotion';
 import { Audio } from '@remotion/media';
+import { Triangle, Circle, Ellipse, Star, Pie, Rect as RRect, Polygon, Heart, Arrow } from '@remotion/shapes';
 
 /** All APIs available to Agent's React code */
 const REMOTION_SCOPE: Record<string, unknown> = {
@@ -39,6 +40,16 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   Img,
   AbsoluteFill,
   Audio,
+  // @remotion/shapes — SVG decorative elements
+  Triangle,
+  Circle,
+  Ellipse,
+  Star,
+  Pie,
+  RRect,
+  Polygon,
+  Heart,
+  Arrow,
 };
 
 // Babel CDN fallback (lazy-loaded only when Sucrase fails)
