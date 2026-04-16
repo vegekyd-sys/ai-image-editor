@@ -1101,7 +1101,7 @@ export async function* runMakaronAgent(
         continue;
       }
       if (event.type === 'reasoning-delta') {
-        yield { type: 'reasoning' as const, text: (event as any).delta || '' };
+        yield { type: 'reasoning' as const, text: (event as any).text || '' };
         continue;
       }
 
