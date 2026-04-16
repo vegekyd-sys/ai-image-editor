@@ -190,9 +190,7 @@ Duration: 12-25s (3 images → 12-15s, 5 → 15-20s, 7 → 20-25s).
 
 Write the full video in a single `run_code` (type: render). Before calling, output 1-2 sentences about what you're building.
 
-After code is complete, save to workspace: `write_file({ fromLastRunCode: true, name: "video-slug" })`.
-
-You can use `patch` anytime to iterate — fix issues, adjust animations, refine typography.
+**After EVERY `run_code` (render or patch), immediately call `write_file({ fromLastRunCode: true, name: "video-slug" })`** to save code to workspace and publish to timeline. Do not skip this — if you don't save, the code only exists in memory and is lost on page refresh.
 
 #### Phase 3 — Verify（batch preview_frame）
 
