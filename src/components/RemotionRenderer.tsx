@@ -182,11 +182,12 @@ interface RemotionRendererProps {
   onError?: (error: string) => void;
   mode?: 'fill' | 'inline';
   hideControls?: boolean;
+  posterImage?: string;
   onContainerRef?: (el: HTMLDivElement | null) => void;
   onPlayerRef?: (ref: PlayerRef | null) => void;
 }
 
-export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, onContainerRef, onPlayerRef }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, posterImage, onContainerRef, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -270,6 +271,14 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
           loop={false}
           autoPlay={false}
           acknowledgeRemotionLicense
+          // Poster: show snapshot image while buffering / before play — prevents blank frames
+          renderPoster={posterImage ? () => (
+            <img src={posterImage} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          ) : undefined}
+          showPosterWhenUnplayed={!!posterImage}
+          showPosterWhenBuffering={!!posterImage}
+          posterFillMode="player-size"
+          bufferStateDelayInMilliseconds={200}
           errorFallback={({ error }) => (
             <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
               Render error: {error.message}
