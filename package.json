@@ -25,7 +25,6 @@
     "@remotion/media-utils": "^4.0.446",
     "@remotion/player": "^4.0.446",
     "@remotion/renderer": "4.0.446",
-    "@remotion/shapes": "^4.0.448",
     "@remotion/vercel": "^4.0.448",
     "@remotion/web-renderer": "^4.0.446",
     "@supabase/ssr": "^0.8.0",
