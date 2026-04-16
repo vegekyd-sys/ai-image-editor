@@ -1104,6 +1104,11 @@ export async function* runMakaronAgent(
         yield { type: 'reasoning' as const, text: (event as any).text || '' };
         continue;
       }
+      if (event.type === 'reasoning-end') {
+        const isEnLocale = options?.locale === 'en';
+        yield { type: 'status' as const, text: isEnLocale ? 'Planning...' : '规划中...' };
+        continue;
+      }
 
       // ── Tool input streaming — extract code in real-time for run_code ──
       if (event.type === 'tool-input-start') {
