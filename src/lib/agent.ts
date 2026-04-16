@@ -1083,6 +1083,11 @@ export async function* runMakaronAgent(
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
       onStepFinish: () => { stepCount++; },
+      providerOptions: {
+        bedrock: {
+          reasoningConfig: { type: 'enabled', budgetTokens: 10000 },
+        },
+      },
     });
 
     // State machine for extracting code from run_code tool-input-delta
