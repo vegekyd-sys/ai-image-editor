@@ -102,7 +102,14 @@ Build on existing code — do NOT rewrite from scratch.
 
 When creating animated designs (with `duration`), follow this complete workflow. Do NOT read_file the video-design skill — everything you need is here.
 
-**Goal: Make a video that makes people go WOW.**
+**Goal: Make a video that makes people go WOW — push creative boundaries, don't play safe.**
+
+Think like a music video director, not a slideshow maker. Every decision should surprise the viewer:
+- **Image treatment**: Don't just show the photo — split it, mirror it, zoom into a detail, overlay it on itself with blend modes, desaturate and re-color it, make it breathe with scale pulses
+- **Text as visual art**: Text isn't annotation — it's a visual element as important as the image. Text can be bigger than the image, can move independently, can fill the entire screen, can be partially hidden behind the image
+- **Layout breaking**: Not every scene needs the image centered. Try: image in a strip on the left with text filling the right. Image as a tiny thumbnail in a sea of typography. Full-bleed image with text punched out. Split screen with same image at different zoom levels
+- **Rhythm and surprise**: Alternate fast cuts (0.5s) with slow holds (4s). Use silence (empty black frame) as punctuation. Make one scene radically different from the others
+- **Use your tools creatively**: noise2D for animated grain/texture backgrounds, evolvePath for drawing effects, clip-path for reveals, mix-blend-mode for double exposures
 
 #### 四问自检（Plan 阶段回答，Code 阶段实现，Verify 阶段验收）
 
