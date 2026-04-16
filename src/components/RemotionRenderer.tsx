@@ -183,11 +183,12 @@ interface RemotionRendererProps {
   mode?: 'fill' | 'inline';
   hideControls?: boolean;
   posterImage?: string;
+  onLoading?: (loading: boolean) => void;
   onContainerRef?: (el: HTMLDivElement | null) => void;
   onPlayerRef?: (ref: PlayerRef | null) => void;
 }
 
-export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, posterImage, onContainerRef, onPlayerRef }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, posterImage, onLoading, onContainerRef, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -205,6 +206,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
   useEffect(() => {
     let cancelled = false;
+    onLoading?.(true);
     (async () => {
       try {
         await preloadBabel().catch(() => {});
@@ -222,16 +224,19 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         if (!comp) {
           setCompileError('Failed to compile design code');
           onError?.('Failed to compile design code');
+          onLoading?.(false);
           return;
         }
         setCompileError(null);
         setComponent(() => comp);
+        onLoading?.(false);
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[RemotionRenderer] init failed:', msg);
         setCompileError(msg);
         onError?.(msg);
+        onLoading?.(false);
       }
     })();
     return () => {

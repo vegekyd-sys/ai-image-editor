@@ -141,6 +141,7 @@ export default function ImageCanvas({
   const [remotionPlaying, setRemotionPlaying] = useState(false);
   const remotionFrameRef = useRef(0);
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
+  const [remotionLoading, setRemotionLoading] = useState(false); // true while RemotionRenderer is initializing (fetching images/fonts/audio)
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
@@ -632,6 +633,8 @@ export default function ImageCanvas({
   const remotionAutoPlayRef = useRef(false);
   useEffect(() => {
     setRemotionPlaying(false);
+    setRemotionBuffering(false);
+    setRemotionLoading(!!currentDesign?.animation);
     remotionFrameRef.current = 0;
     remotionStartedRef.current = false;
     // Mark for auto-play — actual play triggered when Player ref arrives
@@ -1003,6 +1006,7 @@ export default function ImageCanvas({
               mode="fill"
               hideControls
               posterImage={currentDesign?.animation ? displayImage : undefined}
+              onLoading={setRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
               onPlayerRef={(ref) => {
@@ -1024,10 +1028,10 @@ export default function ImageCanvas({
             {currentDesign?.animation && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
-                  onClick={(e) => { e.stopPropagation(); if (!remotionBuffering) toggleRemotionPlay(); }}
+                  onClick={(e) => { e.stopPropagation(); if (!remotionBuffering && !remotionLoading) toggleRemotionPlay(); }}
                   className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
                 >
-                  {remotionBuffering ? (
+                  {(remotionBuffering || remotionLoading) ? (
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="animate-spin">
                       <circle cx="10" cy="10" r="8" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
                       <path d="M10 2a8 8 0 0 1 8 8" stroke="white" strokeWidth="2" strokeLinecap="round" />
