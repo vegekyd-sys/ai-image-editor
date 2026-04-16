@@ -651,15 +651,18 @@ export default function ImageCanvas({
 
   // Pause on buffering, resume when assets ready — like a real video player
   const wasPlayingBeforeBufferRef = useRef(false);
+  const [remotionBuffering, setRemotionBuffering] = useState(false);
   useEffect(() => {
     const player = remotionRef.current;
     if (!player) return;
     const onWaiting = () => {
       wasPlayingBeforeBufferRef.current = remotionPlaying;
+      setRemotionBuffering(true);
       player.pause();
       setRemotionPlaying(false);
     };
     const onResume = () => {
+      setRemotionBuffering(false);
       if (wasPlayingBeforeBufferRef.current || remotionStartedRef.current) {
         player.play();
         setRemotionPlaying(true);
@@ -1021,10 +1024,15 @@ export default function ImageCanvas({
             {currentDesign?.animation && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
-                  onClick={(e) => { e.stopPropagation(); toggleRemotionPlay(); }}
+                  onClick={(e) => { e.stopPropagation(); if (!remotionBuffering) toggleRemotionPlay(); }}
                   className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
                 >
-                  {remotionPlaying ? (
+                  {remotionBuffering ? (
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="animate-spin">
+                      <circle cx="10" cy="10" r="8" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
+                      <path d="M10 2a8 8 0 0 1 8 8" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  ) : remotionPlaying ? (
                     <svg width="18" height="18" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
                   ) : (
                     <svg width="18" height="18" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
