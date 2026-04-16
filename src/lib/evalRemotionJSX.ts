@@ -23,7 +23,6 @@ import {
 import { Audio } from '@remotion/media';
 import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
 import { noise2D, noise3D } from '@remotion/noise';
-import opentype from 'opentype.js';
 
 /** All APIs available to Agent's React code */
 const REMOTION_SCOPE: Record<string, unknown> = {
@@ -46,8 +45,6 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath,
   // @remotion/noise — organic textures
   noise2D, noise3D,
-  // opentype.js — font path extraction (English fonts only, not CJK)
-  opentype,
 };
 
 // Babel CDN fallback (lazy-loaded only when Sucrase fails)
