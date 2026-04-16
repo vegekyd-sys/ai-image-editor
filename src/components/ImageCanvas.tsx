@@ -629,6 +629,20 @@ export default function ImageCanvas({
     return () => cancelAnimationFrame(raf);
   }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
+  // Preload all images in design code via browser cache, then call onReady
+  const preloadDesignImages = useCallback((code: string): Promise<void> => {
+    const urls = new Set<string>();
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi)) urls.add(m[0]);
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi)) urls.add(m[0]);
+    if (urls.size === 0) return Promise.resolve();
+    return Promise.all([...urls].map(url => new Promise<void>(resolve => {
+      const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+      img.src = url;
+    }))).then(() => {});
+  }, []);
+
   // Reset + auto-play when switching to a design snapshot
   const remotionAutoPlayRef = useRef(false);
   useEffect(() => {
@@ -639,15 +653,17 @@ export default function ImageCanvas({
     remotionStartedRef.current = false;
     // Mark for auto-play — actual play triggered when Player ref arrives
     remotionAutoPlayRef.current = !!currentDesign?.animation;
-    // Try auto-play now if ref already available
+    // Try auto-play now if ref already available — preload images first
     if (currentDesign?.animation && remotionRef.current) {
-      const timer = setTimeout(() => {
+      let cancelled = false;
+      preloadDesignImages(currentDesign.code).then(() => {
+        if (cancelled) return;
         remotionRef.current?.play();
         remotionStartedRef.current = true;
         setRemotionPlaying(true);
         remotionAutoPlayRef.current = false;
-      }, 600);
-      return () => clearTimeout(timer);
+      });
+      return () => { cancelled = true; };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex]);
@@ -1025,13 +1041,13 @@ export default function ImageCanvas({
                 remotionRef.current = ref;
                 if (editableFields?.length) setDesignPlayerRef(ref);
                 // Auto-play if pending (ref wasn't ready during useEffect)
-                if (ref && remotionAutoPlayRef.current) {
+                if (ref && remotionAutoPlayRef.current && currentDesign) {
                   remotionAutoPlayRef.current = false;
-                  setTimeout(() => {
+                  preloadDesignImages(currentDesign.code).then(() => {
                     ref.play();
                     remotionStartedRef.current = true;
                     setRemotionPlaying(true);
-                  }, 600);
+                  });
                 }
               }}
             />
