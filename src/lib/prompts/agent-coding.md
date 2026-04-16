@@ -209,7 +209,7 @@ Call multiple `preview_frame` in a single turn. Do NOT call one, wait, call the 
 When reviewing the screenshots, focus on two things:
 
 1. **人物主体有没有被截掉？** — 头、脸、手有没有被裁出画面。特别是 cover 模式 + objectPosition 不对时容易切掉头顶或下半身。如果人被裁了，调 objectPosition 或换 contain。
-2. **花字有没有挡住人？** — 大字不能盖住人脸或关键部位。花字应该在留白区域（底部、顶部、图片旁边），不要压在人物主体上。
+2. **花字有没有挡住人？** — 大字不能盖住人脸或关键部位。花字放在画面中间偏上或偏下的位置，不要贴在顶部/底部边缘（底部 1/8 和顶部 1/8 是安全区外，手机状态栏和底部手势条会遮挡）。
 
 #### Cross-Platform Effects (iOS / Android / Web 通用)
 
