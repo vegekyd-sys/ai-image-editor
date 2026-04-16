@@ -21,6 +21,13 @@ import {
   AbsoluteFill,
 } from 'remotion';
 import { Audio } from '@remotion/media';
+import { TransitionSeries, linearTiming, springTiming } from '@remotion/transitions';
+import { fade } from '@remotion/transitions/fade';
+import { slide } from '@remotion/transitions/slide';
+import { wipe } from '@remotion/transitions/wipe';
+import { flip } from '@remotion/transitions/flip';
+import { clockWipe } from '@remotion/transitions/clock-wipe';
+import { Lottie, getLottieMetadata } from '@remotion/lottie';
 
 /** All APIs available to Agent's React code */
 const REMOTION_SCOPE: Record<string, unknown> = {
@@ -39,6 +46,18 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   Img,
   AbsoluteFill,
   Audio,
+  // @remotion/transitions — declarative scene transitions
+  TransitionSeries,
+  linearTiming,
+  springTiming,
+  fade,
+  slide,
+  wipe,
+  flip,
+  clockWipe,
+  // @remotion/lottie — After Effects animations
+  Lottie,
+  getLottieMetadata,
 };
 
 // Babel CDN fallback (lazy-loaded only when Sucrase fails)

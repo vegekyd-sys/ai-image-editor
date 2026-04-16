@@ -306,7 +306,60 @@ const fast = interpolate(frame, [0, 150], [0, -15], { extrapolateRight: 'clamp' 
 <div style={{transform:`translateY(${fast}%)`}}>{/* kinetic text */}</div>
 ```
 
-**Shatter transition (clip-path mask animation):**
+**TransitionSeries — declarative scene transitions (preferred over manual clip-path/opacity):**
+Use `TransitionSeries` instead of manually coding transitions. Built-in presentations: `fade()`, `slide()`, `wipe()`, `flip()`, `clockWipe()`.
+```jsx
+// Each scene is a TransitionSeries.Sequence, transitions go between them
+<TransitionSeries>
+  <TransitionSeries.Sequence durationInFrames={90}>
+    <AbsoluteFill>
+      <Img src={url1} style={{width:'100%',height:'100%',objectFit:'cover'}} />
+      {/* Scene 1 content + text */}
+    </AbsoluteFill>
+  </TransitionSeries.Sequence>
+  <TransitionSeries.Transition
+    presentation={slide({ direction: 'from-right' })}
+    timing={springTiming({ config: { damping: 200 }, durationInFrames: 15 })}
+  />
+  <TransitionSeries.Sequence durationInFrames={120}>
+    <AbsoluteFill>
+      <Img src={url2} style={{width:'100%',height:'100%',objectFit:'cover'}} />
+      {/* Scene 2 content + text */}
+    </AbsoluteFill>
+  </TransitionSeries.Sequence>
+  <TransitionSeries.Transition
+    presentation={wipe({ direction: 'from-left' })}
+    timing={linearTiming({ durationInFrames: 20 })}
+  />
+  <TransitionSeries.Sequence durationInFrames={90}>
+    {/* Scene 3 ... */}
+  </TransitionSeries.Sequence>
+</TransitionSeries>
+```
+Presentations: `fade()`, `slide({ direction })`, `wipe({ direction })`, `flip({ direction })`, `clockWipe()`.
+Timing: `springTiming({ config, durationInFrames })` or `linearTiming({ durationInFrames })`.
+Benefits: scenes auto-mount/unmount (solves iOS memory), transitions are smooth and tested.
+
+**Lottie — After Effects animations as decorative overlays:**
+Use `<Lottie>` to overlay pre-made animations (confetti, sparkles, light effects, smoke) on top of scenes. Load JSON from a URL.
+```jsx
+// Fetch lottie JSON, then render
+const [animData, setAnimData] = useState(null);
+useEffect(() => {
+  fetch('https://assets.lottiefiles.com/packages/lf20_xxxx.json')
+    .then(r => r.json()).then(setAnimData);
+}, []);
+// Overlay on scene
+{animData && (
+  <div style={{position:'absolute', inset:0, pointerEvents:'none'}}>
+    <Lottie animationData={animData} />
+  </div>
+)}
+```
+Good sources for free Lottie JSON: lottiefiles.com (search for confetti, sparkle, firework, smoke, celebration).
+Use as accent layers — don't make Lottie the main content.
+
+**Shatter transition (clip-path mask animation — use when TransitionSeries presentations don't fit):**
 ```jsx
 const reveal = interpolate(frame, [transStart, transStart + 20], [0, 100], { extrapolateRight: 'clamp' });
 <div style={{clipPath:`polygon(0 0, ${reveal}% 0, ${reveal - 20}% 100%, 0 100%)`}}>
