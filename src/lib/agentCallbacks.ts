@@ -378,15 +378,16 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     },
 
     onReasoning: (text: string) => {
-      // Append to the latest thinking segment
+      if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentThinking');
       if (!currentMsgId || !text) return;
       const id = currentMsgId;
       ctx.setMessages(prev => prev.map(m => {
         if (m.id !== id) return m;
-        const segments = m.thinking || [''];
+        const segments = [...(m.thinking || [])];
+        // Auto-create first segment if none exists (reasoning-start may not fire)
         if (segments.length === 0) segments.push('');
         segments[segments.length - 1] += text;
-        return { ...m, thinking: [...segments] };
+        return { ...m, thinking: segments };
       }));
     },
 
