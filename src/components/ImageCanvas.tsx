@@ -1024,6 +1024,15 @@ export default function ImageCanvas({
               }}
             />
 
+            {/* Poster fallback while RemotionRenderer is loading (fetching images/fonts/audio) */}
+            {remotionLoading && displayImage && (
+              <img
+                src={displayImage}
+                alt="poster"
+                className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none z-[1]"
+              />
+            )}
+
             {/* Play/pause button — bottom-left, large */}
             {currentDesign?.animation && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
