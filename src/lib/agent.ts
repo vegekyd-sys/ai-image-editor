@@ -1202,7 +1202,7 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: isEnLocale ? 'Deleting...' : '删除中...' };
         } else if (event.toolName === 'run_code') {
           const desc = (event.input as { description?: string }).description;
-          yield { type: 'status', text: isEnLocale ? `Running: ${desc || 'code'}...` : `执行: ${desc || '代码'}...` };
+          yield { type: 'status', text: isEnLocale ? 'Generating code...' : '代码生成中...' };
         } else if (event.toolName === 'rotate_camera') {
           yield { type: 'status', text: isEnLocale ? 'Rotating camera...' : '旋转相机中...' };
         }
