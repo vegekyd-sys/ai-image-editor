@@ -46,6 +46,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
+    "react-moveable": "^0.56.0",
     "remark-gfm": "^4.0.1",
     "remotion": "^4.0.446",
     "sharp": "^0.34.5",

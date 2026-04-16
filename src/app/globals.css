@@ -220,3 +220,8 @@ textarea {
   border-radius: 2px;
   background: rgba(192,38,211,0.8);
 }
+
+/* Moveable — override default blue (#4af) with our fuchsia */
+[class*="moveable-"] {
+  --moveable-color: #d946ef !important;
+}
