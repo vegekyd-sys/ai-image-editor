@@ -653,29 +653,41 @@ export default function ImageCanvas({
   }, [currentIndex]);
 
   // Pause on buffering, resume when assets ready — like a real video player
+  // Debounce resume to avoid flicker when multiple images load in quick succession
   const wasPlayingBeforeBufferRef = useRef(false);
   const [remotionBuffering, setRemotionBuffering] = useState(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const player = remotionRef.current;
     if (!player) return;
     const onWaiting = () => {
-      wasPlayingBeforeBufferRef.current = remotionPlaying;
+      // Cancel any pending resume — still buffering
+      if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
+      wasPlayingBeforeBufferRef.current = wasPlayingBeforeBufferRef.current || remotionPlaying;
       setRemotionBuffering(true);
       player.pause();
       setRemotionPlaying(false);
     };
     const onResume = () => {
-      setRemotionBuffering(false);
-      if (wasPlayingBeforeBufferRef.current || remotionStartedRef.current) {
-        player.play();
-        setRemotionPlaying(true);
-      }
+      // Debounce: wait 150ms to confirm all assets are truly ready
+      // (prevents flash when image 1 loads but image 2/3 on same frame haven't yet)
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = setTimeout(() => {
+        resumeTimerRef.current = null;
+        setRemotionBuffering(false);
+        if (wasPlayingBeforeBufferRef.current || remotionStartedRef.current) {
+          wasPlayingBeforeBufferRef.current = false;
+          player.play();
+          setRemotionPlaying(true);
+        }
+      }, 150);
     };
     player.addEventListener('waiting', onWaiting);
     player.addEventListener('resume', onResume);
     return () => {
       player.removeEventListener('waiting', onWaiting);
       player.removeEventListener('resume', onResume);
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
     };
   });
 
