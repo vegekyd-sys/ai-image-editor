@@ -92,8 +92,10 @@ export function useProject(projectId: string, userId: string) {
         const storagePath = `${resolvedUserId}/workspace/${dp}`
         const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
         if (urlData?.publicUrl) {
+          // Cache-bust: design JSON is updated in-place via upsert, CDN caches stale version
+          const bustUrl = `${urlData.publicUrl}?t=${Date.now()}`
           const res = await Promise.race([
-            fetch(urlData.publicUrl),
+            fetch(bustUrl),
             new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
           ])
           if (res.ok) {

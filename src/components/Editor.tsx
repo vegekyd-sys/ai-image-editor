@@ -256,11 +256,28 @@ export default function Editor({
     setSnapshots(prev => {
       const existingIds = new Set(prev.map(s => s.id));
       const newItems = initialSnapshots.filter(s => !existingIds.has(s.id));
-      if (newItems.length === 0) return prev;
-      // During reconnect: append new items (don't replace Realtime-created ones)
-      // Normal: if Supabase has more, replace entirely for freshness
-      if (isAgentActive) return [...prev, ...newItems];
-      return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
+
+      if (newItems.length > 0) {
+        // New snapshots found
+        if (isAgentActive) return [...prev, ...newItems];
+        return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
+      }
+
+      // Same IDs — merge design/props updates from Supabase into cached snapshots.
+      // This handles: cache shows stale design, then Supabase loads fresh design JSON.
+      const incoming = new Map(initialSnapshots.map(s => [s.id, s]));
+      let changed = false;
+      const merged = prev.map(s => {
+        const fresh = incoming.get(s.id);
+        if (!fresh?.design) return s;
+        // If fresh has a design but prev doesn't, or fresh design has newer props
+        if (!s.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(s.design.props))) {
+          changed = true;
+          return { ...s, design: fresh.design };
+        }
+        return s;
+      });
+      return changed ? merged : prev;
     });
   }, [initialSnapshots, isAgentActive]);
 
