@@ -3,14 +3,6 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   devIndicators: false,
   serverExternalPackages: ['@remotion/renderer', '@remotion/bundler', '@remotion/vercel', '@vercel/sandbox', '@remotion/google-fonts'],
-  async rewrites() {
-    return [
-      {
-        source: '/storage/:path*',
-        destination: 'https://sdyrtztrjgmmpnirswxt.supabase.co/storage/:path*',
-      },
-    ];
-  },
   turbopack: {
     rules: {
       "*.md": {
