@@ -1089,8 +1089,9 @@ export async function* runMakaronAgent(
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
 
     for await (const event of result.fullStream) {
-      // ── Reasoning delta — skip (route.ts heartbeat handles keep-alive) ──
+      // ── Reasoning delta — forward to CUI as thinking text ──
       if (event.type === 'reasoning-delta') {
+        yield { type: 'reasoning' as const, text: (event as any).text || (event as any).delta || '' };
         continue;
       }
 

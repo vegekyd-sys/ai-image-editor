@@ -367,8 +367,14 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }
     },
 
-    onReasoning: () => {
+    onReasoning: (text: string) => {
       if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentThinking');
+      // Append thinking text to current message for CUI display
+      if (!currentMsgId || !text) return;
+      const id = currentMsgId;
+      ctx.setMessages(prev => prev.map(m =>
+        m.id === id ? { ...m, thinking: (m.thinking || '') + text } : m,
+      ));
     },
 
     onCoding: () => {
