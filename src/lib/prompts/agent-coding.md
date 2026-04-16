@@ -190,10 +190,7 @@ Duration: 12-25s (3 images → 12-15s, 5 → 15-20s, 7 → 20-25s).
 
 Write the full video in a single `run_code` (type: render). Before calling, output 1-2 sentences about what you're building.
 
-**After EVERY `run_code` (render or patch), save your code:**
-- Save without publishing: `write_file({ fromLastRunCode: true, name: "video-slug", publish: false })` — saves code to workspace, does NOT create a timeline Snapshot. Use this while iterating.
-- Save and publish: `write_file({ fromLastRunCode: true, name: "video-slug" })` — saves code AND publishes to timeline. Use when the result is ready for the user.
-- Do not skip saving — if you don't, the code only exists in memory and is lost on page refresh.
+**After EVERY `run_code` (render or patch), immediately call `write_file({ fromLastRunCode: true, name: "slug" })`** — this saves your code and publishes to timeline. Never skip this. Do NOT ask the user whether to save or publish — just do it.
 
 #### Phase 3 — Verify（batch preview_frame）
 

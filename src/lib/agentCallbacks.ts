@@ -276,14 +276,28 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const stream = ctx.codeStreamRef.current;
       if (!stream) return;
       if (done) {
+        // Flush any pending text before closing
+        const pending = (stream as any).__pendingText || '';
+        if ((stream as any).__pendingRaf) cancelAnimationFrame((stream as any).__pendingRaf);
         ctx.setMessages(prev => prev.map(m =>
-          m.id === stream.msgId ? { ...m, content: (m.content || '') + '\n```\n' } : m,
+          m.id === stream.msgId ? { ...m, content: (m.content || '') + pending + '\n```\n' } : m,
         ));
         ctx.codeStreamRef.current = null;
       } else {
-        ctx.setMessages(prev => prev.map(m =>
-          m.id === stream.msgId ? { ...m, content: (m.content || '') + text } : m,
-        ));
+        // Batch code chunks — accumulate in ref, flush via rAF (prevents "maximum update depth exceeded")
+        (stream as any).__pendingText = ((stream as any).__pendingText || '') + text;
+        if (!(stream as any).__pendingRaf) {
+          (stream as any).__pendingRaf = requestAnimationFrame(() => {
+            const flush = (stream as any).__pendingText || '';
+            (stream as any).__pendingText = '';
+            (stream as any).__pendingRaf = 0;
+            if (flush) {
+              ctx.setMessages(prev => prev.map(m =>
+                m.id === stream.msgId ? { ...m, content: (m.content || '') + flush } : m,
+              ));
+            }
+          });
+        }
       }
     },
 
