@@ -221,28 +221,24 @@ textarea {
   background: rgba(192,38,211,0.8);
 }
 
-/* Moveable — fuchsia dashed selection frame */
+/* Moveable — all colors derived from --mk (fuchsia #d946ef = rgb(217,70,239)) */
 [class*="moveable-"] {
   --moveable-color: #d946ef !important;
 }
-.moveable-line {
-  background: transparent !important;
-  border-top: 1.5px dashed var(--moveable-color) !important;
-  height: 0 !important;
-}
-.moveable-control.moveable-origin {
-  display: none !important;
-}
-/* Snap guideline styling */
-.moveable-line.moveable-snap-guideline {
-  background: rgba(217,70,239,0.5) !important;
+.moveable-control.moveable-origin { display: none !important; }
+
+/* Selection frame — dashed via gradient */
+.moveable-line:not(.moveable-snap-guideline):not(.moveable-gap) {
+  background: repeating-linear-gradient(90deg, #d946ef 0, #d946ef 4px, transparent 4px, transparent 8px) !important;
   border: none !important;
-  height: 1px !important;
 }
-.moveable-line.moveable-snap-guideline.moveable-vertical {
-  width: 1px !important;
-  height: auto !important;
+.moveable-line.moveable-vertical:not(.moveable-snap-guideline):not(.moveable-gap) {
+  background: repeating-linear-gradient(180deg, #d946ef 0, #d946ef 4px, transparent 4px, transparent 8px) !important;
 }
-.moveable-gap .moveable-line {
-  background: rgba(217,70,239,0.3) !important;
-}
+
+/* Snap/gap/distance lines — all fuchsia, priority via opacity */
+.moveable-line.moveable-snap-guideline.moveable-snap-element { background: rgba(217,70,239,0.7) !important; border: none !important; }
+.moveable-line.moveable-snap-guideline:not(.moveable-snap-element) { background: rgba(217,70,239,0.25) !important; border: none !important; }
+.moveable-gap .moveable-line,
+[class*="moveable-"] [class*="guideline-group"] [class*="line"] { background: rgba(217,70,239,0.4) !important; border: none !important; }
+[class*="moveable-"] [class*="size-value"] { color: #d946ef !important; font-size: 10px !important; font-weight: 500 !important; }

@@ -68,15 +68,27 @@ export default function DesignOverlay({
 
 
 
-  // Apply stored position offsets to Remotion DOM elements
+  // Cache of each editable element's original transform (set by Agent's JSX code)
+  const originalTransforms = useRef<Record<string, string>>({});
+
+  // Apply stored position offsets to Remotion DOM elements, preserving original transforms
   const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
     elements.forEach((el) => {
       const id = el.getAttribute('data-editable');
       if (!id) return;
+      const htmlEl = el as HTMLElement;
+
+      // Capture original transform on first encounter (before we modify it)
+      if (!(id in originalTransforms.current)) {
+        originalTransforms.current[id] = htmlEl.style.transform || '';
+      }
+
       const posKey = `_pos_${id}`;
       const pos = props[posKey] as { x: number; y: number } | undefined;
       if (pos) {
-        (el as HTMLElement).style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+        const orig = originalTransforms.current[id];
+        // Prepend translate to the original transform (translate applies first)
+        htmlEl.style.transform = `translate(${pos.x}px, ${pos.y}px) ${orig}`.trim();
       }
     });
   }, [props]);
@@ -289,11 +301,11 @@ export default function DesignOverlay({
           snappable={true}
           snapThreshold={8}
           snapGap={true}
-          isDisplaySnapDigit={false}
+          isDisplaySnapDigit={true}
           snapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
           elementSnapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
-          horizontalGuidelines={overlayRef.current ? [0, overlayRef.current.offsetHeight / 2, overlayRef.current.offsetHeight] : []}
-          verticalGuidelines={overlayRef.current ? [0, overlayRef.current.offsetWidth / 2, overlayRef.current.offsetWidth] : []}
+          horizontalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientHeight / 2)] : []}
+          verticalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientWidth / 2)] : []}
           elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => hitTargetRefs.current[r.id]).filter(Boolean) as HTMLElement[]}
           onDragStart={({ set }) => {
             isDraggingRef.current = true;
@@ -324,7 +336,8 @@ export default function DesignOverlay({
             const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
             if (dragDomElRef.current) {
               const scale = dragScaleRef.current;
-              dragDomElRef.current.style.transform = `translate(${baseX + tx / scale}px, ${baseY + ty / scale}px)`;
+              const orig = originalTransforms.current[selectedFieldId] || '';
+              dragDomElRef.current.style.transform = `translate(${baseX + tx / scale}px, ${baseY + ty / scale}px) ${orig}`.trim();
             }
           }}
           onDragEnd={({ lastEvent }) => {
