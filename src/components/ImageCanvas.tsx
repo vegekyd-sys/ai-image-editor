@@ -373,7 +373,7 @@ export default function ImageCanvas({
         setAnimDir(null);
       }, 150);
     }
-  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode, onPullDownEnd]);
+  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode, onPullDownEnd, selectedEditableId]);
 
   const handleClick = useCallback(() => {
     if (selectedEditableId) return; // Design Editor mode — handled by design container onClick
@@ -438,7 +438,7 @@ export default function ImageCanvas({
         y: prev.y + panDy / scale,
       }));
     }
-  }, [clearLongPress, isComparing, scale]);
+  }, [clearLongPress, isComparing, scale, selectedEditableId]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (selectedEditableId) return;
@@ -486,7 +486,7 @@ export default function ImageCanvas({
       }
     }
     mouseStartPos.current = null;
-  }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange, scale]);
+  }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange, scale, selectedEditableId]);
 
   // Desktop: trackpad pinch-to-zoom (ctrl+wheel) + horizontal swipe (deltaX) → switch snapshot
   const wheelCooldown = useRef(false);
