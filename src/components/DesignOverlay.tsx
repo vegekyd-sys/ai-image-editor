@@ -164,26 +164,25 @@ export default function DesignOverlay({
       const htmlEl = el as HTMLElement;
 
       // Pointerdown: select immediately (enables direct drag on desktop).
-      // No stopPropagation needed — ImageCanvas handlers return early in Design Editor mode.
+      let lastTapTime = 0;
       const handlePointerDown = () => {
+        const now = Date.now();
+        if (selectedFieldIdRef.current === id && now - lastTapTime < 400) {
+          // Double-tap detected → edit text (works on both desktop and mobile)
+          onStartEditRef.current?.(id);
+          lastTapTime = 0;
+          return;
+        }
+        lastTapTime = now;
         if (selectedFieldIdRef.current !== id) {
           onSelectFieldRef.current(id);
         }
       };
 
-      // Double-click: enter text editing mode
-      const handleDblClick = () => {
-        if (selectedFieldIdRef.current === id) {
-          onStartEditRef.current?.(id);
-        }
-      };
-
       htmlEl.addEventListener('pointerdown', handlePointerDown);
-      htmlEl.addEventListener('dblclick', handleDblClick);
 
       cleanups.push(() => {
         htmlEl.removeEventListener('pointerdown', handlePointerDown);
-        htmlEl.removeEventListener('dblclick', handleDblClick);
       });
     });
 
