@@ -382,7 +382,8 @@ export default function ImageCanvas({
       return;
     }
     if (annotationMode) return;
-    if (isDraft) onDismissDraft?.();
+    // Dismiss tips drafts on click, but NOT design drafts (design can't be recovered)
+    if (isDraft && !draftDesign) onDismissDraft?.();
   }, [isDraft, onDismissDraft, annotationMode, selectedEditableId]);
 
   // Desktop: unified mouse handler — mirrors all touch interactions
