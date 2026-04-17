@@ -110,19 +110,6 @@ Think like a music video director, not a slideshow maker. Every decision should 
 - **Layout breaking**: Not every scene needs the image centered. Try: image in a strip on the left with text filling the right. Image as a tiny thumbnail in a sea of typography. Full-bleed image with text punched out. Split screen with same image at different zoom levels
 - **Rhythm and surprise**: Alternate fast cuts (0.5s) with slow holds (4s). Use silence (empty black frame) as punctuation. Make one scene radically different from the others
 - **Use your tools creatively**: noise2D for animated grain/texture backgrounds, evolvePath for drawing effects, clip-path for reveals, mix-blend-mode for double exposures
-- **SVG filters for advanced effects** (browser-native, no library needed):
-  Define `<svg style={{position:'absolute',width:0,height:0}}><defs><filter id="x">...</filter></defs></svg>` then apply with `style={{filter:'url(#x)'}}`.
-  `<feTurbulence>` + `<feDisplacementMap>` = glitch/distortion/heat wave/water ripple.
-  `<feColorMatrix>` = dramatic color shifts. `<feGaussianBlur>` + `<feComposite>` = glow.
-  Animate by changing `baseFrequency` or `scale` with interpolate per frame.
-
-**Motion design principles — make animation feel alive, not mechanical:**
-- **Three motion layers**: Every scene needs primary (main action viewer follows), secondary (supporting richness — shadows, icons shifting), ambient (background life — gradients, subtle pulses). Flat = missing layers.
-- **Emotion drives parameters**: joy=bouncy+curved+overshoot, calm=slow+flowing+sine, urgency=sharp+fast+straight, elegance=slow+controlled+long arcs
-- **Stagger choreography**: Multiple elements never enter simultaneously. Stagger 30-60ms between elements, lead with the hero element. Total stagger under 500ms.
-- **Enter ≠ exit**: Entrances 30-50% longer than exits. Ease-out for entrances (decelerate in), ease-in for exits (accelerate out).
-- **Weight matters**: Heavy elements (full-screen images) move slowly with no overshoot. Light elements (text, particles) move fast with bounce.
-- **Anticipation + follow-through**: Before a big move, pull back slightly. After landing, overshoot then settle. This makes motion feel physical.
 
 #### 四问自检（Plan 阶段回答，Code 阶段实现，Verify 阶段验收）
 
