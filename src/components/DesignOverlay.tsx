@@ -76,7 +76,7 @@ export default function DesignOverlay({
       const posKey = `_pos_${id}`;
       const pos = props[posKey] as { x: number; y: number } | undefined;
       if (pos) {
-        (el as HTMLElement).style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+        (el as HTMLElement).style.translate = `${pos.x}px ${pos.y}px`;
       }
     });
   }, [props]);
@@ -90,7 +90,7 @@ export default function DesignOverlay({
 
     // Clear any leftover Moveable transforms on hit-target divs
     Object.values(hitTargetRefs.current).forEach(el => {
-      if (el) el.style.transform = '';
+      if (el) { el.style.transform = ''; el.style.translate = ''; }
     });
 
     // Re-apply stored offsets before measuring (Remotion re-renders reset transforms)
@@ -316,7 +316,7 @@ export default function DesignOverlay({
             const ty = beforeTranslate[1];
 
             // Move hit-target
-            target.style.transform = `translate(${tx}px, ${ty}px)`;
+            target.style.translate = `${tx}px ${ty}px`;
 
             // Mirror to real DOM element (convert screen-px → design-px).
             // The Remotion Player scales composition content to fit the container.
@@ -324,7 +324,7 @@ export default function DesignOverlay({
             const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
             if (dragDomElRef.current) {
               const scale = dragScaleRef.current;
-              dragDomElRef.current.style.transform = `translate(${baseX + tx / scale}px, ${baseY + ty / scale}px)`;
+              dragDomElRef.current.style.translate = `${baseX + tx / scale}px ${baseY + ty / scale}px`;
             }
           }}
           onDragEnd={({ lastEvent }) => {
