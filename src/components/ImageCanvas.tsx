@@ -727,6 +727,10 @@ export default function ImageCanvas({
     const rect = bar.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const frame = Math.round(ratio * (remotionTotalFrames - 1));
+    // Pause on seek — prevent resume handler from auto-playing
+    remotionRef.current.pause();
+    setRemotionPlaying(false);
+    wasPlayingBeforeBufferRef.current = false;
     remotionRef.current.seekTo(frame);
     remotionFrameRef.current = frame;
     updateRemotionUI();
