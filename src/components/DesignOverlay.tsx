@@ -53,6 +53,8 @@ export default function DesignOverlay({
   // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDomElRef = useRef<HTMLElement | null>(null);
+  // Prevents first click after selection from immediately opening text editor
+  const justSelectedRef = useRef(false);
 
   // Apply stored position offsets to Remotion DOM elements (uses CSS translate property to preserve Agent's transform)
   const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
@@ -113,13 +115,6 @@ export default function DesignOverlay({
     isMeasuringRef.current = false;
   }, [containerEl, editables, applyStoredOffsets, props]);
 
-  // Mark selected element (CSS uses this to hide hover outline when Moveable frame shows)
-  useEffect(() => {
-    const el = selectedFieldId ? rects.find(r => r.id === selectedFieldId)?.domEl : null;
-    if (el) el.setAttribute('data-editable-selected', '');
-    return () => { if (el) el.removeAttribute('data-editable-selected'); };
-  }, [selectedFieldId, rects]);
-
   // Measure triggers
   useEffect(() => { isDraggingRef.current = false; setIsDragging(false); measure(); }, [measure, props]);
   useEffect(() => { if (overlayRef.current && !overlayMountedRef.current) { overlayMountedRef.current = true; measure(); } }, [measure]);
@@ -163,33 +158,30 @@ export default function DesignOverlay({
       if (!id || !editables.some(f => f.id === id)) return;
       const htmlEl = el as HTMLElement;
 
-      // Click: double-click-to-edit (if already selected) or select (if not)
-      const handleClick = (e: Event) => {
-        e.stopPropagation();
-        if (isDraggingRef.current) return;
-        if (selectedFieldIdRef.current === id) {
-          onStartEditRef.current?.(id);
-        } else {
-          // Select on click (for non-drag taps)
-          onSelectFieldRef.current(id);
-        }
-      };
-
-      // Pointerdown: select immediately so Moveable can start dragging in the same gesture.
-      // Always stopPropagation to prevent canvas swipe/pan/long-press.
-      const handlePointerDown = (e: Event) => {
-        e.stopPropagation();
+      // Pointerdown: select immediately (enables direct drag on desktop).
+      // No stopPropagation needed — ImageCanvas handlers return early in Design Editor mode.
+      const handlePointerDown = () => {
         if (selectedFieldIdRef.current !== id) {
           onSelectFieldRef.current(id);
+          justSelectedRef.current = true;
         }
       };
 
-      htmlEl.addEventListener('click', handleClick, true);
-      htmlEl.addEventListener('pointerdown', handlePointerDown, true);
+      // Click: edit text (if already selected and not just-selected)
+      const handleClick = () => {
+        if (isDraggingRef.current) return;
+        if (justSelectedRef.current) { justSelectedRef.current = false; return; }
+        if (selectedFieldIdRef.current === id) {
+          onStartEditRef.current?.(id);
+        }
+      };
+
+      htmlEl.addEventListener('pointerdown', handlePointerDown);
+      htmlEl.addEventListener('click', handleClick);
 
       cleanups.push(() => {
-        htmlEl.removeEventListener('click', handleClick, true);
-        htmlEl.removeEventListener('pointerdown', handlePointerDown, true);
+        htmlEl.removeEventListener('pointerdown', handlePointerDown);
+        htmlEl.removeEventListener('click', handleClick);
       });
     });
 

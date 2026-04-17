@@ -190,6 +190,7 @@ export default function ImageCanvas({
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
+    if (selectedEditableId) return; // Design Editor mode — all canvas gestures disabled
     if (e.touches.length === 2) {
       // Pinch start — skip for video entry
       if (isVideoEntry) return;
@@ -226,10 +227,11 @@ export default function ImageCanvas({
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, currentIndex, draftDesign, animatedDesigns]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, currentIndex, draftDesign, animatedDesigns, selectedEditableId]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
+    if (selectedEditableId) return;
     if (e.touches.length === 2 && isPinching.current) {
       // Pinch move
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -284,10 +286,11 @@ export default function ImageCanvas({
         }));
       }
     }
-  }, [scale, isComparing, clearLongPress, annotationMode, isVideoEntry, isDraft, isDesktop, onPullDown]);
+  }, [scale, isComparing, clearLongPress, annotationMode, isVideoEntry, isDraft, isDesktop, onPullDown, selectedEditableId]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
+    if (selectedEditableId) return;
     clearLongPress();
 
     // End pull-down gesture
@@ -373,15 +376,14 @@ export default function ImageCanvas({
   }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode, onPullDownEnd]);
 
   const handleClick = useCallback(() => {
+    if (selectedEditableId) return; // Design Editor mode — handled by design container onClick
     if (skipClick.current) {
       skipClick.current = false;
       return;
     }
     if (annotationMode) return;
     if (isDraft) onDismissDraft?.();
-    // Deselect editable field when clicking canvas background
-    if (selectedEditableId) onSelectEditable?.(null);
-  }, [isDraft, onDismissDraft, annotationMode, selectedEditableId, onSelectEditable]);
+  }, [isDraft, onDismissDraft, annotationMode, selectedEditableId]);
 
   // Desktop: unified mouse handler — mirrors all touch interactions
   // (pan when zoomed, long-press compare, swipe navigate, double-click reset zoom)
@@ -392,6 +394,7 @@ export default function ImageCanvas({
   const lastClickTime = useRef(0);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (selectedEditableId) return;
     if (annotationMode || e.button !== 0 || isVideoEntry) { mouseStartPos.current = null; return; }
     mouseStartPos.current = { x: e.clientX, y: e.clientY };
     mouseDidDrag.current = false;
@@ -411,9 +414,10 @@ export default function ImageCanvas({
         mousePanning.current = false; // stop panning when comparing
       }, 200);
     }
-  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, currentIndex, draftDesign, animatedDesigns]);
+  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, currentIndex, draftDesign, animatedDesigns, selectedEditableId]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (selectedEditableId) return;
     if (!mouseStartPos.current) return;
     const dx = Math.abs(e.clientX - mouseStartPos.current.x);
     const dy = Math.abs(e.clientY - mouseStartPos.current.y);
@@ -437,6 +441,7 @@ export default function ImageCanvas({
   }, [clearLongPress, isComparing, scale]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    if (selectedEditableId) return;
     clearLongPress();
     if (isComparing) { setIsComparing(false); mouseStartPos.current = null; skipClick.current = true; return; }
 
@@ -770,15 +775,6 @@ export default function ImageCanvas({
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
       /* Edit mode: capture-phase intercept blocks ALL gestures before they reach any handler.
          Moveable (z-3000 on body) and DesignOverlay hit-targets are unaffected. */
-      /* Edit mode: capture-phase intercept blocks canvas gestures (swipe/pinch/pan)
-         but allows Moveable drag (hit-targets with .pointer-events-auto) through. */
-      /* Edit mode gesture shield — see DesignOverlay for editable event isolation */
-      onTouchMoveCapture={selectedEditableId ? (e) => {
-        const t = e.target as HTMLElement;
-        if (t.closest('[data-editable]') || t.closest('[class*="moveable-"]')) return;
-        e.preventDefault();
-        e.stopPropagation();
-      } : undefined}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -1035,9 +1031,11 @@ export default function ImageCanvas({
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
           }`}
-            onClick={() => {
+            onClick={(e) => {
               if (isComparing) return;
-              // If an editable field is selected, deselect it instead of toggling play
+              // In Design Editor mode: editable elements handle their own click,
+              // clicking blank area deselects
+              if ((e.target as HTMLElement).closest('[data-editable]')) return;
               if (selectedEditableId) {
                 onSelectEditable?.(null);
               } else {
