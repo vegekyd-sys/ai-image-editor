@@ -238,9 +238,11 @@ textarea {
   background: repeating-linear-gradient(180deg, var(--mk) 0, var(--mk) 4px, transparent 4px, transparent 8px) !important;
 }
 
-/* All guide/snap/gap lines + digits — fuchsia, priority via opacity */
-.moveable-line.moveable-snap-guideline.moveable-snap-element { background: rgba(var(--mk-r),var(--mk-g),var(--mk-b),0.7) !important; border: none !important; }
-.moveable-line.moveable-snap-guideline:not(.moveable-snap-element) { background: rgba(var(--mk-r),var(--mk-g),var(--mk-b),0.25) !important; border: none !important; }
+/* All guide lines (snap/gap/distance) — uniform style */
+.moveable-line.moveable-snap-guideline,
 .moveable-gap .moveable-line,
-[class*="moveable-"] [class*="guideline-group"] [class*="line"] { background: rgba(var(--mk-r),var(--mk-g),var(--mk-b),0.4) !important; border: none !important; }
+[class*="moveable-"] [class*="guideline-group"] [class*="line"] {
+  background: rgba(var(--mk-r),var(--mk-g),var(--mk-b),0.5) !important;
+  border: none !important;
+}
 [class*="moveable-"] [class*="size-value"] { color: var(--mk) !important; font-size: 10px !important; font-weight: 500 !important; }
