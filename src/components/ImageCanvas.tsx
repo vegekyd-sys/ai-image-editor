@@ -763,6 +763,32 @@ export default function ImageCanvas({
       ref={containerRef}
       className="absolute inset-0 flex items-center justify-center touch-none select-none"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+      /* Edit mode: capture-phase intercept blocks ALL gestures before they reach any handler.
+         Moveable (z-3000 on body) and DesignOverlay hit-targets are unaffected. */
+      /* Edit mode: capture-phase intercept blocks ALL canvas gestures.
+         Moveable (controls + hit-targets) events pass through. */
+      onPointerDownCapture={selectedEditableId ? (e) => {
+        const t = e.target as HTMLElement;
+        if (t.closest('[class*="moveable-"]') || t.closest('.pointer-events-auto')) return;
+        e.stopPropagation();
+      } : undefined}
+      onPointerMoveCapture={selectedEditableId ? (e) => {
+        const t = e.target as HTMLElement;
+        if (t.closest('[class*="moveable-"]') || t.closest('.pointer-events-auto')) return;
+        e.stopPropagation();
+      } : undefined}
+      onTouchStartCapture={selectedEditableId ? (e) => {
+        const t = e.target as HTMLElement;
+        if (t.closest('[class*="moveable-"]') || t.closest('.pointer-events-auto')) return;
+        e.preventDefault();
+        e.stopPropagation();
+      } : undefined}
+      onTouchMoveCapture={selectedEditableId ? (e) => {
+        const t = e.target as HTMLElement;
+        if (t.closest('[class*="moveable-"]') || t.closest('.pointer-events-auto')) return;
+        e.preventDefault();
+        e.stopPropagation();
+      } : undefined}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -1131,6 +1157,7 @@ export default function ImageCanvas({
                 </div>
               </div>
             )}
+            {/* Edit mode gesture shield div removed — handled by capture-phase on outer container */}
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay

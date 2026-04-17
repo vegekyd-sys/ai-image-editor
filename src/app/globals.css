@@ -221,7 +221,15 @@ textarea {
   background: rgba(192,38,211,0.8);
 }
 
-/* Moveable — override default blue (#4af) with our fuchsia */
+/* Moveable — fuchsia dashed selection frame */
 [class*="moveable-"] {
   --moveable-color: #d946ef !important;
+}
+.moveable-line {
+  background: transparent !important;
+  border-top: 1.5px dashed var(--moveable-color) !important;
+  height: 0 !important;
+}
+.moveable-control.moveable-origin {
+  display: none !important;
 }
