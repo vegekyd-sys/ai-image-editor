@@ -191,6 +191,7 @@ export default function DesignOverlay({
 
   const selectedRect = rects.find(r => r.id === selectedFieldId);
 
+
   return (
     <div
       ref={overlayRef}
@@ -221,13 +222,16 @@ export default function DesignOverlay({
         <Moveable
           ref={moveableRef}
           target={selectedRect.domEl}
+          rootContainer={containerEl ?? undefined}
           draggable={true}
           scalable={true}
           keepRatio={true}
           renderDirections={['se']}
+          pinchable={true}
           rotatable={false}
           origin={false}
           throttleDrag={0}
+          throttleScale={0}
           hideDefaultLines={false}
           edge={false}
           padding={{ left: 0, top: 0, right: 0, bottom: 0 }}

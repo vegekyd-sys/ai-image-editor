@@ -226,6 +226,8 @@ textarea {
   --moveable-color: var(--primary) !important;
 }
 .moveable-control.moveable-origin { display: none !important; }
+div[class*="moveable-control-box"],
+div[class*="moveable-control-box"] * { pointer-events: auto !important; }
 
 /* Selection frame — dashed via gradient */
 .moveable-line:not(.moveable-snap-guideline):not(.moveable-gap) {
