@@ -150,8 +150,11 @@ export default function DesignOverlay({
     isMeasuringRef.current = false;
   }, [containerEl, editables, applyStoredOffsets]);
 
-  // Measure on mount, on prop changes
-  useEffect(() => { measure(); }, [measure, props]);
+  // Measure on mount, on prop changes — also clears isDragging (props updated = drag committed)
+  useEffect(() => {
+    isDraggingRef.current = false;
+    measure();
+  }, [measure, props]);
 
   // Re-measure once overlay div mounts
   useEffect(() => {
@@ -322,9 +325,7 @@ export default function DesignOverlay({
               const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
               onUpdateProp(`_pos_${selectedFieldId}`, { x: baseX + tx / scale, y: baseY + ty / scale });
             }
-            // Clear isDragging after a short delay so the props-triggered measure
-            // can run and reposition everything correctly
-            setTimeout(() => { isDraggingRef.current = false; }, 100);
+            // isDragging cleared by useEffect([props]) when the prop update propagates
           }}
         />
       )}

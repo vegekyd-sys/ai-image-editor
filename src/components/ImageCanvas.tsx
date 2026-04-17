@@ -256,7 +256,7 @@ export default function ImageCanvas({
       const rawDy = touch.clientY - touchStartY.current;
       const rawDx = Math.abs(touch.clientX - touchStartX.current);
       if (!isPullDown.current && !isPanning.current && !isPinching.current
-        && !isVideoEntry && !isDesktop && !annotationMode
+        && !isVideoEntry && !isDesktop && !annotationMode && !selectedEditableId
         && scale === 1 && onPullDown
         && rawDy > PULL_ACTIVATE && rawDy > rawDx * 2) {
         isPullDown.current = true;
@@ -765,27 +765,12 @@ export default function ImageCanvas({
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
       /* Edit mode: capture-phase intercept blocks ALL gestures before they reach any handler.
          Moveable (z-3000 on body) and DesignOverlay hit-targets are unaffected. */
-      /* Edit mode: capture-phase intercept blocks ALL canvas gestures.
-         Moveable (controls + hit-targets) events pass through. */
-      onPointerDownCapture={selectedEditableId ? (e) => {
-        const t = e.target as HTMLElement;
-        if (t.closest('[class*="moveable-"]') || t.closest('.pointer-events-auto')) return;
-        e.stopPropagation();
-      } : undefined}
-      onPointerMoveCapture={selectedEditableId ? (e) => {
-        const t = e.target as HTMLElement;
-        if (t.closest('[class*="moveable-"]') || t.closest('.pointer-events-auto')) return;
-        e.stopPropagation();
-      } : undefined}
-      onTouchStartCapture={selectedEditableId ? (e) => {
-        const t = e.target as HTMLElement;
-        if (t.closest('[class*="moveable-"]') || t.closest('.pointer-events-auto')) return;
-        e.preventDefault();
-        e.stopPropagation();
-      } : undefined}
+      /* Edit mode: capture-phase intercept blocks canvas gestures (swipe/pinch/pan)
+         but allows Moveable drag (hit-targets with .pointer-events-auto) through. */
       onTouchMoveCapture={selectedEditableId ? (e) => {
+        // Block pull-down/swipe/pinch — but allow Moveable drag on editable hit-targets
         const t = e.target as HTMLElement;
-        if (t.closest('[class*="moveable-"]') || t.closest('.pointer-events-auto')) return;
+        if (t.closest('.pointer-events-auto') || t.closest('[class*="moveable-"]')) return;
         e.preventDefault();
         e.stopPropagation();
       } : undefined}
