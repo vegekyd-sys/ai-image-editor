@@ -68,27 +68,15 @@ export default function DesignOverlay({
 
 
 
-  // Cache of each editable element's original transform (set by Agent's JSX code)
-  const originalTransforms = useRef<Record<string, string>>({});
-
-  // Apply stored position offsets to Remotion DOM elements, preserving original transforms
+  // Apply stored position offsets to Remotion DOM elements
   const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
     elements.forEach((el) => {
       const id = el.getAttribute('data-editable');
       if (!id) return;
-      const htmlEl = el as HTMLElement;
-
-      // Capture original transform on first encounter (before we modify it)
-      if (!(id in originalTransforms.current)) {
-        originalTransforms.current[id] = htmlEl.style.transform || '';
-      }
-
       const posKey = `_pos_${id}`;
       const pos = props[posKey] as { x: number; y: number } | undefined;
       if (pos) {
-        const orig = originalTransforms.current[id];
-        // Prepend translate to the original transform (translate applies first)
-        htmlEl.style.transform = `translate(${pos.x}px, ${pos.y}px) ${orig}`.trim();
+        (el as HTMLElement).style.transform = `translate(${pos.x}px, ${pos.y}px)`;
       }
     });
   }, [props]);
@@ -123,10 +111,10 @@ export default function DesignOverlay({
       // If element is clipped (overflow:hidden in Player) but has a stored offset,
       // calculate expected position from the original rect + offset instead of using
       // the clipped getBoundingClientRect.
-      let rectLeft = elRect.left - baseRect.left;
-      let rectTop = elRect.top - baseRect.top;
-      let rectWidth = elRect.width;
-      let rectHeight = elRect.height;
+      let rectLeft = Math.round(elRect.left - baseRect.left);
+      let rectTop = Math.round(elRect.top - baseRect.top);
+      let rectWidth = Math.round(elRect.width);
+      let rectHeight = Math.round(elRect.height);
 
       if (elRect.width < 1 || elRect.height < 1) {
         if (!storedPos) return; // truly invisible and never moved — skip
@@ -336,8 +324,7 @@ export default function DesignOverlay({
             const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
             if (dragDomElRef.current) {
               const scale = dragScaleRef.current;
-              const orig = originalTransforms.current[selectedFieldId] || '';
-              dragDomElRef.current.style.transform = `translate(${baseX + tx / scale}px, ${baseY + ty / scale}px) ${orig}`.trim();
+              dragDomElRef.current.style.transform = `translate(${baseX + tx / scale}px, ${baseY + ty / scale}px)`;
             }
           }}
           onDragEnd={({ lastEvent }) => {
