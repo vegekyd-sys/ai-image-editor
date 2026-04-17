@@ -53,8 +53,6 @@ export default function DesignOverlay({
   // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDomElRef = useRef<HTMLElement | null>(null);
-  // Prevents first click after selection from immediately opening text editor
-  const justSelectedRef = useRef(false);
 
   // Apply stored position offsets to Remotion DOM elements (uses CSS translate property to preserve Agent's transform)
   const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
@@ -115,6 +113,13 @@ export default function DesignOverlay({
     isMeasuringRef.current = false;
   }, [containerEl, editables, applyStoredOffsets, props]);
 
+  // Mark selected element (CSS hides hover outline when Moveable frame shows)
+  useEffect(() => {
+    const el = selectedFieldId ? rects.find(r => r.id === selectedFieldId)?.domEl : null;
+    if (el) el.setAttribute('data-editable-selected', '');
+    return () => { if (el) el.removeAttribute('data-editable-selected'); };
+  }, [selectedFieldId, rects]);
+
   // Measure triggers
   useEffect(() => { isDraggingRef.current = false; setIsDragging(false); measure(); }, [measure, props]);
   useEffect(() => { if (overlayRef.current && !overlayMountedRef.current) { overlayMountedRef.current = true; measure(); } }, [measure]);
@@ -163,25 +168,22 @@ export default function DesignOverlay({
       const handlePointerDown = () => {
         if (selectedFieldIdRef.current !== id) {
           onSelectFieldRef.current(id);
-          justSelectedRef.current = true;
         }
       };
 
-      // Click: edit text (if already selected and not just-selected)
-      const handleClick = () => {
-        if (isDraggingRef.current) return;
-        if (justSelectedRef.current) { justSelectedRef.current = false; return; }
+      // Double-click: enter text editing mode
+      const handleDblClick = () => {
         if (selectedFieldIdRef.current === id) {
           onStartEditRef.current?.(id);
         }
       };
 
       htmlEl.addEventListener('pointerdown', handlePointerDown);
-      htmlEl.addEventListener('click', handleClick);
+      htmlEl.addEventListener('dblclick', handleDblClick);
 
       cleanups.push(() => {
         htmlEl.removeEventListener('pointerdown', handlePointerDown);
-        htmlEl.removeEventListener('click', handleClick);
+        htmlEl.removeEventListener('dblclick', handleDblClick);
       });
     });
 
