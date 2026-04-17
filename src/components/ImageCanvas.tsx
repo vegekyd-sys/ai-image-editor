@@ -771,10 +771,10 @@ export default function ImageCanvas({
          Moveable (z-3000 on body) and DesignOverlay hit-targets are unaffected. */
       /* Edit mode: capture-phase intercept blocks canvas gestures (swipe/pinch/pan)
          but allows Moveable drag (hit-targets with .pointer-events-auto) through. */
+      /* Edit mode gesture shield — see DesignOverlay for editable event isolation */
       onTouchMoveCapture={selectedEditableId ? (e) => {
-        // Block pull-down/swipe/pinch — but allow Moveable drag on editable hit-targets
         const t = e.target as HTMLElement;
-        if (t.closest('.pointer-events-auto') || t.closest('[class*="moveable-"]')) return;
+        if (t.closest('[data-editable]') || t.closest('[class*="moveable-"]')) return;
         e.preventDefault();
         e.stopPropagation();
       } : undefined}

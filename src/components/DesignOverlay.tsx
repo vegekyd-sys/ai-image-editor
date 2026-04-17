@@ -23,7 +23,6 @@ interface MeasuredRect {
   top: number;
   width: number;
   height: number;
-  /** The actual DOM element inside the Remotion Player */
   domEl: HTMLElement;
 }
 
@@ -39,66 +38,47 @@ export default function DesignOverlay({
   playerRef,
 }: DesignOverlayProps) {
   const [rects, setRects] = useState<MeasuredRect[]>([]);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const rafRef = useRef<number>(0);
   const onVisibleFieldsChangeRef = useRef(onVisibleFieldsChange);
   onVisibleFieldsChangeRef.current = onVisibleFieldsChange;
 
-  // Track overlay container ref — used as coordinate base in measure()
   const overlayRef = useRef<HTMLDivElement>(null);
   const overlayMountedRef = useRef(false);
-
-  // Moveable ref
   const moveableRef = useRef<Moveable>(null);
 
-  // Track drag state to suppress re-measure during drag
   const isDraggingRef = useRef(false);
-  // Guard to prevent measure ↔ MutationObserver infinite loop
+  const [isDragging, setIsDragging] = useState(false);
   const isMeasuringRef = useRef(false);
 
-  // Refs for overlay hit-target divs (keyed by editable id)
-  const hitTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  // Snapshot of stored offset at drag start — stable during the entire drag
+  // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  // Snapshot of the real DOM element at drag start
   const dragDomElRef = useRef<HTMLElement | null>(null);
-  // Snapshot of Player scale at drag start (screen-px / design-px)
-  const dragScaleRef = useRef(1);
 
-
-
-  // Apply stored position offsets to Remotion DOM elements
+  // Apply stored position offsets to Remotion DOM elements (uses CSS translate property to preserve Agent's transform)
   const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
     elements.forEach((el) => {
       const id = el.getAttribute('data-editable');
       if (!id) return;
-      const posKey = `_pos_${id}`;
-      const pos = props[posKey] as { x: number; y: number } | undefined;
+      const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
       if (pos) {
         (el as HTMLElement).style.translate = `${pos.x}px ${pos.y}px`;
+      } else {
+        (el as HTMLElement).style.translate = '';
       }
     });
   }, [props]);
 
-  // Measure positions of [data-editable] elements relative to the overlay itself
+  // Measure editable elements
   const measure = useCallback(() => {
     if (isDraggingRef.current || isMeasuringRef.current) return;
     if (!containerEl || !overlayRef.current) { setRects([]); return; }
 
     isMeasuringRef.current = true;
 
-    // Clear any leftover Moveable transforms on hit-target divs
-    Object.values(hitTargetRefs.current).forEach(el => {
-      if (el) el.style.transform = '';
-    });
-
-    // Re-apply stored offsets before measuring (Remotion re-renders reset transforms)
     const elements = containerEl.querySelectorAll('[data-editable]');
     applyStoredOffsets(elements);
 
     const baseRect = overlayRef.current.getBoundingClientRect();
-    const containerRect = containerEl.getBoundingClientRect();
     const newRects: MeasuredRect[] = [];
     const seen = new Set<string>();
     elements.forEach((el) => {
@@ -108,20 +88,13 @@ export default function DesignOverlay({
       const elRect = el.getBoundingClientRect();
       const storedPos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
 
-      // If element is clipped (overflow:hidden in Player) but has a stored offset,
-      // calculate expected position from the original rect + offset instead of using
-      // the clipped getBoundingClientRect.
       let rectLeft = Math.round(elRect.left - baseRect.left);
       let rectTop = Math.round(elRect.top - baseRect.top);
       let rectWidth = Math.round(elRect.width);
       let rectHeight = Math.round(elRect.height);
 
       if (elRect.width < 1 || elRect.height < 1) {
-        if (!storedPos) return; // truly invisible and never moved — skip
-
-        // Element is clipped by Player overflow. Use the previous rect if available,
-        // or estimate from stored offset. We can't measure the actual size when clipped,
-        // so find the last known rect for this id.
+        if (!storedPos) return;
         const prevRect = rects.find(r => r.id === id);
         if (prevRect) {
           rectLeft = prevRect.left;
@@ -129,93 +102,94 @@ export default function DesignOverlay({
           rectWidth = prevRect.width;
           rectHeight = prevRect.height;
         } else {
-          // No previous rect — element was always clipped. Skip for now.
           return;
         }
       }
       seen.add(id);
-      newRects.push({
-        id,
-        left: rectLeft,
-        top: rectTop,
-        width: rectWidth,
-        height: rectHeight,
-        domEl: el as HTMLElement,
-      });
+      newRects.push({ id, left: rectLeft, top: rectTop, width: rectWidth, height: rectHeight, domEl: el as HTMLElement });
     });
     setRects(newRects);
-    const visibleIds = newRects.map(r => r.id);
-    onVisibleFieldsChangeRef.current?.(visibleIds);
-
+    onVisibleFieldsChangeRef.current?.(newRects.map(r => r.id));
     isMeasuringRef.current = false;
-  }, [containerEl, editables, applyStoredOffsets]);
+  }, [containerEl, editables, applyStoredOffsets, props]);
 
-  // Measure on mount, on prop changes — also clears isDragging (props updated = drag committed)
-  useEffect(() => {
-    isDraggingRef.current = false;
-    measure();
-  }, [measure, props]);
-
-  // Re-measure once overlay div mounts
-  useEffect(() => {
-    if (overlayRef.current && !overlayMountedRef.current) {
-      overlayMountedRef.current = true;
-      measure();
-    }
-  }, [measure]);
-
-  // Listen for frameupdate from Remotion Player (for animated designs)
+  // Measure triggers
+  useEffect(() => { isDraggingRef.current = false; setIsDragging(false); measure(); }, [measure, props]);
+  useEffect(() => { if (overlayRef.current && !overlayMountedRef.current) { overlayMountedRef.current = true; measure(); } }, [measure]);
   useEffect(() => {
     if (!playerRef) return;
-    const handleFrame = () => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(measure);
-    };
-    try { playerRef.addEventListener('frameupdate', handleFrame); } catch { /* */ }
-    return () => {
-      try { playerRef.removeEventListener('frameupdate', handleFrame); } catch { /* */ }
-      cancelAnimationFrame(rafRef.current);
-    };
+    const h = () => { cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(measure); };
+    try { playerRef.addEventListener('frameupdate', h); } catch { /* */ }
+    return () => { try { playerRef.removeEventListener('frameupdate', h); } catch { /* */ } cancelAnimationFrame(rafRef.current); };
   }, [playerRef, measure]);
-
-  // Re-measure on window resize
-  useEffect(() => {
-    const handleResize = () => measure();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [measure]);
-
-  // Observe container for DOM changes (Remotion re-renders)
+  useEffect(() => { const h = () => measure(); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, [measure]);
   useEffect(() => {
     if (!containerEl) return;
-    const observer = new MutationObserver(() => {
-      if (isDraggingRef.current) return;
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(measure);
-    });
-    observer.observe(containerEl, { childList: true, subtree: true, attributes: true });
-    return () => observer.disconnect();
+    const o = new MutationObserver(() => { if (isDraggingRef.current) return; cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(measure); });
+    o.observe(containerEl, { childList: true, subtree: true, attributes: true });
+    return () => o.disconnect();
   }, [containerEl, measure]);
-
-  // Re-measure when selection changes
-  useEffect(() => {
-    const t = setTimeout(measure, 50);
-    return () => clearTimeout(t);
-  }, [selectedFieldId, measure]);
-
-  // ResizeObserver on containerEl
+  useEffect(() => { const t = setTimeout(measure, 50); return () => clearTimeout(t); }, [selectedFieldId, measure]);
   useEffect(() => {
     if (!containerEl) return;
-    const ro = new ResizeObserver(() => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(measure);
-    });
-    ro.observe(containerEl);
-    return () => ro.disconnect();
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(measure); });
+    ro.observe(containerEl); return () => ro.disconnect();
   }, [containerEl, measure]);
+
+  // Bind click + gesture isolation directly on each editable DOM element.
+  // This replaces hit-target's role: stopPropagation prevents canvas gestures,
+  // click handles select/edit.
+  const onSelectFieldRef = useRef(onSelectField);
+  onSelectFieldRef.current = onSelectField;
+  const onStartEditRef = useRef(onStartEdit);
+  onStartEditRef.current = onStartEdit;
+  const selectedFieldIdRef = useRef(selectedFieldId);
+  selectedFieldIdRef.current = selectedFieldId;
+
+  useEffect(() => {
+    if (!containerEl) return;
+    const elements = containerEl.querySelectorAll('[data-editable]');
+    const cleanups: (() => void)[] = [];
+
+    elements.forEach((el) => {
+      const id = el.getAttribute('data-editable');
+      if (!id || !editables.some(f => f.id === id)) return;
+      const htmlEl = el as HTMLElement;
+
+      // Click: double-click-to-edit (if already selected) or select (if not)
+      const handleClick = (e: Event) => {
+        e.stopPropagation();
+        if (isDraggingRef.current) return;
+        if (selectedFieldIdRef.current === id) {
+          onStartEditRef.current?.(id);
+        } else {
+          // Select on click (for non-drag taps)
+          onSelectFieldRef.current(id);
+        }
+      };
+
+      // Pointerdown: select immediately so Moveable can start dragging in the same gesture.
+      // Always stopPropagation to prevent canvas swipe/pan/long-press.
+      const handlePointerDown = (e: Event) => {
+        e.stopPropagation();
+        if (selectedFieldIdRef.current !== id) {
+          onSelectFieldRef.current(id);
+        }
+      };
+
+      htmlEl.addEventListener('click', handleClick, true);
+      htmlEl.addEventListener('pointerdown', handlePointerDown, true);
+
+      cleanups.push(() => {
+        htmlEl.removeEventListener('click', handleClick, true);
+        htmlEl.removeEventListener('pointerdown', handlePointerDown, true);
+      });
+    });
+
+    return () => cleanups.forEach(fn => fn());
+  }, [containerEl, editables, rects]); // re-bind when DOM changes
 
   const selectedRect = rects.find(r => r.id === selectedFieldId);
-  const selectedHitTarget = selectedFieldId ? hitTargetRefs.current[selectedFieldId] : null;
 
   return (
     <div
@@ -223,62 +197,34 @@ export default function DesignOverlay({
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 15 }}
     >
-      {rects.map((rect) => {
-        const field = editables.find(f => f.id === rect.id);
+      {/* Label tag for selected element — hidden during drag */}
+      {selectedRect && selectedFieldId && !isDragging && (() => {
+        const field = editables.find(f => f.id === selectedFieldId);
         if (!field) return null;
-        const isSelected = selectedFieldId === rect.id;
-        const isHovered = hoveredId === rect.id;
-
         return (
           <div
-            key={rect.id}
-            ref={(el) => { hitTargetRefs.current[rect.id] = el; }}
-            className="absolute pointer-events-auto"
+            className="absolute px-1.5 py-0.5 text-[10px] font-medium rounded-sm whitespace-nowrap pointer-events-none"
             style={{
-              left: rect.left,
-              top: rect.top,
-              width: rect.width,
-              height: rect.height,
-              border: isHovered && !isSelected
-                ? '1px dashed rgba(255,255,255,0.4)'
-                : '1px solid transparent',
-              cursor: isSelected ? 'move' : 'pointer',
-              transition: isDraggingRef.current ? 'none' : 'border-color 0.15s',
-              boxSizing: 'border-box',
+              left: selectedRect.left,
+              top: selectedRect.top - 20,
+              backgroundColor: 'rgb(217,70,239)',
+              color: 'white',
             }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isDraggingRef.current) return;
-              if (isSelected) {
-                onStartEdit?.(rect.id);
-              } else {
-                onSelectField(rect.id);
-              }
-            }}
-            onMouseEnter={() => setHoveredId(rect.id)}
-            onMouseLeave={() => setHoveredId(null)}
           >
-            {isSelected && !isDraggingRef.current && (
-              <div
-                className="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-medium rounded-sm whitespace-nowrap"
-                style={{ backgroundColor: 'rgb(217,70,239)', color: 'white' }}
-              >
-                {field.label}
-              </div>
-            )}
+            {field.label}
           </div>
         );
-      })}
+      })()}
 
-      {/* Moveable: targets the hit-target div, mirrors movement to real DOM element */}
-      {selectedHitTarget && selectedRect && selectedFieldId && (
+      {/* Moveable: directly targets the real DOM element inside Remotion Player */}
+      {selectedRect && selectedFieldId && (
         <Moveable
           ref={moveableRef}
-          target={selectedHitTarget}
+          target={selectedRect.domEl}
           draggable={true}
-          resizable={false}
+          scalable={true}
+          keepRatio={true}
+          renderDirections={['se']}
           rotatable={false}
           origin={false}
           throttleDrag={0}
@@ -294,48 +240,48 @@ export default function DesignOverlay({
           elementSnapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
           horizontalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientHeight / 2)] : []}
           verticalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientWidth / 2)] : []}
-          elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => hitTargetRefs.current[r.id]).filter(Boolean) as HTMLElement[]}
+          elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
+          /* ── Drag ── */
           onDragStart={({ set }) => {
             isDraggingRef.current = true;
-            // Snapshot the current stored offset — stable for the entire drag
+            setIsDragging(true);
             const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
             dragBaseOffsetRef.current = { x: pos?.x ?? 0, y: pos?.y ?? 0 };
             dragDomElRef.current = selectedRect.domEl;
-            // Compute Player scale: compare DOM element's screen size vs layout size
-            const el = selectedRect.domEl;
-            if (el.offsetWidth > 0) {
-              dragScaleRef.current = el.getBoundingClientRect().width / el.offsetWidth;
-            } else {
-              dragScaleRef.current = 1;
-            }
-            // Reset Moveable's internal translate tracking to [0,0]
             set([0, 0]);
           }}
           onDrag={({ target, beforeTranslate }) => {
-            const tx = beforeTranslate[0];
-            const ty = beforeTranslate[1];
-
-            // Move hit-target (use transform, not translate — Moveable reads translate for positioning)
-            target.style.transform = `translate(${tx}px, ${ty}px)`;
-
-            // Mirror to real DOM element (convert screen-px → design-px).
-            // The Remotion Player scales composition content to fit the container.
-            // beforeTranslate is in screen-px, but DOM element transform is in design-px.
             const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
-            if (dragDomElRef.current) {
-              const scale = dragScaleRef.current;
-              dragDomElRef.current.style.translate = `${baseX + tx / scale}px ${baseY + ty / scale}px`;
-            }
+            target.style.translate = `${baseX + beforeTranslate[0]}px ${baseY + beforeTranslate[1]}px`;
           }}
           onDragEnd={({ lastEvent }) => {
             if (lastEvent) {
-              const tx = lastEvent.beforeTranslate[0];
-              const ty = lastEvent.beforeTranslate[1];
-              const scale = dragScaleRef.current;
               const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
-              onUpdateProp(`_pos_${selectedFieldId}`, { x: baseX + tx / scale, y: baseY + ty / scale });
+              onUpdateProp(`_pos_${selectedFieldId}`, {
+                x: baseX + lastEvent.beforeTranslate[0],
+                y: baseY + lastEvent.beforeTranslate[1],
+              });
             }
-            // isDragging cleared by useEffect([props]) when the prop update propagates
+          }}
+          /* ── Scale ── */
+          onScaleStart={() => {
+            isDraggingRef.current = true;
+            setIsDragging(true);
+            dragDomElRef.current = selectedRect.domEl;
+          }}
+          onScale={({ target, transform }) => {
+            target.style.transform = transform;
+          }}
+          onScaleEnd={({ lastEvent }) => {
+            if (lastEvent?.transform) {
+              const match = lastEvent.transform.match(/scale\(([^,)]+)(?:,\s*([^)]+))?\)/);
+              if (match) {
+                onUpdateProp(`_scale_${selectedFieldId}`, {
+                  w: parseFloat(match[1]),
+                  h: parseFloat(match[2] || match[1]),
+                });
+              }
+            }
           }}
         />
       )}

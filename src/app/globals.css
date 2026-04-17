@@ -243,3 +243,7 @@ textarea {
   background: var(--primary) !important; opacity: 0.5; border: none !important;
 }
 [class*="moveable-"] [class*="size-value"] { color: var(--primary) !important; font-size: 10px !important; font-weight: 500 !important; }
+
+/* Editable element — clickable + hover hint */
+[data-editable] { cursor: pointer; pointer-events: auto; }
+[data-editable]:hover { outline: 1px dashed rgba(255,255,255,0.4); outline-offset: -1px; }
