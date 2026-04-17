@@ -221,28 +221,25 @@ textarea {
   background: rgba(192,38,211,0.8);
 }
 
-/* Moveable — single color source: change --mk-r/g/b to retheme everything */
+/* Moveable — single color source */
 [class*="moveable-"] {
-  --mk-r: 217; --mk-g: 70; --mk-b: 239;
-  --mk: rgb(var(--mk-r),var(--mk-g),var(--mk-b));
-  --moveable-color: var(--mk) !important;
+  --moveable-color: var(--primary) !important;
 }
 .moveable-control.moveable-origin { display: none !important; }
 
 /* Selection frame — dashed via gradient */
 .moveable-line:not(.moveable-snap-guideline):not(.moveable-gap) {
-  background: repeating-linear-gradient(90deg, var(--mk) 0, var(--mk) 4px, transparent 4px, transparent 8px) !important;
+  background: repeating-linear-gradient(90deg, var(--primary) 0, var(--primary) 4px, transparent 4px, transparent 8px) !important;
   border: none !important;
 }
 .moveable-line.moveable-vertical:not(.moveable-snap-guideline):not(.moveable-gap) {
-  background: repeating-linear-gradient(180deg, var(--mk) 0, var(--mk) 4px, transparent 4px, transparent 8px) !important;
+  background: repeating-linear-gradient(180deg, var(--primary) 0, var(--primary) 4px, transparent 4px, transparent 8px) !important;
 }
 
-/* All guide lines (snap/gap/distance) — uniform style */
+/* All guide lines (snap/gap/distance) — uniform */
 .moveable-line.moveable-snap-guideline,
 .moveable-gap .moveable-line,
 [class*="moveable-"] [class*="guideline-group"] [class*="line"] {
-  background: rgba(var(--mk-r),var(--mk-g),var(--mk-b),0.5) !important;
-  border: none !important;
+  background: var(--primary) !important; opacity: 0.5; border: none !important;
 }
-[class*="moveable-"] [class*="size-value"] { color: var(--mk) !important; font-size: 10px !important; font-weight: 500 !important; }
+[class*="moveable-"] [class*="size-value"] { color: var(--primary) !important; font-size: 10px !important; font-weight: 500 !important; }
