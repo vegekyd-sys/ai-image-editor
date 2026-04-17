@@ -90,7 +90,7 @@ export default function DesignOverlay({
 
     // Clear any leftover Moveable transforms on hit-target divs
     Object.values(hitTargetRefs.current).forEach(el => {
-      if (el) { el.style.transform = ''; el.style.translate = ''; }
+      if (el) el.style.transform = '';
     });
 
     // Re-apply stored offsets before measuring (Remotion re-renders reset transforms)
@@ -315,8 +315,8 @@ export default function DesignOverlay({
             const tx = beforeTranslate[0];
             const ty = beforeTranslate[1];
 
-            // Move hit-target
-            target.style.translate = `${tx}px ${ty}px`;
+            // Move hit-target (use transform, not translate — Moveable reads translate for positioning)
+            target.style.transform = `translate(${tx}px, ${ty}px)`;
 
             // Mirror to real DOM element (convert screen-px → design-px).
             // The Remotion Player scales composition content to fit the container.
