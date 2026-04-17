@@ -54,6 +54,7 @@ export default function DesignOverlay({
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDomElRef = useRef<HTMLElement | null>(null);
 
+
   // Apply stored position offsets to Remotion DOM elements (uses CSS translate property to preserve Agent's transform)
   const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
     elements.forEach((el) => {
@@ -226,7 +227,7 @@ export default function DesignOverlay({
           draggable={true}
           scalable={true}
           keepRatio={true}
-          renderDirections={['se']}
+          renderDirections={['nw', 'ne', 'sw', 'se']}
           rotatable={false}
           origin={false}
           throttleDrag={0}

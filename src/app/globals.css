@@ -229,6 +229,62 @@ textarea {
 div[class*="moveable-control-box"],
 div[class*="moveable-control-box"] * { pointer-events: auto !important; }
 
+/* Corner resize handles — L bracket style, all 4 corners */
+div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-nw.moveable-scalable,
+div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-ne.moveable-scalable,
+div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-sw.moveable-scalable,
+div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-se.moveable-scalable {
+  width: 20px !important;
+  height: 20px !important;
+  margin-top: -10px !important;
+  margin-left: -10px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+/* L bracket ::before — solid corner that blends with dashed frame */
+div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-scalable::before {
+  content: '' !important;
+  position: absolute !important;
+  width: 10px !important;
+  height: 10px !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+}
+/* Large touch target ::after */
+div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-scalable::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: -10px !important;
+}
+/* Each corner: solid L at same thickness as dashed frame (1px), positioned to overlap frame corners */
+div[class*="moveable-control-box"] div.moveable-control.moveable-nw.moveable-scalable { cursor: nwse-resize !important; }
+div[class*="moveable-control-box"] div.moveable-control.moveable-nw.moveable-scalable::before {
+  top: 9px !important; left: 9px !important;
+  border-left: 3px solid var(--primary) !important;
+  border-top: 3px solid var(--primary) !important;
+}
+div[class*="moveable-control-box"] div.moveable-control.moveable-ne.moveable-scalable { cursor: nesw-resize !important; }
+div[class*="moveable-control-box"] div.moveable-control.moveable-ne.moveable-scalable::before {
+  top: 9px !important; right: 9px !important;
+  border-right: 3px solid var(--primary) !important;
+  border-top: 3px solid var(--primary) !important;
+}
+div[class*="moveable-control-box"] div.moveable-control.moveable-sw.moveable-scalable { cursor: nesw-resize !important; }
+div[class*="moveable-control-box"] div.moveable-control.moveable-sw.moveable-scalable::before {
+  bottom: 9px !important; left: 9px !important;
+  border-left: 3px solid var(--primary) !important;
+  border-bottom: 3px solid var(--primary) !important;
+}
+div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-scalable { cursor: nwse-resize !important; }
+div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-scalable::before {
+  bottom: 9px !important; right: 9px !important;
+  border-right: 3px solid var(--primary) !important;
+  border-bottom: 3px solid var(--primary) !important;
+}
+
 /* Selection frame — dashed via gradient */
 .moveable-line:not(.moveable-snap-guideline):not(.moveable-gap) {
   background: repeating-linear-gradient(90deg, var(--primary) 0, var(--primary) 4px, transparent 4px, transparent 8px) !important;
