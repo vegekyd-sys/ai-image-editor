@@ -40,7 +40,7 @@ export default function DesignEditPanel({
   }, [selectedFieldId]);
 
   const toolbar = (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 animate-pop-in">
       <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.28)' }}>
         Design
       </span>

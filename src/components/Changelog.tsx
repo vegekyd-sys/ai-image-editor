@@ -8,6 +8,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-17',
+    en: { title: 'Design Editor & Creative Tools', items: [
+      'Design Editor: drag editable text elements to reposition — snap guidelines for precise alignment',
+      'Agent creative tools: @remotion/paths (SVG path animation) + @remotion/noise (procedural textures)',
+      'Design animations preserved: dragging no longer breaks Agent\'s rotate/scale/skew effects',
+    ]},
+    zh: { title: 'Design 编辑器 & 创意工具', items: [
+      'Design 编辑器：可拖拽文字元素重新定位 — 智能辅助线精确对齐',
+      'Agent 创意工具：@remotion/paths（SVG 路径动画）+ @remotion/noise（程序化纹理）',
+      '动画效果保留：拖拽后 Agent 的旋转/缩放/倾斜特效不丢失',
+    ]},
+  },
+  {
     date: '2026-04-16',
     en: { title: 'Video Design Pro & Sandbox Rendering', items: [
       'Smarter video creation: 4-question creative check drives the entire workflow — plan, code, verify',

@@ -221,7 +221,7 @@ textarea {
   background: rgba(192,38,211,0.8);
 }
 
-/* Moveable — single color source */
+/* Moveable — fuchsia theme */
 [class*="moveable-"] {
   --moveable-color: var(--primary) !important;
 }
@@ -242,7 +242,18 @@ textarea {
 [class*="moveable-"] [class*="guideline-group"] [class*="line"] {
   background: var(--primary) !important; opacity: 0.5; border: none !important;
 }
-[class*="moveable-"] [class*="size-value"] { color: var(--primary) !important; font-size: 10px !important; font-weight: 500 !important; }
+[class*="moveable-"] [class*="size-value"],
+[class*="moveable-"] [class*="gap"] [class*="size-value"] { color: var(--primary) !important; font-size: 10px !important; font-weight: 500 !important; }
+
+/* Pop-in animation for editable UI panels */
+@keyframes pop-in {
+  0% { opacity: 0; transform: scale(0.5) translateY(20px); }
+  70% { opacity: 1; transform: scale(1.08) translateY(-4px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-pop-in {
+  animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
 
 /* Editable element — clickable + hover hint */
 [data-editable] { cursor: pointer; pointer-events: auto; }
