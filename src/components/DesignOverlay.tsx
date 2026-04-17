@@ -54,18 +54,17 @@ export default function DesignOverlay({
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDomElRef = useRef<HTMLElement | null>(null);
 
-
-  // Apply stored position offsets to Remotion DOM elements (uses CSS translate property to preserve Agent's transform)
+  // Apply stored position + scale to Remotion DOM elements
+  // Uses independent CSS properties (translate/scale) to preserve Agent's transform animations
   const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
     elements.forEach((el) => {
       const id = el.getAttribute('data-editable');
       if (!id) return;
+      const htmlEl = el as HTMLElement;
       const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
-      if (pos) {
-        (el as HTMLElement).style.translate = `${pos.x}px ${pos.y}px`;
-      } else {
-        (el as HTMLElement).style.translate = '';
-      }
+      const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
+      htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
+      htmlEl.style.scale = sc ? `${sc.w} ${sc.h}` : '';
     });
   }, [props]);
 
@@ -228,6 +227,7 @@ export default function DesignOverlay({
           scalable={true}
           keepRatio={true}
           renderDirections={['nw', 'ne', 'sw', 'se']}
+          pinchable={true}
           rotatable={false}
           origin={false}
           throttleDrag={0}
@@ -268,23 +268,27 @@ export default function DesignOverlay({
             }
           }}
           /* ── Scale ── */
-          onScaleStart={() => {
+          onScaleStart={({ set }) => {
             isDraggingRef.current = true;
             setIsDragging(true);
             dragDomElRef.current = selectedRect.domEl;
+            // Snapshot base scale, reset Moveable to 1x (same pattern as drag's set([0,0]))
+            const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
+            dragBaseOffsetRef.current = { x: sc?.w ?? 1, y: sc?.h ?? 1 };
+            set([1, 1]);
           }}
-          onScale={({ target, transform }) => {
-            target.style.transform = transform;
+          onScale={({ target, scale: scaleVec }) => {
+            // Multiply Moveable's delta (from 1x) with base scale, apply via CSS scale property
+            const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
+            target.style.scale = `${baseW * scaleVec[0]} ${baseH * scaleVec[1]}`;
           }}
           onScaleEnd={({ lastEvent }) => {
-            if (lastEvent?.transform) {
-              const match = lastEvent.transform.match(/scale\(([^,)]+)(?:,\s*([^)]+))?\)/);
-              if (match) {
-                onUpdateProp(`_scale_${selectedFieldId}`, {
-                  w: parseFloat(match[1]),
-                  h: parseFloat(match[2] || match[1]),
-                });
-              }
+            if (lastEvent) {
+              const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
+              onUpdateProp(`_scale_${selectedFieldId}`, {
+                w: baseW * lastEvent.scale[0],
+                h: baseH * lastEvent.scale[1],
+              });
             }
           }}
         />
