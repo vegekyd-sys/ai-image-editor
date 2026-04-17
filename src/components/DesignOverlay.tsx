@@ -227,7 +227,6 @@ export default function DesignOverlay({
           scalable={true}
           keepRatio={true}
           renderDirections={['se']}
-          pinchable={true}
           rotatable={false}
           origin={false}
           throttleDrag={0}
