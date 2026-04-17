@@ -246,4 +246,4 @@ textarea {
 
 /* Editable element — clickable + hover hint */
 [data-editable] { cursor: pointer; pointer-events: auto; }
-[data-editable]:hover { outline: 1px dashed rgba(255,255,255,0.4); outline-offset: -1px; }
+[data-editable]:hover { outline: 1.5px dashed rgba(255,255,255,0.7); outline-offset: -1px; }

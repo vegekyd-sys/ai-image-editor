@@ -714,12 +714,13 @@ export default function ImageCanvas({
       p.pause();
       setRemotionPlaying(false);
     } else {
+      if (selectedEditableId) onSelectEditable?.(null);
       if (remotionFrameRef.current >= remotionTotalFrames - 1) p.seekTo(0);
       p.play();
       remotionStartedRef.current = true;
       setRemotionPlaying(true);
     }
-  }, [remotionPlaying, remotionTotalFrames]);
+  }, [remotionPlaying, remotionTotalFrames, selectedEditableId, onSelectEditable]);
 
   const seekRemotion = useCallback((clientX: number) => {
     const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
