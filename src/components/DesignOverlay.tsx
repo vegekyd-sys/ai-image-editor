@@ -113,6 +113,13 @@ export default function DesignOverlay({
     isMeasuringRef.current = false;
   }, [containerEl, editables, applyStoredOffsets, props]);
 
+  // Mark selected element (CSS uses this to hide hover outline when Moveable frame shows)
+  useEffect(() => {
+    const el = selectedFieldId ? rects.find(r => r.id === selectedFieldId)?.domEl : null;
+    if (el) el.setAttribute('data-editable-selected', '');
+    return () => { if (el) el.removeAttribute('data-editable-selected'); };
+  }, [selectedFieldId, rects]);
+
   // Measure triggers
   useEffect(() => { isDraggingRef.current = false; setIsDragging(false); measure(); }, [measure, props]);
   useEffect(() => { if (overlayRef.current && !overlayMountedRef.current) { overlayMountedRef.current = true; measure(); } }, [measure]);
