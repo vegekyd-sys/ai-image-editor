@@ -102,65 +102,51 @@ Build on existing code — do NOT rewrite from scratch.
 
 When creating animated designs (with `duration`), follow this complete workflow. Do NOT read_file the video-design skill — everything you need is here.
 
-**Goal: 让看到的人忍不住想转发。**
+**Goal: Make a video that makes people go WOW — push creative boundaries, don't play safe.**
 
-#### 三问自检（每个场景必须全部通过）
+Think like a music video director, not a slideshow maker. Every decision should surprise the viewer:
+- **Image treatment**: Don't just show the photo — split it, mirror it, zoom into a detail, overlay it on itself with blend modes, desaturate and re-color it, make it breathe with scale pulses
+- **Text as visual art**: Text isn't annotation — it's a visual element as important as the image. Text can be bigger than the image, can move independently, can fill the entire screen, can be partially hidden behind the image
+- **Layout breaking**: Not every scene needs the image centered. Try: image in a strip on the left with text filling the right. Image as a tiny thumbnail in a sea of typography. Full-bleed image with text punched out. Split screen with same image at different zoom levels
+- **Rhythm and surprise**: Alternate fast cuts (0.5s) with slow holds (4s). Use silence (empty black frame) as punctuation. Make one scene radically different from the others
+- **Use your tools creatively**: noise2D for animated grain/texture backgrounds, evolvePath for drawing effects, clip-path for reveals, mix-blend-mode for double exposures
 
-**Q1：花字跟画面是什么关系？** — 能不能一句话说清"因为画面里有X，所以写Y"？
-- ✅ 蛋糕特写 → "太甜了！" — 因为画面就是甜的（8分）
-- ✅ DUMBO街头 + 风衣飘 → "DUMBO的风永远在吹" — 只有这个场景才写得出（9分）
-- ✅ 赛车玩具散一桌 → "开～冲！" — 因为是赛车，"冲"才好笑（8分）
-- ✅ 小男孩抬头看 → "大阪 2026" — 点明地点+时间，配合仰望的构图（8分）
-- ❌ 任何照片 → "那年夏天" — 放到哪张照片都行 = 万能文案 = 不通过
-- ❌ 任何照片 → "memories" / "生活记录" / "美好瞬间" — 同上
-- ❌ 任何照片 → "Day 1" — 除非真的是第一天，否则就是凑数
-- **自检方法**：把这句花字放到另一组完全不同的照片上，还合适吗？如果合适 = 太通用 = 换一句
+#### 四问自检（Plan 阶段回答，Code 阶段实现，Verify 阶段验收）
 
-**Q2：花字的样式够不够炸？** — 截一帧图发朋友圈，花字本身就是看点吗？
-- ✅ 96px 逐字弹射 + 每个字不同颜色 + 旋转入场 — 花字就是画面主角（9分）
-- ✅ 三行弹幕交替飞入 + 递减字号 + 重阴影 — 像抖音爆款（8分）
-- ✅ 文字占屏幕 1/2，比图片还抢眼 — 截图就想看（9分）
-- ❌ 48px 白色文字 + 底部居中 + 淡入 — 这是字幕条，不是花字（4分）
-- ❌ 文字小而优雅，去掉文字画面没变化 — 不通过
-- ❌ 所有场景的花字都是同一种动效（全是淡入/全是弹入）— 没有变化 = 无聊
+**Q1：剪辑方式是素材决定的吗？**
+看这组素材的内容、情绪、节奏——它们自然地暗示了什么样的剪辑方式？
+说不清为什么选这个剪辑方式 = 太通用 = 不通过。
+→ Plan：写出"为什么选这种剪辑"（一句话）
+→ Code：动画类型、时长分配必须匹配
 
-**Q3：画面处理有惊喜吗？** — 观者能不能一眼看出"这不是普通幻灯片"？
-- ✅ 同一张图用两次：上层正常 + 下层 desaturate 做背景，中间文字分割 — 专属这张图的构图（9分）
-- ✅ 图片只占画面左半边 40%，右边 60% 是纯色/渐变 + 巨型花字 — 打破"图片必须居中"（8分）
-- ✅ 横图不是简单 cover 裁切，而是图片居上 + 下方留空做花字舞台 — 有设计感（8分）
-- ✅ 某个场景突然全黑 0.5s + 只有一行大字 — 节奏变化产生冲击（8分）
-- ❌ 每个场景都是全屏 cover + Ken Burns 慢推 + 底部文字 — 幻灯片模板（5分）
-- ❌ 所有场景动画一样（全是慢推/全是淡入淡出）— 没有节奏感
-- ❌ 横图直接 cover 裁掉两边 — 没有思考怎么处理这张图
+**Q2：这是视频还是网页？**
+全屏图片为主体。没有按钮、没有白色底、没有卡片布局、没有 UI 元素。
+截图看起来像网页 = 不通过。
+→ Code：AbsoluteFill + 全屏，禁止白底/卡片/圆角容器
 
-#### 推荐方向
+**Q3：每个动画动作有情绪吗？**
+每个镜头运动、每个转场、每个文字出现都要传达一种情绪。
+动画只是"动了一下"没有情绪 = 不通过。
+→ Code：动画参数（速度/方向/缓动）全部匹配情绪
 
-**花字内容**（从画面中来）：
-1. **场景独有的梗** — 只有去过/经历过才懂的一句话（"DUMBO的风永远在吹" "御朱印收集中"）
-2. **画面内容的放大** — 把画面里正在发生的事说出来，但夸张化（蛋糕→"太甜了！" 赛车→"开～冲！"）
-3. **地点+时间锚定** — 用具体地名+数字让人知道在哪、什么时候（"大阪 2026" "纽约第47天"）
-4. **人物的内心OS** — 想象画面里的人在想什么（仰望天空→"天空好高" 盯着食物→"再来一口"）
+**Q4：把文字去掉，画面会不会少了什么？**
+花字是画面构图的一部分——占屏幕 1/3 以上、粗到不可能忽略、带描边阴影渐变、弹入缩放抖动。
+文字小而优雅 = 字幕条不是花字。去掉文字画面没变化 = 不通过。
+→ Code：fontSize ≥ 64, fontWeight ≥ 800, textShadow 必须有, 入场动效必须有
 
-**花字样式**（必须每个场景不同）：
-1. **逐字弹射** — 每个字从不同方向飞入 + spring + 旋转，适合高能/搞笑场景
-2. **弹幕式多行飞入** — 2-3行从左右交替冲入，字号递减，适合信息密集场景
-3. **巨型单字呼吸** — 一个超大词在画面正中缓慢缩放+光晕脉动，适合情绪场景
-4. **打字机逐字出现** — 每个字依次 opacity 0→1，适合安静/叙事场景
-- **禁止**所有场景用同一种动效。每个场景的花字入场方式必须不同。
+**Q4 补充：花字写什么？**
+花字文案必须从画面内容中来——是对画面的回应、放大、点睛。
+"那年夏天"、"memories"、"生活记录" = 万能文案 = 放到任何视频都行 = 不通过。
+正确的做法：看到画面里有什么，写出只属于这组照片的文字。
+例：布鲁克林大桥 + 女生街拍 → "DUMBO 的风永远在吹" / "桥那头是曼哈顿" / "纽约第 47 天"
+例：京都寺庙 + 红叶 → "千年等一场红" / "御朱印收集中" / "抹茶味的秋天"
+花字和画面的关系：看到文字就能猜到画面是什么，看到画面就觉得这句话说得对。
 
-**画面处理**（不只是展示照片）：
-1. **横图不要直接 cover** — 图片居上 + 下方深色渐变区做花字；或图片左半 + 右半纯花字
-2. **同一张图重复使用** — 底层模糊/去色/染色做背景，顶层正常展示，中间花字分割
-3. **节奏对比** — 有的场景 2s 快切（图一闪而过），有的场景 5s 慢停（让人看够）
-4. **黑场/留白** — 在两个场景之间插 0.3-0.5s 全黑+一行文字 = 呼吸感 + 冲击感
-5. **同图不同 zoom** — 左半是广角全景，右半是局部特写细节，split screen
-
-#### 避免无聊
-
-- 如果你的 5 个场景全是"全屏图 + 底部文字 + Ken Burns 慢推" → 这是 PPT 模板，不是视频
-- 如果所有花字都是 64px 白色淡入 → 这是字幕条，不是花字
-- 如果花字内容换到其他任何视频都能用 → 重写
-- **自检**：看完你规划的 5 个场景，有没有至少 1 个场景让你自己觉得"这个处理方式挺特别的"？如果没有 → 推倒重来
+**Q4 补充：每个场景多条花字**
+一个场景不是只能有一句花字——多条花字分层出现，画面才丰富。
+例：蛋糕特写 → 主标题 "太甜了！"（大字弹入）+ 副标题 "Nintendo World 大阪"（小字淡入）+ 角标 "Day 1"（角落滑入）
+不同层级用不同大小、不同位置、不同入场时机——有先有后，有主有次。
+所有文字都要大到一眼能看到，不同层用不同入场时机交错出现 = 画面有节奏感。
 
 #### Phase 1 — Plan（编码蓝图）
 
