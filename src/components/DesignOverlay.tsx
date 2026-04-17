@@ -285,6 +285,16 @@ export default function DesignOverlay({
           hideDefaultLines={false}
           edge={false}
           padding={{ left: 0, top: 0, right: 0, bottom: 0 }}
+          /* ── Snap & Guidelines ── */
+          snappable={true}
+          snapThreshold={8}
+          snapGap={true}
+          isDisplaySnapDigit={false}
+          snapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
+          elementSnapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
+          horizontalGuidelines={overlayRef.current ? [0, overlayRef.current.offsetHeight / 2, overlayRef.current.offsetHeight] : []}
+          verticalGuidelines={overlayRef.current ? [0, overlayRef.current.offsetWidth / 2, overlayRef.current.offsetWidth] : []}
+          elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => hitTargetRefs.current[r.id]).filter(Boolean) as HTMLElement[]}
           onDragStart={({ set }) => {
             isDraggingRef.current = true;
             // Snapshot the current stored offset — stable for the entire drag

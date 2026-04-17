@@ -233,3 +233,16 @@ textarea {
 .moveable-control.moveable-origin {
   display: none !important;
 }
+/* Snap guideline styling */
+.moveable-line.moveable-snap-guideline {
+  background: rgba(217,70,239,0.5) !important;
+  border: none !important;
+  height: 1px !important;
+}
+.moveable-line.moveable-snap-guideline.moveable-vertical {
+  width: 1px !important;
+  height: auto !important;
+}
+.moveable-gap .moveable-line {
+  background: rgba(217,70,239,0.3) !important;
+}
