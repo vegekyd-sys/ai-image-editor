@@ -89,6 +89,10 @@ function checkCompile(code: string, result?: DesignResult | null): string | null
       interpolate: (frame: number) => frame,
       spring: () => 0,
       Sequence: 'Sequence', Series: 'Series', Img: 'Img', AbsoluteFill: 'AbsoluteFill', Audio: 'Audio',
+      // @remotion/paths
+      evolvePath: () => '', getLength: () => 0, getPointAtLength: () => ({ x: 0, y: 0 }), getTangentAtLength: () => ({ x: 0, y: 0 }), interpolatePath: () => '', parsePath: () => [], resetPath: () => '', cutPath: () => '',
+      // @remotion/noise
+      noise2D: () => 0, noise3D: () => 0,
     };
     const scopeKeys = Object.keys(mockScope);
     const scopeValues = Object.values(mockScope);
