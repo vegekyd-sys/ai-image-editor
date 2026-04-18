@@ -53,7 +53,6 @@ export default function DesignOverlay({
   // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDomElRef = useRef<HTMLElement | null>(null);
-  const dragScaleRef = useRef<{ w: number; h: number }>({ w: 1, h: 1 });
 
   // Apply stored position + scale to Remotion DOM elements
   // Uses independent CSS properties (translate/scale) to preserve Agent's transform animations
@@ -144,9 +143,7 @@ export default function DesignOverlay({
     ro.observe(containerEl); return () => ro.disconnect();
   }, [containerEl, measure]);
 
-  // Bind click + gesture isolation directly on each editable DOM element.
-  // This replaces hit-target's role: stopPropagation prevents canvas gestures,
-  // click handles select/edit.
+  // Bind click + double-tap-to-edit on each editable DOM element
   const onSelectFieldRef = useRef(onSelectField);
   onSelectFieldRef.current = onSelectField;
   const onStartEditRef = useRef(onStartEdit);
@@ -164,7 +161,6 @@ export default function DesignOverlay({
       if (!id || !editables.some(f => f.id === id)) return;
       const htmlEl = el as HTMLElement;
 
-      // Pointerdown: select immediately (enables direct drag on desktop).
       let lastTapTime = 0;
       let activeTouches = 0;
       const handlePointerDown = (e: PointerEvent) => {
@@ -195,10 +191,83 @@ export default function DesignOverlay({
     });
 
     return () => cleanups.forEach(fn => fn());
-  }, [containerEl, editables, rects]); // re-bind when DOM changes
+  }, [containerEl, editables, rects]);
+
+  // ── Container-level pinch-to-scale ──
+  // Single implementation: works regardless of where fingers land.
+  // Moveable's pinchable is disabled — this is the only pinch handler.
+  const pinchRef = useRef<{ startDist: number; baseW: number; baseH: number } | null>(null);
+
+  useEffect(() => {
+    if (!containerEl) return;
+
+    const getDist = (t: TouchList) =>
+      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (!selectedFieldIdRef.current || e.touches.length !== 2) return;
+      const sc = props[`_scale_${selectedFieldIdRef.current}`] as { w: number; h: number } | undefined;
+      pinchRef.current = {
+        startDist: getDist(e.touches),
+        baseW: sc?.w ?? 1,
+        baseH: sc?.h ?? 1,
+      };
+      isDraggingRef.current = true;
+      setIsDragging(true);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const p = pinchRef.current;
+      if (!p || e.touches.length < 2 || !selectedFieldIdRef.current) return;
+      e.preventDefault();
+
+      const ratio = getDist(e.touches) / p.startDist;
+      const newW = p.baseW * ratio;
+      const newH = p.baseH * ratio;
+
+      // Apply scale directly to DOM element
+      const el = containerEl.querySelector(
+        `[data-editable="${selectedFieldIdRef.current}"]`
+      ) as HTMLElement | null;
+      if (el) el.style.scale = `${newW} ${newH}`;
+
+      // Update Moveable frame to follow
+      moveableRef.current?.updateRect();
+    };
+
+    const onTouchEnd = () => {
+      if (!pinchRef.current) return;
+      const fieldId = selectedFieldIdRef.current;
+      pinchRef.current = null;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+
+      if (!fieldId) return;
+      // Read final scale from DOM and persist
+      const el = containerEl.querySelector(
+        `[data-editable="${fieldId}"]`
+      ) as HTMLElement | null;
+      if (el && el.style.scale) {
+        const parts = el.style.scale.split(' ');
+        const w = parseFloat(parts[0]) || 1;
+        const h = parseFloat(parts[1] ?? parts[0]) || 1;
+        onUpdateProp(`_scale_${fieldId}`, { w, h });
+      }
+    };
+
+    containerEl.addEventListener('touchstart', onTouchStart, { passive: true });
+    containerEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    containerEl.addEventListener('touchend', onTouchEnd, { passive: true });
+    containerEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    return () => {
+      containerEl.removeEventListener('touchstart', onTouchStart);
+      containerEl.removeEventListener('touchmove', onTouchMove);
+      containerEl.removeEventListener('touchend', onTouchEnd);
+      containerEl.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [containerEl, props, onUpdateProp]);
 
   const selectedRect = rects.find(r => r.id === selectedFieldId);
-
 
   return (
     <div
@@ -225,7 +294,7 @@ export default function DesignOverlay({
         );
       })()}
 
-      {/* Moveable: directly targets the real DOM element inside Remotion Player */}
+      {/* Moveable: drag + desktop scale handles. Pinch handled by container touch listener above. */}
       {selectedRect && selectedFieldId && (
         <Moveable
           ref={moveableRef}
@@ -235,7 +304,7 @@ export default function DesignOverlay({
           scalable={true}
           keepRatio={true}
           renderDirections={['nw', 'ne', 'sw', 'se']}
-          pinchable={true}
+          pinchable={false}
           rotatable={false}
           origin={false}
           throttleDrag={0}
@@ -275,18 +344,16 @@ export default function DesignOverlay({
               });
             }
           }}
-          /* ── Scale ── */
+          /* ── Scale (desktop handle drag only) ── */
           onScaleStart={({ set }) => {
             isDraggingRef.current = true;
             setIsDragging(true);
             dragDomElRef.current = selectedRect.domEl;
-            // Snapshot base scale, reset Moveable to 1x (same pattern as drag's set([0,0]))
             const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
             dragBaseOffsetRef.current = { x: sc?.w ?? 1, y: sc?.h ?? 1 };
             set([1, 1]);
           }}
           onScale={({ target, scale: scaleVec }) => {
-            // Multiply Moveable's delta (from 1x) with base scale, apply via CSS scale property
             const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
             target.style.scale = `${baseW * scaleVec[0]} ${baseH * scaleVec[1]}`;
           }}
