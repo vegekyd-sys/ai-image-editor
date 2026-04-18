@@ -217,7 +217,7 @@ export default function DesignOverlay({
       const el = containerEl.querySelector(
         `[data-editable="${selectedFieldIdRef.current}"]`
       ) as HTMLElement | null;
-      if (el) el.style.scale = `${newW} ${newH}`;
+      if (el) el.style.scale = `${+newW.toFixed(4)} ${+newH.toFixed(4)}`;
 
       // Update Moveable frame to follow
       moveableRef.current?.updateRect();
@@ -299,7 +299,7 @@ export default function DesignOverlay({
           throttleScale={0}
           hideDefaultLines={false}
           edge={false}
-          padding={{ left: 0, top: 0, right: 0, bottom: 0 }}
+          padding={{ left: 10, top: 10, right: 10, bottom: 10 }}
           /* ── Snap & Guidelines ── */
           snappable={true}
           snapThreshold={8}
@@ -348,7 +348,7 @@ export default function DesignOverlay({
           }}
           onScale={({ target, scale: scaleVec }) => {
             const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
-            target.style.scale = `${baseW * scaleVec[0]} ${baseH * scaleVec[1]}`;
+            target.style.scale = `${+(baseW * scaleVec[0]).toFixed(4)} ${+(baseH * scaleVec[1]).toFixed(4)}`;
           }}
           onScaleEnd={({ lastEvent }) => {
             if (lastEvent) {

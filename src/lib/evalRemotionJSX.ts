@@ -181,7 +181,7 @@ export function applyEditableTransforms(container: HTMLElement, props: Record<st
     const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
     const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
     htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
-    htmlEl.style.scale = sc ? `${sc.w} ${sc.h}` : '';
+    htmlEl.style.scale = sc ? `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` : '';
   });
 }
 
