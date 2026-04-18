@@ -200,25 +200,61 @@ export function applyEditableTransforms(container: HTMLElement, props: Record<st
 }
 
 /**
- * HOC that applies _pos_* and _scale_* props to [data-editable] DOM elements.
- * Ensures Preview (Player) and Export (renderStillOnWeb/renderMediaOnWeb)
- * produce identical results — single rendering path, no external overlay needed.
+ * Recursively inject transform styles into React elements with data-editable attribute.
+ * Works in the RENDER PHASE (not effects), so renderMediaOnWeb sees the transforms
+ * in the React tree before it reads the DOM for canvas drawing.
+ */
+function injectEditableTransforms(node: React.ReactNode, props: Record<string, unknown>): React.ReactNode {
+  if (!React.isValidElement(node)) return node;
+
+  const element = node as React.ReactElement<Record<string, unknown>>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const elProps = element.props as any;
+
+  // Recurse into children first
+  let children = elProps?.children;
+  if (children) {
+    children = React.Children.map(children, (child: React.ReactNode) => injectEditableTransforms(child, props));
+  }
+
+  // Check if this element has data-editable
+  const editableId = elProps?.['data-editable'] as string | undefined;
+  if (editableId) {
+    const pos = props[`_pos_${editableId}`] as { x: number; y: number } | undefined;
+    const sc = props[`_scale_${editableId}`] as { w: number; h: number } | undefined;
+    const editTransform = buildEditableTransform(pos, sc);
+    if (editTransform) {
+      const existingStyle = (elProps?.style || {}) as Record<string, unknown>;
+      const existingTransform = (existingStyle.transform || '') as string;
+      // Prepend our transform (translate+scale) before Agent's animation transform
+      const mergedTransform = existingTransform
+        ? `${editTransform} ${existingTransform}`
+        : editTransform;
+      return React.cloneElement(element, {
+        style: { ...existingStyle, transform: mergedTransform },
+        children,
+      } as Record<string, unknown>);
+    }
+  }
+
+  // If children changed, clone with new children
+  if (children !== elProps?.children) {
+    return React.cloneElement(element, { children } as Record<string, unknown>);
+  }
+  return element;
+}
+
+/**
+ * HOC that applies _pos_* and _scale_* props to [data-editable] elements.
+ * Uses React render-phase tree traversal (not DOM effects) — guaranteed to work
+ * with renderMediaOnWeb which reads the React tree, not post-effect DOM.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
   return function WrappedDesign(props: Record<string, unknown>) {
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    // useLayoutEffect runs synchronously after DOM update, before browser paint / Remotion capture.
-    // This ensures transforms are applied on EVERY frame, including when Sequences mount new elements.
-    useLayoutEffect(() => {
-      if (containerRef.current) {
-        applyEditableTransforms(containerRef.current, props);
-      }
-    });
-
-    return React.createElement('div', { ref: containerRef, style: { width: '100%', height: '100%' } },
-      React.createElement(Component, props)
-    );
+    const rendered = React.createElement(Component, props);
+    const hasTransforms = Object.keys(props).some(k => k.startsWith('_pos_') || k.startsWith('_scale_'));
+    if (!hasTransforms) return rendered;
+    return injectEditableTransforms(rendered, props) as React.ReactElement;
   };
 }
