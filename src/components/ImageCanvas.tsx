@@ -148,6 +148,7 @@ export default function ImageCanvas({
   const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDragging = useRef(false);
+  const [isSeeking, setIsSeeking] = useState(false);
   // Pull-down gesture (mobile only: free-drag like iOS Photos dismiss)
   const isPullDown = useRef(false);
   const pullDownStartX = useRef(0);
@@ -905,8 +906,8 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Play/pause button — bottom-left (same as Remotion) */}
-            {!videoError && showControls && (
+            {/* Play/pause button — bottom-left, hidden while seeking */}
+            {!videoError && showControls && !isSeeking && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
                   onClick={(e) => {
@@ -953,9 +954,8 @@ export default function ImageCanvas({
                   e.preventDefault();
                   e.stopPropagation();
                   if (videoPlaying) videoRef.current?.pause();
-                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
-                  if (track) track.style.height = '6px';
                   seekDragging.current = true;
+                  setIsSeeking(true);
                   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                   doSeek(e.clientX);
                   resetControlsTimer();
@@ -966,13 +966,12 @@ export default function ImageCanvas({
                 }}
                 onPointerUp={(e) => {
                   seekDragging.current = false;
-                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
-                  if (track) track.style.height = '';
+                  setIsSeeking(false);
                   (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div data-video-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
+                <div data-video-track className={`absolute bottom-0 left-0 right-0 transition-[height] duration-150 ${isSeeking ? 'h-[6px]' : 'h-[2px] group-hover:h-[6px]'}`}>
                   <div className="absolute inset-0 bg-white/12" />
                   <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${videoBuffered * 100}%` }} />
                   <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }} />
@@ -1076,8 +1075,8 @@ export default function ImageCanvas({
               />
             )}
 
-            {/* Play/pause button — bottom-left, large */}
-            {currentDesign?.animation && (
+            {/* Play/pause button — bottom-left, hidden while seeking */}
+            {currentDesign?.animation && !isSeeking && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
                   onClick={(e) => { e.stopPropagation(); if (!remotionBuffering && !remotionLoading) toggleRemotionPlay(); }}
@@ -1123,9 +1122,7 @@ export default function ImageCanvas({
                     remotionRef.current?.pause();
                     setRemotionPlaying(false);
                   }
-                  // Thicken bar on drag (mobile)
-                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
-                  if (track) track.style.height = '6px';
+                  setIsSeeking(true);
                   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                   seekRemotion(e.clientX);
                 }}
@@ -1133,14 +1130,12 @@ export default function ImageCanvas({
                   if (e.buttons) seekRemotion(e.clientX);
                 }}
                 onPointerUp={(e) => {
-                  // Shrink bar back
-                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
-                  if (track) track.style.height = '';
+                  setIsSeeking(false);
                   (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div data-remotion-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
+                <div data-remotion-track className={`absolute bottom-0 left-0 right-0 transition-[height] duration-150 ${isSeeking ? 'h-[6px]' : 'h-[2px] group-hover:h-[6px]'}`}>
                   <div className="absolute inset-0 bg-white/12" />
                   <div data-remotion-fill className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: '0%' }} />
                 </div>
@@ -1220,8 +1215,8 @@ export default function ImageCanvas({
         </div>
       )}
 
-      {/* Timeline indicators — bottom of canvas, capsule pill (hidden in design editor mode) */}
-      {!selectedEditableId && (timeline.length > 1 || onAnimate) && (
+      {/* Timeline indicators — bottom of canvas, hidden while seeking or in design editor mode */}
+      {!selectedEditableId && !isSeeking && (timeline.length > 1 || onAnimate) && (
         <div className={`absolute left-1/2 -translate-x-1/2 flex items-center justify-center z-10 ${isDesktop ? 'bottom-3' : 'bottom-3'}`}>
           <div className={`flex items-center rounded-full ${isDesktop ? 'gap-1.5 px-3 py-1.5' : 'gap-[5px] px-[10px] py-[5px]'}`}
             style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
