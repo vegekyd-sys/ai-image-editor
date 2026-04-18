@@ -2591,13 +2591,26 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       return;
     }
 
-    // Image download
-    const img = timeline[viewIndex];
+    // Image download — for designs with editable transforms, re-capture poster to include drag/scale
+    const snapIdxForSave = snapFromTimeline(viewIndex, draftParentIndexRef.current);
+    const snapForSave = snapIdxForSave !== null ? snapshotsRef.current[snapIdxForSave] : undefined;
+    let img = timeline[viewIndex];
     if (!img) return;
     const filename = `ai-edited-${Date.now()}.jpg`;
     setIsSaving(true);
 
     try {
+      // Re-capture poster for static designs (includes drag/scale transforms via HOC)
+      if (snapForSave?.design && !snapForSave.design.animation) {
+        try {
+          const { captureDesignPoster } = await import('@/components/RemotionRenderer');
+          const freshPoster = await captureDesignPoster(snapForSave.design);
+          if (freshPoster) img = freshPoster;
+        } catch (e) {
+          console.warn('Re-capture poster for save failed, using cached:', e);
+        }
+      }
+
       const res = await fetch(img);
       const blob = await res.blob();
 
