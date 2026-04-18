@@ -268,10 +268,6 @@ export default function DesignOverlay({
   }, [containerEl, props, onUpdateProp]);
 
   const selectedRect = rects.find(r => r.id === selectedFieldId);
-  // Always use the live DOM element (rects.domEl may be stale after Sequence remount)
-  const liveSelectedEl = selectedFieldId && containerEl
-    ? containerEl.querySelector(`[data-editable="${selectedFieldId}"]`) as HTMLElement | null
-    : null;
 
   return (
     <div
@@ -299,10 +295,10 @@ export default function DesignOverlay({
       })()}
 
       {/* Moveable: drag + desktop scale handles. Pinch handled by container touch listener above. */}
-      {selectedRect && selectedFieldId && liveSelectedEl && (
+      {selectedRect && selectedFieldId && (
         <Moveable
           ref={moveableRef}
-          target={liveSelectedEl}
+          target={selectedRect.domEl}
           rootContainer={containerEl ?? undefined}
           draggable={true}
           scalable={true}
