@@ -169,23 +169,7 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
   }
 }
 
-/**
- * Apply _pos_* and _scale_* transforms to [data-editable] elements using CSS independent
- * properties (style.translate / style.scale). These don't interfere with Moveable's
- * coordinate calculation or browser hit-testing, and are correctly read by
- * @remotion/web-renderer's canvas drawing pipeline (via our patch).
- */
-export function applyEditableTransforms(container: HTMLElement, props: Record<string, unknown>): void {
-  container.querySelectorAll('[data-editable]').forEach((node) => {
-    const id = node.getAttribute('data-editable');
-    if (!id) return;
-    const htmlEl = node as HTMLElement;
-    const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
-    const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
-    htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
-    htmlEl.style.scale = sc ? `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` : '';
-  });
-}
+
 
 
 /**
