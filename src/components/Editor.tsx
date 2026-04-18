@@ -2524,20 +2524,19 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         pendingVideoRef.current = null;
         const file = new File([blob], filename, { type: 'video/mp4' });
         try {
-          if (navigator.share && navigator.canShare?.({ files: [file] })) {
+          if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
             await navigator.share({ files: [file] });
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
           } else {
-            // Fallback: direct download (localhost or unsupported browser)
+            // Fallback: open in new tab (iOS Safari ignores <a download> for blobs)
             const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            window.open(url, '_blank');
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+            setTimeout(() => URL.revokeObjectURL(url), 120000);
           }
         } catch { /* user cancelled share sheet */ }
-        setAgentStatus(t('editor.done'));
-        showSaveToast();
         return;
       }
 
