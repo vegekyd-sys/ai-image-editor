@@ -238,12 +238,7 @@ export default function Editor({
     _setSelectedEditableFieldId(id);
     if (!id) setEditingDesignFieldId(null); // deselect also closes editor
   }, []);
-  // Auto-deselect when selected editable disappears (e.g. Sequence changes scene)
-  useEffect(() => {
-    if (selectedEditableFieldId && visibleEditableIds.length > 0 && !visibleEditableIds.includes(selectedEditableFieldId)) {
-      setSelectedEditableFieldId(null);
-    }
-  }, [visibleEditableIds, selectedEditableFieldId, setSelectedEditableFieldId]);
+
 
   // Music generation state
   const [musicTaskId, setMusicTaskId] = useState<string | null>(initialMusicTaskId ?? null);

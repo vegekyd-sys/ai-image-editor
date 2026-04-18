@@ -158,15 +158,19 @@ export default function DesignOverlay({
   // Event delegation: single listener on container, works for any DOM element regardless of remount
   useEffect(() => {
     if (!containerEl) return;
+    // DEBUG: mark the container so we can find it in DevTools
+    containerEl.setAttribute('data-design-overlay-container', 'true');
+    console.log('[DesignOverlay] binding to containerEl:', containerEl.style.cssText, 'children:', containerEl.children.length, 'hasPlayer:', !!containerEl.querySelector('.__remotion-player'), 'hasEditable:', !!containerEl.querySelector('[data-editable]'));
     let lastTapTime = 0;
     let lastTapId = '';
     let activeTouches = 0;
 
     const handlePointerDown = (e: PointerEvent) => {
       const target = (e.target as HTMLElement).closest?.('[data-editable]');
-      if (!target) return;
+      console.log('[DesignOverlay handlePointerDown]', 'target:', target?.getAttribute('data-editable'), 'editableIds:', editables.map(f => f.id), 'selectedFieldId:', selectedFieldIdRef.current);
+      if (!target) { console.log('[DesignOverlay] EXIT: no target'); return; }
       const id = target.getAttribute('data-editable');
-      if (!id || !editables.some(f => f.id === id)) return;
+      if (!id || !editables.some(f => f.id === id)) { console.log('[DesignOverlay] EXIT: id not in editables', id); return; }
 
       if (e.pointerType === 'touch') activeTouches++;
       const now = Date.now();
@@ -189,6 +193,7 @@ export default function DesignOverlay({
     containerEl.addEventListener('pointerdown', handlePointerDown);
     containerEl.addEventListener('pointerup', handlePointerUp);
     return () => {
+      console.log('[DesignOverlay] CLEANUP — removing listeners. containerEl:', containerEl?.style.cssText?.substring(0, 40), 'editables:', editables.length);
       containerEl.removeEventListener('pointerdown', handlePointerDown);
       containerEl.removeEventListener('pointerup', handlePointerUp);
     };
