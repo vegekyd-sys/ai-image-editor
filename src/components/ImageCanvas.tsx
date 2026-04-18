@@ -1097,8 +1097,8 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Time badge — updated via DOM (data-remotion-time) */}
-            {currentDesign?.animation && (
+            {/* Time badge — updated via DOM (data-remotion-time), hidden in design editor mode */}
+            {currentDesign?.animation && !selectedEditableId && (
               <div className="absolute z-20 pointer-events-none" style={{ bottom: 14, right: 10 }}>
                 <span data-remotion-time className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
                   style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}>
@@ -1107,8 +1107,8 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag */}
-            {currentDesign?.animation && (
+            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag, hidden in design editor mode */}
+            {currentDesign?.animation && !selectedEditableId && (
               <div
                 data-remotion-seek
                 className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
@@ -1220,8 +1220,8 @@ export default function ImageCanvas({
         </div>
       )}
 
-      {/* Timeline indicators — bottom of canvas, capsule pill */}
-      {(timeline.length > 1 || onAnimate) && (
+      {/* Timeline indicators — bottom of canvas, capsule pill (hidden in design editor mode) */}
+      {!selectedEditableId && (timeline.length > 1 || onAnimate) && (
         <div className={`absolute left-1/2 -translate-x-1/2 flex items-center justify-center z-10 ${isDesktop ? 'bottom-3' : 'bottom-3'}`}>
           <div className={`flex items-center rounded-full ${isDesktop ? 'gap-1.5 px-3 py-1.5' : 'gap-[5px] px-[10px] py-[5px]'}`}
             style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}

@@ -3028,8 +3028,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
             {/* TODO: Floating text input for annotation text tool — uncomment when text editing flow is ready */}
 
-            {/* Top toolbar */}
-            {snapshots.length > 0 && (
+            {/* Top toolbar — hidden in design editor mode */}
+            {snapshots.length > 0 && !selectedEditableFieldId && (
               <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
                 <div className="flex items-center gap-1">
                   {onBack && (
