@@ -207,6 +207,11 @@ export function applyEditableTransforms(container: HTMLElement, props: Record<st
  * This bridges the gap between "compile once" and "render with different props each frame".
  */
 let _currentTransformProps: Record<string, unknown> = {};
+/** When true, Proxy injects style.transform (for renderMediaOnWeb export).
+ *  When false, transforms are applied via CSS translate/scale by DesignOverlay (for preview). */
+let _injectTransformInStyle = false;
+/** Enable/disable transform injection in style. Used by export functions. */
+export function setInjectTransformInStyle(v: boolean) { _injectTransformInStyle = v; }
 
 /** Patched React object for Agent code: createElement intercepts [data-editable] and injects transforms */
 const _origCE = React.createElement;
@@ -217,7 +222,9 @@ const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
     const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
     const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
     const editTransform = buildEditableTransform(pos, sc);
-    if (editTransform) {
+    if (editTransform && _injectTransformInStyle) {
+      // Export mode: inject into style.transform (renderMediaOnWeb only reads this).
+      // Preview mode: DesignOverlay applies via CSS translate/scale independently.
       const existingStyle = (elProps.style || {}) as Record<string, unknown>;
       const existingTransform = (existingStyle.transform || '') as string;
       const merged = existingTransform ? `${editTransform} ${existingTransform}` : editTransform;

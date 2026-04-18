@@ -3,7 +3,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
-import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
+import { evalRemotionJSX, preloadBabel, setInjectTransformInStyle } from '@/lib/evalRemotionJSX';
 import type { DesignPayload } from '@/types';
 
 export type { DesignPayload };
@@ -69,6 +69,7 @@ async function preloadFontsFromCode(code: string): Promise<void> {
  */
 export async function captureDesignPoster(design: DesignPayload): Promise<string> {
   let imageBlobUrls: string[] = [];
+  setInjectTransformInStyle(true); // Enable Proxy transform injection for export
   try {
     await preloadBabel().catch(() => {});
     const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
@@ -106,6 +107,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
     console.warn('🎨 [design] poster capture failed:', e);
     return '';
   } finally {
+    setInjectTransformInStyle(false);
     imageBlobUrls.forEach(url => URL.revokeObjectURL(url));
   }
 }
@@ -116,6 +118,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
  */
 export async function captureDesignFrame(design: DesignPayload, frame: number): Promise<Blob | null> {
   let imageBlobUrls: string[] = [];
+  setInjectTransformInStyle(true);
   try {
     await preloadBabel().catch(() => {});
     const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
@@ -147,6 +150,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
     console.warn('🎨 [design] frame capture failed:', e);
     return null;
   } finally {
+    setInjectTransformInStyle(false);
     imageBlobUrls.forEach(url => URL.revokeObjectURL(url));
   }
 }
@@ -349,6 +353,7 @@ export async function exportDesignVideo(
   design: DesignPayload,
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
+  setInjectTransformInStyle(true);
   preloadBabel().catch(() => {});
 
   // Pre-fetch remote image URLs → blob URLs (same-origin, native browser handling)
@@ -385,6 +390,7 @@ export async function exportDesignVideo(
 
     return result.getBlob();
   } finally {
+    setInjectTransformInStyle(false);
     [...imageBlobUrls, ...audioBlobUrls].forEach(url => URL.revokeObjectURL(url));
   }
 }
