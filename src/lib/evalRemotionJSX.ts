@@ -9,7 +9,7 @@
  */
 
 import { transform as sucraseTransform } from 'sucrase';
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import {
   useCurrentFrame,
   useVideoConfig,
@@ -164,7 +164,7 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
     const scopeValues = Object.values(REMOTION_SCOPE);
     const factory = new Function(...scopeKeys, execCode);
     const comp = factory(...scopeValues);
-    return comp || null;
+    return comp ? wrapWithEditableTransforms(comp) : null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
@@ -198,4 +198,32 @@ export function buildEditableTransform(
   if (pos) parts.push(`translate(${pos.x}px, ${pos.y}px)`);
   if (sc && (sc.w !== 1 || sc.h !== 1)) parts.push(`scale(${+sc.w.toFixed(4)}, ${+sc.h.toFixed(4)})`);
   return parts.join(' ');
+}
+
+/**
+ * HOC: applies _pos_* and _scale_* transforms via useLayoutEffect.
+ * Uses CSS independent properties (style.translate / style.scale) which:
+ * - Don't interfere with Moveable coordinate calculation
+ * - Don't affect browser hit-testing (no ghost pointerdown)
+ * - Are correctly read by @remotion/web-renderer (via our patch)
+ *
+ * In preview: DesignOverlay.applyStoredOffsets also sets these → same values, no conflict.
+ * In export: no DesignOverlay → this HOC is the only one applying transforms.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
+  return function WrappedDesign(props: Record<string, unknown>) {
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+      if (containerRef.current) {
+        applyEditableTransforms(containerRef.current, props);
+      }
+    });
+
+    return React.createElement('div', {
+      ref: containerRef,
+      style: { width: '100%', height: '100%' },
+    }, React.createElement(Component, props));
+  };
 }
