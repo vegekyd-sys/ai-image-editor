@@ -194,26 +194,6 @@ Scene 4 (10-15s): <<<image_1>>> 回到长廊
 
 Duration: 12-25s (3 images → 12-15s, 5 → 15-20s, 7 → 20-25s).
 
-#### Phase 1.5 — Asset Preparation（先生图，再写码）
-
-After planning, review your scenes: **do any need visual elements beyond the user's photos?**
-
-| Need | Best tool | Code is wrong because... |
-|---|---|---|
-| Stickers, characters, objects, illustrations | `generate_image` + sticker-maker (green chroma key → sharp remove bg → transparent PNG) | CSS drawings look cheap and fake |
-| Background scenes, textures, artistic backdrops | `generate_image` (full scene) → use as `<Img>` | Gradients can't replace real textures |
-| Geometric shapes, text effects, animation, layout | `run_code` (CSS/Remotion) | This IS what code excels at |
-
-**Decision rule**: If it has texture, detail, or organic form → `generate_image`. If it's layout, motion, or geometry → code.
-
-**When assets are needed**:
-1. Generate each element with `generate_image` (green chroma key for stickers: `"on a solid bright green chroma key background, #00FF00"`)
-2. For transparent overlays: `run_code` with sharp to remove background → PNG
-3. `write_file` to save each asset
-4. Then proceed to Phase 2, referencing saved URLs as `<Img src={url}>` in your design
-
-**Skip this phase** if the design only uses the user's existing photos + text + code effects.
-
 #### Phase 2 — Code
 
 Write the full video in a single `run_code` (type: render). Before calling, output 1-2 sentences about what you're building.
