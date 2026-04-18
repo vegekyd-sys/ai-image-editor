@@ -26,7 +26,6 @@ export default function DesignTextEditor({
       inputRef.current.focus();
       const len = inputRef.current.value.length;
       inputRef.current.setSelectionRange(len, len);
-      // Auto-resize to content
       inputRef.current.style.height = 'auto';
       inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
     }

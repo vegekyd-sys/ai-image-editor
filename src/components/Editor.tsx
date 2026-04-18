@@ -216,6 +216,17 @@ export default function Editor({
   // Design editable state
   const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
+  // Mobile keyboard offset for text editor panel
+  const [editorKbInset, setEditorKbInset] = useState(0);
+  useEffect(() => {
+    if (isDesktop || !editingDesignFieldId) { setEditorKbInset(0); return; }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setEditorKbInset(Math.round(Math.max(0, window.innerHeight - vv.height - vv.offsetTop)));
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, [isDesktop, editingDesignFieldId]);
   const [visibleEditableIds, _setVisibleEditableIds] = useState<string[]>([]);
   const handleVisibleEditableFields = useCallback((ids: string[]) => {
     _setVisibleEditableIds(prev => {
@@ -3207,6 +3218,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             </div>
           )}
 
+          {/* Hidden proxy input — iOS keyboard focus anchor (must be in DOM before edit starts) */}
           {/* Design text editor — floating panel (like AnnotationToolbar) */}
           {editingDesignField && currentDesignSnap?.design && (
             <div style={isDesktop ? {
@@ -3216,10 +3228,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               width: 340,
             } : {
               position: 'fixed',
-              bottom: 0, left: 0, right: 0,
+              bottom: editorKbInset, left: 0, right: 0,
               zIndex: 201,
               maxWidth: 480,
               margin: '0 auto',
+              transition: editorKbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
             }}>
               <DesignTextEditor
                 field={editingDesignField}
