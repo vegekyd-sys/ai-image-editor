@@ -166,6 +166,8 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
     const factory = new Function(...scopeKeys, execCode);
     const comp = factory(...scopeValues);
     return comp ? wrapWithEditableTransforms(comp) : null;
+    // Note: wrapWithEditableTransforms creates a patched React.createElement
+    // that intercepts data-editable elements during the Component's render.
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
@@ -200,61 +202,50 @@ export function applyEditableTransforms(container: HTMLElement, props: Record<st
 }
 
 /**
- * Recursively inject transform styles into React elements with data-editable attribute.
- * Works in the RENDER PHASE (not effects), so renderMediaOnWeb sees the transforms
- * in the React tree before it reads the DOM for canvas drawing.
+ * Module-level ref for current transform props. Updated by the HOC's render,
+ * read by the patched createElement in REMOTION_SCOPE.
+ * This bridges the gap between "compile once" and "render with different props each frame".
  */
-function injectEditableTransforms(node: React.ReactNode, props: Record<string, unknown>): React.ReactNode {
-  if (!React.isValidElement(node)) return node;
+let _currentTransformProps: Record<string, unknown> = {};
 
-  const element = node as React.ReactElement<Record<string, unknown>>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const elProps = element.props as any;
-
-  // Recurse into children first
-  let children = elProps?.children;
-  if (children) {
-    children = React.Children.map(children, (child: React.ReactNode) => injectEditableTransforms(child, props));
-  }
-
-  // Check if this element has data-editable
-  const editableId = elProps?.['data-editable'] as string | undefined;
-  if (editableId) {
-    const pos = props[`_pos_${editableId}`] as { x: number; y: number } | undefined;
-    const sc = props[`_scale_${editableId}`] as { w: number; h: number } | undefined;
+/** Patched React object for Agent code: createElement intercepts [data-editable] and injects transforms */
+const _origCE = React.createElement;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
+  if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
+    const id = elProps['data-editable'] as string;
+    const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
+    const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
     const editTransform = buildEditableTransform(pos, sc);
     if (editTransform) {
-      const existingStyle = (elProps?.style || {}) as Record<string, unknown>;
+      const existingStyle = (elProps.style || {}) as Record<string, unknown>;
       const existingTransform = (existingStyle.transform || '') as string;
-      // Prepend our transform (translate+scale) before Agent's animation transform
-      const mergedTransform = existingTransform
-        ? `${editTransform} ${existingTransform}`
-        : editTransform;
-      return React.cloneElement(element, {
-        style: { ...existingStyle, transform: mergedTransform },
-        children,
-      } as Record<string, unknown>);
+      const merged = existingTransform ? `${editTransform} ${existingTransform}` : editTransform;
+      elProps = { ...elProps, style: { ...existingStyle, transform: merged } };
     }
   }
+  return _origCE.call(React, type, elProps, ...children);
+};
 
-  // If children changed, clone with new children
-  if (children !== elProps?.children) {
-    return React.cloneElement(element, { children } as Record<string, unknown>);
+const PATCHED_REACT = new Proxy(React, {
+  get(target, prop) {
+    if (prop === 'createElement') return _patchedCE;
+    return Reflect.get(target, prop);
   }
-  return element;
-}
+});
+
+// Replace React in REMOTION_SCOPE with patched version
+REMOTION_SCOPE.React = PATCHED_REACT;
 
 /**
- * HOC that applies _pos_* and _scale_* props to [data-editable] elements.
- * Uses React render-phase tree traversal (not DOM effects) — guaranteed to work
- * with renderMediaOnWeb which reads the React tree, not post-effect DOM.
+ * HOC: sets _currentTransformProps before Component renders (synchronous).
+ * Agent code uses PATCHED_REACT.createElement → reads _currentTransformProps → injects transforms.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
   return function WrappedDesign(props: Record<string, unknown>) {
-    const rendered = React.createElement(Component, props);
-    const hasTransforms = Object.keys(props).some(k => k.startsWith('_pos_') || k.startsWith('_scale_'));
-    if (!hasTransforms) return rendered;
-    return injectEditableTransforms(rendered, props) as React.ReactElement;
+    // Set module-level ref BEFORE Component renders (synchronous in render phase)
+    _currentTransformProps = props;
+    return _origCE.call(React, Component, props);
   };
 }
