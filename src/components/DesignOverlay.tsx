@@ -55,21 +55,9 @@ export default function DesignOverlay({
   const dragDomElRef = useRef<HTMLElement | null>(null);
   const dragScaleRef = useRef(1);
 
-  // Apply stored position + scale to Remotion DOM elements
-  // Uses independent CSS properties (translate/scale) to preserve Agent's transform animations
-  const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
-    elements.forEach((el) => {
-      const id = el.getAttribute('data-editable');
-      if (!id) return;
-      const htmlEl = el as HTMLElement;
-      const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
-      const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
-      htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
-      htmlEl.style.scale = sc ? `${sc.w} ${sc.h}` : '';
-    });
-  }, [props]);
-
   // Measure editable elements
+  // Transforms (_pos_*/_scale_*) are applied by the HOC in evalRemotionJSX.ts,
+  // so DOM positions are already correct when we measure here.
   const measure = useCallback(() => {
     if (isDraggingRef.current || isMeasuringRef.current) return;
     if (!containerEl || !overlayRef.current) { setRects([]); return; }
@@ -77,7 +65,6 @@ export default function DesignOverlay({
     isMeasuringRef.current = true;
 
     const elements = containerEl.querySelectorAll('[data-editable]');
-    applyStoredOffsets(elements);
 
     const baseRect = overlayRef.current.getBoundingClientRect();
     const newRects: MeasuredRect[] = [];
@@ -112,7 +99,7 @@ export default function DesignOverlay({
     setRects(newRects);
     onVisibleFieldsChangeRef.current?.(newRects.map(r => r.id));
     isMeasuringRef.current = false;
-  }, [containerEl, editables, applyStoredOffsets, props]);
+  }, [containerEl, editables, props]);
 
   // Mark selected element (CSS hides hover outline when Moveable frame shows)
   useEffect(() => {

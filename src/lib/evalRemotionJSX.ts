@@ -161,9 +161,59 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
     const scopeKeys = Object.keys(REMOTION_SCOPE);
     const scopeValues = Object.values(REMOTION_SCOPE);
     const factory = new Function(...scopeKeys, execCode);
-    return factory(...scopeValues);
+    const comp = factory(...scopeValues);
+    return comp ? wrapWithEditableTransforms(comp) : null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
   }
+}
+
+/**
+ * HOC that applies _pos_* and _scale_* props to [data-editable] DOM elements.
+ * Ensures Preview (Player) and Export (renderStillOnWeb/renderMediaOnWeb)
+ * produce identical results — single rendering path, no external overlay needed.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
+  return function WrappedDesign(props: Record<string, unknown>) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const propsRef = useRef(props);
+    propsRef.current = props;
+
+    const applyAll = useCallback(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      const p = propsRef.current;
+      el.querySelectorAll('[data-editable]').forEach((node) => {
+        const id = node.getAttribute('data-editable');
+        if (!id) return;
+        const htmlEl = node as HTMLElement;
+        const pos = p[`_pos_${id}`] as { x: number; y: number } | undefined;
+        const sc = p[`_scale_${id}`] as { w: number; h: number } | undefined;
+        htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
+        htmlEl.style.scale = sc ? `${sc.w} ${sc.h}` : '';
+      });
+    }, []);
+
+    // MutationObserver: apply transforms whenever children appear or change
+    useEffect(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      applyAll();
+      const mo = new MutationObserver(applyAll);
+      mo.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-editable'] });
+      return () => mo.disconnect();
+    }, [applyAll]);
+
+    // Re-apply when transform props change
+    const transformKeys = Object.keys(props).filter(k => k.startsWith('_pos_') || k.startsWith('_scale_'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const transformDep = JSON.stringify(transformKeys.sort().map(k => [k, props[k]]));
+    useEffect(() => { applyAll(); }, [transformDep, applyAll]);
+
+    return React.createElement('div', { ref: containerRef, style: { width: '100%', height: '100%' } },
+      React.createElement(Component, props)
+    );
+  };
 }
