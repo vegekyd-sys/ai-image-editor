@@ -30,6 +30,7 @@ Rules:
 
 Every `type: 'render'` design MUST declare editable fields. Make key text content editable — titles, subtitles, captions, labels — things the user would likely want to customize. Decorative text, icons, or structural elements don't need to be editable.
 - Add `data-editable="fieldId"` attribute to editable text elements
+- Editable elements MUST be `display: block` or `inline-block` (never `inline`) — the drag/resize system requires a box model
 - Put editable text in `props` so the GUI can update it
 - Declare `editables` array mapping field IDs to prop keys
 
