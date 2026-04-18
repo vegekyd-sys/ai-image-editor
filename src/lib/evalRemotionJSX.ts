@@ -9,7 +9,7 @@
  */
 
 import { transform as sucraseTransform } from 'sucrase';
-import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   useCurrentFrame,
   useVideoConfig,
@@ -19,8 +19,6 @@ import {
   Series,
   Img,
   AbsoluteFill,
-  delayRender,
-  continueRender,
 } from 'remotion';
 import { Audio } from '@remotion/media';
 import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
@@ -189,16 +187,6 @@ export function applyEditableTransforms(container: HTMLElement, props: Record<st
   });
 }
 
-/** Build a CSS transform string from position and scale. Used by DesignOverlay for drag/scale feedback. */
-export function buildEditableTransform(
-  pos?: { x: number; y: number } | null,
-  sc?: { w: number; h: number } | null,
-): string {
-  const parts: string[] = [];
-  if (pos) parts.push(`translate(${pos.x}px, ${pos.y}px)`);
-  if (sc && (sc.w !== 1 || sc.h !== 1)) parts.push(`scale(${+sc.w.toFixed(4)}, ${+sc.h.toFixed(4)})`);
-  return parts.join(' ');
-}
 
 /**
  * Module-level ref for current transform props.
