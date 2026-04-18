@@ -50,6 +50,9 @@ export default function DesignOverlay({
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const isMeasuringRef = useRef(false);
+  // Incremented when DOM elements change (Sequence remount) — forces listener rebinding
+  const [bindGeneration, setBindGeneration] = useState(0);
+  const prevDomElsRef = useRef<Set<HTMLElement>>(new Set());
 
   // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -99,6 +102,13 @@ export default function DesignOverlay({
     });
     setRects(newRects);
     onVisibleFieldsChangeRef.current?.(newRects.map(r => r.id));
+    // Detect DOM element replacement (Sequence remount) → force listener rebind
+    const newDomEls = new Set(newRects.map(r => r.domEl));
+    const prev = prevDomElsRef.current;
+    if (newDomEls.size !== prev.size || [...newDomEls].some(el => !prev.has(el))) {
+      prevDomElsRef.current = newDomEls;
+      setBindGeneration(g => g + 1);
+    }
     isMeasuringRef.current = false;
   }, [containerEl, editables, props]);
 
@@ -140,47 +150,44 @@ export default function DesignOverlay({
   const selectedFieldIdRef = useRef(selectedFieldId);
   selectedFieldIdRef.current = selectedFieldId;
 
+  // Event delegation: single listener on container, works for any DOM element regardless of remount
   useEffect(() => {
     if (!containerEl) return;
-    const elements = containerEl.querySelectorAll('[data-editable]');
-    const cleanups: (() => void)[] = [];
+    let lastTapTime = 0;
+    let lastTapId = '';
+    let activeTouches = 0;
 
-    elements.forEach((el) => {
-      const id = el.getAttribute('data-editable');
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = (e.target as HTMLElement).closest?.('[data-editable]');
+      if (!target) return;
+      const id = target.getAttribute('data-editable');
       if (!id || !editables.some(f => f.id === id)) return;
-      const htmlEl = el as HTMLElement;
 
-      let lastTapTime = 0;
-      let activeTouches = 0;
-      const handlePointerDown = (e: PointerEvent) => {
-        if (e.pointerType === 'touch') activeTouches++;
-        const now = Date.now();
-        // Only trigger double-tap edit with single finger — pinch fires 2 pointerdowns rapidly
-        if (activeTouches <= 1 && selectedFieldIdRef.current === id && now - lastTapTime < 400) {
-          onStartEditRef.current?.(id);
-          lastTapTime = 0;
-          return;
-        }
-        lastTapTime = now;
-        if (selectedFieldIdRef.current !== id) {
-          onSelectFieldRef.current(id);
-        }
-      };
-      const handlePointerUp = (e: PointerEvent) => {
-        if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
-      };
+      if (e.pointerType === 'touch') activeTouches++;
+      const now = Date.now();
+      if (activeTouches <= 1 && selectedFieldIdRef.current === id && lastTapId === id && now - lastTapTime < 400) {
+        onStartEditRef.current?.(id);
+        lastTapTime = 0;
+        lastTapId = '';
+        return;
+      }
+      lastTapTime = now;
+      lastTapId = id;
+      if (selectedFieldIdRef.current !== id) {
+        onSelectFieldRef.current(id);
+      }
+    };
+    const handlePointerUp = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
+    };
 
-      htmlEl.addEventListener('pointerdown', handlePointerDown);
-      htmlEl.addEventListener('pointerup', handlePointerUp);
-
-      cleanups.push(() => {
-        htmlEl.removeEventListener('pointerdown', handlePointerDown);
-        htmlEl.removeEventListener('pointerup', handlePointerUp);
-      });
-    });
-
-    return () => cleanups.forEach(fn => fn());
-  }, [containerEl, editables, rects]);
+    containerEl.addEventListener('pointerdown', handlePointerDown);
+    containerEl.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      containerEl.removeEventListener('pointerdown', handlePointerDown);
+      containerEl.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [containerEl, editables]);
 
   // ── Container-level pinch-to-scale ──
   // Single implementation: works regardless of where fingers land.
