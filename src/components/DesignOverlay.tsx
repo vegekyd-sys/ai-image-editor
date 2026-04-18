@@ -180,6 +180,9 @@ export default function DesignOverlay({
       if (!target) return;
       const id = target.getAttribute('data-editable');
       if (!id || !editables.some(f => f.id === id)) return;
+      // Stop propagation to prevent Remotion Player's click handler from
+      // firing a ghost pointerdown that clears the selection
+      e.stopPropagation();
 
       if (e.pointerType === 'touch') activeTouches++;
       const now = Date.now();
