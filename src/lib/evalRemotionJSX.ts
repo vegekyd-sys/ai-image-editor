@@ -19,6 +19,8 @@ import {
   Series,
   Img,
   AbsoluteFill,
+  delayRender,
+  continueRender,
 } from 'remotion';
 import { Audio } from '@remotion/media';
 import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
@@ -197,27 +199,41 @@ function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.
     const propsRef = useRef(props);
     propsRef.current = props;
 
-    const applyAll = useCallback(() => {
+    // Check if any transform props exist
+    const hasTransforms = Object.keys(props).some(k => k.startsWith('_pos_') || k.startsWith('_scale_'));
+
+    // delayRender: block Remotion's frame capture until transforms are applied.
+    // This guarantees renderStillOnWeb/renderMediaOnWeb waits for DOM transforms.
+    const [handle] = useState(() => hasTransforms ? delayRender('Applying editable transforms') : null);
+    const handleRef = useRef(handle);
+    const continuedRef = useRef(false);
+
+    const applyAndContinue = useCallback(() => {
       const el = containerRef.current;
       if (!el) return;
       applyEditableTransforms(el, propsRef.current);
+      // Signal Remotion that transforms are ready — safe to capture frame
+      if (handleRef.current !== null && !continuedRef.current) {
+        continuedRef.current = true;
+        continueRender(handleRef.current);
+      }
     }, []);
 
     // MutationObserver: apply transforms whenever children appear or change
     useEffect(() => {
       const el = containerRef.current;
       if (!el) return;
-      applyAll();
-      const mo = new MutationObserver(applyAll);
+      applyAndContinue();
+      const mo = new MutationObserver(applyAndContinue);
       mo.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-editable'] });
       return () => mo.disconnect();
-    }, [applyAll]);
+    }, [applyAndContinue]);
 
     // Re-apply when transform props change
     const transformKeys = Object.keys(props).filter(k => k.startsWith('_pos_') || k.startsWith('_scale_'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const transformDep = JSON.stringify(transformKeys.sort().map(k => [k, props[k]]));
-    useEffect(() => { applyAll(); }, [transformDep, applyAll]);
+    useEffect(() => { applyAndContinue(); }, [transformDep, applyAndContinue]);
 
     return React.createElement('div', { ref: containerRef, style: { width: '100%', height: '100%' } },
       React.createElement(Component, props)
