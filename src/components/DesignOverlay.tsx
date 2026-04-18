@@ -53,6 +53,7 @@ export default function DesignOverlay({
   // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDomElRef = useRef<HTMLElement | null>(null);
+  const dragScaleRef = useRef<{ w: number; h: number }>({ w: 1, h: 1 });
 
   // Apply stored position + scale to Remotion DOM elements
   // Uses independent CSS properties (translate/scale) to preserve Agent's transform animations
@@ -165,10 +166,12 @@ export default function DesignOverlay({
 
       // Pointerdown: select immediately (enables direct drag on desktop).
       let lastTapTime = 0;
-      const handlePointerDown = () => {
+      let activeTouches = 0;
+      const handlePointerDown = (e: PointerEvent) => {
+        if (e.pointerType === 'touch') activeTouches++;
         const now = Date.now();
-        if (selectedFieldIdRef.current === id && now - lastTapTime < 400) {
-          // Double-tap detected → edit text (works on both desktop and mobile)
+        // Only trigger double-tap edit with single finger — pinch fires 2 pointerdowns rapidly
+        if (activeTouches <= 1 && selectedFieldIdRef.current === id && now - lastTapTime < 400) {
           onStartEditRef.current?.(id);
           lastTapTime = 0;
           return;
@@ -178,11 +181,16 @@ export default function DesignOverlay({
           onSelectFieldRef.current(id);
         }
       };
+      const handlePointerUp = (e: PointerEvent) => {
+        if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
+      };
 
       htmlEl.addEventListener('pointerdown', handlePointerDown);
+      htmlEl.addEventListener('pointerup', handlePointerUp);
 
       cleanups.push(() => {
         htmlEl.removeEventListener('pointerdown', handlePointerDown);
+        htmlEl.removeEventListener('pointerup', handlePointerUp);
       });
     });
 

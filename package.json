@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "postinstall": "npx patch-package --patch-dir patches",
     "mcp": "npx tsx --require ./md-loader.cjs mcp-server.ts --stdio",
     "mcp:http": "npx tsx --require ./md-loader.cjs mcp-server.ts"
   },
