@@ -2524,7 +2524,17 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         pendingVideoRef.current = null;
         const file = new File([blob], filename, { type: 'video/mp4' });
         try {
-          await navigator.share({ files: [file] });
+          if (navigator.share && navigator.canShare?.({ files: [file] })) {
+            await navigator.share({ files: [file] });
+          } else {
+            // Fallback: direct download (localhost or unsupported browser)
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          }
         } catch { /* user cancelled share sheet */ }
         setAgentStatus(t('editor.done'));
         showSaveToast();
@@ -2541,10 +2551,25 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         });
 
         if (isMobile) {
-          // Mobile: store blob, prompt user to tap Share
-          pendingVideoRef.current = { blob, filename: `makaron-design-${Date.now()}.mp4` };
-          setIsSaving(false);
-          setAgentStatus(t('editor.videoReady'));
+          const filename = `makaron-design-${Date.now()}.mp4`;
+          const file = new File([blob], filename, { type: 'video/mp4' });
+          if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+            // Mobile + share available: store blob, prompt user to tap Share
+            pendingVideoRef.current = { blob, filename };
+            setIsSaving(false);
+            setAgentStatus(t('editor.videoReady'));
+          } else {
+            // Mobile but no share (localhost/HTTP): download directly
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            setIsSaving(false);
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+          }
         } else {
           // Desktop: download directly
           const filename = `makaron-design-${Date.now()}.mp4`;
