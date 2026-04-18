@@ -123,6 +123,7 @@ Think like a music video director, not a slideshow maker. Every decision should 
 全屏图片为主体。没有按钮、没有白色底、没有卡片布局、没有 UI 元素。
 截图看起来像网页 = 不通过。
 → Code：AbsoluteFill + 全屏，禁止白底/卡片/圆角容器
+→ **默认画布 1080×1440（3:4 竖版）**，除非用户指定其他比例
 
 **Q3：每个动画动作有情绪吗？**
 每个镜头运动、每个转场、每个文字出现都要传达一种情绪。
@@ -162,7 +163,7 @@ Format (mobile-friendly — NO tables):
 
 **剪辑理由** (Q1): 一句话
 
-**画布**: 1080×1920 竖版 | **时长**: Ns
+**画布**: 1080×1440 (3:4) | **时长**: Ns
 
 Scene 1 (0-3s): <<<image_1>>> Brooklyn Bridge 砖楼长廊
 - 横图，上方展示完整画面，下方模糊背景透出
