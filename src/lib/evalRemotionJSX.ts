@@ -234,7 +234,6 @@ const PATCHED_REACT = new Proxy(React, {
   }
 });
 
-// Replace React in REMOTION_SCOPE with patched version
 REMOTION_SCOPE.React = PATCHED_REACT;
 
 /**
