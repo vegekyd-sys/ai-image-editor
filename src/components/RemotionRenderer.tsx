@@ -200,6 +200,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const durationInFrames = design.animation
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
+  const blobUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -222,6 +223,12 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         setCompileError(null);
         setComponent(() => comp);
         onLoading?.(false);
+        // Background-preload audio URLs (non-blocking — warms browser cache so <Audio> plays faster)
+        resolveAudioUrls(design.code).then(({ blobUrls }) => {
+          // Keep blob URLs alive for the lifetime of this component
+          if (!cancelled) blobUrlsRef.current = blobUrls;
+          else blobUrls.forEach(u => URL.revokeObjectURL(u));
+        }).catch(() => {});
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
@@ -231,7 +238,11 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         onLoading?.(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      blobUrlsRef.current.forEach(u => URL.revokeObjectURL(u));
+      blobUrlsRef.current = [];
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
