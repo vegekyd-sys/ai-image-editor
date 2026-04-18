@@ -201,29 +201,58 @@ export function buildEditableTransform(
 }
 
 /**
- * HOC: applies _pos_* and _scale_* transforms via useLayoutEffect.
- * Uses CSS independent properties (style.translate / style.scale) which:
- * - Don't interfere with Moveable coordinate calculation
- * - Don't affect browser hit-testing (no ghost pointerdown)
- * - Are correctly read by @remotion/web-renderer (via our patch)
+ * Module-level ref for current transform props.
+ * Updated by the HOC's render, read by the Proxy createElement.
+ */
+let _currentTransformProps: Record<string, unknown> = {};
+
+/**
+ * Patched createElement: intercepts [data-editable] elements and injects
+ * CSS independent properties (style.translate / style.scale).
  *
- * In preview: DesignOverlay.applyStoredOffsets also sets these → same values, no conflict.
- * In export: no DesignOverlay → this HOC is the only one applying transforms.
+ * Unlike style.transform, these independent properties:
+ * - Do NOT appear in getComputedStyle().transform (verified: returns "none")
+ * - Do NOT interfere with Moveable coordinate calculation
+ * - Do NOT affect browser hit-testing (no ghost pointerdown)
+ * - ARE correctly read by @remotion/web-renderer (via our patch)
+ */
+const _origCE = React.createElement;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
+  if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
+    const id = elProps['data-editable'] as string;
+    const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
+    const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
+    if (pos || sc) {
+      const existingStyle = (elProps.style || {}) as Record<string, unknown>;
+      elProps = { ...elProps, style: {
+        ...existingStyle,
+        ...(pos ? { translate: `${pos.x}px ${pos.y}px` } : {}),
+        ...(sc ? { scale: `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` } : {}),
+      }};
+    }
+  }
+  return _origCE.call(React, type, elProps, ...children);
+};
+
+const PATCHED_REACT = new Proxy(React, {
+  get(target, prop) {
+    if (prop === 'createElement') return _patchedCE;
+    return Reflect.get(target, prop);
+  }
+});
+
+REMOTION_SCOPE.React = PATCHED_REACT;
+
+/**
+ * HOC: sets _currentTransformProps before Component renders (synchronous).
+ * Agent code uses PATCHED_REACT.createElement → reads _currentTransformProps
+ * → injects style.translate/scale on [data-editable] elements.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
   return function WrappedDesign(props: Record<string, unknown>) {
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    useLayoutEffect(() => {
-      if (containerRef.current) {
-        applyEditableTransforms(containerRef.current, props);
-      }
-    });
-
-    return React.createElement('div', {
-      ref: containerRef,
-      style: { width: '100%', height: '100%' },
-    }, React.createElement(Component, props));
+    _currentTransformProps = props;
+    return _origCE.call(React, Component, props);
   };
 }
