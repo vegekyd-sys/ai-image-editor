@@ -53,6 +53,7 @@ export default function DesignOverlay({
   // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDomElRef = useRef<HTMLElement | null>(null);
+  const dragScaleRef = useRef(1);
 
   // Apply stored position + scale to Remotion DOM elements
   // Uses independent CSS properties (translate/scale) to preserve Agent's transform animations
@@ -322,25 +323,30 @@ export default function DesignOverlay({
           horizontalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientHeight / 2)] : []}
           verticalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientWidth / 2)] : []}
           elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
-          /* ── Drag ── */
+          /* ── Drag (beforeTranslate × scale to compensate CSS translate applying before scale) ── */
           onDragStart={({ set }) => {
             isDraggingRef.current = true;
             setIsDragging(true);
             const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
             dragBaseOffsetRef.current = { x: pos?.x ?? 0, y: pos?.y ?? 0 };
             dragDomElRef.current = selectedRect.domEl;
+            // Snapshot current scale for drag compensation
+            const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
+            dragScaleRef.current = sc?.w ?? 1;
             set([0, 0]);
           }}
           onDrag={({ target, beforeTranslate }) => {
             const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
-            target.style.translate = `${baseX + beforeTranslate[0]}px ${baseY + beforeTranslate[1]}px`;
+            const s = dragScaleRef.current;
+            target.style.translate = `${baseX + beforeTranslate[0] * s}px ${baseY + beforeTranslate[1] * s}px`;
           }}
           onDragEnd={({ lastEvent }) => {
             if (lastEvent) {
               const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
+              const s = dragScaleRef.current;
               onUpdateProp(`_pos_${selectedFieldId}`, {
-                x: baseX + lastEvent.beforeTranslate[0],
-                y: baseY + lastEvent.beforeTranslate[1],
+                x: baseX + lastEvent.beforeTranslate[0] * s,
+                y: baseY + lastEvent.beforeTranslate[1] * s,
               });
             }
           }}
