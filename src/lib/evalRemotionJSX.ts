@@ -176,6 +176,17 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
  * Apply _pos_* and _scale_* transforms to all [data-editable] elements inside a container.
  * Exported for testing. Used by the HOC below and can be called standalone.
  */
+/** Build a CSS transform string from position and scale. Used by HOC and DesignOverlay. */
+export function buildEditableTransform(
+  pos?: { x: number; y: number } | null,
+  sc?: { w: number; h: number } | null,
+): string {
+  const parts: string[] = [];
+  if (pos) parts.push(`translate(${pos.x}px, ${pos.y}px)`);
+  if (sc && (sc.w !== 1 || sc.h !== 1)) parts.push(`scale(${+sc.w.toFixed(4)}, ${+sc.h.toFixed(4)})`);
+  return parts.join(' ');
+}
+
 export function applyEditableTransforms(container: HTMLElement, props: Record<string, unknown>): void {
   container.querySelectorAll('[data-editable]').forEach((node) => {
     const id = node.getAttribute('data-editable');
@@ -183,8 +194,8 @@ export function applyEditableTransforms(container: HTMLElement, props: Record<st
     const htmlEl = node as HTMLElement;
     const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
     const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
-    htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
-    htmlEl.style.scale = sc ? `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` : '';
+    // Use style.transform (renderMediaOnWeb only reads transform, not translate/scale)
+    htmlEl.style.transform = buildEditableTransform(pos, sc);
   });
 }
 

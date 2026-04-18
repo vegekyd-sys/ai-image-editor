@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { EditableField } from '@/types';
+import { buildEditableTransform } from '@/lib/evalRemotionJSX';
 
 interface DesignOverlayProps {
   containerEl: HTMLDivElement | null;
@@ -213,11 +214,14 @@ export default function DesignOverlay({
       const newW = p.baseW * ratio;
       const newH = p.baseH * ratio;
 
-      // Apply scale directly to DOM element
+      // Apply scale via transform (renderMediaOnWeb only reads style.transform)
       const el = containerEl.querySelector(
         `[data-editable="${selectedFieldIdRef.current}"]`
       ) as HTMLElement | null;
-      if (el) el.style.scale = `${+newW.toFixed(4)} ${+newH.toFixed(4)}`;
+      if (el) {
+        const pos = props[`_pos_${selectedFieldIdRef.current}`] as { x: number; y: number } | undefined;
+        el.style.transform = buildEditableTransform(pos, { w: newW, h: newH });
+      }
 
       // Update Moveable frame to follow
       moveableRef.current?.updateRect();
@@ -231,15 +235,16 @@ export default function DesignOverlay({
       setIsDragging(false);
 
       if (!fieldId) return;
-      // Read final scale from DOM and persist
+      // Persist the pinched scale (read from pinch state, not DOM)
       const el = containerEl.querySelector(
         `[data-editable="${fieldId}"]`
       ) as HTMLElement | null;
-      if (el && el.style.scale) {
-        const parts = el.style.scale.split(' ');
-        const w = parseFloat(parts[0]) || 1;
-        const h = parseFloat(parts[1] ?? parts[0]) || 1;
-        onUpdateProp(`_scale_${fieldId}`, { w, h });
+      if (el) {
+        // Parse scale from the transform string we set during pinch
+        const match = el.style.transform.match(/scale\(([\d.]+),\s*([\d.]+)\)/);
+        if (match) {
+          onUpdateProp(`_scale_${fieldId}`, { w: parseFloat(match[1]), h: parseFloat(match[2]) });
+        }
       }
     };
 
@@ -310,14 +315,13 @@ export default function DesignOverlay({
           horizontalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientHeight / 2)] : []}
           verticalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientWidth / 2)] : []}
           elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
-          /* ── Drag (beforeTranslate × scale to compensate CSS translate applying before scale) ── */
+          /* ── Drag ── */
           onDragStart={({ set }) => {
             isDraggingRef.current = true;
             setIsDragging(true);
             const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
             dragBaseOffsetRef.current = { x: pos?.x ?? 0, y: pos?.y ?? 0 };
             dragDomElRef.current = selectedRect.domEl;
-            // Snapshot current scale for drag compensation
             const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
             dragScaleRef.current = sc?.w ?? 1;
             set([0, 0]);
@@ -325,7 +329,9 @@ export default function DesignOverlay({
           onDrag={({ target, beforeTranslate }) => {
             const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
             const s = dragScaleRef.current;
-            target.style.translate = `${baseX + beforeTranslate[0] * s}px ${baseY + beforeTranslate[1] * s}px`;
+            const newPos = { x: baseX + beforeTranslate[0] * s, y: baseY + beforeTranslate[1] * s };
+            const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
+            target.style.transform = buildEditableTransform(newPos, sc);
           }}
           onDragEnd={({ lastEvent }) => {
             if (lastEvent) {
@@ -348,7 +354,9 @@ export default function DesignOverlay({
           }}
           onScale={({ target, scale: scaleVec }) => {
             const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
-            target.style.scale = `${+(baseW * scaleVec[0]).toFixed(4)} ${+(baseH * scaleVec[1]).toFixed(4)}`;
+            const newSc = { w: baseW * scaleVec[0], h: baseH * scaleVec[1] };
+            const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
+            target.style.transform = buildEditableTransform(pos, newSc);
           }}
           onScaleEnd={({ lastEvent }) => {
             if (lastEvent) {
