@@ -3,7 +3,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { EditableField } from '@/types';
-import { buildEditableTransform } from '@/lib/evalRemotionJSX';
 
 interface DesignOverlayProps {
   containerEl: HTMLDivElement | null;
@@ -50,18 +49,27 @@ export default function DesignOverlay({
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const isMeasuringRef = useRef(false);
-  // Incremented when DOM elements change (Sequence remount) — forces listener rebinding
-  const [bindGeneration, setBindGeneration] = useState(0);
-  const prevDomElsRef = useRef<Set<HTMLElement>>(new Set());
 
   // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDomElRef = useRef<HTMLElement | null>(null);
   const dragScaleRef = useRef(1);
 
+  // Apply stored position + scale to Remotion DOM elements
+  // Uses independent CSS properties (translate/scale) to preserve Agent's transform animations
+  const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
+    elements.forEach((el) => {
+      const id = el.getAttribute('data-editable');
+      if (!id) return;
+      const htmlEl = el as HTMLElement;
+      const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
+      const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
+      htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
+      htmlEl.style.scale = sc ? `${sc.w} ${sc.h}` : '';
+    });
+  }, [props]);
+
   // Measure editable elements
-  // Transforms (_pos_*/_scale_*) are applied by the HOC in evalRemotionJSX.ts,
-  // so DOM positions are already correct when we measure here.
   const measure = useCallback(() => {
     if (isDraggingRef.current || isMeasuringRef.current) return;
     if (!containerEl || !overlayRef.current) { setRects([]); return; }
@@ -69,6 +77,7 @@ export default function DesignOverlay({
     isMeasuringRef.current = true;
 
     const elements = containerEl.querySelectorAll('[data-editable]');
+    applyStoredOffsets(elements);
 
     const baseRect = overlayRef.current.getBoundingClientRect();
     const newRects: MeasuredRect[] = [];
@@ -102,15 +111,8 @@ export default function DesignOverlay({
     });
     setRects(newRects);
     onVisibleFieldsChangeRef.current?.(newRects.map(r => r.id));
-    // Detect DOM element replacement (Sequence remount) → force listener rebind
-    const newDomEls = new Set(newRects.map(r => r.domEl));
-    const prev = prevDomElsRef.current;
-    if (newDomEls.size !== prev.size || [...newDomEls].some(el => !prev.has(el))) {
-      prevDomElsRef.current = newDomEls;
-      setBindGeneration(g => g + 1);
-    }
     isMeasuringRef.current = false;
-  }, [containerEl, editables, props]);
+  }, [containerEl, editables, applyStoredOffsets, props]);
 
   // Mark selected element (CSS hides hover outline when Moveable frame shows)
   useEffect(() => {
@@ -150,44 +152,47 @@ export default function DesignOverlay({
   const selectedFieldIdRef = useRef(selectedFieldId);
   selectedFieldIdRef.current = selectedFieldId;
 
-  // Event delegation: single listener on container, works for any DOM element regardless of remount
   useEffect(() => {
     if (!containerEl) return;
-    let lastTapTime = 0;
-    let lastTapId = '';
-    let activeTouches = 0;
+    const elements = containerEl.querySelectorAll('[data-editable]');
+    const cleanups: (() => void)[] = [];
 
-    const handlePointerDown = (e: PointerEvent) => {
-      const target = (e.target as HTMLElement).closest?.('[data-editable]');
-      if (!target) return;
-      const id = target.getAttribute('data-editable');
+    elements.forEach((el) => {
+      const id = el.getAttribute('data-editable');
       if (!id || !editables.some(f => f.id === id)) return;
+      const htmlEl = el as HTMLElement;
 
-      if (e.pointerType === 'touch') activeTouches++;
-      const now = Date.now();
-      if (activeTouches <= 1 && selectedFieldIdRef.current === id && lastTapId === id && now - lastTapTime < 400) {
-        onStartEditRef.current?.(id);
-        lastTapTime = 0;
-        lastTapId = '';
-        return;
-      }
-      lastTapTime = now;
-      lastTapId = id;
-      if (selectedFieldIdRef.current !== id) {
-        onSelectFieldRef.current(id);
-      }
-    };
-    const handlePointerUp = (e: PointerEvent) => {
-      if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
-    };
+      let lastTapTime = 0;
+      let activeTouches = 0;
+      const handlePointerDown = (e: PointerEvent) => {
+        if (e.pointerType === 'touch') activeTouches++;
+        const now = Date.now();
+        // Only trigger double-tap edit with single finger — pinch fires 2 pointerdowns rapidly
+        if (activeTouches <= 1 && selectedFieldIdRef.current === id && now - lastTapTime < 400) {
+          onStartEditRef.current?.(id);
+          lastTapTime = 0;
+          return;
+        }
+        lastTapTime = now;
+        if (selectedFieldIdRef.current !== id) {
+          onSelectFieldRef.current(id);
+        }
+      };
+      const handlePointerUp = (e: PointerEvent) => {
+        if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
+      };
 
-    containerEl.addEventListener('pointerdown', handlePointerDown);
-    containerEl.addEventListener('pointerup', handlePointerUp);
-    return () => {
-      containerEl.removeEventListener('pointerdown', handlePointerDown);
-      containerEl.removeEventListener('pointerup', handlePointerUp);
-    };
-  }, [containerEl, editables]);
+      htmlEl.addEventListener('pointerdown', handlePointerDown);
+      htmlEl.addEventListener('pointerup', handlePointerUp);
+
+      cleanups.push(() => {
+        htmlEl.removeEventListener('pointerdown', handlePointerDown);
+        htmlEl.removeEventListener('pointerup', handlePointerUp);
+      });
+    });
+
+    return () => cleanups.forEach(fn => fn());
+  }, [containerEl, editables, rects]);
 
   // ── Container-level pinch-to-scale ──
   // Single implementation: works regardless of where fingers land.
@@ -221,14 +226,11 @@ export default function DesignOverlay({
       const newW = p.baseW * ratio;
       const newH = p.baseH * ratio;
 
-      // Apply scale via transform (renderMediaOnWeb only reads style.transform)
+      // Apply scale directly to DOM element
       const el = containerEl.querySelector(
         `[data-editable="${selectedFieldIdRef.current}"]`
       ) as HTMLElement | null;
-      if (el) {
-        const pos = props[`_pos_${selectedFieldIdRef.current}`] as { x: number; y: number } | undefined;
-        el.style.transform = buildEditableTransform(pos, { w: newW, h: newH });
-      }
+      if (el) el.style.scale = `${newW} ${newH}`;
 
       // Update Moveable frame to follow
       moveableRef.current?.updateRect();
@@ -242,16 +244,15 @@ export default function DesignOverlay({
       setIsDragging(false);
 
       if (!fieldId) return;
-      // Persist the pinched scale (read from pinch state, not DOM)
+      // Read final scale from DOM and persist
       const el = containerEl.querySelector(
         `[data-editable="${fieldId}"]`
       ) as HTMLElement | null;
-      if (el) {
-        // Parse scale from the transform string we set during pinch
-        const match = el.style.transform.match(/scale\(([\d.]+),\s*([\d.]+)\)/);
-        if (match) {
-          onUpdateProp(`_scale_${fieldId}`, { w: parseFloat(match[1]), h: parseFloat(match[2]) });
-        }
+      if (el && el.style.scale) {
+        const parts = el.style.scale.split(' ');
+        const w = parseFloat(parts[0]) || 1;
+        const h = parseFloat(parts[1] ?? parts[0]) || 1;
+        onUpdateProp(`_scale_${fieldId}`, { w, h });
       }
     };
 
@@ -311,7 +312,7 @@ export default function DesignOverlay({
           throttleScale={0}
           hideDefaultLines={false}
           edge={false}
-          padding={{ left: 10, top: 10, right: 10, bottom: 10 }}
+          padding={{ left: 0, top: 0, right: 0, bottom: 0 }}
           /* ── Snap & Guidelines ── */
           snappable={true}
           snapThreshold={8}
@@ -322,13 +323,14 @@ export default function DesignOverlay({
           horizontalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientHeight / 2)] : []}
           verticalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientWidth / 2)] : []}
           elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
-          /* ── Drag ── */
+          /* ── Drag (beforeTranslate × scale to compensate CSS translate applying before scale) ── */
           onDragStart={({ set }) => {
             isDraggingRef.current = true;
             setIsDragging(true);
             const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
             dragBaseOffsetRef.current = { x: pos?.x ?? 0, y: pos?.y ?? 0 };
             dragDomElRef.current = selectedRect.domEl;
+            // Snapshot current scale for drag compensation
             const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
             dragScaleRef.current = sc?.w ?? 1;
             set([0, 0]);
@@ -336,9 +338,7 @@ export default function DesignOverlay({
           onDrag={({ target, beforeTranslate }) => {
             const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
             const s = dragScaleRef.current;
-            const newPos = { x: baseX + beforeTranslate[0] * s, y: baseY + beforeTranslate[1] * s };
-            const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
-            target.style.transform = buildEditableTransform(newPos, sc);
+            target.style.translate = `${baseX + beforeTranslate[0] * s}px ${baseY + beforeTranslate[1] * s}px`;
           }}
           onDragEnd={({ lastEvent }) => {
             if (lastEvent) {
@@ -361,9 +361,7 @@ export default function DesignOverlay({
           }}
           onScale={({ target, scale: scaleVec }) => {
             const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
-            const newSc = { w: baseW * scaleVec[0], h: baseH * scaleVec[1] };
-            const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
-            target.style.transform = buildEditableTransform(pos, newSc);
+            target.style.scale = `${baseW * scaleVec[0]} ${baseH * scaleVec[1]}`;
           }}
           onScaleEnd={({ lastEvent }) => {
             if (lastEvent) {

@@ -68,7 +68,7 @@ Use `image_index` in `generate_image` or `analyze_image` to work with any snapsh
 
 **Music:** You have a `generate_music` tool. When the user asks for music/score, analyze the video content (mood, pacing, transitions), call `generate_music` with a beat-synced prompt, and move on. The system polls in the background and auto-notifies you when the audio is ready — you do NOT need to poll or wait. Do NOT auto-generate music — only when the user asks.
 
-**run_code design** — See `agent-coding.md` (injected when run_code is called) for full coding rules: render vs patch, editable fields, saving, server preview.
+**run_code design** — See `agent-coding.md` (injected when run_code is called) for full coding rules: render vs patch, editable fields, saving, server preview. **Before jumping into code, check if you need visual assets first** — stickers, illustrations, characters, objects are better generated with `generate_image` (+ sticker-maker for transparent PNGs) than drawn with CSS.
 
 **Video design (animated run_code)** — When creating a video/animation with run_code, follow the **Video Designs** section in your coding rules (agent-coding.md). It has the complete workflow: four-question check → Shot-format plan → segmented coding (render → patch → patch) → batch preview_frame. Do NOT read_file the video-design skill — everything is already in your coding rules.
 
