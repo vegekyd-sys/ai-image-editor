@@ -1050,7 +1050,7 @@ export default function ImageCanvas({
               posterImage={currentDesign?.animation ? displayImage : undefined}
               onLoading={setRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
-              onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
+              onContainerRef={setDesignContainerEl}
               onPlayerRef={(ref) => {
                 remotionRef.current = ref;
                 if (editableFields?.length) setDesignPlayerRef(ref);

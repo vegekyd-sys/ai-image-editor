@@ -186,13 +186,10 @@ export default function DesignOverlay({
       if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
     };
 
-    // Use capture phase — Remotion Player's double-click prevention registers
-    // document-level pointerup listeners that delay mouse events by 200ms.
-    // Capture runs before Player's bubble-phase handler, ensuring selection works.
-    containerEl.addEventListener('pointerdown', handlePointerDown, { capture: true });
+    containerEl.addEventListener('pointerdown', handlePointerDown);
     containerEl.addEventListener('pointerup', handlePointerUp);
     return () => {
-      containerEl.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+      containerEl.removeEventListener('pointerdown', handlePointerDown);
       containerEl.removeEventListener('pointerup', handlePointerUp);
     };
   }, [containerEl, editables]);
