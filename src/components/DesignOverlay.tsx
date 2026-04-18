@@ -77,6 +77,11 @@ export default function DesignOverlay({
       const id = el.getAttribute('data-editable');
       if (!id || seen.has(id)) return;
       if (!editables.some(f => f.id === id)) return;
+      // Fix inline elements — Moveable needs a box model to work correctly
+      const htmlEl = el as HTMLElement;
+      if (getComputedStyle(htmlEl).display === 'inline') {
+        htmlEl.style.display = 'inline-block';
+      }
       const elRect = el.getBoundingClientRect();
       const storedPos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
 
