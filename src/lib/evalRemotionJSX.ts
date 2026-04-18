@@ -170,6 +170,22 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
 }
 
 /**
+ * Apply _pos_* and _scale_* transforms to all [data-editable] elements inside a container.
+ * Exported for testing. Used by the HOC below and can be called standalone.
+ */
+export function applyEditableTransforms(container: HTMLElement, props: Record<string, unknown>): void {
+  container.querySelectorAll('[data-editable]').forEach((node) => {
+    const id = node.getAttribute('data-editable');
+    if (!id) return;
+    const htmlEl = node as HTMLElement;
+    const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
+    const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
+    htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
+    htmlEl.style.scale = sc ? `${sc.w} ${sc.h}` : '';
+  });
+}
+
+/**
  * HOC that applies _pos_* and _scale_* props to [data-editable] DOM elements.
  * Ensures Preview (Player) and Export (renderStillOnWeb/renderMediaOnWeb)
  * produce identical results — single rendering path, no external overlay needed.
@@ -184,16 +200,7 @@ function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.
     const applyAll = useCallback(() => {
       const el = containerRef.current;
       if (!el) return;
-      const p = propsRef.current;
-      el.querySelectorAll('[data-editable]').forEach((node) => {
-        const id = node.getAttribute('data-editable');
-        if (!id) return;
-        const htmlEl = node as HTMLElement;
-        const pos = p[`_pos_${id}`] as { x: number; y: number } | undefined;
-        const sc = p[`_scale_${id}`] as { w: number; h: number } | undefined;
-        htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
-        htmlEl.style.scale = sc ? `${sc.w} ${sc.h}` : '';
-      });
+      applyEditableTransforms(el, propsRef.current);
     }, []);
 
     // MutationObserver: apply transforms whenever children appear or change
