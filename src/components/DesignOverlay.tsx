@@ -50,6 +50,9 @@ export default function DesignOverlay({
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const isMeasuringRef = useRef(false);
+  // Incremented when DOM elements change — forces listener rebinding
+  const [bindGeneration, setBindGeneration] = useState(0);
+  const prevDomElsRef = useRef<Set<HTMLElement>>(new Set());
 
   // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -99,6 +102,13 @@ export default function DesignOverlay({
     });
     setRects(newRects);
     onVisibleFieldsChangeRef.current?.(newRects.map(r => r.id));
+    // Detect if DOM elements changed (Sequence remount) → force listener rebinding
+    const newDomEls = new Set(newRects.map(r => r.domEl));
+    const prev = prevDomElsRef.current;
+    if (newDomEls.size !== prev.size || [...newDomEls].some(el => !prev.has(el))) {
+      prevDomElsRef.current = newDomEls;
+      setBindGeneration(g => g + 1);
+    }
     isMeasuringRef.current = false;
   }, [containerEl, editables, props]);
 
@@ -180,7 +190,7 @@ export default function DesignOverlay({
     });
 
     return () => cleanups.forEach(fn => fn());
-  }, [containerEl, editables, rects]);
+  }, [containerEl, editables, bindGeneration]);
 
   // ── Container-level pinch-to-scale ──
   // Single implementation: works regardless of where fingers land.
