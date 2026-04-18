@@ -1118,6 +1118,7 @@ export default function ImageCanvas({
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (selectedEditableId) onSelectEditable?.(null);
                   if (remotionPlaying) {
                     remotionRef.current?.pause();
                     setRemotionPlaying(false);
