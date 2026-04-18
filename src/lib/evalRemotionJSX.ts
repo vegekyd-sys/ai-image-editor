@@ -9,8 +9,7 @@
  */
 
 import { transform as sucraseTransform } from 'sucrase';
-import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
-// delayRender/continueRender kept in scope for Agent code, not used by HOC
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   useCurrentFrame,
   useVideoConfig,
@@ -165,9 +164,7 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
     const scopeValues = Object.values(REMOTION_SCOPE);
     const factory = new Function(...scopeKeys, execCode);
     const comp = factory(...scopeValues);
-    return comp ? wrapWithEditableTransforms(comp) : null;
-    // Note: wrapWithEditableTransforms creates a patched React.createElement
-    // that intercepts data-editable elements during the Component's render.
+    return comp || null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
@@ -175,10 +172,24 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
 }
 
 /**
- * Apply _pos_* and _scale_* transforms to all [data-editable] elements inside a container.
- * Exported for testing. Used by the HOC below and can be called standalone.
+ * Apply _pos_* and _scale_* transforms to [data-editable] elements using CSS independent
+ * properties (style.translate / style.scale). These don't interfere with Moveable's
+ * coordinate calculation or browser hit-testing, and are correctly read by
+ * @remotion/web-renderer's canvas drawing pipeline (via our patch).
  */
-/** Build a CSS transform string from position and scale. Used by HOC and DesignOverlay. */
+export function applyEditableTransforms(container: HTMLElement, props: Record<string, unknown>): void {
+  container.querySelectorAll('[data-editable]').forEach((node) => {
+    const id = node.getAttribute('data-editable');
+    if (!id) return;
+    const htmlEl = node as HTMLElement;
+    const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
+    const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
+    htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
+    htmlEl.style.scale = sc ? `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` : '';
+  });
+}
+
+/** Build a CSS transform string from position and scale. Used by DesignOverlay for drag/scale feedback. */
 export function buildEditableTransform(
   pos?: { x: number; y: number } | null,
   sc?: { w: number; h: number } | null,
@@ -187,64 +198,4 @@ export function buildEditableTransform(
   if (pos) parts.push(`translate(${pos.x}px, ${pos.y}px)`);
   if (sc && (sc.w !== 1 || sc.h !== 1)) parts.push(`scale(${+sc.w.toFixed(4)}, ${+sc.h.toFixed(4)})`);
   return parts.join(' ');
-}
-
-export function applyEditableTransforms(container: HTMLElement, props: Record<string, unknown>): void {
-  container.querySelectorAll('[data-editable]').forEach((node) => {
-    const id = node.getAttribute('data-editable');
-    if (!id) return;
-    const htmlEl = node as HTMLElement;
-    const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
-    const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
-    // Use style.transform (renderMediaOnWeb only reads transform, not translate/scale)
-    htmlEl.style.transform = buildEditableTransform(pos, sc);
-  });
-}
-
-/**
- * Module-level ref for current transform props. Updated by the HOC's render,
- * read by the patched createElement in REMOTION_SCOPE.
- * This bridges the gap between "compile once" and "render with different props each frame".
- */
-let _currentTransformProps: Record<string, unknown> = {};
-
-/** Patched React object for Agent code: createElement intercepts [data-editable] and injects transforms */
-const _origCE = React.createElement;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
-  if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
-    const id = elProps['data-editable'] as string;
-    const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
-    const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
-    const editTransform = buildEditableTransform(pos, sc);
-    if (editTransform) {
-      const existingStyle = (elProps.style || {}) as Record<string, unknown>;
-      const existingTransform = (existingStyle.transform || '') as string;
-      const merged = existingTransform ? `${editTransform} ${existingTransform}` : editTransform;
-      elProps = { ...elProps, style: { ...existingStyle, transform: merged } };
-    }
-  }
-  return _origCE.call(React, type, elProps, ...children);
-};
-
-const PATCHED_REACT = new Proxy(React, {
-  get(target, prop) {
-    if (prop === 'createElement') return _patchedCE;
-    return Reflect.get(target, prop);
-  }
-});
-
-REMOTION_SCOPE.React = PATCHED_REACT;
-
-/**
- * HOC: sets _currentTransformProps before Component renders (synchronous).
- * Agent code uses PATCHED_REACT.createElement → reads _currentTransformProps → injects transforms.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
-  return function WrappedDesign(props: Record<string, unknown>) {
-    // Set module-level ref BEFORE Component renders (synchronous in render phase)
-    _currentTransformProps = props;
-    return _origCE.call(React, Component, props);
-  };
 }

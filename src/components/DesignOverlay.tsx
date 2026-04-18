@@ -3,7 +3,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { EditableField } from '@/types';
-import { buildEditableTransform } from '@/lib/evalRemotionJSX';
 
 interface DesignOverlayProps {
   containerEl: HTMLDivElement | null;
@@ -59,9 +58,22 @@ export default function DesignOverlay({
   const dragDomElRef = useRef<HTMLElement | null>(null);
   const dragScaleRef = useRef(1);
 
+  // Apply stored position + scale to Remotion DOM elements using CSS independent properties.
+  // style.translate / style.scale don't interfere with Moveable or hit-testing,
+  // and are read by @remotion/web-renderer's canvas drawing (via our patch).
+  const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
+    elements.forEach((el) => {
+      const id = el.getAttribute('data-editable');
+      if (!id) return;
+      const htmlEl = el as HTMLElement;
+      const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
+      const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
+      htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
+      htmlEl.style.scale = sc ? `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` : '';
+    });
+  }, [props]);
+
   // Measure editable elements
-  // Transforms (_pos_*/_scale_*) are applied by the HOC in evalRemotionJSX.ts,
-  // so DOM positions are already correct when we measure here.
   const measure = useCallback(() => {
     if (isDraggingRef.current || isMeasuringRef.current) return;
     if (!containerEl || !overlayRef.current) { setRects([]); return; }
@@ -69,6 +81,7 @@ export default function DesignOverlay({
     isMeasuringRef.current = true;
 
     const elements = containerEl.querySelectorAll('[data-editable]');
+    applyStoredOffsets(elements);
 
     const baseRect = overlayRef.current.getBoundingClientRect();
     const newRects: MeasuredRect[] = [];
@@ -115,7 +128,7 @@ export default function DesignOverlay({
       setBindGeneration(g => g + 1);
     }
     isMeasuringRef.current = false;
-  }, [containerEl, editables, props]);
+  }, [containerEl, editables, applyStoredOffsets, props]);
 
   // Mark selected element (CSS hides hover outline when Moveable frame shows)
   useEffect(() => {
@@ -158,19 +171,15 @@ export default function DesignOverlay({
   // Event delegation: single listener on container, works for any DOM element regardless of remount
   useEffect(() => {
     if (!containerEl) return;
-    // DEBUG: mark the container so we can find it in DevTools
-    containerEl.setAttribute('data-design-overlay-container', 'true');
-    console.log('[DesignOverlay] binding to containerEl:', containerEl.style.cssText, 'children:', containerEl.children.length, 'hasPlayer:', !!containerEl.querySelector('.__remotion-player'), 'hasEditable:', !!containerEl.querySelector('[data-editable]'));
     let lastTapTime = 0;
     let lastTapId = '';
     let activeTouches = 0;
 
     const handlePointerDown = (e: PointerEvent) => {
       const target = (e.target as HTMLElement).closest?.('[data-editable]');
-      console.log('[DesignOverlay handlePointerDown]', 'target:', target?.getAttribute('data-editable'), 'editableIds:', editables.map(f => f.id), 'selectedFieldId:', selectedFieldIdRef.current);
-      if (!target) { console.log('[DesignOverlay] EXIT: no target'); return; }
+      if (!target) return;
       const id = target.getAttribute('data-editable');
-      if (!id || !editables.some(f => f.id === id)) { console.log('[DesignOverlay] EXIT: id not in editables', id); return; }
+      if (!id || !editables.some(f => f.id === id)) return;
 
       if (e.pointerType === 'touch') activeTouches++;
       const now = Date.now();
@@ -193,7 +202,6 @@ export default function DesignOverlay({
     containerEl.addEventListener('pointerdown', handlePointerDown);
     containerEl.addEventListener('pointerup', handlePointerUp);
     return () => {
-      console.log('[DesignOverlay] CLEANUP — removing listeners. containerEl:', containerEl?.style.cssText?.substring(0, 40), 'editables:', editables.length);
       containerEl.removeEventListener('pointerdown', handlePointerDown);
       containerEl.removeEventListener('pointerup', handlePointerUp);
     };
@@ -237,7 +245,7 @@ export default function DesignOverlay({
       ) as HTMLElement | null;
       if (el) {
         const pos = props[`_pos_${selectedFieldIdRef.current}`] as { x: number; y: number } | undefined;
-        el.style.transform = buildEditableTransform(pos, { w: newW, h: newH });
+        el.style.scale = `${+newW.toFixed(4)} ${+newH.toFixed(4)}`;
       }
 
       // Update Moveable frame to follow
@@ -346,9 +354,7 @@ export default function DesignOverlay({
           onDrag={({ target, beforeTranslate }) => {
             const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
             const s = dragScaleRef.current;
-            const newPos = { x: baseX + beforeTranslate[0] * s, y: baseY + beforeTranslate[1] * s };
-            const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
-            target.style.transform = buildEditableTransform(newPos, sc);
+            target.style.translate = `${baseX + beforeTranslate[0] * s}px ${baseY + beforeTranslate[1] * s}px`;
           }}
           onDragEnd={({ lastEvent }) => {
             if (lastEvent) {
@@ -371,9 +377,7 @@ export default function DesignOverlay({
           }}
           onScale={({ target, scale: scaleVec }) => {
             const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
-            const newSc = { w: baseW * scaleVec[0], h: baseH * scaleVec[1] };
-            const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
-            target.style.transform = buildEditableTransform(pos, newSc);
+            target.style.scale = `${+(baseW * scaleVec[0]).toFixed(4)} ${+(baseH * scaleVec[1]).toFixed(4)}`;
           }}
           onScaleEnd={({ lastEvent }) => {
             if (lastEvent) {

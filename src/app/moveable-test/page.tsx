@@ -1,98 +1,80 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
-import Moveable from 'react-moveable';
+import { useState } from 'react';
+import { renderStillOnWeb } from '@remotion/web-renderer';
+import { AbsoluteFill } from 'remotion';
+
+// Simple component: one box with style.translate + style.scale, one without (reference)
+function TestDesign({ text, bgColor }: { text: string; bgColor: string }) {
+  return (
+    <AbsoluteFill style={{ background: bgColor }}>
+      <div style={{
+        position: 'absolute', top: 100, left: 100,
+        fontSize: 48, fontWeight: 900, color: '#fff',
+        background: 'rgba(217,70,239,0.5)', padding: '12px 24px',
+        borderRadius: 12,
+        // CSS independent properties — patch should make web-renderer read these
+        translate: '150px 80px',
+        scale: '1.5 1.5',
+      }}>
+        {text}
+      </div>
+      <div style={{
+        position: 'absolute', top: 400, left: 100,
+        fontSize: 32, color: '#fff',
+      }}>
+        Reference (no translate/scale)
+      </div>
+    </AbsoluteFill>
+  );
+}
 
 export default function MoveableTestPage() {
-  const targetRef = useRef<HTMLDivElement>(null);
-  const [target, setTarget] = useState<HTMLDivElement | null>(null);
-  const [info, setInfo] = useState('Drag the scaled box');
-  const [compensate, setCompensate] = useState(false);
+  const [result, setResult] = useState<string>('');
+  const [status, setStatus] = useState('Click Export Test to verify patch');
 
-  const moveableRef = useRef<Moveable>(null);
-  const [currentScale, setCurrentScale] = useState(1.5);
-  const baseOffsetRef = useRef({ x: 0, y: 0 });
-  const scaleRef = useRef(currentScale);
-  scaleRef.current = currentScale;
-
-  // Update Moveable frame when scale changes
-  useEffect(() => {
-    requestAnimationFrame(() => moveableRef.current?.updateRect());
-  }, [currentScale]);
-  const compensateRef = useRef(compensate);
-  compensateRef.current = compensate;
-
-  useEffect(() => { setTarget(targetRef.current); }, []);
+  const runTest = async () => {
+    setStatus('Exporting...');
+    try {
+      const res = await renderStillOnWeb({
+        composition: {
+          component: TestDesign,
+          durationInFrames: 1, fps: 30,
+          width: 800, height: 600,
+          id: 'translate-test',
+          calculateMetadata: null, defaultProps: { text: '', bgColor: '#000' },
+        },
+        frame: 0,
+        imageFormat: 'png',
+        inputProps: { text: 'Translated+Scaled', bgColor: '#1a1a2e' },
+      });
+      const url = URL.createObjectURL(res.blob);
+      setResult(url);
+      setStatus('Done! Purple box should be offset right+down and 1.5x bigger.');
+    } catch (e) {
+      setStatus('Error: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
 
   return (
-    <div style={{ background: '#111', minHeight: '100dvh', padding: 20, touchAction: 'none' }}>
-      <div style={{ color: '#888', fontFamily: 'monospace', fontSize: 13, marginBottom: 8 }}>{info}</div>
-
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 8 }}>
-        {[1, 1.5, 2, 3].map(s => (
-          <button key={s} onClick={() => { setCurrentScale(s); baseOffsetRef.current = { x: 0, y: 0 }; if (targetRef.current) targetRef.current.style.translate = ''; }}
-            style={{ padding: '4px 12px', background: currentScale === s ? '#d946ef' : '#333', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13 }}>
-            {s}x
-          </button>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
-        <button onClick={() => setCompensate(c => !c)}
-          style={{ padding: '4px 16px', background: compensate ? '#22c55e' : '#555', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13 }}>
-          {compensate ? '✓ Compensate ON' : '✗ Compensate OFF'}
-        </button>
-      </div>
-
-      <div style={{ position: 'relative', width: 300, height: 350, background: '#222', margin: '0 auto' }}>
-        <div
-          ref={targetRef}
-          style={{
-            position: 'absolute', top: 80, left: 40, width: 180, height: 100,
-            background: 'rgba(217,70,239,0.3)', border: '3px solid #d946ef',
-            borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: 20, fontWeight: 900,
-            scale: `${currentScale} ${currentScale}`,
-          }}
-        >
-          Drag Me
+    <div style={{ background: '#111', minHeight: '100dvh', padding: 20, color: '#fff', fontFamily: 'monospace' }}>
+      <h2 style={{ fontSize: 16, marginBottom: 8 }}>style.translate + scale Export Test</h2>
+      <p style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>
+        Verifies @remotion/web-renderer patch reads CSS translate/scale.
+      </p>
+      <button onClick={runTest} style={{ padding: '8px 20px', background: '#d946ef', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>
+        Export Test
+      </button>
+      <div style={{ fontSize: 13, color: '#aaa', marginBottom: 16 }}>{status}</div>
+      {result && (
+        <div>
+          <h3 style={{ fontSize: 14, marginBottom: 8 }}>Exported:</h3>
+          <img src={result} style={{ maxWidth: '100%', border: '1px solid #333', borderRadius: 8 }} />
+          <p style={{ fontSize: 11, color: '#666', marginTop: 8 }}>
+            If purple box at top-left corner (100,100) with normal size = patch NOT working.
+            If offset right+down and bigger = patch WORKS.
+          </p>
         </div>
-      </div>
-
-      {target && (
-        <Moveable
-          ref={moveableRef}
-          target={target}
-          draggable={true}
-          scalable={false}
-          pinchable={false}
-          origin={false}
-          onDragStart={({ set }) => {
-            set([0, 0]);
-          }}
-          onDrag={({ target, beforeTranslate }) => {
-            const s = scaleRef.current;
-            const comp = compensateRef.current;
-            const bx = baseOffsetRef.current.x;
-            const by = baseOffsetRef.current.y;
-            // With compensation: multiply by scale
-            const mx = comp ? beforeTranslate[0] * s : beforeTranslate[0];
-            const my = comp ? beforeTranslate[1] * s : beforeTranslate[1];
-            target.style.translate = `${bx + mx}px ${by + my}px`;
-            setInfo(`s=${s} comp=${comp} raw=${beforeTranslate[0].toFixed(0)},${beforeTranslate[1].toFixed(0)} applied=${mx.toFixed(0)},${my.toFixed(0)}`);
-          }}
-          onDragEnd={({ lastEvent }) => {
-            if (lastEvent) {
-              const s = scaleRef.current;
-              const comp = compensateRef.current;
-              const mx = comp ? lastEvent.beforeTranslate[0] * s : lastEvent.beforeTranslate[0];
-              const my = comp ? lastEvent.beforeTranslate[1] * s : lastEvent.beforeTranslate[1];
-              baseOffsetRef.current = {
-                x: baseOffsetRef.current.x + mx,
-                y: baseOffsetRef.current.y + my,
-              };
-            }
-          }}
-        />
       )}
     </div>
   );

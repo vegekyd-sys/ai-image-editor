@@ -1,0 +1,50 @@
+diff --git a/node_modules/@remotion/web-renderer/dist/esm/index.mjs b/node_modules/@remotion/web-renderer/dist/esm/index.mjs
+index 97416ce..9918eaf 100644
+--- a/node_modules/@remotion/web-renderer/dist/esm/index.mjs
++++ b/node_modules/@remotion/web-renderer/dist/esm/index.mjs
+@@ -1654,8 +1654,11 @@ var hasRotateCssValue = (style) => {
+ var hasScaleCssValue = (style) => {
+   return style.scale !== "none" && style.scale !== "";
+ };
++var hasTranslateCssValue = (style) => {
++  return style.translate !== "none" && style.translate !== "";
++};
+ var hasAnyTransformCssValue = (style) => {
+-  return hasTransformCssValue(style) || hasRotateCssValue(style) || hasScaleCssValue(style);
++  return hasTransformCssValue(style) || hasRotateCssValue(style) || hasScaleCssValue(style) || hasTranslateCssValue(style);
+ };
+ 
+ // src/drawing/parse-linear-gradient.ts
+@@ -1992,8 +1995,15 @@ var calculateTransforms = ({
+     if (hasAnyTransformCssValue(computedStyle) || parent === element) {
+       const toParse = hasTransformCssValue(computedStyle) ? computedStyle.transform : undefined;
+       const matrix = new DOMMatrix(toParse);
+-      const { transform, scale, rotate } = parent.style;
++      const { transform, scale, rotate, translate } = parent.style;
+       const additionalMatrices = [];
++      if (translate !== "" && translate !== "none") {
++        // CSS translate property uses space-separated values (e.g. "150px 80px"),
++        // but DOMMatrix needs comma-separated (e.g. "translate(150px, 80px)")
++        const translateParts = translate.trim().split(/\s+/);
++        const translateCSS = `translate(${translateParts.join(', ')})`;
++        additionalMatrices.push(new DOMMatrix(translateCSS));
++      }
+       if (rotate !== "" && rotate !== "none") {
+         additionalMatrices.push(new DOMMatrix(`rotate(${rotate})`));
+       }
+@@ -2002,6 +2012,7 @@ var calculateTransforms = ({
+       }
+       additionalMatrices.push(matrix);
+       parent.style.transform = "none";
++      parent.style.translate = "none";
+       parent.style.scale = "none";
+       parent.style.rotate = "none";
+       transforms.push({
+@@ -2013,6 +2024,7 @@ var calculateTransforms = ({
+       const parentRef = parent;
+       toReset.push(() => {
+         parentRef.style.transform = transform;
++        parentRef.style.translate = translate;
+         parentRef.style.scale = scale;
+         parentRef.style.rotate = rotate;
+       });
