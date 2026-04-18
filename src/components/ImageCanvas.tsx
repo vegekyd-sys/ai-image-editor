@@ -1106,8 +1106,8 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag, hidden in design editor mode */}
-            {currentDesign?.animation && !selectedEditableId && (
+            {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag */}
+            {currentDesign?.animation && (
               <div
                 data-remotion-seek
                 className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"

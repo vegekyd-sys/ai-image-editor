@@ -22,13 +22,19 @@ export default function DesignTextEditor({
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-      const len = inputRef.current.value.length;
-      inputRef.current.setSelectionRange(len, len);
-      inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
-    }
+    const el = inputRef.current;
+    if (!el) return;
+    // Immediate focus + delayed retry (Remotion Player may steal focus after click)
+    const doFocus = () => {
+      el.focus();
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    };
+    doFocus();
+    const t = setTimeout(doFocus, 50);
+    return () => clearTimeout(t);
   }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
