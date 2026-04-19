@@ -167,8 +167,6 @@ export default function DesignOverlay({
   onStartEditRef.current = onStartEdit;
   const selectedFieldIdRef = useRef(selectedFieldId);
   selectedFieldIdRef.current = selectedFieldId;
-  const measureRef = useRef(measure);
-  measureRef.current = measure;
 
   // Event delegation: single listener on container, works for any DOM element regardless of remount
   useEffect(() => {
@@ -178,38 +176,10 @@ export default function DesignOverlay({
     let activeTouches = 0;
 
     const handlePointerDown = (e: PointerEvent) => {
-      // First try explicitly marked elements
-      let target = (e.target as HTMLElement).closest?.('[data-editable], [data-selectable]') as HTMLElement | null;
-
-      // If no marked element, find the nearest visual element:
-      // walk up from clicked element until we find a direct child of an AbsoluteFill-like container
-      if (!target && containerEl) {
-        let node = e.target as HTMLElement;
-        while (node && node !== containerEl) {
-          const parent = node.parentElement as HTMLElement | null;
-          if (!parent || parent === containerEl) break;
-          // Parent is an AbsoluteFill (inset:0, 100% size) with multiple children → node is a visual element
-          const ps = parent.style;
-          const isAbsFill = (ps.inset === '0px' || (ps.top === '0px' && ps.left === '0px'))
-            && ps.width === '100%' && ps.height === '100%' && parent.children.length > 1;
-          if (isAbsFill) {
-            // Auto-mark this element as selectable
-            if (!node.getAttribute('data-selectable') && !node.getAttribute('data-editable')) {
-              const autoId = `auto_${Array.from(parent.children).indexOf(node)}`;
-              node.setAttribute('data-selectable', autoId);
-            }
-            target = node;
-            break;
-          }
-          node = parent;
-        }
-      }
-
+      const target = (e.target as HTMLElement).closest?.('[data-editable], [data-selectable]');
       if (!target) return;
       const id = target.getAttribute('data-editable') || target.getAttribute('data-selectable');
       if (!id) return;
-      // If auto-marked, force measure so rects include this element before Moveable renders
-      if (id.startsWith('auto_')) measureRef.current();
 
       if (e.pointerType === 'touch') activeTouches++;
       const now = Date.now();
