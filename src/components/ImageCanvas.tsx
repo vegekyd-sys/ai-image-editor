@@ -1163,7 +1163,13 @@ export default function ImageCanvas({
                     remotionRef.current.pause();
                     setRemotionPlaying(false);
                   }
-                  if (id) lastSelectTimeRef.current = Date.now();
+                  if (id) {
+                    lastSelectTimeRef.current = Date.now();
+                    // Trigger a no-op prop update to force React re-render.
+                    // This resets Remotion Player's ghost pointerup listener,
+                    // preventing the ghost double-click that causes deselection.
+                    onUpdateProp?.(`_sel_${id}`, Date.now());
+                  }
                   onSelectEditable(id);
                 }}
                 onUpdateProp={onUpdateProp}
