@@ -12,25 +12,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'audioUrl and projectId required' }, { status: 400 })
     }
 
-    // Deselect all tracks for this project, then select the chosen one
+    // Deselect all, then find the best match to select
     await supabase.from('project_music')
       .update({ selected: false })
       .eq('project_id', projectId)
 
-    // Match by audio_url OR suno_task_id URL (audio_url may have been updated to Supabase permanent URL)
-    await supabase.from('project_music')
-      .update({ selected: true })
+    // Find a track with a permanent Supabase URL for this project
+    // (client may send a stream URL that doesn't match DB — DB has permanent URL after upload)
+    const { data: tracks } = await supabase.from('project_music')
+      .select('audio_url, track_index')
       .eq('project_id', projectId)
-      .eq('audio_url', audioUrl)
+      .eq('status', 'completed')
+      .order('track_index')
 
-    // Return the permanent URL (may differ from the Suno temp URL the client sent)
-    const { data: selected } = await supabase.from('project_music')
-      .select('audio_url')
-      .eq('project_id', projectId)
-      .eq('selected', true)
-      .single()
+    // Prefer track whose audio_url matches, otherwise first track with a Supabase URL
+    const exact = tracks?.find((t: { audio_url: string }) => t.audio_url === audioUrl)
+    const supabaseTrack = tracks?.find((t: { audio_url: string }) => t.audio_url?.includes('.supabase.co/'))
+    const best = exact || supabaseTrack || tracks?.[0]
 
-    return NextResponse.json({ success: true, permanentUrl: selected?.audio_url || audioUrl })
+    if (best) {
+      await supabase.from('project_music')
+        .update({ selected: true })
+        .eq('project_id', projectId)
+        .eq('track_index', best.track_index)
+    }
+
+    const permanentUrl = best?.audio_url?.includes('.supabase.co/') ? best.audio_url : audioUrl
+    return NextResponse.json({ success: true, permanentUrl })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('[/api/music/select POST]', msg)
