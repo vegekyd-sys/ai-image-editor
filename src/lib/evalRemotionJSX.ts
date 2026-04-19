@@ -191,8 +191,8 @@ let _currentTransformProps: Record<string, unknown> = {};
 const _origCE = React.createElement;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
-  if (elProps && typeof elProps === 'object' && (elProps['data-editable'] || elProps['data-selectable'])) {
-    const id = (elProps['data-editable'] || elProps['data-selectable']) as string;
+  if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
+    const id = elProps['data-editable'] as string;
     const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
     const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
     if (pos || sc) {

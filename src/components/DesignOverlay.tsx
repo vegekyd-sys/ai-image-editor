@@ -63,7 +63,7 @@ export default function DesignOverlay({
   // and are read by @remotion/web-renderer's canvas drawing (via our patch).
   const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
     elements.forEach((el) => {
-      const id = el.getAttribute('data-editable') || el.getAttribute('data-selectable');
+      const id = el.getAttribute('data-editable');
       if (!id) return;
       const htmlEl = el as HTMLElement;
       const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
@@ -80,16 +80,16 @@ export default function DesignOverlay({
 
     isMeasuringRef.current = true;
 
-    // Select all visual elements: data-editable (text editing) + data-selectable (any moveable element)
-    const elements = containerEl.querySelectorAll('[data-editable], [data-selectable]');
+    const elements = containerEl.querySelectorAll('[data-editable]');
     applyStoredOffsets(elements);
 
     const baseRect = overlayRef.current.getBoundingClientRect();
     const newRects: MeasuredRect[] = [];
     const seen = new Set<string>();
     elements.forEach((el) => {
-      const id = el.getAttribute('data-editable') || el.getAttribute('data-selectable');
+      const id = el.getAttribute('data-editable');
       if (!id || seen.has(id)) return;
+      if (!editables.some(f => f.id === id)) return;
       // Fix inline elements — Moveable needs a box model to work correctly
       const htmlEl = el as HTMLElement;
       if (getComputedStyle(htmlEl).display === 'inline') {
@@ -176,16 +176,14 @@ export default function DesignOverlay({
     let activeTouches = 0;
 
     const handlePointerDown = (e: PointerEvent) => {
-      const target = (e.target as HTMLElement).closest?.('[data-editable], [data-selectable]');
+      const target = (e.target as HTMLElement).closest?.('[data-editable]');
       if (!target) return;
-      const id = target.getAttribute('data-editable') || target.getAttribute('data-selectable');
-      if (!id) return;
+      const id = target.getAttribute('data-editable');
+      if (!id || !editables.some(f => f.id === id)) return;
 
       if (e.pointerType === 'touch') activeTouches++;
       const now = Date.now();
-      // Double-tap to edit — only for data-editable elements
-      const isEditable = !!target.getAttribute('data-editable');
-      if (isEditable && activeTouches <= 1 && selectedFieldIdRef.current === id && lastTapId === id && now - lastTapTime < 400) {
+      if (activeTouches <= 1 && selectedFieldIdRef.current === id && lastTapId === id && now - lastTapTime < 400) {
         onStartEditRef.current?.(id);
         lastTapTime = 0;
         lastTapId = '';
@@ -243,7 +241,7 @@ export default function DesignOverlay({
 
       // Apply scale via transform (renderMediaOnWeb only reads style.transform)
       const el = containerEl.querySelector(
-        `[data-editable="${selectedFieldIdRef.current}"], [data-selectable="${selectedFieldIdRef.current}"]`
+        `[data-editable="${selectedFieldIdRef.current}"]`
       ) as HTMLElement | null;
       if (el) {
         const pos = props[`_pos_${selectedFieldIdRef.current}`] as { x: number; y: number } | undefined;
@@ -264,7 +262,7 @@ export default function DesignOverlay({
       if (!fieldId) return;
       // Persist the pinched scale (read from pinch state, not DOM)
       const el = containerEl.querySelector(
-        `[data-editable="${fieldId}"], [data-selectable="${fieldId}"]`
+        `[data-editable="${fieldId}"]`
       ) as HTMLElement | null;
       if (el) {
         // Parse scale from the transform string we set during pinch
