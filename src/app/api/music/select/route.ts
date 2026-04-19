@@ -17,12 +17,20 @@ export async function POST(req: NextRequest) {
       .update({ selected: false })
       .eq('project_id', projectId)
 
+    // Match by audio_url OR suno_task_id URL (audio_url may have been updated to Supabase permanent URL)
     await supabase.from('project_music')
       .update({ selected: true })
       .eq('project_id', projectId)
       .eq('audio_url', audioUrl)
 
-    return NextResponse.json({ success: true })
+    // Return the permanent URL (may differ from the Suno temp URL the client sent)
+    const { data: selected } = await supabase.from('project_music')
+      .select('audio_url')
+      .eq('project_id', projectId)
+      .eq('selected', true)
+      .single()
+
+    return NextResponse.json({ success: true, permanentUrl: selected?.audio_url || audioUrl })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('[/api/music/select POST]', msg)

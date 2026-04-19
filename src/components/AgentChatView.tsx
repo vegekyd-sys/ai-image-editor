@@ -199,7 +199,7 @@ function MusicCard({ track, onSelect }: {
           </svg>
         </button>
 
-        {/* Insert into design — onTouchEnd for reliable mobile tap */}
+        {/* Insert into design */}
         <button
           onClick={(e) => { e.stopPropagation(); onSelect(); }}
           onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(); }}

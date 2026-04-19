@@ -2363,6 +2363,16 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           }
           // Stop polling only when completed with 2 tracks
           if (data.status === 'completed' && data.tracks.length >= 2) {
+            // Replace stream URLs with permanent URLs in all design code
+            for (const tk of data.tracks) {
+              if (!tk.streamAudioUrl || !tk.audioUrl || tk.streamAudioUrl === tk.audioUrl) continue;
+              setSnapshots(prev => prev.map(snap => {
+                if (!snap.design?.code?.includes(tk.streamAudioUrl)) return snap;
+                const updated = { ...snap, design: { ...snap.design!, code: snap.design!.code.replace(tk.streamAudioUrl, tk.audioUrl) } };
+                onSaveDesignProps?.(snap.id, updated.design!);
+                return updated;
+              }));
+            }
             setMusicTaskId(null);
             musicPollingRef.current = false;
             setAgentStatus(t('status.musicReady'));
@@ -2707,21 +2717,24 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
-  // Music select: user chose a track → show short user msg + send agent inject request
-  const handleMusicSelect = useCallback((track: { audioUrl: string; duration: number; title: string; tags: string }) => {
+  // Music select: user chose a track → get permanent URL → send agent inject request
+  const handleMusicSelect = useCallback(async (track: { audioUrl: string; duration: number; title: string; tags: string }) => {
     if (!projectId) { console.warn('🎵 [music] no projectId'); return; }
     if (isAgentActive) { console.warn('🎵 [music] agent busy, skipping'); return; }
     console.log(`🎵 [music] user selected: ${track.title}`);
-    // Mark selected in DB
-    fetch('/api/music/select', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
-    }).catch(() => {});
-    // Show short user message
     addMessage('user', `🎵 ${track.title}`);
-    // Send full instruction to agent (silent — no duplicate user msg shown)
-    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\nAdd <Audio src="${track.audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
+    // Get permanent Supabase URL (Suno temp URLs expire)
+    let audioUrl = track.audioUrl;
+    try {
+      const res = await fetch('/api/music/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
+      });
+      const data = await res.json();
+      if (data.permanentUrl) audioUrl = data.permanentUrl;
+    } catch { /* fallback to original URL */ }
+    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
     handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 

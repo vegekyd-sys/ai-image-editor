@@ -312,12 +312,14 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
 /** Pre-fetch remote audio URLs via server proxy → blob URLs (fixes CORS + avoids massive data URLs) */
 async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
+  // Strip <Audio> tags with blob: or expired temp URLs — they can't be resolved and would block delayRender
+  let cleaned = code.replace(/<Audio[^>]*src=["']?blob:[^>]*\/>/g, '');
   // Match audio URLs by extension (.mp3 etc) OR known audio domains (Suno streamAudioUrl has no extension)
   const audioUrlPattern = /<Audio[^>]+src=["']?(https?:\/\/[^"'\s>]+\.(?:mp3|wav|m4a|aac|ogg)[^"'\s>]*|https?:\/\/(?:musicfile\.removeai\.ai|tempfile\.aiquickdraw\.com|cdn\d*\.suno\.ai)\/[^"'\s>]+)["']?/g;
-  const matches = [...code.matchAll(audioUrlPattern)];
-  if (!matches.length) return { code, blobUrls: [] };
+  const matches = [...cleaned.matchAll(audioUrlPattern)];
+  if (!matches.length) return { code: cleaned, blobUrls: [] };
 
-  let resolved = code;
+  let resolved = cleaned;
   const blobUrls: string[] = [];
   for (const match of matches) {
     const url = match[1];
@@ -332,10 +334,9 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
       blobUrls.push(blobUrl);
       resolved = resolved.replace(url, blobUrl);
     } catch (e) {
-      console.warn('[resolveAudioUrls] failed to resolve, stripping <Audio> to prevent Player hang:', url, e);
-      // Remove the entire <Audio .../> tag — unresolved remote URL causes delayRender to block Player
-      const audioTagPattern = new RegExp(`<Audio[^>]*src=["']?${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^>]*/>`);
-      resolved = resolved.replace(audioTagPattern, '');
+      console.warn('[resolveAudioUrls] failed to resolve, stripping <Audio> to prevent delayRender hang:', url, e);
+      // Remove any <Audio .../> or <Audio ...>...</Audio> containing this URL
+      resolved = resolved.replace(new RegExp(`<Audio[^]*?${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^]*?/>`, 'g'), '');
     }
   }
   return { code: resolved, blobUrls };
