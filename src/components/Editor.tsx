@@ -1487,13 +1487,14 @@ export default function Editor({
           const desc = isRef
             ? (s.description || 'Skill reference image')
             : isDesign
-              ? (s.description || '[design/video — use code in context to modify, do NOT analyze_image]')
+              ? (s.description || '[design/video]')
               : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
                 ? (s.description || '原图 / Original upload')
                 : (s.description || '(use analyze_image to see this snapshot)');
           const tag = isRef ? ' (reference)' : isDesign ? ' (design)' : '';
           const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
-          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}`;
+          const codePath = isDesign && s.designPath ? ` [code: ${s.designPath}]` : '';
+          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${codePath}`;
         }).join('\n')}\n\n`
       : '';
 

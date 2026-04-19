@@ -70,7 +70,7 @@ export function useProject(projectId: string, userId: string) {
       imageUrl: s.image_url,
       description: s.description ?? undefined,
       ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
-      ...(s.design_path ? { _designPath: s.design_path } : {}),
+      ...(s.design_path ? { designPath: s.design_path } : {}),
     }))
 
     // Load persisted designs from workspace (async, non-blocking)
@@ -86,8 +86,8 @@ export function useProject(projectId: string, userId: string) {
       return ''
     })()
     await Promise.all(snapshots.map(async (snap) => {
-      const dp = (snap as any)._designPath as string | undefined
-      if (!dp || !resolvedUserId) { delete (snap as any)._designPath; return }
+      const dp = snap.designPath
+      if (!dp || !resolvedUserId) return
       try {
         const storagePath = `${resolvedUserId}/workspace/${dp}`
         const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
@@ -106,7 +106,6 @@ export function useProject(projectId: string, userId: string) {
       } catch (e) {
         console.warn('Failed to load design from workspace:', dp, e)
       }
-      delete (snap as any)._designPath
     }))
 
     const messages: Message[] = dbMessages.map((m) => {

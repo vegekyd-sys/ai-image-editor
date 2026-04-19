@@ -651,7 +651,7 @@ Your code must return a value:
   \`\`\`
   - **Still** (default): omit \`duration\` — renders as a single image.
   - **Animation**: add \`duration: 5\` (seconds) — renders as a playable video with Remotion Player. Use \`useCurrentFrame()\` + \`interpolate()\` for animation.
-- **Patch (incremental edit)**: return \`{ type: 'patch', edits: [{ old: '...', new: '...' }] }\`. Search & replace on current design code. Each edit.old must match exactly once in the code. Use for text changes, style tweaks, minor additions/removals. Optionally include \`props: {...}\` to merge prop updates.
+- **Patch (incremental edit)**: return \`{ type: 'patch', edits: [{ old: '...', new: '...' }] }\`. Search & replace on current design code. Each edit.old must match exactly once in the code. Use for text changes, style tweaks, minor additions/removals. Optionally include \`props: {...}\` to merge prop updates. To patch a **different** design snapshot, add \`code_path\` (from the image index, e.g. \`{ type: 'patch', code_path: 'code/xxx.json', edits: [...] }\`). Use \`read_file\` first to see the code before patching.
 - Error: return \`{ type: 'error', message: 'what went wrong' }\`
 
 **Default to design for all visual output.** Design supports text, layout, images (embed URLs via template literal \\\`\${ctx.snapshotImages[N]}\\\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
@@ -774,13 +774,27 @@ Your code must return a value:
             (ctx as any).__runCodeDrafts.push({ type: 'image', imageBase64: dataUrl, previewBase64: dataUrl });
           };
 
-          // { type: 'patch', edits: [...] } — Incremental search & replace on last design
+          // { type: 'patch', edits: [...] } — Incremental search & replace on last design or a specific design via code_path
           if (result?.type === 'patch' && Array.isArray(result.edits)) {
-            const lastDesign = (ctx as any).__lastDesignPayload;
-            if (!lastDesign) {
-              return { type: 'text' as const, content: 'No active design to patch. Use type: "render" to create a design first.' };
+            let baseDesign = (ctx as any).__lastDesignPayload;
+
+            // code_path: load a different design from workspace as patch base
+            if (result.code_path && typeof result.code_path === 'string') {
+              try {
+                const file = await workspace.readFile(result.code_path, ctx.supabase, ctx.userId);
+                if (!file) {
+                  return { type: 'text' as const, content: `Patch failed: code_path "${result.code_path}" not found. Use read_file to verify the path.` };
+                }
+                baseDesign = JSON.parse(file.content);
+              } catch (e) {
+                return { type: 'text' as const, content: `Patch failed: could not read "${result.code_path}": ${e instanceof Error ? e.message : String(e)}` };
+              }
             }
-            let code = lastDesign.code;
+
+            if (!baseDesign) {
+              return { type: 'text' as const, content: 'No active design to patch. Use type: "render" to create a design first, or provide code_path to patch a specific design.' };
+            }
+            let code = baseDesign.code;
             for (const edit of result.edits) {
               if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
                 return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
@@ -790,8 +804,8 @@ Your code must return a value:
               if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
               code = code.replace(edit.old, edit.new);
             }
-            const mergedProps = result.props ? { ...(lastDesign.props || {}), ...result.props } : lastDesign.props;
-            const patched = { ...lastDesign, code, props: mergedProps };
+            const mergedProps = result.props ? { ...(baseDesign.props || {}), ...result.props } : baseDesign.props;
+            const patched = { ...baseDesign, code, props: mergedProps };
             if (result.editables) patched.editables = result.editables;
 
             const harnessError = validateDesign({ code: patched.code, props: patched.props });

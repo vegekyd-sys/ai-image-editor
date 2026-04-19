@@ -87,6 +87,7 @@ export interface Snapshot {
   metadata?: PhotoMetadata; // EXIF metadata (location, time)
   type?: 'original' | 'edit' | 'reference'; // snapshot kind — reference = skill asset
   design?: DesignPayload; // live Remotion design (rendered via Player, not screenshot)
+  designPath?: string;    // workspace path to design JSON (e.g. "code/xxx.json")
 }
 
 export interface Project {
