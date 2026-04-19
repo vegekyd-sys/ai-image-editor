@@ -254,12 +254,11 @@ export default function DesignOverlay({
       const el = containerEl.querySelector(
         `[data-editable="${fieldId}"]`
       ) as HTMLElement | null;
-      if (el) {
-        // Parse scale from the transform string we set during pinch
-        const match = el.style.transform.match(/scale\(([\d.]+),\s*([\d.]+)\)/);
-        if (match) {
-          onUpdateProp(`_scale_${fieldId}`, { w: parseFloat(match[1]), h: parseFloat(match[2]) });
-        }
+      if (el && el.style.scale) {
+        const parts = el.style.scale.split(' ');
+        const w = parseFloat(parts[0]) || 1;
+        const h = parseFloat(parts[1] ?? parts[0]) || 1;
+        onUpdateProp(`_scale_${fieldId}`, { w, h });
       }
     };
 
