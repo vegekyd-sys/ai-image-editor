@@ -49,9 +49,6 @@ export default function DesignOverlay({
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const isMeasuringRef = useRef(false);
-  // Incremented when DOM elements change (Sequence remount) — forces listener rebinding
-  const [bindGeneration, setBindGeneration] = useState(0);
-  const prevDomElsRef = useRef<Set<HTMLElement>>(new Set());
 
   // Drag snapshots
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -120,13 +117,6 @@ export default function DesignOverlay({
     });
     setRects(newRects);
     onVisibleFieldsChangeRef.current?.(newRects.map(r => r.id));
-    // Detect DOM element replacement (Sequence remount) → force listener rebind
-    const newDomEls = new Set(newRects.map(r => r.domEl));
-    const prev = prevDomElsRef.current;
-    if (newDomEls.size !== prev.size || [...newDomEls].some(el => !prev.has(el))) {
-      prevDomElsRef.current = newDomEls;
-      setBindGeneration(g => g + 1);
-    }
     isMeasuringRef.current = false;
   }, [containerEl, editables, applyStoredOffsets, props]);
 

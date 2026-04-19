@@ -170,8 +170,6 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
 }
 
 
-
-
 /**
  * Module-level ref for current transform props.
  * Updated by the HOC's render, read by the Proxy createElement.
