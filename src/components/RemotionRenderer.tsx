@@ -211,9 +211,13 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         // Preload Google Fonts (must be ready before rendering — text layout depends on it)
         await preloadFontsFromCode(design.code);
         if (cancelled) return;
-        // Compile directly with original URLs — <Img> handles loading via delayRender,
-        // Player pauses on waiting event when assets aren't ready (stream-style loading)
-        const comp = evalRemotionJSX(design.code);
+        // Resolve audio URLs to blob URLs BEFORE compiling — remote audio causes CORS/buffering issues in Player
+        let codeToCompile = design.code;
+        const { code: audioResolved, blobUrls } = await resolveAudioUrls(design.code);
+        if (cancelled) { blobUrls.forEach(u => URL.revokeObjectURL(u)); return; }
+        blobUrlsRef.current = blobUrls;
+        if (blobUrls.length) codeToCompile = audioResolved;
+        const comp = evalRemotionJSX(codeToCompile);
         if (!comp) {
           setCompileError('Failed to compile design code');
           onError?.('Failed to compile design code');
@@ -223,12 +227,6 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         setCompileError(null);
         setComponent(() => comp);
         onLoading?.(false);
-        // Background-preload audio URLs (non-blocking — warms browser cache so <Audio> plays faster)
-        resolveAudioUrls(design.code).then(({ blobUrls }) => {
-          // Keep blob URLs alive for the lifetime of this component
-          if (!cancelled) blobUrlsRef.current = blobUrls;
-          else blobUrls.forEach(u => URL.revokeObjectURL(u));
-        }).catch(() => {});
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);

@@ -18,7 +18,7 @@ export async function GET(
     const userId = session.user.id
     const result = await getMusicStatus({ taskId })
 
-    // Persist completed tracks to project_music
+    // Persist completed tracks to project_music (only on final completion, not streaming)
     if (result.status === 'completed' && result.tracks.length && projectId) {
       for (const track of result.tracks) {
         await supabase.from('project_music').upsert({

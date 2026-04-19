@@ -2336,29 +2336,33 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         const res = await fetch(`/api/music/${musicTaskId}?projectId=${projectId}`);
         const data = await res.json();
         if (stopped) return;
-        if (data.status === 'completed' && data.tracks?.length) {
+        if ((data.status === 'streaming' || data.status === 'completed') && data.tracks?.length) {
           setMusicTracks(data.tracks);
-          // Create a new music message at the bottom (same pattern as video inline)
-          const musicLines = data.tracks.map((t: { title: string; duration: number; tags: string; audioUrl: string; trackIndex: number }) =>
-            `music:${t.trackIndex}|${t.title}|${Math.round(t.duration)}|${t.tags}|${t.audioUrl}`
-          ).join('\n');
+          // Format: music:trackIndex|title|duration|tags|playUrl|finalUrl
+          const musicLines = data.tracks.map((tk: { title: string; duration: number; tags: string; audioUrl: string; streamAudioUrl?: string; trackIndex: number }) => {
+            const playUrl = tk.streamAudioUrl || tk.audioUrl;
+            const finalUrl = tk.audioUrl || '';
+            return `music:${tk.trackIndex}|${tk.title}|${Math.round(tk.duration)}|${tk.tags}|${playUrl}|${finalUrl}`;
+          }).join('\n');
           const msgId = `music-${musicTaskId}`;
-          const fullContent = `🎵 ${t('status.musicReady')}\n${musicLines}`;
+          const statusText = data.status === 'streaming' ? t('status.musicStreaming') : t('status.musicReady');
+          const fullContent = `🎵 ${statusText}\n${musicLines}`;
           setMessages(prev => {
-            // Update if already exists (second track arriving), otherwise create new
             if (prev.some(m => m.id === msgId)) {
               const updated = prev.map(m => m.id === msgId ? { ...m, content: fullContent } : m);
-              // Re-persist with updated tracks
               const msg = updated.find(m => m.id === msgId);
-              if (msg) onSaveMessage?.(msg);
+              if (msg && data.status === 'completed') onSaveMessage?.(msg);
               return updated;
             }
             const musicMsg: Message = { id: msgId, role: 'assistant', content: fullContent, timestamp: Date.now() };
-            onSaveMessage?.(musicMsg);
+            if (data.status === 'completed') onSaveMessage?.(musicMsg);
             return [...prev, musicMsg];
           });
-          // Check if all tracks done (2 tracks = full SUCCESS)
-          if (data.tracks.length >= 2) {
+          if (data.status === 'streaming') {
+            setAgentStatus(t('status.musicStreaming'));
+          }
+          // Stop polling only when completed with 2 tracks
+          if (data.status === 'completed' && data.tracks.length >= 2) {
             setMusicTaskId(null);
             musicPollingRef.current = false;
             setAgentStatus(t('status.musicReady'));
@@ -2375,9 +2379,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         console.warn('🎵 [music] poll error:', e);
       }
     };
-    // Poll immediately, then every 10s
     poll();
-    const interval = setInterval(poll, 10_000);
+    const interval = setInterval(poll, 2_000);
     return () => { stopped = true; clearInterval(interval); };
   }, [musicTaskId, projectId, t]);
 

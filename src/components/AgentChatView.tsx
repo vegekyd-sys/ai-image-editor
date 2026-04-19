@@ -85,7 +85,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
  * Fix CommonMark strict closing-delimiter rules that break **text:**
 /** Playable music track card for CUI */
 function MusicCard({ track, onSelect }: {
-  track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number };
+  track: { playUrl: string; finalUrl: string; duration: number; title: string; tags: string; trackIndex: number };
   onSelect: () => void;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -93,6 +93,19 @@ function MusicCard({ track, onSelect }: {
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [seeking, setSeeking] = useState(false);
+  const loadedUrlRef = useRef(track.playUrl);
+
+  // When finalUrl arrives and not playing, swap to final URL
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !track.finalUrl || playing) return;
+    if (loadedUrlRef.current !== track.finalUrl) {
+      audio.src = track.finalUrl;
+      loadedUrlRef.current = track.finalUrl;
+    }
+  }, [track.finalUrl, playing]);
+
+  const bestUrl = track.finalUrl || track.playUrl;
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -100,8 +113,12 @@ function MusicCard({ track, onSelect }: {
     if (playing) {
       audio.pause(); setPlaying(false);
     } else {
-      // Pause all other audio (MusicCards + Remotion Player)
-      document.dispatchEvent(new CustomEvent('music-play', { detail: track.audioUrl }));
+      // If final URL arrived, swap before playing
+      if (track.finalUrl && loadedUrlRef.current !== track.finalUrl) {
+        audio.src = track.finalUrl;
+        loadedUrlRef.current = track.finalUrl;
+      }
+      document.dispatchEvent(new CustomEvent('music-play', { detail: bestUrl }));
       audio.play(); setPlaying(true);
     }
   };
@@ -110,14 +127,14 @@ function MusicCard({ track, onSelect }: {
   useEffect(() => {
     const handler = (e: Event) => {
       const url = (e as CustomEvent).detail;
-      if (url !== track.audioUrl && audioRef.current) {
+      if (url !== bestUrl && audioRef.current) {
         audioRef.current.pause();
         setPlaying(false);
       }
     };
     document.addEventListener('music-play', handler);
     return () => document.removeEventListener('music-play', handler);
-  }, [track.audioUrl]);
+  }, [bestUrl]);
 
   // Progress + time update
   useEffect(() => {
@@ -134,16 +151,17 @@ function MusicCard({ track, onSelect }: {
 
   const handleDownload = () => {
     const a = document.createElement('a');
-    a.href = track.audioUrl;
+    a.href = bestUrl;
     a.download = `${track.title || 'music'}.mp3`;
     a.click();
   };
 
+  const isStreaming = !track.finalUrl;
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <audio ref={audioRef} src={track.audioUrl} preload="metadata"
+      <audio ref={audioRef} src={track.playUrl} preload="metadata"
         onEnded={() => { setPlaying(false); setProgress(0); }} />
 
       <div className="flex items-center gap-3 px-3.5 py-3.5">
@@ -165,7 +183,10 @@ function MusicCard({ track, onSelect }: {
             <span style={{ color: 'rgba(255,255,255,0.3)' }}>#{track.trackIndex + 1}</span>
           </div>
           <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>
-            {playing || currentTime > 0 ? `${formatTime(currentTime)} / ${formatTime(track.duration)}` : formatTime(track.duration)} · {track.tags || 'instrumental'}
+            {playing || currentTime > 0
+              ? `${formatTime(currentTime)}${track.duration ? ` / ${formatTime(track.duration)}` : ''}`
+              : track.duration ? formatTime(track.duration) : (isStreaming ? 'streaming...' : '--:--')
+            } · {track.tags || 'instrumental'}
           </div>
         </div>
 
@@ -1108,17 +1129,21 @@ export default function AgentChatView({
                       <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
 
-                    {/* Inline music — parsed from content "music:INDEX|TITLE|DURATION|TAGS|URL" */}
+                    {/* Inline music — format: "music:INDEX|TITLE|DURATION|TAGS|playUrl|finalUrl" */}
                     {(() => {
                       const musicMatches = msg.content.match(/music:\d+\|[^\n]+/g);
                       if (!musicMatches) return null;
                       return musicMatches.map((line) => {
                         const parts = line.replace('music:', '').split('|');
                         if (parts.length < 5) return null;
-                        const track = { trackIndex: parseInt(parts[0]), title: parts[1], duration: parseFloat(parts[2]), tags: parts[3], audioUrl: parts.slice(4).join('|') };
+                        // 6-field format: parts[4]=playUrl, parts[5]=finalUrl
+                        // 5-field backwards compat: parts[4]=audioUrl (used as both)
+                        const playUrl = parts[4];
+                        const finalUrl = parts.length >= 6 ? parts.slice(5).join('|') : playUrl;
+                        const track = { trackIndex: parseInt(parts[0]), title: parts[1], duration: parseFloat(parts[2]), tags: parts[3], playUrl, finalUrl };
                         return (
                           <MusicCard key={track.trackIndex} track={track}
-                            onSelect={() => onMusicSelect?.(track)} />
+                            onSelect={() => onMusicSelect?.({ audioUrl: finalUrl || playUrl, duration: track.duration, title: track.title, tags: track.tags, trackIndex: track.trackIndex })} />
                         );
                       });
                     })()}

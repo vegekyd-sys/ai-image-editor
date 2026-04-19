@@ -947,12 +947,9 @@ Your code must return a value:
     }),
 
     generate_music: tool({
-      description: `Generate background music for the current design/video. The system polls in the background and shows music cards in CUI when ready — you do NOT need to poll or wait.
-IMPORTANT: Start the prompt with the exact video duration, e.g. "15-second ...". Check the current design's animation.durationInSeconds for the length. This ensures the generated music matches the video.
-Prompt tips: genre, mood, instruments, and beat-synced timing sections.
-Example for a 15s video: "15-second cinematic, slow strings 0-3s, percussive hit at 3s, rising energy 3-10s, piano fadeout 10-15s"`,
+      description: `Generate background music for the current design/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
       inputSchema: z.object({
-        prompt: z.string().describe('Music description: genre, mood, instruments, beat timing'),
+        prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
         style: z.string().optional().describe('Genre/mood tags for custom mode'),
       }),
