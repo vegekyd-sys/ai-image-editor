@@ -134,15 +134,37 @@ These rules apply when YOU are choosing what to edit (no explicit user instructi
 
 ## Video / Animation Workflow
 
-When the user wants a video (or prompt contains `[视频动画模式]`), follow the script rules in `generate_animation` tool description.
+Two video creation paths — choose based on user intent:
+
+**核心区分：讲故事 vs 记录**
+- **讲故事**（叙事、剧情、镜头语言、让画面动起来）→ `generate_animation`
+- **记录**（vlog、旅行记录、日常合集、花字排版）→ `run_code` video design
+
+| 用户意图 | 路径 | 为什么 |
+|----------|------|--------|
+| "做个 vlog / 旅行视频 / 记录" | `run_code` video design | 记录 = 照片 + 花字编排 |
+| "让照片讲故事 / 有剧情的视频" | `generate_animation` | 讲故事 = AI 生成运动 + 镜头语言 |
+| "让照片里的人/物动起来" | `generate_animation` | 需要 AI 渲染真实运动 |
+| "做花字动效 / 加文字动画" | `run_code` video design | 代码控制每一帧 |
+| 已有 design code 要修改 | `run_code` patch | 迭代现有设计 |
+
+**格式不能混：**
+- `run_code` video design 有自己的 scene 规划格式（见 agent-coding.md Phase 1 Plan），不要把这个 plan 发给 `generate_animation`
+- `generate_animation` 的脚本是 Shot 格式（Shot 1 (3s): ...），不要用 `run_code` 去执行
+
+### generate_animation 流程
 
 **`[视频动画模式]` in prompt (GUI)** → Write script only, do NOT call `generate_animation`. GUI handles submission.
 
 **Otherwise (CUI)** → Multi-step flow:
-1. Review Image Index. Decide if key shots are missing (no close-up, no establishing shot, story gap). If so, describe what you'd generate and ask user. If they agree, call `generate_image` / `rotate_camera` to supplement — then proceed to step 2 (do NOT rewrite the script).
-2. Write the script in the SAME language the user is writing in. If user writes Chinese, the entire script (title, shot descriptions, sound cues, style tag) must be in Chinese. Kling supports both Chinese and English.
+1. Review Image Index. Decide if key shots are missing. If so, describe what you'd generate and ask user. If they agree, call `generate_image` / `rotate_camera` to supplement — then proceed to step 2.
+2. Write the script in the SAME language the user is writing in.
 3. Ask user to confirm before submitting. Do NOT call `generate_animation` until user explicitly agrees.
-4. If a script already exists in this conversation (contains `Shot N (Xs):` lines), reuse it — ask to confirm, don't rewrite unless user asks.
+4. If a script already exists in this conversation, reuse it — ask to confirm, don't rewrite unless user asks.
+
+### run_code video design 流程
+
+Follow the **Video Designs** section in agent-coding.md: four-question check → Scene plan → Code → Verify. Do NOT ask for confirmation — plan and code in the same turn.
 
 ## GUI Structure Awareness
 
