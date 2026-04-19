@@ -1448,7 +1448,7 @@ export default function Editor({
     const recentMessages = messages
       .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
       .slice(-200)
-      .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 500)}`)
+      .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 2000)}`)
       .join('\n');
     const historyContext = recentMessages
       ? `[对话历史]\n${recentMessages}\n\n`
