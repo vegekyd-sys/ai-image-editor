@@ -313,10 +313,13 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
 /** Pre-fetch remote audio URLs via server proxy → blob URLs (fixes CORS + avoids massive data URLs) */
 async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
-  // Strip <Audio> tags with blob: or expired temp URLs — they can't be resolved and would block delayRender
-  let cleaned = code.replace(/<Audio[^>]*src=["']?blob:[^>]*\/>/g, '');
-  // Match audio URLs by extension (.mp3 etc) OR known audio domains (Suno streamAudioUrl has no extension)
-  const audioUrlPattern = /<Audio[^>]+src=["']?(https?:\/\/[^"'\s>]+\.(?:mp3|wav|m4a|aac|ogg)[^"'\s>]*|https?:\/\/(?:musicfile\.removeai\.ai|tempfile\.aiquickdraw\.com|cdn\d*\.suno\.ai)\/[^"'\s>]+)["']?/g;
+  // Strip blob: audio URLs (expired after refresh) — both JSX and createElement forms
+  let cleaned = code
+    .replace(/<Audio[^>]*src=["']?blob:[^>]*\/>/g, '')
+    .replace(/React\.createElement\(Audio,\s*\{[^}]*src:\s*"blob:[^"]*"[^)]*\)\s*,?/g, '');
+  // Match audio URLs in both <Audio src="..."> and React.createElement(Audio, { src: "..." }) forms
+  // Covers: .mp3/.wav etc extensions + known audio domains (Suno streamAudioUrl has no extension)
+  const audioUrlPattern = /(?:<Audio[^>]+src=["']?|React\.createElement\(Audio,\s*\{[^}]*src:\s*")(https?:\/\/[^"'\s>]+\.(?:mp3|wav|m4a|aac|ogg)[^"'\s>]*|https?:\/\/(?:musicfile\.removeai\.ai|tempfile\.aiquickdraw\.com|cdn\d*\.suno\.ai)\/[^"'\s>)]+)/g;
   const matches = [...cleaned.matchAll(audioUrlPattern)];
   if (!matches.length) return { code: cleaned, blobUrls: [] };
 
@@ -333,8 +336,12 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
       blobUrls.push(blobUrl);
       resolved = resolved.replace(url, blobUrl);
     } catch (e) {
-      console.warn('[resolveAudioUrls] failed to resolve, stripping <Audio>:', url, e);
-      resolved = resolved.replace(new RegExp(`<Audio[^]*?${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^]*?/>`, 'g'), '');
+      console.warn('[resolveAudioUrls] failed to resolve, stripping Audio element:', url, e);
+      const esc = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Strip JSX form: <Audio ... src="url" ... />
+      resolved = resolved.replace(new RegExp(`<Audio[^]*?${esc}[^]*?/>`, 'g'), '');
+      // Strip createElement form: React.createElement(Audio, { src: "url" ... }),
+      resolved = resolved.replace(new RegExp(`React\\.createElement\\(Audio,\\s*\\{[^)]*${esc}[^)]*\\)\\s*,?`, 'g'), '');
     }
   }
   return { code: resolved, blobUrls };
