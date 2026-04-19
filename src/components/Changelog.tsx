@@ -8,6 +8,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-19',
+    en: { title: 'Preview = Export & Design Editor Polish', items: [
+      'Preview = Export guarantee: drag/scale positions now identical in preview and exported video/image',
+      'Mobile pinch-to-scale: two-finger zoom on editable elements, works anywhere on canvas',
+      'Seek bar interaction: dragging seek bar cleanly exits design editor mode',
+    ]},
+    zh: { title: '预览=导出 & Design 编辑器优化', items: [
+      '预览=导出保证：拖拽/缩放后的位置在预览和导出视频/图片中完全一致',
+      '手机双指缩放：画布任意位置双指缩放编辑元素',
+      '进度条交互：拖拽进度条自动退出编辑模式',
+    ]},
+  },
+  {
     date: '2026-04-17',
     en: { title: 'Design Editor & Creative Tools', items: [
       'Design Editor: drag editable text elements to reposition — snap guidelines for precise alignment',
