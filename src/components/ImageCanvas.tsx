@@ -159,6 +159,8 @@ export default function ImageCanvas({
 
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
+  // Debounce: ignore deselection within 300ms of selection (blocks Remotion's ghost pointerup)
+  const lastSelectTimeRef = useRef(0);
 
   // Update imageRect when image loads or container resizes
   const updateImageRect = useCallback(() => {
@@ -1037,6 +1039,8 @@ export default function ImageCanvas({
               // clicking blank area deselects
               if ((e.target as HTMLElement).closest('[data-editable]')) return;
               if (selectedEditableId) {
+                // Ignore ghost deselection from Remotion Player's 200ms click delay
+                if (Date.now() - lastSelectTimeRef.current < 300) return;
                 onSelectEditable?.(null);
               } else {
                 toggleRemotionPlay();
@@ -1156,6 +1160,7 @@ export default function ImageCanvas({
                     remotionRef.current.pause();
                     setRemotionPlaying(false);
                   }
+                  if (id) lastSelectTimeRef.current = Date.now();
                   onSelectEditable(id);
                 }}
                 onUpdateProp={onUpdateProp}
