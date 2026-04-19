@@ -324,8 +324,6 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
   const blobUrls: string[] = [];
   for (const match of matches) {
     const url = match[1];
-    // Supabase public URLs have CORS headers — keep as-is, no proxy needed
-    if (url.includes('.supabase.co/')) continue;
     try {
       const proxyUrl = `/api/proxy-audio?url=${encodeURIComponent(url)}`;
       const res = await fetch(proxyUrl);
