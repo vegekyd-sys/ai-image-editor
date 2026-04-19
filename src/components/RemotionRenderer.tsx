@@ -13,7 +13,8 @@ export type { RenderMediaOnWebProgress };
  *  Caller must revoke blobUrls after use. */
 async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   const urlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi;
-  const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi;
+  // Match Supabase storage URLs but exclude audio files (.mp3/.wav etc) — those are handled by resolveAudioUrls
+  const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/(?![^\s"'`<>)}\]]*\.(?:mp3|wav|m4a|aac|ogg))[^\s"'`<>)}\]]*/gi;
   const urls = new Set<string>();
   for (const m of code.matchAll(urlPattern)) urls.add(m[0]);
   for (const m of code.matchAll(storagePattern)) urls.add(m[0]);
@@ -323,19 +324,18 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
   const blobUrls: string[] = [];
   for (const match of matches) {
     const url = match[1];
+    // Supabase public URLs have CORS headers — keep as-is, no proxy needed
+    if (url.includes('.supabase.co/')) continue;
     try {
-      // Fetch via server-side proxy to bypass CORS restrictions
       const proxyUrl = `/api/proxy-audio?url=${encodeURIComponent(url)}`;
       const res = await fetch(proxyUrl);
       if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
       const blob = await res.blob();
-      // Use blob URL instead of data URL — short string, same-origin, no 13MB base64
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
       resolved = resolved.replace(url, blobUrl);
     } catch (e) {
-      console.warn('[resolveAudioUrls] failed to resolve, stripping <Audio> to prevent delayRender hang:', url, e);
-      // Remove any <Audio .../> or <Audio ...>...</Audio> containing this URL
+      console.warn('[resolveAudioUrls] failed to resolve, stripping <Audio>:', url, e);
       resolved = resolved.replace(new RegExp(`<Audio[^]*?${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^]*?/>`, 'g'), '');
     }
   }
