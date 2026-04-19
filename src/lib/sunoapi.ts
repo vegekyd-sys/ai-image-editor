@@ -97,8 +97,11 @@ export async function getSunoTask(taskId: string): Promise<SunoTaskResult> {
 
   switch (sunoStatus) {
     case 'SUCCESS':
-    case 'FIRST_SUCCESS':
       status = 'completed'
+      break
+    case 'FIRST_SUCCESS':
+      // Only one track is ready — keep polling until SUCCESS (both tracks ready)
+      status = 'processing'
       break
     case 'TEXT_SUCCESS': {
       const hasStream = sunoData.some((t: Record<string, unknown>) => t.streamAudioUrl)
