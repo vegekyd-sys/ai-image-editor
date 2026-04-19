@@ -2718,23 +2718,20 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
-  // Music select: user chose a track → get permanent URL → send agent inject request
-  const handleMusicSelect = useCallback(async (track: { audioUrl: string; duration: number; title: string; tags: string }) => {
+  // Music select: insert immediately with whatever URL is available (stream or permanent)
+  // completed polling will replace stream URLs with permanent URLs in design code later
+  const handleMusicSelect = useCallback((track: { audioUrl: string; duration: number; title: string; tags: string }) => {
     if (!projectId) { console.warn('🎵 [music] no projectId'); return; }
     if (isAgentActive) { console.warn('🎵 [music] agent busy, skipping'); return; }
     console.log(`🎵 [music] user selected: ${track.title}`);
     addMessage('user', `🎵 ${track.title}`);
-    // Get permanent Supabase URL (Suno temp URLs expire)
-    let audioUrl = track.audioUrl;
-    try {
-      const res = await fetch('/api/music/select', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
-      });
-      const data = await res.json();
-      if (data.permanentUrl) audioUrl = data.permanentUrl;
-    } catch { /* fallback to original URL */ }
+    // Mark selected in DB (fire-and-forget)
+    fetch('/api/music/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
+    }).catch(() => {});
+    const audioUrl = track.audioUrl;
     const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
     handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
