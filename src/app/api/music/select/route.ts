@@ -12,32 +12,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'audioUrl and projectId required' }, { status: 400 })
     }
 
-    // Deselect all, then find the best match to select
+    // Deselect all, then find the matching track by any of the three URL columns
     await supabase.from('project_music')
       .update({ selected: false })
       .eq('project_id', projectId)
 
-    // Find a track with a permanent Supabase URL for this project
-    // (client may send a stream URL that doesn't match DB — DB has permanent URL after upload)
-    const { data: tracks } = await supabase.from('project_music')
+    const { data: match } = await supabase.from('project_music')
       .select('audio_url, track_index')
       .eq('project_id', projectId)
-      .eq('status', 'completed')
-      .order('track_index')
+      .or(`audio_url.eq.${audioUrl},suno_audio_url.eq.${audioUrl},stream_audio_url.eq.${audioUrl}`)
+      .limit(1)
+      .single()
 
-    // Prefer track whose audio_url matches, otherwise first track with a Supabase URL
-    const exact = tracks?.find((t: { audio_url: string }) => t.audio_url === audioUrl)
-    const supabaseTrack = tracks?.find((t: { audio_url: string }) => t.audio_url?.includes('.supabase.co/'))
-    const best = exact || supabaseTrack || tracks?.[0]
-
-    if (best) {
+    if (match) {
       await supabase.from('project_music')
         .update({ selected: true })
         .eq('project_id', projectId)
-        .eq('track_index', best.track_index)
+        .eq('track_index', match.track_index)
     }
 
-    const permanentUrl = best?.audio_url?.includes('.supabase.co/') ? best.audio_url : audioUrl
+    const permanentUrl = match?.audio_url || audioUrl
     return NextResponse.json({ success: true, permanentUrl })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

@@ -36,15 +36,16 @@ export async function GET(
             console.error('Audio upload error:', err)
           }
         }
-        // Update track URL to permanent
+        const sunoAudioUrl = track.audioUrl
         track.audioUrl = permanentUrl
-        // Persist to DB with permanent URL
         await supabase.from('project_music').upsert({
           suno_task_id: taskId,
           track_index: track.trackIndex,
           project_id: projectId,
           user_id: userId,
           audio_url: permanentUrl,
+          suno_audio_url: sunoAudioUrl || null,
+          stream_audio_url: track.streamAudioUrl || null,
           duration: track.duration,
           title: track.title,
           tags: track.tags,
