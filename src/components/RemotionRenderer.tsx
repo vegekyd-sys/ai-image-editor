@@ -211,13 +211,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         // Preload Google Fonts (must be ready before rendering — text layout depends on it)
         await preloadFontsFromCode(design.code);
         if (cancelled) return;
-        // Resolve audio URLs to blob URLs BEFORE compiling — remote audio causes CORS/buffering issues in Player
-        let codeToCompile = design.code;
-        const { code: audioResolved, blobUrls } = await resolveAudioUrls(design.code);
-        if (cancelled) { blobUrls.forEach(u => URL.revokeObjectURL(u)); return; }
-        blobUrlsRef.current = blobUrls;
-        if (blobUrls.length) codeToCompile = audioResolved;
-        const comp = evalRemotionJSX(codeToCompile);
+        const comp = evalRemotionJSX(design.code);
         if (!comp) {
           setCompileError('Failed to compile design code');
           onError?.('Failed to compile design code');
@@ -318,7 +312,8 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
 /** Pre-fetch remote audio URLs via server proxy → blob URLs (fixes CORS + avoids massive data URLs) */
 async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
-  const audioUrlPattern = /<Audio[^>]+src=["']?(https?:\/\/[^"'\s>]+\.(?:mp3|wav|m4a|aac|ogg)[^"'\s>]*)["']?/g;
+  // Match audio URLs by extension (.mp3 etc) OR known audio domains (Suno streamAudioUrl has no extension)
+  const audioUrlPattern = /<Audio[^>]+src=["']?(https?:\/\/[^"'\s>]+\.(?:mp3|wav|m4a|aac|ogg)[^"'\s>]*|https?:\/\/(?:musicfile\.removeai\.ai|tempfile\.aiquickdraw\.com|cdn\d*\.suno\.ai)\/[^"'\s>]+)["']?/g;
   const matches = [...code.matchAll(audioUrlPattern)];
   if (!matches.length) return { code, blobUrls: [] };
 
@@ -337,7 +332,10 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
       blobUrls.push(blobUrl);
       resolved = resolved.replace(url, blobUrl);
     } catch (e) {
-      console.warn('[exportDesignVideo] failed to resolve audio URL:', url, e);
+      console.warn('[resolveAudioUrls] failed to resolve, stripping <Audio> to prevent Player hang:', url, e);
+      // Remove the entire <Audio .../> tag — unresolved remote URL causes delayRender to block Player
+      const audioTagPattern = new RegExp(`<Audio[^>]*src=["']?${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^>]*/>`);
+      resolved = resolved.replace(audioTagPattern, '');
     }
   }
   return { code: resolved, blobUrls };
