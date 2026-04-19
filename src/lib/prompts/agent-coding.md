@@ -229,6 +229,8 @@ After planning, review your scenes: **do any need visual elements beyond the use
 
 Write the full video in a single `run_code` (type: render). Before calling, output 1-2 sentences about what you're building.
 
+**iOS CRASH PREVENTION:** Every scene MUST be wrapped in `<Sequence from={start} durationInFrames={duration}>`. Never use opacity-only visibility — all `<Img>` load simultaneously and crash iOS Safari. See Cross-Platform Effects section below.
+
 **Save and publish are two separate actions:**
 1. **Save (after EVERY run_code):** `write_file({ fromLastRunCode: true, name: "slug", publish: false })` — persists code to workspace. Do this after every render and patch. Never skip — code in memory is lost on refresh.
 2. **Publish (when you're satisfied):** `write_file({ fromLastRunCode: true, name: "slug" })` — saves code AND publishes to timeline as a Snapshot.
@@ -257,8 +259,8 @@ When reviewing the screenshots, focus on two things:
 These videos play on all platforms. Every effect you use must render correctly on iOS Safari, Android Chrome, and desktop browsers. Follow these rules to avoid platform-specific rendering failures.
 
 **Performance budget (CRITICAL — iOS Safari will CRASH if exceeded):**
-- Use `<Sequence from={sceneStart} durationInFrames={sceneDuration}>` to mount/unmount scenes — do NOT mount all scenes with `opacity: 0`
-- Total `<Img>` tags simultaneously in DOM: **≤ 3** (1 current + 1 crossfade overlap). No duplicated images for backgrounds.
+- **MUST use `<Sequence>` for every scene** — `<Sequence from={sceneStart} durationInFrames={sceneDuration + crossfadeDuration}>` to mount/unmount scenes. Do NOT mount all scenes with `opacity: 0` — all `<Img>` tags load simultaneously and crash iOS. This is the #1 cause of iOS crashes.
+- Total `<Img>` tags simultaneously in DOM: **≤ 3** (1 current + 1 crossfade overlap). 8 images with opacity = instant crash on iPhone. No duplicated images for backgrounds.
 - Max **3 filter** effects on any single element
 - Max **2 textShadow** layers per text element
 - **NEVER use a second `<Img>` of the same image as blur background** — this doubles memory and crashes iOS. Use CSS gradients instead (see below).
