@@ -1042,7 +1042,10 @@ export default function ImageCanvas({
                 // Ignore ghost deselection from Remotion Player's 200ms click delay
                 if (Date.now() - lastSelectTimeRef.current < 300) return;
                 onSelectEditable?.(null);
+                lastSelectTimeRef.current = Date.now(); // also debounce the follow-up toggle
               } else {
+                // Don't toggle play right after deselecting (ghost double-click)
+                if (Date.now() - lastSelectTimeRef.current < 300) return;
                 toggleRemotionPlay();
               }
             }}
