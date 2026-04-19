@@ -77,6 +77,8 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 **Remotion 渲染引擎（2026-04-09，worktree-workspace-agent 分支）**：Agent 的 `run_code` design 模式用 Remotion 渲染。静态图用 `renderStillOnWeb`（JPEG截图），动画用 `@remotion/player`（带控制条）+ poster 截图。Design JSON 持久化到 workspace `code/{snapId}.json`，刷新后恢复。MP4 导出用 `renderMediaOnWeb`（浏览器端 h264/mp4）。JSX 编译从 Sucrase 切换到 `@babel/standalone`（支持现代语法）。Satori 已移除（design 模式替代）。Agent 模型升级为 Opus 4.6（`us.anthropic.claude-opus-4-6-v1`）。`run_code` 新增 `image_refs` 参数让模型自选带哪些图片。所有视觉输出默认用 design 模式，sharp 只做格式转换。`video-design` skill 提供视频创作四问自检框架。
 
+**Preview = Export 一致性（2026-04-19）**：用户 drag/scale editable 元素后，预览和导出必须位置一致。架构：Proxy 拦截 `React.createElement` 注入 CSS 独立属性 `style.translate`/`style.scale`（不用 `style.transform`，会干扰 Moveable）+ `@remotion/web-renderer` patch 加 `style.translate` 支持。详见 `docs/preview-export-consistency.md`。patch 通过 `patch-package` 持久化在 `patches/` 目录。**添加新的可视化编辑属性时必须同步更新 Proxy 和 DesignOverlay.applyStoredOffsets，并确认 web-renderer 兼容。**
+
 **音乐生成 / 配乐（2026-04-10）**：SunoAPI.org（V5.5，$0.005/credit）。`src/lib/sunoapi.ts` 客户端（create + poll），skill 层 `create-music.ts` + `get-music-status.ts`。Agent 有 `generate_music` + `get_music_status` 两个 tool，用户要求配乐时触发（不自动）。MCP 有 `makaron_create_music` + `makaron_get_music_status`。Remotion `<Audio>` 已在 scope（`evalRemotionJSX.ts`），音频 URL CORS 已处理（`resolvePropsUrls` 支持 mp3/wav/m4a/aac/ogg）。环境变量 `SUNOAPI_KEY`。每次生成 2 首歌（取第一首），生成耗时 ~2-3 分钟。Suno 可执行卡点 prompt（时间段+情绪转换），但不支持精确时长控制。
 
 **NSFW 内容保护（2026-03-25）**：`ContentBlockedError` 检测 Gemini `promptFeedback.blockReason`。Tips：blocked 时不重试不 fallback，发 `[BLOCKED]` SSE 事件给前端。生图：blocked 时 model-router 自动 fallback 到 Qwen。Tips 并发信号量限制 max 4（防多图上传爆发 40+ 并发请求）。
