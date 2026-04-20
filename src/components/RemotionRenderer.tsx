@@ -33,34 +33,6 @@ async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: 
   return { code: resolved, blobUrls };
 }
 
-/** Preload Google Fonts referenced in design code so they're available before rendering. */
-async function preloadFontsFromCode(code: string): Promise<void> {
-  const fontUrls = new Set<string>();
-  for (const m of code.matchAll(/@import\s+url\(['"]?(https:\/\/fonts\.googleapis\.com\/[^'")\s]+)['"]?\)/g))
-    fontUrls.add(m[1]);
-  for (const m of code.matchAll(/href=["'](https:\/\/fonts\.googleapis\.com\/[^"']+)["']/g))
-    fontUrls.add(m[1]);
-  if (fontUrls.size === 0) return;
-
-  const fontFamilies = new Set<string>();
-  await Promise.all([...fontUrls].map(async url => {
-    try {
-      const css = await fetch(url).then(r => r.text());
-      const style = document.createElement('style');
-      style.textContent = css;
-      document.head.appendChild(style);
-      for (const m of css.matchAll(/font-family:\s*['"]?([^;'"]+)['"]?\s*;/g))
-        fontFamilies.add(m[1].trim());
-    } catch { /* skip */ }
-  }));
-
-  // Force-load all discovered font families
-  await Promise.all([...fontFamilies].map(f =>
-    document.fonts.load(`1em "${f}"`).catch(() => {})
-  ));
-  await document.fonts.ready;
-}
-
 // ─── Standalone poster capture (no DOM needed) ─────────────────────────────
 
 /**
@@ -121,7 +93,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
     await preloadBabel().catch(() => {});
     const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
     imageBlobUrls = blobUrls;
-    await preloadFontsFromCode(resolvedCode);
+
     const comp = evalRemotionJSX(resolvedCode);
     if (!comp) return null;
 
@@ -209,8 +181,6 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     (async () => {
       try {
         await preloadBabel().catch(() => {});
-        // Preload Google Fonts (must be ready before rendering — text layout depends on it)
-        await preloadFontsFromCode(design.code);
         if (cancelled) return;
         const comp = evalRemotionJSX(design.code);
         if (!comp) {
@@ -357,8 +327,6 @@ export async function exportDesignVideo(
   const { code: imageResolved, blobUrls: imageBlobUrls } = await resolveCodeUrls(design.code);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
   const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
-  // Preload Google Fonts before rendering (ensures text renders correctly)
-  await preloadFontsFromCode(resolvedCode);
   const Component = evalRemotionJSX(resolvedCode);
   if (!Component) throw new Error('Failed to compile design code');
 
