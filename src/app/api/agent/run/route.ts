@@ -72,6 +72,16 @@ export async function POST(req: NextRequest) {
       referenceImageCount,
     });
 
+    // Write user message to DB (frontend does this itself, headless mode must do it here)
+    const userMessageId = crypto.randomUUID();
+    await supabase.from('messages').insert({
+      id: userMessageId,
+      project_id: projectId,
+      role: 'user',
+      content: prompt,
+      has_image: false,
+    });
+
     // DualWriter in headless mode (no SSE controller)
     const writer = new AgentDualWriter(runId, supabase, user.id, projectId);
 
