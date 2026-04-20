@@ -44,6 +44,8 @@ import { containRect, coverRect } from '@/lib/image/geometry';
 import { extractPhotoMetadata } from '@/lib/image/metadata';
 import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
+import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
+import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 
 export interface AnimationState {
@@ -217,6 +219,17 @@ export default function Editor({
   // Design editable state
   const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
+  // Mobile keyboard offset for text editor panel
+  const [editorKbInset, setEditorKbInset] = useState(0);
+  useEffect(() => {
+    if (isDesktop || !editingDesignFieldId) { setEditorKbInset(0); return; }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setEditorKbInset(Math.round(Math.max(0, window.innerHeight - vv.height - vv.offsetTop)));
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, [isDesktop, editingDesignFieldId]);
   const [visibleEditableIds, _setVisibleEditableIds] = useState<string[]>([]);
   const handleVisibleEditableFields = useCallback((ids: string[]) => {
     _setVisibleEditableIds(prev => {
@@ -228,6 +241,7 @@ export default function Editor({
     _setSelectedEditableFieldId(id);
     if (!id) setEditingDesignFieldId(null); // deselect also closes editor
   }, []);
+
 
   // Music generation state
   const [musicTaskId, setMusicTaskId] = useState<string | null>(initialMusicTaskId ?? null);
@@ -257,11 +271,28 @@ export default function Editor({
     setSnapshots(prev => {
       const existingIds = new Set(prev.map(s => s.id));
       const newItems = initialSnapshots.filter(s => !existingIds.has(s.id));
-      if (newItems.length === 0) return prev;
-      // During reconnect: append new items (don't replace Realtime-created ones)
-      // Normal: if Supabase has more, replace entirely for freshness
-      if (isAgentActive) return [...prev, ...newItems];
-      return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
+
+      if (newItems.length > 0) {
+        // New snapshots found
+        if (isAgentActive) return [...prev, ...newItems];
+        return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
+      }
+
+      // Same IDs — merge design/props updates from Supabase into cached snapshots.
+      // This handles: cache shows stale design, then Supabase loads fresh design JSON.
+      const incoming = new Map(initialSnapshots.map(s => [s.id, s]));
+      let changed = false;
+      const merged = prev.map(s => {
+        const fresh = incoming.get(s.id);
+        if (!fresh?.design) return s;
+        // If fresh has a design but prev doesn't, or fresh design has newer props
+        if (!s.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(s.design.props))) {
+          changed = true;
+          return { ...s, design: fresh.design };
+        }
+        return s;
+      });
+      return changed ? merged : prev;
     });
   }, [initialSnapshots, isAgentActive]);
 
@@ -1421,7 +1452,7 @@ export default function Editor({
     const recentMessages = messages
       .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
       .slice(-200)
-      .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 500)}`)
+      .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 2000)}`)
       .join('\n');
     const historyContext = recentMessages
       ? `[对话历史]\n${recentMessages}\n\n`
@@ -1460,13 +1491,14 @@ export default function Editor({
           const desc = isRef
             ? (s.description || 'Skill reference image')
             : isDesign
-              ? (s.description || '[design/video — use code in context to modify, do NOT analyze_image]')
+              ? (s.description || '[design/video]')
               : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
                 ? (s.description || '原图 / Original upload')
                 : (s.description || '(use analyze_image to see this snapshot)');
           const tag = isRef ? ' (reference)' : isDesign ? ' (design)' : '';
           const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
-          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}`;
+          const codePath = isDesign && s.designPath ? ` [code: ${s.designPath}]` : '';
+          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${codePath}`;
         }).join('\n')}\n\n`
       : '';
 
@@ -2306,29 +2338,46 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         const res = await fetch(`/api/music/${musicTaskId}?projectId=${projectId}`);
         const data = await res.json();
         if (stopped) return;
-        if (data.status === 'completed' && data.tracks?.length) {
+        if ((data.status === 'streaming' || data.status === 'completed') && data.tracks?.length) {
           setMusicTracks(data.tracks);
-          // Create a new music message at the bottom (same pattern as video inline)
-          const musicLines = data.tracks.map((t: { title: string; duration: number; tags: string; audioUrl: string; trackIndex: number }) =>
-            `music:${t.trackIndex}|${t.title}|${Math.round(t.duration)}|${t.tags}|${t.audioUrl}`
-          ).join('\n');
+          // Format: music:trackIndex|title|duration|tags|playUrl|finalUrl
+          const musicLines = data.tracks.map((tk: { title: string; duration: number; tags: string; audioUrl: string; streamAudioUrl?: string; trackIndex: number }) => {
+            const playUrl = tk.streamAudioUrl || tk.audioUrl;
+            const finalUrl = tk.audioUrl || '';
+            return `music:${tk.trackIndex}|${tk.title}|${Math.round(tk.duration)}|${tk.tags}|${playUrl}|${finalUrl}`;
+          }).join('\n');
           const msgId = `music-${musicTaskId}`;
-          const fullContent = `🎵 ${t('status.musicReady')}\n${musicLines}`;
+          const statusText = data.status === 'streaming' ? t('status.musicStreaming') : t('status.musicReady');
+          const fullContent = `🎵 ${statusText}\n${musicLines}`;
           setMessages(prev => {
-            // Update if already exists (second track arriving), otherwise create new
             if (prev.some(m => m.id === msgId)) {
               const updated = prev.map(m => m.id === msgId ? { ...m, content: fullContent } : m);
-              // Re-persist with updated tracks
               const msg = updated.find(m => m.id === msgId);
-              if (msg) onSaveMessage?.(msg);
+              if (msg && data.status === 'completed') onSaveMessage?.(msg);
               return updated;
             }
             const musicMsg: Message = { id: msgId, role: 'assistant', content: fullContent, timestamp: Date.now() };
-            onSaveMessage?.(musicMsg);
+            if (data.status === 'completed') onSaveMessage?.(musicMsg);
             return [...prev, musicMsg];
           });
-          // Check if all tracks done (2 tracks = full SUCCESS)
-          if (data.tracks.length >= 2) {
+          if (data.status === 'streaming') {
+            setAgentStatus(t('status.musicStreaming'));
+          }
+          // Stop polling only when completed with 2 tracks
+          if (data.status === 'completed' && data.tracks.length >= 2) {
+            // Replace stream/temp URLs with permanent Supabase URLs in all design code
+            const supabase = createBrowserSupabase();
+            setSnapshots(prev => {
+              prev.forEach(snap => {
+                if (!snap.design?.code) return;
+                resolveAudioUrlsInCode(snap.design.code, projectId!, supabase).then(({ code, changed }) => {
+                  if (!changed) return;
+                  setSnapshots(p => p.map(s => s.id !== snap.id ? s : { ...s, design: { ...s.design!, code } }));
+                  onSaveDesignProps?.(snap.id, { ...snap.design!, code });
+                });
+              });
+              return prev;
+            });
             setMusicTaskId(null);
             musicPollingRef.current = false;
             setAgentStatus(t('status.musicReady'));
@@ -2345,9 +2394,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         console.warn('🎵 [music] poll error:', e);
       }
     };
-    // Poll immediately, then every 10s
     poll();
-    const interval = setInterval(poll, 10_000);
+    const interval = setInterval(poll, 2_000);
     return () => { stopped = true; clearInterval(interval); };
   }, [musicTaskId, projectId, t]);
 
@@ -2495,10 +2543,19 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         pendingVideoRef.current = null;
         const file = new File([blob], filename, { type: 'video/mp4' });
         try {
-          await navigator.share({ files: [file] });
+          if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+            await navigator.share({ files: [file] });
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+          } else {
+            // Fallback: open in new tab (iOS Safari ignores <a download> for blobs)
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+            setTimeout(() => URL.revokeObjectURL(url), 120000);
+          }
         } catch { /* user cancelled share sheet */ }
-        setAgentStatus(t('editor.done'));
-        showSaveToast();
         return;
       }
 
@@ -2512,10 +2569,25 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         });
 
         if (isMobile) {
-          // Mobile: store blob, prompt user to tap Share
-          pendingVideoRef.current = { blob, filename: `makaron-design-${Date.now()}.mp4` };
-          setIsSaving(false);
-          setAgentStatus(t('editor.videoReady'));
+          const filename = `makaron-design-${Date.now()}.mp4`;
+          const file = new File([blob], filename, { type: 'video/mp4' });
+          if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+            // Mobile + share available: store blob, prompt user to tap Share
+            pendingVideoRef.current = { blob, filename };
+            setIsSaving(false);
+            setAgentStatus(t('editor.videoReady'));
+          } else {
+            // Mobile but no share (localhost/HTTP): download directly
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            setIsSaving(false);
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+          }
         } else {
           // Desktop: download directly
           const filename = `makaron-design-${Date.now()}.mp4`;
@@ -2538,13 +2610,26 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       return;
     }
 
-    // Image download
-    const img = timeline[viewIndex];
+    // Image download — for designs with editable transforms, re-capture poster to include drag/scale
+    const snapIdxForSave = snapFromTimeline(viewIndex, draftParentIndexRef.current);
+    const snapForSave = snapIdxForSave !== null ? snapshotsRef.current[snapIdxForSave] : undefined;
+    let img = timeline[viewIndex];
     if (!img) return;
     const filename = `ai-edited-${Date.now()}.jpg`;
     setIsSaving(true);
 
     try {
+      // Re-capture poster for static designs (includes drag/scale transforms via HOC)
+      if (snapForSave?.design && !snapForSave.design.animation) {
+        try {
+          const { captureDesignPoster } = await import('@/components/RemotionRenderer');
+          const freshPoster = await captureDesignPoster(snapForSave.design);
+          if (freshPoster) img = freshPoster;
+        } catch (e) {
+          console.warn('Re-capture poster for save failed, using cached:', e);
+        }
+      }
+
       const res = await fetch(img);
       const blob = await res.blob();
 
@@ -2637,21 +2722,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
-  // Music select: user chose a track → show short user msg + send agent inject request
+  // Music select: insert immediately with whatever URL is available (stream or permanent)
+  // completed polling will replace stream URLs with permanent URLs in design code later
   const handleMusicSelect = useCallback((track: { audioUrl: string; duration: number; title: string; tags: string }) => {
     if (!projectId) { console.warn('🎵 [music] no projectId'); return; }
     if (isAgentActive) { console.warn('🎵 [music] agent busy, skipping'); return; }
     console.log(`🎵 [music] user selected: ${track.title}`);
-    // Mark selected in DB
+    addMessage('user', `🎵 ${track.title}`);
+    // Mark selected in DB (fire-and-forget)
     fetch('/api/music/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
     }).catch(() => {});
-    // Show short user message
-    addMessage('user', `🎵 ${track.title}`);
-    // Send full instruction to agent (silent — no duplicate user msg shown)
-    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\nAdd <Audio src="${track.audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
+    const audioUrl = track.audioUrl;
+    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
     handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
@@ -2999,8 +3084,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
             {/* TODO: Floating text input for annotation text tool — uncomment when text editing flow is ready */}
 
-            {/* Top toolbar */}
-            {snapshots.length > 0 && (
+            {/* Top toolbar — hidden in design editor mode */}
+            {snapshots.length > 0 && !selectedEditableFieldId && (
               <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
                 <div className="flex items-center gap-1">
                   {onBack && (
@@ -3189,6 +3274,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             </div>
           )}
 
+          {/* Hidden proxy input — iOS keyboard focus anchor (must be in DOM before edit starts) */}
           {/* Design text editor — floating panel (like AnnotationToolbar) */}
           {editingDesignField && currentDesignSnap?.design && (
             <div style={isDesktop ? {
@@ -3198,10 +3284,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               width: 340,
             } : {
               position: 'fixed',
-              bottom: 0, left: 0, right: 0,
+              bottom: editorKbInset, left: 0, right: 0,
               zIndex: 201,
               maxWidth: 480,
               margin: '0 auto',
+              transition: editorKbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
             }}>
               <DesignTextEditor
                 field={editingDesignField}

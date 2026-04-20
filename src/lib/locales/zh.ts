@@ -52,6 +52,7 @@ const zh = {
   'status.designFailed': '设计生成失败',
   'status.generatingMusic': '配乐生成中...',
   'status.musicReady': '配乐已就绪',
+  'status.musicStreaming': '配乐预览就绪',
   'status.musicFailed': '配乐生成失败',
   'status.addingMusic': '正在添加配乐...',
   'status.writingScript': '正在写视频脚本...',

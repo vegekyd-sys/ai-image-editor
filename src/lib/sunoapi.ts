@@ -9,6 +9,7 @@ export interface SunoTaskInput {
 
 export interface SunoTrack {
   audioUrl: string
+  streamAudioUrl?: string
   duration: number
   title: string
   tags: string
@@ -16,7 +17,7 @@ export interface SunoTrack {
 
 export interface SunoTaskResult {
   taskId: string
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  status: 'pending' | 'processing' | 'streaming' | 'completed' | 'failed'
   tracks?: SunoTrack[]   // 2 tracks per generation
   error?: string
 }
@@ -37,7 +38,7 @@ export async function createSunoTask(input: SunoTaskInput): Promise<string> {
     prompt: input.prompt,
     customMode: useCustomMode,
     instrumental: input.instrumental ?? true,
-    model: input.model || 'V5_5',
+    model: input.model || 'V4_5',
     callBackUrl: 'https://makaron.app/api/noop',
   }
   if (useCustomMode && input.style) {
@@ -92,13 +93,21 @@ export async function getSunoTask(taskId: string): Promise<SunoTaskResult> {
   // Map Suno status to normalized status
   let status: SunoTaskResult['status']
   let error: string | undefined
+  const sunoData: Record<string, unknown>[] = data?.response?.sunoData || []
 
   switch (sunoStatus) {
     case 'SUCCESS':
-    case 'FIRST_SUCCESS':
-      // FIRST_SUCCESS = first track ready (~85s), SUCCESS = both ready (~146s)
       status = 'completed'
       break
+    case 'FIRST_SUCCESS':
+      // Only one track is ready — keep polling until SUCCESS (both tracks ready)
+      status = 'processing'
+      break
+    case 'TEXT_SUCCESS': {
+      const hasStream = sunoData.some((t: Record<string, unknown>) => t.streamAudioUrl)
+      status = hasStream ? 'streaming' : 'processing'
+      break
+    }
     case 'CREATE_TASK_FAILED':
     case 'GENERATE_AUDIO_FAILED':
     case 'CALLBACK_EXCEPTION':
@@ -107,20 +116,20 @@ export async function getSunoTask(taskId: string): Promise<SunoTaskResult> {
       error = data?.errorMessage || sunoStatus
       break
     default:
-      // PENDING, TEXT_SUCCESS
       status = 'processing'
   }
 
-  // Extract tracks — filter to those with audioUrl (FIRST_SUCCESS only has track[0])
+  // Extract tracks when streaming (streamAudioUrl available) or completed (audioUrl available)
   let tracks: SunoTrack[] | undefined
-  if (status === 'completed' && data?.response?.sunoData) {
-    tracks = data.response.sunoData
-      .filter((t: Record<string, unknown>) => t.audioUrl)
+  if ((status === 'streaming' || status === 'completed') && sunoData.length) {
+    tracks = sunoData
+      .filter((t: Record<string, unknown>) => t.streamAudioUrl || t.audioUrl)
       .map((t: Record<string, unknown>) => ({
-        audioUrl: t.audioUrl as string,
-        duration: t.duration as number,
-        title: t.title as string,
-        tags: t.tags as string,
+        audioUrl: (t.audioUrl as string) || '',
+        streamAudioUrl: (t.streamAudioUrl as string) || undefined,
+        duration: (t.duration as number) || 0,
+        title: (t.title as string) || '',
+        tags: (t.tags as string) || '',
       }))
   }
 

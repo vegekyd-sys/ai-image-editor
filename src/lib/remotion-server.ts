@@ -63,7 +63,8 @@ export async function renderDesignFrame(
   const fps = design.animation?.fps || 30;
   const dur = design.animation?.durationInSeconds || 0;
   const durationInFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
-  const outputFile = '/tmp/still.jpeg';
+  // Unique output file per render — prevents concurrent renders from overwriting each other
+  const outputFile = `/tmp/still-${frame}-${Date.now()}.jpeg`;
 
   // Retry once if Sandbox is gone (410/expired)
   for (let attempt = 0; attempt < 2; attempt++) {

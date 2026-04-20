@@ -117,11 +117,20 @@ export class AgentDualWriter {
             props: event.props, animation: event.animation,
           });
 
-          // Upload design JSON to workspace
+          // Upload design JSON to workspace + index in workspace_files for agent read_file
           try {
             const storagePath = `${this.userId}/workspace/${designPath}`;
             await this.supabase.storage.from('images')
               .upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true });
+            const { data: urlData } = this.supabase.storage.from('images').getPublicUrl(storagePath);
+            await this.supabase.from('workspace_files').upsert({
+              user_id: this.userId,
+              path: designPath,
+              content_type: 'application/json',
+              size_bytes: designJson.length,
+              storage_url: urlData?.publicUrl || '',
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'user_id,path' });
           } catch (err) {
             console.error('[DualWriter] design upload error:', err);
           }

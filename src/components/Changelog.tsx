@@ -8,6 +8,57 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-19',
+    en: { title: 'Preview = Export & Design Editor Polish', items: [
+      'Preview = Export guarantee: drag/scale positions now identical in preview and exported video/image',
+      'Mobile pinch-to-scale: two-finger zoom on editable elements, works anywhere on canvas',
+      'Seek bar interaction: dragging seek bar cleanly exits design editor mode',
+    ]},
+    zh: { title: '预览=导出 & Design 编辑器优化', items: [
+      '预览=导出保证：拖拽/缩放后的位置在预览和导出视频/图片中完全一致',
+      '手机双指缩放：画布任意位置双指缩放编辑元素',
+      '进度条交互：拖拽进度条自动退出编辑模式',
+    ]},
+  },
+  {
+    date: '2026-04-17',
+    en: { title: 'Design Editor & Creative Tools', items: [
+      'Design Editor: drag editable text elements to reposition — snap guidelines for precise alignment',
+      'Agent creative tools: @remotion/paths (SVG path animation) + @remotion/noise (procedural textures)',
+      'Design animations preserved: dragging no longer breaks Agent\'s rotate/scale/skew effects',
+      'Double-tap to edit text: unified interaction on desktop and mobile',
+      'Scale/resize editable elements: drag any corner handle to resize proportionally',
+    ]},
+    zh: { title: 'Design 编辑器 & 创意工具', items: [
+      'Design 编辑器：可拖拽文字元素重新定位 — 智能辅助线精确对齐',
+      'Agent 创意工具：@remotion/paths（SVG 路径动画）+ @remotion/noise（程序化纹理）',
+      '动画效果保留：拖拽后 Agent 的旋转/缩放/倾斜特效不丢失',
+      '双击编辑文字：桌面和手机统一交互',
+      '缩放编辑元素：拖拽四角手柄等比缩放',
+    ]},
+  },
+  {
+    date: '2026-04-16',
+    en: { title: 'Video Design Pro & Sandbox Rendering', items: [
+      'Smarter video creation: 4-question creative check drives the entire workflow — plan, code, verify',
+      'Rich kinetic typography: per-character animation, multi-layer text per scene, text that tells the story',
+      'Remotion Sandbox: server-side frame rendering on Vercel — Agent previews any frame without browser',
+      'CJK fonts + emoji in Sandbox: system Noto fonts + 30 pre-cached Google Fonts in Snapshot',
+      'Cross-platform safe: iOS-friendly effects, gradient backgrounds, no heavy CJK web fonts',
+      'Auto-save & publish: Agent saves code after every edit, publishes when satisfied',
+      'Abort Agent: cancel background Agent from CUI',
+    ]},
+    zh: { title: 'Video Design Pro & Sandbox 渲染', items: [
+      '更聪明的视频创作：四问创意自检驱动全流程 — 规划、编码、验证',
+      '丰富的花字动效：逐字动画、每场景多层文字、文字就是画面的一部分',
+      'Remotion Sandbox：服务端逐帧渲染 — Agent 无需浏览器即可预览任意帧',
+      'Sandbox 中日韩字体 + Emoji：系统 Noto 字体 + 30 个预缓存 Google Fonts',
+      '跨平台安全：iOS 友好特效，渐变背景代替模糊，不加载大型中文网络字体',
+      '自动保存 & 发布：Agent 每次编辑后自动存代码，满意后发布',
+      '中断 Agent：CUI 中可取消后台 Agent',
+    ]},
+  },
+  {
     date: '2026-04-15',
     en: { title: 'Frame Preview & Draft Timeline', items: [
       'preview_frame: Agent captures any frame of a video design to check its own work before publishing',

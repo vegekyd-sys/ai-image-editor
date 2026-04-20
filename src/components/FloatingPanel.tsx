@@ -60,7 +60,7 @@ export default function FloatingPanel({ onClose, isDesktop, children }: Floating
 
   return (
     <div
-      className="px-3 pb-3 pt-1"
+      className="px-3 pb-3 pt-1 animate-pop-in"
       style={isDesktop ? {
         transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
         cursor: isDragging ? 'grabbing' : undefined,

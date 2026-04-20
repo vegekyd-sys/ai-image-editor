@@ -276,14 +276,28 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const stream = ctx.codeStreamRef.current;
       if (!stream) return;
       if (done) {
+        // Flush any pending text before closing
+        const pending = (stream as any).__pendingText || '';
+        if ((stream as any).__pendingRaf) cancelAnimationFrame((stream as any).__pendingRaf);
         ctx.setMessages(prev => prev.map(m =>
-          m.id === stream.msgId ? { ...m, content: (m.content || '') + '\n```\n' } : m,
+          m.id === stream.msgId ? { ...m, content: (m.content || '') + pending + '\n```\n' } : m,
         ));
         ctx.codeStreamRef.current = null;
       } else {
-        ctx.setMessages(prev => prev.map(m =>
-          m.id === stream.msgId ? { ...m, content: (m.content || '') + text } : m,
-        ));
+        // Batch code chunks — accumulate in ref, flush via rAF (prevents "maximum update depth exceeded")
+        (stream as any).__pendingText = ((stream as any).__pendingText || '') + text;
+        if (!(stream as any).__pendingRaf) {
+          (stream as any).__pendingRaf = requestAnimationFrame(() => {
+            const flush = (stream as any).__pendingText || '';
+            (stream as any).__pendingText = '';
+            (stream as any).__pendingRaf = 0;
+            if (flush) {
+              ctx.setMessages(prev => prev.map(m =>
+                m.id === stream.msgId ? { ...m, content: (m.content || '') + flush } : m,
+              ));
+            }
+          });
+        }
       }
     },
 
@@ -353,8 +367,28 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }
     },
 
-    onReasoning: () => {
+    onReasoningStart: () => {
       if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentThinking');
+      // Start a new thinking segment
+      if (!currentMsgId) return;
+      const id = currentMsgId;
+      ctx.setMessages(prev => prev.map(m =>
+        m.id === id ? { ...m, thinking: [...(m.thinking || []), ''] } : m,
+      ));
+    },
+
+    onReasoning: (text: string) => {
+      if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentThinking');
+      if (!currentMsgId || !text) return;
+      const id = currentMsgId;
+      ctx.setMessages(prev => prev.map(m => {
+        if (m.id !== id) return m;
+        const segments = [...(m.thinking || [])];
+        // Auto-create first segment if none exists (reasoning-start may not fire)
+        if (segments.length === 0) segments.push('');
+        segments[segments.length - 1] += text;
+        return { ...m, thinking: segments };
+      }));
     },
 
     onCoding: () => {

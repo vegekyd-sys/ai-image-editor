@@ -17,6 +17,7 @@ export interface AgentStreamCallbacks {
   onRunId?: (runId: string) => void;
   onMessageId?: (messageId: string) => void;
   onClearRunMessages?: (messageIds: string[]) => void;
+  onReasoningStart?: () => void;
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
@@ -123,6 +124,9 @@ export async function streamAgent(
             break;
           case 'nsfw_detected':
             callbacks.onNsfwDetected?.();
+            break;
+          case 'reasoning_start':
+            callbacks.onReasoningStart?.();
             break;
           case 'reasoning':
             callbacks.onReasoning?.(event.text);

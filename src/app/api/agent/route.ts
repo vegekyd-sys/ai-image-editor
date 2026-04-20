@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 export async function POST(req: NextRequest) {
   try {

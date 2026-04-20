@@ -77,7 +77,8 @@ export type AgentStreamEvent =
   | { type: 'capture_frame'; frame: number; uploadPath: string; captureId: string }  // request frontend to capture a frame via renderStillOnWeb
   | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
   | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
-  | { type: 'reasoning'; text: string }  // extended thinking delta — keeps SSE alive during long thinking
+  | { type: 'reasoning_start' }           // new thinking round started
+  | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
@@ -253,8 +254,9 @@ function createTools(ctx: AgentContext) {
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then Shot lines with <<<image_N>>> references, camera directions, sound cues, ending with Style line. Follow the Video Script Format in system prompt.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
+        aspect_ratio: z.enum(['16:9', '9:16', '1:1']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
       }),
-      execute: async ({ story_prompt, duration }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio }) => {
         // GUI animation mode: use animationImageUrls; CUI mode: fallback to snapshotImages URLs
         let imageUrls = ctx.animationImageUrls;
         if (!imageUrls?.length) {
@@ -264,11 +266,11 @@ function createTools(ctx: AgentContext) {
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
-          // Call skill layer: createVideo (stateless, no DB)
           const skillResult = await createVideo({
             script: story_prompt,
             images: imageUrls,
             duration,
+            aspectRatio: aspect_ratio,
           });
 
           if (!skillResult.success || !skillResult.taskId) {
@@ -351,10 +353,9 @@ function createTools(ctx: AgentContext) {
 
     preview_frame: tool({
       description: `Capture a screenshot of your current design at a specific frame or time.
-Use this to verify visual output — check key moments in video designs (opening, scene transitions, ending).
+Use this to verify visual output — check key moments in video designs.
 For still designs, frame 0 is the only frame.
-Returns the rendered image so you can see it with your vision.
-The screenshot is saved to workspace and shown to the user in chat.`,
+Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
@@ -376,39 +377,19 @@ The screenshot is saved to workspace and shown to the user in chat.`,
         }
 
         try {
-          // Debug: dump full design to file for reproduction
-          const codeUrls = (design.code.match(/https:\/\/[^\s"'`\\]+/g) || []).filter((u: string) => u.includes('storage'));
-          console.log(`🔍 [preview_frame] URLs in code (${codeUrls.length}): ${codeUrls.map((u: string) => '...' + u.slice(-40)).join(', ')}`);
-          try {
-            const fs = await import('fs');
-            fs.writeFileSync('/tmp/preview-frame-debug.json', JSON.stringify({
-              code: design.code,
-              props: design.props,
-              width: design.width,
-              height: design.height,
-              animation: design.animation,
-              targetFrame,
-              totalFrames,
-              fps,
-            }, null, 2));
-            console.log(`🔍 [preview_frame] Design dumped to /tmp/preview-frame-debug.json (code: ${design.code.length} chars)`);
-          } catch { /* ignore */ }
-
           // Server-side Sandbox rendering
           const { renderDesignFrame } = await import('./remotion-server');
           const jpegBuffer = await renderDesignFrame(design, targetFrame);
 
-          // Update draft preview for publish poster
           const drafts = (ctx as any).__runCodeDrafts || [];
           const b64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
           if (drafts.length > 0) {
             drafts[drafts.length - 1].previewBase64 = b64;
           }
 
-          // Upload to workspace
           let wsUrl = '';
           const snapN = ctx.snapshotImages.length;
-          const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}.jpg`;
+          const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}-${Date.now()}.jpg`;
           if (ctx.supabase && ctx.userId) {
             const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
             if (ws.storageUrl) {
@@ -418,7 +399,6 @@ The screenshot is saved to workspace and shown to the user in chat.`,
           }
 
           console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB (sandbox)`);
-
           return {
             base64Data: jpegBuffer.toString('base64'),
             mimeType: 'image/jpeg',
@@ -542,15 +522,16 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-Set fromLastRunCode=true to PUBLISH the last run_code output (design or image) — this creates a real Snapshot on the timeline that the user can see. Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.
-Every run_code output is a draft (preview only). Call write_file({ fromLastRunCode: true }) to publish when you're satisfied with the result.`,
+Set fromLastRunCode=true to save the last run_code output. By default this also PUBLISHES to the timeline. Set publish=false to save code to workspace WITHOUT publishing — useful for saving work-in-progress before you're ready to show the user.
+Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save and PUBLISH the last run_code output (design or image) to timeline. Path is auto-generated with project ID + snapshot number.'),
+        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output (design or image). By default also publishes to timeline. Set publish=false to save only.'),
+        publish: z.boolean().optional().describe('Whether to publish to timeline. Default true. Set false to save code to workspace without creating a Snapshot.'),
       }),
-      execute: async ({ path: filePath, name, content, fromLastRunCode }) => {
+      execute: async ({ path: filePath, name, content, fromLastRunCode, publish: shouldPublish }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, message: 'Workspace not available (no Supabase connection).' };
         }
@@ -580,8 +561,8 @@ Every run_code output is a draft (preview only). Call write_file({ fromLastRunCo
           return { success: false, message: `Write failed: ${result.error}` };
         }
 
-        // Publish: when fromLastRunCode, promote the last draft to a real Snapshot
-        if (fromLastRunCode) {
+        // Publish: when fromLastRunCode and publish !== false, promote the last draft to a real Snapshot
+        if (fromLastRunCode && shouldPublish !== false) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const drafts = (ctx as any).__runCodeDrafts || [];
           const lastDraft = drafts[drafts.length - 1];
@@ -657,7 +638,7 @@ Available in your code:
 Your code must return a value:
 - Image (sharp output): return Buffer directly, or \`{ type: 'image', data: base64, mimeType: 'image/jpeg' }\`
 - Text: return \`{ type: 'text', content: 'result' }\`
-- **Render (React design)**: return \`{ type: 'render', code: '...', width: 1080, height: 1350 }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill. Rendered by the browser with full CSS + Google Fonts support.
+- **Render (React design)**: return \`{ type: 'render', code: '...', width: 1080, height: 1350 }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio, evolvePath/getLength/getPointAtLength/interpolatePath/parsePath/resetPath/cutPath (@remotion/paths), noise2D/noise3D (@remotion/noise). Rendered by the browser with full CSS + Google Fonts support.
   **IMPORTANT: Use \`<Img>\` (Remotion) instead of \`<img>\` for all images.** \`<Img>\` ensures images are fully loaded before rendering/screenshot. Plain \`<img>\` causes blank images on mobile.
   **Embed image URLs directly in code using template literals** — do NOT use props for images:
   \`\`\`
@@ -671,7 +652,7 @@ Your code must return a value:
   \`\`\`
   - **Still** (default): omit \`duration\` — renders as a single image.
   - **Animation**: add \`duration: 5\` (seconds) — renders as a playable video with Remotion Player. Use \`useCurrentFrame()\` + \`interpolate()\` for animation.
-- **Patch (incremental edit)**: return \`{ type: 'patch', edits: [{ old: '...', new: '...' }] }\`. Search & replace on current design code. Each edit.old must match exactly once in the code. Use for text changes, style tweaks, minor additions/removals. Optionally include \`props: {...}\` to merge prop updates.
+- **Patch (incremental edit)**: return \`{ type: 'patch', edits: [{ old: '...', new: '...' }] }\`. Search & replace on current design code. Each edit.old must match exactly once in the code. Use for text changes, style tweaks, minor additions/removals. Optionally include \`props: {...}\` to merge prop updates. To patch a **different** design snapshot, add \`code_path\` (from the image index, e.g. \`{ type: 'patch', code_path: 'code/xxx.json', edits: [...] }\`). Use \`read_file\` first to see the code before patching.
 - Error: return \`{ type: 'error', message: 'what went wrong' }\`
 
 **Default to design for all visual output.** Design supports text, layout, images (embed URLs via template literal \\\`\${ctx.snapshotImages[N]}\\\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
@@ -794,13 +775,27 @@ Your code must return a value:
             (ctx as any).__runCodeDrafts.push({ type: 'image', imageBase64: dataUrl, previewBase64: dataUrl });
           };
 
-          // { type: 'patch', edits: [...] } — Incremental search & replace on last design
+          // { type: 'patch', edits: [...] } — Incremental search & replace on last design or a specific design via code_path
           if (result?.type === 'patch' && Array.isArray(result.edits)) {
-            const lastDesign = (ctx as any).__lastDesignPayload;
-            if (!lastDesign) {
-              return { type: 'text' as const, content: 'No active design to patch. Use type: "render" to create a design first.' };
+            let baseDesign = (ctx as any).__lastDesignPayload;
+
+            // code_path: load a different design from workspace as patch base
+            if (result.code_path && typeof result.code_path === 'string') {
+              try {
+                const file = await workspace.readFile(result.code_path, ctx.supabase, ctx.userId);
+                if (!file) {
+                  return { type: 'text' as const, content: `Patch failed: code_path "${result.code_path}" not found. Use read_file to verify the path.` };
+                }
+                baseDesign = JSON.parse(file.content);
+              } catch (e) {
+                return { type: 'text' as const, content: `Patch failed: could not read "${result.code_path}": ${e instanceof Error ? e.message : String(e)}` };
+              }
             }
-            let code = lastDesign.code;
+
+            if (!baseDesign) {
+              return { type: 'text' as const, content: 'No active design to patch. Use type: "render" to create a design first, or provide code_path to patch a specific design.' };
+            }
+            let code = baseDesign.code;
             for (const edit of result.edits) {
               if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
                 return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
@@ -810,8 +805,8 @@ Your code must return a value:
               if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
               code = code.replace(edit.old, edit.new);
             }
-            const mergedProps = result.props ? { ...(lastDesign.props || {}), ...result.props } : lastDesign.props;
-            const patched = { ...lastDesign, code, props: mergedProps };
+            const mergedProps = result.props ? { ...(baseDesign.props || {}), ...result.props } : baseDesign.props;
+            const patched = { ...baseDesign, code, props: mergedProps };
             if (result.editables) patched.editables = result.editables;
 
             const harnessError = validateDesign({ code: patched.code, props: patched.props });
@@ -967,12 +962,9 @@ Your code must return a value:
     }),
 
     generate_music: tool({
-      description: `Generate background music for the current design/video. The system polls in the background and shows music cards in CUI when ready — you do NOT need to poll or wait.
-IMPORTANT: Start the prompt with the exact video duration, e.g. "15-second ...". Check the current design's animation.durationInSeconds for the length. This ensures the generated music matches the video.
-Prompt tips: genre, mood, instruments, and beat-synced timing sections.
-Example for a 15s video: "15-second cinematic, slow strings 0-3s, percussive hit at 3s, rising energy 3-10s, piano fadeout 10-15s"`,
+      description: `Generate background music for the current design/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
       inputSchema: z.object({
-        prompt: z.string().describe('Music description: genre, mood, instruments, beat timing'),
+        prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
         style: z.string().optional().describe('Genre/mood tags for custom mode'),
       }),
@@ -1110,8 +1102,18 @@ export async function* runMakaronAgent(
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
 
     for await (const event of result.fullStream) {
-      // ── Reasoning delta — skip (route.ts heartbeat handles keep-alive) ──
+      // ── Reasoning events — forward to CUI ──
+      if (event.type === 'reasoning-start') {
+        yield { type: 'reasoning_start' as const };
+        continue;
+      }
       if (event.type === 'reasoning-delta') {
+        yield { type: 'reasoning' as const, text: (event as any).text || '' };
+        continue;
+      }
+      if (event.type === 'reasoning-end') {
+        const isEnLocale = options?.locale === 'en';
+        yield { type: 'status' as const, text: isEnLocale ? 'Planning...' : '规划中...' };
         continue;
       }
 
@@ -1120,6 +1122,8 @@ export async function* runMakaronAgent(
         const toolName = (event as any).toolName ?? '';
         if (toolName === 'run_code') {
           codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0 };
+          const isEnLocale = options?.locale === 'en';
+          yield { type: 'status' as const, text: isEnLocale ? 'Generating code...' : '代码生成中...' };
         }
         continue;
       }

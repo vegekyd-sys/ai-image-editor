@@ -17,6 +17,8 @@ import {
   continueRender,
 } from 'remotion';
 import { Audio } from '@remotion/media';
+import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
+import { noise2D, noise3D } from '@remotion/noise';
 import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 
@@ -36,6 +38,10 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   Img,
   AbsoluteFill,
   Audio,
+  // @remotion/paths
+  evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath,
+  // @remotion/noise
+  noise2D, noise3D,
 };
 
 function compileAndEval(code: string): React.ComponentType<Record<string, unknown>> | null {
@@ -131,10 +137,8 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
         // Load all Google Fonts referenced in code + props
         await loadGoogleFontsFromText(allText);
 
-        // Emoji font — headless Chrome has no emoji font installed
-        if (hasEmoji(allText)) {
-          await loadEmojiFont();
-        }
+        // Emoji font — always load so emoji characters fallback correctly
+        await loadEmojiFont();
 
         // If CJK text present, inject global fallback font-family
         // so text renders even when Agent doesn't specify fontFamily
