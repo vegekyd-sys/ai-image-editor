@@ -90,12 +90,14 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       });
       console.log(`✅ [create_video] PiAPI task created: ${taskId}`);
     } else {
-      const { createKlingTask } = await import('../kling');
+      const { createKlingTask, detectAspectRatio } = await import('../kling');
+      // If no explicit aspect ratio, detect from first image (before filtering)
+      const resolvedRatio = aspectRatio || await detectAspectRatio(images[0]);
       taskId = await createKlingTask({
         prompt: finalPrompt,
         images: filteredImages,
         duration: resolvedDuration,
-        aspect_ratio: aspectRatio,
+        aspect_ratio: resolvedRatio,
         videoUrl,
         videoReferType,
         keepOriginalSound,

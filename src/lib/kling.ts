@@ -43,20 +43,42 @@ function headers() {
   }
 }
 
+const KLING_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '2:1', '1:2', '21:9', '9:21'] as const
+
+/** Detect aspect ratio from an image URL by fetching dimensions. Returns closest Kling-supported ratio. */
+export async function detectAspectRatio(imageUrl: string): Promise<string> {
+  try {
+    const sharp = (await import('sharp')).default
+    const res = await fetch(imageUrl)
+    const buf = Buffer.from(await res.arrayBuffer())
+    const { width, height } = await sharp(buf).metadata()
+    if (!width || !height) return '3:4'
+    const ratio = width / height
+    let best = '3:4'
+    let bestDiff = Infinity
+    for (const r of KLING_RATIOS) {
+      const [w, h] = r.split(':').map(Number)
+      const diff = Math.abs(ratio - w / h)
+      if (diff < bestDiff) { bestDiff = diff; best = r }
+    }
+    console.log(`🎬 [kling] detected aspect ratio: ${width}x${height} → ${best}`)
+    return best
+  } catch (e) {
+    console.warn('[kling] detectAspectRatio failed, defaulting to 3:4:', e)
+    return '3:4'
+  }
+}
+
 /** Submit a v3-omni video task. Returns the Kling task ID. */
 export async function createKlingTask(input: KlingTaskInput): Promise<string> {
   const hasVideo = !!input.videoUrl
   const referType = input.videoReferType ?? 'base'
 
-  // With aspect_ratio: images as references (no type), Kling respects aspect_ratio.
-  // Without aspect_ratio: first image as first_frame, Kling matches image dimensions.
-  // When video refer_type=base: first/end frames cannot be defined, skip first_frame type.
-  const skipFirstFrame = hasVideo && referType === 'base'
+  // All images are references — no first_frame. Aspect ratio is always explicit.
   const body: Record<string, unknown> = {
     model_name: 'kling-v3-omni',
-    image_list: input.images.map((img, i) => ({
+    image_list: input.images.map((img) => ({
       image_url: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
-      ...(i === 0 && !input.aspect_ratio && !skipFirstFrame ? { type: 'first_frame' } : {}),
     })),
     prompt: input.prompt,
     mode: input.mode ?? 'std',
