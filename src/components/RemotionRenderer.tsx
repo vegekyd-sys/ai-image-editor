@@ -33,6 +33,60 @@ async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: 
   return { code: resolved, blobUrls };
 }
 
+// ─── Google Fonts auto-loading from code ────────────────────────────────────
+
+/** System/built-in fonts that should NOT be loaded from Google Fonts */
+const SYSTEM_FONTS = new Set([
+  'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui',
+  'arial', 'helvetica', 'times new roman', 'courier new', 'georgia',
+  'verdana', 'tahoma', 'trebuchet ms', 'impact', 'comic sans ms',
+  'pingfang sc', 'noto sans sc', 'noto serif sc', 'geist', 'geist mono',
+]);
+
+/** Track which fonts we've already injected to avoid duplicate <link> tags */
+const loadedGoogleFonts = new Set<string>();
+
+/**
+ * Extract fontFamily names from code and load them via Google Fonts CSS API.
+ * Works by scanning for fontFamily: "..." patterns and injecting <link> tags.
+ * Waits for document.fonts.ready so renderStillOnWeb captures correct fonts.
+ */
+async function loadGoogleFontsFromCode(code: string): Promise<void> {
+  // Extract all fontFamily values — matches both JS style and CSS
+  const families = new Set<string>();
+  // JS: fontFamily: '"Great Vibes", cursive' or fontFamily: "'Montserrat', sans-serif"
+  for (const m of code.matchAll(/fontFamily:\s*['"`]([^'"`]+)['"`]/g)) {
+    for (const part of m[1].split(',')) {
+      const clean = part.trim().replace(/^["']|["']$/g, '').trim();
+      if (clean && !SYSTEM_FONTS.has(clean.toLowerCase())) families.add(clean);
+    }
+  }
+  // CSS: font-family: "Great Vibes", cursive;
+  for (const m of code.matchAll(/font-family:\s*['"]?([^;'"]+)['"]?\s*[;{]/g)) {
+    for (const part of m[1].split(',')) {
+      const clean = part.trim().replace(/^["']|["']$/g, '').trim();
+      if (clean && !SYSTEM_FONTS.has(clean.toLowerCase())) families.add(clean);
+    }
+  }
+
+  // Filter out already loaded fonts
+  const toLoad = [...families].filter(f => !loadedGoogleFonts.has(f));
+  if (toLoad.length === 0) return;
+
+  // Inject Google Fonts <link> for each family
+  for (const family of toLoad) {
+    loadedGoogleFonts.add(family);
+    const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}&display=swap`;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = url;
+    document.head.appendChild(link);
+  }
+
+  // Wait for all fonts to be ready
+  await document.fonts.ready;
+}
+
 // ─── Standalone poster capture (no DOM needed) ─────────────────────────────
 
 /**
@@ -46,6 +100,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
     await preloadBabel().catch(() => {});
     const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
     imageBlobUrls = blobUrls;
+    await loadGoogleFontsFromCode(resolvedCode);
     const comp = evalRemotionJSX(resolvedCode);
     if (!comp) return '';
 
@@ -93,7 +148,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
     await preloadBabel().catch(() => {});
     const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
     imageBlobUrls = blobUrls;
-
+    await loadGoogleFontsFromCode(resolvedCode);
     const comp = evalRemotionJSX(resolvedCode);
     if (!comp) return null;
 
@@ -181,6 +236,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     (async () => {
       try {
         await preloadBabel().catch(() => {});
+        await loadGoogleFontsFromCode(design.code);
         if (cancelled) return;
         const comp = evalRemotionJSX(design.code);
         if (!comp) {
@@ -327,6 +383,7 @@ export async function exportDesignVideo(
   const { code: imageResolved, blobUrls: imageBlobUrls } = await resolveCodeUrls(design.code);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
   const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
+  await loadGoogleFontsFromCode(resolvedCode);
   const Component = evalRemotionJSX(resolvedCode);
   if (!Component) throw new Error('Failed to compile design code');
 
