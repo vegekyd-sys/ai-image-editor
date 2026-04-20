@@ -33,58 +33,34 @@ async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: 
   return { code: resolved, blobUrls };
 }
 
-// ─── Google Fonts auto-loading from code ────────────────────────────────────
+// ─── Google Fonts auto-loading from code (same approach as server DynamicDesign.tsx) ──
 
-/** System/built-in fonts that should NOT be loaded from Google Fonts */
-const SYSTEM_FONTS = new Set([
-  'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui',
-  'arial', 'helvetica', 'times new roman', 'courier new', 'georgia',
-  'verdana', 'tahoma', 'trebuchet ms', 'impact', 'comic sans ms',
-  'pingfang sc', 'noto sans sc', 'noto serif sc', 'geist', 'geist mono',
-]);
+import { getAvailableFonts } from '@remotion/google-fonts';
 
-/** Track which fonts we've already injected to avoid duplicate <link> tags */
-const loadedGoogleFonts = new Set<string>();
+const ALL_FONTS = getAvailableFonts();
+const loadedFontFamilies = new Set<string>();
 
 /**
- * Extract fontFamily names from code and load them via Google Fonts CSS API.
- * Works by scanning for fontFamily: "..." patterns and injecting <link> tags.
- * Waits for document.fonts.ready so renderStillOnWeb captures correct fonts.
+ * Scan code + props text for Google Font family names and load them.
+ * Uses @remotion/google-fonts — the same mechanism as server-side DynamicDesign.tsx.
+ * Only fonts whose family name appears in the text are loaded (lazy).
  */
 async function loadGoogleFontsFromCode(code: string): Promise<void> {
-  // Extract all fontFamily values — matches both JS style and CSS
-  const families = new Set<string>();
-  // JS: fontFamily: '"Great Vibes", cursive' or fontFamily: "'Montserrat', sans-serif"
-  for (const m of code.matchAll(/fontFamily:\s*['"`]([^'"`]+)['"`]/g)) {
-    for (const part of m[1].split(',')) {
-      const clean = part.trim().replace(/^["']|["']$/g, '').trim();
-      if (clean && !SYSTEM_FONTS.has(clean.toLowerCase())) families.add(clean);
+  const fontsToLoad = ALL_FONTS.filter(f =>
+    code.includes(f.fontFamily) && !loadedFontFamilies.has(f.fontFamily)
+  );
+  if (fontsToLoad.length === 0) return;
+
+  await Promise.all(fontsToLoad.map(async (font) => {
+    try {
+      loadedFontFamilies.add(font.fontFamily);
+      const loaded = await font.load();
+      const { waitUntilDone } = loaded.loadFont();
+      await waitUntilDone();
+    } catch (e) {
+      console.warn(`[RemotionRenderer] font load failed: ${font.fontFamily}`, e);
     }
-  }
-  // CSS: font-family: "Great Vibes", cursive;
-  for (const m of code.matchAll(/font-family:\s*['"]?([^;'"]+)['"]?\s*[;{]/g)) {
-    for (const part of m[1].split(',')) {
-      const clean = part.trim().replace(/^["']|["']$/g, '').trim();
-      if (clean && !SYSTEM_FONTS.has(clean.toLowerCase())) families.add(clean);
-    }
-  }
-
-  // Filter out already loaded fonts
-  const toLoad = [...families].filter(f => !loadedGoogleFonts.has(f));
-  if (toLoad.length === 0) return;
-
-  // Inject Google Fonts <link> for each family
-  for (const family of toLoad) {
-    loadedGoogleFonts.add(family);
-    const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}&display=swap`;
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = url;
-    document.head.appendChild(link);
-  }
-
-  // Wait for all fonts to be ready
-  await document.fonts.ready;
+  }));
 }
 
 // ─── Standalone poster capture (no DOM needed) ─────────────────────────────
