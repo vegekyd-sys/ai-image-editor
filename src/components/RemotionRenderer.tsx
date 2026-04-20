@@ -49,6 +49,14 @@ async function loadGoogleFontsFromCode(code: string): Promise<void> {
   const fontsToLoad = ALL_FONTS.filter(f =>
     code.includes(f.fontFamily) && !loadedFontFamilies.has(f.fontFamily)
   );
+
+  // Always register Noto Color Emoji so emoji characters fallback correctly
+  // (decorative fonts like Great Vibes lack emoji glyphs → browser needs a registered @font-face to fallback to)
+  if (!loadedFontFamilies.has('Noto Color Emoji')) {
+    const emojiFont = ALL_FONTS.find(f => f.fontFamily === 'Noto Color Emoji');
+    if (emojiFont) fontsToLoad.push(emojiFont);
+  }
+
   if (fontsToLoad.length === 0) return;
 
   await Promise.all(fontsToLoad.map(async (font) => {

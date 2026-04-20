@@ -137,10 +137,8 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
         // Load all Google Fonts referenced in code + props
         await loadGoogleFontsFromText(allText);
 
-        // Emoji font — headless Chrome has no emoji font installed
-        if (hasEmoji(allText)) {
-          await loadEmojiFont();
-        }
+        // Emoji font — always load so emoji characters fallback correctly
+        await loadEmojiFont();
 
         // If CJK text present, inject global fallback font-family
         // so text renders even when Agent doesn't specify fontFamily
