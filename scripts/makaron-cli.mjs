@@ -282,7 +282,16 @@ async function pollMusic(baseUrl, cookie, taskId) {
 
 async function createProject(baseUrl, cookie, opts) {
   const body = {};
-  if (opts.imageUrl) {
+
+  // Multiple images support
+  if (opts.imageUrls?.length) {
+    body.imageUrls = opts.imageUrls;
+  } else if (opts.images?.length) {
+    body.imageBase64s = opts.images.map(f => {
+      const buf = fs.readFileSync(f);
+      return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    });
+  } else if (opts.imageUrl) {
     body.imageUrl = opts.imageUrl;
   } else if (opts.image) {
     const buf = fs.readFileSync(opts.image);
@@ -304,7 +313,12 @@ async function createProject(baseUrl, cookie, opts) {
   const data = await res.json();
   console.log(`✅ Project created`);
   console.log(`   ID: ${data.projectId}`);
-  console.log(`   Image: ${data.imageUrl}`);
+  if (data.snapshots) {
+    console.log(`   Images: ${data.snapshots.length}`);
+    data.snapshots.forEach((s, i) => console.log(`   [${i + 1}] ${s.imageUrl}`));
+  } else if (data.imageUrl) {
+    console.log(`   Image: ${data.imageUrl}`);
+  }
   console.log(`   URL: ${data.projectUrl}`);
   return data;
 }
@@ -372,29 +386,59 @@ if (command === 'login') {
   await login();
 } else if (command === 'create') {
   const { cookie, baseUrl } = getAuthCookie();
-  const opts = {};
+  const opts = { images: [], imageUrls: [] };
   for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--image' && args[i + 1]) opts.image = args[++i];
-    else if (args[i] === '--image-url' && args[i + 1]) opts.imageUrl = args[++i];
+    if (args[i] === '--image' && args[i + 1]) opts.images.push(args[++i]);
+    else if (args[i] === '--image-url' && args[i + 1]) opts.imageUrls.push(args[++i]);
     else if (args[i] === '--title' && args[i + 1]) opts.title = args[++i];
   }
-  if (!opts.image && !opts.imageUrl) {
-    console.error('Usage: makaron create --image <file> or --image-url <url>');
-    process.exit(1);
+  // Single image compat
+  if (opts.images.length === 1) { opts.image = opts.images[0]; opts.images = []; }
+  if (opts.imageUrls.length === 1) { opts.imageUrl = opts.imageUrls[0]; opts.imageUrls = []; }
+
+  // Text-to-image: create empty project, then chat
+  if (!opts.image && !opts.imageUrl && !opts.images.length && !opts.imageUrls.length) {
+    if (!opts.title) {
+      console.error('Usage: makaron create --image <file> [--image <file2>] or --title "project name"');
+      process.exit(1);
+    }
   }
   await createProject(baseUrl, cookie, opts);
 } else if (command === 'chat') {
   const { cookie, baseUrl } = getAuthCookie();
   let projectId = null;
+  const chatImages = [];
   const promptParts = [];
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
+    else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else promptParts.push(args[i]);
   }
   const prompt = promptParts.join(' ');
   if (!projectId || !prompt) {
-    console.error('Usage: makaron chat --project <id> "your message"');
+    console.error('Usage: makaron chat --project <id> [--image <file>] "your message"');
     process.exit(1);
+  }
+
+  // Upload chat images as new snapshots before sending message
+  if (chatImages.length > 0) {
+    const base64s = chatImages.map(imgPath => {
+      process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
+      const buf = fs.readFileSync(imgPath);
+      return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    });
+    const res = await fetch(`${baseUrl}/api/projects/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+      body: JSON.stringify({ imageBase64s: base64s, _addToProject: projectId }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const added = data.snapshots?.length || 0;
+      process.stderr.write(`📤 Added ${added} image(s) to project\n`);
+    } else {
+      process.stderr.write(`⚠️ Failed to upload images: ${await res.text()}\n`);
+    }
   }
 
   const { results } = await streamAgent(baseUrl, cookie, projectId, prompt);
