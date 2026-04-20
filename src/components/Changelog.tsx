@@ -8,6 +8,25 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-20',
+    en: { title: 'Headless Agent & CLI', items: [
+      'Makaron CLI: create projects, chat with Agent, generate images/videos — all from terminal',
+      'Headless Agent: Agent runs without browser — results appear in project page automatically',
+      'Fire-and-forget API: POST /api/agent/run returns immediately, Agent works in background',
+      'Multi-image project creation: upload multiple photos at once via CLI or API',
+      'Text-to-image: create empty project and let Agent generate from a text prompt',
+      'Auto-naming: headless projects get named automatically after first Agent run',
+    ]},
+    zh: { title: 'Headless Agent & CLI', items: [
+      'Makaron CLI：终端创建项目、与 Agent 对话、生图/生视频，无需浏览器',
+      'Headless Agent：Agent 脱离前端运行，结果自动出现在项目页',
+      'Fire-and-forget API：POST /api/agent/run 立即返回，Agent 后台执行',
+      '多图项目创建：CLI 或 API 一次上传多张照片',
+      '文生图：创建空项目后 Agent 直接从文字 prompt 生成图片',
+      '自动命名：headless 项目在首次 Agent 运行后自动获取名称',
+    ]},
+  },
+  {
     date: '2026-04-19',
     en: { title: 'Preview = Export & Design Editor Polish', items: [
       'Preview = Export guarantee: drag/scale positions now identical in preview and exported video/image',
