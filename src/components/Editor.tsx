@@ -43,6 +43,8 @@ import { containRect, coverRect } from '@/lib/image/geometry';
 import { extractPhotoMetadata } from '@/lib/image/metadata';
 import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
+import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
+import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 
 export interface AnimationState {
@@ -2364,16 +2366,19 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           }
           // Stop polling only when completed with 2 tracks
           if (data.status === 'completed' && data.tracks.length >= 2) {
-            // Replace stream URLs with permanent URLs in all design code
-            for (const tk of data.tracks) {
-              if (!tk.streamAudioUrl || !tk.audioUrl || tk.streamAudioUrl === tk.audioUrl) continue;
-              setSnapshots(prev => prev.map(snap => {
-                if (!snap.design?.code?.includes(tk.streamAudioUrl)) return snap;
-                const updated = { ...snap, design: { ...snap.design!, code: snap.design!.code.replace(tk.streamAudioUrl, tk.audioUrl) } };
-                onSaveDesignProps?.(snap.id, updated.design!);
-                return updated;
-              }));
-            }
+            // Replace stream/temp URLs with permanent Supabase URLs in all design code
+            const supabase = createBrowserSupabase();
+            setSnapshots(prev => {
+              prev.forEach(snap => {
+                if (!snap.design?.code) return;
+                resolveAudioUrlsInCode(snap.design.code, projectId!, supabase).then(({ code, changed }) => {
+                  if (!changed) return;
+                  setSnapshots(p => p.map(s => s.id !== snap.id ? s : { ...s, design: { ...s.design!, code } }));
+                  onSaveDesignProps?.(snap.id, { ...snap.design!, code });
+                });
+              });
+              return prev;
+            });
             setMusicTaskId(null);
             musicPollingRef.current = false;
             setAgentStatus(t('status.musicReady'));
