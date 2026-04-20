@@ -27,13 +27,13 @@ export class AgentDualWriter {
     private supabase: SupabaseClient,
     private userId: string,
     private projectId: string,
-    private controller: ReadableStreamDefaultController,
-    private encoder: TextEncoder,
+    private controller?: ReadableStreamDefaultController | null,
+    private encoder?: TextEncoder | null,
   ) {}
 
-  /** Write enriched event to SSE stream. Catches disconnect errors silently. */
+  /** Write enriched event to SSE stream. No-op in headless mode (no controller). */
   tryEnqueue(event: Record<string, unknown>) {
-    if (this.sseDisconnected) return;
+    if (this.sseDisconnected || !this.controller || !this.encoder) return;
     try {
       this.controller.enqueue(
         this.encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
