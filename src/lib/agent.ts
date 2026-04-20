@@ -254,8 +254,9 @@ function createTools(ctx: AgentContext) {
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then Shot lines with <<<image_N>>> references, camera directions, sound cues, ending with Style line. Follow the Video Script Format in system prompt.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
+        aspect_ratio: z.enum(['16:9', '9:16', '1:1']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
       }),
-      execute: async ({ story_prompt, duration }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio }) => {
         // GUI animation mode: use animationImageUrls; CUI mode: fallback to snapshotImages URLs
         let imageUrls = ctx.animationImageUrls;
         if (!imageUrls?.length) {
@@ -265,11 +266,11 @@ function createTools(ctx: AgentContext) {
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
-          // Call skill layer: createVideo (stateless, no DB)
           const skillResult = await createVideo({
             script: story_prompt,
             images: imageUrls,
             duration,
+            aspectRatio: aspect_ratio,
           });
 
           if (!skillResult.success || !skillResult.taskId) {

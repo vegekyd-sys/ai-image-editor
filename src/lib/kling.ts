@@ -43,7 +43,7 @@ function headers() {
   }
 }
 
-const KLING_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '2:1', '1:2', '21:9', '9:21'] as const
+const KLING_RATIOS = ['1:1', '16:9', '9:16'] as const
 
 /** Detect aspect ratio from an image URL by fetching dimensions. Returns closest Kling-supported ratio. */
 export async function detectAspectRatio(imageUrl: string): Promise<string> {
