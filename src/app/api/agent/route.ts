@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
     const { prompt, image, originalImage, referenceImages, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
-            musicReady, musicAudioUrl, currentDesign } = await req.json();
+            musicReady, musicAudioUrl, currentDesign,
+            headless, hasAnnotation, isDraft } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
@@ -171,6 +172,40 @@ export async function POST(req: NextRequest) {
           const allSkills = await getAllSkills(supabase, user.id);
           const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
 
+          // Headless mode: build context from DB instead of using frontend-provided context
+          let agentPrompt = prompt ?? '';
+          let agentImage = image;
+          let agentOriginalImage = originalImage;
+          let agentSnapshotImages = snapshotImages?.length ? snapshotImages : undefined;
+          let agentCurrentSnapshotIndex = currentSnapshotIndex;
+          let agentCurrentDesign = currentDesign || undefined;
+
+          if (headless) {
+            const { buildPromptContext } = await import('@/lib/agent-context');
+            const ctx = await buildPromptContext(projectId, supabase, user.id, {
+              userMessage: prompt ?? '',
+              currentSnapshotIndex,
+              hasAnnotation,
+              isDraft,
+              referenceImageCount: referenceImages?.length,
+            });
+            agentPrompt = ctx.fullPrompt;
+            agentImage = ctx.snapshotImages[ctx.currentSnapshotIndex] || '';
+            agentOriginalImage = ctx.originalImage;
+            agentSnapshotImages = ctx.snapshotImages;
+            agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
+            agentCurrentDesign = ctx.currentDesign;
+
+            // Write user message to DB (frontend does this itself)
+            await supabase.from('messages').insert({
+              id: crypto.randomUUID(),
+              project_id: projectId,
+              role: 'user',
+              content: prompt ?? '',
+              has_image: false,
+            });
+          }
+
           // Normal agent request — SSE heartbeat every 10s to prevent proxy idle timeout
           const heartbeat = setInterval(() => {
             try { controller.enqueue(encoder.encode(`: heartbeat\n\n`)); } catch { /* disconnected */ }
@@ -184,7 +219,7 @@ export async function POST(req: NextRequest) {
           };
 
           try {
-            for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: currentDesign || undefined })) {
+            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign })) {
               if (writer) {
                 await writer.processAndEnqueue(event);
               } else {
