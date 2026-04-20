@@ -115,6 +115,7 @@ export class AgentDualWriter {
           const designJson = JSON.stringify({
             code: event.code, width: event.width, height: event.height,
             props: event.props, animation: event.animation,
+            ...((event as Record<string, unknown>).editables ? { editables: (event as Record<string, unknown>).editables } : {}),
           });
 
           // Upload design JSON to workspace + index in workspace_files for agent read_file
