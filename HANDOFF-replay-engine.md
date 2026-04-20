@@ -1,4 +1,10 @@
-# Handoff: Replay Engine + Background Agent → 完全后端化
+# Handoff: Agent 完全后端化
+
+## 核心目标
+
+Agent 完全脱离前端，作为独立后端服务运行。任何客户端（前端页面、Claude Code、MCP、API）都可以触发 agent，通过 DB 获取结果。前端变成纯"观察者"。
+
+**不是目标**：用 Replay Engine 替代 loadProject。loadProject 读的是真实 DB 数据（snapshots + messages 表），是 source of truth。Replay Engine 用于回放展示和 reconnect，不替代数据加载。
 
 ## 当前状态（2026-04-16）
 
@@ -12,16 +18,17 @@
 - Abort：`POST /api/agent/abort` → 标记 run aborted → 服务端每 ~10 events 检查
 - 88 个 Vitest 单元测试
 
-**Replay Engine（在 worktree 分支，未合入 dev）**：
-- `ReplayEngine.buildState(events)` → 从 events 瞬间重建完整 ProjectState
-- `loadReplayEvents()` → 分页查询（突破 Supabase 1000 行限制）
-- 并行 run 处理：按 `run_id` 分组，每个 run 独立重建，合并时按时间排序
-- 第一条消息无 `new_turn` 自动创建
-- `editPrompt` 从 `tool_call` events 恢复
-- `projectEventLogger.ts`：前端写用户侧 events（image_upload, user_message, tip_committed, project_named）
-- `agent_events.project_id` 列（直接关联项目，不经过 run_id）
-- page.tsx `tryReplayLoad`：优先从 events 加载，fallback 到 loadProject
-- 15 个 ReplayEngine 单元测试
+**Replay Engine（在 worktree 分支，未合入 dev，OPTIONAL）**：
+- `ReplayEngine.buildState(events)` → 从 events 重建 ProjectState
+- 仅用于未来"分享回放"功能，**不替代 loadProject**
+- loadProject 读 snapshots + messages 表，是 source of truth
+- 完全后端化后，前端只需 loadProject + polling，不需要 ReplayEngine
+- 如果不做分享回放功能，可以不合入
+
+**也在 worktree（可合入 dev）**：
+- `projectEventLogger.ts`：前端写用户侧 events（给审计 + 未来回放用）
+- `agent_events.project_id` 列（直接关联项目）
+- DualWriter 1:1 存所有 SSE events（含 reasoning/coding/code_stream）
 
 ### 已知问题
 
