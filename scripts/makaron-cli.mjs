@@ -249,12 +249,20 @@ async function pollMusic(baseUrl, cookie, taskId) {
       if (!res.ok) continue;
       const data = await res.json();
 
-      if (data.status === 'completed' || data.audioUrl) {
-        process.stderr.write(`\r🎵 Music done (${elapsed}s): ${data.audioUrl}\n`);
-        return data.audioUrl;
+      const trackUrl = data.audioUrl || data.tracks?.[0]?.audioUrl;
+      const streamUrl = data.streamAudioUrl || data.tracks?.[0]?.streamAudioUrl;
+      if (data.status === 'completed' || trackUrl) {
+        const tracks = data.tracks || [];
+        if (tracks.length > 1) {
+          process.stderr.write(`\r🎵 Music done (${elapsed}s): ${tracks.length} tracks\n`);
+          tracks.forEach((t, i) => process.stderr.write(`   ${i + 1}. ${t.title} (${Math.round(t.duration)}s) — ${t.audioUrl}\n`));
+        } else {
+          process.stderr.write(`\r🎵 Music done (${elapsed}s): ${trackUrl}\n`);
+        }
+        return trackUrl;
       }
-      if (data.streamAudioUrl && elapsed > 20) {
-        process.stderr.write(`\r🎵 Music streaming: ${data.streamAudioUrl}\n`);
+      if (streamUrl && elapsed > 20) {
+        process.stderr.write(`\r🎵 Music streaming: ${streamUrl}\n`);
       }
       if (data.status === 'failed') {
         process.stderr.write(`\r🎵 Music failed (${elapsed}s)\n`);
