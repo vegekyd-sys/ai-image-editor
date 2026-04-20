@@ -256,8 +256,7 @@ export async function POST(req: NextRequest) {
           }
         } finally {
           if (writer) await writer.flush();
-          // Mark run as completed HERE (agent truly finished), not in after()
-          // after() fires when Response ends (client disconnect), which is too early
+          // Mark run as completed
           if (runId) {
             try {
               const { data: run } = await supabase.from('agent_runs')
@@ -267,6 +266,22 @@ export async function POST(req: NextRequest) {
                   status: 'completed',
                   ended_at: new Date().toISOString(),
                 }).eq('id', runId);
+              }
+            } catch { /* best effort */ }
+          }
+          // Headless: auto-name project if still "Untitled"
+          if (headless) {
+            try {
+              const { data: proj } = await supabase.from('projects').select('title').eq('id', projectId).single();
+              if (proj?.title === 'Untitled' || !proj?.title) {
+                // Use first snapshot description or prompt as name
+                const { data: snap } = await supabase.from('snapshots')
+                  .select('description').eq('project_id', projectId).order('sort_order').limit(1).single();
+                const nameSource = snap?.description || (prompt ?? '').slice(0, 100);
+                if (nameSource) {
+                  const shortName = nameSource.replace(/[\n\r]/g, ' ').slice(0, 50).trim();
+                  await supabase.from('projects').update({ title: shortName }).eq('id', projectId);
+                }
               }
             } catch { /* best effort */ }
           }

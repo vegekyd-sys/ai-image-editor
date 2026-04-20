@@ -309,15 +309,58 @@ async function createProject(baseUrl, cookie, opts) {
   return data;
 }
 
+// ─── List Projects ───────────────────────────────────────────────────────────
+
+async function listProjects(baseUrl, cookie) {
+  const res = await fetch(`${baseUrl}/api/projects/list`, {
+    headers: { 'Cookie': cookie },
+  });
+  if (!res.ok) {
+    console.error('List failed:', await res.text());
+    process.exit(1);
+  }
+  const { projects } = await res.json();
+  if (!projects.length) {
+    console.log('No projects yet. Create one with: makaron create --image <file>');
+    return;
+  }
+  console.log(`📁 ${projects.length} projects\n`);
+  for (const p of projects) {
+    const age = timeSince(new Date(p.updatedAt));
+    console.log(`  ${p.id}  ${p.title.padEnd(30)} ${String(p.snapshotCount).padStart(2)} snaps  ${age}`);
+  }
+  console.log('');
+}
+
+function timeSince(date) {
+  const s = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
 // ─── Status ──────────────────────────────────────────────────────────────────
 
 async function showStatus(baseUrl, cookie, projectId) {
-  // Quick status via snapshots count from a run query
-  const res = await fetch(`${baseUrl}/api/agent/run?projectId=${projectId}`, {
-    headers: { 'Cookie': cookie },
-  });
-  // Fallback: just print project URL
-  console.log(`🔗 ${APP_URL}/projects/${projectId}`);
+  if (!projectId) {
+    console.error('Usage: makaron status <projectId>');
+    process.exit(1);
+  }
+  // Get project info + recent runs
+  const [projRes, runsRes] = await Promise.all([
+    fetch(`${baseUrl}/api/projects/list`, { headers: { 'Cookie': cookie } }),
+    fetch(`${baseUrl}/api/agent/run/${projectId}?events=false`, { headers: { 'Cookie': cookie } }).catch(() => null),
+  ]);
+
+  const { projects } = await projRes.json();
+  const proj = projects?.find(p => p.id === projectId);
+  if (proj) {
+    console.log(`📁 ${proj.title} (${proj.snapshotCount} snapshots)`);
+    console.log(`🔗 ${APP_URL}/projects/${projectId}`);
+  } else {
+    console.log(`🔗 ${APP_URL}/projects/${projectId}`);
+  }
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -373,6 +416,9 @@ if (command === 'login') {
   for (const task of results.musicTasks) {
     await pollMusic(baseUrl, cookie, task.taskId);
   }
+} else if (command === 'list' || command === 'ls') {
+  const { cookie, baseUrl } = getAuthCookie();
+  await listProjects(baseUrl, cookie);
 } else if (command === 'status') {
   const { cookie, baseUrl } = getAuthCookie();
   await showStatus(baseUrl, cookie, args[1]);
@@ -381,6 +427,7 @@ if (command === 'login') {
 
 Commands:
   login                              Log in to Makaron
+  list (ls)                          List all projects
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   chat --project <id> "message"      Chat with Makaron Agent
