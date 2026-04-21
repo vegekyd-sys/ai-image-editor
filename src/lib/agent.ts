@@ -128,6 +128,25 @@ async function fetchImageBuffer(
   return buf;
 }
 
+/** Refresh ctx.snapshotImages from DB — replaces base64 entries with Storage URLs. */
+async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
+  if (!ctx.supabase || !ctx.projectId) return;
+  try {
+    const { data: dbSnaps } = await ctx.supabase
+      .from('snapshots')
+      .select('image_url, sort_order')
+      .eq('project_id', ctx.projectId)
+      .order('sort_order');
+    if (!dbSnaps?.length) return;
+    for (let i = 0; i < Math.min(dbSnaps.length, ctx.snapshotImages.length); i++) {
+      const dbUrl = dbSnaps[i]?.image_url;
+      if (dbUrl && !ctx.snapshotImages[i]?.startsWith('http')) {
+        ctx.snapshotImages[i] = dbUrl;
+      }
+    }
+  } catch { /* best effort */ }
+}
+
 // ---------------------------------------------------------------------------
 // System prompt (bundled via webpack asset/source)
 // ---------------------------------------------------------------------------
@@ -240,9 +259,12 @@ function createTools(ctx: AgentContext) {
         if (skillResult.contentBlocked) ctx.isNsfw = true;
         if (skillResult.image) {
           ctx.currentImage = skillResult.image;
-          ctx.snapshotImages.push(skillResult.image); // Append as <<<image_N+1>>>
+          ctx.snapshotImages.push(skillResult.image);
           ctx.generatedImages.push(skillResult.image);
           if (skillResult.usedModel) ctx.lastUsedModel = skillResult.usedModel;
+          // Refresh URLs from DB — DualWriter uploads to Storage in parallel,
+          // so base64 entries get replaced with http URLs for downstream tools
+          await refreshSnapshotUrls(ctx);
         }
         const indexInfo = skillResult.image ? ` Now <<<image_${ctx.snapshotImages.length}>>>.` : '';
         return { success: skillResult.success as true, message: skillResult.message + indexInfo, contentBlocked: skillResult.contentBlocked };
@@ -668,23 +690,9 @@ Your code must return a value:
         (ctx as any).__lastRunCode = code;
 
         // Refresh snapshotImages URLs from DB — ensures URLs are valid
-        // (fixes race condition where upload is still in progress at request time)
         if (ctx.supabase && ctx.projectId) {
           try {
-            const { data: dbSnaps } = await ctx.supabase
-              .from('snapshots')
-              .select('image_url, sort_order')
-              .eq('project_id', ctx.projectId)
-              .order('sort_order');
-            if (dbSnaps?.length) {
-              for (let i = 0; i < Math.min(dbSnaps.length, ctx.snapshotImages.length); i++) {
-                const dbUrl = dbSnaps[i]?.image_url;
-                if (dbUrl && !ctx.snapshotImages[i].startsWith('http')) {
-                  console.log(`📸 [run_code] refreshed snapshotImages[${i}]: base64 → ${dbUrl.substring(0, 80)}`);
-                  ctx.snapshotImages[i] = dbUrl;
-                }
-              }
-            }
+            await refreshSnapshotUrls(ctx);
           } catch (e) {
             console.warn('⚠️ [run_code] failed to refresh snapshot URLs:', e);
           }
