@@ -28,7 +28,12 @@ A short title on the first line (2-5 words, no quotes, no markdown), then Shot l
 
 4. **Language**: Write descriptions in the same language the user is speaking. BUT keep `Shot N (Xs):` format exactly as-is (not "镜头N" or "分镜N") — Kling requires this exact format. Same for `Style:` tag.
 
-5. **Dialogue**: Characters can speak — put dialogue in quotes.
+5. **Dialogue & Voice**: Kling generates character speech with real voice synthesis. Write dialogue inline with emotion/tone cues. Supports Chinese, English, Japanese, and more.
+   - Format: `角色名（语气描述）："台词内容"` or `Character (tone): "dialogue"`
+   - Example: `猫（小孩的声音，故作镇定）："老板，你找我？"` → Kling renders a child-like voice
+   - Example: `主人（画外音，语气严肃）："你今年的KPI呢？"` → off-screen narration
+   - Add ambient sound cues alongside dialogue: `Sound: 办公室空调嗡嗡声`
+   - For pet/animal talking videos: describe the voice style (小孩声音, 奶声奶气, 低沉老练) in parentheses
 
 6. **Style tag**: End with a brief style direction (e.g. "Cinematic, warm golden light." or "Surreal, dreamlike, soft focus.")
 
@@ -51,6 +56,14 @@ Shot 5 (2s): A bird's-eye view of the scene shows the two separated and having s
 
 ### Character + dialogue:
 Long take. On a windy day in an Icelandic mountain range, <<<image_1>>> says with a barely contained smile, "Do you think our wedding is too simple—like there's no one here to bless us?" The camera circles the subjects to reveal <<<image_2>>> standing opposite, smiling and replying, "The wind—the wind is their blessing to us." Cinematic, handheld feel.
+
+### Pet talking video (宠物说话):
+场景设定在家中客厅，空调发出轻微的嗡嗡声。
+Shot 1 (3s): 近景，<<<image_1>>> — 猫端坐在沙发上，直视镜头。猫（小孩的声音，故作镇定，有点紧张）："老板，你找我？" Sound: 办公室空调嗡嗡声。
+Shot 2 (4s): 中景，镜头微微推进。主人（画外音，语气严肃地逐条念）："第一，沙发抓烂了。第二，凌晨四点跑酷。第三，桌上的杯子推下去三个。" 猫（无辜地眨眨眼）："……那个沙发本来就丑。" Sound: 翻文件声。
+Shot 3 (4s): 特写，猫脸占满画面。猫（突然理直气壮）："行，那我问你——我的卖萌KPI呢？" 主人（沉默两秒）："……" 猫（得意地眯起眼）："满分是吧。" Sound: 法庭惊堂木一敲。
+Shot 4 (4s): 近景，猫四脚朝天仰躺，露出肚皮，完全放松。猫（慵懒地）："所以……加薪的事，定了吧？" 主人（无奈叹气）："……罐头给你开了。" 猫（满意地闭眼）："成交。" Sound: 开罐头声，BGM切成轻松爵士乐。
+Style: 竖屏抖音风，伪纪录片采访感，字幕粗体白色描边，猫全程用小孩声音说话。
 
 ### Photo edit story (typical for this app):
 Shot 1 (2s): Extreme close-up, push-in. <<<image_3>>> — a chameleon's eye snaps into focus, scales shifting neon. Sound: sharp synth hit.
