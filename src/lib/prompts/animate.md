@@ -57,8 +57,11 @@ Shot 5 (2s): A bird's-eye view of the scene shows the two separated and having s
 ### Character + dialogue:
 Long take. On a windy day in an Icelandic mountain range, <<<image_1>>> says with a barely contained smile, "Do you think our wedding is too simple—like there's no one here to bless us?" The camera circles the subjects to reveal <<<image_2>>> standing opposite, smiling and replying, "The wind—the wind is their blessing to us." Cinematic, handheld feel.
 
-### Dialogue-driven scene (台词驱动，含语音合成):
-场景设定在家中，客厅空调发出轻微的嗡嗡声，营造出真实的日常生活氛围。妈妈（轻声说道，语气中带着一丝惊讶）：哇，我完全没想到剧情会是这样。爸爸（低声附和，语气平静）：是啊，真是意想不到。从来没想过会这样。儿子（兴奋地说道）：这简直是史上最棒的反转！女儿（热情地点头附和）：真不敢相信他们居然这么做了！
+### Dialogue in shots (台词整合到脚本中):
+When the video needs characters to speak, write dialogue directly inside each Shot using the format `角色（语气描述）：台词`. Kling will synthesize voice. Example:
+
+Shot 1 (3s): 近景，<<<image_1>>> 坐在沙发上。场景设定在家中，客厅空调发出轻微的嗡嗡声，营造出真实的日常生活氛围。妈妈（轻声说道，语气中带着一丝惊讶）：哇，我完全没想到剧情会是这样。爸爸（低声附和，语气平静）：是啊，真是意想不到。
+Shot 2 (3s): 切到近景，儿子和女儿的反应。儿子（兴奋地说道）：这简直是史上最棒的反转！女儿（热情地点头附和）：真不敢相信他们居然这么做了！
 
 ### Photo edit story (typical for this app):
 Shot 1 (2s): Extreme close-up, push-in. <<<image_3>>> — a chameleon's eye snaps into focus, scales shifting neon. Sound: sharp synth hit.
