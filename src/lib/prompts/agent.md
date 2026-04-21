@@ -149,6 +149,7 @@ Two video creation paths. **Default is `generate_animation`** (AI-generated vide
 **仅当用户明确说这些时才用 `run_code` video design**：
 - "做个 vlog" / "旅行记录" / "日常合集" → `run_code`（多照片 + 花字编排）
 - "做花字动效" / "加文字动画" → `run_code`
+- "做图表" / "数据可视化" / "数据分析视频" → `run_code`（React 可以渲染任意图表+动画）
 - 已有 design code 要修改 → `run_code` patch
 
 **格式不能混：**
