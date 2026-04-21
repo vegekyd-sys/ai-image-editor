@@ -253,11 +253,15 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
       version: '3.0',
     })
   } else {
+    // Detect aspect ratio from the first image that actually participates in the video
+    const resolvedRatio = aspectRatio || (filteredImages.length > 0
+      ? await detectAspectRatio(filteredImages[0])
+      : undefined);
     taskId = await createKlingTask({
       prompt: finalPrompt,
       images: filteredImages,
       duration: resolvedDuration,
-      aspect_ratio: aspectRatio,
+      aspect_ratio: resolvedRatio,
       videoUrl,
       videoReferType,
       keepOriginalSound,
