@@ -102,7 +102,18 @@ function getAuthCookie() {
 
 // ─── SSE Consumer ────────────────────────────────────────────────────────────
 
+async function abortRun(baseUrl, cookie, runId) {
+  try {
+    await fetch(`${baseUrl}/api/agent/abort`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+      body: JSON.stringify({ runId }),
+    });
+  } catch { /* best effort */ }
+}
+
 async function streamAgent(baseUrl, cookie, projectId, prompt) {
+  const controller = new AbortController();
   const res = await fetch(`${baseUrl}/api/agent`, {
     method: 'POST',
     headers: {
@@ -114,6 +125,7 @@ async function streamAgent(baseUrl, cookie, projectId, prompt) {
       prompt,
       headless: true,
     }),
+    signal: controller.signal,
   });
 
   if (!res.ok) {
@@ -125,6 +137,14 @@ async function streamAgent(baseUrl, cookie, projectId, prompt) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+
+  const sigintHandler = async () => {
+    process.stderr.write('\n⏹️  Aborting...\n');
+    controller.abort();
+    if (runId) await abortRun(baseUrl, cookie, runId);
+    process.exit(0);
+  };
+  process.on('SIGINT', sigintHandler);
 
   const results = { images: [], designs: [], animationTasks: [], musicTasks: [], text: '' };
 
@@ -193,6 +213,7 @@ async function streamAgent(baseUrl, cookie, projectId, prompt) {
     }
   }
 
+  process.removeListener('SIGINT', sigintHandler);
   // Final newline after streamed text
   if (results.text) process.stdout.write('\n');
 
