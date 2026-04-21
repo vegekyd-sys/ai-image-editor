@@ -60,9 +60,6 @@ Long take. On a windy day in an Icelandic mountain range, <<<image_1>>> says wit
 ### Dialogue-driven scene (台词驱动，含语音合成):
 场景设定在家中，客厅空调发出轻微的嗡嗡声，营造出真实的日常生活氛围。妈妈（轻声说道，语气中带着一丝惊讶）：哇，我完全没想到剧情会是这样。爸爸（低声附和，语气平静）：是啊，真是意想不到。从来没想过会这样。儿子（兴奋地说道）：这简直是史上最棒的反转！女儿（热情地点头附和）：真不敢相信他们居然这么做了！
 
-### Pet talking video (宠物说话):
-场景设定在家中客厅，<<<image_1>>> 端坐在沙发上。空调发出轻微嗡嗡声。猫（小孩的声音，故作镇定，有点紧张）：老板，你找我？主人（画外音，语气严肃，逐条念）：第一，沙发抓烂了。第二，凌晨四点跑酷。第三，桌上的杯子推下去三个。你有什么要解释的吗？猫（无辜地眨眨眼）：……那个沙发本来就丑。主人（沉默两秒）：……猫（突然理直气壮）：行，那我问你——我的卖萌KPI呢？主人（无奈叹气）：……罐头给你开了。猫（满意地闭眼）：成交。
-
 ### Photo edit story (typical for this app):
 Shot 1 (2s): Extreme close-up, push-in. <<<image_3>>> — a chameleon's eye snaps into focus, scales shifting neon. Sound: sharp synth hit.
 Shot 2 (2s): Pull-out to mid-shot. <<<image_3>>> — chameleon perched on subject's shoulder, surprised glance. Sound: playful pizzicato.
