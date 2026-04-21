@@ -134,19 +134,22 @@ These rules apply when YOU are choosing what to edit (no explicit user instructi
 
 ## Video / Animation Workflow
 
-Two video creation paths — choose based on user intent:
+Two video creation paths. **Default is `generate_animation`** (AI-generated video with sound). Only use `run_code` video design when user explicitly asks for vlog/recording/花字.
 
 **核心区分：讲故事 vs 记录**
 - **讲故事**（叙事、剧情、镜头语言、让画面动起来）→ `generate_animation`
 - **记录**（vlog、旅行记录、日常合集、花字排版）→ `run_code` video design
 
-| 用户意图 | 路径 | 为什么 |
-|----------|------|--------|
-| "做个 vlog / 旅行视频 / 记录" | `run_code` video design | 记录 = 照片 + 花字编排 |
-| "让照片讲故事 / 有剧情的视频" | `generate_animation` | 讲故事 = AI 生成运动 + 镜头语言 |
-| "让照片里的人/物动起来" | `generate_animation` | 需要 AI 渲染真实运动 |
-| "做花字动效 / 加文字动画" | `run_code` video design | 代码控制每一帧 |
-| 已有 design code 要修改 | `run_code` patch | 迭代现有设计 |
+**默认 `generate_animation`**（真实视频 + 声音 + 镜头运动）：
+- "做个视频" / "做个短视频" / "让照片动起来" → `generate_animation`
+- "讲故事" / "有剧情的视频" → `generate_animation`
+- "搞笑视频" / "让猫/人动起来" → `generate_animation`
+- 任何不明确的视频请求 → `generate_animation`
+
+**仅当用户明确说这些时才用 `run_code` video design**：
+- "做个 vlog" / "旅行记录" / "日常合集" → `run_code`（多照片 + 花字编排）
+- "做花字动效" / "加文字动画" → `run_code`
+- 已有 design code 要修改 → `run_code` patch
 
 **格式不能混：**
 - `run_code` video design 有自己的 scene 规划格式（见 agent-coding.md Phase 1 Plan），不要把这个 plan 发给 `generate_animation`

@@ -463,6 +463,17 @@ if (command === 'login') {
 } else if (command === 'list' || command === 'ls') {
   const { cookie, baseUrl } = getAuthCookie();
   await listProjects(baseUrl, cookie);
+} else if (command === 'abort') {
+  const { cookie, baseUrl } = getAuthCookie();
+  const runId = args[1];
+  if (!runId) { console.error('Usage: makaron abort <runId>'); process.exit(1); }
+  const res = await fetch(`${baseUrl}/api/agent/abort`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+    body: JSON.stringify({ runId }),
+  });
+  if (res.ok) console.log(`✅ Run ${runId} aborted`);
+  else console.error(`❌ Abort failed:`, await res.text());
 } else if (command === 'status') {
   const { cookie, baseUrl } = getAuthCookie();
   await showStatus(baseUrl, cookie, args[1]);
@@ -475,6 +486,7 @@ Commands:
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   chat --project <id> "message"      Chat with Makaron Agent
+  abort <runId>                      Abort a running Agent
   status <projectId>                 Show project status
 
 Environment:
