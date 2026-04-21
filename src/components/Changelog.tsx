@@ -10,6 +10,7 @@ const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-04-20',
     en: { title: 'Headless Agent & CLI', items: [
+      'Published on npm: `npx makaron-cli` — zero install, works anywhere with Node.js',
       'Makaron CLI: create projects, chat with Agent, generate images/videos — all from terminal',
       'Headless Agent: Agent runs without browser — results appear in project page automatically',
       'Fire-and-forget API: POST /api/agent/run returns immediately, Agent works in background',
@@ -18,6 +19,7 @@ const CHANGELOG: ChangelogEntry[] = [
       'Auto-naming: headless projects get named automatically after first Agent run',
     ]},
     zh: { title: 'Headless Agent & CLI', items: [
+      '已发布 npm：`npx makaron-cli` — 无需安装，有 Node.js 即可使用',
       'Makaron CLI：终端创建项目、与 Agent 对话、生图/生视频，无需浏览器',
       'Headless Agent：Agent 脱离前端运行，结果自动出现在项目页',
       'Fire-and-forget API：POST /api/agent/run 立即返回，Agent 后台执行',
