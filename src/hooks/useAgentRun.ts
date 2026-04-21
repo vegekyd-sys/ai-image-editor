@@ -91,10 +91,10 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
 
       if (error || !runningRun) return
 
-      // Check if run is stale (started >5 min ago — likely the function died)
+      // Check if run is stale (started >800s ago — matches Vercel maxDuration)
       const startedAt = new Date(runningRun.started_at).getTime()
-      const fiveMinAgo = Date.now() - 5 * 60 * 1000
-      if (startedAt < fiveMinAgo) {
+      const staleThreshold = Date.now() - 800 * 1000
+      if (startedAt < staleThreshold) {
         await supabase.from('agent_runs').update({
           status: 'failed',
           ended_at: new Date().toISOString(),

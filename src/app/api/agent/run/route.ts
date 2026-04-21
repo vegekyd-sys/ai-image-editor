@@ -5,7 +5,7 @@ import { runMakaronAgent } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
 
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 /**
  * POST /api/agent/run — Fire-and-forget agent execution.
