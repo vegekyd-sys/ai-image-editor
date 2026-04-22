@@ -39,6 +39,12 @@ export async function getTokenRate(modelId: string): Promise<TokenRate | null> {
   // Exact match
   const exact = all.find(r => r.model_id === modelId)
   if (exact) return exact
+  // Strip region prefix (e.g. "us.anthropic.xxx" → "anthropic.xxx") and retry
+  const stripped = modelId.replace(/^(us|eu|ap)\./i, '')
+  if (stripped !== modelId) {
+    const strippedMatch = all.find(r => r.model_id === stripped)
+    if (strippedMatch) return strippedMatch
+  }
   // Prefix match: find rates where modelId starts with rate.model_id or vice versa
   const prefix = all.find(r => modelId.startsWith(r.model_id) || r.model_id.startsWith(modelId))
   return prefix ?? null
