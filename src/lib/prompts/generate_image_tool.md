@@ -58,6 +58,11 @@ When the input image has visible red annotations, the editPrompt MUST reference 
 - The red marks are temporary guides — the output image should NOT contain the red annotations
 - **Always call analyze_image first** when annotations are present — this lets you see exactly what the marks are pointing at before generating
 
+--- MODEL SELECTION ---
+`model` is optional — omit it for normal edits (auto-router handles).
+Set `model: 'openai'` when the edit requires accurate text rendering (posters, titles, captions baked into the image) or when the user complains about face identity drift after a Gemini edit.
+OpenAI takes ~2-3 minutes — always warn the user about the wait time before calling.
+
 --- WRITING THE EDITPROMPT ---
 
 FACE (when people are present — always include):

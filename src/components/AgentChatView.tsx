@@ -17,7 +17,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const inputImageLabels = [t('chat.currentImage'), t('chat.originalImage')];
-  const modelLabels: Record<string, string> = { qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious' };
+  const modelLabels: Record<string, string> = { qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
   const modelLabel = modelLabels[editModel || ''] || 'nano banana 2';
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', maxWidth: 308 }}>
@@ -36,7 +36,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
           />
         )}
         <span className="text-[11px] font-medium flex-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          {t('chat.promptCard').replace(/nano banana 2|qwen edit/gi, modelLabel)}
+          {t('chat.promptCard').replace(/nano banana 2|qwen edit|OpenAI Image 2/gi, modelLabel)}
         </span>
         <span className="text-[11px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? t('chat.collapse') : t('chat.expand')}</span>
       </button>
@@ -370,7 +370,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
   );
 }
 
-export type PreferredModel = 'auto' | 'gemini' | 'qwen' | 'pony' | 'wai';
+export type PreferredModel = 'auto' | 'gemini' | 'qwen' | 'pony' | 'wai' | 'openai';
 
 interface AgentChatViewProps {
   messages: Message[];
@@ -1290,7 +1290,7 @@ export default function AgentChatView({
                 data-current-model={preferredModel}
                 aria-label={`Model: ${preferredModel}. Click to switch.`}
                 onClick={() => {
-                  const cycle: PreferredModel[] = ['auto', 'gemini', 'qwen'];
+                  const cycle: PreferredModel[] = ['auto', 'gemini', 'qwen', 'openai'];
                   const next = cycle[(cycle.indexOf(preferredModel) + 1) % cycle.length];
                   onModelChange(next);
                 }}
@@ -1299,9 +1299,11 @@ export default function AgentChatView({
                   padding: '0 10px',
                   background: preferredModel === 'auto' ? 'rgba(255,255,255,0.06)'
                     : preferredModel === 'qwen' ? 'rgba(16,185,129,0.15)'
+                    : preferredModel === 'openai' ? 'rgba(168,85,247,0.15)'
                     : 'rgba(59,130,246,0.15)',
                   border: `1px solid ${preferredModel === 'auto' ? 'rgba(255,255,255,0.08)'
                     : preferredModel === 'qwen' ? 'rgba(16,185,129,0.3)'
+                    : preferredModel === 'openai' ? 'rgba(168,85,247,0.3)'
                     : 'rgba(59,130,246,0.3)'}`,
                 }}
               >
@@ -1311,6 +1313,7 @@ export default function AgentChatView({
                   letterSpacing: '0.02em',
                   color: preferredModel === 'auto' ? 'rgba(255,255,255,0.35)'
                     : preferredModel === 'qwen' ? 'rgba(16,185,129,0.85)'
+                    : preferredModel === 'openai' ? 'rgba(168,85,247,0.85)'
                     : 'rgba(59,130,246,0.85)',
                 }}>
                   {preferredModel === 'auto' ? 'AUTO' : preferredModel.toUpperCase()}
