@@ -24,13 +24,9 @@ export async function POST(req: NextRequest) {
   if (email.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
     targetId = email
   } else {
-    // Search auth.users by email — paginate through all
-    for (let page = 1; page <= 20; page++) {
-      const { data } = await admin.auth.admin.listUsers({ page, perPage: 100 })
-      const found = data?.users?.find(u => u.email === email)
-      if (found) { targetId = found.id; break }
-      if (!data?.users?.length || data.users.length < 100) break
-    }
+    // Use RPC function to query auth.users directly (listUsers doesn't work with service role)
+    const { data } = await admin.rpc('get_user_id_by_email', { p_email: email })
+    if (data) targetId = data
   }
 
   if (!targetId) {
