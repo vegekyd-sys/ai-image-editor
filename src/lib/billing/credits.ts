@@ -141,10 +141,13 @@ export async function deductByTokens(
   apiKeyId?: string | null,
 ): Promise<{ charged: number; remaining: number }> {
   if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
-  const rate = await getTokenRate(modelId)
+  let rate = await getTokenRate(modelId)
+  let usedFallback = false
   if (!rate) {
-    console.warn(`[billing] No token rate found for model "${modelId}", skipping deduction`)
-    return { charged: 0, remaining: 0 }
+    // Fallback: charge at Opus-level rates rather than giving free usage
+    console.warn(`[billing] WARNING: No token rate for "${modelId}". Using fallback $5/$25. Add it via Admin → Billing → Token Rates.`)
+    rate = { model_id: `unknown:${modelId}`, display_name: 'Fallback', input_per_1m: 5, output_per_1m: 25, markup: 2, is_active: true }
+    usedFallback = true
   }
 
   const credits = tokensToCredits(rate, inputTokens, outputTokens)
@@ -158,7 +161,7 @@ export async function deductByTokens(
     user_id: userId,
     api_key_id: apiKeyId || null,
     tool_name: toolName,
-    model_used: modelId,
+    model_used: usedFallback ? `unknown:${modelId}` : modelId,
     credits_charged: credits,
     input_tokens: inputTokens,
     output_tokens: outputTokens,
