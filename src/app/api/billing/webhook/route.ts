@@ -122,15 +122,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true })
     }
 
-    // Look up subscription in our DB
-    const { data: sub } = await admin
-      .from('subscriptions')
-      .select('user_id, plan_id')
-      .eq('stripe_subscription_id', subscriptionId)
-      .single()
+    // Look up subscription in our DB (retry — checkout.session.completed may still be writing)
+    let sub: { user_id: string; plan_id: string } | null = null
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data } = await admin
+        .from('subscriptions')
+        .select('user_id, plan_id')
+        .eq('stripe_subscription_id', subscriptionId)
+        .single()
+      if (data) { sub = data; break }
+      if (attempt < 4) await new Promise(r => setTimeout(r, 2000))
+    }
 
     if (!sub) {
-      console.warn(`[Stripe webhook] invoice paid but subscription not in DB: ${subscriptionId}`)
+      console.warn(`[Stripe webhook] invoice paid but subscription not in DB after retries: ${subscriptionId}`)
       return NextResponse.json({ received: true })
     }
 
