@@ -50,6 +50,10 @@ export default function AdminPage() {
   const [welcomeCredits, setWelcomeCredits] = useState(500)
   const [editingWelcome, setEditingWelcome] = useState(false)
   const [welcomeInput, setWelcomeInput] = useState('500')
+  const [addCreditEmail, setAddCreditEmail] = useState('')
+  const [addCreditAmount, setAddCreditAmount] = useState('100')
+  const [addCreditResult, setAddCreditResult] = useState<string | null>(null)
+  const [addingCredits, setAddingCredits] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -336,6 +340,57 @@ export default function AdminPage() {
                 </>
               )}
             </div>
+          </div>
+
+          {/* Add credits to user */}
+          <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/10">
+            <div className="text-sm font-medium mb-3">Add Credits to User</div>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                value={addCreditEmail}
+                onChange={(e) => setAddCreditEmail(e.target.value)}
+                placeholder="user@email.com"
+                className="flex-1 px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+              />
+              <input
+                type="number"
+                value={addCreditAmount}
+                onChange={(e) => setAddCreditAmount(e.target.value)}
+                className="w-20 px-2 py-1.5 rounded-lg bg-white/10 text-white text-xs text-right border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+              />
+              <button
+                onClick={async () => {
+                  if (!addCreditEmail || !addCreditAmount) return
+                  setAddingCredits(true)
+                  setAddCreditResult(null)
+                  try {
+                    const res = await fetch('/api/admin/add-credits', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email: addCreditEmail, credits: parseInt(addCreditAmount) }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                      setAddCreditResult(`Added ${data.credits} → balance: ${data.newBalance}`)
+                      setAddCreditEmail('')
+                    } else {
+                      setAddCreditResult(`Error: ${data.error}`)
+                    }
+                  } catch { setAddCreditResult('Failed') }
+                  finally { setAddingCredits(false) }
+                }}
+                disabled={addingCredits || !addCreditEmail}
+                className="px-4 py-1.5 rounded-lg bg-fuchsia-600 text-white text-xs font-medium hover:bg-fuchsia-500 disabled:opacity-40 transition-all"
+              >
+                {addingCredits ? '...' : 'Add'}
+              </button>
+            </div>
+            {addCreditResult && (
+              <div className={`text-xs mt-2 ${addCreditResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+                {addCreditResult}
+              </div>
+            )}
           </div>
 
           <h3 className="text-sm font-medium text-white/60 mb-3">Per-action tools (fixed credits)</h3>
