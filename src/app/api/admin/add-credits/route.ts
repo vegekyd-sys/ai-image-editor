@@ -17,19 +17,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'email and credits (>0) required' }, { status: 400 })
   }
 
-  // Find user by email
   const admin = getSupabaseAdmin()
-  const { data: profiles } = await admin.auth.admin.listUsers({ perPage: 1000 })
-  const target = profiles?.users?.find(u => u.email === email)
-  if (!target) {
-    return NextResponse.json({ error: `User not found: ${email}` }, { status: 404 })
+  let targetId: string | null = null
+
+  // Accept UUID directly
+  if (email.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    targetId = email
+  } else {
+    // Search auth.users by email — paginate through all
+    for (let page = 1; page <= 20; page++) {
+      const { data } = await admin.auth.admin.listUsers({ page, perPage: 100 })
+      const found = data?.users?.find(u => u.email === email)
+      if (found) { targetId = found.id; break }
+      if (!data?.users?.length || data.users.length < 100) break
+    }
   }
 
-  const newBalance = await addCredits(target.id, credits)
+  if (!targetId) {
+    return NextResponse.json({ error: `User not found: ${email}. You can also paste a user_id (UUID).` }, { status: 404 })
+  }
+
+  const newBalance = await addCredits(targetId, credits)
 
   // Record
   await admin.from('credit_purchases').insert({
-    user_id: target.id,
+    user_id: targetId,
     stripe_session_id: `admin_${Date.now()}`,
     credits,
     amount_usd: 0,
@@ -37,5 +49,5 @@ export async function POST(req: NextRequest) {
     source: 'admin',
   })
 
-  return NextResponse.json({ success: true, userId: target.id, email, credits, newBalance })
+  return NextResponse.json({ success: true, userId: targetId, email, credits, newBalance })
 }
