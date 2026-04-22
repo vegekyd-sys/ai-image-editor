@@ -59,34 +59,22 @@ export default function DashboardPage() {
   const [subscribing, setSubscribing] = useState<string | null>(null)
   const [managingSubscription, setManagingSubscription] = useState(false)
 
-  const fetchBalance = useCallback(async () => {
-    const res = await fetch('/api/billing/credits')
-    if (res.ok) setBalance(await res.json())
-  }, [])
-
-  const fetchKeys = useCallback(async () => {
-    const res = await fetch('/api/billing/keys')
+  const fetchDashboard = useCallback(async () => {
+    const res = await fetch('/api/billing/dashboard')
     if (res.ok) {
       const data = await res.json()
+      setBalance(data)
       setKeys(data.keys || [])
-    }
-  }, [])
-
-  const fetchUsage = useCallback(async () => {
-    const res = await fetch('/api/billing/usage')
-    if (res.ok) {
-      const data = await res.json()
       setUsage(data.usage || [])
     }
   }, [])
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchBalance(), fetchKeys(), fetchUsage()]).finally(() => setLoading(false))
-    // Load auto-tips preference
+    fetchDashboard().finally(() => setLoading(false))
     const stored = localStorage.getItem('mkr_auto_tips')
     if (stored === 'auto' || stored === 'off') setAutoTips(stored)
-  }, [fetchBalance, fetchKeys, fetchUsage])
+  }, [fetchDashboard])
 
   const handleCreateKey = async () => {
     setCreating(true)
@@ -100,7 +88,7 @@ export default function DashboardPage() {
       if (data.key) {
         setCreatedKey(data.key)
         setNewKeyName('')
-        fetchKeys()
+        fetchDashboard()
       }
     } finally {
       setCreating(false)
@@ -113,7 +101,7 @@ export default function DashboardPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     })
-    fetchKeys()
+    fetchDashboard()
   }
 
   const handleCheckout = async (tier: string) => {
