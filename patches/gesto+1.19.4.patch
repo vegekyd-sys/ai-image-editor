@@ -1,0 +1,39 @@
+diff --git a/node_modules/gesto/dist/gesto.cjs.js b/node_modules/gesto/dist/gesto.cjs.js
+index 79ffd4c..7842d0a 100644
+--- a/node_modules/gesto/dist/gesto.cjs.js
++++ b/node_modules/gesto/dist/gesto.cjs.js
+@@ -255,7 +255,7 @@ var Gesto = /*#__PURE__*/ (function (_super) {
+             if (!_this.flag && e.cancelable === false) {
+                 return;
+             }
+-            var isDragAPI = e.type.indexOf("drag") >= -1;
++            var isDragAPI = e.type.indexOf("drag") > -1;
+             if (_this.flag && isDragAPI) {
+                 return;
+             }
+diff --git a/node_modules/gesto/dist/gesto.esm.js b/node_modules/gesto/dist/gesto.esm.js
+index c53fdc7..172a8ea 100644
+--- a/node_modules/gesto/dist/gesto.esm.js
++++ b/node_modules/gesto/dist/gesto.esm.js
+@@ -253,7 +253,7 @@ var Gesto = /*#__PURE__*/ (function (_super) {
+             if (!_this.flag && e.cancelable === false) {
+                 return;
+             }
+-            var isDragAPI = e.type.indexOf("drag") >= -1;
++            var isDragAPI = e.type.indexOf("drag") > -1;
+             if (_this.flag && isDragAPI) {
+                 return;
+             }
+diff --git a/node_modules/gesto/dist/gesto.js b/node_modules/gesto/dist/gesto.js
+index 2e4c7ce..b010003 100644
+--- a/node_modules/gesto/dist/gesto.js
++++ b/node_modules/gesto/dist/gesto.js
+@@ -660,7 +660,7 @@ version: 1.19.4
+                 if (!_this.flag && e.cancelable === false) {
+                     return;
+                 }
+-                var isDragAPI = e.type.indexOf("drag") >= -1;
++                var isDragAPI = e.type.indexOf("drag") > -1;
+                 if (_this.flag && isDragAPI) {
+                     return;
+                 }

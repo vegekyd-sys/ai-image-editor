@@ -52,6 +52,7 @@ const en = {
   'status.designFailed': 'Design failed',
   'status.generatingMusic': 'Generating music...',
   'status.musicReady': 'Music ready',
+  'status.musicStreaming': 'Music preview ready',
   'status.musicFailed': 'Music generation failed',
   'status.addingMusic': 'Adding music...',
   'status.writingScript': 'Writing video script...',

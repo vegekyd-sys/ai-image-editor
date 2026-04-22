@@ -18,11 +18,13 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  image?: string;        // base64 data URL
+  image?: string;        // base64 data URL (single image, e.g. generate_image result)
+  images?: string[];     // multiple images (e.g. preview_frame captures)
   editPrompt?: string;   // the English editPrompt sent to generate_image (for transparency)
   editModel?: string;    // which model generated the image ('gemini' | 'qwen')
   editInputImages?: string[]; // images passed to Gemini as input (1 = normal, 2 = face restoration)
   design?: DesignPayload; // Remotion design from run_code
+  thinking?: string[];   // Agent's reasoning/thinking segments (one per thinking round)
   timestamp: number;
   projectId?: string;
 }
@@ -85,6 +87,7 @@ export interface Snapshot {
   metadata?: PhotoMetadata; // EXIF metadata (location, time)
   type?: 'original' | 'edit' | 'reference'; // snapshot kind — reference = skill asset
   design?: DesignPayload; // live Remotion design (rendered via Player, not screenshot)
+  designPath?: string;    // workspace path to design JSON (e.g. "code/xxx.json")
 }
 
 export interface Project {

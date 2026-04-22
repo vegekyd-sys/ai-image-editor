@@ -219,26 +219,33 @@ describe('credits', () => {
   });
 
   describe('deductByTokens', () => {
-    it('skips deduction when no token rate found', async () => {
-      // Mock token_rates to return empty
+    it('uses fallback rate when no token rate found', async () => {
       const ratesChain = mockQuery([]);
-      const balanceChain = mockQuery({ balance: 100 });
+      const insertFn = vi.fn().mockResolvedValue({ data: null, error: null });
+      const usageChain = { insert: insertFn };
+
+      mockRpc.mockResolvedValue({ data: 50, error: null });
 
       mockFrom.mockImplementation((table: string) => {
         if (table === 'app_settings') return billingSettingsChain;
         if (table === 'token_rates') return ratesChain;
-        return balanceChain;
+        if (table === 'usage_logs') return usageChain;
+        return mockQuery(null);
       });
       ratesChain.order = vi.fn().mockResolvedValue({ data: [], error: null });
 
       const { deductByTokens } = await import('@/lib/billing/credits');
-      // Need to clear token rate cache
       const { invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
       invalidateTokenRateCache();
 
       const result = await deductByTokens('user-1', 'agent', 'unknown-model', 1000, 500);
-      expect(result.charged).toBe(0);
-      expect(result.remaining).toBe(0);
+      // Fallback rate: $5/$25 per 1M, 2x markup
+      // (1000/1M * 5 + 500/1M * 25) * 2 / 0.01 = (0.005 + 0.0125) * 2 / 0.01 = 3.5
+      expect(result.charged).toBeGreaterThan(0);
+      // Verify model logged as unknown:
+      expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
+        model_used: 'unknown:unknown-model',
+      }));
     });
 
     it('deducts correct credits and logs usage with tokens', async () => {

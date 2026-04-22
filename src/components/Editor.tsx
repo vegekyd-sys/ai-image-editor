@@ -12,6 +12,7 @@ import CreditPopup from '@/components/CreditPopup';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
+// projectEventLogger removed — events only needed for ReplayEngine (not active)
 import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
@@ -44,6 +45,8 @@ import { containRect, coverRect } from '@/lib/image/geometry';
 import { extractPhotoMetadata } from '@/lib/image/metadata';
 import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
+import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
+import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 
 export interface AnimationState {
@@ -249,15 +252,36 @@ export default function Editor({
   const [previewingTipIndex, setPreviewingTipIndex] = useState<number | null>(null);
   const [draftParentIndex, setDraftParentIndex] = useState<number | null>(null);
   const [draftFullLoaded, setDraftFullLoaded] = useState(false);
+  // Draft type: makes the implicit mutual exclusion between tips draft and design draft explicit.
+  // 'tips' = tip preview selected, 'design' = Agent render draft, null = no draft active.
+  const [activeDraftType, setActiveDraftType] = useState<'tips' | 'design' | null>(null);
   const [isAgentActive, setIsAgentActive] = useState(false);
   const [agentStatus, setAgentStatus] = useState(t('editor.greeting'));
   const [pendingDesign, setPendingDesign] = useState<DesignPayload | null>(null);
+  const [draftDesign, setDraftDesign] = useState<DesignPayload | null>(null);
+  const [draftDesignPoster, setDraftDesignPoster] = useState<string>('');
+  // Refs to track latest design for async capture callbacks
+  const draftDesignRef = useRef<DesignPayload | null>(null);
+  const pendingDesignRef = useRef<DesignPayload | null>(null);
+  useEffect(() => { draftDesignRef.current = draftDesign; }, [draftDesign]);
+  useEffect(() => { pendingDesignRef.current = pendingDesign; }, [pendingDesign]);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   // Design editable state
   const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
+  // Mobile keyboard offset for text editor panel
+  const [editorKbInset, setEditorKbInset] = useState(0);
+  useEffect(() => {
+    if (isDesktop || !editingDesignFieldId) { setEditorKbInset(0); return; }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setEditorKbInset(Math.round(Math.max(0, window.innerHeight - vv.height - vv.offsetTop)));
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, [isDesktop, editingDesignFieldId]);
   const [visibleEditableIds, _setVisibleEditableIds] = useState<string[]>([]);
   const handleVisibleEditableFields = useCallback((ids: string[]) => {
     _setVisibleEditableIds(prev => {
@@ -269,6 +293,7 @@ export default function Editor({
     _setSelectedEditableFieldId(id);
     if (!id) setEditingDesignFieldId(null); // deselect also closes editor
   }, []);
+
 
   // Music generation state
   const [musicTaskId, setMusicTaskId] = useState<string | null>(initialMusicTaskId ?? null);
@@ -298,11 +323,28 @@ export default function Editor({
     setSnapshots(prev => {
       const existingIds = new Set(prev.map(s => s.id));
       const newItems = initialSnapshots.filter(s => !existingIds.has(s.id));
-      if (newItems.length === 0) return prev;
-      // During reconnect: append new items (don't replace Realtime-created ones)
-      // Normal: if Supabase has more, replace entirely for freshness
-      if (isAgentActive) return [...prev, ...newItems];
-      return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
+
+      if (newItems.length > 0) {
+        // New snapshots found
+        if (isAgentActive) return [...prev, ...newItems];
+        return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
+      }
+
+      // Same IDs — merge design/props updates from Supabase into cached snapshots.
+      // This handles: cache shows stale design, then Supabase loads fresh design JSON.
+      const incoming = new Map(initialSnapshots.map(s => [s.id, s]));
+      let changed = false;
+      const merged = prev.map(s => {
+        const fresh = incoming.get(s.id);
+        if (!fresh?.design) return s;
+        // If fresh has a design but prev doesn't, or fresh design has newer props
+        if (!s.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(s.design.props))) {
+          changed = true;
+          return { ...s, design: fresh.design };
+        }
+        return s;
+      });
+      return changed ? merged : prev;
     });
   }, [initialSnapshots, isAgentActive]);
 
@@ -412,14 +454,22 @@ export default function Editor({
   }, [draftParentIndex, previewingTipIndex, snapshots]);
 
   const draftImage = useMemo(() => {
-    if (!draftFullUrl) return null;
-    // base64 or non-URL: use directly (no loading needed)
-    if (!draftFullUrl.startsWith('http')) return draftFullUrl;
-    // Full image loaded: high-quality WebP (no visible downscale)
-    if (draftFullLoaded) return getOptimizedUrl(draftFullUrl);
-    // Not loaded yet: small proportional thumbnail (contain = keeps original aspect ratio)
-    return getThumbnailUrl(draftFullUrl, 144, 60, 144, 'contain');
-  }, [draftFullUrl, draftFullLoaded]);
+    if (activeDraftType === 'design') {
+      // Design draft: use captured poster (or empty string while capturing)
+      return draftDesignPoster || '';
+    }
+    if (activeDraftType === 'tips') {
+      // Tips draft: use tip preview image
+      if (!draftFullUrl) return null;
+      // base64 or non-URL: use directly (no loading needed)
+      if (!draftFullUrl.startsWith('http')) return draftFullUrl;
+      // Full image loaded: high-quality WebP (no visible downscale)
+      if (draftFullLoaded) return getOptimizedUrl(draftFullUrl);
+      // Not loaded yet: small proportional thumbnail (contain = keeps original aspect ratio)
+      return getThumbnailUrl(draftFullUrl, 144, 60, 144, 'contain');
+    }
+    return null;
+  }, [activeDraftType, draftDesignPoster, draftFullUrl, draftFullLoaded]);
 
   // Preload full draft image and flip flag when done
   useEffect(() => {
@@ -429,6 +479,18 @@ export default function Editor({
     img.src = getOptimizedUrl(draftFullUrl);
     img.onload = () => setDraftFullLoaded(true);
   }, [draftFullUrl]);
+
+  // Capture poster for design draft (async — shown as timeline thumbnail)
+  useEffect(() => {
+    if (!draftDesign) { setDraftDesignPoster(''); return; }
+    let cancelled = false;
+    import('@/components/RemotionRenderer').then(({ captureDesignPoster }) =>
+      captureDesignPoster(draftDesign).then(poster => {
+        if (!cancelled && poster) setDraftDesignPoster(poster);
+      })
+    ).catch(() => {});
+    return () => { cancelled = true; };
+  }, [draftDesign]);
 
   // Timeline: committed snapshots with the virtual draft inserted right after its parent
   // + optional video sentinel at the end (when ANY animation exists)
@@ -550,6 +612,7 @@ export default function Editor({
     if (!pendingNotification) return;
     // Exit draft mode
     if (draftParentIndex !== null) {
+      setActiveDraftType(null);
       setPreviewingTipIndex(null);
       setDraftParentIndex(null);
     }
@@ -641,7 +704,7 @@ export default function Editor({
         { prompt: '', image: '', projectId, nameProject: true, description },
         {
           onContent: (delta) => { name += delta; },
-          onDone: () => { if (name.trim()) onRenameProject(name.trim()); },
+          onDone: () => { if (name.trim()) { onRenameProject(name.trim()); } },
           onError: () => {},
         },
       );
@@ -1456,7 +1519,7 @@ export default function Editor({
     const recentMessages = messages
       .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
       .slice(-200)
-      .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 500)}`)
+      .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 2000)}`)
       .join('\n');
     const historyContext = recentMessages
       ? `[对话历史]\n${recentMessages}\n\n`
@@ -1495,13 +1558,14 @@ export default function Editor({
           const desc = isRef
             ? (s.description || 'Skill reference image')
             : isDesign
-              ? (s.description || '[design/video — use code in context to modify, do NOT analyze_image]')
+              ? (s.description || '[design/video]')
               : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
                 ? (s.description || '原图 / Original upload')
                 : (s.description || '(use analyze_image to see this snapshot)');
           const tag = isRef ? ' (reference)' : isDesign ? ' (design)' : '';
           const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
-          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}`;
+          const codePath = isDesign && s.designPath ? ` [code: ${s.designPath}]` : '';
+          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${codePath}`;
         }).join('\n')}\n\n`
       : '';
 
@@ -1555,7 +1619,20 @@ export default function Editor({
 
     const { callbacks: agentCallbacks, setCurrentMsgId, getCurrentMsgId } = makeAgentCallbacks({
       projectId: projectId!,
-      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+      setDesignDraftParent: (idx) => {
+        if (idx !== null) {
+          // Design draft: clear any active tips draft (mutually exclusive)
+          setActiveDraftType('design');
+          setPreviewingTipIndex(null);
+          setDraftParentIndex(idx);
+          setViewIndex(idx + 1); // navigate to the virtual draft slot
+        } else {
+          // Clear design draft slot (published or dismissed)
+          setActiveDraftType(null);
+          setDraftParentIndex(null);
+        }
+      },
       setPendingNotification, setSelectedVideoId, setAnimationState,
       snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
       pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
@@ -1577,6 +1654,37 @@ export default function Editor({
         setAgentStatus(t('status.generatingMusic'));
       },
       musicPollingRef,
+      captureDesignFrame: async (frame, uploadPath) => {
+        const design = draftDesignRef.current || pendingDesignRef.current;
+        if (!design) { console.warn('⚠️ captureDesignFrame: no active design'); return; }
+        try {
+          const { captureDesignFrame: capture } = await import('@/components/RemotionRenderer');
+          const blob = await capture(design, frame);
+          if (!blob) throw new Error('capture returned null');
+          const supabase = (await import('@/lib/supabase/client')).createClient();
+          const userId = (await supabase.auth.getUser()).data.user?.id;
+          if (!userId) throw new Error('no user');
+          // Upload to Storage
+          const storagePath = `${userId}/workspace/${uploadPath}`;
+          const { error } = await supabase.storage.from('images').upload(storagePath, blob, {
+            contentType: 'image/jpeg', upsert: true,
+          });
+          if (error) throw error;
+          // Get public URL + upsert workspace_files index (so server readFile can find it)
+          const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath);
+          await supabase.from('workspace_files').upsert({
+            user_id: userId,
+            path: uploadPath,
+            content_type: 'image/jpeg',
+            size_bytes: blob.size,
+            storage_url: urlData?.publicUrl || '',
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,path' });
+          console.log(`📸 [captureDesignFrame] frame ${frame} uploaded → ${storagePath}`);
+        } catch (err) {
+          console.error('⚠️ captureDesignFrame failed:', err);
+        }
+      },
     });
     // Sync factory's currentMsgId with the already-created assistant message
     setCurrentMsgId(assistantMsgId);
@@ -1602,14 +1710,24 @@ export default function Editor({
     setAgentStatus(t('editor.greeting'));
     // Remove the last empty/partial assistant message (the one being streamed)
     setMessages(prev => {
-      // Find the last assistant message — if it has no meaningful content, remove it
       const lastIdx = prev.length - 1;
       if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
         return prev.slice(0, lastIdx);
       }
       return prev;
     });
-  }, []);
+    // Abort the background agent run so server stops processing
+    if (agentRunIdRef.current) {
+      fetch('/api/agent/abort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: agentRunIdRef.current }),
+      }).catch(() => {});
+      agentRunIdRef.current = null;
+    }
+    // If reconnected via Realtime, disconnect
+    agentDisconnect();
+  }, [agentDisconnect]);
 
   // ── Reconnect to active background agent run ──
   // Uses the same makeAgentCallbacks factory as the SSE path — identical CUI building logic.
@@ -1620,7 +1738,18 @@ export default function Editor({
 
     const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
       projectId: projectId ?? '',
-      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign,
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+      setDesignDraftParent: (idx) => {
+        if (idx !== null) {
+          setActiveDraftType('design');
+          setPreviewingTipIndex(null);
+          setDraftParentIndex(idx);
+          setViewIndex(idx + 1);
+        } else {
+          setActiveDraftType(null);
+          setDraftParentIndex(null);
+        }
+      },
       setPendingNotification, setSelectedVideoId, setAnimationState,
       snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
       pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
@@ -1634,15 +1763,7 @@ export default function Editor({
       onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
     });
 
-    agentReconnect({
-      ...reconnectCallbacks,
-      onClearRunMessages: (msgIds) => {
-        if (msgIds.length > 0) {
-          const idSet = new Set(msgIds);
-          setMessages(prev => prev.filter(m => !idSet.has(m.id)));
-        }
-      },
-    });
+    agentReconnect(reconnectCallbacks);
 
     return () => { agentDisconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1807,6 +1928,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
     // Clear draft and jump to the newly committed snapshot
     setViewIndex(snapshots.length);
+    setActiveDraftType(null);
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
     setCommittedCategory(tip.category as Tip['category']);
@@ -1884,6 +2006,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     // If tip is still generating, ignore click
     if (tip.previewStatus === 'pending' || tip.previewStatus === 'generating') return;
 
+    // Clear any active design draft (tips draft and design draft are mutually exclusive)
+    if (activeDraftType === 'design') {
+      setDraftDesign(null);
+      setDraftDesignPoster('');
+    }
+    setActiveDraftType('tips');
+
     // Update tip selection (switches draft image via draftImage memo)
     setPreviewingTipIndex(tipIndex);
 
@@ -1897,7 +2026,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setDraftParentIndex(currentSnapIdx);
       setViewIndex(currentSnapIdx + 1);
     }
-  }, [draftParentIndex, viewIndex, snapshots, previewingTipIndex, generatePreviewForTip]);
+  }, [activeDraftType, draftParentIndex, viewIndex, snapshots, previewingTipIndex, generatePreviewForTip]);
 
   // Retry a failed preview generation
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1922,21 +2051,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, [snapshots, tipsSourceIndex, generatePreviewForTip]);
 
   // Previous image for long-press compare
+  // Must match timeline precedence: prefer base64 from IndexedDB (instant) over URL (network fetch)
   const previousImage = useMemo(() => {
-    let img: string | undefined;
+    let snap: typeof snapshots[number] | undefined;
     if (isViewingDraft && draftParentIndex !== null) {
-      const parent = snapshots[draftParentIndex];
-      img = parent?.imageUrl || parent?.image || undefined; // design poster may be in imageUrl
+      snap = snapshots[draftParentIndex];
     } else {
       const snapIdx = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
-      if (snapIdx > 0) {
-        const prev = snapshots[snapIdx - 1];
-        img = prev?.imageUrl || prev?.image || undefined; // prefer URL (design poster)
-      }
+      if (snapIdx > 0) snap = snapshots[snapIdx - 1];
     }
-    // URL images: route through optimized path (same quality as canvas)
-    if (img && img.startsWith('http')) return getOptimizedUrl(img);
-    return img;
+    if (!snap) return undefined;
+    // base64 from cache → use directly, no network cost (same logic as timeline)
+    if (snap.image && !snap.image.startsWith('http')) return snap.image;
+    const url = snap.image || snap.imageUrl || '';
+    if (!url) return undefined;
+    return getOptimizedUrl(url);
   }, [isViewingDraft, draftParentIndex, snapshots, viewIndex]);
 
   // Dismiss draft: remove virtual draft entry, return to parent
@@ -1945,8 +2074,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     // so the auto-clamp doesn't fall back to the last snapshot instead.
     // While draft exists, draftParentIndex === its timeline index (no earlier draft slot).
     if (draftParentIndex !== null) setViewIndex(draftParentIndex);
+    setActiveDraftType(null);
     setDraftParentIndex(null);
     setPreviewingTipIndex(null);
+    setDraftDesign(null);
+    setDraftDesignPoster('');
   }, [draftParentIndex]);
 
   // Navigate timeline: keep draft alive so user can swipe back
@@ -1958,6 +2090,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     if (!file.type.startsWith('image/') && !isHeicFile(file)) return;
 
     previewAbortRef.current.abort();
+    setActiveDraftType(null);
     setPreviewingTipIndex(null);
     setDraftParentIndex(null);
     setMessages([]);
@@ -2061,10 +2194,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         if (workSnapshots.length > 0) setViewIndex(refSnapshots.length);
       }
 
-      // ── Step 4: Persist + cache ──
+      // ── Step 4: Persist + cache + log events ──
       allSnapshots.forEach((snap, i) => {
         onSaveSnapshot?.(snap, i, (url) => {
           setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+          // Log image_upload event with the uploaded URL (for Replay)
+          if (projectId && snap.type !== 'reference') {
+          }
         });
         if (snap.type !== 'reference') {
           cacheImage(`snap:${snap.id}`, snap.image);
@@ -2273,29 +2409,46 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         const res = await fetch(`/api/music/${musicTaskId}?projectId=${projectId}`);
         const data = await res.json();
         if (stopped) return;
-        if (data.status === 'completed' && data.tracks?.length) {
+        if ((data.status === 'streaming' || data.status === 'completed') && data.tracks?.length) {
           setMusicTracks(data.tracks);
-          // Create a new music message at the bottom (same pattern as video inline)
-          const musicLines = data.tracks.map((t: { title: string; duration: number; tags: string; audioUrl: string; trackIndex: number }) =>
-            `music:${t.trackIndex}|${t.title}|${Math.round(t.duration)}|${t.tags}|${t.audioUrl}`
-          ).join('\n');
+          // Format: music:trackIndex|title|duration|tags|playUrl|finalUrl
+          const musicLines = data.tracks.map((tk: { title: string; duration: number; tags: string; audioUrl: string; streamAudioUrl?: string; trackIndex: number }) => {
+            const playUrl = tk.streamAudioUrl || tk.audioUrl;
+            const finalUrl = tk.audioUrl || '';
+            return `music:${tk.trackIndex}|${tk.title}|${Math.round(tk.duration)}|${tk.tags}|${playUrl}|${finalUrl}`;
+          }).join('\n');
           const msgId = `music-${musicTaskId}`;
-          const fullContent = `🎵 ${t('status.musicReady')}\n${musicLines}`;
+          const statusText = data.status === 'streaming' ? t('status.musicStreaming') : t('status.musicReady');
+          const fullContent = `🎵 ${statusText}\n${musicLines}`;
           setMessages(prev => {
-            // Update if already exists (second track arriving), otherwise create new
             if (prev.some(m => m.id === msgId)) {
               const updated = prev.map(m => m.id === msgId ? { ...m, content: fullContent } : m);
-              // Re-persist with updated tracks
               const msg = updated.find(m => m.id === msgId);
-              if (msg) onSaveMessage?.(msg);
+              if (msg && data.status === 'completed') onSaveMessage?.(msg);
               return updated;
             }
             const musicMsg: Message = { id: msgId, role: 'assistant', content: fullContent, timestamp: Date.now() };
-            onSaveMessage?.(musicMsg);
+            if (data.status === 'completed') onSaveMessage?.(musicMsg);
             return [...prev, musicMsg];
           });
-          // Check if all tracks done (2 tracks = full SUCCESS)
-          if (data.tracks.length >= 2) {
+          if (data.status === 'streaming') {
+            setAgentStatus(t('status.musicStreaming'));
+          }
+          // Stop polling only when completed with 2 tracks
+          if (data.status === 'completed' && data.tracks.length >= 2) {
+            // Replace stream/temp URLs with permanent Supabase URLs in all design code
+            const supabase = createBrowserSupabase();
+            setSnapshots(prev => {
+              prev.forEach(snap => {
+                if (!snap.design?.code) return;
+                resolveAudioUrlsInCode(snap.design.code, projectId!, supabase).then(({ code, changed }) => {
+                  if (!changed) return;
+                  setSnapshots(p => p.map(s => s.id !== snap.id ? s : { ...s, design: { ...s.design!, code } }));
+                  onSaveDesignProps?.(snap.id, { ...snap.design!, code });
+                });
+              });
+              return prev;
+            });
             setMusicTaskId(null);
             musicPollingRef.current = false;
             setAgentStatus(t('status.musicReady'));
@@ -2312,9 +2465,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         console.warn('🎵 [music] poll error:', e);
       }
     };
-    // Poll immediately, then every 10s
     poll();
-    const interval = setInterval(poll, 10_000);
+    const interval = setInterval(poll, 2_000);
     return () => { stopped = true; clearInterval(interval); };
   }, [musicTaskId, projectId, t]);
 
@@ -2462,10 +2614,19 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         pendingVideoRef.current = null;
         const file = new File([blob], filename, { type: 'video/mp4' });
         try {
-          await navigator.share({ files: [file] });
+          if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+            await navigator.share({ files: [file] });
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+          } else {
+            // Fallback: open in new tab (iOS Safari ignores <a download> for blobs)
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+            setTimeout(() => URL.revokeObjectURL(url), 120000);
+          }
         } catch { /* user cancelled share sheet */ }
-        setAgentStatus(t('editor.done'));
-        showSaveToast();
         return;
       }
 
@@ -2479,10 +2640,25 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         });
 
         if (isMobile) {
-          // Mobile: store blob, prompt user to tap Share
-          pendingVideoRef.current = { blob, filename: `makaron-design-${Date.now()}.mp4` };
-          setIsSaving(false);
-          setAgentStatus(t('editor.videoReady'));
+          const filename = `makaron-design-${Date.now()}.mp4`;
+          const file = new File([blob], filename, { type: 'video/mp4' });
+          if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+            // Mobile + share available: store blob, prompt user to tap Share
+            pendingVideoRef.current = { blob, filename };
+            setIsSaving(false);
+            setAgentStatus(t('editor.videoReady'));
+          } else {
+            // Mobile but no share (localhost/HTTP): download directly
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            setIsSaving(false);
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+          }
         } else {
           // Desktop: download directly
           const filename = `makaron-design-${Date.now()}.mp4`;
@@ -2505,13 +2681,26 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       return;
     }
 
-    // Image download
-    const img = timeline[viewIndex];
+    // Image download — for designs with editable transforms, re-capture poster to include drag/scale
+    const snapIdxForSave = snapFromTimeline(viewIndex, draftParentIndexRef.current);
+    const snapForSave = snapIdxForSave !== null ? snapshotsRef.current[snapIdxForSave] : undefined;
+    let img = timeline[viewIndex];
     if (!img) return;
     const filename = `ai-edited-${Date.now()}.jpg`;
     setIsSaving(true);
 
     try {
+      // Re-capture poster for static designs (includes drag/scale transforms via HOC)
+      if (snapForSave?.design && !snapForSave.design.animation) {
+        try {
+          const { captureDesignPoster } = await import('@/components/RemotionRenderer');
+          const freshPoster = await captureDesignPoster(snapForSave.design);
+          if (freshPoster) img = freshPoster;
+        } catch (e) {
+          console.warn('Re-capture poster for save failed, using cached:', e);
+        }
+      }
+
       const res = await fetch(img);
       const blob = await res.blob();
 
@@ -2604,21 +2793,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
-  // Music select: user chose a track → show short user msg + send agent inject request
+  // Music select: insert immediately with whatever URL is available (stream or permanent)
+  // completed polling will replace stream URLs with permanent URLs in design code later
   const handleMusicSelect = useCallback((track: { audioUrl: string; duration: number; title: string; tags: string }) => {
     if (!projectId) { console.warn('🎵 [music] no projectId'); return; }
     if (isAgentActive) { console.warn('🎵 [music] agent busy, skipping'); return; }
     console.log(`🎵 [music] user selected: ${track.title}`);
-    // Mark selected in DB
+    addMessage('user', `🎵 ${track.title}`);
+    // Mark selected in DB (fire-and-forget)
     fetch('/api/music/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
     }).catch(() => {});
-    // Show short user message
-    addMessage('user', `🎵 ${track.title}`);
-    // Send full instruction to agent (silent — no duplicate user msg shown)
-    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${track.audioUrl}\nAdd <Audio src="${track.audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
+    const audioUrl = track.audioUrl;
+    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
     handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
@@ -2898,9 +3087,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 onIndexChange={handleIndexChange}
                 referenceCount={referenceCount}
                 animatedDesigns={designsMap}
+                draftDesign={draftDesign}
                 isEditing={isEditing}
                 isDraft={isViewingDraft}
-                isDraftLoading={isViewingDraft && !draftFullLoaded && !!draftFullUrl?.startsWith('http')}
+                isDraftLoading={isViewingDraft && (activeDraftType === 'design' ? !draftDesignPoster : activeDraftType === 'tips' ? (!draftFullLoaded && !!draftFullUrl?.startsWith('http')) : false)}
                 draftTimelineIndex={draftParentIndex !== null ? draftParentIndex + 1 : undefined}
                 onDismissDraft={dismissDraft}
                 previousImage={previousImage}
@@ -2966,8 +3156,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
             {/* TODO: Floating text input for annotation text tool — uncomment when text editing flow is ready */}
 
-            {/* Top toolbar */}
-            {snapshots.length > 0 && (
+            {/* Top toolbar — hidden in design editor mode */}
+            {snapshots.length > 0 && !selectedEditableFieldId && (
               <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
                 <div className="flex items-center gap-1">
                   {onBack && (
@@ -3156,6 +3346,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             </div>
           )}
 
+          {/* Hidden proxy input — iOS keyboard focus anchor (must be in DOM before edit starts) */}
           {/* Design text editor — floating panel (like AnnotationToolbar) */}
           {editingDesignField && currentDesignSnap?.design && (
             <div style={isDesktop ? {
@@ -3165,10 +3356,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               width: 340,
             } : {
               position: 'fixed',
-              bottom: 0, left: 0, right: 0,
+              bottom: editorKbInset, left: 0, right: 0,
               zIndex: 201,
               maxWidth: 480,
               margin: '0 auto',
+              transition: editorKbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
             }}>
               <DesignTextEditor
                 field={editingDesignField}
@@ -3576,6 +3768,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           const currentDesign = pendingDesign;
           const designDesc = (currentDesign as unknown as Record<string, unknown>).description as string | undefined;
           setPendingDesign(null);
+          setActiveDraftType(null); // clear draft type — published design replaces virtual draft
+          setDraftDesign(null); // clear draft — published design replaces it
+          setDraftParentIndex(null); // clear virtual draft slot — published replaces it
           setAgentStatus(t('status.renderingDesign'));
           // Poster-first: wait 500ms for fonts/images to load, capture poster, THEN add snapshot
           queueMicrotask(async () => {

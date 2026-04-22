@@ -35,7 +35,7 @@ export async function createMusic(input: CreateMusicInput): Promise<CreateMusicR
     return {
       success: true,
       taskId,
-      message: 'Music generation started. Use get_music_status to poll (typically 2-3 minutes).',
+      message: 'Music generation started. Preview available in ~30s.',
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

@@ -6,6 +6,7 @@ export interface GetMusicStatusInput {
 
 export interface MusicTrack {
   audioUrl: string
+  streamAudioUrl?: string
   duration: number
   title: string
   tags: string
@@ -14,7 +15,7 @@ export interface MusicTrack {
 
 export interface GetMusicStatusResult {
   success: boolean
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  status: 'pending' | 'processing' | 'streaming' | 'completed' | 'failed'
   tracks: MusicTrack[]
   error?: string
   message: string
@@ -40,11 +41,27 @@ export async function getMusicStatus(input: GetMusicStatusInput): Promise<GetMus
       case 'processing':
         message = 'Music is generating...'
         break
+      case 'streaming':
+        if (result.tracks?.length) {
+          result.tracks.forEach((t: SunoTrack, i: number) => {
+            tracks.push({
+              audioUrl: t.audioUrl,
+              streamAudioUrl: t.streamAudioUrl,
+              duration: t.duration,
+              title: t.title,
+              tags: t.tags,
+              trackIndex: i,
+            })
+          })
+        }
+        message = 'Music preview available'
+        break
       case 'completed':
         if (result.tracks?.length) {
           result.tracks.forEach((t: SunoTrack, i: number) => {
             tracks.push({
               audioUrl: t.audioUrl,
+              streamAudioUrl: t.streamAudioUrl,
               duration: t.duration,
               title: t.title,
               tags: t.tags,

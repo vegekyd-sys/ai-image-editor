@@ -8,6 +8,93 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-20',
+    en: { title: 'Headless Agent & CLI', items: [
+      'Published on npm: `npx makaron-cli` — zero install, works anywhere with Node.js',
+      'Makaron CLI: create projects, chat with Agent, generate images/videos — all from terminal',
+      'Headless Agent: Agent runs without browser — results appear in project page automatically',
+      'Fire-and-forget API: POST /api/agent/run returns immediately, Agent works in background',
+      'Multi-image project creation: upload multiple photos at once via CLI or API',
+      'Text-to-image: create empty project and let Agent generate from a text prompt',
+      'Auto-naming: headless projects get named automatically after first Agent run',
+    ]},
+    zh: { title: 'Headless Agent & CLI', items: [
+      '已发布 npm：`npx makaron-cli` — 无需安装，有 Node.js 即可使用',
+      'Makaron CLI：终端创建项目、与 Agent 对话、生图/生视频，无需浏览器',
+      'Headless Agent：Agent 脱离前端运行，结果自动出现在项目页',
+      'Fire-and-forget API：POST /api/agent/run 立即返回，Agent 后台执行',
+      '多图项目创建：CLI 或 API 一次上传多张照片',
+      '文生图：创建空项目后 Agent 直接从文字 prompt 生成图片',
+      '自动命名：headless 项目在首次 Agent 运行后自动获取名称',
+    ]},
+  },
+  {
+    date: '2026-04-19',
+    en: { title: 'Preview = Export & Design Editor Polish', items: [
+      'Preview = Export guarantee: drag/scale positions now identical in preview and exported video/image',
+      'Mobile pinch-to-scale: two-finger zoom on editable elements, works anywhere on canvas',
+      'Seek bar interaction: dragging seek bar cleanly exits design editor mode',
+    ]},
+    zh: { title: '预览=导出 & Design 编辑器优化', items: [
+      '预览=导出保证：拖拽/缩放后的位置在预览和导出视频/图片中完全一致',
+      '手机双指缩放：画布任意位置双指缩放编辑元素',
+      '进度条交互：拖拽进度条自动退出编辑模式',
+    ]},
+  },
+  {
+    date: '2026-04-17',
+    en: { title: 'Design Editor & Creative Tools', items: [
+      'Design Editor: drag editable text elements to reposition — snap guidelines for precise alignment',
+      'Agent creative tools: @remotion/paths (SVG path animation) + @remotion/noise (procedural textures)',
+      'Design animations preserved: dragging no longer breaks Agent\'s rotate/scale/skew effects',
+      'Double-tap to edit text: unified interaction on desktop and mobile',
+      'Scale/resize editable elements: drag any corner handle to resize proportionally',
+    ]},
+    zh: { title: 'Design 编辑器 & 创意工具', items: [
+      'Design 编辑器：可拖拽文字元素重新定位 — 智能辅助线精确对齐',
+      'Agent 创意工具：@remotion/paths（SVG 路径动画）+ @remotion/noise（程序化纹理）',
+      '动画效果保留：拖拽后 Agent 的旋转/缩放/倾斜特效不丢失',
+      '双击编辑文字：桌面和手机统一交互',
+      '缩放编辑元素：拖拽四角手柄等比缩放',
+    ]},
+  },
+  {
+    date: '2026-04-16',
+    en: { title: 'Video Design Pro & Sandbox Rendering', items: [
+      'Smarter video creation: 4-question creative check drives the entire workflow — plan, code, verify',
+      'Rich kinetic typography: per-character animation, multi-layer text per scene, text that tells the story',
+      'Remotion Sandbox: server-side frame rendering on Vercel — Agent previews any frame without browser',
+      'CJK fonts + emoji in Sandbox: system Noto fonts + 30 pre-cached Google Fonts in Snapshot',
+      'Cross-platform safe: iOS-friendly effects, gradient backgrounds, no heavy CJK web fonts',
+      'Auto-save & publish: Agent saves code after every edit, publishes when satisfied',
+      'Abort Agent: cancel background Agent from CUI',
+    ]},
+    zh: { title: 'Video Design Pro & Sandbox 渲染', items: [
+      '更聪明的视频创作：四问创意自检驱动全流程 — 规划、编码、验证',
+      '丰富的花字动效：逐字动画、每场景多层文字、文字就是画面的一部分',
+      'Remotion Sandbox：服务端逐帧渲染 — Agent 无需浏览器即可预览任意帧',
+      'Sandbox 中日韩字体 + Emoji：系统 Noto 字体 + 30 个预缓存 Google Fonts',
+      '跨平台安全：iOS 友好特效，渐变背景代替模糊，不加载大型中文网络字体',
+      '自动保存 & 发布：Agent 每次编辑后自动存代码，满意后发布',
+      '中断 Agent：CUI 中可取消后台 Agent',
+    ]},
+  },
+  {
+    date: '2026-04-15',
+    en: { title: 'Frame Preview & Draft Timeline', items: [
+      'preview_frame: Agent captures any frame of a video design to check its own work before publishing',
+      'Draft → Publish: run_code creates drafts, write_file publishes — only final designs land on timeline',
+      'Multi-frame chat display: preview frames shown as scrollable gallery in conversation',
+      'Agent model upgraded to Opus 4.6',
+    ]},
+    zh: { title: '逐帧预览 & 草稿时间线', items: [
+      'preview_frame：Agent 可以截取视频任意帧来检查自己的作品，发布前自行校验',
+      '草稿 → 发布：run_code 生成草稿，write_file 发布 — 时间线上只出现最终稿',
+      '多帧聊天展示：截帧预览在对话中横向滚动展示',
+      'Agent 模型升级到 Opus 4.6',
+    ]},
+  },
+  {
     date: '2026-04-13',
     en: { title: 'Editable Text in Designs', items: [
       'Edit text directly: click any text element in a design to select, click Edit to modify — no Agent needed',

@@ -15,6 +15,8 @@ export interface AgentCallbackContext {
   setAgentStatus: (status: string) => void;
   setAnimations: (updater: (prev: ProjectAnimation[]) => ProjectAnimation[]) => void;
   setPendingDesign: (d: DesignPayload | null) => void;
+  setDraftDesign?: (d: DesignPayload | null) => void;
+  setDesignDraftParent?: (idx: number | null) => void;
   setPendingNotification?: (n: { text: string; targetIndex: number }) => void;
   setSelectedVideoId?: (id: string) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,6 +61,8 @@ export interface AgentCallbackContext {
 
   // Credits exhausted — show CreditPopup
   onInsufficientCredits?: (balance: number) => void;
+  // Frame capture (frontend renderStillOnWeb → upload to workspace)
+  captureDesignFrame?: (frame: number, uploadPath: string) => Promise<void>;
 
   // Optional cleanup on done (reconnect uses this to disconnect)
   onCleanup?: () => void;
@@ -109,6 +113,9 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
   let toolStatusSetAt = 0;
   let pendingThinking: string | null = null;
   let minDisplayTimer: ReturnType<typeof setTimeout> | null = null;
+  // Track last status set by this callback instance (for conditional greeting reset)
+  let lastSetStatus = '';
+  const setStatus = (s: string) => { lastSetStatus = s; ctx.setAgentStatus(s); };
 
   const isThinkingStatus = (s: string) =>
     s.includes('Thinking') || s.includes('正在思考');
@@ -129,7 +136,9 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         pendingThinking = null;
         if (minDisplayTimer) { clearTimeout(minDisplayTimer); minDisplayTimer = null; }
         toolStatusSetAt = performance.now();
-        ctx.setAgentStatus(status);
+        // Sync timer phase so the 1s interval doesn't overwrite this status
+        if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = status;
+        setStatus(status);
       } else if (isThinkingStatus(status)) {
         // Thinking: defer if tool status hasn't been shown long enough
         const remaining = MIN_TOOL_DISPLAY_MS - (performance.now() - toolStatusSetAt);
@@ -138,19 +147,19 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
           if (minDisplayTimer) clearTimeout(minDisplayTimer);
           minDisplayTimer = setTimeout(() => {
             if (pendingThinking) {
-              ctx.setAgentStatus(pendingThinking);
+              setStatus(pendingThinking);
               pendingThinking = null;
             }
             minDisplayTimer = null;
           }, remaining);
         } else {
-          ctx.setAgentStatus(status);
+          setStatus(status);
         }
       } else {
         // Other statuses (done, error, etc): display immediately
         pendingThinking = null;
         if (minDisplayTimer) { clearTimeout(minDisplayTimer); minDisplayTimer = null; }
-        ctx.setAgentStatus(status);
+        setStatus(status);
       }
     },
 
@@ -216,7 +225,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const isFirstSnapshot = ctx.snapshotsRef.current.length <= 1;
       ctx.fetchTipsForSnapshot(snapId, imageData, isFirstSnapshot ? 'full' : 'none');
       ctx.autoFetchTriggered.current = true;
-      ctx.setAgentStatus(ctx.t('status.imageGenerated'));
+      setStatus(ctx.t('status.imageGenerated'));
 
       // "See" button if user is not on the new snapshot
       const newSnapIdx = ctx.snapshotsRef.current.length;
@@ -269,14 +278,28 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const stream = ctx.codeStreamRef.current;
       if (!stream) return;
       if (done) {
+        // Flush any pending text before closing
+        const pending = (stream as any).__pendingText || '';
+        if ((stream as any).__pendingRaf) cancelAnimationFrame((stream as any).__pendingRaf);
         ctx.setMessages(prev => prev.map(m =>
-          m.id === stream.msgId ? { ...m, content: (m.content || '') + '\n```\n' } : m,
+          m.id === stream.msgId ? { ...m, content: (m.content || '') + pending + '\n```\n' } : m,
         ));
         ctx.codeStreamRef.current = null;
       } else {
-        ctx.setMessages(prev => prev.map(m =>
-          m.id === stream.msgId ? { ...m, content: (m.content || '') + text } : m,
-        ));
+        // Batch code chunks — accumulate in ref, flush via rAF (prevents "maximum update depth exceeded")
+        (stream as any).__pendingText = ((stream as any).__pendingText || '') + text;
+        if (!(stream as any).__pendingRaf) {
+          (stream as any).__pendingRaf = requestAnimationFrame(() => {
+            const flush = (stream as any).__pendingText || '';
+            (stream as any).__pendingText = '';
+            (stream as any).__pendingRaf = 0;
+            if (flush) {
+              ctx.setMessages(prev => prev.map(m =>
+                m.id === stream.msgId ? { ...m, content: (m.content || '') + flush } : m,
+              ));
+            }
+          });
+        }
       }
     },
 
@@ -313,6 +336,23 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       ctx.onMusicTaskCreated?.(taskId);
     },
 
+    onCaptureFrame: (frame, uploadPath, _captureId) => {
+      // Frontend captures the frame and uploads — fire and forget
+      ctx.captureDesignFrame?.(frame, uploadPath).catch(err => {
+        console.warn('⚠️ [agent] captureDesignFrame failed:', err);
+      });
+    },
+
+    onPreviewFrame: (workspaceUrl) => {
+      // Append preview frame to images array (supports multiple frames per message)
+      if (workspaceUrl && currentMsgId) {
+        const id = currentMsgId;
+        ctx.setMessages(prev => prev.map(m =>
+          m.id === id ? { ...m, images: [...(m.images || []), workspaceUrl] } : m
+        ));
+      }
+    },
+
     onNsfwDetected: () => {
       console.log('[agent] NSFW content detected — session flagged, future calls skip Gemini');
       ctx.isNsfwRef.current = true;
@@ -329,8 +369,28 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }
     },
 
-    onReasoning: () => {
+    onReasoningStart: () => {
       if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentThinking');
+      // Start a new thinking segment
+      if (!currentMsgId) return;
+      const id = currentMsgId;
+      ctx.setMessages(prev => prev.map(m =>
+        m.id === id ? { ...m, thinking: [...(m.thinking || []), ''] } : m,
+      ));
+    },
+
+    onReasoning: (text: string) => {
+      if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentThinking');
+      if (!currentMsgId || !text) return;
+      const id = currentMsgId;
+      ctx.setMessages(prev => prev.map(m => {
+        if (m.id !== id) return m;
+        const segments = [...(m.thinking || [])];
+        // Auto-create first segment if none exists (reasoning-start may not fire)
+        if (segments.length === 0) segments.push('');
+        segments[segments.length - 1] += text;
+        return { ...m, thinking: segments };
+      }));
     },
 
     onCoding: () => {
@@ -338,11 +398,29 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     },
 
     onRender: (design) => {
-      console.log(`🎨 [agent] render received: ${design.width}x${design.height}, code ${design.code.length} chars`);
-      ctx.setAgentStatus(ctx.t('status.renderingDesign'));
-      ctx.pendingDesignMsgIdRef.current = currentMsgId;
-      ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
-      ctx.setPendingDesign(design);
+      const published = (design as Record<string, unknown>).published === true;
+      const previewUrl = (design as Record<string, unknown>).previewUrl as string | undefined;
+      console.log(`🎨 [agent] render received (published=${published}): ${design.width}x${design.height}, code ${design.code.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
+      setStatus(ctx.t('status.renderingDesign'));
+
+      // Show preview image in CUI (so user sees what Agent sees)
+      if (previewUrl && currentMsgId) {
+        ctx.setMessages(prev => prev.map(m =>
+          m.id === currentMsgId ? { ...m, image: previewUrl } : m
+        ));
+      }
+
+      if (published) {
+        ctx.pendingDesignMsgIdRef.current = currentMsgId;
+        ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
+        ctx.setDraftDesign?.(null);
+        ctx.setDesignDraftParent?.(null);
+        ctx.setPendingDesign(design);
+      } else {
+        ctx.setDraftDesign?.(design);
+        const lastSnapIdx = ctx.snapshotsRef.current.length - 1;
+        ctx.setDesignDraftParent?.(lastSnapIdx >= 0 ? lastSnapIdx : 0);
+      }
     },
 
     onDone: () => {
@@ -351,7 +429,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       console.log(`⏱️ [agent] DONE total ${elapsed}s`);
       // Don't overwrite music polling status
       if (!ctx.musicPollingRef?.current) {
-        ctx.setAgentStatus(ctx.t('editor.done'));
+        setStatus(ctx.t('editor.done'));
       }
 
       // Drain pending CUI-attached images
@@ -373,7 +451,11 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         ctx.pendingTeaserRef.current = null;
         setTimeout(() => ctx.triggerTipsTeaser?.(pendingTeaser.snapshotId, pendingTeaser.tips), 400);
       } else if (!ctx.musicPollingRef?.current) {
-        setTimeout(() => ctx.setAgentStatus(ctx.t('editor.greeting')), 2000);
+        // Only reset to greeting if status is still "Done" — don't overwrite newer status
+        const doneText = ctx.t('editor.done');
+        setTimeout(() => {
+          if (lastSetStatus === doneText) setStatus(ctx.t('editor.greeting'));
+        }, 2000);
       }
 
       ctx.onCleanup?.();

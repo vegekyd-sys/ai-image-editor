@@ -4,6 +4,7 @@ import { useRef, useCallback } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
+import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
 import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation } from '@/types'
 
 interface LoadedProject {
@@ -70,7 +71,7 @@ export function useProject(projectId: string, userId: string) {
       imageUrl: s.image_url,
       description: s.description ?? undefined,
       ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
-      ...(s.design_path ? { _designPath: s.design_path } : {}),
+      ...(s.design_path ? { designPath: s.design_path } : {}),
     }))
 
     // Load persisted designs from workspace (async, non-blocking)
@@ -86,14 +87,16 @@ export function useProject(projectId: string, userId: string) {
       return ''
     })()
     await Promise.all(snapshots.map(async (snap) => {
-      const dp = (snap as any)._designPath as string | undefined
-      if (!dp || !resolvedUserId) { delete (snap as any)._designPath; return }
+      const dp = snap.designPath
+      if (!dp || !resolvedUserId) return
       try {
         const storagePath = `${resolvedUserId}/workspace/${dp}`
         const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
         if (urlData?.publicUrl) {
+          // Cache-bust: design JSON is updated in-place via upsert, CDN caches stale version
+          const bustUrl = `${urlData.publicUrl}?t=${Date.now()}`
           const res = await Promise.race([
-            fetch(urlData.publicUrl),
+            fetch(bustUrl),
             new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
           ])
           if (res.ok) {
@@ -104,8 +107,29 @@ export function useProject(projectId: string, userId: string) {
       } catch (e) {
         console.warn('Failed to load design from workspace:', dp, e)
       }
-      delete (snap as any)._designPath
     }))
+
+    // Background: resolve expired audio URLs in design code (non-blocking)
+    Promise.resolve().then(async () => {
+      for (const snap of snapshots) {
+        if (!snap.design?.code) continue
+        try {
+          const { code, changed } = await resolveAudioUrlsInCode(snap.design.code, projectId, supabase)
+          if (!changed) continue
+          snap.design = { ...snap.design, code }
+          // Re-save to workspace
+          const dp = snap.designPath
+          if (dp && resolvedUserId) {
+            const designJson = JSON.stringify(snap.design)
+            const storagePath = `${resolvedUserId}/workspace/${dp}`
+            await supabase.storage.from('images').upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
+            console.log(`🎵 [audio-resolve] updated ${dp}`)
+          }
+        } catch (e) {
+          console.warn('[audio-resolve] failed for snapshot:', snap.id, e)
+        }
+      }
+    })
 
     const messages: Message[] = dbMessages.map((m) => {
       // Restore inline image + design: find the snapshot linked to this message

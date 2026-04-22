@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
+import Moveable from 'react-moveable';
 import type { EditableField } from '@/types';
 
 interface DesignOverlayProps {
@@ -22,6 +23,7 @@ interface MeasuredRect {
   top: number;
   width: number;
   height: number;
+  domEl: HTMLElement;
 }
 
 export default function DesignOverlay({
@@ -30,117 +32,249 @@ export default function DesignOverlay({
   props,
   selectedFieldId,
   onSelectField,
+  onUpdateProp,
   onStartEdit,
   onVisibleFieldsChange,
   playerRef,
 }: DesignOverlayProps) {
   const [rects, setRects] = useState<MeasuredRect[]>([]);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const rafRef = useRef<number>(0);
   const onVisibleFieldsChangeRef = useRef(onVisibleFieldsChange);
   onVisibleFieldsChangeRef.current = onVisibleFieldsChange;
 
-  // Track overlay container ref — used as coordinate base in measure()
   const overlayRef = useRef<HTMLDivElement>(null);
   const overlayMountedRef = useRef(false);
+  const moveableRef = useRef<Moveable>(null);
 
-  // Measure positions of [data-editable] elements relative to the overlay itself
+  const isDraggingRef = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const isMeasuringRef = useRef(false);
+
+  // Drag snapshots
+  const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragDomElRef = useRef<HTMLElement | null>(null);
+  const dragScaleRef = useRef(1);
+
+  // Apply stored position + scale to Remotion DOM elements using CSS independent properties.
+  // style.translate / style.scale don't interfere with Moveable or hit-testing,
+  // and are read by @remotion/web-renderer's canvas drawing (via our patch).
+  const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
+    elements.forEach((el) => {
+      const id = el.getAttribute('data-editable');
+      if (!id) return;
+      const htmlEl = el as HTMLElement;
+      const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
+      const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
+      htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
+      htmlEl.style.scale = sc ? `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` : '';
+    });
+  }, [props]);
+
+  // Measure editable elements
   const measure = useCallback(() => {
+    if (isDraggingRef.current || isMeasuringRef.current) return;
     if (!containerEl || !overlayRef.current) { setRects([]); return; }
-    const baseRect = overlayRef.current.getBoundingClientRect();
-    const containerRect = containerEl.getBoundingClientRect();
+
+    isMeasuringRef.current = true;
+
     const elements = containerEl.querySelectorAll('[data-editable]');
+    applyStoredOffsets(elements);
+
+    const baseRect = overlayRef.current.getBoundingClientRect();
     const newRects: MeasuredRect[] = [];
     const seen = new Set<string>();
     elements.forEach((el) => {
       const id = el.getAttribute('data-editable');
       if (!id || seen.has(id)) return;
       if (!editables.some(f => f.id === id)) return;
+      // Fix inline elements — Moveable needs a box model to work correctly
+      const htmlEl = el as HTMLElement;
+      if (getComputedStyle(htmlEl).display === 'inline') {
+        htmlEl.style.display = 'inline-block';
+      }
       const elRect = el.getBoundingClientRect();
-      // Skip elements outside the visible Remotion Player area
-      if (elRect.width < 1 || elRect.height < 1) return;
-      if (elRect.right <= containerRect.left || elRect.left >= containerRect.right) return;
-      if (elRect.bottom <= containerRect.top || elRect.top >= containerRect.bottom) return;
+      const storedPos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
+
+      let rectLeft = Math.round(elRect.left - baseRect.left);
+      let rectTop = Math.round(elRect.top - baseRect.top);
+      let rectWidth = Math.round(elRect.width);
+      let rectHeight = Math.round(elRect.height);
+
+      if (elRect.width < 1 || elRect.height < 1) {
+        if (!storedPos) return;
+        const prevRect = rects.find(r => r.id === id);
+        if (prevRect) {
+          rectLeft = prevRect.left;
+          rectTop = prevRect.top;
+          rectWidth = prevRect.width;
+          rectHeight = prevRect.height;
+        } else {
+          return;
+        }
+      }
       seen.add(id);
-      newRects.push({
-        id,
-        left: elRect.left - baseRect.left,
-        top: elRect.top - baseRect.top,
-        width: elRect.width,
-        height: elRect.height,
-      });
+      newRects.push({ id, left: rectLeft, top: rectTop, width: rectWidth, height: rectHeight, domEl: el as HTMLElement });
     });
     setRects(newRects);
-    // Notify parent which fields are visible at the current frame
-    const visibleIds = newRects.map(r => r.id);
-    onVisibleFieldsChangeRef.current?.(visibleIds);
-  }, [containerEl, editables]);
+    onVisibleFieldsChangeRef.current?.(newRects.map(r => r.id));
+    isMeasuringRef.current = false;
+  }, [containerEl, editables, applyStoredOffsets, props]);
 
-  // Measure on mount, on prop changes
+  // Mark selected element (CSS hides hover outline when Moveable frame shows)
   useEffect(() => {
-    measure();
-  }, [measure, props]);
+    const el = selectedFieldId ? rects.find(r => r.id === selectedFieldId)?.domEl : null;
+    if (el) el.setAttribute('data-editable-selected', '');
+    return () => { if (el) el.removeAttribute('data-editable-selected'); };
+  }, [selectedFieldId, rects]);
 
-  // Re-measure once overlay div mounts
-  useEffect(() => {
-    if (overlayRef.current && !overlayMountedRef.current) {
-      overlayMountedRef.current = true;
-      measure();
-    }
-  }, [measure]);
-
-  // Listen for frameupdate from Remotion Player (for animated designs)
+  // Measure triggers
+  useEffect(() => { isDraggingRef.current = false; setIsDragging(false); measure(); }, [measure, props]);
+  useEffect(() => { if (overlayRef.current && !overlayMountedRef.current) { overlayMountedRef.current = true; measure(); } }, [measure]);
   useEffect(() => {
     if (!playerRef) return;
-    const handleFrame = () => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(measure);
-    };
-    try {
-      playerRef.addEventListener('frameupdate', handleFrame);
-    } catch { /* playerRef may not support this */ }
-    return () => {
-      try {
-        playerRef.removeEventListener('frameupdate', handleFrame);
-      } catch { /* ignore */ }
-      cancelAnimationFrame(rafRef.current);
-    };
+    const h = () => { cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(measure); };
+    try { playerRef.addEventListener('frameupdate', h); } catch { /* */ }
+    return () => { try { playerRef.removeEventListener('frameupdate', h); } catch { /* */ } cancelAnimationFrame(rafRef.current); };
   }, [playerRef, measure]);
-
-  // Re-measure on window resize
-  useEffect(() => {
-    const handleResize = () => measure();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [measure]);
-
-  // Observe container for DOM changes (Remotion re-renders)
+  useEffect(() => { const h = () => measure(); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, [measure]);
   useEffect(() => {
     if (!containerEl) return;
-    const observer = new MutationObserver(() => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(measure);
-    });
-    observer.observe(containerEl, { childList: true, subtree: true, attributes: true });
-    return () => observer.disconnect();
+    const o = new MutationObserver(() => { if (isDraggingRef.current) return; cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(measure); });
+    o.observe(containerEl, { childList: true, subtree: true, attributes: true });
+    return () => o.disconnect();
   }, [containerEl, measure]);
-
-  // Re-measure when selection changes (input bar toggles → layout shift)
-  useEffect(() => {
-    const t = setTimeout(measure, 50);
-    return () => clearTimeout(t);
-  }, [selectedFieldId, measure]);
-
-  // ResizeObserver on containerEl to catch layout changes
+  useEffect(() => { const t = setTimeout(measure, 50); return () => clearTimeout(t); }, [selectedFieldId, measure]);
   useEffect(() => {
     if (!containerEl) return;
-    const ro = new ResizeObserver(() => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(measure);
-    });
-    ro.observe(containerEl);
-    return () => ro.disconnect();
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(measure); });
+    ro.observe(containerEl); return () => ro.disconnect();
   }, [containerEl, measure]);
+
+  // Bind click + double-tap-to-edit on each editable DOM element
+  const onSelectFieldRef = useRef(onSelectField);
+  onSelectFieldRef.current = onSelectField;
+  const onStartEditRef = useRef(onStartEdit);
+  onStartEditRef.current = onStartEdit;
+  const selectedFieldIdRef = useRef(selectedFieldId);
+  selectedFieldIdRef.current = selectedFieldId;
+
+  // Event delegation: single listener on container, works for any DOM element regardless of remount
+  useEffect(() => {
+    if (!containerEl) return;
+    let lastTapTime = 0;
+    let lastTapId = '';
+    let activeTouches = 0;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = (e.target as HTMLElement).closest?.('[data-editable]');
+      if (!target) return;
+      const id = target.getAttribute('data-editable');
+      if (!id || !editables.some(f => f.id === id)) return;
+
+      if (e.pointerType === 'touch') activeTouches++;
+      const now = Date.now();
+      if (activeTouches <= 1 && selectedFieldIdRef.current === id && lastTapId === id && now - lastTapTime < 400) {
+        onStartEditRef.current?.(id);
+        lastTapTime = 0;
+        lastTapId = '';
+        return;
+      }
+      lastTapTime = now;
+      lastTapId = id;
+      if (selectedFieldIdRef.current !== id) {
+        onSelectFieldRef.current(id);
+      }
+    };
+    const handlePointerUp = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
+    };
+
+    containerEl.addEventListener('pointerdown', handlePointerDown);
+    containerEl.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      containerEl.removeEventListener('pointerdown', handlePointerDown);
+      containerEl.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [containerEl, editables]);
+
+  // ── Container-level pinch-to-scale ──
+  // Single implementation: works regardless of where fingers land.
+  // Moveable's pinchable is disabled — this is the only pinch handler.
+  const pinchRef = useRef<{ startDist: number; baseW: number; baseH: number } | null>(null);
+
+  useEffect(() => {
+    if (!containerEl) return;
+
+    const getDist = (t: TouchList) =>
+      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (!selectedFieldIdRef.current || e.touches.length !== 2) return;
+      const sc = props[`_scale_${selectedFieldIdRef.current}`] as { w: number; h: number } | undefined;
+      pinchRef.current = {
+        startDist: getDist(e.touches),
+        baseW: sc?.w ?? 1,
+        baseH: sc?.h ?? 1,
+      };
+      isDraggingRef.current = true;
+      setIsDragging(true);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const p = pinchRef.current;
+      if (!p || e.touches.length < 2 || !selectedFieldIdRef.current) return;
+      e.preventDefault();
+
+      const ratio = getDist(e.touches) / p.startDist;
+      const newW = p.baseW * ratio;
+      const newH = p.baseH * ratio;
+
+      // Apply scale via transform (renderMediaOnWeb only reads style.transform)
+      const el = containerEl.querySelector(
+        `[data-editable="${selectedFieldIdRef.current}"]`
+      ) as HTMLElement | null;
+      if (el) {
+        const pos = props[`_pos_${selectedFieldIdRef.current}`] as { x: number; y: number } | undefined;
+        el.style.scale = `${+newW.toFixed(4)} ${+newH.toFixed(4)}`;
+      }
+
+      // Update Moveable frame to follow
+      moveableRef.current?.updateRect();
+    };
+
+    const onTouchEnd = () => {
+      if (!pinchRef.current) return;
+      const fieldId = selectedFieldIdRef.current;
+      pinchRef.current = null;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+
+      if (!fieldId) return;
+      // Persist the pinched scale (read from pinch state, not DOM)
+      const el = containerEl.querySelector(
+        `[data-editable="${fieldId}"]`
+      ) as HTMLElement | null;
+      if (el && el.style.scale) {
+        const parts = el.style.scale.split(' ');
+        const w = parseFloat(parts[0]) || 1;
+        const h = parseFloat(parts[1] ?? parts[0]) || 1;
+        onUpdateProp(`_scale_${fieldId}`, { w, h });
+      }
+    };
+
+    containerEl.addEventListener('touchstart', onTouchStart, { passive: true });
+    containerEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    containerEl.addEventListener('touchend', onTouchEnd, { passive: true });
+    containerEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    return () => {
+      containerEl.removeEventListener('touchstart', onTouchStart);
+      containerEl.removeEventListener('touchmove', onTouchMove);
+      containerEl.removeEventListener('touchend', onTouchEnd);
+      containerEl.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [containerEl, props, onUpdateProp]);
+
+  const selectedRect = rects.find(r => r.id === selectedFieldId);
 
   return (
     <div
@@ -148,58 +282,103 @@ export default function DesignOverlay({
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 15 }}
     >
-      {rects.map((rect) => {
-        const field = editables.find(f => f.id === rect.id);
+      {/* Label tag for selected element — hidden during drag */}
+      {selectedRect && selectedFieldId && !isDragging && (() => {
+        const field = editables.find(f => f.id === selectedFieldId);
         if (!field) return null;
-        const isSelected = selectedFieldId === rect.id;
-        const isHovered = hoveredId === rect.id;
-
         return (
           <div
-            key={rect.id}
-            className="absolute pointer-events-auto"
+            className="absolute px-1.5 py-0.5 text-[10px] font-medium rounded-sm whitespace-nowrap pointer-events-none"
             style={{
-              left: rect.left,
-              top: rect.top,
-              width: rect.width,
-              height: rect.height,
-              border: isSelected
-                ? '1px dashed rgb(217,70,239)'
-                : isHovered
-                  ? '1px dashed rgba(255,255,255,0.4)'
-                  : '1px solid transparent',
-              cursor: 'pointer',
-              transition: 'border-color 0.15s',
-              boxSizing: 'border-box',
+              left: selectedRect.left,
+              top: selectedRect.top - 20,
+              backgroundColor: 'rgb(217,70,239)',
+              color: 'white',
             }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isSelected) {
-                onStartEdit?.(rect.id); // already selected → enter edit
-              } else {
-                onSelectField(rect.id); // first click → select
-              }
-            }}
-            onMouseEnter={() => setHoveredId(rect.id)}
-            onMouseLeave={() => setHoveredId(null)}
           >
-            {/* Label tag at top */}
-            {isSelected && (
-              <div
-                className="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-medium rounded-sm whitespace-nowrap"
-                style={{
-                  backgroundColor: 'rgb(217,70,239)',
-                  color: 'white',
-                }}
-              >
-                {field.label}
-              </div>
-            )}
+            {field.label}
           </div>
         );
-      })}
+      })()}
+
+      {/* Moveable: drag + desktop scale handles. Pinch handled by container touch listener above. */}
+      {selectedRect && selectedFieldId && (
+        <Moveable
+          ref={moveableRef}
+          target={selectedRect.domEl}
+          rootContainer={containerEl ?? undefined}
+          draggable={true}
+          scalable={true}
+          keepRatio={true}
+          renderDirections={['nw', 'ne', 'sw', 'se']}
+          pinchable={false}
+          rotatable={false}
+          origin={false}
+          throttleDrag={0}
+          throttleScale={0}
+          hideDefaultLines={false}
+          edge={false}
+          padding={{ left: 0, top: 0, right: 0, bottom: 0 }}
+          /* ── Snap & Guidelines ── */
+          snappable={true}
+          snapThreshold={8}
+          snapGap={true}
+          isDisplaySnapDigit={true}
+          snapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
+          elementSnapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
+          horizontalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientHeight / 2)] : []}
+          verticalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientWidth / 2)] : []}
+          elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
+          /* ── Drag ── */
+          onDragStart={({ set }) => {
+            isDraggingRef.current = true;
+            setIsDragging(true);
+            const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
+            dragBaseOffsetRef.current = { x: pos?.x ?? 0, y: pos?.y ?? 0 };
+            dragDomElRef.current = selectedRect.domEl;
+            const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
+            dragScaleRef.current = sc?.w ?? 1;
+            set([0, 0]);
+          }}
+          onDrag={({ target, beforeTranslate }) => {
+            const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
+            const s = dragScaleRef.current;
+            target.style.translate = `${baseX + beforeTranslate[0] * s}px ${baseY + beforeTranslate[1] * s}px`;
+          }}
+          onDragEnd={({ lastEvent }) => {
+            if (lastEvent) {
+              const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
+              const s = dragScaleRef.current;
+              onUpdateProp(`_pos_${selectedFieldId}`, {
+                x: baseX + lastEvent.beforeTranslate[0] * s,
+                y: baseY + lastEvent.beforeTranslate[1] * s,
+              });
+            }
+          }}
+          /* ── Scale (desktop handle drag only) ── */
+          onScaleStart={({ set }) => {
+            isDraggingRef.current = true;
+            setIsDragging(true);
+            dragDomElRef.current = selectedRect.domEl;
+            const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
+            dragBaseOffsetRef.current = { x: sc?.w ?? 1, y: sc?.h ?? 1 };
+            set([1, 1]);
+          }}
+          onScale={({ target, scale: scaleVec }) => {
+            const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
+            target.style.scale = `${+(baseW * scaleVec[0]).toFixed(4)} ${+(baseH * scaleVec[1]).toFixed(4)}`;
+          }}
+          onScaleEnd={({ lastEvent }) => {
+            if (lastEvent) {
+              const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
+              onUpdateProp(`_scale_${selectedFieldId}`, {
+                w: baseW * lastEvent.scale[0],
+                h: baseH * lastEvent.scale[1],
+              });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

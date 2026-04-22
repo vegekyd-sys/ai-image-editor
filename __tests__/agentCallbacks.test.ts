@@ -10,6 +10,8 @@ function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCall
     setAgentStatus: vi.fn(),
     setAnimations: vi.fn((updater) => updater([])),
     setPendingDesign: vi.fn(),
+    setDraftDesign: vi.fn(),
+    setDesignDraftParent: vi.fn(),
     setPendingNotification: vi.fn(),
     setSelectedVideoId: vi.fn(),
     setAnimationState: vi.fn(),
@@ -182,15 +184,25 @@ describe('makeAgentCallbacks', () => {
   });
 
   describe('onRender', () => {
-    it('triggers pendingDesign with snapshotId', () => {
+    it('published render triggers pendingDesign with snapshotId', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.('msg-1');
-      const design = { code: 'function D(){}', width: 1080, height: 1350, snapshotId: 'design-snap' };
+      const design = { code: 'function D(){}', width: 1080, height: 1350, snapshotId: 'design-snap', published: true };
       callbacks.onRender?.(design as never);
 
       expect(ctx.setPendingDesign).toHaveBeenCalled();
       expect(ctx.pendingDesignMsgIdRef.current).toBe('msg-1');
       expect(ctx.pendingDesignSnapIdRef.current).toBe('design-snap');
+    });
+
+    it('draft render sets draftDesign, not pendingDesign', () => {
+      const { callbacks } = makeAgentCallbacks(ctx);
+      callbacks.onNewTurn?.('msg-1');
+      const design = { code: 'function D(){}', width: 1080, height: 1350, published: false };
+      callbacks.onRender?.(design as never);
+
+      expect(ctx.setDraftDesign).toHaveBeenCalled();
+      expect(ctx.setPendingDesign).not.toHaveBeenCalled();
     });
   });
 

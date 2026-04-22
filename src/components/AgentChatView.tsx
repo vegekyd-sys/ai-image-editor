@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message } from '@/types';
@@ -85,7 +85,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
  * Fix CommonMark strict closing-delimiter rules that break **text:**
 /** Playable music track card for CUI */
 function MusicCard({ track, onSelect }: {
-  track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number };
+  track: { playUrl: string; finalUrl: string; duration: number; title: string; tags: string; trackIndex: number };
   onSelect: () => void;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -93,6 +93,19 @@ function MusicCard({ track, onSelect }: {
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [seeking, setSeeking] = useState(false);
+  const loadedUrlRef = useRef(track.playUrl);
+
+  // When finalUrl arrives and not playing, swap to final URL
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !track.finalUrl || playing) return;
+    if (loadedUrlRef.current !== track.finalUrl) {
+      audio.src = track.finalUrl;
+      loadedUrlRef.current = track.finalUrl;
+    }
+  }, [track.finalUrl, playing]);
+
+  const bestUrl = track.finalUrl || track.playUrl;
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -100,8 +113,12 @@ function MusicCard({ track, onSelect }: {
     if (playing) {
       audio.pause(); setPlaying(false);
     } else {
-      // Pause all other audio (MusicCards + Remotion Player)
-      document.dispatchEvent(new CustomEvent('music-play', { detail: track.audioUrl }));
+      // If final URL arrived, swap before playing
+      if (track.finalUrl && loadedUrlRef.current !== track.finalUrl) {
+        audio.src = track.finalUrl;
+        loadedUrlRef.current = track.finalUrl;
+      }
+      document.dispatchEvent(new CustomEvent('music-play', { detail: bestUrl }));
       audio.play(); setPlaying(true);
     }
   };
@@ -110,14 +127,14 @@ function MusicCard({ track, onSelect }: {
   useEffect(() => {
     const handler = (e: Event) => {
       const url = (e as CustomEvent).detail;
-      if (url !== track.audioUrl && audioRef.current) {
+      if (url !== bestUrl && audioRef.current) {
         audioRef.current.pause();
         setPlaying(false);
       }
     };
     document.addEventListener('music-play', handler);
     return () => document.removeEventListener('music-play', handler);
-  }, [track.audioUrl]);
+  }, [bestUrl]);
 
   // Progress + time update
   useEffect(() => {
@@ -134,16 +151,17 @@ function MusicCard({ track, onSelect }: {
 
   const handleDownload = () => {
     const a = document.createElement('a');
-    a.href = track.audioUrl;
+    a.href = bestUrl;
     a.download = `${track.title || 'music'}.mp3`;
     a.click();
   };
 
+  const isStreaming = !track.finalUrl;
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <audio ref={audioRef} src={track.audioUrl} preload="metadata"
+      <audio ref={audioRef} src={track.playUrl} preload="metadata"
         onEnded={() => { setPlaying(false); setProgress(0); }} />
 
       <div className="flex items-center gap-3 px-3.5 py-3.5">
@@ -165,7 +183,10 @@ function MusicCard({ track, onSelect }: {
             <span style={{ color: 'rgba(255,255,255,0.3)' }}>#{track.trackIndex + 1}</span>
           </div>
           <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>
-            {playing || currentTime > 0 ? `${formatTime(currentTime)} / ${formatTime(track.duration)}` : formatTime(track.duration)} · {track.tags || 'instrumental'}
+            {playing || currentTime > 0
+              ? `${formatTime(currentTime)}${track.duration ? ` / ${formatTime(track.duration)}` : ''}`
+              : track.duration ? formatTime(track.duration) : (isStreaming ? 'streaming...' : '--:--')
+            } · {track.tags || 'instrumental'}
           </div>
         </div>
 
@@ -178,7 +199,7 @@ function MusicCard({ track, onSelect }: {
           </svg>
         </button>
 
-        {/* Insert into design — onTouchEnd for reliable mobile tap */}
+        {/* Insert into design */}
         <button
           onClick={(e) => { e.stopPropagation(); onSelect(); }}
           onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(); }}
@@ -269,74 +290,80 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
   // Replace `path/to/file.md` with FILE_REF token for clickable file chips
   processed = processed.replace(/`([^`]*\.md)`/g, '`FILE_REF_$1`');
 
+  // Memoize components so ReactMarkdown keeps stable component types across re-renders.
+  // Without this, streaming text causes parent re-renders → new function refs → ImageRefChip
+  // unmounts/remounts on every chunk, resetting popover state and causing preview image flash.
+  const components = useMemo(() => ({
+    h1: ({ children }: { children?: React.ReactNode }) => <h1 className={`${isPanel ? 'text-[20px]' : 'text-[24px]'} font-bold mt-3 mb-1`}>{children}</h1>,
+    h2: ({ children }: { children?: React.ReactNode }) => <h2 className={`${isPanel ? 'text-[18px]' : 'text-[22px]'} font-semibold mt-3 mb-1`}>{children}</h2>,
+    h3: ({ children }: { children?: React.ReactNode }) => <h3 className={`${isPanel ? 'text-[17px]' : 'text-[21px]'} font-semibold mt-2 mb-0.5`}>{children}</h3>,
+    p: ({ children }: { children?: React.ReactNode }) => <p className="mb-2 last:mb-0">{children}</p>,
+    strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-white/95">{children}</strong>,
+    em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
+    del: ({ children }: { children?: React.ReactNode }) => <del className="line-through opacity-50">{children}</del>,
+    code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) => {
+      // Intercept IMG_REF_N tokens → render ImageRefChip (check regardless of inline flag)
+      if (snapshots) {
+        const str = String(children);
+        const m = str.match(/^IMG_REF_(\d+)$/);
+        if (m) {
+          const idx = parseInt(m[1]) - 1;
+          return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
+        }
+      }
+      // Intercept FILE_REF tokens → render FileRefChip
+      {
+        const str2 = String(children);
+        const fileMatch = str2.match(/^FILE_REF_(.+)$/);
+        if (fileMatch) {
+          return <FileRefChip path={fileMatch[1]} onView={onViewFile} />;
+        }
+      }
+      // Treat short single-line code as inline even if markdown parser says block
+      const text = String(children);
+      const isShort = !text.includes('\n') && text.length < 60;
+      if (inline || isShort) {
+        return <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>;
+      }
+      // Long code blocks: collapsible
+      const lines = text.split('\n');
+      if (lines.length > 3) {
+        return <CollapsibleCode text={text} isPanel={isPanel} />;
+      }
+      return <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>;
+    },
+    pre: ({ children }: { children?: React.ReactNode }) => <pre className="my-0">{children}</pre>,
+    ul: ({ children }: { children?: React.ReactNode }) => <ul className="list-none pl-3 my-1.5 space-y-0.5">{children}</ul>,
+    ol: ({ children }: { children?: React.ReactNode }) => <ol className="list-none pl-3 my-1.5 space-y-0.5 [counter-reset:item]">{children}</ol>,
+    li: ({ children, ordered }: { children?: React.ReactNode; ordered?: boolean }) => (
+      <li className={`flex gap-2 ${ordered ? '[counter-increment:item]' : ''}`}>
+        <span className="flex-shrink-0 mt-[3px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          {ordered ? <span className="font-mono text-[18px] before:content-[counter(item,decimal)_'.']" /> : '•'}
+        </span>
+        <span>{children}</span>
+      </li>
+    ),
+    blockquote: ({ children }: { children?: React.ReactNode }) => (
+      <blockquote className="pl-3 my-2" style={{ borderLeft: '2px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)' }}>{children}</blockquote>
+    ),
+    hr: () => <hr className="my-3" style={{ borderColor: 'rgba(255,255,255,0.08)' }} />,
+    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" style={{ color: 'rgba(192,38,211,0.85)' }}>{children}</a>
+    ),
+    table: ({ children }: { children?: React.ReactNode }) => (
+      <div className="overflow-x-auto my-2">
+        <table className={`${isPanel ? 'text-[16px]' : 'text-[20px]'} border-collapse w-full`}>{children}</table>
+      </div>
+    ),
+    th: ({ children }: { children?: React.ReactNode }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
+    td: ({ children }: { children?: React.ReactNode }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [snapshots, onNavigateToSnapshot, onViewFile, isPanel]);
+
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      components={{
-        h1: ({ children }) => <h1 className={`${isPanel ? 'text-[20px]' : 'text-[24px]'} font-bold mt-3 mb-1`}>{children}</h1>,
-        h2: ({ children }) => <h2 className={`${isPanel ? 'text-[18px]' : 'text-[22px]'} font-semibold mt-3 mb-1`}>{children}</h2>,
-        h3: ({ children }) => <h3 className={`${isPanel ? 'text-[17px]' : 'text-[21px]'} font-semibold mt-2 mb-0.5`}>{children}</h3>,
-        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-        strong: ({ children }) => <strong className="font-semibold text-white/95">{children}</strong>,
-        em: ({ children }) => <em className="italic">{children}</em>,
-        del: ({ children }) => <del className="line-through opacity-50">{children}</del>,
-        code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) => {
-          // Intercept IMG_REF_N tokens → render ImageRefChip (check regardless of inline flag)
-          if (snapshots) {
-            const str = String(children);
-            const m = str.match(/^IMG_REF_(\d+)$/);
-            if (m) {
-              const idx = parseInt(m[1]) - 1;
-              return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
-            }
-          }
-          // Intercept FILE_REF tokens → render FileRefChip
-          {
-            const str2 = String(children);
-            const fileMatch = str2.match(/^FILE_REF_(.+)$/);
-            if (fileMatch) {
-              return <FileRefChip path={fileMatch[1]} onView={onViewFile} />;
-            }
-          }
-          // Treat short single-line code as inline even if markdown parser says block
-          const text = String(children);
-          const isShort = !text.includes('\n') && text.length < 60;
-          if (inline || isShort) {
-            return <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>;
-          }
-          // Long code blocks: collapsible
-          const lines = text.split('\n');
-          if (lines.length > 3) {
-            return <CollapsibleCode text={text} isPanel={isPanel} />;
-          }
-          return <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>;
-        },
-        pre: ({ children }) => <pre className="my-0">{children}</pre>,
-        ul: ({ children }) => <ul className="list-none pl-3 my-1.5 space-y-0.5">{children}</ul>,
-        ol: ({ children }) => <ol className="list-none pl-3 my-1.5 space-y-0.5 [counter-reset:item]">{children}</ol>,
-        li: ({ children, ordered }: { children?: React.ReactNode; ordered?: boolean }) => (
-          <li className={`flex gap-2 ${ordered ? '[counter-increment:item]' : ''}`}>
-            <span className="flex-shrink-0 mt-[3px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              {ordered ? <span className="font-mono text-[18px] before:content-[counter(item,decimal)_'.']" /> : '•'}
-            </span>
-            <span>{children}</span>
-          </li>
-        ),
-        blockquote: ({ children }) => (
-          <blockquote className="pl-3 my-2" style={{ borderLeft: '2px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)' }}>{children}</blockquote>
-        ),
-        hr: () => <hr className="my-3" style={{ borderColor: 'rgba(255,255,255,0.08)' }} />,
-        a: ({ href, children }) => (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" style={{ color: 'rgba(192,38,211,0.85)' }}>{children}</a>
-        ),
-        table: ({ children }) => (
-          <div className="overflow-x-auto my-2">
-            <table className={`${isPanel ? 'text-[16px]' : 'text-[20px]'} border-collapse w-full`}>{children}</table>
-          </div>
-        ),
-        th: ({ children }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
-        td: ({ children }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
-      }}
+      components={components}
     >
       {processed}
     </ReactMarkdown>
@@ -995,15 +1022,12 @@ export default function AgentChatView({
                       return (
                         <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
                           <div className="flex items-center gap-3 px-3.5 py-3.5">
-                            {/* Icon */}
                             <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
                               style={{ background: 'rgba(192,38,211,0.15)' }}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e879f9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                               </svg>
                             </div>
-
-                            {/* Text */}
                             <div className="flex-1 min-w-0">
                               <div className="text-[12px] font-medium" style={{ color: 'rgba(255,255,255,0.8)' }}>
                                 {t('billing.exhausted')}
@@ -1012,8 +1036,6 @@ export default function AgentChatView({
                                 {bal} remaining · <span style={{ color: '#fbbf24' }}>{t('billing.topUpToContinue')}</span>
                               </div>
                             </div>
-
-                            {/* CTA */}
                             <button
                               onClick={() => onOpenCreditPopup?.()}
                               className="px-3 py-1.5 rounded-full flex-shrink-0 active:scale-90 transition-transform text-[11px] font-semibold"
@@ -1022,11 +1044,20 @@ export default function AgentChatView({
                               {t('billing.topUp')}
                             </button>
                           </div>
-                          {/* Accent bar */}
                           <div style={{ height: 2, background: 'rgba(192,38,211,0.4)' }} />
                         </div>
                       );
                     })()}
+                    {msg.thinking?.map((segment, ti) => segment && (
+                      <details key={ti} className="mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                        <summary className="cursor-pointer select-none text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                          Thinking{msg.thinking!.length > 1 ? ` (${ti + 1})` : ''}...
+                        </summary>
+                        <div className="mt-1 text-[13px] leading-[1.6] whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          {segment}
+                        </div>
+                      </details>
+                    ))}
                     {msg.content && !msg.content.startsWith('[CREDITS_EXHAUSTED:') && (
                       <div className="markdown-body">
                         <MarkdownBlock
@@ -1104,22 +1135,50 @@ export default function AgentChatView({
                       );
                     })()}
 
+                    {/* Multiple preview frames (from preview_frame tool) */}
+                    {msg.images && msg.images.length > 0 && (
+                      <div className="flex gap-2 mt-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+                        {msg.images.map((url, i) => (
+                          <button
+                            key={`${msg.id}-frame-${i}`}
+                            onClick={(e) => handleInlineImageClick(msg.id, e)}
+                            className="flex-shrink-0 active:opacity-75 transition-opacity relative"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url.startsWith('http') ? getThumbnailUrl(url, isPanel ? 340 : 512, 75, 1000, 'contain') : url}
+                              alt={`Frame ${i + 1}`}
+                              className="rounded-xl"
+                              style={{ border: '1px solid rgba(255,255,255,0.08)', height: 160, width: 'auto' }}
+                            />
+                            <span className="absolute bottom-1.5 left-1.5 bg-black/60 backdrop-blur text-white text-[10px] font-medium px-1.5 py-0.5 rounded-md">
+                              {i + 1}/{msg.images!.length}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {/* editPrompt card — collapsible */}
                     {msg.editPrompt && (
                       <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
                     )}
 
-                    {/* Inline music — parsed from content "music:INDEX|TITLE|DURATION|TAGS|URL" */}
+                    {/* Inline music — format: "music:INDEX|TITLE|DURATION|TAGS|playUrl|finalUrl" */}
                     {(() => {
                       const musicMatches = msg.content.match(/music:\d+\|[^\n]+/g);
                       if (!musicMatches) return null;
                       return musicMatches.map((line) => {
                         const parts = line.replace('music:', '').split('|');
                         if (parts.length < 5) return null;
-                        const track = { trackIndex: parseInt(parts[0]), title: parts[1], duration: parseFloat(parts[2]), tags: parts[3], audioUrl: parts.slice(4).join('|') };
+                        // 6-field format: parts[4]=playUrl, parts[5]=finalUrl
+                        // 5-field backwards compat: parts[4]=audioUrl (used as both)
+                        const playUrl = parts[4];
+                        const finalUrl = parts.length >= 6 ? parts.slice(5).join('|') : playUrl;
+                        const track = { trackIndex: parseInt(parts[0]), title: parts[1], duration: parseFloat(parts[2]), tags: parts[3], playUrl, finalUrl };
                         return (
                           <MusicCard key={track.trackIndex} track={track}
-                            onSelect={() => onMusicSelect?.(track)} />
+                            onSelect={() => onMusicSelect?.({ audioUrl: finalUrl || playUrl, duration: track.duration, title: track.title, tags: track.tags, trackIndex: track.trackIndex })} />
                         );
                       });
                     })()}

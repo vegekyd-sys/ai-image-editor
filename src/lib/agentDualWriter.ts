@@ -29,20 +29,19 @@ export class AgentDualWriter {
     private supabase: SupabaseClient,
     private userId: string,
     private projectId: string,
-    private controller: ReadableStreamDefaultController,
-    private encoder: TextEncoder,
+    private controller?: ReadableStreamDefaultController | null,
+    private encoder?: TextEncoder | null,
   ) {}
 
-  /** Write enriched event to SSE stream. Catches disconnect errors silently. */
+  /** Write enriched event to SSE stream. No-op in headless mode (no controller). */
   tryEnqueue(event: Record<string, unknown>) {
-    if (this.sseDisconnected) return;
+    if (this.sseDisconnected || !this.controller || !this.encoder) return;
     try {
       this.controller.enqueue(
         this.encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
       );
     } catch {
       this.sseDisconnected = true;
-      // Flush any pending content to DB immediately so reconnect sees it
       void this.flushContent();
     }
   }
@@ -56,9 +55,9 @@ export class AgentDualWriter {
       case 'content': {
         this.contentBuffer += event.text;
         this.messageText += event.text;
-        // SSE: send original content event immediately
+        // SSE: send immediately
         this.tryEnqueue(event);
-        // DB: batch content writes
+        // DB: batch content writes (50 chars or 500ms — not per-token)
         if (this.contentBuffer.length >= 50) {
           await this.flushContent();
         } else if (!this.flushTimer) {
@@ -112,48 +111,73 @@ export class AgentDualWriter {
       case 'render':  // agent.ts now yields 'render'; 'design' kept for backward compat
       case 'design': {
         await this.flushContent();
-        const snapId = crypto.randomUUID();
-        const designPath = `code/${snapId}.json`;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const designDesc = (event as any).description as string | undefined;
-        const designJson = JSON.stringify({
-          code: event.code, width: event.width, height: event.height,
-          props: event.props, animation: event.animation,
-        });
+        const published = (event as any).published === true;
 
-        // Upload design JSON to workspace
-        try {
-          const storagePath = `${this.userId}/workspace/${designPath}`;
-          await this.supabase.storage.from('images')
-            .upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true });
-        } catch (err) {
-          console.error('[DualWriter] design upload error:', err);
+        if (published) {
+          // Published design — create real Snapshot in DB
+          const snapId = crypto.randomUUID();
+          const designPath = `code/${snapId}.json`;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const designDesc = (event as any).description as string | undefined;
+          const designJson = JSON.stringify({
+            code: event.code, width: event.width, height: event.height,
+            props: event.props, animation: event.animation,
+            ...((event as Record<string, unknown>).editables ? { editables: (event as Record<string, unknown>).editables } : {}),
+          });
+
+          // Upload design JSON to workspace + index in workspace_files for agent read_file
+          try {
+            const storagePath = `${this.userId}/workspace/${designPath}`;
+            await this.supabase.storage.from('images')
+              .upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true });
+            const { data: urlData } = this.supabase.storage.from('images').getPublicUrl(storagePath);
+            await this.supabase.from('workspace_files').upsert({
+              user_id: this.userId,
+              path: designPath,
+              content_type: 'application/json',
+              size_bytes: designJson.length,
+              storage_url: urlData?.publicUrl || '',
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'user_id,path' });
+          } catch (err) {
+            console.error('[DualWriter] design upload error:', err);
+          }
+
+          // Write snapshots table
+          const sortOrder = await this.nextSortOrder();
+          await this.supabase.from('snapshots').upsert({
+            id: snapId,
+            project_id: this.projectId,
+            image_url: '',
+            tips: [],
+            message_id: this.currentMessageId,
+            sort_order: sortOrder,
+            description: designDesc || '[design]',
+            design_path: designPath,
+          }, { onConflict: 'id' }).then(({ error }) => {
+            if (error) console.error('[DualWriter] design snapshot upsert error:', error);
+          });
+          this.currentMessageHasImage = true;
+
+          // Write agent_events
+          await this.insertEvent(event.type, {
+            code: event.code, width: event.width, height: event.height,
+            props: event.props, animation: event.animation, snapshotId: snapId, published: true,
+          });
+
+          // SSE: enriched with snapshotId, normalize type to 'render'
+          this.tryEnqueue({ ...event, type: 'render', snapshotId: snapId, published: true });
+        } else {
+          // Draft design — preview only, no DB snapshot
+          await this.insertEvent(event.type, {
+            code: event.code, width: event.width, height: event.height,
+            props: event.props, animation: event.animation, published: false,
+          });
+
+          // SSE: pass through as draft (no snapshotId)
+          this.tryEnqueue({ ...event, type: 'render', published: false });
         }
-
-        // Write snapshots table
-        const sortOrder = await this.nextSortOrder();
-        await this.supabase.from('snapshots').upsert({
-          id: snapId,
-          project_id: this.projectId,
-          image_url: '',
-          tips: [],
-          message_id: this.currentMessageId,
-          sort_order: sortOrder,
-          description: designDesc || '[design]',
-          design_path: designPath,
-        }, { onConflict: 'id' }).then(({ error }) => {
-          if (error) console.error('[DualWriter] design snapshot upsert error:', error);
-        });
-        this.currentMessageHasImage = true;
-
-        // Write agent_events
-        await this.insertEvent(event.type, {
-          code: event.code, width: event.width, height: event.height,
-          props: event.props, animation: event.animation, snapshotId: snapId,
-        });
-
-        // SSE: enriched with snapshotId, normalize type to 'render'
-        this.tryEnqueue({ ...event, type: 'render', snapshotId: snapId });
         return;
       }
 
@@ -220,7 +244,7 @@ export class AgentDualWriter {
       }
 
       default:
-        // Unknown event types (reasoning, coding, code_stream): pass through SSE only
+        // High-frequency events (reasoning, coding, code_stream): SSE only, no DB
         this.tryEnqueue(event);
         return;
     }
@@ -281,6 +305,7 @@ export class AgentDualWriter {
     try {
       await this.supabase.from('agent_events').insert({
         run_id: this.runId,
+        project_id: this.projectId,
         type,
         data,
         seq: this.seq++,

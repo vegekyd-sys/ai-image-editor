@@ -28,7 +28,12 @@ A short title on the first line (2-5 words, no quotes, no markdown), then Shot l
 
 4. **Language**: Write descriptions in the same language the user is speaking. BUT keep `Shot N (Xs):` format exactly as-is (not "镜头N" or "分镜N") — Kling requires this exact format. Same for `Style:` tag.
 
-5. **Dialogue**: Characters can speak — put dialogue in quotes.
+5. **Dialogue & Voice**: Kling generates character speech with real voice synthesis. Write dialogue inline with emotion/tone cues. Supports Chinese, English, Japanese, and more.
+   - Format: `角色名（语气描述）："台词内容"` or `Character (tone): "dialogue"`
+   - Example: `猫（小孩的声音，故作镇定）："老板，你找我？"` → Kling renders a child-like voice
+   - Example: `主人（画外音，语气严肃）："你今年的KPI呢？"` → off-screen narration
+   - Add ambient sound cues alongside dialogue: `Sound: 办公室空调嗡嗡声`
+   - For pet/animal talking videos: describe the voice style (小孩声音, 奶声奶气, 低沉老练) in parentheses
 
 6. **Style tag**: End with a brief style direction (e.g. "Cinematic, warm golden light." or "Surreal, dreamlike, soft focus.")
 
@@ -51,6 +56,12 @@ Shot 5 (2s): A bird's-eye view of the scene shows the two separated and having s
 
 ### Character + dialogue:
 Long take. On a windy day in an Icelandic mountain range, <<<image_1>>> says with a barely contained smile, "Do you think our wedding is too simple—like there's no one here to bless us?" The camera circles the subjects to reveal <<<image_2>>> standing opposite, smiling and replying, "The wind—the wind is their blessing to us." Cinematic, handheld feel.
+
+### Dialogue in shots (台词整合到脚本中):
+When the video needs characters to speak, write dialogue directly inside each Shot using the format `角色（语气描述）：台词`. Kling will synthesize voice. Example:
+
+Shot 1 (3s): 近景，<<<image_1>>> 坐在沙发上。场景设定在家中，客厅空调发出轻微的嗡嗡声，营造出真实的日常生活氛围。妈妈（轻声说道，语气中带着一丝惊讶）：哇，我完全没想到剧情会是这样。爸爸（低声附和，语气平静）：是啊，真是意想不到。
+Shot 2 (3s): 切到近景，儿子和女儿的反应。儿子（兴奋地说道）：这简直是史上最棒的反转！女儿（热情地点头附和）：真不敢相信他们居然这么做了！
 
 ### Photo edit story (typical for this app):
 Shot 1 (2s): Extreme close-up, push-in. <<<image_3>>> — a chameleon's eye snaps into focus, scales shifting neon. Sound: sharp synth hit.
