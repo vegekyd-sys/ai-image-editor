@@ -48,11 +48,31 @@ export async function requireCredits(
 ): Promise<{ ok: true; balance: number } | { ok: false; balance: number; response: Response }> {
   if (!(await isBillingEnabled())) return { ok: true, balance: 0 }
   const admin = getSupabaseAdmin()
-  const { data } = await admin
+  let { data } = await admin
     .from('credit_balances')
     .select('balance')
     .eq('user_id', userId)
     .single()
+
+  // Auto-initialize for users without a credit_balances row (e.g. old users)
+  if (!data) {
+    const { data: setting } = await admin.from('app_settings').select('value').eq('key', 'welcome_credits').single()
+    const welcomeCredits = parseInt(setting?.value || '500')
+    if (welcomeCredits > 0) {
+      await addCredits(userId, welcomeCredits)
+      try {
+        await admin.from('credit_purchases').insert({
+          user_id: userId, stripe_session_id: `welcome_auto_${Date.now()}`,
+          credits: welcomeCredits, amount_usd: 0, status: 'completed', source: 'welcome',
+        })
+      } catch { /* ignore duplicate */ }
+    } else {
+      await admin.from('credit_balances').upsert({ user_id: userId, balance: 0, lifetime_purchased: 0, lifetime_used: 0 }, { onConflict: 'user_id' })
+    }
+    const { data: fresh } = await admin.from('credit_balances').select('balance').eq('user_id', userId).single()
+    data = fresh
+  }
+
   const balance = Number(data?.balance ?? 0)
 
   if (balance >= estimatedCredits) {
