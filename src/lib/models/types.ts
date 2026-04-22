@@ -1,4 +1,4 @@
-export type ModelId = 'gemini' | 'qwen' | 'pony' | 'wai';
+export type ModelId = 'gemini' | 'qwen' | 'pony' | 'wai' | 'openai';
 
 export interface GenerateImageRequest {
   image?: string;           // input image (URL/base64). Missing = text-to-image
