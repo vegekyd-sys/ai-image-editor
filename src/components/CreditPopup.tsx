@@ -21,15 +21,72 @@ interface CreditPopupProps {
   success?: boolean;
   /** Waiting for payment webhook — show loading state */
   waiting?: boolean;
+  /** Auto-detect ?topped_up=1 in URL, poll for credits, show waiting→success */
+  autoDetectPayment?: boolean;
+  /** Called when balance updates after successful payment */
+  onBalanceUpdate?: (balance: number, subscription?: { planId: string; status: string } | null) => void;
 }
 
-export default function CreditPopup({ open, onClose, balance, needed, subscription, projectId, success, waiting }: CreditPopupProps) {
+export default function CreditPopup({ open: externalOpen, onClose: externalOnClose, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
   const { t } = useLocale();
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<string>('pro');
   const [selectedPlan, setSelectedPlan] = useState<string>('basic');
   const [animatedBalance, setAnimatedBalance] = useState(0);
   const animatingRef = useRef(false);
+
+  // Auto-detect payment state (self-managed when autoDetectPayment=true)
+  const [autoOpen, setAutoOpen] = useState(false);
+  const [autoWaiting, setAutoWaiting] = useState(false);
+  const [autoSuccess, setAutoSuccess] = useState(false);
+  const [autoBalance, setAutoBalance] = useState(0);
+  const [autoSubscription, setAutoSubscription] = useState<{ planId: string; status: string } | null>(null);
+
+  const open = autoOpen || externalOpen;
+  const waiting = autoWaiting || (externalWaiting ?? false);
+  const success = autoSuccess || (externalSuccess ?? false);
+  const balance = autoSuccess ? autoBalance : externalBalance;
+  const subscription = autoSubscription || externalSubscription;
+
+  const onClose = () => {
+    setAutoOpen(false);
+    setAutoWaiting(false);
+    setAutoSuccess(false);
+    externalOnClose();
+  };
+
+  // Auto-detect ?topped_up=1 after Stripe redirect
+  useEffect(() => {
+    if (!autoDetectPayment || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get('topped_up') && !params.get('payment') && !params.get('subscription')) return;
+    window.history.replaceState({}, '', window.location.pathname);
+    setAutoOpen(true);
+    setAutoWaiting(true);
+    setAutoSuccess(false);
+    let attempts = 0;
+    const poll = () => {
+      attempts++;
+      fetch('/api/billing/credits').then(r => r.json()).then(data => {
+        const bal = data.balance ?? 0;
+        if (data.subscription) setAutoSubscription(data.subscription);
+        if (bal > 0) {
+          setAutoBalance(bal);
+          setAutoSuccess(true);
+          setAutoWaiting(false);
+          onBalanceUpdate?.(bal, data.subscription ?? null);
+        } else if (attempts < 20) {
+          setTimeout(poll, 1000);
+        } else {
+          setAutoBalance(bal);
+          setAutoSuccess(true);
+          setAutoWaiting(false);
+          onBalanceUpdate?.(bal, data.subscription ?? null);
+        }
+      }).catch(() => { if (attempts < 20) setTimeout(poll, 1000); });
+    };
+    poll();
+  }, [autoDetectPayment]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasSubscription = !!(subscription && subscription.status !== 'canceled');
 
@@ -42,7 +99,6 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
   const currentPlanIndex = hasSubscription ? PLANS.findIndex(p => p.id === subscription!.planId) : -1;
 
   // Animate balance count-up on success
-  // Simple: animate from 0 to balance, ensure no negative values
   useEffect(() => {
     if (!success || !open || animatingRef.current) return;
     animatingRef.current = true;
@@ -75,7 +131,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier, returnPath: projectId ? `/projects/${projectId}` : undefined }),
+        body: JSON.stringify({ tier, returnPath: projectId ? `/projects/${projectId}` : (typeof window !== 'undefined' ? window.location.pathname : undefined) }),
       });
       const data = await res.json();
       if (data.url) window.open(data.url, '_blank');
@@ -90,7 +146,7 @@ export default function CreditPopup({ open, onClose, balance, needed, subscripti
       const res = await fetch('/api/billing/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId, interval: 'month', returnPath: projectId ? `/projects/${projectId}` : undefined }),
+        body: JSON.stringify({ planId, interval: 'month', returnPath: projectId ? `/projects/${projectId}` : (typeof window !== 'undefined' ? window.location.pathname : undefined) }),
       });
       const data = await res.json();
       if (data.url) window.open(data.url, '_blank');

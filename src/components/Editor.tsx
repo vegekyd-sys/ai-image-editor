@@ -202,41 +202,7 @@ export default function Editor({
     }).catch(() => {});
   }, []);
 
-  // Detect ?topped_up=1 after Stripe redirect
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('topped_up')) {
-      window.history.replaceState({}, '', window.location.pathname);
-      setMessages(prev => prev.filter(m => !m.content?.startsWith('[CREDITS_EXHAUSTED:')));
-      setCreditExhausted(false);
-      // Show waiting state immediately
-      setCreditWaiting(true);
-      setCreditSuccess(false);
-      setCreditPopupOpen(true);
-      setCreditBalance(0);
-      // Poll every 1s until balance > 0 (webhook may take a few seconds)
-      let attempts = 0;
-      const poll = () => {
-        attempts++;
-        fetch('/api/billing/credits').then(r => r.json()).then(data => {
-          setCreditSubscription(data.subscription ?? null);
-          const bal = data.balance ?? 0;
-          if (bal > 0) {
-            setCreditBalance(bal);
-            setCreditSuccess(true);
-          } else if (attempts < 20) {
-            setTimeout(poll, 1000);
-          } else {
-            // Timed out — show anyway
-            setCreditBalance(bal);
-            setCreditSuccess(true);
-          }
-        }).catch(() => { if (attempts < 20) setTimeout(poll, 1000); });
-      };
-      poll();
-    }
-  }, []);
+  // Payment success detection is handled by CreditPopup autoDetectPayment
   // Camera rotation panel
   const [showCameraPanel, setShowCameraPanel] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
@@ -3815,6 +3781,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         projectId={projectId ?? undefined}
         success={creditSuccess}
         waiting={creditWaiting}
+        autoDetectPayment
+        onBalanceUpdate={(bal, sub) => {
+          setCreditBalance(bal);
+          if (sub) setCreditSubscription(sub);
+          setMessages(prev => prev.filter(m => !m.content?.startsWith('[CREDITS_EXHAUSTED:')));
+          setCreditExhausted(false);
+        }}
       />
     </div>
   );

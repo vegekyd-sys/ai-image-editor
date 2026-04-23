@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { CREDIT_TIERS } from '@/lib/billing/tiers'
+import CreditPopup from '@/components/CreditPopup'
 
 interface ApiKey {
   id: string
@@ -110,7 +111,7 @@ export default function DashboardPage() {
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ tier, returnPath: '/dashboard' }),
       })
       const data = await res.json()
       if (data.url) window.location.href = data.url
@@ -125,7 +126,7 @@ export default function DashboardPage() {
       const res = await fetch('/api/billing/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId, interval: billingInterval }),
+        body: JSON.stringify({ planId, interval: billingInterval, returnPath: '/dashboard' }),
       })
       const data = await res.json()
       if (data.url) window.location.href = data.url
@@ -430,6 +431,14 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+      <CreditPopup
+        open={false}
+        onClose={() => {}}
+        balance={balance?.balance ?? 0}
+        subscription={balance?.subscription ?? null}
+        autoDetectPayment
+        onBalanceUpdate={() => fetchDashboard()}
+      />
     </div>
   )
 }

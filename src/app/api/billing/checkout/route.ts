@@ -33,8 +33,8 @@ export async function POST(req: NextRequest) {
       },
       quantity: 1,
     }],
-    success_url: returnPath ? `${origin}${returnPath}?topped_up=1` : `${origin}/dashboard?payment=success`,
-    cancel_url: returnPath ? `${origin}${returnPath}` : `${origin}/dashboard?payment=cancelled`,
+    success_url: returnPath ? `${origin}${returnPath}?topped_up=1` : `${origin}/dashboard?topped_up=1`,
+    cancel_url: returnPath ? `${origin}${returnPath}` : `${origin}/dashboard`,
   })
 
   return NextResponse.json({ url: session.url })
