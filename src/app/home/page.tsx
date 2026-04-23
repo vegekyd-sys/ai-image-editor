@@ -530,9 +530,12 @@ export default function HomePage() {
           position: 'fixed', left: 0, right: 0,
           bottom: kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 0,
           zIndex: 50,
-          padding: isDesktop
-            ? '0 24px'
-            : `24px 12px ${kbInset > 0 ? '8px' : 'max(8px, env(safe-area-inset-bottom))'}`,
+          ...(isDesktop ? {
+            padding: '0 24px',
+          } : {
+            padding: `60px 12px ${kbInset > 0 ? '8px' : 'max(8px, env(safe-area-inset-bottom))'}`,
+            background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.85) 60px)',
+          }),
           transition: kbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
         }}>
           <div style={{ maxWidth: '480px', margin: '0 auto' }}>
