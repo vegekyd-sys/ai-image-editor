@@ -74,7 +74,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         const bal = data.balance ?? 0;
         if (data.subscription) setAutoSubscription(data.subscription);
         if (initialBalance === null) initialBalance = bal;
-        if (bal > initialBalance) {
+        if (bal > initialBalance!) {
           setAutoBalance(bal);
           setAutoSuccess(true);
           setAutoWaiting(false);
