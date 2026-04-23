@@ -21,7 +21,7 @@ const CHANGELOG: ChangelogEntry[] = [
     ]},
   },
   {
-    date: '2026-04-23',
+    date: '2026-04-22',
     en: { title: 'OpenAI Image 2 & Billing', items: [
       'OpenAI gpt-5.4-image-2: new image generation model via OpenRouter — superior text rendering for posters/graphics',
       'CUI model selector: cycle through Auto → Gemini → Qwen → OpenAI (purple pill)',
