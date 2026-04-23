@@ -401,17 +401,17 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                             padding: '14px 18px',
                             borderRadius: 14,
                             border: isCurrent
-                              ? '1.5px solid rgba(192,38,211,0.5)'
+                              ? '1px solid rgba(255,255,255,0.08)'
                               : isSelected
                                 ? '1.5px solid rgba(192,38,211,0.5)'
                                 : '1px solid rgba(255,255,255,0.06)',
                             background: isCurrent
-                              ? 'rgba(192,38,211,0.06)'
+                              ? 'rgba(255,255,255,0.02)'
                               : isSelected
                                 ? 'rgba(192,38,211,0.06)'
                                 : 'rgba(255,255,255,0.02)',
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            opacity: isDowngrade ? 0.4 : 1,
+                            opacity: isCurrent ? 0.45 : isDowngrade ? 0.4 : 1,
                             cursor: isCurrent || isDowngrade ? 'default' : 'pointer',
                             textAlign: 'left',
                             transition: 'all 0.15s',
