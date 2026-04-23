@@ -353,16 +353,24 @@ export default function ProjectsPage() {
         }
 
         if (staleIds.length > 0) {
-          const { data: snapshotRows, error: sErr } = await supabase
-            .from('snapshots')
-            .select('id, project_id, image_url, sort_order')
-            .in('project_id', staleIds)
-            .order('sort_order', { ascending: true })
-          if (sErr) console.error('Failed to fetch snapshots:', sErr)
-          for (const s of snapshotRows ?? []) {
-            const list = snapshotMap.get(s.project_id) ?? []
-            list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
-            snapshotMap.set(s.project_id, list)
+          // Fetch snapshots in parallel batches (Supabase default limit is 1000 rows)
+          const BATCH = 30
+          const batches: string[][] = []
+          for (let i = 0; i < staleIds.length; i += BATCH) batches.push(staleIds.slice(i, i + BATCH))
+          const results = await Promise.all(batches.map(batch =>
+            supabase.from('snapshots')
+              .select('id, project_id, image_url, sort_order')
+              .in('project_id', batch)
+              .order('sort_order', { ascending: true })
+              .limit(3000)
+          ))
+          for (const { data: snapshotRows, error: sErr } of results) {
+            if (sErr) console.error('Failed to fetch snapshots:', sErr)
+            for (const s of snapshotRows ?? []) {
+              const list = snapshotMap.get(s.project_id) ?? []
+              list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
+              snapshotMap.set(s.project_id, list)
+            }
           }
         }
 
