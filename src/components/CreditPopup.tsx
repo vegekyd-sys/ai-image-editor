@@ -66,25 +66,15 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     setAutoWaiting(true);
     setAutoSuccess(false);
     setAutoFailed(false);
+    const preBalance = parseInt(sessionStorage.getItem('mkr_pre_topup_balance') || '0');
+    sessionStorage.removeItem('mkr_pre_topup_balance');
     let attempts = 0;
-    let firstBalance: number | null = null;
     const poll = () => {
       attempts++;
       fetch('/api/billing/credits').then(r => r.json()).then(data => {
         const bal = data.balance ?? 0;
         if (data.subscription) setAutoSubscription(data.subscription);
-        if (firstBalance === null) {
-          firstBalance = bal;
-          // First poll: if balance already > 0, webhook likely already processed
-          // Wait a couple more polls to confirm it's stable (not still at pre-payment level)
-          if (bal > 0) {
-            // Check one more time to see if it increases (webhook might still be in flight)
-            setTimeout(poll, 1500);
-            return;
-          }
-        }
-        // Success if: balance increased from first poll, OR balance > 0 after a few attempts
-        if ((firstBalance !== null && bal > firstBalance) || (attempts >= 3 && bal > 0)) {
+        if (bal > preBalance) {
           setAutoBalance(bal);
           setAutoSuccess(true);
           setAutoWaiting(false);
@@ -116,7 +106,8 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     if (!success || !open || animatingRef.current) return;
     animatingRef.current = true;
     const target = Math.max(0, balance);
-    setAnimatedBalance(0);
+    const from = parseInt(sessionStorage.getItem('mkr_pre_topup_balance') || '0');
+    setAnimatedBalance(from);
     // Small delay so the "0" renders first, then count up
     const timer = setTimeout(() => {
       const duration = 1200;
@@ -124,7 +115,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
       const step = (now: number) => {
         const progress = Math.min((now - start) / duration, 1);
         const eased = 1 - Math.pow(1 - progress, 3);
-        setAnimatedBalance(Math.max(0, Math.round(eased * target)));
+        setAnimatedBalance(Math.max(0, Math.round(from + eased * (target - from))));
         if (progress < 1) {
           requestAnimationFrame(step);
         } else {
@@ -147,7 +138,10 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         body: JSON.stringify({ tier, returnPath: projectId ? `/projects/${projectId}` : (typeof window !== 'undefined' ? window.location.pathname : undefined) }),
       });
       const data = await res.json();
-      if (data.url) window.open(data.url, '_blank');
+      if (data.url) {
+        sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
+        window.location.href = data.url;
+      }
     } finally {
       setLoading(null);
     }
@@ -162,7 +156,10 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         body: JSON.stringify({ planId, interval: 'month', returnPath: projectId ? `/projects/${projectId}` : (typeof window !== 'undefined' ? window.location.pathname : undefined) }),
       });
       const data = await res.json();
-      if (data.url) window.open(data.url, '_blank');
+      if (data.url) {
+        sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
+        window.location.href = data.url;
+      }
     } finally {
       setLoading(null);
     }
