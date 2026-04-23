@@ -403,6 +403,8 @@ interface AgentChatViewProps {
   onMusicSelect?: (track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }) => void;
   /** Background task running (music generation, video rendering) — show status even when agent is idle */
   hasBackgroundTask?: boolean;
+  /** Open CreditPopup when credits are exhausted */
+  onOpenCreditPopup?: () => void;
 }
 
 export default function AgentChatView({
@@ -430,6 +432,7 @@ export default function AgentChatView({
   onDesignPoster,
   onMusicSelect,
   hasBackgroundTask = false,
+  onOpenCreditPopup,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -1013,6 +1016,38 @@ export default function AgentChatView({
                 /* Assistant — no bubble, full-width text */
                 <div className="flex flex-col gap-2.5">
                   <div className={`${isPanel ? 'text-[17px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>
+                    {/* Credits exhausted inline card */}
+                    {msg.content?.startsWith('[CREDITS_EXHAUSTED:') && (() => {
+                      const bal = parseInt(msg.content.match(/\d+/)?.[0] || '0');
+                      return (
+                        <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <div className="flex items-center gap-3 px-3.5 py-3.5">
+                            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                              style={{ background: 'rgba(192,38,211,0.15)' }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e879f9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[12px] font-medium" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                                {t('billing.exhausted')}
+                              </div>
+                              <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                {bal} remaining · <span style={{ color: '#fbbf24' }}>{t('billing.topUpToContinue')}</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => onOpenCreditPopup?.()}
+                              className="px-3 py-1.5 rounded-full flex-shrink-0 active:scale-90 transition-transform text-[11px] font-semibold"
+                              style={{ background: 'rgba(192,38,211,0.2)', color: '#e879f9', border: '1px solid rgba(192,38,211,0.3)' }}
+                            >
+                              {t('billing.topUp')}
+                            </button>
+                          </div>
+                          <div style={{ height: 2, background: 'rgba(192,38,211,0.4)' }} />
+                        </div>
+                      );
+                    })()}
                     {msg.thinking?.map((segment, ti) => segment && (
                       <details key={ti} className="mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
                         <summary className="cursor-pointer select-none text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
@@ -1023,7 +1058,7 @@ export default function AgentChatView({
                         </div>
                       </details>
                     ))}
-                    {msg.content && (
+                    {msg.content && !msg.content.startsWith('[CREDITS_EXHAUSTED:') && (
                       <div className="markdown-body">
                         <MarkdownBlock
                           key={msg.id}

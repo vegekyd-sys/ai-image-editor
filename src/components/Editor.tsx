@@ -8,6 +8,7 @@ import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
+import CreditPopup from '@/components/CreditPopup';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
@@ -185,6 +186,23 @@ export default function Editor({
   const [textColor, setTextColor] = useState('#ec4899');
   const [textBgEnabled, setTextBgEnabled] = useState(true);
   const [showAnimateSheet, setShowAnimateSheet] = useState(false);
+  // Credit popup + status bar notification
+  const [creditPopupOpen, setCreditPopupOpen] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<number>(0);
+  const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(null);
+  const [creditExhausted, setCreditExhausted] = useState(false);
+  const [creditSuccess, setCreditSuccess] = useState(false);
+  const [creditWaiting, setCreditWaiting] = useState(false);
+
+  // Fetch credit balance + subscription info on mount
+  useEffect(() => {
+    fetch('/api/billing/credits').then(r => r.json()).then(data => {
+      setCreditBalance(data.balance ?? 0);
+      setCreditSubscription(data.subscription ?? null);
+    }).catch(() => {});
+  }, []);
+
+  // Payment success detection is handled by CreditPopup autoDetectPayment
   // Camera rotation panel
   const [showCameraPanel, setShowCameraPanel] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
@@ -919,6 +937,12 @@ export default function Editor({
         signal: previewAbortRef.current.signal,
       });
 
+      if (res.status === 402) {
+        try { const d = await res.json(); setCreditBalance(d.balance ?? 0); } catch { /* */ }
+        setCreditExhausted(true);
+        setCreditPopupOpen(true);
+        return;
+      }
       if (!res.ok) throw new Error('Preview failed');
       const { image, contentBlocked } = await res.json();
       if (contentBlocked) isNsfwRef.current = true;
@@ -1028,6 +1052,11 @@ export default function Editor({
               skillName: activeSkillRef.current || undefined,
             }),
           });
+          if (res.status === 402) {
+            try { const d = await res.json(); setCreditBalance(d.balance ?? 0); } catch { /* */ }
+            setCreditPopupOpen(true);
+            return;
+          }
           if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
 
           const reader = res.body!.getReader();
@@ -1137,6 +1166,11 @@ export default function Editor({
               metadata: snapshotsRef.current.find(s => s.id === req.snapshotId)?.metadata,
             }),
           });
+          if (res.status === 402) {
+            try { const d = await res.json(); setCreditBalance(d.balance ?? 0); } catch { /* */ }
+            setCreditPopupOpen(true);
+            return;
+          }
           if (!res.ok) throw new Error(`Tips ${category} failed: ${res.status}`);
 
           const reader = res.body!.getReader();
@@ -1574,6 +1608,10 @@ export default function Editor({
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t, initialTitle, userPromptText: text,
+      onInsufficientCredits: (balance) => {
+        setCreditBalance(balance);
+        setCreditExhausted(true);
+      },
       onMusicTaskCreated: (taskId) => {
         setMusicTaskId(taskId);
         musicPollingRef.current = true;
@@ -1687,6 +1725,7 @@ export default function Editor({
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t,
+      onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
       onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
     });
 
@@ -2134,8 +2173,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         }
       });
 
-      // ── Step 5: Tips (if images exist) ──
-      if (hasImages) {
+      // ── Step 5: Tips (if images exist, and auto-tips enabled) ──
+      const autoTips = typeof window !== 'undefined' ? (localStorage.getItem('mkr_auto_tips') ?? 'auto') : 'auto';
+      if (hasImages && autoTips !== 'off') {
         const tipsImage = (img: string) =>
           img.startsWith('http') ? Promise.resolve(img) : compressBase64Image(img, 600_000);
         if (hasPrompt) {
@@ -2925,6 +2965,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling',
+    onOpenCreditPopup: () => setCreditPopupOpen(true),
   };
 
   return (
@@ -3333,8 +3374,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
                   snapshotCount={snapshots.length}
-                  notification={pendingNotification}
-                  onSeeNotification={handleSeeNotification}
+                  notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : pendingNotification}
+                  onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : handleSeeNotification}
                   onAnimate={snapshots.length >= 1 ? () => {
                     if (hasAnyAnimation) {
                       setViewIndex(videoTimelineIndex);
@@ -3730,6 +3771,24 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         }
         return null;
       })()}
+
+      {/* Credit popup */}
+      <CreditPopup
+        open={creditPopupOpen}
+        onClose={() => { setCreditPopupOpen(false); setCreditExhausted(false); setCreditSuccess(false); setCreditWaiting(false); }}
+        balance={creditBalance}
+        subscription={creditSubscription}
+        projectId={projectId ?? undefined}
+        success={creditSuccess}
+        waiting={creditWaiting}
+        autoDetectPayment
+        onBalanceUpdate={(bal, sub) => {
+          setCreditBalance(bal);
+          if (sub) setCreditSubscription(sub);
+          setMessages(prev => prev.filter(m => !m.content?.startsWith('[CREDITS_EXHAUSTED:')));
+          setCreditExhausted(false);
+        }}
+      />
     </div>
   );
 }

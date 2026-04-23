@@ -200,6 +200,28 @@ const en = {
   'landing.cta.sub': 'Retouch, storyboard, explore, animate. Free to start.',
   'landing.cta.button': 'Open Makaron',
 
+  // Billing
+  'billing.credits': 'Credits',
+  'billing.balance': 'Balance',
+  'billing.topUp': 'Top Up',
+  'billing.getMoreCredits': 'Get More Credits',
+  'billing.subscribe': 'Subscribe',
+  'billing.upgrade': 'Upgrade',
+  'billing.perMonth': '/mo',
+  'billing.creditsPerMonth': 'credits/month',
+  'billing.exhausted': 'Credits exhausted',
+  'billing.topUpToContinue': 'top up to continue',
+  'billing.creditsAdded': 'Credits Added!',
+  'billing.balanceUpdated': 'Your balance has been updated',
+  'billing.continueCreating': 'Continue Creating',
+  'billing.processingPayment': 'Processing payment...',
+  'billing.usuallyFewSeconds': 'This usually takes a few seconds',
+  'billing.orTopUp': 'Or top up',
+  'billing.creditsAvailable': 'credits available',
+  'billing.subscribeTo': 'Subscribe to',
+  'billing.upgradeTo': 'Upgrade to',
+  'billing.current': 'Current',
+
   // Misc
   'misc.toolUse': 'Tool use',
   'misc.error': 'Error',

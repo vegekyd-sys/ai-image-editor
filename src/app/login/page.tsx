@@ -119,7 +119,20 @@ export default function LoginPage() {
         if (key) setErrorKey(key); else setErrorRaw(error.message)
         return
       }
-      // Store invite code for auto-activation
+      // Activate immediately with invite code (don't rely on /activate page)
+      try {
+        const activateRes = await fetch('/api/auth/validate-invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: validatedCode }),
+        })
+        const activateData = await activateRes.json()
+        if (activateData.success && activateData.welcome) {
+          window.location.href = '/projects?welcome=1'
+          return
+        }
+      } catch { /* fall through */ }
+      // Fallback: store code for /activate page
       sessionStorage.setItem('mkr_invite_code', validatedCode)
       window.location.href = '/'
     } catch {

@@ -1,8 +1,9 @@
 import { createMakaronMcpServer } from '@/mcp/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { validateApiKey } from '@/lib/billing/api-keys';
-import { checkBalance, deductCredits } from '@/lib/billing/credits';
+import { checkBalance, deductCredits, deductByTokens } from '@/lib/billing/credits';
 import { resolveToolName } from '@/lib/billing/pricing';
+import { getTokenRate } from '@/lib/billing/token-rates';
 
 export const maxDuration = 180;
 
@@ -64,10 +65,21 @@ async function handleMcp(req: Request): Promise<Response> {
       return { allowed: true };
     } : undefined,
 
-    // Post-complete: deduct credits
-    onToolComplete: auth.type === 'user' ? async (toolName, model, durationMs) => {
+    // Post-complete: deduct credits (token-based if usage available, else per-action)
+    onToolComplete: auth.type === 'user' ? async (toolName, model, durationMs, usage, meta) => {
       lastToolModel = model;
-      await deductCredits(auth.userId!, auth.keyId!, toolName, model, durationMs);
+      if (usage) {
+        // Token-based billing — Gemini/OpenRouter tools that return usage
+        await deductByTokens(auth.userId!, toolName, usage.modelId, usage.inputTokens, usage.outputTokens, durationMs, auth.keyId);
+      } else if (meta?.videoDurationSec) {
+        // Video: per-second billing — 22 credits/s ($0.11/s × 2x markup)
+        const videoCredits = Math.ceil(meta.videoDurationSec * 22);
+        const { deductFixedCredits } = await import('@/lib/billing/credits');
+        await deductFixedCredits(auth.userId!, videoCredits, toolName, model, durationMs, auth.keyId);
+      } else {
+        // Per-action billing — ComfyUI, Suno etc.
+        await deductCredits(auth.userId!, auth.keyId!, toolName, model, durationMs);
+      }
     } : undefined,
   });
 

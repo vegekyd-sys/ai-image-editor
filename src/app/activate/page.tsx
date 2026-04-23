@@ -19,7 +19,7 @@ export default function ActivatePage() {
         })
         const data = await res.json()
         if (data.success && data.autoActivated) {
-          window.location.href = '/projects'
+          window.location.href = data.welcome ? '/projects?welcome=1' : '/projects'
           return
         }
       } catch { /* not an existing user */ }
@@ -36,7 +36,7 @@ export default function ActivatePage() {
           })
           const data = await res.json()
           if (data.success) {
-            window.location.href = '/projects'
+            window.location.href = data.welcome ? '/projects?welcome=1' : '/projects'
             return
           }
         } catch { /* fall through */ }

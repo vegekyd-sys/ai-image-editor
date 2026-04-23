@@ -1,5 +1,22 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getToolPrice, resolveToolName } from './pricing'
+import { getTokenRate, tokensToCredits } from './token-rates'
+
+// Billing kill switch — cached from DB app_settings
+let _billingEnabled: boolean | null = null
+let _billingCheckedAt = 0
+const BILLING_CACHE_TTL = 60_000 // 1 minute
+
+export async function isBillingEnabled(): Promise<boolean> {
+  if (_billingEnabled !== null && Date.now() - _billingCheckedAt < BILLING_CACHE_TTL) return _billingEnabled
+  const admin = getSupabaseAdmin()
+  const { data } = await admin.from('app_settings').select('value').eq('key', 'billing_enabled').single()
+  _billingEnabled = data?.value === 'true'
+  _billingCheckedAt = Date.now()
+  return _billingEnabled
+}
+
+export function invalidateBillingCache() { _billingEnabled = null }
 
 /**
  * Check if user has enough credits for a tool call.
@@ -20,60 +37,202 @@ export async function checkBalance(userId: string, toolName: string): Promise<{ 
 }
 
 /**
- * Deduct credits after a successful tool call.
+ * Pre-flight credit check for App API routes.
+ * Returns a 402 Response if insufficient credits, so the route can short-circuit:
+ *   const check = await requireCredits(userId, 5);
+ *   if (!check.ok) return check.response;
+ */
+export async function requireCredits(
+  userId: string,
+  estimatedCredits: number = 1,
+): Promise<{ ok: true; balance: number } | { ok: false; balance: number; response: Response }> {
+  if (!(await isBillingEnabled())) return { ok: true, balance: 0 }
+  const admin = getSupabaseAdmin()
+  let { data } = await admin
+    .from('credit_balances')
+    .select('balance')
+    .eq('user_id', userId)
+    .single()
+
+  // Auto-initialize for users without a credit_balances row (e.g. old users)
+  if (!data) {
+    const { data: setting } = await admin.from('app_settings').select('value').eq('key', 'welcome_credits').single()
+    const welcomeCredits = parseInt(setting?.value || '500')
+    if (welcomeCredits > 0) {
+      await addCredits(userId, welcomeCredits)
+      try {
+        await admin.from('credit_purchases').insert({
+          user_id: userId, stripe_session_id: `welcome_auto_${Date.now()}`,
+          credits: welcomeCredits, amount_usd: 0, status: 'completed', source: 'welcome',
+        })
+      } catch { /* ignore duplicate */ }
+    } else {
+      await admin.from('credit_balances').upsert({ user_id: userId, balance: 0, lifetime_purchased: 0, lifetime_used: 0 }, { onConflict: 'user_id' })
+    }
+    const { data: fresh } = await admin.from('credit_balances').select('balance').eq('user_id', userId).single()
+    data = fresh
+  }
+
+  const balance = Number(data?.balance ?? 0)
+
+  if (balance >= estimatedCredits) {
+    return { ok: true, balance }
+  }
+
+  return {
+    ok: false,
+    balance,
+    response: new Response(
+      JSON.stringify({
+        error: 'insufficient_credits',
+        balance,
+        needed: estimatedCredits,
+        upgradeUrl: 'https://www.makaron.app/dashboard',
+      }),
+      { status: 402, headers: { 'Content-Type': 'application/json' } },
+    ),
+  }
+}
+
+/**
+ * Deduct credits after a successful tool call (per-action pricing from credit_pricing table).
  */
 export async function deductCredits(
   userId: string,
-  apiKeyId: string,
+  apiKeyId: string | null,
   mcpToolName: string,
   model?: string,
   durationMs?: number,
 ): Promise<{ charged: number; remaining: number }> {
+  if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   const toolName = resolveToolName(mcpToolName, model)
   const price = await getToolPrice(toolName)
   if (!price || price.isFree) return { charged: 0, remaining: 0 }
 
   const credits = price.credits
+  const remaining = await atomicDeduct(userId, credits)
+
+  // Log usage
+  const admin = getSupabaseAdmin()
+  await admin.from('usage_logs').insert({
+    user_id: userId,
+    api_key_id: apiKeyId || null,
+    tool_name: toolName,
+    model_used: model,
+    credits_charged: credits,
+    duration_ms: durationMs,
+    source: apiKeyId ? 'mcp' : 'app',
+  })
+
+  return { charged: credits, remaining }
+}
+
+/**
+ * Deduct credits based on actual token usage (for OpenRouter/Bedrock/Google calls).
+ * Computes credit cost from token_rates table, then deducts atomically.
+ */
+export async function deductByTokens(
+  userId: string,
+  toolName: string,
+  modelId: string,
+  inputTokens: number,
+  outputTokens: number,
+  durationMs?: number,
+  apiKeyId?: string | null,
+): Promise<{ charged: number; remaining: number }> {
+  if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
+  let rate = await getTokenRate(modelId)
+  let usedFallback = false
+  if (!rate) {
+    // Fallback: charge at Opus-level rates rather than giving free usage
+    console.warn(`[billing] WARNING: No token rate for "${modelId}". Using fallback $5/$25. Add it via Admin → Billing → Token Rates.`)
+    rate = { model_id: `unknown:${modelId}`, display_name: 'Fallback', input_per_1m: 5, output_per_1m: 25, markup: 2, is_active: true }
+    usedFallback = true
+  }
+
+  const credits = tokensToCredits(rate, inputTokens, outputTokens)
+  if (credits <= 0) return { charged: 0, remaining: 0 }
+
+  const remaining = await atomicDeduct(userId, credits)
+
+  // Log usage with token details
+  const admin = getSupabaseAdmin()
+  await admin.from('usage_logs').insert({
+    user_id: userId,
+    api_key_id: apiKeyId || null,
+    tool_name: toolName,
+    model_used: usedFallback ? `unknown:${modelId}` : modelId,
+    credits_charged: credits,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    duration_ms: durationMs,
+    source: apiKeyId ? 'mcp' : 'app',
+  })
+
+  return { charged: credits, remaining }
+}
+
+/**
+ * Atomic credit deduction via RPC with manual fallback.
+ * Returns remaining balance.
+ */
+async function atomicDeduct(userId: string, credits: number): Promise<number> {
   const admin = getSupabaseAdmin()
 
-  // Atomic deduction
+  // Try atomic RPC first
   const { data, error } = await admin.rpc('deduct_credits', {
     p_user_id: userId,
     p_amount: credits,
   })
 
-  // Fallback if RPC doesn't exist: manual update
-  let remaining = 0
-  if (error) {
-    // Manual deduction
-    const { data: bal } = await admin
-      .from('credit_balances')
-      .select('balance, lifetime_used')
-      .eq('user_id', userId)
-      .single()
-    if (bal) {
-      remaining = Math.max(0, bal.balance - credits)
-      await admin
-        .from('credit_balances')
-        .update({
-          balance: remaining,
-          lifetime_used: (bal.lifetime_used || 0) + credits,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-    }
-  } else {
-    remaining = data ?? 0
-  }
+  if (!error) return data ?? 0
 
-  // Log usage
+  // Fallback: manual update
+  const { data: bal } = await admin
+    .from('credit_balances')
+    .select('balance, lifetime_used')
+    .eq('user_id', userId)
+    .single()
+  if (!bal) return 0
+
+  const remaining = Math.max(0, bal.balance - credits)
+  await admin
+    .from('credit_balances')
+    .update({
+      balance: remaining,
+      lifetime_used: (bal.lifetime_used || 0) + credits,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+
+  return remaining
+}
+
+/**
+ * Deduct a fixed number of credits (for dynamic pricing like per-second video billing).
+ */
+export async function deductFixedCredits(
+  userId: string,
+  credits: number,
+  toolName: string,
+  model?: string,
+  durationMs?: number,
+  apiKeyId?: string | null,
+): Promise<{ charged: number; remaining: number }> {
+  if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
+  if (credits <= 0) return { charged: 0, remaining: 0 }
+
+  const remaining = await atomicDeduct(userId, credits)
+
+  const admin = getSupabaseAdmin()
   await admin.from('usage_logs').insert({
     user_id: userId,
-    api_key_id: apiKeyId,
+    api_key_id: apiKeyId || null,
     tool_name: toolName,
     model_used: model,
     credits_charged: credits,
     duration_ms: durationMs,
+    source: apiKeyId ? 'mcp' : 'app',
   })
 
   return { charged: credits, remaining }

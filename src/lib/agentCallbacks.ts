@@ -59,6 +59,8 @@ export interface AgentCallbackContext {
   /** When true, onDone won't reset status to greeting (music polling shows its own status) */
   musicPollingRef?: { current: boolean };
 
+  // Credits exhausted — show CreditPopup
+  onInsufficientCredits?: (balance: number) => void;
   // Frame capture (frontend renderStillOnWeb → upload to workspace)
   captureDesignFrame?: (frame: number, uploadPath: string) => Promise<void>;
 
@@ -467,6 +469,20 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
           m.id === id ? { ...m, content: m.content || ctx.t('editor.errorRetry') } : m,
         ));
       }
+      ctx.onCleanup?.();
+    },
+
+    onInsufficientCredits: (balance) => {
+      // Insert a system message in CUI — popup only opens when user taps "Top Up"
+      const sysMsg: import('@/types').Message = {
+        id: `credits-${Date.now()}`,
+        role: 'assistant',
+        content: `[CREDITS_EXHAUSTED:${balance}]`,
+        timestamp: Date.now(),
+      };
+      ctx.setMessages(prev => [...prev, sysMsg]);
+      ctx.setAgentStatus('');
+      ctx.onInsufficientCredits?.(balance); // triggers StatusBar notification
       ctx.onCleanup?.();
     },
   };

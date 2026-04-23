@@ -55,7 +55,7 @@ function formatResult(image: string, message: string, prefix: string) {
 
 export interface McpServerOptions {
   /** Called after each tool completes successfully. Used for billing. */
-  onToolComplete?: (toolName: string, model?: string, durationMs?: number) => void | Promise<void>;
+  onToolComplete?: (toolName: string, model?: string, durationMs?: number, usage?: { inputTokens: number; outputTokens: number; modelId: string }, meta?: { videoDurationSec?: number }) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
   onToolStart?: (toolName: string) => Promise<{ allowed: boolean; message?: string }>;
 }
@@ -128,7 +128,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
           return { content: [{ type: 'text' as const, text: result.message }] };
         }
         // Bill after success
-        await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0);
+        await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage);
         const msg = result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
           : result.message;
@@ -264,7 +264,7 @@ Style: Cinematic, warm golden light.`,
         });
 
         if (result.success) {
-          await options?.onToolComplete?.('makaron_create_video', undefined, Date.now() - t0);
+          await options?.onToolComplete?.('makaron_create_video', undefined, Date.now() - t0, undefined, { videoDurationSec: params.duration });
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}`
@@ -320,7 +320,7 @@ Example: Edit a video to add cinematic color grading:
         });
 
         if (result.success) {
-          await options?.onToolComplete?.('makaron_edit_video', undefined, Date.now() - t0);
+          await options?.onToolComplete?.('makaron_edit_video', undefined, Date.now() - t0, undefined, { videoDurationSec: params.duration });
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}`

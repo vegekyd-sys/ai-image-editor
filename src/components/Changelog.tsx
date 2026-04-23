@@ -8,6 +8,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-23',
+    en: { title: 'OpenAI Image 2 & Billing', items: [
+      'OpenAI gpt-5.4-image-2: new image generation model via OpenRouter — superior text rendering for posters/graphics',
+      'CUI model selector: cycle through Auto → Gemini → Qwen → OpenAI (purple pill)',
+      'Token-based billing: per-model usage tracking for Gemini, OpenAI, Bedrock',
+      'Subscription system: 3-tier Stripe recurring plans (Basic/Pro/Business) + one-time top-ups',
+    ]},
+    zh: { title: 'OpenAI Image 2 & 计费系统', items: [
+      'OpenAI gpt-5.4-image-2：新增生图模型 — 文字渲染远超 Gemini，适合海报/营销图',
+      'CUI 模型选择器：Auto → Gemini → Qwen → OpenAI 循环切换（紫色标签）',
+      'Token 计费：Gemini、OpenAI、Bedrock 按模型用量计费',
+      '订阅系统：Stripe 3 档周期订阅（Basic/Pro/Business）+ 单次充值',
+    ]},
+  },
+  {
     date: '2026-04-20',
     en: { title: 'Headless Agent & CLI', items: [
       'Published on npm: `npx makaron-cli` — zero install, works anywhere with Node.js',

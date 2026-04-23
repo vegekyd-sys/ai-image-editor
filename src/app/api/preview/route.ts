@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateImage } from '@/lib/model-router';
+import { requireCredits, deductByTokens, deductCredits } from '@/lib/billing/credits';
 
 export const maxDuration = 120;
 
@@ -14,6 +15,10 @@ export async function POST(req: NextRequest) {
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
+
+    // Pre-flight credit check
+    const creditCheck = await requireCredits(user.id, 2);
+    if (!creditCheck.ok) return creditCheck.response;
 
     const { image, editPrompt, aspectRatio, category, isNsfw, referenceImages } = await req.json();
 
@@ -38,6 +43,17 @@ export async function POST(req: NextRequest) {
       : undefined;
 
     const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw, references });
+
+    // Deduct credits regardless of success (API tokens already consumed)
+    if (result.usage) {
+      deductByTokens(user.id, 'preview', result.usage.modelId, result.usage.inputTokens, result.usage.outputTokens)
+        .catch(e => console.error('[billing] preview deduct error:', e));
+    } else if (result.image) {
+      // Only charge per-action if image was actually generated (ComfyUI or no-usage Gemini)
+      const toolName = result.model === 'gemini' ? 'preview' : `edit_image_${result.model}`;
+      deductCredits(user.id, null, toolName)
+        .catch(e => console.error('[billing] preview deduct error:', e));
+    }
 
     if (!result.image) {
       return new Response(

@@ -84,6 +84,7 @@ export type AgentStreamEvent =
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
+  | { type: 'usage'; inputTokens: number; outputTokens: number; model: string }  // token usage for billing
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -255,6 +256,19 @@ function createTools(ctx: AgentContext) {
           { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           { currentImage: editTarget, originalImage: ctx.originalImage, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
+        // Bill for image generation (separate from Agent LLM tokens)
+        if (skillResult.usage) {
+          import('./billing/credits').then(({ deductByTokens }) =>
+            deductByTokens(ctx.userId ?? '', 'generate_image', skillResult.usage!.modelId, skillResult.usage!.inputTokens, skillResult.usage!.outputTokens)
+              .catch(e => console.error('[billing] generate_image deduct error:', e))
+          );
+        } else if (skillResult.usedModel && skillResult.usedModel !== 'gemini') {
+          // Per-action for ComfyUI models
+          import('./billing/credits').then(({ deductCredits }) =>
+            deductCredits(ctx.userId ?? '', null, `edit_image_${skillResult.usedModel}`)
+              .catch(e => console.error('[billing] generate_image deduct error:', e))
+          );
+        }
         // NSFW detection: flag session so all subsequent calls skip Gemini
         if (skillResult.contentBlocked) ctx.isNsfw = true;
         if (skillResult.image) {
@@ -321,6 +335,14 @@ function createTools(ctx: AgentContext) {
 
           ctx.animationTaskId = taskId;
           ctx.animationPrompt = story_prompt;
+
+          // Bill for video generation (per-second)
+          const videoSec = duration || 10;
+          import('./billing/credits').then(({ deductFixedCredits }) =>
+            deductFixedCredits(ctx.userId ?? '', Math.ceil(videoSec * 22), 'create_video', undefined, undefined)
+              .catch(e => console.error('[billing] generate_animation deduct error:', e))
+          );
+
           return { success: true as const, taskId, message: 'Video generation task created! It takes about 3–5 minutes. The result will appear here when done.' };
         } catch (e) {
           return { success: false as const, message: String(e) };
@@ -476,6 +498,11 @@ Parameters:
         if (skillResult.image) {
           ctx.currentImage = skillResult.image;
           ctx.generatedImages.push(skillResult.image);
+          // Bill for camera rotation (per-action)
+          import('./billing/credits').then(({ deductCredits }) =>
+            deductCredits(ctx.userId ?? '', null, 'rotate_camera')
+              .catch(e => console.error('[billing] rotate_camera deduct error:', e))
+          );
         }
         return { success: skillResult.success as true, message: skillResult.message };
       },
@@ -980,6 +1007,11 @@ Your code must return a value:
         const result = await createMusic({ prompt, instrumental, style });
         if (result.taskId) {
           (ctx as any).musicTaskId = result.taskId;
+          // Bill for music generation
+          import('./billing/credits').then(({ deductCredits }) =>
+            deductCredits(ctx.userId ?? '', null, 'create_music')
+              .catch(e => console.error('[billing] generate_music deduct error:', e))
+          );
           // Fire-and-forget: write pending rows to DB for polling resume after reload
           if (ctx.supabase && ctx.userId) {
             Promise.all([0, 1].map(idx =>
@@ -1374,6 +1406,16 @@ export async function* runMakaronAgent(
     }
 
     console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
+
+    // Emit token usage for billing
+    try {
+      const usage = await result.usage;
+      if (usage) {
+        const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
+        yield { type: 'usage', inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0, model: modelId };
+      }
+    } catch { /* best effort — don't fail the stream if usage unavailable */ }
+
     yield { type: 'done' };
   } catch (err) {
     console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${err instanceof Error ? err.message : String(err)}`);

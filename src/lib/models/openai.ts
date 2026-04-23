@@ -1,7 +1,7 @@
 /**
  * OpenAI gpt-5.4-image-2 backend — via OpenRouter (same endpoint as Gemini)
  */
-import type { ModelBackend, GenerateImageRequest } from './types';
+import type { ModelBackend, GenerateImageRequest, TokenUsage } from './types';
 import { ensureJpeg } from '../gemini';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
@@ -19,10 +19,10 @@ async function generateOpenAI(
   image: string | undefined,
   prompt: string,
   references?: { url: string; role: string }[],
-): Promise<string | null> {
+): Promise<{ image: string | null; usage?: TokenUsage }> {
   if (!process.env.OPENROUTER_API_KEY) {
     console.warn('[openai] No OPENROUTER_API_KEY');
-    return null;
+    return { image: null };
   }
 
   const userContent: Array<Record<string, unknown>> = [];
@@ -62,17 +62,24 @@ async function generateOpenAI(
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
     console.error(`[openai] ${res.status} (TTFB ${ttfb}ms): ${errText.slice(0, 300)}`);
-    return null;
+    return { image: null };
   }
 
   const data = await res.json();
   const totalMs = Date.now() - t0;
   console.log(`[openai] TTFB=${ttfb}ms total=${totalMs}ms (${(totalMs / 1000).toFixed(1)}s)`);
 
+  const usage: TokenUsage | undefined = data.usage ? {
+    inputTokens: data.usage.prompt_tokens ?? 0,
+    outputTokens: data.usage.completion_tokens ?? 0,
+    modelId: OPENAI_MODEL,
+  } : undefined;
+  if (usage) console.log(`[openai] usage: in=${usage.inputTokens} out=${usage.outputTokens}`);
+
   const choice = data.choices?.[0]?.message;
   if (!choice) {
     console.error('[openai] No choice in response');
-    return null;
+    return { image: null, usage };
   }
 
   if (choice.content && typeof choice.content === 'string') {
@@ -97,16 +104,16 @@ async function generateOpenAI(
   }
 
   if (!imageUrl) {
-    // Check for safety refusal
     if (data.error?.message?.includes('safety')) {
       console.warn('[openai] Safety system rejected request');
     } else {
       console.warn('[openai] No image in response');
     }
-    return null;
+    return { image: null, usage };
   }
 
-  return ensureJpeg(imageUrl);
+  const jpeg = await ensureJpeg(imageUrl);
+  return { image: jpeg, usage };
 }
 
 export const openaiBackend: ModelBackend = {
@@ -116,7 +123,7 @@ export const openaiBackend: ModelBackend = {
     return !!process.env.OPENROUTER_API_KEY;
   },
 
-  async generate(req: GenerateImageRequest): Promise<string | null> {
+  async generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage }> {
     if (req.references?.length) {
       const allRefs = [
         ...(req.image ? [{ url: req.image, role: 'Photo to edit (base image)' }] : []),

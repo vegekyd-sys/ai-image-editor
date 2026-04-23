@@ -77,6 +77,8 @@ export default function ProjectsPage() {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
   const [skillsExpanded, setSkillsExpanded] = useState(false)
+  const [creditBalance, setCreditBalance] = useState<number | null>(null)
+  const [showWelcome, setShowWelcome] = useState(false)
   const [skillDragOver, setSkillDragOver] = useState(false)
   const [skillUploading, setSkillUploading] = useState(false)
   const [skillUploadError, setSkillUploadError] = useState<string | null>(null)
@@ -395,6 +397,22 @@ export default function ProjectsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
+  // Fetch credit balance + detect welcome
+  useEffect(() => {
+    if (!user) return
+    fetch('/api/billing/credits').then(r => r.json()).then(d => {
+      setCreditBalance(d.balance ?? 0)
+    }).catch(() => {})
+    // Detect ?welcome=1
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('welcome')) {
+        window.history.replaceState({}, '', window.location.pathname)
+        setShowWelcome(true)
+      }
+    }
+  }, [user])
+
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
     if (!user || creating || (files.length === 0 && !prompt)) return
     setCreating(true)
@@ -558,7 +576,32 @@ export default function ProjectsPage() {
               {locale === 'zh' ? '更新日志' : "What's new"}
             </button>
           </div>
-          <button
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {creditBalance !== null && (
+              <Link
+                href="/dashboard"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '4px 10px', borderRadius: 8,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  textDecoration: 'none',
+                  transition: 'all 0.2s',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={creditBalance < 20 ? '#fbbf24' : '#e879f9'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 600,
+                  color: creditBalance < 20 ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+                }}>
+                  {creditBalance.toLocaleString()}
+                </span>
+              </Link>
+            )}
+            <button
               onClick={() => signOut()}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
@@ -571,6 +614,7 @@ export default function ProjectsPage() {
             >
               Sign out
             </button>
+          </div>
         </div>
 
         {/* ═══════════════════════════════
@@ -1232,6 +1276,52 @@ export default function ProjectsPage() {
         </div>
       )}
       {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
+
+      {/* Welcome credits popup */}
+      {showWelcome && creditBalance !== null && creditBalance > 0 && (
+        <>
+          <div onClick={() => setShowWelcome(false)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} />
+          <div style={{
+            position: 'fixed', zIndex: 301, left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            width: '92%', maxWidth: 400, background: 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
+            borderRadius: 20, border: '1px solid rgba(255,255,255,0.08)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.8)', padding: '48px 24px 36px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
+              {locale === 'zh' ? '欢迎来到 Makaron!' : 'Welcome to Makaron!'}
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
+              {locale === 'zh' ? '我们送了你一份创作礼物' : "Here's a gift to get you started"}
+            </div>
+            <div style={{
+              marginTop: 24, padding: '20px 0', borderRadius: 16,
+              background: 'rgba(192,38,211,0.06)', border: '1px solid rgba(192,38,211,0.15)',
+            }}>
+              <div style={{
+                fontSize: 48, fontWeight: 800, letterSpacing: '-0.03em',
+                background: 'linear-gradient(135deg, #e879f9, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              }}>
+                {creditBalance.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                credits · ${(creditBalance * 0.01).toFixed(2)} {locale === 'zh' ? '价值' : 'value'}
+              </div>
+            </div>
+            <button
+              onClick={() => setShowWelcome(false)}
+              style={{
+                width: '100%', marginTop: 24, padding: 14, borderRadius: 14, border: 'none',
+                background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
+                color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
+              }}
+            >
+              {locale === 'zh' ? '开始创作' : 'Start Creating'}
+            </button>
+          </div>
+        </>
+      )}
     </>
   )
 }

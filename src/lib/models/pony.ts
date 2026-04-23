@@ -12,10 +12,10 @@ export const ponyBackend: ModelBackend = {
     return !!process.env.COMFYUI_PONY_URL;
   },
 
-  async generate(req: GenerateImageRequest): Promise<string | null> {
-    if (req.image) return null; // img2img not supported
+  async generate(req: GenerateImageRequest): Promise<{ image: string | null }> {
+    if (req.image) return { image: null }; // img2img not supported
     const { translateForPony, generateTextToImageWithPony } = await import('../comfyui-sdxl');
     const translated = await translateForPony(req.prompt);
-    return generateTextToImageWithPony(translated);
+    return { image: await generateTextToImageWithPony(translated) };
   },
 };

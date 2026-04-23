@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createMusic } from '@/lib/skills/create-music'
+import { requireCredits, deductCredits } from '@/lib/billing/credits'
 
 export const maxDuration = 30
 
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest) {
     if (!prompt) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
     }
+
+    // Pre-flight credit check
+    const creditCheck = await requireCredits(user.id, 10)
+    if (!creditCheck.ok) return creditCheck.response
 
     const result = await createMusic({ prompt, instrumental, style })
 
@@ -36,6 +41,10 @@ export async function POST(req: NextRequest) {
         }, { onConflict: 'suno_task_id,track_index' })
       }
     }
+
+    // Deduct credits for music generation (fire-and-forget)
+    deductCredits(user.id, null, 'create_music')
+      .catch(e => console.error('[billing] music deduct error:', e))
 
     return NextResponse.json({ taskId: result.taskId })
   } catch (e) {

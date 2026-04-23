@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
+import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 
 export const maxDuration = 30
 
@@ -27,6 +28,10 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+
+    // Pre-flight credit check
+    const creditCheck = await requireCredits(user.id, 50)
+    if (!creditCheck.ok) return creditCheck.response
 
     // Call skill layer (stateless, no DB)
     const skillResult = await createVideo({
@@ -57,6 +62,12 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) throw error
+
+    // Deduct credits for video generation (fire-and-forget)
+    // Per-second billing: 22 credits/s ($0.11/s × 2x markup), default 10s if smart mode
+    const videoSec = duration || 10
+    deductFixedCredits(user.id, Math.ceil(videoSec * 22), 'create_video', undefined, undefined)
+      .catch(e => console.error('[billing] animate deduct error:', e))
 
     return NextResponse.json({ animationId: animation.id, taskId })
   } catch (err) {

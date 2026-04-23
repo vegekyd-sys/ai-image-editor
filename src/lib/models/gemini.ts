@@ -1,7 +1,7 @@
 /**
  * Gemini model backend — wraps existing generatePreviewImage functions from gemini.ts
  */
-import type { ModelBackend, GenerateImageRequest } from './types';
+import type { ModelBackend, GenerateImageRequest, TokenUsage } from './types';
 
 // Import internal Gemini functions (kept in gemini.ts for session management, tips, etc.)
 import {
@@ -19,34 +19,37 @@ export const geminiBackend: ModelBackend = {
     return true;
   },
 
-  async generate(req: GenerateImageRequest): Promise<string | null> {
+  async generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage }> {
     // Multi-reference path: user photo as edit base (first), then reference images
     if (req.references?.length) {
       const allRefs = [
         ...(req.image ? [{ url: req.image, role: 'Photo to edit (base image)' }] : []),
         ...req.references,
       ];
-      return generateImageWithReferences(
+      const image = await generateImageWithReferences(
         allRefs,
         req.prompt,
         req.aspectRatio,
         req.thinkingEffort,
       );
+      return { image };
     }
 
     // Standard single-image or text-to-image
     if (PROVIDER === 'openrouter') {
-      return generatePreviewImageOpenRouter(
+      const result = await generatePreviewImageOpenRouter(
         req.image ?? '',
         req.prompt,
         req.aspectRatio,
         req.thinkingEffort,
       );
+      return { image: result.image, usage: result.usage };
     }
-    return generatePreviewImageGoogle(
+    const result = await generatePreviewImageGoogle(
       req.image ?? '',
       req.prompt,
       req.aspectRatio,
     );
+    return { image: result.image, usage: result.usage };
   },
 };
