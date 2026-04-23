@@ -1,7 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
@@ -52,7 +52,10 @@ export default function ProjectsPage() {
   const { user, loading: authLoading, signOut } = useAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   // Phase 1: Synchronous memory cache — same-session instant render
   const [projects, setProjects] = useState<ProjectWithSnapshots[]>(() => {
     if (typeof window === 'undefined') return []
@@ -124,6 +127,31 @@ export default function ProjectsPage() {
     const t = setTimeout(load, 2000)
     return () => clearTimeout(t)
   }, [])
+  // Auto-select skill from URL param (after claim redirect)
+  useEffect(() => {
+    const skillParam = searchParams.get('skill')
+    if (skillParam && availableSkills.length > 0) {
+      const match = availableSkills.find(s => s.name === skillParam)
+      if (match) {
+        setSelectedSkill(match.name)
+        setSkillsExpanded(true)
+      }
+      window.history.replaceState({}, '', '/projects')
+    }
+  }, [searchParams, availableSkills])
+
+  // Close user menu on click outside
+  useEffect(() => {
+    if (!userMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [userMenuOpen])
+
   const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
   const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
@@ -601,19 +629,64 @@ export default function ProjectsPage() {
                 </span>
               </Link>
             )}
-            <button
-              onClick={() => signOut()}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.45)',
-                transition: 'color 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-            >
-              Sign out
-            </button>
+            <div ref={userMenuRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setUserMenuOpen(v => !v)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
+                  color: userMenuOpen ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.45)',
+                  transition: 'color 0.2s',
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+                onMouseLeave={(e) => { if (!userMenuOpen) e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: userMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {userMenuOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 8,
+                  background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 12, padding: '4px 0', minWidth: 140,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
+                }}>
+                  <button
+                    onClick={() => { setUserMenuOpen(false); router.push('/skills') }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '10px 16px', background: 'none', border: 'none',
+                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
+                      cursor: 'pointer', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    Skills
+                  </button>
+                  <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
+                  <button
+                    onClick={() => { setUserMenuOpen(false); signOut() }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '10px 16px', background: 'none', border: 'none',
+                      color: 'rgba(255,255,255,0.45)', fontSize: '0.75rem',
+                      cursor: 'pointer', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

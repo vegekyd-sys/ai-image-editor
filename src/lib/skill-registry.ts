@@ -187,15 +187,3 @@ export async function loadUserSkills(supabase: any, userId: string): Promise<Par
 export function getSkillFromAll(name: string, userSkills?: ParsedSkill[]): ParsedSkill | undefined {
   return loadBuiltInSkills().get(name) || userSkills?.find(s => s.name === name);
 }
-
-/** Build skills section for Agent system prompt: summary + full instructions */
-export function getSkillsSummaryForAgent(additionalSkills?: ParsedSkill[]): string {
-  const skills = [...getAllSkills(), ...(additionalSkills || [])];
-  if (skills.length === 0) return '';
-
-  const sections = skills.map(s =>
-    `### Skill: ${s.name}\n**Description**: ${s.description.trim()}\n**Allowed tools**: ${s.allowedTools?.join(', ') || 'all'}\n\n${s.template}`
-  );
-
-  return `\n\n## Skills\n\nWhen the user's intent matches a skill, follow that skill's instructions autonomously.\n\n${sections.join('\n\n---\n\n')}\n`;
-}

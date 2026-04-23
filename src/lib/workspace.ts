@@ -409,6 +409,59 @@ export async function deleteFile(filePath: string, supabase: SupabaseClient, use
   return dbDeleteFile(supabase, userId, filePath);
 }
 
+// ── Skill install (shared by ZIP upload + claim) ─────────────────────────
+
+export interface SkillAsset {
+  filename: string;
+  data: Buffer;
+  contentType: string;
+}
+
+export async function installSkill(opts: {
+  skillMd: string;
+  assets: SkillAsset[];
+  supabase: SupabaseClient;
+  userId: string;
+}): Promise<{ success: boolean; skillName: string; error?: string }> {
+  const { skillMd, assets, supabase, userId } = opts;
+
+  const parsed = parseSkillMd(skillMd);
+  if (!parsed) return { success: false, skillName: '', error: 'Invalid SKILL.md format' };
+
+  let finalName = parsed.name;
+  const existing = await getAllSkills(supabase, userId);
+  const existingNames = new Set(existing.map(s => s.name));
+  if (existingNames.has(finalName)) {
+    let i = 2;
+    while (existingNames.has(`${parsed.name}-${i}`)) i++;
+    finalName = `${parsed.name}-${i}`;
+  }
+
+  const uploadedUrls: Record<string, string> = {};
+  for (const asset of assets) {
+    const wsPath = `skills/${finalName}/assets/${asset.filename}`;
+    const result = await writeFile(wsPath, asset.data, supabase, userId, asset.contentType);
+    if (result.success && result.storageUrl) {
+      uploadedUrls[`assets/${asset.filename}`] = result.storageUrl;
+    }
+  }
+
+  let finalMd = skillMd;
+  if (finalName !== parsed.name) {
+    finalMd = finalMd.replace(/^name:\s*.+$/m, `name: ${finalName}`);
+  }
+  for (const [relativePath, publicUrl] of Object.entries(uploadedUrls)) {
+    finalMd = finalMd.replace(new RegExp(relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), publicUrl);
+  }
+
+  const mdResult = await writeFile(`skills/${finalName}/SKILL.md`, finalMd, supabase, userId, 'text/markdown');
+  if (!mdResult.success) {
+    return { success: false, skillName: finalName, error: `Failed to save SKILL.md: ${mdResult.error}` };
+  }
+
+  return { success: true, skillName: finalName };
+}
+
 // ── Skill convenience methods ──────────────────────────────────────────────
 
 /** Get a skill by name. Checks: DB user skills → built-in skills. */
