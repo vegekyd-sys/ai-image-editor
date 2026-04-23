@@ -534,7 +534,7 @@ export default function HomePage() {
             padding: '0 24px',
           } : {
             padding: `60px 12px ${kbInset > 0 ? '8px' : 'max(8px, env(safe-area-inset-bottom))'}`,
-            background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.85) 60px)',
+            background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
           }),
           transition: kbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
         }}>
@@ -550,11 +550,11 @@ export default function HomePage() {
                 display: 'flex', gap: 0,
                 borderRadius: 18,
                 border: dragOver ? '1px solid rgba(217,70,239,0.6)' : '1px solid rgba(255,255,255,0.1)',
-                background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(20,20,20,0.45)',
+                background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(20,20,20,0.3)',
                 overflow: 'hidden',
                 transition: 'border-color 0.2s, background 0.2s',
-                backdropFilter: 'blur(16px) saturate(1.1)',
-                WebkitBackdropFilter: 'blur(16px) saturate(1.1)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
               }}
             >
               {/* Left: photo slot — square, width = container height */}
