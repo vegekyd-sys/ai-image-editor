@@ -56,6 +56,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   };
 
   // Auto-detect ?topped_up=1 after Stripe redirect
+  const [autoFailed, setAutoFailed] = useState(false);
   useEffect(() => {
     if (!autoDetectPayment || typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -64,13 +65,16 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     setAutoOpen(true);
     setAutoWaiting(true);
     setAutoSuccess(false);
+    setAutoFailed(false);
     let attempts = 0;
+    let initialBalance: number | null = null;
     const poll = () => {
       attempts++;
       fetch('/api/billing/credits').then(r => r.json()).then(data => {
         const bal = data.balance ?? 0;
         if (data.subscription) setAutoSubscription(data.subscription);
-        if (bal > 0) {
+        if (initialBalance === null) initialBalance = bal;
+        if (bal > initialBalance) {
           setAutoBalance(bal);
           setAutoSuccess(true);
           setAutoWaiting(false);
@@ -79,9 +83,8 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
           setTimeout(poll, 1000);
         } else {
           setAutoBalance(bal);
-          setAutoSuccess(true);
           setAutoWaiting(false);
-          onBalanceUpdate?.(bal, data.subscription ?? null);
+          setAutoFailed(true);
         }
       }).catch(() => { if (attempts < 20) setTimeout(poll, 1000); });
     };
@@ -184,8 +187,39 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
           animation: 'creditScaleIn 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }}
       >
-        {/* ══════ WAITING STATE ══════ */}
-        {waiting && !success ? (
+        {/* ══════ FAILED STATE ══════ */}
+        {autoFailed ? (
+          <div style={{ padding: '48px 24px 36px', textAlign: 'center' }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%', margin: '0 auto 20px',
+              background: 'rgba(239,68,68,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+              </svg>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+              {t('billing.paymentPending')}
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 6, lineHeight: 1.5 }}>
+              {t('billing.paymentPendingDesc')}
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                width: '100%', marginTop: 24,
+                padding: 14, borderRadius: 14, border: 'none',
+                background: 'rgba(255,255,255,0.1)',
+                color: '#fff', fontSize: 15, fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {t('billing.close')}
+            </button>
+          </div>
+
+        ) : waiting && !success ? (
           <div style={{ padding: '48px 24px 36px', textAlign: 'center' }}>
             <div style={{
               width: 48, height: 48, margin: '0 auto 20px',
