@@ -9,6 +9,23 @@ interface ChangelogEntry {
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-04-23',
+    en: { title: 'Skill Sharing & Management', items: [
+      'Share skills: generate a private link and send it to friends — they can add the Skill to their account in one click',
+      'Skills page: browse all your skills in one place, with share and delete actions',
+      'User menu: Sign out replaced with a dropdown menu (Skills + Sign out)',
+      'Claim page: beautiful preview card when opening a share link, with login redirect for new users',
+      'Smart dedup: sharing the same skill returns the same link every time',
+    ]},
+    zh: { title: 'Skill 分享 & 管理', items: [
+      '分享 Skill：生成私密链接发给朋友，朋友一键即可添加到自己账号',
+      'Skills 页面：集中浏览所有 Skill，支持分享和删除操作',
+      '用户菜单：Sign out 改为下拉菜单（Skills + Sign out）',
+      '领取页面：打开分享链接后展示精美预览卡片，未登录自动引导登录',
+      '智能去重：同一个 Skill 多次分享返回同一个链接',
+    ]},
+  },
+  {
+    date: '2026-04-23',
     en: { title: 'OpenAI Image 2 & Billing', items: [
       'OpenAI gpt-5.4-image-2: new image generation model via OpenRouter — superior text rendering for posters/graphics',
       'CUI model selector: cycle through Auto → Gemini → Qwen → OpenAI (purple pill)',
