@@ -444,11 +444,13 @@ export default function HomePage() {
         {/* ── Skill Template Grid ── */}
         <div style={{
           flex: 1,
-          padding: isDesktop ? '0 24px' : '0 14px',
+          paddingLeft: isDesktop ? '24px' : '14px',
+          paddingRight: isDesktop ? '24px' : '14px',
+          paddingTop: 0,
+          paddingBottom: '160px',
           maxWidth: isDesktop ? '1200px' : '520px',
           width: '100%',
           margin: '0 auto',
-          paddingBottom: '160px',
         }}>
           <div style={{
             display: 'grid',
@@ -550,7 +552,7 @@ export default function HomePage() {
                 display: 'flex', gap: 0,
                 borderRadius: 18,
                 border: dragOver ? '1px solid rgba(217,70,239,0.6)' : '1px solid rgba(255,255,255,0.1)',
-                background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(20,20,20,0.3)',
+                background: dragOver ? 'rgba(217,70,239,0.08)' : isDesktop ? 'rgba(10,10,10,0.75)' : 'rgba(20,20,20,0.3)',
                 overflow: 'hidden',
                 transition: 'border-color 0.2s, background 0.2s',
                 backdropFilter: 'blur(10px)',
