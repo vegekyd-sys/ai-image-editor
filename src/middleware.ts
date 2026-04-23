@@ -44,10 +44,10 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  // Logged in — / → projects
+  // Logged in — / → home
   if (pathname === '/') {
     const url = request.nextUrl.clone()
-    url.pathname = activated ? '/projects' : '/activate'
+    url.pathname = activated ? '/home' : '/activate'
     return NextResponse.redirect(url)
   }
 
@@ -56,16 +56,16 @@ export async function middleware(request: NextRequest) {
   // /login → redirect based on activation status
   if (pathname === '/login') {
     const url = request.nextUrl.clone()
-    url.pathname = activated ? '/projects' : '/activate'
+    url.pathname = activated ? '/home' : '/activate'
     return NextResponse.redirect(url)
   }
 
   // /activate — accessible when logged in
   if (pathname === '/activate') {
-    // Already activated → skip to projects
+    // Already activated → skip to home
     if (activated) {
       const url = request.nextUrl.clone()
-      url.pathname = '/projects'
+      url.pathname = '/home'
       return NextResponse.redirect(url)
     }
     return supabaseResponse
