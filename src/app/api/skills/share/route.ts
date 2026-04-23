@@ -15,6 +15,21 @@ export async function POST(req: NextRequest) {
     const skill = await getSkill(skillName, supabase, user.id);
     if (!skill) return NextResponse.json({ error: 'Skill not found' }, { status: 404 });
 
+    const origin = req.headers.get('origin') || req.headers.get('referer')?.replace(/\/[^/]*$/, '') || 'https://www.makaron.app';
+
+    // Reuse existing share link if one exists
+    const { data: existing } = await supabase
+      .from('skill_shares')
+      .select('code')
+      .eq('sharer_id', user.id)
+      .eq('skill_name', skillName)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      return NextResponse.json({ code: existing.code, url: `${origin}/s/${existing.code}` });
+    }
+
     const code = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
 
     const { error } = await supabase.from('skill_shares').insert({
@@ -28,7 +43,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create share link' }, { status: 500 });
     }
 
-    const origin = req.headers.get('origin') || req.headers.get('referer')?.replace(/\/[^/]*$/, '') || 'https://www.makaron.app';
     return NextResponse.json({ code, url: `${origin}/s/${code}` });
   } catch (err) {
     console.error('[skills/share POST]', err);
