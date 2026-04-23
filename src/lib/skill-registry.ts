@@ -120,7 +120,7 @@ export function parseSkillMd(content: string): ParsedSkill | null {
 }
 
 // ── Registry ────────────────────────────────────────────────────────────────
-
+// (module-level cache, reset on server restart)
 let _skills: Map<string, ParsedSkill> | null = null;
 
 /** Clear cached skills (for dev hot-reload) */
