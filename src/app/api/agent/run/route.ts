@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
           if (event.type === 'usage') {
             totalInputTokens += event.inputTokens ?? 0;
             totalOutputTokens += event.outputTokens ?? 0;
-            if (event.modelId) agentModel = event.modelId;
+            if (event.model) agentModel = event.model;
           }
           await writer.processAndEnqueue(event);
           if (await isAborted()) {
