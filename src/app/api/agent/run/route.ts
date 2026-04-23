@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { runMakaronAgent } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
+import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 
 export const maxDuration = 800;
 
@@ -39,6 +40,10 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Pre-flight credit check
+    const creditCheck = await requireCredits(user.id, 5);
+    if (!creditCheck.ok) return creditCheck.response;
 
     const locale = req.cookies.get('locale')?.value ?? 'en';
 
@@ -104,6 +109,9 @@ export async function POST(req: NextRequest) {
         return data?.status === 'aborted';
       };
 
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      let agentModel = '';
       try {
         for await (const event of runMakaronAgent(ctx.fullPrompt, ctx.snapshotImages[ctx.currentSnapshotIndex] || '', projectId, {
           originalImage: ctx.originalImage,
@@ -117,6 +125,11 @@ export async function POST(req: NextRequest) {
           userId: user.id,
           currentDesign: ctx.currentDesign,
         })) {
+          if (event.type === 'usage') {
+            totalInputTokens += event.inputTokens ?? 0;
+            totalOutputTokens += event.outputTokens ?? 0;
+            if (event.modelId) agentModel = event.modelId;
+          }
           await writer.processAndEnqueue(event);
           if (await isAborted()) {
             console.log(`[agent/run] Run ${runId} aborted`);
@@ -134,6 +147,11 @@ export async function POST(req: NextRequest) {
       }
 
       await writer.flush();
+      // Deduct agent LLM tokens
+      if (totalInputTokens > 0 || totalOutputTokens > 0) {
+        deductByTokens(user.id, 'agent', agentModel || 'unknown', totalInputTokens, totalOutputTokens)
+          .catch(e => console.error('[agent/run] billing error:', e));
+      }
       const { data: finalRun } = await supabase.from('agent_runs')
         .select('status').eq('id', runId).single();
       if (finalRun?.status === 'running') {
