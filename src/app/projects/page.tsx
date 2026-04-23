@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
@@ -49,6 +50,10 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function ProjectsPage() {
+  return <Suspense><ProjectsPageInner /></Suspense>
+}
+
+function ProjectsPageInner() {
   const { user, loading: authLoading, signOut } = useAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
