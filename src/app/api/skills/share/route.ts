@@ -28,8 +28,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create share link' }, { status: 500 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.makaron.app';
-    return NextResponse.json({ code, url: `${baseUrl}/s/${code}` });
+    const origin = req.headers.get('origin') || req.headers.get('referer')?.replace(/\/[^/]*$/, '') || 'https://www.makaron.app';
+    return NextResponse.json({ code, url: `${origin}/s/${code}` });
   } catch (err) {
     console.error('[skills/share POST]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
