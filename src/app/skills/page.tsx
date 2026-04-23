@@ -19,6 +19,8 @@ export default function SkillsPage() {
   const [skills, setSkills] = useState<SkillItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [sharing, setSharing] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -49,17 +51,8 @@ export default function SkillsPage() {
         return;
       }
 
-      if (navigator.share) {
-        try {
-          await navigator.share({ title: `Makaron Skill`, url: data.url });
-        } catch {
-          // User cancelled share
-        }
-      } else {
-        await navigator.clipboard.writeText(data.url);
-        setShareToast(locale === 'zh' ? '链接已复制' : 'Link copied!');
-        setTimeout(() => setShareToast(null), 2000);
-      }
+      setShareUrl(data.url);
+      setShareCopied(false);
     } catch {
       setShareToast('Failed');
       setTimeout(() => setShareToast(null), 3000);
@@ -188,6 +181,84 @@ export default function SkillsPage() {
         <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 14, textAlign: 'center', marginTop: 60 }}>
           {locale === 'zh' ? '还没有任何 Skill' : 'No skills yet'}
         </p>
+      )}
+
+      {/* Share Link Modal */}
+      {shareUrl && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20,
+          }}
+          onClick={() => setShareUrl(null)}
+        >
+          <div
+            style={{
+              maxWidth: 420, width: '100%',
+              background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 20, padding: '28px 24px',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: '0 0 8px' }}>
+              {locale === 'zh' ? '分享 Skill' : 'Share Skill'}
+            </h3>
+            <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, margin: '0 0 20px', lineHeight: 1.5 }}>
+              {locale === 'zh'
+                ? '把这个链接发给朋友，他们就可以把这个 Skill 添加到自己的账号。'
+                : 'Send this link to a friend — they can add this Skill to their account.'}
+            </p>
+            <div style={{
+              display: 'flex', gap: 8, alignItems: 'center',
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 12, padding: '10px 12px',
+            }}>
+              <input
+                readOnly
+                value={shareUrl}
+                style={{
+                  flex: 1, background: 'none', border: 'none', outline: 'none',
+                  color: 'rgba(255,255,255,0.7)', fontSize: 13, fontFamily: 'monospace',
+                  minWidth: 0,
+                }}
+                onFocus={e => e.target.select()}
+              />
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(shareUrl);
+                    setShareCopied(true);
+                    setTimeout(() => setShareCopied(false), 2000);
+                  } catch {}
+                }}
+                style={{
+                  flexShrink: 0, padding: '6px 14px', borderRadius: 8,
+                  border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  background: shareCopied ? 'rgba(34,197,94,0.2)' : 'rgba(217,70,239,0.15)',
+                  color: shareCopied ? '#4ade80' : '#f0abfc',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {shareCopied ? (locale === 'zh' ? '已复制' : 'Copied!') : (locale === 'zh' ? '复制' : 'Copy')}
+              </button>
+            </div>
+            <button
+              onClick={() => setShareUrl(null)}
+              style={{
+                width: '100%', marginTop: 16, padding: '12px 0',
+                borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)',
+                background: 'none', color: 'rgba(255,255,255,0.5)',
+                fontSize: 14, cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              {locale === 'zh' ? '关闭' : 'Done'}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Toast */}
