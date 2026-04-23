@@ -67,26 +67,36 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     setAutoSuccess(false);
     setAutoFailed(false);
     let attempts = 0;
-    let initialBalance: number | null = null;
+    let firstBalance: number | null = null;
     const poll = () => {
       attempts++;
       fetch('/api/billing/credits').then(r => r.json()).then(data => {
         const bal = data.balance ?? 0;
         if (data.subscription) setAutoSubscription(data.subscription);
-        if (initialBalance === null) initialBalance = bal;
-        if (bal > initialBalance!) {
+        if (firstBalance === null) {
+          firstBalance = bal;
+          // First poll: if balance already > 0, webhook likely already processed
+          // Wait a couple more polls to confirm it's stable (not still at pre-payment level)
+          if (bal > 0) {
+            // Check one more time to see if it increases (webhook might still be in flight)
+            setTimeout(poll, 1500);
+            return;
+          }
+        }
+        // Success if: balance increased from first poll, OR balance > 0 after a few attempts
+        if ((firstBalance !== null && bal > firstBalance) || (attempts >= 3 && bal > 0)) {
           setAutoBalance(bal);
           setAutoSuccess(true);
           setAutoWaiting(false);
           onBalanceUpdate?.(bal, data.subscription ?? null);
-        } else if (attempts < 20) {
+        } else if (attempts < 30) {
           setTimeout(poll, 1000);
         } else {
           setAutoBalance(bal);
           setAutoWaiting(false);
           setAutoFailed(true);
         }
-      }).catch(() => { if (attempts < 20) setTimeout(poll, 1000); });
+      }).catch(() => { if (attempts < 30) setTimeout(poll, 1000); });
     };
     poll();
   }, [autoDetectPayment]); // eslint-disable-line react-hooks/exhaustive-deps
