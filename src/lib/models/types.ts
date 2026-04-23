@@ -1,4 +1,4 @@
-export type ModelId = 'gemini' | 'qwen' | 'pony' | 'wai';
+export type ModelId = 'gemini' | 'qwen' | 'pony' | 'wai' | 'openai';
 
 export interface GenerateImageRequest {
   image?: string;           // input image (URL/base64). Missing = text-to-image
@@ -12,16 +12,23 @@ export interface GenerateImageRequest {
   isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  modelId: string;          // full model ID for billing (e.g. 'gemini-3.1-flash-image-preview')
+}
+
 export interface GenerateImageResult {
   image: string | null;
   model: ModelId;           // model that actually produced the image
   fallbackUsed: boolean;
   failedModels?: ModelId[]; // models that were tried and returned null/error
   contentBlocked?: boolean; // Gemini refused content (NSFW) — caller should set isNsfw flag
+  usage?: TokenUsage;       // token usage for billing (available for Gemini/OpenRouter)
 }
 
 export interface ModelBackend {
   id: ModelId;
   canHandle(req: GenerateImageRequest): boolean;
-  generate(req: GenerateImageRequest): Promise<string | null>;
+  generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage }>;
 }

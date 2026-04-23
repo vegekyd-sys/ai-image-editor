@@ -8,7 +8,7 @@ description: >
 allowed-tools: generate_image analyze_image generate_animation
 metadata:
   makaron:
-    icon: "\uD83C\uDFAC"
+    icon: "🎬"
     color: "#c084fc"
     tipsEnabled: false
     builtIn: true

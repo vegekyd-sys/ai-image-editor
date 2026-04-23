@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { CREDIT_TIERS } from '@/lib/billing/tiers'
+import CreditPopup from '@/components/CreditPopup'
 
 interface ApiKey {
   id: string
@@ -13,22 +14,40 @@ interface ApiKey {
 }
 
 interface UsageLog {
-  id: string
   tool_name: string
   model_used: string | null
   credits_charged: number
+  input_tokens: number | null
+  output_tokens: number | null
+  source: string | null
   duration_ms: number | null
   created_at: string
+}
+
+interface SubscriptionInfo {
+  planId: string
+  status: string
+  billingInterval: 'month' | 'year'
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
 }
 
 interface Balance {
   balance: number
   lifetimePurchased: number
   lifetimeUsed: number
+  subscription: SubscriptionInfo | null
 }
 
+const PLANS = [
+  { id: 'basic', name: 'Basic', monthlyPrice: 990, annualPrice: 9500, credits: 1200 },
+  { id: 'pro', name: 'Pro', monthlyPrice: 1990, annualPrice: 19100, credits: 3000 },
+  { id: 'business', name: 'Business', monthlyPrice: 4990, annualPrice: 47900, credits: 10000 },
+] as const
+
 export default function DashboardPage() {
-  const [tab, setTab] = useState<'overview' | 'keys' | 'usage'>('overview')
+  const [tab, setTab] = useState<'subscribe' | 'topup' | 'keys' | 'usage' | 'settings'>('subscribe')
+  const [autoTips, setAutoTips] = useState<'auto' | 'off'>('auto')
   const [balance, setBalance] = useState<Balance | null>(null)
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [usage, setUsage] = useState<UsageLog[]>([])
@@ -37,29 +56,26 @@ export default function DashboardPage() {
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [checkingOut, setCheckingOut] = useState<string | null>(null)
+  const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month')
+  const [subscribing, setSubscribing] = useState<string | null>(null)
+  const [managingSubscription, setManagingSubscription] = useState(false)
 
-  const fetchBalance = useCallback(async () => {
-    const res = await fetch('/api/billing/credits')
-    if (res.ok) setBalance(await res.json())
-  }, [])
-
-  const fetchKeys = useCallback(async () => {
-    const res = await fetch('/api/billing/keys')
+  const fetchDashboard = useCallback(async () => {
+    const res = await fetch('/api/billing/dashboard')
     if (res.ok) {
       const data = await res.json()
+      setBalance(data)
       setKeys(data.keys || [])
+      setUsage(data.usage || [])
     }
-  }, [])
-
-  const fetchUsage = useCallback(async () => {
-    // Usage logs via admin — for now use credits endpoint
-    // TODO: add /api/billing/usage endpoint
   }, [])
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchBalance(), fetchKeys(), fetchUsage()]).finally(() => setLoading(false))
-  }, [fetchBalance, fetchKeys, fetchUsage])
+    fetchDashboard().finally(() => setLoading(false))
+    const stored = localStorage.getItem('mkr_auto_tips')
+    if (stored === 'auto' || stored === 'off') setAutoTips(stored)
+  }, [fetchDashboard])
 
   const handleCreateKey = async () => {
     setCreating(true)
@@ -73,7 +89,7 @@ export default function DashboardPage() {
       if (data.key) {
         setCreatedKey(data.key)
         setNewKeyName('')
-        fetchKeys()
+        fetchDashboard()
       }
     } finally {
       setCreating(false)
@@ -86,7 +102,7 @@ export default function DashboardPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     })
-    fetchKeys()
+    fetchDashboard()
   }
 
   const handleCheckout = async (tier: string) => {
@@ -95,7 +111,7 @@ export default function DashboardPage() {
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ tier, returnPath: '/dashboard' }),
       })
       const data = await res.json()
       if (data.url) window.location.href = data.url
@@ -103,6 +119,34 @@ export default function DashboardPage() {
       setCheckingOut(null)
     }
   }
+
+  const handleSubscribe = async (planId: string) => {
+    setSubscribing(planId)
+    try {
+      const res = await fetch('/api/billing/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, interval: billingInterval, returnPath: '/dashboard' }),
+      })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+    } finally {
+      setSubscribing(null)
+    }
+  }
+
+  const handleManageSubscription = async () => {
+    setManagingSubscription(true)
+    try {
+      const res = await fetch('/api/billing/manage', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+    } finally {
+      setManagingSubscription(false)
+    }
+  }
+
+  const sub = balance?.subscription
 
   if (loading) {
     return (
@@ -119,13 +163,25 @@ export default function DashboardPage() {
     <div className="min-h-dvh bg-black text-white p-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <a href="/projects" className="text-white/40 text-sm hover:text-white/60">← Back to app</a>
+        <a href="/projects" className="text-white/40 text-sm hover:text-white/60">&larr; Back to app</a>
       </div>
 
       {/* Balance card */}
       <div className="bg-gradient-to-br from-fuchsia-900/30 to-purple-900/20 rounded-2xl p-6 mb-6 border border-fuchsia-500/20">
-        <div className="text-white/50 text-sm mb-1">Credit Balance</div>
-        <div className="text-4xl font-bold text-fuchsia-400">{balance?.balance ?? 0}</div>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-white/50 text-sm mb-1">Credit Balance</div>
+            <div className="text-4xl font-bold text-fuchsia-400">{balance?.balance ?? 0}</div>
+          </div>
+          {sub && sub.status !== 'canceled' && (
+            <div className="text-right">
+              <div className="text-xs text-fuchsia-400 font-medium uppercase tracking-wider">{sub.planId} Plan</div>
+              <div className="text-white/30 text-xs mt-1">
+                {sub.cancelAtPeriodEnd ? 'Cancels' : 'Renews'} {sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd).toLocaleDateString() : ''}
+              </div>
+            </div>
+          )}
+        </div>
         <div className="flex gap-6 mt-3 text-xs text-white/40">
           <span>Purchased: {balance?.lifetimePurchased ?? 0}</span>
           <span>Used: {balance?.lifetimeUsed ?? 0}</span>
@@ -134,28 +190,104 @@ export default function DashboardPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-white/5 rounded-lg p-1">
-        {(['overview', 'keys', 'usage'] as const).map(t => (
+        {(['subscribe', 'topup', 'keys', 'usage', 'settings'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all capitalize ${
+            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${
               tab === t ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
             }`}
           >
-            {t === 'overview' ? 'Top Up' : t === 'keys' ? 'API Keys' : 'Usage'}
+            {t === 'subscribe' ? 'Plan' : t === 'topup' ? 'Top Up' : t === 'keys' ? 'API Keys' : t === 'usage' ? 'Usage' : 'Settings'}
           </button>
         ))}
       </div>
 
+      {/* ══════ SUBSCRIBE TAB ══════ */}
+      {tab === 'subscribe' && (
+        <>
+          {/* Current subscription */}
+          {sub && sub.status !== 'canceled' ? (
+            <div className="bg-white/[0.03] rounded-xl p-5 border border-fuchsia-500/20 mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium capitalize">{sub.planId} Plan</div>
+                  <div className="text-white/40 text-sm mt-1">
+                    {sub.billingInterval === 'year' ? 'Annual' : 'Monthly'} billing
+                    {sub.cancelAtPeriodEnd && <span className="text-amber-400 ml-2">Canceling at period end</span>}
+                  </div>
+                  <div className="text-white/30 text-xs mt-1">
+                    Next billing: {sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd).toLocaleDateString() : 'N/A'}
+                  </div>
+                </div>
+                <button
+                  onClick={handleManageSubscription}
+                  disabled={managingSubscription}
+                  className="px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/15 disabled:opacity-40 transition-all"
+                >
+                  {managingSubscription ? '...' : 'Manage'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Billing interval toggle */}
+              <div className="flex items-center justify-center gap-3 mb-5">
+                <span className={`text-sm ${billingInterval === 'month' ? 'text-white' : 'text-white/40'}`}>Monthly</span>
+                <button
+                  onClick={() => setBillingInterval(v => v === 'month' ? 'year' : 'month')}
+                  className={`relative w-12 h-6 rounded-full transition-all ${billingInterval === 'year' ? 'bg-fuchsia-600' : 'bg-white/20'}`}
+                >
+                  <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${billingInterval === 'year' ? 'left-6' : 'left-0.5'}`} />
+                </button>
+                <span className={`text-sm ${billingInterval === 'year' ? 'text-white' : 'text-white/40'}`}>
+                  Annual <span className="text-green-400 text-xs font-medium ml-1">Save 20%</span>
+                </span>
+              </div>
+
+              {/* Plan cards */}
+              <div className="grid gap-3">
+                {PLANS.map(plan => {
+                  const price = billingInterval === 'month' ? plan.monthlyPrice : plan.annualPrice
+                  const perMonth = billingInterval === 'year' ? Math.round(plan.annualPrice / 12) : plan.monthlyPrice
+                  return (
+                    <div key={plan.id} className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{plan.name}</div>
+                        <div className="text-white/40 text-sm mt-1">
+                          {plan.credits.toLocaleString()} credits/month
+                        </div>
+                        {billingInterval === 'year' && (
+                          <div className="text-green-400/60 text-xs mt-0.5">
+                            ${(perMonth / 100).toFixed(2)}/mo billed annually
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleSubscribe(plan.id)}
+                        disabled={!!subscribing}
+                        className="px-5 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-40 transition-all"
+                      >
+                        {subscribing === plan.id ? '...' : `$${(price / 100).toFixed(2)}${billingInterval === 'year' ? '/yr' : '/mo'}`}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
       {/* ══════ TOP UP TAB ══════ */}
-      {tab === 'overview' && (
+      {tab === 'topup' && (
         <div className="grid gap-3">
           {CREDIT_TIERS.map(tier => (
             <div key={tier.id} className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
               <div>
                 <div className="font-medium">{tier.name}</div>
                 <div className="text-white/40 text-sm mt-1">
-                  {tier.credits.toLocaleString()} credits · {tier.unitPrice}/credit
+                  {tier.credits.toLocaleString()} credits &middot; {tier.unitPrice}/credit
                 </div>
               </div>
               <button
@@ -173,10 +305,9 @@ export default function DashboardPage() {
       {/* ══════ API KEYS TAB ══════ */}
       {tab === 'keys' && (
         <>
-          {/* New key created — show once */}
           {createdKey && (
             <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-4 mb-4">
-              <div className="text-green-400 text-sm font-medium mb-2">API Key Created — copy it now, it won&apos;t be shown again!</div>
+              <div className="text-green-400 text-sm font-medium mb-2">API Key Created &mdash; copy it now, it won&apos;t be shown again!</div>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs bg-black/50 rounded-lg px-3 py-2 font-mono text-green-300 break-all select-all">
                   {createdKey}
@@ -191,7 +322,6 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Create new key */}
           <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/10">
             <div className="flex gap-2">
               <input
@@ -211,13 +341,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Keys list */}
           <div className="space-y-2">
             {keys.filter(k => k.is_active).map(k => (
               <div key={k.id} className="bg-white/[0.03] rounded-lg px-4 py-3 border border-white/5 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <code className="text-xs font-mono text-white/70">{k.key_prefix}••••••••</code>
+                    <code className="text-xs font-mono text-white/70">{k.key_prefix}&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code>
                     <span className="text-white/30 text-xs">{k.name}</span>
                   </div>
                   <div className="text-white/20 text-xs mt-1">
@@ -242,10 +371,74 @@ export default function DashboardPage() {
 
       {/* ══════ USAGE TAB ══════ */}
       {tab === 'usage' && (
-        <div className="text-white/30 text-sm text-center py-12">
-          Usage history coming soon.
+        <>
+          {usage.length > 0 ? (
+            <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/50 text-xs">
+                    <th className="text-left px-4 py-3 font-medium">Tool</th>
+                    <th className="text-right px-4 py-3 font-medium">Credits</th>
+                    <th className="text-right px-4 py-3 font-medium">Tokens</th>
+                    <th className="text-right px-4 py-3 font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usage.map((u, i) => (
+                    <tr key={i} className="border-b border-white/5 hover:bg-white/[0.02]">
+                      <td className="px-4 py-3">
+                        <div className="font-mono text-xs">{u.tool_name}</div>
+                        {u.model_used && <div className="text-white/30 text-xs mt-0.5">{u.model_used}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-right text-fuchsia-400 font-medium">{u.credits_charged}</td>
+                      <td className="px-4 py-3 text-right text-white/40 text-xs">
+                        {u.input_tokens != null ? `${u.input_tokens}/${u.output_tokens ?? 0}` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right text-white/30 text-xs">
+                        {new Date(u.created_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-white/30 text-sm text-center py-12">No usage yet.</p>
+          )}
+        </>
+      )}
+
+      {/* ══════ SETTINGS TAB ══════ */}
+      {tab === 'settings' && (
+        <div className="space-y-3">
+          <div className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
+            <div>
+              <div className="font-medium">Auto Tips</div>
+              <div className="text-white/40 text-sm mt-1">
+                Auto-generate edit suggestions when uploading a photo
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                const next = autoTips === 'auto' ? 'off' : 'auto'
+                setAutoTips(next)
+                localStorage.setItem('mkr_auto_tips', next)
+              }}
+              className={`relative w-12 h-6 rounded-full transition-all ${autoTips === 'auto' ? 'bg-fuchsia-600' : 'bg-white/20'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${autoTips === 'auto' ? 'left-6' : 'left-0.5'}`} />
+            </button>
+          </div>
         </div>
       )}
+      <CreditPopup
+        open={false}
+        onClose={() => {}}
+        balance={balance?.balance ?? 0}
+        subscription={balance?.subscription ?? null}
+        autoDetectPayment
+        onBalanceUpdate={() => fetchDashboard()}
+      />
     </div>
   )
 }

@@ -21,6 +21,8 @@ import {
   AbsoluteFill,
 } from 'remotion';
 import { Audio } from '@remotion/media';
+import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
+import { noise2D, noise3D } from '@remotion/noise';
 
 /** All APIs available to Agent's React code */
 const REMOTION_SCOPE: Record<string, unknown> = {
@@ -39,6 +41,10 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   Img,
   AbsoluteFill,
   Audio,
+  // @remotion/paths — SVG path animation
+  evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath,
+  // @remotion/noise — organic textures
+  noise2D, noise3D,
 };
 
 // Babel CDN fallback (lazy-loaded only when Sucrase fails)
@@ -155,9 +161,68 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
     const scopeKeys = Object.keys(REMOTION_SCOPE);
     const scopeValues = Object.values(REMOTION_SCOPE);
     const factory = new Function(...scopeKeys, execCode);
-    return factory(...scopeValues);
+    const comp = factory(...scopeValues);
+    return comp ? wrapWithEditableTransforms(comp) : null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
   }
+}
+
+
+/**
+ * Module-level ref for current transform props.
+ * Updated by the HOC's render, read by the Proxy createElement.
+ */
+let _currentTransformProps: Record<string, unknown> = {};
+
+/**
+ * Patched createElement: intercepts [data-editable] elements and injects
+ * CSS independent properties (style.translate / style.scale).
+ *
+ * Unlike style.transform, these independent properties:
+ * - Do NOT appear in getComputedStyle().transform (verified: returns "none")
+ * - Do NOT interfere with Moveable coordinate calculation
+ * - Do NOT affect browser hit-testing (no ghost pointerdown)
+ * - ARE correctly read by @remotion/web-renderer (via our patch)
+ */
+const _origCE = React.createElement;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
+  if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
+    const id = elProps['data-editable'] as string;
+    const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
+    const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
+    if (pos || sc) {
+      const existingStyle = (elProps.style || {}) as Record<string, unknown>;
+      elProps = { ...elProps, style: {
+        ...existingStyle,
+        ...(pos ? { translate: `${pos.x}px ${pos.y}px` } : {}),
+        ...(sc ? { scale: `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` } : {}),
+      }};
+    }
+  }
+  return _origCE.call(React, type, elProps, ...children);
+};
+
+const PATCHED_REACT = new Proxy(React, {
+  get(target, prop) {
+    if (prop === 'createElement') return _patchedCE;
+    return Reflect.get(target, prop);
+  }
+});
+
+REMOTION_SCOPE.React = PATCHED_REACT;
+
+/**
+ * HOC: sets _currentTransformProps before Component renders (synchronous).
+ * Agent code uses PATCHED_REACT.createElement → reads _currentTransformProps
+ * → injects style.translate/scale on [data-editable] elements.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
+  return function WrappedDesign(props: Record<string, unknown>) {
+    _currentTransformProps = props;
+    return _origCE.call(React, Component, props);
+  };
 }

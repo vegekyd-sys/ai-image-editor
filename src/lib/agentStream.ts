@@ -11,16 +11,20 @@ export interface AgentStreamCallbacks {
   onAnimationTask?: (taskId: string, prompt: string) => void;
   onMusicTask?: (taskId: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
+  onCaptureFrame?: (frame: number, uploadPath: string, captureId: string) => void;
+  onPreviewFrame?: (workspaceUrl: string) => void;
   onNsfwDetected?: () => void;
   onRunId?: (runId: string) => void;
   onMessageId?: (messageId: string) => void;
   onClearRunMessages?: (messageIds: string[]) => void;
+  onReasoningStart?: () => void;
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
-  onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string }) => void;
+  onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string; published?: boolean; previewUrl?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
+  onInsufficientCredits?: (balance: number) => void;
 }
 
 export async function streamAgent(
@@ -52,6 +56,15 @@ export async function streamAgent(
   });
 
   if (!res.ok) {
+    if (res.status === 402) {
+      try {
+        const data = await res.json();
+        callbacks.onInsufficientCredits?.(data.balance ?? 0);
+      } catch {
+        callbacks.onInsufficientCredits?.(0);
+      }
+      return;
+    }
     const text = await res.text().catch(() => 'Unknown error');
     callbacks.onError?.(text);
     return;
@@ -109,8 +122,21 @@ export async function streamAgent(
           case 'image_analyzed':
             callbacks.onImageAnalyzed?.(event.imageIndex);
             break;
+          case 'capture_frame':
+            callbacks.onCaptureFrame?.(
+              (event as { frame: number }).frame,
+              (event as { uploadPath: string }).uploadPath,
+              (event as { captureId: string }).captureId,
+            );
+            break;
+          case 'preview_frame_captured':
+            callbacks.onPreviewFrame?.((event as { workspaceUrl: string }).workspaceUrl);
+            break;
           case 'nsfw_detected':
             callbacks.onNsfwDetected?.();
+            break;
+          case 'reasoning_start':
+            callbacks.onReasoningStart?.();
             break;
           case 'reasoning':
             callbacks.onReasoning?.(event.text);
@@ -123,7 +149,7 @@ export async function streamAgent(
             break;
           case 'design': // backward compat — fall through to 'render'
           case 'render':
-            callbacks.onRender?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string });
+            callbacks.onRender?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string; published?: boolean });
             break;
           case 'done':
             receivedDone = true;

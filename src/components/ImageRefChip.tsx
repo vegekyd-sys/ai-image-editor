@@ -12,7 +12,7 @@ interface ImageRefChipProps {
 
 export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefChipProps) {
   const [showPreview, setShowPreview] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const chipRef = useRef<HTMLSpanElement>(null);
@@ -26,10 +26,8 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
     ? getThumbnailUrl(imgSrc, 400, 90, 400, 'cover')
     : imgSrc;
 
-  // Reset loaded state when preview closes
-  useEffect(() => {
-    if (!showPreview) setImgLoaded(false);
-  }, [showPreview]);
+  // Track loaded URL instead of boolean — same URL reopens instantly (no spinner flash)
+  const imgLoaded = loadedUrl === previewUrl;
 
   const updatePosition = useCallback(() => {
     if (!chipRef.current) return;
@@ -103,7 +101,7 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
           <img
             src={previewUrl}
             alt=""
-            onLoad={() => setImgLoaded(true)}
+            onLoad={() => setLoadedUrl(previewUrl ?? null)}
             style={{ width: '100%', height: 'auto', display: imgLoaded ? 'block' : 'none' }}
           />
           {imgLoaded && (

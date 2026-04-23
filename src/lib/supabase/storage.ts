@@ -2,6 +2,11 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 const BUCKET = 'images'
 
+/** Return the Supabase storage URL as-is (no domain rewrite). */
+export function toPublicStorageUrl(url: string): string {
+  return url
+}
+
 /**
  * Upload a base64 data URL image to Supabase Storage.
  * Returns the public URL on success, null on failure.

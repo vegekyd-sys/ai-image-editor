@@ -8,7 +8,7 @@ description: >
 allowed-tools: generate_image analyze_image
 metadata:
   makaron:
-    icon: "\uD83E\uDDD9"
+    icon: "🧙"
     color: "#3D2FBF"
     tipsEnabled: true
     tipsCount: 2

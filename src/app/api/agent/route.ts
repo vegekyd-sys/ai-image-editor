@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
+import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,10 +17,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Pre-flight credit check
+    const creditCheck = await requireCredits(user.id, 5);
+    if (!creditCheck.ok) return creditCheck.response;
+
     const { prompt, image, originalImage, referenceImages, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
-            musicReady, musicAudioUrl, currentDesign } = await req.json();
+            musicReady, musicAudioUrl, currentDesign,
+            headless, hasAnnotation, isDraft } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
@@ -62,6 +68,17 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        // Track token usage for billing
+        let usageEvent: { inputTokens: number; outputTokens: number; model: string } | null = null;
+
+        // Helper: iterate agent stream, capture usage event
+        async function iterateAgent(gen: AsyncIterable<import('@/lib/agent').AgentStreamEvent>, ctrl: ReadableStreamDefaultController) {
+          for await (const event of gen) {
+            if (event.type === 'usage') { usageEvent = event; continue; } // capture, don't send to client
+            ctrl.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          }
+        }
+
         // Create dual writer if normal mode with a valid run
         const writer = (runId && isNormalMode)
           ? new AgentDualWriter(runId, supabase, user!.id, projectId, controller, encoder)
@@ -89,9 +106,7 @@ export async function POST(req: NextRequest) {
               `Here are edit suggestions for a photo:\n${tipsSummary}\n\nPick the most interesting one. Write a single teaser sentence (under 15 words) starting with "Try...". Output only that sentence.`,
               locale,
             );
-            for await (const event of runMakaronAgent(teaserPrompt, '', projectId, { tipReactionOnly: true, locale })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            await iterateAgent(runMakaronAgent(teaserPrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
             return;
           }
 
@@ -107,9 +122,7 @@ export async function POST(req: NextRequest) {
               `Based on this photo description, give a concise project name (2-4 words): ${desc}. Output only the name, no punctuation or explanation.`,
               locale,
             );
-            for await (const event of runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            await iterateAgent(runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
             return;
           }
 
@@ -128,9 +141,7 @@ export async function POST(req: NextRequest) {
               `All ${tips.length} edit suggestion previews are ready:\n${tipsSummary}\n\nIn 1-2 sentences, tell the user previews are ready and they can scroll TipsBar. Comment on one interesting one. Friendly tone, don't start with "I".`,
               locale,
             );
-            for await (const event of runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true, locale })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            await iterateAgent(runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
             return;
           }
 
@@ -140,11 +151,9 @@ export async function POST(req: NextRequest) {
               `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest design code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code to render the updated version with music.`,
               locale,
             );
-            for await (const event of runMakaronAgent(musicPrompt, image || '', projectId, {
+            await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {
               locale, snapshotImages, currentSnapshotIndex, supabase, userId: user.id,
-            })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            }), controller);
             return;
           }
 
@@ -160,9 +169,7 @@ export async function POST(req: NextRequest) {
               `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}\n\nReact naturally in 1 sentence, like a friend. Then in 1 short sentence, inspire what direction they could explore next with this photo (e.g. mood, lighting, story element) — but do NOT recommend specific tips. Don't start with "I".`,
               locale,
             );
-            for await (const event of runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true, locale })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            }
+            await iterateAgent(runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true, locale }), controller);
             return;
           }
 
@@ -171,16 +178,64 @@ export async function POST(req: NextRequest) {
           const allSkills = await getAllSkills(supabase, user.id);
           const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
 
+          // Headless mode: build context from DB instead of using frontend-provided context
+          let agentPrompt = prompt ?? '';
+          let agentImage = image;
+          let agentOriginalImage = originalImage;
+          let agentSnapshotImages = snapshotImages?.length ? snapshotImages : undefined;
+          let agentCurrentSnapshotIndex = currentSnapshotIndex;
+          let agentCurrentDesign = currentDesign || undefined;
+
+          if (headless) {
+            const { buildPromptContext } = await import('@/lib/agent-context');
+            const ctx = await buildPromptContext(projectId, supabase, user.id, {
+              userMessage: prompt ?? '',
+              currentSnapshotIndex,
+              hasAnnotation,
+              isDraft,
+              referenceImageCount: referenceImages?.length,
+            });
+            agentPrompt = ctx.fullPrompt;
+            agentImage = ctx.snapshotImages[ctx.currentSnapshotIndex] || '';
+            agentOriginalImage = ctx.originalImage;
+            agentSnapshotImages = ctx.snapshotImages;
+            agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
+            agentCurrentDesign = ctx.currentDesign;
+
+            // Write user message to DB (frontend does this itself)
+            await supabase.from('messages').insert({
+              id: crypto.randomUUID(),
+              project_id: projectId,
+              role: 'user',
+              content: prompt ?? '',
+              has_image: false,
+            });
+          }
+
           // Normal agent request — SSE heartbeat every 10s to prevent proxy idle timeout
           const heartbeat = setInterval(() => {
             try { controller.enqueue(encoder.encode(`: heartbeat\n\n`)); } catch { /* disconnected */ }
           }, 10_000);
+          // Periodically check if run was aborted (user clicked abort in CUI)
+          let abortCheckCount = 0;
+          const isAborted = async () => {
+            if (!runId || ++abortCheckCount % 10 !== 0) return false; // check every ~10 events
+            const { data } = await supabase.from('agent_runs').select('status').eq('id', runId).single();
+            return data?.status === 'aborted';
+          };
+
           try {
-            for await (const event of runMakaronAgent(prompt ?? '', image, projectId, { analysisOnly, analysisContext, originalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: snapshotImages?.length ? snapshotImages : undefined, currentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: currentDesign || undefined })) {
+            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign })) {
+              if (event.type === 'usage') { usageEvent = event; continue; }
               if (writer) {
                 await writer.processAndEnqueue(event);
               } else {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              }
+              // Check abort after processing event
+              if (await isAborted()) {
+                console.log('[agent] Run aborted by user');
+                break;
               }
             }
           } finally {
@@ -207,9 +262,14 @@ export async function POST(req: NextRequest) {
             } catch { /* best effort */ }
           }
         } finally {
+          // Deduct credits based on token usage (fire-and-forget)
+          if (usageEvent) {
+            deductByTokens(user!.id, 'agent', usageEvent.model, usageEvent.inputTokens, usageEvent.outputTokens)
+              .catch(e => console.error('[billing] agent deduct error:', e));
+          }
+
           if (writer) await writer.flush();
-          // Mark run as completed HERE (agent truly finished), not in after()
-          // after() fires when Response ends (client disconnect), which is too early
+          // Mark run as completed
           if (runId) {
             try {
               const { data: run } = await supabase.from('agent_runs')
@@ -219,6 +279,22 @@ export async function POST(req: NextRequest) {
                   status: 'completed',
                   ended_at: new Date().toISOString(),
                 }).eq('id', runId);
+              }
+            } catch { /* best effort */ }
+          }
+          // Headless: auto-name project if still "Untitled"
+          if (headless) {
+            try {
+              const { data: proj } = await supabase.from('projects').select('title').eq('id', projectId).single();
+              if (proj?.title === 'Untitled' || !proj?.title) {
+                // Use first snapshot description or prompt as name
+                const { data: snap } = await supabase.from('snapshots')
+                  .select('description').eq('project_id', projectId).order('sort_order').limit(1).single();
+                const nameSource = snap?.description || (prompt ?? '').slice(0, 100);
+                if (nameSource) {
+                  const shortName = nameSource.replace(/[\n\r]/g, ' ').slice(0, 50).trim();
+                  await supabase.from('projects').update({ title: shortName }).eq('id', projectId);
+                }
               }
             } catch { /* best effort */ }
           }

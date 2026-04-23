@@ -23,19 +23,14 @@ Use `skill` to auto-inject a proven quality template into the prompt. When skill
 write only the specific creative direction in editPrompt — the template rules are injected automatically.
 
 When to use each skill:
-- skill='enhance'  → user wants the photo to look better/professional: "好看点", "美化",
-                     "电影感", "通透", "修图", "提升画质", "调个好看的滤镜", "enhance"
 - skill='creative' → user wants something fun/interesting added: "好玩点", "有趣",
                      "加个什么", "创意", "搞笑", general "p一下" requests
 - skill='wild'     → user wants exaggerated/crazy transformation of existing elements:
                      "疯狂一下", "脑洞", "夸张", "wild", "变形"
-- (no skill)       → explicit specific requests ("把背景换成XX", direct editPrompt instructions),
-                     or follow-up tweaks on a just-generated image
+- skill='captions' → user wants text/captions added to the image
+- (no skill)       → explicit specific requests ("把背景换成XX"), follow-up tweaks,
+                     or any request that doesn't fit the above categories
 
-When skill is set, write editPrompt as the specific direction only (not boilerplate):
-- enhance: which direction (cinema/golden hour/depth/etc.) and why it fits this photo
-- creative: what element to add and why it belongs in THIS scene
-- wild: which existing object to transform and how
 
 --- DEFAULT: SINGLE IMAGE MODE ---
 By default (useOriginalAsReference=false), only the current photo is sent to Gemini.
@@ -62,6 +57,11 @@ When the input image has visible red annotations, the editPrompt MUST reference 
 - Describe the target area by its visual content (e.g. "the building on the left that is circled in red"), not by coordinates
 - The red marks are temporary guides — the output image should NOT contain the red annotations
 - **Always call analyze_image first** when annotations are present — this lets you see exactly what the marks are pointing at before generating
+
+--- MODEL SELECTION ---
+`model` is optional — omit it for normal edits (auto-router handles).
+Set `model: 'openai'` when the edit requires accurate text rendering (posters, titles, captions baked into the image) or when the user complains about face identity drift after a Gemini edit.
+OpenAI takes ~2-3 minutes — always warn the user about the wait time before calling.
 
 --- WRITING THE EDITPROMPT ---
 

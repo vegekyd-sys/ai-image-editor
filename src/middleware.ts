@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
 
   // Not logged in — /login, /landingpage, / are accessible; others → landing page
   if (!user) {
-    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/mcp' && pathname !== '/admin/status') {
+    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/')) {
       const url = request.nextUrl.clone()
       url.pathname = '/landingpage'
       return NextResponse.redirect(url)
@@ -90,6 +90,6 @@ export const config = {
      * - /api/* (API routes)
      * - Static assets (.svg, .png, .jpg, etc.)
      */
-    '/((?!_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|api/|storage/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }

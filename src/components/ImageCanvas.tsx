@@ -49,6 +49,8 @@ interface ImageCanvasProps {
   referenceCount?: number;
   /** Map of timeline index → DesignPayload for animated designs (rendered via Player) */
   animatedDesigns?: Map<number, DesignPayload>;
+  /** Draft design from Agent — shown in canvas as preview, not committed to timeline */
+  draftDesign?: DesignPayload | null;
   /** Editable fields declared by the Agent for the current design */
   editableFields?: EditableField[];
   /** Current design props for editable field values */
@@ -76,6 +78,7 @@ export default function ImageCanvas({
   videoPlayTrigger,
   referenceCount = 0,
   animatedDesigns,
+  draftDesign,
   editableFields,
   designProps,
   selectedEditableId,
@@ -138,12 +141,14 @@ export default function ImageCanvas({
   const [remotionPlaying, setRemotionPlaying] = useState(false);
   const remotionFrameRef = useRef(0);
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
+  const [remotionLoading, setRemotionLoading] = useState(false); // true while RemotionRenderer is initializing (fetching images/fonts/audio)
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
   const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDragging = useRef(false);
+  const [isSeeking, setIsSeeking] = useState(false);
   // Pull-down gesture (mobile only: free-drag like iOS Photos dismiss)
   const isPullDown = useRef(false);
   const pullDownStartX = useRef(0);
@@ -154,6 +159,8 @@ export default function ImageCanvas({
 
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
+  // Debounce: ignore deselection within 300ms of selection (blocks Remotion's ghost pointerup)
+  const lastSelectTimeRef = useRef(0);
 
   // Update imageRect when image loads or container resizes
   const updateImageRect = useCallback(() => {
@@ -186,6 +193,7 @@ export default function ImageCanvas({
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
+    if (selectedEditableId) return; // Design Editor mode — all canvas gestures disabled
     if (e.touches.length === 2) {
       // Pinch start — skip for video entry
       if (isVideoEntry) return;
@@ -213,18 +221,20 @@ export default function ImageCanvas({
       swiping.current = true;
     }
 
-    // Long press detection — skip for video entry
-    if (previousImage && !isVideoEntry) {
+    // Long press detection — skip for video entry and animated designs
+    const hasAnimation = !!(draftDesign?.animation || animatedDesigns?.get(currentIndex)?.animation);
+    if (previousImage && !isVideoEntry && !hasAnimation) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, currentIndex, draftDesign, animatedDesigns, selectedEditableId]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
+    if (selectedEditableId) return;
     if (e.touches.length === 2 && isPinching.current) {
       // Pinch move
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -251,7 +261,7 @@ export default function ImageCanvas({
       const rawDy = touch.clientY - touchStartY.current;
       const rawDx = Math.abs(touch.clientX - touchStartX.current);
       if (!isPullDown.current && !isPanning.current && !isPinching.current
-        && !isVideoEntry && !isDesktop && !annotationMode
+        && !isVideoEntry && !isDesktop && !annotationMode && !selectedEditableId
         && scale === 1 && onPullDown
         && rawDy > PULL_ACTIVATE && rawDy > rawDx * 2) {
         isPullDown.current = true;
@@ -279,10 +289,11 @@ export default function ImageCanvas({
         }));
       }
     }
-  }, [scale, isComparing, clearLongPress, annotationMode, isVideoEntry, isDraft, isDesktop, onPullDown]);
+  }, [scale, isComparing, clearLongPress, annotationMode, isVideoEntry, isDraft, isDesktop, onPullDown, selectedEditableId]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
+    if (selectedEditableId) return;
     clearLongPress();
 
     // End pull-down gesture
@@ -365,18 +376,18 @@ export default function ImageCanvas({
         setAnimDir(null);
       }, 150);
     }
-  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode, onPullDownEnd]);
+  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode, onPullDownEnd, selectedEditableId]);
 
   const handleClick = useCallback(() => {
+    if (selectedEditableId) return; // Design Editor mode — handled by design container onClick
     if (skipClick.current) {
       skipClick.current = false;
       return;
     }
     if (annotationMode) return;
-    if (isDraft) onDismissDraft?.();
-    // Deselect editable field when clicking canvas background
-    if (selectedEditableId) onSelectEditable?.(null);
-  }, [isDraft, onDismissDraft, annotationMode, selectedEditableId, onSelectEditable]);
+    // Dismiss tips drafts on click, but NOT design drafts (design can't be recovered)
+    if (isDraft && !draftDesign) onDismissDraft?.();
+  }, [isDraft, onDismissDraft, annotationMode, selectedEditableId]);
 
   // Desktop: unified mouse handler — mirrors all touch interactions
   // (pan when zoomed, long-press compare, swipe navigate, double-click reset zoom)
@@ -387,6 +398,7 @@ export default function ImageCanvas({
   const lastClickTime = useRef(0);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (selectedEditableId) return;
     if (annotationMode || e.button !== 0 || isVideoEntry) { mouseStartPos.current = null; return; }
     mouseStartPos.current = { x: e.clientX, y: e.clientY };
     mouseDidDrag.current = false;
@@ -397,17 +409,19 @@ export default function ImageCanvas({
       lastMousePos.current = { x: e.clientX, y: e.clientY };
     }
 
-    // Long press → compare (works at any zoom level, same as touch)
-    if (previousImage) {
+    // Long press → compare (works at any zoom level, same as touch) — skip for animated designs
+    const hasAnimationMouse = !!(draftDesign?.animation || animatedDesigns?.get(currentIndex)?.animation);
+    if (previousImage && !hasAnimationMouse) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         mousePanning.current = false; // stop panning when comparing
       }, 200);
     }
-  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale]);
+  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, currentIndex, draftDesign, animatedDesigns, selectedEditableId]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (selectedEditableId) return;
     if (!mouseStartPos.current) return;
     const dx = Math.abs(e.clientX - mouseStartPos.current.x);
     const dy = Math.abs(e.clientY - mouseStartPos.current.y);
@@ -428,9 +442,10 @@ export default function ImageCanvas({
         y: prev.y + panDy / scale,
       }));
     }
-  }, [clearLongPress, isComparing, scale]);
+  }, [clearLongPress, isComparing, scale, selectedEditableId]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    if (selectedEditableId) return;
     clearLongPress();
     if (isComparing) { setIsComparing(false); mouseStartPos.current = null; skipClick.current = true; return; }
 
@@ -475,7 +490,7 @@ export default function ImageCanvas({
       }
     }
     mouseStartPos.current = null;
-  }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange, scale]);
+  }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange, scale, selectedEditableId]);
 
   // Desktop: trackpad pinch-to-zoom (ctrl+wheel) + horizontal swipe (deltaX) → switch snapshot
   const wheelCooldown = useRef(false);
@@ -583,7 +598,9 @@ export default function ImageCanvas({
   }, [videoPlayTrigger, isVideoEntry, videoUrl]);
 
   // Remotion Player: poll current frame for custom seek bar
-  const currentDesign = animatedDesigns?.get(currentIndex);
+  // draftDesign only shown when viewing the draft slot (not other snapshots)
+  const isViewingDraftSlot = isDraft && draftTimelineIndex !== undefined && currentIndex === draftTimelineIndex;
+  const currentDesign = (isViewingDraftSlot ? draftDesign : null) || animatedDesigns?.get(currentIndex);
   const remotionFps = currentDesign?.animation?.fps || 30;
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
@@ -621,26 +638,83 @@ export default function ImageCanvas({
     return () => cancelAnimationFrame(raf);
   }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
+  // Preload all images in design code via browser cache, then call onReady
+  const preloadDesignImages = useCallback((code: string): Promise<void> => {
+    const urls = new Set<string>();
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi)) urls.add(m[0]);
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi)) urls.add(m[0]);
+    if (urls.size === 0) return Promise.resolve();
+    return Promise.all([...urls].map(url => new Promise<void>(resolve => {
+      const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+      img.src = url;
+    }))).then(() => {});
+  }, []);
+
   // Reset + auto-play when switching to a design snapshot
   const remotionAutoPlayRef = useRef(false);
   useEffect(() => {
     setRemotionPlaying(false);
+    setRemotionBuffering(false);
+    setRemotionLoading(!!currentDesign?.animation);
     remotionFrameRef.current = 0;
     remotionStartedRef.current = false;
     // Mark for auto-play — actual play triggered when Player ref arrives
     remotionAutoPlayRef.current = !!currentDesign?.animation;
-    // Try auto-play now if ref already available
+    // Try auto-play now if ref already available — preload images first
     if (currentDesign?.animation && remotionRef.current) {
-      const timer = setTimeout(() => {
+      let cancelled = false;
+      preloadDesignImages(currentDesign.code).then(() => {
+        if (cancelled) return;
         remotionRef.current?.play();
         remotionStartedRef.current = true;
         setRemotionPlaying(true);
         remotionAutoPlayRef.current = false;
-      }, 600);
-      return () => clearTimeout(timer);
+      });
+      return () => { cancelled = true; };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex]);
+
+  // Pause on buffering, resume when assets ready — like a real video player
+  // Debounce resume to avoid flicker when multiple images load in quick succession
+  const wasPlayingBeforeBufferRef = useRef(false);
+  const [remotionBuffering, setRemotionBuffering] = useState(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const player = remotionRef.current;
+    if (!player) return;
+    const onWaiting = () => {
+      // Cancel any pending resume — still buffering
+      if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
+      wasPlayingBeforeBufferRef.current = wasPlayingBeforeBufferRef.current || remotionPlaying;
+      setRemotionBuffering(true);
+      player.pause();
+      setRemotionPlaying(false);
+    };
+    const onResume = () => {
+      // Debounce: wait 150ms to confirm all assets are truly ready
+      // (prevents flash when image 1 loads but image 2/3 on same frame haven't yet)
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = setTimeout(() => {
+        resumeTimerRef.current = null;
+        setRemotionBuffering(false);
+        if (wasPlayingBeforeBufferRef.current || remotionStartedRef.current) {
+          wasPlayingBeforeBufferRef.current = false;
+          player.play();
+          setRemotionPlaying(true);
+        }
+      }, 150);
+    };
+    player.addEventListener('waiting', onWaiting);
+    player.addEventListener('resume', onResume);
+    return () => {
+      player.removeEventListener('waiting', onWaiting);
+      player.removeEventListener('resume', onResume);
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    };
+  });
 
   const toggleRemotionPlay = useCallback(() => {
     const p = remotionRef.current;
@@ -649,12 +723,13 @@ export default function ImageCanvas({
       p.pause();
       setRemotionPlaying(false);
     } else {
+      if (selectedEditableId) onSelectEditable?.(null);
       if (remotionFrameRef.current >= remotionTotalFrames - 1) p.seekTo(0);
       p.play();
       remotionStartedRef.current = true;
       setRemotionPlaying(true);
     }
-  }, [remotionPlaying, remotionTotalFrames]);
+  }, [remotionPlaying, remotionTotalFrames, selectedEditableId, onSelectEditable]);
 
   const seekRemotion = useCallback((clientX: number) => {
     const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
@@ -662,6 +737,10 @@ export default function ImageCanvas({
     const rect = bar.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const frame = Math.round(ratio * (remotionTotalFrames - 1));
+    // Pause on seek — prevent resume handler from auto-playing
+    remotionRef.current.pause();
+    setRemotionPlaying(false);
+    wasPlayingBeforeBufferRef.current = false;
     remotionRef.current.seekTo(frame);
     remotionFrameRef.current = frame;
     updateRemotionUI();
@@ -698,6 +777,8 @@ export default function ImageCanvas({
       ref={containerRef}
       className="absolute inset-0 flex items-center justify-center touch-none select-none"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+      /* Edit mode: capture-phase intercept blocks ALL gestures before they reach any handler.
+         Moveable (z-3000 on body) and DesignOverlay hit-targets are unaffected. */
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -827,8 +908,8 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Play/pause button — bottom-left (same as Remotion) */}
-            {!videoError && showControls && (
+            {/* Play/pause button — bottom-left, hidden while seeking */}
+            {!videoError && showControls && !isSeeking && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
                   onClick={(e) => {
@@ -875,9 +956,8 @@ export default function ImageCanvas({
                   e.preventDefault();
                   e.stopPropagation();
                   if (videoPlaying) videoRef.current?.pause();
-                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
-                  if (track) track.style.height = '6px';
                   seekDragging.current = true;
+                  setIsSeeking(true);
                   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                   doSeek(e.clientX);
                   resetControlsTimer();
@@ -888,13 +968,12 @@ export default function ImageCanvas({
                 }}
                 onPointerUp={(e) => {
                   seekDragging.current = false;
-                  const track = e.currentTarget.querySelector('[data-video-track]') as HTMLElement;
-                  if (track) track.style.height = '';
+                  setIsSeeking(false);
                   (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div data-video-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
+                <div data-video-track className={`absolute bottom-0 left-0 right-0 transition-[height] duration-150 ${isSeeking ? 'h-[6px]' : 'h-[2px] group-hover:h-[6px]'}`}>
                   <div className="absolute inset-0 bg-white/12" />
                   <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${videoBuffered * 100}%` }} />
                   <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }} />
@@ -947,45 +1026,55 @@ export default function ImageCanvas({
             </div>
             <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
-        ) : animatedDesigns?.get(currentIndex) && !isComparing ? (
-          /* Animated design — Remotion Player with custom controls (same as video) */
+        ) : currentDesign && !isComparing ? (
+          /* Animated design (or draft preview) — Remotion Player with custom controls (same as video) */
           <div className={`relative w-full h-full transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
           }`}
-            onClick={() => {
-              // If an editable field is selected, deselect it instead of toggling play
+            onClick={(e) => {
+              if (isComparing) return;
+              // In Design Editor mode: editable elements handle their own click,
+              // clicking blank area deselects
+              if ((e.target as HTMLElement).closest('[data-editable]')) return;
               if (selectedEditableId) {
+                // Ignore ghost deselection from Remotion Player's 200ms click delay
+                if (Date.now() - lastSelectTimeRef.current < 300) return;
                 onSelectEditable?.(null);
+                lastSelectTimeRef.current = Date.now(); // also debounce the follow-up toggle
               } else {
+                // Don't toggle play right after deselecting (ghost double-click)
+                if (Date.now() - lastSelectTimeRef.current < 300) return;
                 toggleRemotionPlay();
               }
             }}
           >
             <RemotionRenderer
-              design={animatedDesigns.get(currentIndex)!}
+              design={currentDesign!}
               mode="fill"
               hideControls
+              posterImage={currentDesign?.animation ? displayImage : undefined}
+              onLoading={setRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
-              onContainerRef={editableFields?.length ? setDesignContainerEl : undefined}
+              onContainerRef={setDesignContainerEl}
               onPlayerRef={(ref) => {
                 remotionRef.current = ref;
                 if (editableFields?.length) setDesignPlayerRef(ref);
                 // Auto-play if pending (ref wasn't ready during useEffect)
-                if (ref && remotionAutoPlayRef.current) {
+                if (ref && remotionAutoPlayRef.current && currentDesign) {
                   remotionAutoPlayRef.current = false;
-                  setTimeout(() => {
+                  preloadDesignImages(currentDesign.code).then(() => {
                     ref.play();
                     remotionStartedRef.current = true;
                     setRemotionPlaying(true);
-                  }, 600);
+                  });
                 }
               }}
             />
 
-            {/* Poster — only for animated designs before first play (covers black first frame) */}
-            {!remotionStartedRef.current && currentDesign?.animation && displayImage && (
+            {/* Poster fallback while RemotionRenderer is loading (fetching images/fonts/audio) */}
+            {remotionLoading && displayImage && (
               <img
                 src={displayImage}
                 alt="poster"
@@ -993,14 +1082,19 @@ export default function ImageCanvas({
               />
             )}
 
-            {/* Play/pause button — bottom-left, large */}
-            {currentDesign?.animation && (
+            {/* Play/pause button — bottom-left, hidden while seeking */}
+            {currentDesign?.animation && !isSeeking && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
-                  onClick={(e) => { e.stopPropagation(); toggleRemotionPlay(); }}
+                  onClick={(e) => { e.stopPropagation(); if (!remotionBuffering && !remotionLoading) toggleRemotionPlay(); }}
                   className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
                 >
-                  {remotionPlaying ? (
+                  {(remotionBuffering || remotionLoading) ? (
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="animate-spin">
+                      <circle cx="10" cy="10" r="8" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
+                      <path d="M10 2a8 8 0 0 1 8 8" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  ) : remotionPlaying ? (
                     <svg width="18" height="18" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
                   ) : (
                     <svg width="18" height="18" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
@@ -1009,8 +1103,8 @@ export default function ImageCanvas({
               </div>
             )}
 
-            {/* Time badge — updated via DOM (data-remotion-time) */}
-            {currentDesign?.animation && (
+            {/* Time badge — updated via DOM (data-remotion-time), hidden in design editor mode */}
+            {currentDesign?.animation && !selectedEditableId && (
               <div className="absolute z-20 pointer-events-none" style={{ bottom: 14, right: 10 }}>
                 <span data-remotion-time className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
                   style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}>
@@ -1031,13 +1125,12 @@ export default function ImageCanvas({
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (selectedEditableId) onSelectEditable?.(null);
                   if (remotionPlaying) {
                     remotionRef.current?.pause();
                     setRemotionPlaying(false);
                   }
-                  // Thicken bar on drag (mobile)
-                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
-                  if (track) track.style.height = '6px';
+                  setIsSeeking(true);
                   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                   seekRemotion(e.clientX);
                 }}
@@ -1045,19 +1138,18 @@ export default function ImageCanvas({
                   if (e.buttons) seekRemotion(e.clientX);
                 }}
                 onPointerUp={(e) => {
-                  // Shrink bar back
-                  const track = e.currentTarget.querySelector('[data-remotion-track]') as HTMLElement;
-                  if (track) track.style.height = '';
+                  setIsSeeking(false);
                   (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div data-remotion-track className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-[6px] transition-[height] duration-150">
+                <div data-remotion-track className={`absolute bottom-0 left-0 right-0 transition-[height] duration-150 ${isSeeking ? 'h-[6px]' : 'h-[2px] group-hover:h-[6px]'}`}>
                   <div className="absolute inset-0 bg-white/12" />
                   <div data-remotion-fill className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: '0%' }} />
                 </div>
               </div>
             )}
+            {/* Edit mode gesture shield div removed — handled by capture-phase on outer container */}
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay
@@ -1070,6 +1162,13 @@ export default function ImageCanvas({
                   if (remotionPlaying && remotionRef.current) {
                     remotionRef.current.pause();
                     setRemotionPlaying(false);
+                  }
+                  if (id) {
+                    lastSelectTimeRef.current = Date.now();
+                    // Trigger a no-op prop update to force React re-render.
+                    // This resets Remotion Player's ghost pointerup listener,
+                    // preventing the ghost double-click that causes deselection.
+                    onUpdateProp?.(`_sel_${id}`, Date.now());
                   }
                   onSelectEditable(id);
                 }}
@@ -1131,8 +1230,8 @@ export default function ImageCanvas({
         </div>
       )}
 
-      {/* Timeline indicators — bottom of canvas, capsule pill */}
-      {(timeline.length > 1 || onAnimate) && (
+      {/* Timeline indicators — bottom of canvas, hidden while seeking or in design editor mode */}
+      {!selectedEditableId && !isSeeking && (timeline.length > 1 || onAnimate) && (
         <div className={`absolute left-1/2 -translate-x-1/2 flex items-center justify-center z-10 ${isDesktop ? 'bottom-3' : 'bottom-3'}`}>
           <div className={`flex items-center rounded-full ${isDesktop ? 'gap-1.5 px-3 py-1.5' : 'gap-[5px] px-[10px] py-[5px]'}`}
             style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}

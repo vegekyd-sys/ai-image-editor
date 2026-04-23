@@ -128,7 +128,7 @@ export default function ProjectPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  // Effect 2: Fetch from Supabase — always updates all data
+  // Effect 2: Fetch from Supabase via loadProject (source of truth)
   useEffect(() => {
     if (!user || !projectId) return
     let cancelled = false
@@ -177,17 +177,15 @@ export default function ProjectPage() {
       if (snapshots.length > 0 && snapshots[0].imageUrl) {
         updateCover(snapshots[0].imageUrl)
       }
-    }).catch((err) => {
+    }).catch((err: unknown) => {
       if (cancelled) return
       console.error('Failed to load project:', err)
       if (!shownRef.current) {
-        // No cache + no network: show empty editor
         shownRef.current = true
         setInitialSnapshots([])
         setInitialMessages([])
         setLoaded(true)
       }
-      // If cache already showed something, stay on it (offline mode)
     })
 
     return () => { cancelled = true }

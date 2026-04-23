@@ -10,18 +10,18 @@ export const qwenBackend: ModelBackend = {
     return !!process.env.COMFYUI_QWEN_URL;
   },
 
-  async generate(req: GenerateImageRequest): Promise<string | null> {
-    if (!process.env.COMFYUI_QWEN_URL) return null;
+  async generate(req: GenerateImageRequest): Promise<{ image: string | null }> {
+    if (!process.env.COMFYUI_QWEN_URL) return { image: null };
 
     // Multi-reference path (useOriginalAsReference or referenceImages)
     if (req.references?.length) {
       const { generateWithQwenMulti } = await import('../comfyui-qwen');
-      return generateWithQwenMulti(req.references, req.prompt);
+      return { image: await generateWithQwenMulti(req.references, req.prompt) };
     }
 
     // Single image (img2img)
-    if (!req.image) return null;
+    if (!req.image) return { image: null };
     const { generateWithQwen } = await import('../comfyui-qwen');
-    return generateWithQwen(req.image, req.prompt);
+    return { image: await generateWithQwen(req.image, req.prompt) };
   },
 };

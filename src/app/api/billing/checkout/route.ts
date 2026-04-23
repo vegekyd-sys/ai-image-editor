@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { tier } = await req.json() as { tier: TierId }
+  const { tier, returnPath } = await req.json() as { tier: TierId; returnPath?: string }
   const tierConfig = CREDIT_TIERS.find(t => t.id === tier)
   if (!tierConfig) return NextResponse.json({ error: 'Invalid tier' }, { status: 400 })
 
@@ -33,8 +33,8 @@ export async function POST(req: NextRequest) {
       },
       quantity: 1,
     }],
-    success_url: `${origin}/dashboard?payment=success`,
-    cancel_url: `${origin}/dashboard?payment=cancelled`,
+    success_url: returnPath ? `${origin}${returnPath}?topped_up=1` : `${origin}/dashboard?topped_up=1`,
+    cancel_url: returnPath ? `${origin}${returnPath}` : `${origin}/dashboard`,
   })
 
   return NextResponse.json({ url: session.url })

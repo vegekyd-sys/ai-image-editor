@@ -1,7 +1,8 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
@@ -49,10 +50,17 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function ProjectsPage() {
+  return <Suspense><ProjectsPageInner /></Suspense>
+}
+
+function ProjectsPageInner() {
   const { user, loading: authLoading, signOut } = useAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   // Phase 1: Synchronous memory cache — same-session instant render
   const [projects, setProjects] = useState<ProjectWithSnapshots[]>(() => {
     if (typeof window === 'undefined') return []
@@ -77,6 +85,8 @@ export default function ProjectsPage() {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
   const [skillsExpanded, setSkillsExpanded] = useState(false)
+  const [creditBalance, setCreditBalance] = useState<number | null>(null)
+  const [showWelcome, setShowWelcome] = useState(false)
   const [skillDragOver, setSkillDragOver] = useState(false)
   const [skillUploading, setSkillUploading] = useState(false)
   const [skillUploadError, setSkillUploadError] = useState<string | null>(null)
@@ -122,6 +132,31 @@ export default function ProjectsPage() {
     const t = setTimeout(load, 2000)
     return () => clearTimeout(t)
   }, [])
+  // Auto-select skill from URL param (after claim redirect)
+  useEffect(() => {
+    const skillParam = searchParams.get('skill')
+    if (skillParam && availableSkills.length > 0) {
+      const match = availableSkills.find(s => s.name === skillParam)
+      if (match) {
+        setSelectedSkill(match.name)
+        setSkillsExpanded(true)
+      }
+      window.history.replaceState({}, '', '/projects')
+    }
+  }, [searchParams, availableSkills])
+
+  // Close user menu on click outside
+  useEffect(() => {
+    if (!userMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [userMenuOpen])
+
   const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
   const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
@@ -323,16 +358,24 @@ export default function ProjectsPage() {
         }
 
         if (staleIds.length > 0) {
-          const { data: snapshotRows, error: sErr } = await supabase
-            .from('snapshots')
-            .select('id, project_id, image_url, sort_order')
-            .in('project_id', staleIds)
-            .order('sort_order', { ascending: true })
-          if (sErr) console.error('Failed to fetch snapshots:', sErr)
-          for (const s of snapshotRows ?? []) {
-            const list = snapshotMap.get(s.project_id) ?? []
-            list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
-            snapshotMap.set(s.project_id, list)
+          // Fetch snapshots in parallel batches (Supabase default limit is 1000 rows)
+          const BATCH = 30
+          const batches: string[][] = []
+          for (let i = 0; i < staleIds.length; i += BATCH) batches.push(staleIds.slice(i, i + BATCH))
+          const results = await Promise.all(batches.map(batch =>
+            supabase.from('snapshots')
+              .select('id, project_id, image_url, sort_order')
+              .in('project_id', batch)
+              .order('sort_order', { ascending: true })
+              .limit(3000)
+          ))
+          for (const { data: snapshotRows, error: sErr } of results) {
+            if (sErr) console.error('Failed to fetch snapshots:', sErr)
+            for (const s of snapshotRows ?? []) {
+              const list = snapshotMap.get(s.project_id) ?? []
+              list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
+              snapshotMap.set(s.project_id, list)
+            }
           }
         }
 
@@ -393,6 +436,22 @@ export default function ProjectsPage() {
     fetchProjects()
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  // Fetch credit balance + detect welcome
+  useEffect(() => {
+    if (!user) return
+    fetch('/api/billing/credits').then(r => r.json()).then(d => {
+      setCreditBalance(d.balance ?? 0)
+    }).catch(() => {})
+    // Detect ?welcome=1
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('welcome')) {
+        window.history.replaceState({}, '', window.location.pathname)
+        setShowWelcome(true)
+      }
+    }
   }, [user])
 
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
@@ -558,19 +617,90 @@ export default function ProjectsPage() {
               {locale === 'zh' ? '更新日志' : "What's new"}
             </button>
           </div>
-          <button
-              onClick={() => signOut()}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.18)',
-                transition: 'color 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.18)')}
-            >
-              Sign out
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {creditBalance !== null && (
+              <Link
+                href="/dashboard"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '4px 10px', borderRadius: 8,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  textDecoration: 'none',
+                  transition: 'all 0.2s',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={creditBalance < 20 ? '#fbbf24' : '#e879f9'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 600,
+                  color: creditBalance < 20 ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+                }}>
+                  {creditBalance.toLocaleString()}
+                </span>
+              </Link>
+            )}
+            <div ref={userMenuRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setUserMenuOpen(v => !v)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
+                  color: userMenuOpen ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.45)',
+                  transition: 'color 0.2s',
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+                onMouseLeave={(e) => { if (!userMenuOpen) e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: userMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {userMenuOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 8,
+                  background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 12, padding: '4px 0', minWidth: 140,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
+                }}>
+                  <button
+                    onClick={() => { setUserMenuOpen(false); router.push('/skills') }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '10px 16px', background: 'none', border: 'none',
+                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
+                      cursor: 'pointer', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    Skills
+                  </button>
+                  <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
+                  <button
+                    onClick={() => { setUserMenuOpen(false); signOut() }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '10px 16px', background: 'none', border: 'none',
+                      color: 'rgba(255,255,255,0.45)', fontSize: '0.75rem',
+                      cursor: 'pointer', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ═══════════════════════════════
@@ -1232,6 +1362,52 @@ export default function ProjectsPage() {
         </div>
       )}
       {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
+
+      {/* Welcome credits popup */}
+      {showWelcome && creditBalance !== null && creditBalance > 0 && (
+        <>
+          <div onClick={() => setShowWelcome(false)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} />
+          <div style={{
+            position: 'fixed', zIndex: 301, left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            width: '92%', maxWidth: 400, background: 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
+            borderRadius: 20, border: '1px solid rgba(255,255,255,0.08)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.8)', padding: '48px 24px 36px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
+              {locale === 'zh' ? '欢迎来到 Makaron!' : 'Welcome to Makaron!'}
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
+              {locale === 'zh' ? '我们送了你一份创作礼物' : "Here's a gift to get you started"}
+            </div>
+            <div style={{
+              marginTop: 24, padding: '20px 0', borderRadius: 16,
+              background: 'rgba(192,38,211,0.06)', border: '1px solid rgba(192,38,211,0.15)',
+            }}>
+              <div style={{
+                fontSize: 48, fontWeight: 800, letterSpacing: '-0.03em',
+                background: 'linear-gradient(135deg, #e879f9, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              }}>
+                {creditBalance.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                credits · ${(creditBalance * 0.01).toFixed(2)} {locale === 'zh' ? '价值' : 'value'}
+              </div>
+            </div>
+            <button
+              onClick={() => setShowWelcome(false)}
+              style={{
+                width: '100%', marginTop: 24, padding: 14, borderRadius: 14, border: 'none',
+                background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
+                color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
+              }}
+            >
+              {locale === 'zh' ? '开始创作' : 'Start Creating'}
+            </button>
+          </div>
+        </>
+      )}
     </>
   )
 }

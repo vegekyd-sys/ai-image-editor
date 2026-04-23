@@ -14,6 +14,7 @@ function getFallbacks(model: ModelId): ModelId[] {
     case 'qwen':   return ['gemini'];
     case 'pony':   return ['wai', 'gemini'];
     case 'wai':    return ['pony', 'gemini'];
+    case 'openai': return ['gemini', 'qwen'];
     default:       return ['gemini'];
   }
 }
@@ -48,11 +49,13 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
       : req;
 
     try {
-      const image = await backend.generate(effectiveReq);
+      const genResult = await backend.generate(effectiveReq);
+      const image = genResult?.image ?? null;
+      const usage = genResult?.usage;
       if (image) {
         const fallbackUsed = modelId !== chain[0];
         if (fallbackUsed) console.log(`[model-router] Fallback: ${chain[0]} → ${modelId}`);
-        return { image, model: modelId, fallbackUsed, failedModels: failedModels.length ? failedModels : undefined, contentBlocked: contentBlocked || undefined };
+        return { image, model: modelId, fallbackUsed, failedModels: failedModels.length ? failedModels : undefined, contentBlocked: contentBlocked || undefined, usage };
       }
       console.log(`[model-router] ${modelId} returned null, trying next...`);
       failedModels.push(modelId);

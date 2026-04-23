@@ -13,16 +13,35 @@ export async function POST(req: NextRequest) {
 
   const { code, autoActivate } = await req.json()
 
-  // Auto-activate: existing user with projects (no invite code needed)
+  // Auto-activate: user already activated in DB, or existing user with projects
   if (autoActivate) {
-    const { count } = await getSupabaseAdmin()
+    const admin = getSupabaseAdmin()
+
+    // Check if already activated in user_profiles
+    const { data: profile } = await admin
+      .from('user_profiles')
+      .select('activated')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.activated) {
+      const response = NextResponse.json({ success: true, autoActivated: true })
+      response.cookies.set('mkr_activated', '1', {
+        path: '/',
+        maxAge: 365 * 24 * 60 * 60,
+        sameSite: 'lax',
+      })
+      return response
+    }
+
+    // Fallback: existing user with projects (legacy users before activation system)
+    const { count } = await admin
       .from('projects')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
 
     if (count && count > 0) {
-      // Upsert profile as activated
-      await getSupabaseAdmin()
+      await admin
         .from('user_profiles')
         .upsert({ id: user.id, activated: true }, { onConflict: 'id' })
 
@@ -35,7 +54,7 @@ export async function POST(req: NextRequest) {
       return response
     }
 
-    return NextResponse.json({ success: false, error: 'No existing projects' })
+    return NextResponse.json({ success: false, error: 'Not activated' })
   }
 
   // Normal flow: validate invite code
@@ -79,7 +98,44 @@ export async function POST(req: NextRequest) {
       invite_code_used: normalizedCode,
     }, { onConflict: 'id' })
 
-  const response = NextResponse.json({ success: true })
+  // Grant welcome credits (only if user has no balance yet)
+  let isNewUser = false
+  try {
+    const admin = getSupabaseAdmin()
+    const { data: existingBalance } = await admin
+      .from('credit_balances')
+      .select('balance')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!existingBalance) {
+      isNewUser = true
+      const { data: setting } = await admin
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'welcome_credits')
+        .single()
+      const welcomeCredits = parseInt(setting?.value || '500')
+
+      if (welcomeCredits > 0) {
+        const { addCredits } = await import('@/lib/billing/credits')
+        await addCredits(user.id, welcomeCredits)
+
+        await admin.from('credit_purchases').insert({
+          user_id: user.id,
+          stripe_session_id: 'welcome_gift',
+          credits: welcomeCredits,
+          amount_usd: 0,
+          status: 'completed',
+          source: 'welcome',
+        })
+      }
+    }
+  } catch (e) {
+    console.error('[validate-invite] Welcome credits failed (non-blocking):', e)
+  }
+
+  const response = NextResponse.json({ success: true, welcome: isNewUser })
   response.cookies.set('mkr_activated', '1', {
     path: '/',
     maxAge: 365 * 24 * 60 * 60,

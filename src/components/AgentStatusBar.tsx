@@ -83,7 +83,7 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
               border: '1px solid rgba(192,38,211,0.4)',
             }}
           >
-            See
+            {notification.text.includes('Top up') ? 'Top Up' : 'See'}
           </button>
         )}
 
