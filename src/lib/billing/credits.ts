@@ -9,9 +9,13 @@ const BILLING_CACHE_TTL = 60_000 // 1 minute
 
 export async function isBillingEnabled(): Promise<boolean> {
   if (_billingEnabled !== null && Date.now() - _billingCheckedAt < BILLING_CACHE_TTL) return _billingEnabled
-  const admin = getSupabaseAdmin()
-  const { data } = await admin.from('app_settings').select('value').eq('key', 'billing_enabled').single()
-  _billingEnabled = data?.value === 'true'
+  try {
+    const admin = getSupabaseAdmin()
+    const { data } = await admin.from('app_settings').select('value').eq('key', 'billing_enabled').single()
+    _billingEnabled = data?.value === 'true'
+  } catch {
+    _billingEnabled = false
+  }
   _billingCheckedAt = Date.now()
   return _billingEnabled
 }

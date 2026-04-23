@@ -99,39 +99,43 @@ export async function POST(req: NextRequest) {
     }, { onConflict: 'id' })
 
   // Grant welcome credits (only if user has no balance yet)
-  const admin = getSupabaseAdmin()
-  const { data: existingBalance } = await admin
-    .from('credit_balances')
-    .select('balance')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!existingBalance) {
-    // Read welcome credits amount from app_settings (Admin configurable)
-    const { data: setting } = await admin
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'welcome_credits')
+  let isNewUser = false
+  try {
+    const admin = getSupabaseAdmin()
+    const { data: existingBalance } = await admin
+      .from('credit_balances')
+      .select('balance')
+      .eq('user_id', user.id)
       .single()
-    const welcomeCredits = parseInt(setting?.value || '500')
 
-    if (welcomeCredits > 0) {
-      const { addCredits } = await import('@/lib/billing/credits')
-      await addCredits(user.id, welcomeCredits)
+    if (!existingBalance) {
+      isNewUser = true
+      const { data: setting } = await admin
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'welcome_credits')
+        .single()
+      const welcomeCredits = parseInt(setting?.value || '500')
 
-      // Record as welcome gift
-      await admin.from('credit_purchases').insert({
-        user_id: user.id,
-        stripe_session_id: 'welcome_gift',
-        credits: welcomeCredits,
-        amount_usd: 0,
-        status: 'completed',
-        source: 'welcome',
-      })
+      if (welcomeCredits > 0) {
+        const { addCredits } = await import('@/lib/billing/credits')
+        await addCredits(user.id, welcomeCredits)
+
+        await admin.from('credit_purchases').insert({
+          user_id: user.id,
+          stripe_session_id: 'welcome_gift',
+          credits: welcomeCredits,
+          amount_usd: 0,
+          status: 'completed',
+          source: 'welcome',
+        })
+      }
     }
+  } catch (e) {
+    console.error('[validate-invite] Welcome credits failed (non-blocking):', e)
   }
 
-  const response = NextResponse.json({ success: true, welcome: !existingBalance })
+  const response = NextResponse.json({ success: true, welcome: isNewUser })
   response.cookies.set('mkr_activated', '1', {
     path: '/',
     maxAge: 365 * 24 * 60 * 60,

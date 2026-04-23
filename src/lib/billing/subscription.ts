@@ -64,7 +64,16 @@ export async function getOrCreateStripeCustomer(userId: string, email: string): 
     .eq('user_id', userId)
     .single()
 
-  if (data?.stripe_customer_id) return data.stripe_customer_id
+  if (data?.stripe_customer_id) {
+    // Validate existing customer still exists in Stripe (may be from old company)
+    const stripe = getStripe()
+    try {
+      await stripe.customers.retrieve(data.stripe_customer_id)
+      return data.stripe_customer_id
+    } catch {
+      console.warn(`[billing] Stripe customer ${data.stripe_customer_id} not found, creating new one`)
+    }
+  }
 
   // Create new Stripe customer
   const stripe = getStripe()
