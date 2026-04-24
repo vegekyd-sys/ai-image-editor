@@ -11,6 +11,8 @@ import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
 import Changelog from '@/components/Changelog'
 
+const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
+
 const SKILL_TEMPLATES = [
   {
     id: 'photo-to-video',
@@ -242,7 +244,7 @@ export default function HomePage() {
     }
     el.addEventListener('touchmove', onMove, { passive: false })
     return () => el.removeEventListener('touchmove', onMove)
-  })
+  }, [])
 
   const MAX_FILES = 10
   const [dragOver, setDragOver] = useState(false)
@@ -428,7 +430,7 @@ export default function HomePage() {
         {/* Ambient glow */}
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0,
-          height: '520px', pointerEvents: 'none', zIndex: 0,
+          height: '520px', pointerEvents: 'none', zIndex: Z.AMBIENT,
           background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
         }} />
 
@@ -549,20 +551,28 @@ export default function HomePage() {
 
         </div>
 
-        {/* ── Bottom Input Box (fixed, glassmorphism) — hidden when detail overlay open ── */}
+        {/* ── Bottom Input Box (fixed, always on top) ── */}
         <div style={{
           position: 'fixed', left: 0, right: 0,
           bottom: kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 0,
-          zIndex: selectedDetail ? 70 : 50,
+          zIndex: Z.INPUT,
+          pointerEvents: 'none',
           ...(isDesktop ? {
             padding: '0 24px',
           } : {
             padding: `60px 12px ${kbInset > 0 ? '8px' : 'max(8px, env(safe-area-inset-bottom))'}`,
-            background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
           }),
           transition: kbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
         }}>
-          <div style={{ maxWidth: '480px', margin: '0 auto' }}>
+          {/* Gradient fade — visual only, click-through */}
+          {!isDesktop && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
+              pointerEvents: 'none',
+            }} />
+          )}
+          <div style={{ maxWidth: '480px', margin: '0 auto', position: 'relative', pointerEvents: 'auto' }}>
             <div
               ref={inputBoxRef}
               className="mkr-input-box"
@@ -788,7 +798,7 @@ export default function HomePage() {
       {/* ── Hero fly image (card → fullscreen) ── */}
       {heroRect && selectedDetail && (
         <div style={{
-          position: 'fixed', zIndex: 61, pointerEvents: 'none',
+          position: 'fixed', zIndex: Z.HERO_FLY, pointerEvents: 'none',
           top: heroExpanded ? 0 : heroRect.top,
           left: heroExpanded ? 0 : heroRect.left,
           width: heroExpanded ? '100vw' : heroRect.width,
@@ -808,7 +818,7 @@ export default function HomePage() {
         <div
           onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText('') } }}
           style={{
-            position: 'fixed', inset: 0, zIndex: 60,
+            position: 'fixed', inset: 0, zIndex: Z.OVERLAY,
             background: isDesktop ? 'rgba(0,0,0,0.7)' : '#000',
             opacity: heroExpanded ? 1 : 0,
             pointerEvents: heroExpanded ? 'auto' : 'none',
@@ -852,7 +862,7 @@ export default function HomePage() {
                 const t = SKILL_TEMPLATES[idx]
                 if (t && t.id !== selectedDetail?.id) {
                   setSelectedDetail(t)
-                  setSelectedSkill(t.skill || t.id)
+                  setSelectedSkill(t.skill || null)
                   setInputText(t.prompt)
                   setAttachedFiles([])
                   setAttachedPreviews([])
@@ -875,7 +885,7 @@ export default function HomePage() {
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.3) 35%, transparent 65%)', pointerEvents: 'none' }} />
 
                 {/* Bottom content — above input box */}
-                <div style={{ position: 'absolute', bottom: isDesktop ? '120px' : '100px', left: 0, right: 0, zIndex: 1 }}>
+                <div style={{ position: 'absolute', bottom: isDesktop ? '100px' : '140px', left: 0, right: 0, zIndex: 1 }}>
                   {template.skill ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px' }}>
                       {(() => {
