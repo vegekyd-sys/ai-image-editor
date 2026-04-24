@@ -215,6 +215,26 @@ export default function HomePage() {
     }
   }, [])
 
+  const userTypingRef = useRef(false)
+  const resizeTextarea = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [])
+  useEffect(() => {
+    if (userTypingRef.current || !inputText) {
+      resizeTextarea()
+      userTypingRef.current = false
+    }
+  }, [inputText, resizeTextarea])
+  useEffect(() => {
+    if (selectedDetail) {
+      const tid = setTimeout(resizeTextarea, 300)
+      return () => clearTimeout(tid)
+    }
+  }, [selectedDetail, resizeTextarea])
+
   const [cardIndex, setCardIndex] = useState(0)
   const [cardDragX, setCardDragX] = useState(0)
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
@@ -591,18 +611,18 @@ export default function HomePage() {
                 WebkitBackdropFilter: 'blur(10px)',
               }}
             >
-              {/* Left: + button / photo slot */}
+              {/* Left: + button / photo slot — collapses when detail overlay open */}
               <div
-                onClick={() => { if (!creating) fileInputRef.current?.click() }}
+                onClick={() => { if (!creating && !selectedDetail) fileInputRef.current?.click() }}
                 style={{
-                  width: attachedFiles.length > 0 ? photoSlotWidth : 44,
+                  width: selectedDetail ? 0 : photoSlotWidth,
                   flexShrink: 0, alignSelf: 'stretch',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: creating ? 'default' : 'pointer',
-                  borderRight: (attachedFiles.length > 0 || !selectedDetail) ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                  cursor: creating || selectedDetail ? 'default' : 'pointer',
+                  borderRight: selectedDetail ? 'none' : '1px solid rgba(255,255,255,0.08)',
                   position: 'relative',
                   overflow: 'hidden',
-                  transition: 'width 0.2s ease',
+                  transition: 'width 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-right 0.2s',
                 }}
               >
                 {attachedFiles.length === 0 ? (
@@ -717,7 +737,7 @@ export default function HomePage() {
                 <textarea
                   ref={textareaRef}
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
+                  onChange={(e) => { userTypingRef.current = true; setInputText(e.target.value) }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFiles.length > 0)) {
                       e.preventDefault()
@@ -728,13 +748,17 @@ export default function HomePage() {
                   disabled={creating}
                   rows={1}
                   style={{
-                    flex: 1, border: 'none', background: 'transparent',
+                    border: 'none', background: 'transparent',
                     color: 'rgba(255,255,255,0.88)', fontSize: '17px', lineHeight: 1.45,
                     padding: '12px 14px 4px',
                     outline: 'none', resize: 'none',
                     fontFamily: 'var(--font-geist-sans), sans-serif',
                     caretColor: '#d946ef',
                     minHeight: 40,
+                    maxHeight: '8rem',
+                    overflowY: 'auto',
+                    display: 'block',
+                    width: '100%',
                   }}
                 />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
@@ -885,7 +909,7 @@ export default function HomePage() {
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.3) 35%, transparent 65%)', pointerEvents: 'none' }} />
 
                 {/* Bottom content — above input box */}
-                <div style={{ position: 'absolute', bottom: isDesktop ? '100px' : '140px', left: 0, right: 0, zIndex: 1 }}>
+                <div style={{ position: 'absolute', bottom: isDesktop ? '24px' : '160px', left: 0, right: 0, zIndex: 1 }}>
                   {template.skill ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px' }}>
                       {(() => {
