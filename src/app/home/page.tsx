@@ -705,22 +705,23 @@ export default function HomePage() {
               style={{
                 display: 'flex', gap: 0,
                 borderRadius: 18,
-                border: dragOver ? '1px solid rgba(217,70,239,0.6)' : '1px solid rgba(255,255,255,0.1)',
-                background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(10,10,10,0.75)',
+                border: dragOver ? '1px solid rgba(217,70,239,0.6)' : '1px solid rgba(255,255,255,0.18)',
+                background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(15,15,15,0.65)',
                 overflow: 'hidden',
                 transition: 'border-color 0.2s, background 0.2s',
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
                 pointerEvents: 'auto',
-                boxShadow: '0 0 50px 30px rgba(0,0,0,0.6), 0 40px 80px 60px rgba(0,0,0,0.7)',
+                boxShadow: '0 0 0 0.5px rgba(255,255,255,0.08), 0 8px 32px rgba(0,0,0,0.8), 0 0 60px 30px rgba(0,0,0,0.5)',
               }}
             >
               {/* Left: + button / photo slot — collapses when detail overlay open */}
               <div
                 onClick={() => { if (!creating && !selectedDetail) fileInputRef.current?.click() }}
                 style={{
-                  width: selectedDetail ? 0 : photoSlotWidth,
-                  flexShrink: 0, alignSelf: 'stretch',
+                  width: selectedDetail ? 0 : 52,
+                  minHeight: 52,
+                  flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: creating || selectedDetail ? 'default' : 'pointer',
                   borderRight: selectedDetail ? 'none' : '1px solid rgba(255,255,255,0.08)',
