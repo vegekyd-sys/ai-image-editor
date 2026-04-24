@@ -326,7 +326,7 @@ export default function HomePage() {
     }
     el.addEventListener('touchmove', onMove, { passive: false })
     return () => el.removeEventListener('touchmove', onMove)
-  }, [])
+  }, [attachedFiles.length])
 
   const MAX_FILES = 10
   const [dragOver, setDragOver] = useState(false)
@@ -907,7 +907,7 @@ export default function HomePage() {
                     className="mkr-create-btn"
                     onClick={() => { if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
                     disabled={creating}
-                    style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'var(--font-geist-sans), sans-serif' }}
+                    style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '17px', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
                   >
                     {creating ? <Spinner size={12} /> : (
                       <>
