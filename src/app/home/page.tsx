@@ -13,6 +13,22 @@ import Changelog from '@/components/Changelog'
 
 const SKILL_TEMPLATES = [
   {
+    id: 'photo-to-video',
+    label: '照片变视频', labelEn: 'Photo to Video',
+    image: '/skills/night-flash.jpg',
+    prompt: 'Turn my photo into a cinematic video',
+    skill: 'photo-to-video' as string | undefined,
+    imageCount: 1 as number | undefined,
+  },
+  {
+    id: 'animated-gif',
+    label: '动态表情包', labelEn: 'Animated GIF',
+    image: '/skills/anime.jpg',
+    prompt: 'Create an animated GIF from my photos',
+    skill: 'animated-gif' as string | undefined,
+    imageCount: undefined as number | undefined,
+  },
+  {
     id: 'studio-portrait',
     label: '影棚形象照', labelEn: 'Studio Portrait',
     image: '/skills/studio-portrait.jpg',
@@ -150,6 +166,7 @@ export default function HomePage() {
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
   const [showChangelog, setShowChangelog] = useState(false)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
+  const [selectedDetail, setSelectedDetail] = useState<typeof SKILL_TEMPLATES[0] | null>(null)
   const [kbInset, setKbInset] = useState(0)
   const scrollStartY = useRef<number | null>(null)
 
@@ -313,16 +330,15 @@ export default function HomePage() {
   }, [creating, addFiles])
 
   const handleSkillCardClick = (template: typeof SKILL_TEMPLATES[0]) => {
-    if (selectedSkill === template.id) {
+    if (selectedDetail?.id === template.id) {
+      setSelectedDetail(null)
       setSelectedSkill(null)
       setInputText('')
       return
     }
-    setSelectedSkill(template.id)
+    setSelectedDetail(template)
+    setSelectedSkill(template.skill || template.id)
     setInputText(template.prompt)
-    setTimeout(() => {
-      inputBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 100)
   }
 
   if (authLoading || !user) {
@@ -527,11 +543,12 @@ export default function HomePage() {
 
         </div>
 
-        {/* ── Bottom Input Box (fixed, glassmorphism) ── */}
+        {/* ── Bottom Input Box (fixed, glassmorphism) — hidden when detail overlay open ── */}
         <div style={{
           position: 'fixed', left: 0, right: 0,
           bottom: kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 0,
           zIndex: 50,
+          display: selectedDetail ? 'none' : undefined,
           ...(isDesktop ? {
             padding: '0 24px',
           } : {
@@ -559,16 +576,19 @@ export default function HomePage() {
                 WebkitBackdropFilter: 'blur(10px)',
               }}
             >
-              {/* Left: photo slot — square, width = container height */}
+              {/* Left: photo slot — dynamic: hidden when no files, expands when files attached */}
               <div
-                onClick={() => { if (!creating) fileInputRef.current?.click() }}
+                onClick={() => { if (!creating && attachedFiles.length === 0) fileInputRef.current?.click() }}
                 style={{
-                  width: photoSlotWidth, flexShrink: 0, alignSelf: 'stretch',
+                  width: attachedFiles.length > 0 ? photoSlotWidth : 0,
+                  flexShrink: 0, alignSelf: 'stretch',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: creating ? 'default' : 'pointer',
-                  borderRight: '1px solid rgba(255,255,255,0.08)',
+                  borderRight: attachedFiles.length > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none',
                   position: 'relative',
                   background: attachedFiles.length > 0 ? 'transparent' : 'rgba(217,70,239,0.04)',
+                  overflow: 'hidden',
+                  transition: 'width 0.2s ease',
                 }}
               >
                 {attachedFiles.length === 0 ? (
@@ -741,6 +761,227 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* ── Skill Detail Overlay ── */}
+      {selectedDetail && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 60,
+          background: '#000',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          {/* Background image */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={selectedDetail.image}
+            alt=""
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%',
+              objectFit: 'cover',
+              pointerEvents: 'none',
+            }}
+          />
+
+          {/* Bottom gradient */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.4) 40%, transparent 70%)',
+            pointerEvents: 'none',
+          }} />
+
+          {/* Close button */}
+          <button
+            onClick={() => {
+              setSelectedDetail(null)
+              setSelectedSkill(null)
+              setInputText('')
+              setAttachedFiles([])
+              setAttachedPreviews([])
+            }}
+            style={{
+              position: 'absolute', top: 'max(16px, env(safe-area-inset-top))', right: 16,
+              width: 36, height: 36, borderRadius: '50%',
+              background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              border: 'none', color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', zIndex: 2,
+              fontSize: '1.1rem',
+            }}
+          >
+            ✕
+          </button>
+
+          {/* Bottom content area */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            zIndex: 1,
+            paddingBottom: isDesktop ? '24px' : 'max(8px, env(safe-area-inset-bottom))',
+          }}>
+            {/* Upload slots + title row */}
+            {selectedDetail.skill && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '0 16px', marginBottom: 16,
+              }}>
+                {/* Upload slots */}
+                {(() => {
+                  const count = selectedDetail.imageCount ?? 2
+                  const slots = Array.from({ length: Math.max(count, attachedFiles.length + 1) }, (_, i) => i)
+                  return slots.slice(0, selectedDetail.imageCount ?? Math.max(2, attachedFiles.length + 1)).map(i => (
+                    <div
+                      key={i}
+                      onClick={() => {
+                        if (!attachedPreviews[i] && !creating) fileInputRef.current?.click()
+                      }}
+                      style={{
+                        width: 56, height: 56, borderRadius: 12, flexShrink: 0,
+                        border: '1.5px solid rgba(255,255,255,0.2)',
+                        background: 'rgba(255,255,255,0.08)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                      }}
+                    >
+                      {attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={attachedPreviews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setAttachedFiles(prev => prev.filter((_, j) => j !== i))
+                              setAttachedPreviews(prev => prev.filter((_, j) => j !== i))
+                            }}
+                            style={{
+                              position: 'absolute', top: 2, right: 2,
+                              width: 18, height: 18, borderRadius: '50%',
+                              background: 'rgba(0,0,0,0.7)', color: '#fff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '0.6rem', cursor: 'pointer',
+                            }}
+                          >✕</div>
+                        </>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round">
+                          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      )}
+                    </div>
+                  ))
+                })()}
+
+                {/* Title */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: '1.1rem', fontWeight: 700, color: '#fff',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {locale === 'zh' ? selectedDetail.label : selectedDetail.labelEn}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Title only for non-skill templates */}
+            {!selectedDetail.skill && (
+              <div style={{ padding: '0 16px', marginBottom: 16 }}>
+                <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fff' }}>
+                  {locale === 'zh' ? selectedDetail.label : selectedDetail.labelEn}
+                </div>
+              </div>
+            )}
+
+            {/* Input box (same as list page, shared state) */}
+            <div style={{ padding: '0 12px' }}>
+              <div style={{ maxWidth: '480px', margin: '0 auto' }}>
+                <div
+                  ref={selectedDetail ? undefined : inputBoxRef}
+                  className="mkr-input-box"
+                  onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+                  onDragLeave={(e) => { e.preventDefault(); dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragOver(false) } }}
+                  onDrop={handleDrop}
+                  style={{
+                    display: 'flex', gap: 0,
+                    borderRadius: 18,
+                    border: dragOver ? '1px solid rgba(217,70,239,0.6)' : '1px solid rgba(255,255,255,0.12)',
+                    background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(20,20,20,0.5)',
+                    overflow: 'hidden',
+                    transition: 'border-color 0.2s, background 0.2s',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
+                  }}
+                >
+                  {/* Photo slot — only when files attached */}
+                  {attachedFiles.length > 0 && (
+                    <div
+                      onClick={() => { if (!creating) fileInputRef.current?.click() }}
+                      style={{
+                        width: 60, flexShrink: 0, alignSelf: 'stretch',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer',
+                        borderRight: '1px solid rgba(255,255,255,0.08)',
+                        position: 'relative',
+                      }}
+                    >
+                      {attachedPreviews[0] && attachedPreviews[0] !== 'heic-pending' ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={attachedPreviews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <Spinner size={16} />
+                      )}
+                      {attachedFiles.length > 1 && (
+                        <div style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(217,70,239,0.85)', color: '#fff', borderRadius: 6, padding: '0 5px', fontSize: '0.55rem', fontWeight: 700 }}>
+                          {attachedFiles.length}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <textarea
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFiles.length > 0)) {
+                          e.preventDefault()
+                          handleCreate()
+                        }
+                      }}
+                      placeholder="where magic happens"
+                      disabled={creating}
+                      rows={1}
+                      style={{
+                        flex: 1, border: 'none', background: 'transparent',
+                        color: 'rgba(255,255,255,0.88)', fontSize: '17px', lineHeight: 1.45,
+                        padding: '12px 14px 4px',
+                        outline: 'none', resize: 'none',
+                        fontFamily: 'var(--font-geist-sans), sans-serif',
+                        caretColor: '#d946ef',
+                        minHeight: 40,
+                      }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '4px 8px 8px' }}>
+                      <button
+                        className="mkr-create-btn"
+                        onClick={() => { if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
+                        disabled={creating}
+                        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'var(--font-geist-sans), sans-serif' }}
+                      >
+                        {creating ? <Spinner size={12} /> : (
+                          <>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                            Create
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
     </>
