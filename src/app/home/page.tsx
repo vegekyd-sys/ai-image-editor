@@ -18,15 +18,15 @@ const SKILL_TEMPLATES = [
     id: 'photo-to-video',
     label: '照片变视频', labelEn: 'Photo to Video',
     image: '/skills/photo-to-video.jpg',
-    prompt: 'Turn my photo into a cinematic video',
+    prompt: 'Turn my photo into a cinematic short video with dramatic camera movement',
     skill: 'photo-to-video' as string | undefined,
     imageCount: 1 as number | undefined,
   },
   {
     id: 'animated-gif',
     label: '动态表情包', labelEn: 'Animated GIF',
-    image: '/skills/anime.jpg',
-    prompt: 'Create an animated GIF from my photos',
+    image: '/skills/animated-gif.gif',
+    prompt: 'Turn our selfie into a fun animated GIF with expressive movements',
     skill: 'animated-gif' as string | undefined,
     imageCount: undefined as number | undefined,
   },
@@ -56,9 +56,9 @@ const SKILL_TEMPLATES = [
   },
   {
     id: 'comic',
-    label: '漫画', labelEn: 'Comic',
+    label: '波普漫画', labelEn: 'Pop Art',
     image: '/skills/comic.jpg',
-    prompt: 'Comic book style with bold lines and vibrant colors',
+    prompt: 'Transform my photo into half realistic, half pop art comic style with bold Ben-Day dots, halftone patterns, and a POW speech bubble',
   },
   {
     id: 'logo-design',
@@ -68,9 +68,9 @@ const SKILL_TEMPLATES = [
   },
   {
     id: 'oil-painting',
-    label: '油画风', labelEn: 'Oil Painting',
+    label: '金蝶幻变', labelEn: 'Golden Shatter',
     image: '/skills/oil-painting.jpg',
-    prompt: 'Classical oil painting style with rich textures',
+    prompt: 'Transform my portrait so half the face shatters into hundreds of golden metallic butterflies dissolving into darkness, with glowing fracture lines on skin',
   },
   {
     id: 'cyberpunk',
@@ -134,9 +134,9 @@ const SKILL_TEMPLATES = [
   },
   {
     id: 'fantasy',
-    label: '奇幻场景', labelEn: 'Fantasy',
+    label: '星河之眼', labelEn: 'Galaxy Eye',
     image: '/skills/fantasy.jpg',
-    prompt: 'Fantasy digital painting of a magical enchanted world, ethereal atmosphere',
+    prompt: 'Extreme macro close-up of my eye with the iris replaced by a swirling galaxy of stars and nebulae, a single tear reflecting city lights, dark cinematic mood',
   },
   {
     id: 'flat-design',
@@ -146,9 +146,9 @@ const SKILL_TEMPLATES = [
   },
   {
     id: 'surrealism',
-    label: '超现实', labelEn: 'Surrealism',
+    label: '反重力', labelEn: 'Anti-Gravity',
     image: '/skills/surrealism.jpg',
-    prompt: 'Surrealist artwork with dreamlike impossible scenes, Dali inspired',
+    prompt: 'Place me sitting upside down on the ceiling of an ornate baroque palace, chandeliers hanging upward from the floor, hair and clothes defying gravity, Inception style',
   },
 ]
 
@@ -873,23 +873,34 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Hero fly image (card → fullscreen) ── */}
-      {heroRect && selectedDetail && (
-        <div style={{
-          position: 'fixed', zIndex: Z.HERO_FLY, pointerEvents: 'none',
-          top: heroExpanded ? 0 : heroRect.top,
-          left: heroExpanded ? 0 : heroRect.left,
-          width: heroExpanded ? '100vw' : heroRect.width,
-          height: heroExpanded ? '100vh' : heroRect.height,
-          borderRadius: heroExpanded ? 0 : 16,
-          overflow: 'hidden',
-          transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
-          opacity: heroExpanded ? 0 : 1,
-        }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={selectedDetail.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        </div>
-      )}
+      {/* ── Hero fly image (card → fullscreen/card) ── */}
+      {heroRect && selectedDetail && (() => {
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+        const cardW = 440
+        const cardH = vh * 0.75
+        const pb = inputWrapperHeight + 16
+        const targetTop = isDesktop ? Math.max(0, (vh - cardH - pb) / 2) : 0
+        const targetLeft = isDesktop ? (vw - cardW) / 2 : 0
+        const targetW = isDesktop ? cardW : vw
+        const targetH = isDesktop ? cardH : vh
+        return (
+          <div style={{
+            position: 'fixed', zIndex: Z.HERO_FLY, pointerEvents: 'none',
+            top: heroExpanded ? targetTop : heroRect.top,
+            left: heroExpanded ? targetLeft : heroRect.left,
+            width: heroExpanded ? targetW : heroRect.width,
+            height: heroExpanded ? targetH : heroRect.height,
+            borderRadius: heroExpanded ? (isDesktop ? 24 : 0) : 16,
+            overflow: 'hidden',
+            transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
+            opacity: heroExpanded ? 0 : 1,
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={selectedDetail.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
+        )
+      })()}
 
       {/* ── Skill Detail Overlay ── */}
       {selectedDetail && (
