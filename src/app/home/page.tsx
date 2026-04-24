@@ -17,7 +17,7 @@ const SKILL_TEMPLATES = [
   {
     id: 'photo-to-video',
     label: '照片变视频', labelEn: 'Photo to Video',
-    image: '/skills/night-flash.jpg',
+    image: '/skills/photo-to-video.jpg',
     prompt: 'Turn my photo into a cinematic video',
     skill: 'photo-to-video' as string | undefined,
     imageCount: 1 as number | undefined,
@@ -164,6 +164,8 @@ export default function HomePage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
   const [inputBoxHeight, setInputBoxHeight] = useState(0)
+  const inputWrapperRef = useRef<HTMLDivElement>(null)
+  const [inputWrapperHeight, setInputWrapperHeight] = useState(0)
   const [inputText, setInputText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
@@ -198,7 +200,17 @@ export default function HomePage() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [user])
+
+  useEffect(() => {
+    const el = inputWrapperRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      setInputWrapperHeight(Math.round(entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [user])
 
   useEffect(() => {
     const el = document.querySelector('.mkr-page') as HTMLElement | null
@@ -583,7 +595,7 @@ export default function HomePage() {
         </div>
 
         {/* ── Bottom Input Box (fixed, always on top) ── */}
-        <div style={{
+        <div ref={inputWrapperRef} style={{
           position: 'fixed', left: 0, right: 0,
           bottom: kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 0,
           zIndex: Z.INPUT,
@@ -604,6 +616,37 @@ export default function HomePage() {
             }} />
           )}
           <div style={{ maxWidth: '480px', margin: '0 auto', position: 'relative', pointerEvents: 'auto' }}>
+            {/* Mobile only: title + upload slots above input when overlay is open */}
+            {selectedDetail && !isDesktop && (
+              <div style={{ padding: '0 4px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
+                  {locale === 'zh' ? selectedDetail.label : selectedDetail.labelEn}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {Array.from({ length: selectedDetail.imageCount ?? 1 }, (_, i) => (
+                    <div key={i}
+                      onClick={() => { if (!attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
+                      style={{
+                        width: 52, height: 52, borderRadius: 12, flexShrink: 0,
+                        border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                      }}>
+                      {attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={attachedPreviews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <div onClick={(e) => { e.stopPropagation(); setAttachedFiles(prev => prev.filter((_, j) => j !== i)); setAttachedPreviews(prev => prev.filter((_, j) => j !== i)) }}
+                            style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>✕</div>
+                        </>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div
               ref={inputBoxRef}
               className="mkr-input-box"
@@ -859,8 +902,8 @@ export default function HomePage() {
             pointerEvents: heroExpanded ? 'auto' : 'none',
             transition: 'opacity 0.3s ease 0.1s',
             ...(isDesktop ? {
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              paddingBottom: inputBoxHeight + 56,
+              display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+              paddingBottom: inputWrapperHeight + 16,
               transition: 'padding-bottom 0.15s ease',
             } : {}),
           }}
@@ -923,27 +966,25 @@ export default function HomePage() {
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.3) 35%, transparent 65%)', pointerEvents: 'none' }} />
 
-                {/* Bottom content — above input box */}
-                <div style={{ position: 'absolute', bottom: isDesktop ? 24 : (inputBoxHeight + 28), left: 0, right: 0, zIndex: 1, transition: 'bottom 0.15s ease' }}>
-                  <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
-                      {locale === 'zh' ? template.label : template.labelEn}
-                    </div>
-                    {(() => {
-                      const isActive = template.id === selectedDetail?.id
-                      const count = template.imageCount ?? 1
-                      return (
+                {/* Desktop: title + upload slots inside card */}
+                {isDesktop && (
+                  <div style={{ position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 1 }}>
+                    <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
+                        {locale === 'zh' ? template.label : template.labelEn}
+                      </div>
+                      {template.id === selectedDetail?.id && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          {Array.from({ length: count }, (_, i) => (
+                          {Array.from({ length: template.imageCount ?? 1 }, (_, i) => (
                             <div key={i}
-                              onClick={() => { if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
+                              onClick={() => { if (!attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
                               style={{
                                 width: 52, height: 52, borderRadius: 12, flexShrink: 0,
                                 border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 cursor: 'pointer', position: 'relative', overflow: 'hidden',
                               }}>
-                              {isActive && attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
+                              {attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
                                 <>
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={attachedPreviews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -956,10 +997,10 @@ export default function HomePage() {
                             </div>
                           ))}
                         </div>
-                      )
-                    })()}
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>
