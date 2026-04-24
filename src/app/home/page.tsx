@@ -202,6 +202,7 @@ export default function HomePage() {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
   const [showChangelog, setShowChangelog] = useState(false)
+  const [slotDragOver, setSlotDragOver] = useState(-1)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [selectedDetail, setSelectedDetail] = useState<typeof SKILL_TEMPLATES[0] | null>(null)
   const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
@@ -415,6 +416,65 @@ export default function HomePage() {
     )
     addFiles(droppedFiles)
   }, [creating, addFiles])
+
+  const removeFile = useCallback((index: number) => {
+    setAttachedFiles(prev => prev.filter((_, j) => j !== index))
+    setAttachedPreviews(prev => prev.filter((_, j) => j !== index))
+  }, [])
+
+  const handleSlotDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
+    addFiles(files)
+  }, [addFiles])
+
+  const renderUploadSlots = useCallback((template: { imageCount?: number }, isActive: boolean) => {
+    const count = template.imageCount ?? 1
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {Array.from({ length: count }, (_, i) => {
+          const isDragTarget = slotDragOver === i
+          return (
+            <div key={i}
+              onClick={() => { if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
+              onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+              onDragLeave={() => setSlotDragOver(-1)}
+              onDrop={(e) => { setSlotDragOver(-1); handleSlotDrop(e) }}
+              style={{
+                width: 64, height: 64, borderRadius: 16, flexShrink: 0,
+                border: isDragTarget ? '1.5px solid rgba(217,70,239,0.6)' : '1.5px solid rgba(255,255,255,0.25)',
+                background: isDragTarget ? 'rgba(217,70,239,0.08)' : 'rgba(0,0,0,0.4)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                pointerEvents: 'auto',
+                boxShadow: isDragTarget ? '0 0 0 1px rgba(217,70,239,0.12)' : 'none',
+                transition: 'border-color 0.2s, background 0.2s, box-shadow 0.2s',
+              }}>
+              {isActive && attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={attachedPreviews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <div onClick={(e) => { e.stopPropagation(); removeFile(i) }}
+                    style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>✕</div>
+                </>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }, [attachedPreviews, creating, handleSlotDrop, removeFile, slotDragOver])
+
+  const renderTemplateLabel = (template: { label: string; labelEn: string }) => (
+    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
+      {locale === 'zh' ? template.label : template.labelEn}
+    </div>
+  )
 
   const handleSkillCardClick = (template: typeof SKILL_TEMPLATES[0], e: React.MouseEvent) => {
     if (selectedDetail?.id === template.id) {
@@ -662,36 +722,8 @@ export default function HomePage() {
             {/* Mobile only: title + upload slots above input when overlay is open */}
             {selectedDetail && !isDesktop && (
               <div style={{ padding: '0 4px 10px', display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
-                  {locale === 'zh' ? selectedDetail.label : selectedDetail.labelEn}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {Array.from({ length: selectedDetail.imageCount ?? 1 }, (_, i) => (
-                    <div key={i}
-                      onClick={() => { if (!attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
-                      style={{
-                        width: 64, height: 64, borderRadius: 16, flexShrink: 0,
-                        border: '1.5px solid rgba(255,255,255,0.35)',
-                        background: 'rgba(0,0,0,0.4)',
-                        backdropFilter: 'blur(12px)',
-                        WebkitBackdropFilter: 'blur(12px)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                        pointerEvents: 'auto',
-                      }}>
-                      {attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
-                        <>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={attachedPreviews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <div onClick={(e) => { e.stopPropagation(); setAttachedFiles(prev => prev.filter((_, j) => j !== i)); setAttachedPreviews(prev => prev.filter((_, j) => j !== i)) }}
-                            style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>✕</div>
-                        </>
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                {renderTemplateLabel(selectedDetail)}
+                {renderUploadSlots(selectedDetail, true)}
               </div>
             )}
             {/* No scrim div — boxShadow on input box handles glow */}
@@ -1032,37 +1064,8 @@ export default function HomePage() {
                 {isDesktop && (
                   <div style={{ position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 1 }}>
                     <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
-                        {locale === 'zh' ? template.label : template.labelEn}
-                      </div>
-                      {template.id === selectedDetail?.id && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          {Array.from({ length: template.imageCount ?? 1 }, (_, i) => (
-                            <div key={i}
-                              onClick={() => { if (!attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
-                              style={{
-                                width: 64, height: 64, borderRadius: 16, flexShrink: 0,
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                background: 'rgba(10,10,10,0.75)',
-                                backdropFilter: 'blur(10px)',
-                                WebkitBackdropFilter: 'blur(10px)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                              }}>
-                              {attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
-                                <>
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={attachedPreviews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  <div onClick={(e) => { e.stopPropagation(); setAttachedFiles(prev => prev.filter((_, j) => j !== i)); setAttachedPreviews(prev => prev.filter((_, j) => j !== i)) }}
-                                    style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>✕</div>
-                                </>
-                              ) : (
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {renderTemplateLabel(template)}
+                      {template.id === selectedDetail?.id && renderUploadSlots(template, true)}
                     </div>
                   </div>
                 )}
