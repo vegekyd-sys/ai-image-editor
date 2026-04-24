@@ -14,6 +14,7 @@ import Changelog from '@/components/Changelog'
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 
 const SKILL_TEMPLATES = [
+  // --- Featured (new assets) ---
   {
     id: 'photo-to-video',
     label: '照片变视频', labelEn: 'Photo to Video',
@@ -31,17 +32,132 @@ const SKILL_TEMPLATES = [
     imageCount: undefined as number | undefined,
   },
   {
-    id: 'studio-portrait',
-    label: '影棚形象照', labelEn: 'Studio Portrait',
-    image: '/skills/studio-portrait.jpg',
-    prompt: 'Professional studio portrait with cinematic lighting',
+    id: 'attack-on-titan',
+    label: '进击的巨人', labelEn: 'Attack on Titan',
+    image: '/skills/attack-on-titan.jpg',
+    prompt: 'Put me on top of the Wall from Attack on Titan, wearing the Survey Corps green cloak with Wings of Freedom emblem, 3D maneuvering gear on my waist, looking back at camera with a determined fearless expression. Behind me the skinless Colossal Titan head looms over the wall, steam pouring from its muscles. Dramatic orange sunset sky, ruined city far below. Epic cinematic wide shot, my figure small against the massive titan.',
   },
   {
-    id: 'blueprint',
-    label: '蓝图海报', labelEn: 'Blueprint Poster',
-    image: '/skills/blueprint.jpg',
-    prompt: 'Blueprint style technical illustration poster',
+    id: 'glass-shatter',
+    label: '破屏而出', labelEn: 'Glass Shatter',
+    image: '/skills/glass-shatter.jpg',
+    prompt: 'Transform my photo into a dramatic action shot — I am punching straight through a glass screen toward the viewer, my fist thrust forward in the center of the frame with glass shards exploding outward frozen in mid-air. Give me bleached blonde messy hair, a black leather jacket, a bruise under one eye, and a fierce angry snarl. Teal and warm orange backlight rim-lighting my silhouette. Dark warehouse background. HBO Original Series logo in bottom-left corner. Shot with ultra-wide lens making my fist look huge.',
   },
+  {
+    id: 'squid-game-player',
+    label: '鱿鱼游戏', labelEn: 'Squid Game',
+    image: '/skills/squid-game-player.jpg',
+    prompt: 'Put me in the Squid Game Red Light Green Light scene — I am wearing the green tracksuit #456, running toward camera with a terrified but determined expression. A woman with shoulder-length black hair in tracksuit #067 runs beside me on my left. Behind us, the giant robotic doll in yellow and orange dress towers over the sandy field, her head turned toward us. Other players in green tracksuits frozen mid-run in the background. Harsh overhead floodlights, overcast sky, dust kicked up. Netflix cinematic quality.',
+  },
+  {
+    id: 'jujutsu-gojo',
+    label: '咒术回战', labelEn: 'Jujutsu Kaisen',
+    image: '/skills/jujutsu-gojo.jpg',
+    prompt: 'Place me standing back-to-back with photorealistic 3D CGI Gojo Satoru from Jujutsu Kaisen on a destroyed Shibuya rooftop at night. I am on the left wearing a black leather jacket, arms crossed with a confident smirk. Gojo is on the right — tall, white spiky hair, black blindfold, dark blue high-collar uniform, one hand raised with blue Infinity sphere spinning. Purple cursed energy lightning cracks across the dark stormy sky, a dark curse silhouette lurks in the clouds. "SHIBUYA INCIDENT" text at the bottom. Movie poster composition, both figures equally prominent.',
+  },
+  {
+    id: 'totoro-forest',
+    label: '龙猫森林', labelEn: 'Totoro Forest',
+    image: '/skills/totoro-forest.jpg',
+    prompt: 'Put me sitting on the big furry belly of a massive photorealistic CGI Totoro in a lush ancient forest. I am leaning back against his soft grey fur, laughing with mouth wide open and pure joy. Totoro has his iconic wide toothy grin. Tiny black soot sprites (susuwatari) float all around us. The Catbus (furry cat-shaped bus with glowing eyes) peeks from between mossy tree trunks in the background. Golden sunlight streams through the giant camphor tree canopy. I am wearing a denim jacket and converse sneakers. Studio Ghibli live-action movie quality.',
+  },
+  {
+    id: 'onepiece-gear5',
+    label: '海贼王·尼卡', labelEn: 'One Piece Gear 5',
+    image: '/skills/onepiece-gear5.jpg',
+    prompt: 'Put me on the wooden deck bow of the Thousand Sunny pirate ship, running and laughing wildly with mouth wide open next to a photorealistic 3D CGI Luffy in Gear 5 Sun God Nika form — white rubbery cartoon-like skin, wild flowing white hair upward, huge exaggerated grin, white shirt open showing abs, purple sash. We are side by side, both mid-stride. I am wearing a black crop top with a skull-and-crossbones Straw Hat logo and denim shorts. Massive stormy ocean waves crash behind us, wind blowing our hair dramatically.',
+  },
+  {
+    id: 'spirited-away',
+    label: '千与千寻', labelEn: 'Spirited Away',
+    image: '/skills/spirited-away-train.jpg',
+    prompt: 'Place me standing barefoot on railway tracks that stretch across an endless calm ocean, looking back over my shoulder at camera with a gentle mysterious smile, long dark hair flowing in the wind. I am wearing a white summer dress. An old weathered red Japanese train approaches from behind in the distance, its headlights on. Shallow water covers the wooden track ties creating perfect mirror reflections of the pink and orange sunset sky. The scene is serene and dreamlike. Spirited Away sea train brought to life as a photograph. Golden hour warm lighting.',
+  },
+  {
+    id: 'iron-throne',
+    label: '铁王座', labelEn: 'Iron Throne',
+    image: '/skills/iron-throne-dragon.jpg',
+    prompt: 'Put me sitting on the Iron Throne from Game of Thrones — legs crossed, hands gripping the sword armrests, chin raised with a cold commanding stare directly at camera. I am wearing a red latex high-slit dress, a thin gold crown, sharp bob haircut with blunt bangs, bold red lips, gold shimmer on my cheekbones. A small dragon perches on my right shoulder breathing a burst of fire. Dark gothic stone throne room lit only by candles and fire braziers. The mood is dangerous, seductive, and regal.',
+  },
+  {
+    id: 'titan-half-face',
+    label: '巨人化', labelEn: 'Titan Transform',
+    image: '/skills/titan-half-face.jpg',
+    prompt: 'Extreme close-up of my face filling the entire frame — the left half is my real face with smudged dark eyeliner, a lip ring, battle scars, and an intense unblinking stare. The right half seamlessly morphs into an Attack on Titan titan form: exposed red muscles and tendons, no skin, one glowing green eye, steam rising where skin meets muscle along the center split line. "THE RUMBLING" text in large white font at the top. Warm sunset city skyline blurred in the background. Movie poster quality.',
+  },
+  {
+    id: 'ghost-in-shell',
+    label: '攻壳机动队', labelEn: 'Ghost in the Shell',
+    image: '/skills/ghost-in-shell.jpg',
+    prompt: 'Shot directly from above looking straight down — I am lying on my back in a shallow neon-lit puddle on a Tokyo rooftop at night. My platinum blonde hair fans out like Medusa tendrils in the dark water. I am wearing a sheer black mesh bodysuit with chrome chain harness across my chest, gripping the center ring with both hands. My eyes are wide open staring straight up at the camera with an intense provocative gaze. Neon reflections in the water — cyan, magenta, green — from surrounding signs. Holographic Japanese kanji (電脳, 攻殻) and UI overlays glow around me. Rain droplets frozen mid-air.',
+  },
+  {
+    id: 'squid-game-vip',
+    label: '鱿鱼游戏 VIP', labelEn: 'Squid Game VIP',
+    image: '/skills/squid-game-vip.jpg',
+    prompt: 'Put me walking down the center of a neon-lit pink corridor from Squid Game VIP area. I am wearing a perfectly tailored black suit with black shirt, a gold ornate owl mask pushed up onto my forehead, adjusting my right cufflink with a cold arrogant smirk. Flanking me on each side: a Squid Game guard in hot pink jumpsuit — left guard has a triangle mask, right guard has a circle mask, both standing at rigid attention with hands behind back. The corridor recedes behind me with repeating rectangular pink and green fluorescent light frames.',
+  },
+  {
+    id: 'time-freeze',
+    label: '时间冻结', labelEn: 'Time Freeze',
+    image: '/skills/time-freeze.jpg',
+    prompt: 'Transform my photo into a zero-gravity frozen moment — I am jumping mid-air in the center of a living room with a huge surprised laugh, arms and legs spread wide. Everything around me is suspended in zero gravity: a white coffee mug with brown coffee splashing out frozen mid-splash, an iPhone floating screen-on, white AirPods hovering, cereal pieces scattered like confetti, newspaper pages mid-flutter, polaroid photos floating, and an orange tabby cat mid-leap with arched back to my right. Warm morning sunlight from a large window behind me. Ultra-wide angle lens from low angle.',
+  },
+  {
+    id: 'skyscraper-spiderman',
+    label: '摩天蜘蛛侠', labelEn: 'Skyscraper Climb',
+    image: '/skills/skyscraper-spiderman.jpg',
+    prompt: 'Put me crouching on the vertical glass wall of a skyscraper at night, defying gravity like Spider-Man. I am wearing a dark bomber jacket and cargo pants, white sneakers planted flat against the glass. My hair falls sideways from gravity. I am looking directly at camera with a cocky confident grin. Below me (appearing as sideways) the city streets are 50+ stories down — tiny cars, neon signs, streetlights stretching into the distance. The shot is taken from a drone at the same height, creating a vertigo-inducing perspective where the building wall looks like the ground.',
+  },
+  {
+    id: 'snow-globe',
+    label: '水晶球女王', labelEn: 'Snow Globe',
+    image: '/skills/snow-globe-queen.jpg',
+    prompt: 'Place me inside a giant crystal snow globe installed in the middle of Times Square New York at night. I am sitting elegantly on a golden crescent moon inside the sphere, wearing a flowing red sparkly ball gown. Artificial snow swirls around me inside the glass. Outside the globe, a crowd of people in winter coats stands watching and taking photos with their phones held up — shot from behind the crowd looking in at me. The globe glows warmly from within (golden light) contrasting the cold blue LED billboards of Times Square behind.',
+  },
+  {
+    id: 'anti-gravity',
+    label: '反重力宫殿', labelEn: 'Anti-Gravity',
+    image: '/skills/anti-gravity-palace.jpg',
+    prompt: 'Place me sitting calmly in an ornate golden chair on the ceiling of a baroque palace room — I am upside down relative to the floor. I am wearing a tailored black suit with a loosened black tie, legs crossed casually, one hand resting on the chair arm. My hair and tie hang downward (toward the floor above me). Below me (the actual floor), crystal chandeliers hang upward as if gravity is reversed. Renaissance ceiling frescoes are behind my head. The room has teal and gold color palette. Disorienting Inception-style perspective — the viewer cannot tell which way is up.',
+  },
+  {
+    id: 'boa-hancock',
+    label: '女帝约会', labelEn: 'Boa Hancock Date',
+    image: '/skills/boa-hancock-bar.jpg',
+    prompt: 'Put me sitting at a dark moody bar counter, sipping whiskey from a rocks glass with a slight knowing smirk. Next to me sits a photorealistic 3D CGI Boa Hancock from One Piece — impossibly beautiful with long straight black hair, glowing pink heart-shaped eyes (her love-love beam), red silk qipao top, gold snake earrings. She is leaning toward me with an adoring expression. Warm amber tungsten bar lighting, rows of backlit whiskey bottles blurred in the bokeh background. Intimate date night atmosphere.',
+  },
+  {
+    id: 'android18',
+    label: '18号公路', labelEn: 'Android 18',
+    image: '/skills/android18-desert.jpg',
+    prompt: 'Place me leaning against a chrome motorcycle on an empty desert highway at golden hour. Next to me stands a photorealistic 3D CGI Android 18 from Dragon Ball Z — sharp blonde bob haircut, piercing icy blue eyes, denim vest over a striped shirt, arms crossed with her signature cold confident expression. I am wearing a black leather jacket, matching her crossed-arms cool attitude. Dusty desert road stretches to the horizon, warm golden backlight, dust particles in the air. Cinematic wide shot, both of us equally prominent.',
+  },
+  {
+    id: 'zerotwo-selfie',
+    label: '02自拍', labelEn: 'Zero Two Selfie',
+    image: '/skills/zerotwo-selfie.jpg',
+    prompt: 'Make it look like I am taking a selfie with photorealistic 3D CGI Zero Two from Darling in the Franxx. She has long pink hair, small red horns on a white headband, bright emerald green eyes, and is doing her playful tongue-out lick toward the camera. She wears her red and white military pilot suit (partially unzipped) and is wrapping one arm possessively around my neck, pulling me close. I am blushing and grinning. Cherry blossom trees behind us with pink petals falling everywhere. Bright spring sunlight, shallow depth of field. Selfie camera angle (slightly above, close-up).',
+  },
+  {
+    id: 'makima-rooftop',
+    label: '玛奇玛天台', labelEn: 'Makima Rooftop',
+    image: '/skills/makima-rooftop.jpg',
+    prompt: 'Put me sitting on a concrete rooftop ledge at night in Tokyo. Next to me crouches a photorealistic 3D CGI Makima from Chainsaw Man — she has auburn red-brown hair in long braids, distinctive yellow ringed spiral eyes that glow faintly, wearing a white dress shirt, black necktie, and dark overcoat. She is reaching toward me and holding my chin with one finger, tilting my face toward her with a cold, knowing, seductive smile. I look mesmerized and slightly nervous. Tokyo skyline glitters far below behind us. Dark moody cinematic lighting with a red color accent from a neon sign.',
+  },
+  {
+    id: 'sunglasses-twinning',
+    label: '墨镜双胞胎', labelEn: 'Sunglasses Twinning',
+    image: '/skills/sunglasses-twinning.jpg',
+    prompt: 'Put matching white oversized retro sunglasses on my pet, same style as mine. We are both looking at camera with the same sassy duck-face attitude. Keep the same framing, lighting, and background. The pet should look like it is posing on purpose. Fun twinning moment, bright playful energy.',
+  },
+  {
+    id: 'holi-portrait',
+    label: '洒红节', labelEn: 'Holi Festival',
+    image: '/skills/holi-portrait.jpg',
+    prompt: 'Cover me in vibrant Holi festival color powder — thick splashes of pink, teal green, bright orange, and yellow across my face, buzzed hair, and white linen shirt. Add a garland of pink and cream flowers draped around my neck. I look serene with a calm proud expression, chin slightly raised, looking off to the side. Dramatic warm side-lighting from the left against a deep matte purple background. The colored powder looks freshly thrown and still dusty. Editorial portrait photography quality, sharp focus on every powder grain.',
+  },
+  // --- Classic styles ---
   {
     id: 'night-flash',
     label: '夜拍闪光', labelEn: 'Night Flash',
@@ -49,58 +165,10 @@ const SKILL_TEMPLATES = [
     prompt: 'Night photography with flash, urban street style',
   },
   {
-    id: 'anime',
-    label: '动漫风', labelEn: 'Anime Style',
-    image: '/skills/anime.jpg',
-    prompt: 'Anime style illustration',
-  },
-  {
-    id: 'comic',
-    label: '波普漫画', labelEn: 'Pop Art',
-    image: '/skills/comic.jpg',
-    prompt: 'Transform my photo into half realistic, half pop art comic style with bold Ben-Day dots, halftone patterns, and a POW speech bubble',
-  },
-  {
-    id: 'logo-design',
-    label: '标识设计', labelEn: 'Logo Design',
-    image: '/skills/logo-design.jpg',
-    prompt: 'Clean modern logo design',
-  },
-  {
-    id: 'oil-painting',
-    label: '金蝶幻变', labelEn: 'Golden Shatter',
-    image: '/skills/oil-painting.jpg',
-    prompt: 'Transform my portrait so half the face shatters into hundreds of golden metallic butterflies dissolving into darkness, with glowing fracture lines on skin',
-  },
-  {
-    id: 'cyberpunk',
-    label: '赛博朋克', labelEn: 'Cyberpunk',
-    image: '/skills/cyberpunk.jpg',
-    prompt: 'Cyberpunk neon aesthetic with futuristic elements',
-  },
-  {
-    id: 'watercolor',
-    label: '水彩画', labelEn: 'Watercolor',
-    image: '/skills/watercolor.jpg',
-    prompt: 'Watercolor painting with soft pastel colors and wet-on-wet technique',
-  },
-  {
     id: 'pixel-art',
     label: '像素风', labelEn: 'Pixel Art',
     image: '/skills/pixel-art.jpg',
     prompt: 'Pixel art style retro gaming aesthetic, 16-bit detailed scene',
-  },
-  {
-    id: '3d-render',
-    label: '3D 渲染', labelEn: '3D Render',
-    image: '/skills/3d-render.jpg',
-    prompt: 'High quality 3D render with studio lighting, octane render style',
-  },
-  {
-    id: 'film-photo',
-    label: '胶片摄影', labelEn: 'Film Photo',
-    image: '/skills/film-photo.jpg',
-    prompt: 'Vintage film photography with warm tones, film grain, Kodak Portra aesthetic',
   },
   {
     id: 'sticker',
@@ -113,42 +181,6 @@ const SKILL_TEMPLATES = [
     label: '美食摄影', labelEn: 'Food Photo',
     image: '/skills/food-photo.jpg',
     prompt: 'Dramatic food photography with studio lighting, commercial advertising style',
-  },
-  {
-    id: 'art-deco',
-    label: '装饰海报', labelEn: 'Art Deco Poster',
-    image: '/skills/art-deco.jpg',
-    prompt: 'Art deco poster with bold geometric shapes, vintage 1920s style',
-  },
-  {
-    id: 'isometric',
-    label: '等距插画', labelEn: 'Isometric',
-    image: '/skills/isometric.jpg',
-    prompt: 'Isometric 3D illustration with soft pastel colors, miniature world',
-  },
-  {
-    id: 'bw-portrait',
-    label: '黑白人像', labelEn: 'B&W Portrait',
-    image: '/skills/bw-portrait.jpg',
-    prompt: 'Cinematic black and white portrait with dramatic Rembrandt lighting',
-  },
-  {
-    id: 'fantasy',
-    label: '星河之眼', labelEn: 'Galaxy Eye',
-    image: '/skills/fantasy.jpg',
-    prompt: 'Extreme macro close-up of my eye with the iris replaced by a swirling galaxy of stars and nebulae, a single tear reflecting city lights, dark cinematic mood',
-  },
-  {
-    id: 'flat-design',
-    label: '扁平插画', labelEn: 'Flat Design',
-    image: '/skills/flat-design.jpg',
-    prompt: 'Minimalist flat illustration with geometric shapes and limited color palette',
-  },
-  {
-    id: 'surrealism',
-    label: '反重力', labelEn: 'Anti-Gravity',
-    image: '/skills/surrealism.jpg',
-    prompt: 'Place me sitting upside down on the ceiling of an ornate baroque palace, chandeliers hanging upward from the floor, hair and clothes defying gravity, Inception style',
   },
 ]
 
@@ -229,6 +261,13 @@ export default function HomePage() {
       el.removeEventListener('touchmove', onTouchMove)
     }
   }, [])
+
+  useEffect(() => {
+    if (selectedDetail) {
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = '' }
+    }
+  }, [selectedDetail])
 
   const userTypingRef = useRef(false)
   const resizeTextarea = useCallback(() => {
@@ -529,7 +568,7 @@ export default function HomePage() {
           paddingLeft: isDesktop ? '24px' : '14px',
           paddingRight: isDesktop ? '24px' : '14px',
           paddingTop: 0,
-          paddingBottom: '160px',
+          paddingBottom: 'calc(160px + env(safe-area-inset-bottom, 0px))',
           maxWidth: isDesktop ? '1200px' : '520px',
           width: '100%',
           margin: '0 auto',
@@ -594,31 +633,35 @@ export default function HomePage() {
 
         </div>
 
+        {/* ── Bottom edge fade — fixed, below input, blends cards into system bar ── */}
+        {!isDesktop && (
+          <div style={{
+            position: 'fixed', left: 0, right: 0, bottom: 0,
+            height: 'calc(env(safe-area-inset-bottom, 0px) + 40px)',
+            background: 'linear-gradient(to top, #000 0%, transparent 100%)',
+            pointerEvents: 'none',
+            zIndex: Z.INPUT - 1,
+          }} />
+        )}
+
         {/* ── Bottom Input Box (fixed, always on top) ── */}
         <div ref={inputWrapperRef} style={{
           position: 'fixed', left: 0, right: 0,
-          bottom: kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 0,
+          bottom: kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
           zIndex: Z.INPUT,
           pointerEvents: 'none',
           ...(isDesktop ? {
             padding: '0 24px',
           } : {
-            padding: `60px 12px ${kbInset > 0 ? '8px' : 'max(8px, env(safe-area-inset-bottom))'}`,
+            padding: '60px 12px 8px',
           }),
           transition: kbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
         }}>
-          {/* Gradient fade — visual only, click-through */}
-          {!isDesktop && (
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
-              pointerEvents: 'none',
-            }} />
-          )}
-          <div style={{ maxWidth: '480px', margin: '0 auto', position: 'relative', pointerEvents: 'auto' }}>
+          {/* No gradient overlay — cards show through below */}
+          <div style={{ maxWidth: '480px', margin: '0 auto', position: 'relative', pointerEvents: 'none' }}>
             {/* Mobile only: title + upload slots above input when overlay is open */}
             {selectedDetail && !isDesktop && (
-              <div style={{ padding: '0 4px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ padding: '0 4px 10px', display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
                 <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
                   {locale === 'zh' ? selectedDetail.label : selectedDetail.labelEn}
                 </div>
@@ -627,10 +670,14 @@ export default function HomePage() {
                     <div key={i}
                       onClick={() => { if (!attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
                       style={{
-                        width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-                        border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)',
+                        width: 64, height: 64, borderRadius: 16, flexShrink: 0,
+                        border: '1.5px solid rgba(255,255,255,0.35)',
+                        background: 'rgba(0,0,0,0.4)',
+                        backdropFilter: 'blur(12px)',
+                        WebkitBackdropFilter: 'blur(12px)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                        pointerEvents: 'auto',
                       }}>
                       {attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
                         <>
@@ -640,13 +687,14 @@ export default function HomePage() {
                             style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>✕</div>
                         </>
                       ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                       )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
+            {/* No scrim div — boxShadow on input box handles glow */}
             <div
               ref={inputBoxRef}
               className="mkr-input-box"
@@ -658,11 +706,13 @@ export default function HomePage() {
                 display: 'flex', gap: 0,
                 borderRadius: 18,
                 border: dragOver ? '1px solid rgba(217,70,239,0.6)' : '1px solid rgba(255,255,255,0.1)',
-                background: dragOver ? 'rgba(217,70,239,0.08)' : isDesktop ? 'rgba(10,10,10,0.75)' : 'rgba(20,20,20,0.3)',
+                background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(10,10,10,0.75)',
                 overflow: 'hidden',
                 transition: 'border-color 0.2s, background 0.2s',
                 backdropFilter: 'blur(10px)',
                 WebkitBackdropFilter: 'blur(10px)',
+                pointerEvents: 'auto',
+                boxShadow: '0 0 50px 30px rgba(0,0,0,0.6), 0 40px 80px 60px rgba(0,0,0,0.7)',
               }}
             >
               {/* Left: + button / photo slot — collapses when detail overlay open */}
@@ -680,7 +730,7 @@ export default function HomePage() {
                 }}
               >
                 {attachedFiles.length === 0 ? (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
                     <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                 ) : attachedFiles.length === 1 ? (
@@ -806,7 +856,7 @@ export default function HomePage() {
                     color: 'rgba(255,255,255,0.88)', fontSize: '17px', lineHeight: 1.45,
                     padding: '12px 14px 4px',
                     outline: 'none', resize: 'none',
-                    fontFamily: 'var(--font-geist-sans), sans-serif',
+                    fontFamily: 'inherit',
                     caretColor: '#d946ef',
                     minHeight: 40,
                     maxHeight: '8rem',
@@ -842,7 +892,7 @@ export default function HomePage() {
                         background: 'rgba(217,70,239,0.15)', color: '#f0abfc',
                         fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em',
                         cursor: 'pointer', transition: 'all 0.15s',
-                        fontFamily: 'var(--font-geist-sans), sans-serif',
+                        fontFamily: 'inherit',
                         whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
                       }}
                     >
@@ -913,7 +963,7 @@ export default function HomePage() {
             pointerEvents: heroExpanded ? 'auto' : 'none',
             transition: 'opacity 0.3s ease 0.1s',
             ...(isDesktop ? {
-              display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
               paddingBottom: inputWrapperHeight + 16,
               transition: 'padding-bottom 0.15s ease',
             } : {}),
@@ -923,7 +973,7 @@ export default function HomePage() {
           <div style={{
             ...(isDesktop ? {
               position: 'relative',
-              width: '440px', height: '75vh',
+              width: 'min(560px, 50vw, 60vh)', maxHeight: '80vh', aspectRatio: '3 / 4',
               borderRadius: '24px', overflow: 'hidden',
               background: '#000',
             } : {
@@ -975,7 +1025,7 @@ export default function HomePage() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={template.image} alt="" loading="lazy"
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.3) 35%, transparent 65%)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 30%, transparent 55%)', pointerEvents: 'none' }} />
 
                 {/* Desktop: title + upload slots inside card */}
                 {isDesktop && (
@@ -990,8 +1040,11 @@ export default function HomePage() {
                             <div key={i}
                               onClick={() => { if (!attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
                               style={{
-                                width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-                                border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)',
+                                width: 64, height: 64, borderRadius: 16, flexShrink: 0,
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                background: 'rgba(10,10,10,0.75)',
+                                backdropFilter: 'blur(10px)',
+                                WebkitBackdropFilter: 'blur(10px)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 cursor: 'pointer', position: 'relative', overflow: 'hidden',
                               }}>
@@ -1003,7 +1056,7 @@ export default function HomePage() {
                                     style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>✕</div>
                                 </>
                               ) : (
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                               )}
                             </div>
                           ))}
