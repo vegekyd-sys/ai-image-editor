@@ -163,6 +163,7 @@ export default function HomePage() {
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
+  const [inputBoxHeight, setInputBoxHeight] = useState(0)
   const [inputText, setInputText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
@@ -191,7 +192,9 @@ export default function HomePage() {
     const el = inputBoxRef.current
     if (!el) return
     const ro = new ResizeObserver(([entry]) => {
-      setPhotoSlotWidth(Math.round(entry.contentRect.height))
+      const h = Math.round(entry.contentRect.height)
+      setPhotoSlotWidth(h)
+      setInputBoxHeight(h)
     })
     ro.observe(el)
     return () => ro.disconnect()
@@ -219,14 +222,22 @@ export default function HomePage() {
   const resizeTextarea = useCallback(() => {
     const el = textareaRef.current
     if (!el) return
+    const prev = el.offsetHeight
+    el.style.transition = 'none'
     el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
+    const next = el.scrollHeight
+    if (prev !== next) {
+      el.style.height = `${prev}px`
+      el.offsetHeight // force reflow
+      el.style.transition = 'height 0.15s ease'
+      el.style.height = `${next}px`
+    } else {
+      el.style.height = `${next}px`
+    }
   }, [])
   useEffect(() => {
-    if (userTypingRef.current || !inputText) {
-      resizeTextarea()
-      userTypingRef.current = false
-    }
+    resizeTextarea()
+    userTypingRef.current = false
   }, [inputText, resizeTextarea])
   useEffect(() => {
     if (selectedDetail) {
@@ -847,7 +858,11 @@ export default function HomePage() {
             opacity: heroExpanded ? 1 : 0,
             pointerEvents: heroExpanded ? 'auto' : 'none',
             transition: 'opacity 0.3s ease 0.1s',
-            ...(isDesktop ? { display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}),
+            ...(isDesktop ? {
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              paddingBottom: inputBoxHeight + 56,
+              transition: 'padding-bottom 0.15s ease',
+            } : {}),
           }}
         >
           {/* Desktop: centered card container / Mobile: full screen */}
@@ -909,47 +924,41 @@ export default function HomePage() {
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.3) 35%, transparent 65%)', pointerEvents: 'none' }} />
 
                 {/* Bottom content — above input box */}
-                <div style={{ position: 'absolute', bottom: isDesktop ? '24px' : '160px', left: 0, right: 0, zIndex: 1 }}>
-                  {template.skill ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px' }}>
-                      {(() => {
-                        const isActive = template.id === selectedDetail?.id
-                        const count = template.imageCount ?? 2
-                        return Array.from({ length: count }, (_, i) => (
-                          <div key={i}
-                            onClick={() => { if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
-                            style={{
-                              width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-                              border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                            }}>
-                            {isActive && attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
-                              <>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={attachedPreviews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                                <div onClick={(e) => { e.stopPropagation(); setAttachedFiles(prev => prev.filter((_, j) => j !== i)); setAttachedPreviews(prev => prev.filter((_, j) => j !== i)) }}
-                                  style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>✕</div>
-                              </>
-                            ) : (
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                            )}
-                          </div>
-                        ))
-                      })()}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {locale === 'zh' ? template.label : template.labelEn}
+                <div style={{ position: 'absolute', bottom: isDesktop ? 24 : (inputBoxHeight + 28), left: 0, right: 0, zIndex: 1, transition: 'bottom 0.15s ease' }}>
+                  <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
+                      {locale === 'zh' ? template.label : template.labelEn}
+                    </div>
+                    {(() => {
+                      const isActive = template.id === selectedDetail?.id
+                      const count = template.imageCount ?? 1
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {Array.from({ length: count }, (_, i) => (
+                            <div key={i}
+                              onClick={() => { if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
+                              style={{
+                                width: 52, height: 52, borderRadius: 12, flexShrink: 0,
+                                border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                              }}>
+                              {isActive && attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
+                                <>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={attachedPreviews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  <div onClick={(e) => { e.stopPropagation(); setAttachedFiles(prev => prev.filter((_, j) => j !== i)); setAttachedPreviews(prev => prev.filter((_, j) => j !== i)) }}
+                                    style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>✕</div>
+                                </>
+                              ) : (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ padding: '0 16px' }}>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
-                        {locale === 'zh' ? template.label : template.labelEn}
-                      </div>
-                    </div>
-                  )}
+                      )
+                    })()}
+                  </div>
                 </div>
               </div>
             ))}
