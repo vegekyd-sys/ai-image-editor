@@ -10,6 +10,8 @@ scripts/serve*
 !public/landing/*.jpg
 !public/landing/*.jpeg
 !public/landing/*.png
+!public/skills/*.jpg
+!public/skills/*.gif
 *.heic
 *.HEIC
 progress.md
