@@ -167,6 +167,8 @@ export default function HomePage() {
   const [showChangelog, setShowChangelog] = useState(false)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [selectedDetail, setSelectedDetail] = useState<typeof SKILL_TEMPLATES[0] | null>(null)
+  const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
+  const [heroExpanded, setHeroExpanded] = useState(false)
   const detailSnapRef = useRef<HTMLDivElement>(null)
   const [kbInset, setKbInset] = useState(0)
   const scrollStartY = useRef<number | null>(null)
@@ -330,20 +332,25 @@ export default function HomePage() {
     addFiles(droppedFiles)
   }, [creating, addFiles])
 
-  const handleSkillCardClick = (template: typeof SKILL_TEMPLATES[0]) => {
+  const handleSkillCardClick = (template: typeof SKILL_TEMPLATES[0], e: React.MouseEvent) => {
     if (selectedDetail?.id === template.id) {
-      setSelectedDetail(null)
+      setHeroExpanded(false)
+      setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
       setSelectedSkill(null)
       setInputText('')
       return
     }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setHeroRect(rect)
+    setHeroExpanded(false)
     setSelectedDetail(template)
-    setSelectedSkill(template.skill || template.id)
+    setSelectedSkill(template.skill || null)
     setInputText(template.prompt)
     const idx = SKILL_TEMPLATES.findIndex(t => t.id === template.id)
-    setTimeout(() => {
+    requestAnimationFrame(() => {
+      setHeroExpanded(true)
       detailSnapRef.current?.children[idx]?.scrollIntoView({ behavior: 'instant' })
-    }, 0)
+    })
   }
 
   if (authLoading || !user) {
@@ -366,12 +373,6 @@ export default function HomePage() {
           to   { transform: translateY(0); opacity: 1; }
         }
         .mkr-row-enter { animation: mkr-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
-
-        @keyframes mkr-detail-in {
-          from { opacity: 0; transform: scale(0.85); }
-          to   { opacity: 1; transform: scale(1); }
-        }
-        .mkr-detail-enter { animation: mkr-detail-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
         .mkr-detail-snap {
           scroll-snap-type: y mandatory;
@@ -497,16 +498,14 @@ export default function HomePage() {
               <div
                 key={template.id}
                 className="mkr-skill-card mkr-row-enter"
-                onClick={() => handleSkillCardClick(template)}
+                onClick={(e) => handleSkillCardClick(template, e)}
                 style={{
                   position: 'relative',
                   aspectRatio: '3 / 4',
                   borderRadius: '16px',
                   overflow: 'hidden',
                   background: '#120d1a',
-                  border: selectedSkill === template.id
-                    ? '2px solid rgba(217,70,239,0.6)'
-                    : '1px solid rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.06)',
                   animationDelay: `${i * 0.06}s`,
                 }}
               >
@@ -544,19 +543,6 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Selected indicator */}
-                {selectedSkill === template.id && (
-                  <div style={{
-                    position: 'absolute', top: 10, right: 10,
-                    width: 24, height: 24, borderRadius: '50%',
-                    background: 'rgba(217,70,239,0.85)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -595,25 +581,23 @@ export default function HomePage() {
                 WebkitBackdropFilter: 'blur(10px)',
               }}
             >
-              {/* Left: photo slot — dynamic: hidden when no files, expands when files attached */}
+              {/* Left: + button / photo slot */}
               <div
-                onClick={() => { if (!creating && attachedFiles.length === 0) fileInputRef.current?.click() }}
+                onClick={() => { if (!creating) fileInputRef.current?.click() }}
                 style={{
-                  width: attachedFiles.length > 0 ? photoSlotWidth : 0,
+                  width: attachedFiles.length > 0 ? photoSlotWidth : 44,
                   flexShrink: 0, alignSelf: 'stretch',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: creating ? 'default' : 'pointer',
-                  borderRight: attachedFiles.length > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                  borderRight: (attachedFiles.length > 0 || !selectedDetail) ? '1px solid rgba(255,255,255,0.08)' : 'none',
                   position: 'relative',
-                  background: attachedFiles.length > 0 ? 'transparent' : 'rgba(217,70,239,0.04)',
                   overflow: 'hidden',
                   transition: 'width 0.2s ease',
                 }}
               >
                 {attachedFiles.length === 0 ? (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                    <circle cx="12" cy="13" r="4" />
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                 ) : attachedFiles.length === 1 ? (
                   <>
@@ -761,6 +745,26 @@ export default function HomePage() {
                       </div>
                     ))}
                   </div>
+                  {/* Skill pill — shows when a template is selected */}
+                  {selectedSkill && (
+                    <button
+                      onClick={() => { setSelectedSkill(null); setSelectedDetail(null); setHeroExpanded(false); setTimeout(() => setHeroRect(null), 350); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]) }}
+                      style={{
+                        flexShrink: 0, padding: '4px 10px', borderRadius: 12, border: 'none',
+                        background: 'rgba(217,70,239,0.15)', color: '#f0abfc',
+                        fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                        fontFamily: 'var(--font-geist-sans), sans-serif',
+                        whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
+                      }}
+                    >
+                      {locale === 'zh'
+                        ? SKILL_TEMPLATES.find(s => s.id === selectedSkill || s.skill === selectedSkill)?.label
+                        : SKILL_TEMPLATES.find(s => s.id === selectedSkill || s.skill === selectedSkill)?.labelEn
+                      }
+                      <span style={{ opacity: 0.6, fontSize: '0.65rem' }}>✕</span>
+                    </button>
+                  )}
                   <button
                     className="mkr-create-btn"
                     onClick={() => { if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
@@ -781,14 +785,34 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* ── Hero fly image (card → fullscreen) ── */}
+      {heroRect && selectedDetail && (
+        <div style={{
+          position: 'fixed', zIndex: 61, pointerEvents: 'none',
+          top: heroExpanded ? 0 : heroRect.top,
+          left: heroExpanded ? 0 : heroRect.left,
+          width: heroExpanded ? '100vw' : heroRect.width,
+          height: heroExpanded ? '100vh' : heroRect.height,
+          borderRadius: heroExpanded ? 0 : 16,
+          overflow: 'hidden',
+          transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
+          opacity: heroExpanded ? 0 : 1,
+        }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={selectedDetail.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+      )}
+
       {/* ── Skill Detail Overlay ── */}
       {selectedDetail && (
         <div
-          className="mkr-detail-enter"
-          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setSelectedDetail(null); setSelectedSkill(null); setInputText('') } }}
+          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText('') } }}
           style={{
             position: 'fixed', inset: 0, zIndex: 60,
             background: isDesktop ? 'rgba(0,0,0,0.7)' : '#000',
+            opacity: heroExpanded ? 1 : 0,
+            pointerEvents: heroExpanded ? 'auto' : 'none',
+            transition: 'opacity 0.3s ease 0.1s',
             ...(isDesktop ? { display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}),
           }}
         >
