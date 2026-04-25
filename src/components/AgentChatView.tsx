@@ -451,9 +451,16 @@ export default function AgentChatView({
   const [processingImageCount, setProcessingImageCount] = useState(0);
   // Capture skipSlideIn at mount time — ignore prop changes after mount
   const [mountedWithSkip] = useState(skipSlideIn);
-  // Lazy message rendering: only show last N messages initially to reduce forced reflow
+  // Lazy message rendering: only show last N messages on first open to reduce forced reflow.
+  // Once new messages arrive (active chat), show all to prevent older messages from disappearing.
   const INITIAL_MSG_COUNT = 12;
   const [showAllMessages, setShowAllMessages] = useState(false);
+  const initialMsgCountRef = useRef(messages.length);
+  useEffect(() => {
+    if (!showAllMessages && messages.length > INITIAL_MSG_COUNT && messages.length > initialMsgCountRef.current) {
+      setShowAllMessages(true);
+    }
+  }, [messages.length, showAllMessages]);
   const visibleMessages = showAllMessages || messages.length <= INITIAL_MSG_COUNT
     ? messages
     : messages.slice(-INITIAL_MSG_COUNT);
