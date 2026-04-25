@@ -1548,7 +1548,7 @@ export default function Editor({
     // When viewing a draft/preview (tip not yet committed), warn agent to edit the current image directly
     const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
     const draftWarning = isDraftMode
-      ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). The image passed to you is this draft preview — edit it directly. Do NOT use image_index to switch to another snapshot.\n\n`
+      ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the image index. Omit image_index to edit this draft directly.\n\n`
       : '';
 
     // Inject current design editable state so Agent sees GUI changes
