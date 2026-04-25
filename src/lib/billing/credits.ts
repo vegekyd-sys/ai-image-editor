@@ -99,6 +99,51 @@ export async function requireCredits(
 }
 
 /**
+ * Atomic deduct + log via single RPC (one transaction — no lost logs, no double-charge).
+ */
+async function deductAndLog(
+  userId: string, credits: number,
+  toolName: string, model?: string | null,
+  inputTokens?: number | null, outputTokens?: number | null,
+  durationMs?: number | null, source?: string, apiKeyId?: string | null,
+): Promise<number> {
+  const admin = getSupabaseAdmin()
+  const { data, error } = await admin.rpc('deduct_and_log', {
+    p_user_id: userId,
+    p_amount: credits,
+    p_tool_name: toolName,
+    p_model_used: model || null,
+    p_input_tokens: inputTokens || null,
+    p_output_tokens: outputTokens || null,
+    p_duration_ms: durationMs || null,
+    p_source: source || 'app',
+    p_api_key_id: apiKeyId || null,
+  })
+  if (!error) return data ?? 0
+
+  // Fallback if RPC not yet deployed: separate deduct + log (temporary)
+  console.warn('[billing] deduct_and_log RPC not available, using fallback:', error.message)
+  const { data: bal } = await admin
+    .from('credit_balances')
+    .select('balance, lifetime_used')
+    .eq('user_id', userId)
+    .single()
+  if (!bal) return 0
+  const remaining = Math.max(0, bal.balance - credits)
+  await admin
+    .from('credit_balances')
+    .update({ balance: remaining, lifetime_used: (bal.lifetime_used || 0) + credits, updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+  await admin.from('usage_logs').insert({
+    user_id: userId, api_key_id: apiKeyId || null, tool_name: toolName,
+    model_used: model || null, credits_charged: credits,
+    input_tokens: inputTokens || null, output_tokens: outputTokens || null,
+    duration_ms: durationMs || null, source: source || 'app',
+  })
+  return remaining
+}
+
+/**
  * Deduct credits after a successful tool call (per-action pricing from credit_pricing table).
  */
 export async function deductCredits(
@@ -113,22 +158,8 @@ export async function deductCredits(
   const price = await getToolPrice(toolName)
   if (!price || price.isFree) return { charged: 0, remaining: 0 }
 
-  const credits = price.credits
-  const remaining = await atomicDeduct(userId, credits)
-
-  // Log usage
-  const admin = getSupabaseAdmin()
-  await admin.from('usage_logs').insert({
-    user_id: userId,
-    api_key_id: apiKeyId || null,
-    tool_name: toolName,
-    model_used: model,
-    credits_charged: credits,
-    duration_ms: durationMs,
-    source: apiKeyId ? 'mcp' : 'app',
-  })
-
-  return { charged: credits, remaining }
+  const remaining = await deductAndLog(userId, price.credits, toolName, model, null, null, durationMs, apiKeyId ? 'mcp' : 'app', apiKeyId)
+  return { charged: price.credits, remaining }
 }
 
 /**
@@ -148,7 +179,6 @@ export async function deductByTokens(
   let rate = await getTokenRate(modelId)
   let usedFallback = false
   if (!rate) {
-    // Fallback: charge at Opus-level rates rather than giving free usage
     console.warn(`[billing] WARNING: No token rate for "${modelId}". Using fallback $5/$25. Add it via Admin → Billing → Token Rates.`)
     rate = { model_id: `unknown:${modelId}`, display_name: 'Fallback', input_per_1m: 5, output_per_1m: 25, markup: 2, is_active: true }
     usedFallback = true
@@ -157,59 +187,8 @@ export async function deductByTokens(
   const credits = tokensToCredits(rate, inputTokens, outputTokens)
   if (credits <= 0) return { charged: 0, remaining: 0 }
 
-  const remaining = await atomicDeduct(userId, credits)
-
-  // Log usage with token details
-  const admin = getSupabaseAdmin()
-  await admin.from('usage_logs').insert({
-    user_id: userId,
-    api_key_id: apiKeyId || null,
-    tool_name: toolName,
-    model_used: usedFallback ? `unknown:${modelId}` : modelId,
-    credits_charged: credits,
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    duration_ms: durationMs,
-    source: apiKeyId ? 'mcp' : 'app',
-  })
-
+  const remaining = await deductAndLog(userId, credits, toolName, usedFallback ? `unknown:${modelId}` : modelId, inputTokens, outputTokens, durationMs, apiKeyId ? 'mcp' : 'app', apiKeyId)
   return { charged: credits, remaining }
-}
-
-/**
- * Atomic credit deduction via RPC with manual fallback.
- * Returns remaining balance.
- */
-async function atomicDeduct(userId: string, credits: number): Promise<number> {
-  const admin = getSupabaseAdmin()
-
-  // Try atomic RPC first
-  const { data, error } = await admin.rpc('deduct_credits', {
-    p_user_id: userId,
-    p_amount: credits,
-  })
-
-  if (!error) return data ?? 0
-
-  // Fallback: manual update
-  const { data: bal } = await admin
-    .from('credit_balances')
-    .select('balance, lifetime_used')
-    .eq('user_id', userId)
-    .single()
-  if (!bal) return 0
-
-  const remaining = Math.max(0, bal.balance - credits)
-  await admin
-    .from('credit_balances')
-    .update({
-      balance: remaining,
-      lifetime_used: (bal.lifetime_used || 0) + credits,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('user_id', userId)
-
-  return remaining
 }
 
 /**
@@ -226,19 +205,7 @@ export async function deductFixedCredits(
   if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   if (credits <= 0) return { charged: 0, remaining: 0 }
 
-  const remaining = await atomicDeduct(userId, credits)
-
-  const admin = getSupabaseAdmin()
-  await admin.from('usage_logs').insert({
-    user_id: userId,
-    api_key_id: apiKeyId || null,
-    tool_name: toolName,
-    model_used: model,
-    credits_charged: credits,
-    duration_ms: durationMs,
-    source: apiKeyId ? 'mcp' : 'app',
-  })
-
+  const remaining = await deductAndLog(userId, credits, toolName, model, null, null, durationMs, apiKeyId ? 'mcp' : 'app', apiKeyId)
   return { charged: credits, remaining }
 }
 
