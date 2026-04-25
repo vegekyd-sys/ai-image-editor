@@ -2,9 +2,10 @@ Edit the current photo OR generate a new image from text using a detailed Englis
 When no photo exists (text-to-image mode), write the editPrompt as a detailed image generation prompt describing the scene, style, lighting, and composition.
 
 --- IMAGE INDEX (MULTI-SNAPSHOT) ---
-Use `image_index` (1-based) to edit a specific snapshot instead of the current one.
+Use `image_index` (1-based) to select which snapshot to edit.
 The `[图片索引]` in the prompt lists all snapshots with their edit history and content descriptions.
-When omitted, edits the current snapshot (marked with ← YOU ARE HERE).
+When omitted, no photo is sent — the model generates purely from text (text-to-image mode).
+When editing a photo, you MUST pass image_index. The user's current photo is marked with ← YOU ARE HERE in the image index.
 After generation, the result is appended as <<<image_N+1>>> and immediately available.
 
 CRITICAL: Use `reference_image_indices` whenever your editPrompt mentions multiple images (Image 1, Image 2, etc.).
