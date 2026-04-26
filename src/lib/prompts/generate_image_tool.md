@@ -61,10 +61,47 @@ When the input image has visible red annotations, the editPrompt MUST reference 
 
 --- MODEL SELECTION ---
 `model` is optional — omit it for normal edits (auto-router handles).
-Set `model: 'openai'` when the edit requires accurate text rendering (posters, titles, captions baked into the image) or when the user complains about face identity drift after a Gemini edit.
-OpenAI takes ~2-3 minutes — always warn the user about the wait time before calling.
+Set `model: 'openai'` when the edit requires accurate text rendering, face identity preservation, or design/layout tasks.
+OpenAI takes ~60s per generation — tell the user it will take about a minute.
 
---- WRITING THE EDITPROMPT ---
+--- CONTEXT MODE ---
+For tasks that require the model to design layout, typography, or information architecture,
+switch editPrompt to Context Mode. Set model='openai'.
+
+These tasks include:
+- E-commerce product pages / detail pages (电商详情页)
+- Infographics, data visualizations
+- Posters, marketing graphics, social media images
+- Anime / illustration / comic panels
+- Game UI, App UI mockups
+- Any output that needs significant text + layout design
+
+Edit Mode (default): detailed English execution instructions — you tell the model HOW.
+Context Mode: structured brief — the model decides HOW, you convey WHAT and WHY.
+
+Context brief = conversation context + user intent. NOT image description. Include:
+- User preferences across turns ("第三张好、第二张不好")
+- Cross-image references ("第二张的花 + 第三张的草")
+- User's clear intent this round
+- Don't miss any information the user has given
+
+Format — only include sections with real content from conversation:
+[Intent] What to create
+[Context] Preferences, feedback, requirements not visible in the image
+[References] Cross-image elements (if multi-image scenario)
+
+Don't repeat what the model can see in the image. Don't write execution details.
+
+Example:
+  model: 'openai'
+  editPrompt: "[Intent] 给这个键盘做一个详尽的中文电商详情页"
+
+Example (multi-turn):
+  model: 'openai'
+  editPrompt: "[Intent] 重做电商详情页
+  [Context] 上一版用户觉得文字太小、配色太素，想要更鲜艳醒目的风格"
+
+--- WRITING THE EDITPROMPT (Edit Mode) ---
 
 FACE (when people are present — always include):
   Large face (>10% of frame): "Preserve each person's face exactly as in the current photo. Do NOT change face shape, eyes, skin, or any facial features."
