@@ -689,19 +689,51 @@ export default function HomePage() {
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round">
                     <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
-                ) : (
+                ) : attachedFiles.length === 1 ? (
                   <>
                     {attachedPreviews[0] && attachedPreviews[0] !== 'heic-pending' ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={attachedPreviews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
+                    ) : attachedPreviews[0] === null ? (
                       <Spinner size={16} />
+                    ) : (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.7)" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14,2 14,8 20,8" /></svg>
                     )}
-                    {attachedFiles.length > 1 && (
-                      <div style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(217,70,239,0.85)', color: '#fff', borderRadius: 6, padding: '0 5px', fontSize: '0.55rem', fontWeight: 700 }}>
-                        {attachedFiles.length}
-                      </div>
-                    )}
+                    <div style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 2 }}
+                      onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]) }}>✕</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ position: 'absolute', inset: 6, pointerEvents: 'none' }}>
+                      {(() => {
+                        const cardStyle = (rotate: number, zIndex: number): React.CSSProperties => ({
+                          position: 'absolute', inset: 0, borderRadius: 6, overflow: 'hidden',
+                          transform: `rotate(${rotate}deg)`,
+                          border: '1.5px solid rgba(255,255,255,0.12)',
+                          background: '#1a1a1a', zIndex, boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                        })
+                        const n = attachedFiles.length
+                        const layers: { preview: string | null; rotate: number; z: number }[] = []
+                        if (n >= 3) layers.push({ preview: attachedPreviews[0], rotate: -6, z: 1 })
+                        if (n >= 2) layers.push({ preview: attachedPreviews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2 })
+                        layers.push({ preview: attachedPreviews[n - 1], rotate: 0, z: 3 })
+                        return layers.map((layer, li) => (
+                          <div key={li} style={cardStyle(layer.rotate, layer.z)}>
+                            {layer.preview && layer.preview !== 'heic-pending' ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : layer.preview === null ? (
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
+                            ) : null}
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                    <div style={{ position: 'absolute', bottom: 4, right: 4, zIndex: 4, background: 'rgba(217,70,239,0.85)', color: '#fff', borderRadius: 8, padding: '1px 6px', fontSize: '0.6rem', fontWeight: 700, boxShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
+                      {attachedFiles.length}
+                    </div>
+                    <div style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 5 }}
+                      onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]) }}>✕</div>
                   </>
                 )}
               </div>
@@ -732,7 +764,43 @@ export default function HomePage() {
                     ...(selectedDetail ? { textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : {}),
                   }}
                 />
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '4px 8px 8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
+                  <div className="hide-scrollbar" onWheel={(e) => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault() } }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 4 }}>
+                    {isDesktop && attachedFiles.length >= 2 && attachedPreviews.map((preview, i) => (
+                      <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+                        {preview && preview !== 'heic-pending' ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={preview} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', display: 'block', border: '1px solid rgba(255,255,255,0.12)' }} />
+                        ) : (
+                          <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={10} /></div>
+                        )}
+                        <div onClick={(e) => { e.stopPropagation(); removeFile(i) }}
+                          style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                          <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedSkill && (
+                    <button
+                      onClick={() => { setSelectedSkill(null); setSelectedDetail(null); setHeroExpanded(false); setTimeout(() => setHeroRect(null), 350); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]) }}
+                      style={{
+                        flexShrink: 0, padding: '4px 10px', borderRadius: 12, border: 'none',
+                        background: 'rgba(217,70,239,0.15)', color: '#f0abfc',
+                        fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                        fontFamily: 'inherit',
+                        whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
+                      }}
+                    >
+                      {locale === 'zh'
+                        ? SKILL_TEMPLATES.find(s => s.id === selectedSkill || s.skill === selectedSkill)?.label
+                        : SKILL_TEMPLATES.find(s => s.id === selectedSkill || s.skill === selectedSkill)?.labelEn
+                      }
+                      <span style={{ opacity: 0.6, fontSize: '0.65rem' }}>✕</span>
+                    </button>
+                  )}
                   <button
                     className="mkr-create-btn"
                     onClick={() => { if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
