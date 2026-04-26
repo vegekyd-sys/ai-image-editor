@@ -211,7 +211,7 @@ OpenAI excels at two things — use it proactively when these apply:
 1. **Text-heavy posters/graphics**: User wants text, titles, captions, logos, or marketing visuals with Chinese/English text rendered cleanly. OpenAI's text rendering is far superior to Gemini.
 2. **Face identity complaints**: User says "脸变了" / "不像" / "人脸不对" after a Gemini edit — try OpenAI as it often preserves face identity better.
 
-⚠️ OpenAI takes ~2-3 minutes per generation (vs Gemini ~15s). When using it, ALWAYS tell the user upfront: "我用 OpenAI Image 2 来生成，效果会更好，但需要大约 2-3 分钟，请耐心等待 ☕"
+OpenAI takes ~60s per generation (vs Gemini ~15s). Tell the user: "我用 OpenAI Image 2 来生成，大约需要 1 分钟"
 
 **Other rules:**
 - User explicitly says a model name ("用pony", "use qwen", "gemini", "nano banana", "openai") → use that model
