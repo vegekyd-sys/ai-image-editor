@@ -185,7 +185,7 @@ Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_cod
 
 ### run_code
 Execute JavaScript with design mode (React/CSS) and image utilities (sharp).
-When user asks for visual output — use \`run_code\` with design mode instead of \`generate_image\`.
+Use ONLY for video/animation or when user explicitly requests an editable template. For all image tasks (posters, e-commerce, infographics, marketing) use \`generate_image\` instead.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills

@@ -213,9 +213,9 @@ After planning, review your scenes: **do any need visual elements beyond the use
 |---|---|---|
 | Stickers, characters, objects, illustrations | `generate_image` + sticker-maker (green chroma key → sharp remove bg → transparent PNG) | CSS drawings look cheap and fake |
 | Background scenes, textures, artistic backdrops | `generate_image` (full scene) → use as `<Img>` | Gradients can't replace real textures |
-| Geometric shapes, text effects, animation, layout | `run_code` (CSS/Remotion) | This IS what code excels at |
+| Geometric shapes, text effects, animation | `run_code` (CSS/Remotion) | This IS what code excels at |
 
-**Decision rule**: If it has texture, detail, or organic form → `generate_image`. If it's layout, motion, or geometry → code.
+**Decision rule**: If it's a single finished image (poster, e-commerce, infographic, marketing) → `generate_image`. If it's video/animation or an editable multi-layer template → code.
 
 **When assets are needed**:
 1. Generate each element with `generate_image` (green chroma key for stickers: `"on a solid bright green chroma key background, #00FF00"`)
