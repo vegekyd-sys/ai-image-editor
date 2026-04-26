@@ -825,8 +825,13 @@ export default function AgentChatView({
         const remaining = 10 - attachedImages.length;
         const toProcess = files.slice(0, remaining);
         setProcessingImageCount(toProcess.length);
-        const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
-        setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+        try {
+          const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
+          const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
+          if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+        } catch (err) {
+          console.error('[CUI] image compress error:', err);
+        }
         setProcessingImageCount(0);
       }}
     >
@@ -1223,8 +1228,13 @@ export default function AgentChatView({
           const remaining = 10 - attachedImages.length;
           const toProcess = files.slice(0, remaining);
           setProcessingImageCount(toProcess.length);
-          const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
-          setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+          try {
+            const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
+            const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
+            if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+          } catch (err) {
+            console.error('[CUI] image compress error:', err);
+          }
           setProcessingImageCount(0);
         }}
       />
