@@ -212,6 +212,8 @@ export default function HomePage() {
   const scrollStartY = useRef<number | null>(null)
   const inlineInputRef = useRef<HTMLDivElement>(null)
   const inlineTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const inlineBoxRef = useRef<HTMLDivElement>(null)
+  const [inlineBoxHeight, setInlineBoxHeight] = useState(0)
   const [showFixedInput, setShowFixedInput] = useState(false)
 
   useEffect(() => {
@@ -231,7 +233,7 @@ export default function HomePage() {
     if (!el) return
     const ro = new ResizeObserver(([entry]) => {
       const h = Math.round(entry.contentRect.height)
-      setPhotoSlotWidth(h)
+      setPhotoSlotWidth(prev => prev === 80 ? h : prev)
       setInputBoxHeight(h)
     })
     ro.observe(el)
@@ -281,6 +283,17 @@ export default function HomePage() {
     }, { threshold: 0.1 })
     io.observe(el)
     return () => io.disconnect()
+  }, [user])
+
+  useEffect(() => {
+    const el = inlineBoxRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      const h = Math.round(entry.contentRect.height)
+      setInlineBoxHeight(prev => prev === 0 ? h : prev)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [user])
 
   const userTypingRef = useRef(false)
@@ -646,6 +659,7 @@ export default function HomePage() {
             marginTop: '24px', width: '100%', maxWidth: '480px', padding: '0 16px',
           }}>
             <div
+              ref={inlineBoxRef}
               className="mkr-input-box"
               onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
@@ -663,7 +677,8 @@ export default function HomePage() {
               <div
                 onClick={() => { if (!creating) fileInputRef.current?.click() }}
                 style={{
-                  width: 52, minHeight: 52, flexShrink: 0,
+                  width: inlineBoxHeight > 0 ? inlineBoxHeight : 52,
+                  flexShrink: 0, alignSelf: 'stretch',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: creating ? 'default' : 'pointer',
                   borderRight: '1px solid rgba(255,255,255,0.08)',
@@ -868,9 +883,8 @@ export default function HomePage() {
               <div
                 onClick={() => { if (!creating && !selectedDetail) fileInputRef.current?.click() }}
                 style={{
-                  width: selectedDetail ? 0 : 52,
-                  minHeight: 52,
-                  flexShrink: 0,
+                  width: selectedDetail ? 0 : photoSlotWidth,
+                  flexShrink: 0, alignSelf: 'stretch',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: creating || selectedDetail ? 'default' : 'pointer',
                   borderRight: selectedDetail ? 'none' : '1px solid rgba(255,255,255,0.08)',
