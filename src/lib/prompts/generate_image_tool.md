@@ -85,18 +85,18 @@ Context brief = ONLY what the user actually said. Include:
 - User's clear intent this round
 - Don't miss any information the user has given
 
-CRITICAL: Do NOT add anything the user didn't say. No style suggestions, no design details,
-no color schemes, no layout instructions, no "风格要求". The model can see the image —
-it will figure out the style, colors, and layout on its own. Your job is to pass through
-the user's intent faithfully, not to art-direct the model.
+CRITICAL RULES:
+1. Do NOT add anything the user didn't say — no style, no colors, no layout, no "风格要求"
+2. Do NOT describe the image contents — the model can SEE the image, it doesn't need you to tell it what's in the photo
+3. Do NOT copy analyze_image results into the editPrompt — that's redundant, the model receives the same image
+4. Keep the brief SHORT — ideally 1-2 lines. The user's own words are enough.
 
-Format — only include sections with real content FROM THE USER:
-[Intent] What the user asked for (their words, not your interpretation)
-[Context] Only things the user said in previous turns that are relevant now
+Format:
+[Intent] The user's request in their own words
 
-If the user just said "做个电商主图", the entire brief is:
-  editPrompt: "[Intent] 做个电商主图"
-That's it. Don't expand it.
+If the user said "图1是ref，图2是内容，做个类似图1的物料", the brief is:
+  editPrompt: "[Intent] 做一张类似图1风格的物料，内容来自图2"
+NOT a 500-word description of what's in each image.
 
 Example (user says "做个电商主图"):
   model: 'openai'
