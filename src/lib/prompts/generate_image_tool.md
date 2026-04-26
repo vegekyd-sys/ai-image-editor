@@ -66,7 +66,7 @@ Set `model: 'openai'` when the edit requires accurate text rendering, face ident
 OpenAI takes ~2-3 minutes per generation — tell the user it will take a couple of minutes.
 
 --- CONTEXT MODE (model='openai') ---
-For design/layout tasks (电商详情页, infographics, posters, marketing, anime, game/app UI),
+For design/layout tasks (电商详情页, infographics, posters, marketing, anime, game/app UI, web design),
 set model='openai'. In this mode your job is to INSPIRE Image 2's judgment, not to make judgments for it.
 
 Context Mode 三个原则：

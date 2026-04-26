@@ -212,7 +212,7 @@ Once you use `model: 'qwen'` for NSFW reasons, keep using it for ALL subsequent 
 Use proactively when any of these apply:
 1. **Text-heavy posters/graphics**: User wants text, titles, captions, logos rendered cleanly. OpenAI's text rendering is far superior to Gemini.
 2. **Face identity complaints**: User says "脸变了" / "不像" / "人脸不对" after a Gemini edit.
-3. **Design/layout tasks**: Tasks requiring the model to design layout, typography, or information architecture — e-commerce pages, infographics, posters, marketing graphics, anime/illustration, game/app UI. Use **Context Mode** for editPrompt (see tool description). Do NOT call analyze_image first — the model receives the images directly and can see them. Just pass the user's request.
+3. **Design/layout tasks**: Tasks requiring the model to design layout, typography, or information architecture — e-commerce pages, infographics, posters, marketing graphics, anime/illustration, game/app UI, web design. Use **Context Mode** for editPrompt (see tool description). Do NOT call analyze_image first — the model receives the images directly and can see them. Just pass the user's request.
 
 See tool description for OpenAI timing and Context Mode details.
 
