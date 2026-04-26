@@ -611,7 +611,7 @@ export default function HomePage() {
 
         {/* ── Hero: Logo + Tagline — matches projects page ── */}
         <div style={{
-          paddingTop: 'max(env(safe-area-inset-top, 0px), 48px)', paddingBottom: '24px',
+          paddingTop: '20vh', paddingBottom: '40px',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', gap: '0px',
           position: 'relative', zIndex: 1,
