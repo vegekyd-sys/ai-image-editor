@@ -492,13 +492,18 @@ export default function ImageCanvas({
     mouseStartPos.current = null;
   }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange, scale, selectedEditableId]);
 
-  // Desktop: trackpad pinch-to-zoom (ctrl+wheel) + horizontal swipe (deltaX) → switch snapshot
+  // Desktop: zoom (ctrl+wheel / plain wheel) + horizontal swipe (deltaX) → switch snapshot
   const wheelCooldown = useRef(false);
   const handleWheel = useCallback((e: WheelEvent) => {
-    // Pinch-to-zoom: trackpad pinch fires wheel with ctrlKey + deltaY
-    if (e.ctrlKey && !isVideoEntry && !annotationMode) {
+    if (isVideoEntry || annotationMode) return;
+
+    // Zoom: trackpad pinch (ctrlKey+deltaY) or plain mouse wheel (deltaY, no deltaX)
+    const isTrackpadPinch = e.ctrlKey;
+    const isMouseWheel = !e.ctrlKey && Math.abs(e.deltaY) > 0 && Math.abs(e.deltaX) < 5;
+    if (isTrackpadPinch || isMouseWheel) {
       e.preventDefault();
-      const zoomFactor = 1 - e.deltaY * 0.01;
+      const speed = isTrackpadPinch ? 0.01 : 0.003;
+      const zoomFactor = 1 - e.deltaY * speed;
       setScale(prev => {
         const next = Math.min(5, Math.max(1, prev * zoomFactor));
         if (next <= 1.05) { setTranslate({ x: 0, y: 0 }); return 1; }
