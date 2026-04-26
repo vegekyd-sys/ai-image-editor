@@ -20,12 +20,15 @@ const OPENROUTER_MODEL = 'openai/gpt-5.4-image-2';
 
 // ── Shared helpers ───────────────────────────────────────────────
 
-function aspectRatioToSize(ar?: string): string {
+function aspectRatioToSize(ar?: string, isTxt2img = false): string {
   if (!ar) return 'auto';
   const [w, h] = ar.split(':').map(Number);
   if (!w || !h) return 'auto';
-  if (w / h > 1.2) return '1536x1024';
-  if (h / w > 1.2) return '1024x1536';
+  const ratio = w / h;
+  if (ratio > 1.5 && isTxt2img) return '1792x1024';
+  if (ratio > 1.2) return '1536x1024';
+  if (1 / ratio > 1.5 && isTxt2img) return '1024x1792';
+  if (1 / ratio > 1.2) return '1024x1536';
   return '1024x1024';
 }
 
@@ -58,8 +61,8 @@ async function generatePiAPI(
   }
 
   const headers = { 'Authorization': `Bearer ${apiKey}` };
-  const size = aspectRatioToSize(aspectRatio);
   const hasImage = !!(image || references?.length);
+  const size = aspectRatioToSize(aspectRatio, !hasImage);
   const t0 = Date.now();
 
   let res: Response;
