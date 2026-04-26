@@ -63,7 +63,7 @@ When the input image has visible red annotations, the editPrompt MUST reference 
 --- MODEL SELECTION ---
 `model` is optional — omit it for normal edits (auto-router handles).
 Set `model: 'openai'` when the edit requires accurate text rendering, face identity preservation, or design/layout tasks.
-OpenAI takes ~60s per generation — tell the user it will take about a minute.
+OpenAI takes ~2-3 minutes per generation — tell the user it will take a couple of minutes.
 
 --- CONTEXT MODE (model='openai') ---
 For design/layout tasks (电商详情页, infographics, posters, marketing, anime, game/app UI),

@@ -214,7 +214,7 @@ Use proactively when any of these apply:
 2. **Face identity complaints**: User says "脸变了" / "不像" / "人脸不对" after a Gemini edit.
 3. **Design/layout tasks**: Tasks requiring the model to design layout, typography, or information architecture — e-commerce pages, infographics, posters, marketing graphics, anime/illustration, game/app UI. Use **Context Mode** for editPrompt (see tool description). Do NOT call analyze_image first — the model receives the images directly and can see them. Just pass the user's request.
 
-OpenAI takes ~60s per generation (vs Gemini ~15s). Tell the user: "我用 OpenAI Image 2 来生成，大约需要 1 分钟"
+OpenAI takes ~2-3 minutes per generation (vs Gemini ~15s). Tell the user: "我用 OpenAI Image 2 来生成，大约需要 2-3 分钟"
 
 **Other rules:**
 - User explicitly says a model name ("用pony", "use qwen", "gemini", "nano banana", "openai") → use that model
