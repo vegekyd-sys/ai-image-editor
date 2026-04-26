@@ -228,10 +228,11 @@ function createTools(ctx: AgentContext) {
         model: z.enum(['gemini', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
+        transparentBackground: z.boolean().optional().describe('Set true to generate a PNG with transparent background (stickers, cutouts, design assets). Only works with model=openai. Gemini does not support transparency.'),
         image_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<image_1>>> = 1, <<<image_2>>> = 2, ...). Omit for text-to-image (no photo sent). For most edits, pass the current snapshot index.'),
         reference_image_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<image_1>>> and <<<image_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from image_1 and the background from image_2". The editPrompt should describe how to combine them (e.g. "Place the person from Image 2 into the scene of Image 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, image_index, reference_image_indices }) => {
+      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, transparentBackground, image_index, reference_image_indices }) => {
         // Resolve which image to edit — agent must pass image_index to include a photo
         let editTarget: string | undefined;
         if (image_index !== undefined) {
@@ -256,7 +257,7 @@ function createTools(ctx: AgentContext) {
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
-          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, transparentBackground, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           { currentImage: editTarget, originalImage: editTarget ? ctx.originalImage : undefined, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
         // Bill for image generation (separate from Agent LLM tokens)

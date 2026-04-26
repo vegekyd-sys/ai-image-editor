@@ -53,6 +53,7 @@ async function generatePiAPI(
   prompt: string,
   references?: { url: string; role: string }[],
   aspectRatio?: string,
+  transparentBg?: boolean,
 ): Promise<{ image: string | null; usage?: TokenUsage }> {
   const apiKey = process.env.PIAPI_API_KEY;
   if (!apiKey) {
@@ -74,6 +75,10 @@ async function generatePiAPI(
     form.append('prompt', prompt);
     form.append('quality', 'low');
     form.append('size', size);
+    if (transparentBg) {
+      form.append('background', 'transparent');
+      form.append('output_format', 'png');
+    }
 
     if (references?.length) {
       for (const ref of references) {
@@ -90,7 +95,8 @@ async function generatePiAPI(
     res = await fetch(`${PIAPI_BASE}/images/edits`, { method: 'POST', headers, body: form });
   } else {
     // txt2img: /v1/images/generations (JSON)
-    const body = { model: PIAPI_MODEL, prompt, quality: 'low', size, moderation: 'low' };
+    const body: Record<string, unknown> = { model: PIAPI_MODEL, prompt, quality: 'low', size, moderation: 'low' };
+    if (transparentBg) { body.background = 'transparent'; body.output_format = 'png'; }
     console.log(`[openai/piapi] generations size=${size}`);
     res = await fetch(`${PIAPI_BASE}/images/generations`, {
       method: 'POST',
@@ -136,6 +142,9 @@ async function generatePiAPI(
     return { image: null };
   }
 
+  if (transparentBg) {
+    return { image: resultDataUrl };
+  }
   const jpeg = await ensureJpeg(resultDataUrl);
   return { image: jpeg };
 }
@@ -269,7 +278,7 @@ export const openaiBackend: ModelBackend = {
       : undefined;
 
     if (PROVIDER === 'piapi') {
-      return generatePiAPI(refs ? undefined : req.image, req.prompt, refs, req.aspectRatio);
+      return generatePiAPI(refs ? undefined : req.image, req.prompt, refs, req.aspectRatio, req.transparentBackground);
     }
     return generateOpenRouter(refs ? undefined : req.image, req.prompt, refs);
   },
