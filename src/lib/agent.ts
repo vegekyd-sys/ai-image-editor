@@ -1414,9 +1414,9 @@ export async function* runMakaronAgent(
 
     console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
 
-    // Emit token usage for billing
+    // Emit token usage for billing — totalUsage aggregates across all steps (multi-turn)
     try {
-      const usage = await result.usage;
+      const usage = await result.totalUsage;
       if (usage) {
         const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
         yield { type: 'usage', inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0, model: modelId };
