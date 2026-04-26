@@ -1,5 +1,6 @@
-Edit the current photo OR generate a new image from text using a detailed English editPrompt.
-When no photo exists (text-to-image mode), write the editPrompt as a detailed image generation prompt describing the scene, style, lighting, and composition.
+Edit the current photo OR generate a new image from text.
+editPrompt format depends on the mode — see CONTEXT MODE vs Edit Mode sections below.
+When no photo exists (text-to-image mode), write the editPrompt describing the scene.
 
 --- IMAGE INDEX (MULTI-SNAPSHOT) ---
 Use `image_index` (1-based) to select which snapshot to edit.
