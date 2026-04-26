@@ -65,52 +65,30 @@ When the input image has visible red annotations, the editPrompt MUST reference 
 Set `model: 'openai'` when the edit requires accurate text rendering, face identity preservation, or design/layout tasks.
 OpenAI takes ~60s per generation — tell the user it will take about a minute.
 
---- CONTEXT MODE ---
-For tasks that require the model to design layout, typography, or information architecture,
-switch editPrompt to Context Mode. Set model='openai'.
+--- CONTEXT MODE (model='openai') ---
+For design/layout tasks (电商详情页, infographics, posters, marketing, anime, game/app UI),
+set model='openai' and write editPrompt as a SHORT summary of what the user said.
 
-These tasks include:
-- E-commerce product pages / detail pages (电商详情页)
-- Infographics, data visualizations
-- Posters, marketing graphics, social media images
-- Anime / illustration / comic panels
-- Game UI, App UI mockups
-- Any output that needs significant text + layout design
+Rules:
+1. editPrompt = 用户原话的压缩版
+2. 只写用户说过的内容。用户没说的不加
+3. 不描述图片内容（模型自己能看到）
+4. 不加风格建议、配色方案、排版指令
+5. 不调 analyze_image（模型直接看图）
+6. 越短越好，一两句话
 
-Edit Mode (default): detailed English execution instructions — you tell the model HOW.
-Context Mode: structured brief — the model decides HOW, you convey WHAT and WHY.
+单轮示例：
+  用户: "做个电商主图"
+  editPrompt: "做个电商主图"
 
-Context brief = ONLY what the user actually said. Include:
-- User preferences across turns ("第三张好、第二张不好")
-- Cross-image references ("第二张的花 + 第三张的草")
-- User's clear intent this round
-- Don't miss any information the user has given
+多轮示例：
+  用户第一轮: "做个电商详情页"
+  用户第二轮: "太素了，配色参考图3"
+  editPrompt: "重做电商详情页，上一版太素，配色参考图3"
 
-CRITICAL RULES:
-1. Do NOT add anything the user didn't say — no style, no colors, no layout, no "风格要求"
-2. Do NOT describe the image contents — the model can SEE the image, it doesn't need you to tell it what's in the photo
-3. Do NOT copy analyze_image results into the editPrompt — that's redundant, the model receives the same image
-4. Keep the brief SHORT — ideally 1-2 lines. The user's own words are enough.
-
-Format:
-[Intent] The user's request in their own words
-
-If the user said "图1是ref，图2是内容，做个类似图1的物料", the brief is:
-  editPrompt: "[Intent] 做一张类似图1风格的物料，内容来自图2"
-NOT a 500-word description of what's in each image.
-
-Example (user says "做个电商主图"):
-  model: 'openai'
-  editPrompt: "[Intent] 做个电商主图"
-
-Example (user says "重做，上一版文字太小了，配色太素"):
-  model: 'openai'
-  editPrompt: "[Intent] 重做电商主图
-  [Context] 上一版文字太小、配色太素"
-
-Example (user says "图1是参考风格，图2是内容，做个类似图1的物料"):
-  model: 'openai'
-  editPrompt: "[Intent] 做个类似图1风格的物料，内容来自图2"
+多图示例：
+  用户: "图1是我们的宣传物料ref，图2是主要内容，做个类似图1的物料"
+  editPrompt: "做个类似图1风格的物料，内容来自图2"
 
 --- WRITING THE EDITPROMPT (Edit Mode) ---
 
