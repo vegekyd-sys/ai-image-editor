@@ -1354,11 +1354,6 @@ export default function Editor({
                   return prev;
                 });
               }
-              // Auto-name the project once
-              if (!hasTriggeredNamingRef.current && (!initialTitle || initialTitle === 'Untitled' || initialTitle === '未命名' || initialTitle === '未命名项目')) {
-                hasTriggeredNamingRef.current = true;
-                triggerProjectNaming(description);
-              }
             }
             if (!silent && !isTipsFetchingRef.current) {
               const snap = snapshotsRef.current.find(s => s.id === snapshotId);
@@ -2301,19 +2296,6 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }, 4000);
     return () => clearInterval(interval);
   }, [animations]);
-
-  // Auto-name existing projects that still have a default title (runs once on mount)
-  useEffect(() => {
-    if (hasTriggeredNamingRef.current) return;
-    if (!initialTitle || initialTitle === 'Untitled' || initialTitle === '未命名' || initialTitle === '未命名项目') {
-      // Find the first snapshot with a description (from previous analysis)
-      const desc = initialSnapshots?.find(s => s.description)?.description;
-      if (desc) {
-        hasTriggeredNamingRef.current = true;
-        triggerProjectNaming(desc);
-      }
-    }
-  }, [initialTitle, initialSnapshots, triggerProjectNaming]);
 
   // Preload adjacent snapshots (not yet in DOM) so swipe transitions are instant
   useEffect(() => {
