@@ -79,27 +79,37 @@ These tasks include:
 Edit Mode (default): detailed English execution instructions — you tell the model HOW.
 Context Mode: structured brief — the model decides HOW, you convey WHAT and WHY.
 
-Context brief = conversation context + user intent. NOT image description. Include:
+Context brief = ONLY what the user actually said. Include:
 - User preferences across turns ("第三张好、第二张不好")
 - Cross-image references ("第二张的花 + 第三张的草")
 - User's clear intent this round
 - Don't miss any information the user has given
 
-Format — only include sections with real content from conversation:
-[Intent] What to create
-[Context] Preferences, feedback, requirements not visible in the image
-[References] Cross-image elements (if multi-image scenario)
+CRITICAL: Do NOT add anything the user didn't say. No style suggestions, no design details,
+no color schemes, no layout instructions, no "风格要求". The model can see the image —
+it will figure out the style, colors, and layout on its own. Your job is to pass through
+the user's intent faithfully, not to art-direct the model.
 
-Don't repeat what the model can see in the image. Don't write execution details.
+Format — only include sections with real content FROM THE USER:
+[Intent] What the user asked for (their words, not your interpretation)
+[Context] Only things the user said in previous turns that are relevant now
 
-Example:
+If the user just said "做个电商主图", the entire brief is:
+  editPrompt: "[Intent] 做个电商主图"
+That's it. Don't expand it.
+
+Example (user says "做个电商主图"):
   model: 'openai'
-  editPrompt: "[Intent] 给这个键盘做一个详尽的中文电商详情页"
+  editPrompt: "[Intent] 做个电商主图"
 
-Example (multi-turn):
+Example (user says "重做，上一版文字太小了，配色太素"):
   model: 'openai'
-  editPrompt: "[Intent] 重做电商详情页
-  [Context] 上一版用户觉得文字太小、配色太素，想要更鲜艳醒目的风格"
+  editPrompt: "[Intent] 重做电商主图
+  [Context] 上一版文字太小、配色太素"
+
+Example (user says "图1是参考风格，图2是内容，做个类似图1的物料"):
+  model: 'openai'
+  editPrompt: "[Intent] 做个类似图1风格的物料，内容来自图2"
 
 --- WRITING THE EDITPROMPT (Edit Mode) ---
 
