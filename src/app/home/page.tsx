@@ -210,6 +210,9 @@ export default function HomePage() {
   const detailSnapRef = useRef<HTMLDivElement>(null)
   const [kbInset, setKbInset] = useState(0)
   const scrollStartY = useRef<number | null>(null)
+  const inlineInputRef = useRef<HTMLDivElement>(null)
+  const inlineTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const [showFixedInput, setShowFixedInput] = useState(false)
 
   useEffect(() => {
     const vv = window.visualViewport
@@ -270,6 +273,16 @@ export default function HomePage() {
     }
   }, [selectedDetail])
 
+  useEffect(() => {
+    const el = inlineInputRef.current
+    if (!el) return
+    const io = new IntersectionObserver(([entry]) => {
+      setShowFixedInput(!entry.isIntersecting)
+    }, { threshold: 0.1 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [user])
+
   const userTypingRef = useRef(false)
   const resizeTextarea = useCallback(() => {
     const el = textareaRef.current
@@ -287,8 +300,15 @@ export default function HomePage() {
       el.style.height = `${next}px`
     }
   }, [])
+  const resizeInlineTextarea = useCallback(() => {
+    const el = inlineTextareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [])
   useEffect(() => {
     resizeTextarea()
+    resizeInlineTextarea()
     userTypingRef.current = false
   }, [inputText, resizeTextarea])
   useEffect(() => {
@@ -591,7 +611,7 @@ export default function HomePage() {
 
         {/* ── Hero: Logo + Tagline — matches projects page ── */}
         <div style={{
-          paddingTop: '20vh', paddingBottom: '40px',
+          paddingTop: 'max(env(safe-area-inset-top, 0px), 48px)', paddingBottom: '24px',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', gap: '0px',
           position: 'relative', zIndex: 1,
@@ -619,6 +639,99 @@ export default function HomePage() {
           </div>
           <div style={{ marginTop: '4px' }}>
             <RollingTagline className="text-[1.25rem] tracking-wide" />
+          </div>
+
+          {/* ── Inline Input Box (in document flow, like projects page) ── */}
+          <div ref={inlineInputRef} style={{
+            marginTop: '24px', width: '100%', maxWidth: '480px', padding: '0 16px',
+          }}>
+            <div
+              className="mkr-input-box"
+              onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+              onDragLeave={(e) => { e.preventDefault(); dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragOver(false) } }}
+              onDrop={handleDrop}
+              style={{
+                display: 'flex', gap: 0,
+                borderRadius: 18,
+                border: dragOver ? '1px solid rgba(217,70,239,0.6)' : '1px solid rgba(255,255,255,0.1)',
+                background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(255,255,255,0.03)',
+                overflow: 'hidden',
+                transition: 'border-color 0.2s, background 0.2s',
+              }}
+            >
+              <div
+                onClick={() => { if (!creating) fileInputRef.current?.click() }}
+                style={{
+                  width: 52, minHeight: 52, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: creating ? 'default' : 'pointer',
+                  borderRight: '1px solid rgba(255,255,255,0.08)',
+                  position: 'relative', overflow: 'hidden',
+                }}
+              >
+                {attachedFiles.length === 0 ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                ) : (
+                  <>
+                    {attachedPreviews[0] && attachedPreviews[0] !== 'heic-pending' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={attachedPreviews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <Spinner size={16} />
+                    )}
+                    {attachedFiles.length > 1 && (
+                      <div style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(217,70,239,0.85)', color: '#fff', borderRadius: 6, padding: '0 5px', fontSize: '0.55rem', fontWeight: 700 }}>
+                        {attachedFiles.length}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <textarea
+                  ref={inlineTextareaRef}
+                  value={inputText}
+                  onChange={(e) => { userTypingRef.current = true; setInputText(e.target.value) }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFiles.length > 0)) {
+                      e.preventDefault()
+                      handleCreate()
+                    }
+                  }}
+                  placeholder="where magic happens"
+                  disabled={creating}
+                  rows={1}
+                  style={{
+                    border: 'none', background: 'transparent',
+                    color: 'rgba(255,255,255,0.88)', fontSize: '17px', lineHeight: 1.45,
+                    padding: '12px 14px 4px',
+                    outline: 'none', resize: 'none',
+                    fontFamily: 'inherit',
+                    caretColor: '#d946ef',
+                    minHeight: 40, maxHeight: '8rem',
+                    overflowY: 'auto', display: 'block', width: '100%',
+                  }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '4px 8px 8px' }}>
+                  <button
+                    className="mkr-create-btn"
+                    onClick={() => { if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
+                    disabled={creating}
+                    style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '17px', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
+                  >
+                    {creating ? <Spinner size={12} /> : (
+                      <>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        Create
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -694,7 +807,7 @@ export default function HomePage() {
         </div>
 
         {/* ── Bottom edge fade — fixed, below input, blends cards into system bar ── */}
-        {!isDesktop && (
+        {!isDesktop && (showFixedInput || selectedDetail) && (
           <div style={{
             position: 'fixed', left: 0, right: 0, bottom: 0,
             height: 'calc(env(safe-area-inset-bottom, 0px) + 40px)',
@@ -704,7 +817,7 @@ export default function HomePage() {
           }} />
         )}
 
-        {/* ── Bottom Input Box (fixed, always on top) ── */}
+        {/* ── Bottom Input Box (fixed, slides in when inline is off-screen) ── */}
         <div ref={inputWrapperRef} style={{
           position: 'fixed', left: 0, right: 0,
           bottom: kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
@@ -715,7 +828,8 @@ export default function HomePage() {
           } : {
             padding: '60px 12px 8px',
           }),
-          transition: kbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
+          transform: (showFixedInput || selectedDetail) ? 'translateY(0)' : 'translateY(calc(100% + 20px))',
+          transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)' + (kbInset > 0 ? ', bottom 0.1s ease-out' : ''),
         }}>
           {/* No gradient overlay — cards show through below */}
           <div style={{ maxWidth: '480px', margin: '0 auto', position: 'relative', pointerEvents: 'none' }}>
