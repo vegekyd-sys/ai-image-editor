@@ -9,7 +9,6 @@ export interface GenerateImageRequest {
   thinkingEffort?: 'minimal' | 'high';
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
   fallbackPrompt?: string;  // clean prompt without skill template — used when falling back to a model that can't digest .md templates
-  transparentBackground?: boolean; // generate PNG with alpha channel (OpenAI only)
   isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true
 }
 

@@ -8,7 +8,6 @@ export interface EditImageInput {
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   useOriginalAsReference?: boolean;
   aspectRatio?: string;
-  transparentBackground?: boolean;
   /** @deprecated Use workspace service instead. Kept for backward compat. */
   skillPrompts?: Record<string, string>;
   /** User's preferred model override — bypasses default routing */
@@ -83,7 +82,6 @@ export async function editImage(
       model: preferredModel,
       category: skill,
       aspectRatio,
-      transparentBackground: input.transparentBackground,
       thinkingEffort: 'minimal',
       references,
       fallbackPrompt: skillTemplate ? editPrompt : undefined,
