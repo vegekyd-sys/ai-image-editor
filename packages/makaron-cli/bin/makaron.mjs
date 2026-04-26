@@ -160,7 +160,9 @@ async function streamAgent(baseUrl, cookie, projectId, prompt) {
 
         case 'tool_call':
           process.stderr.write(`\n🔧 ${event.tool}`);
-          if (event.input?.editPrompt) process.stderr.write(`: ${event.input.editPrompt.substring(0, 80)}`);
+          if (event.input?.editPrompt) process.stderr.write(`\n   editPrompt: ${event.input.editPrompt}`);
+          if (event.input?.model) process.stderr.write(`\n   model: ${event.input.model}`);
+          if (event.input?.skill) process.stderr.write(`\n   skill: ${event.input.skill}`);
           if (event.input?.description) process.stderr.write(`: ${event.input.description.substring(0, 80)}`);
           process.stderr.write('\n');
           break;
