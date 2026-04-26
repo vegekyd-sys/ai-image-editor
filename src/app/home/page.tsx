@@ -711,8 +711,10 @@ export default function HomePage() {
                     outline: 'none', resize: 'none',
                     fontFamily: 'inherit',
                     caretColor: '#d946ef',
-                    minHeight: 40, maxHeight: '8rem',
-                    overflowY: 'auto', display: 'block', width: '100%',
+                    minHeight: 40, maxHeight: selectedDetail ? 40 : '8rem',
+                    overflowY: selectedDetail ? 'hidden' : 'auto',
+                    display: 'block', width: '100%',
+                    ...(selectedDetail ? { textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : {}),
                   }}
                 />
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '4px 8px 8px' }}>
@@ -764,6 +766,7 @@ export default function HomePage() {
                   background: '#120d1a',
                   border: '1px solid rgba(255,255,255,0.06)',
                   animationDelay: `${i * 0.06}s`,
+                  ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1129,7 +1132,7 @@ export default function HomePage() {
           }}>
             {/* Close button */}
             <button
-              onClick={() => { setSelectedDetail(null); setSelectedSkill(null); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]) }}
+              onClick={() => { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]) }}
               style={{
                 position: 'absolute', top: isDesktop ? 12 : 'max(12px, env(safe-area-inset-top))', right: 12,
                 width: 36, height: 36, borderRadius: '50%',
