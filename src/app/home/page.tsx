@@ -39,6 +39,7 @@ export default function HomePage() {
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
   const [skillMenuPos, setSkillMenuPos] = useState<{ bottom: number; left: number } | null>(null)
   const [skillUploading, setSkillUploading] = useState(false)
+  const [installingSkill, setInstallingSkill] = useState(false)
   const skillFileRef = useRef<HTMLInputElement>(null)
   const skillMenuRef = useRef<HTMLDivElement>(null)
   const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
@@ -327,13 +328,21 @@ export default function HomePage() {
       const supabase = createClient()
       let skillName: string | undefined
       if (selectedDetail?.skill_path) {
-        const installRes = await fetch('/api/skills', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skillPath: selectedDetail.skill_path, homeSkillId: selectedDetail.id }),
-        })
-        const installData = await installRes.json()
-        if (installData.skillName) skillName = installData.skillName
+        setInstallingSkill(true)
+        try {
+          const installRes = await fetch('/api/skills', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skillPath: selectedDetail.skill_path, homeSkillId: selectedDetail.id }),
+          })
+          const installData = await installRes.json()
+          if (installData.skillName) {
+            skillName = installData.skillName
+            setSelectedSkill(installData.skillName)
+          }
+        } finally {
+          setInstallingSkill(false)
+        }
       } else if (selectedSkill) {
         skillName = selectedSkill
       }
@@ -644,26 +653,26 @@ export default function HomePage() {
                 }}
                 style={{
                   flexShrink: 0,
-                  padding: selectedSkill ? '4px 10px' : '5px 6px',
-                  borderRadius: selectedSkill ? 12 : 0,
+                  padding: (selectedSkill || installingSkill) ? '4px 10px' : '5px 6px',
+                  borderRadius: (selectedSkill || installingSkill) ? 12 : 0,
                   border: 'none',
-                  background: selectedSkill ? 'rgba(217,70,239,0.15)' : 'none',
-                  color: selectedSkill ? '#f0abfc' : 'rgba(255,255,255,0.45)',
+                  background: (selectedSkill || installingSkill) ? 'rgba(217,70,239,0.15)' : 'none',
+                  color: (selectedSkill || installingSkill) ? '#f0abfc' : 'rgba(255,255,255,0.45)',
                   fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em',
                   cursor: 'pointer', transition: 'all 0.15s',
                   fontFamily: 'inherit', whiteSpace: 'nowrap',
                   display: 'flex', alignItems: 'center', gap: 4,
                 }}
               >
-                {selectedSkill
-                  ? (availableSkills.find(s => s.name === selectedSkill)?.label
+                {installingSkill ? (
+                  <><Spinner size={10} /> Installing...</>
+                ) : selectedSkill ? (
+                  <>{availableSkills.find(s => s.name === selectedSkill)?.label
                     || homeSkills.find(s => s.id === selectedSkill)?.labels[locale]
-                    || 'Skill')
-                  : 'Skill'}
-                {selectedSkill && (
+                    || 'Skill'}
                   <span onClick={(e) => { e.stopPropagation(); setSelectedSkill(null); setSkillMenuOpen(false) }}
-                    style={{ opacity: 0.6, fontSize: '0.65rem', padding: '0 2px' }}>✕</span>
-                )}
+                    style={{ opacity: 0.6, fontSize: '0.65rem', padding: '0 2px' }}>✕</span></>
+                ) : 'Skill'}
               </button>
               <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
