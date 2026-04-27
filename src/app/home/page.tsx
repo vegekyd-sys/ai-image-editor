@@ -273,7 +273,7 @@ export default function HomePage() {
         const installRes = await fetch('/api/skills', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skillPath: selectedDetail.skill_path }),
+          body: JSON.stringify({ skillPath: selectedDetail.skill_path, homeSkillId: selectedDetail.id }),
         })
         const installData = await installRes.json()
         if (installData.skillName) installedSkillName = installData.skillName

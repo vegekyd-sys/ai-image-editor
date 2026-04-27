@@ -140,6 +140,7 @@ async function dbWriteFile(
   path: string,
   content: string | Buffer,
   contentType?: string,
+  marketplaceId?: string,
 ): Promise<{ success: boolean; storageUrl?: string; error?: string }> {
   const ct = contentType || pathToContentType(path);
   const sp = storagePath(userId, path);
@@ -169,6 +170,7 @@ async function dbWriteFile(
     size_bytes: sizeBytes,
     storage_url: publicUrl,
     updated_at: new Date().toISOString(),
+    ...(marketplaceId ? { marketplace_id: marketplaceId } : {}),
   }, { onConflict: 'user_id,path' });
 
   if (dbError) {
@@ -398,8 +400,9 @@ export async function writeFile(
   supabase: SupabaseClient,
   userId: string,
   contentType?: string,
+  marketplaceId?: string,
 ): Promise<{ success: boolean; storageUrl?: string; error?: string }> {
-  return dbWriteFile(supabase, userId, filePath, content, contentType);
+  return dbWriteFile(supabase, userId, filePath, content, contentType, marketplaceId);
 }
 
 /**
@@ -422,8 +425,9 @@ export async function installSkill(opts: {
   assets: SkillAsset[];
   supabase: SupabaseClient;
   userId: string;
+  marketplaceId?: string;
 }): Promise<{ success: boolean; skillName: string; error?: string }> {
-  const { skillMd, assets, supabase, userId } = opts;
+  const { skillMd, assets, supabase, userId, marketplaceId } = opts;
 
   const parsed = parseSkillMd(skillMd);
   if (!parsed) return { success: false, skillName: '', error: 'Invalid SKILL.md format' };
@@ -454,7 +458,7 @@ export async function installSkill(opts: {
     finalMd = finalMd.replace(new RegExp(relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), publicUrl);
   }
 
-  const mdResult = await writeFile(`skills/${finalName}/SKILL.md`, finalMd, supabase, userId, 'text/markdown');
+  const mdResult = await writeFile(`skills/${finalName}/SKILL.md`, finalMd, supabase, userId, 'text/markdown', marketplaceId);
   if (!mdResult.success) {
     return { success: false, skillName: finalName, error: `Failed to save SKILL.md: ${mdResult.error}` };
   }

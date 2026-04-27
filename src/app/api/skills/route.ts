@@ -35,7 +35,22 @@ async function installFromZip(
   buffer: ArrayBuffer,
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-): Promise<{ success: boolean; skillName?: string; assetsUploaded?: number; error?: string }> {
+  marketplaceId?: string,
+): Promise<{ success: boolean; skillName?: string; assetsUploaded?: number; alreadyInstalled?: boolean; error?: string }> {
+  // Dedup: if marketplace skill already installed, skip
+  if (marketplaceId) {
+    const { data: existing } = await supabase
+      .from('workspace_files')
+      .select('path')
+      .eq('user_id', userId)
+      .eq('marketplace_id', marketplaceId)
+      .limit(1);
+    if (existing && existing.length > 0) {
+      const skillName = existing[0].path.split('/')[1] || '';
+      return { success: true, skillName, alreadyInstalled: true };
+    }
+  }
+
   const zip = await JSZip.loadAsync(buffer);
 
   let skillMdContent: string | null = null;
@@ -62,7 +77,7 @@ async function installFromZip(
     assets.push({ filename, data: Buffer.from(data), contentType: ct });
   }
 
-  const result = await installSkill({ skillMd: skillMdContent, assets, supabase, userId });
+  const result = await installSkill({ skillMd: skillMdContent, assets, supabase, userId, marketplaceId });
   if (!result.success) return { success: false, error: result.error };
   return { success: true, skillName: result.skillName, assetsUploaded: assets.length };
 }
@@ -76,14 +91,14 @@ export async function POST(req: NextRequest) {
 
     const ct = req.headers.get('content-type') || '';
     if (ct.includes('application/json')) {
-      const { skillPath } = await req.json();
+      const { skillPath, homeSkillId } = await req.json();
       if (!skillPath) return NextResponse.json({ error: 'skillPath required' }, { status: 400 });
 
       const resp = await fetch(skillPath);
       if (!resp.ok) return NextResponse.json({ error: `Failed to fetch skill: ${resp.status}` }, { status: 502 });
       const buffer = await resp.arrayBuffer();
 
-      const result = await installFromZip(buffer, supabase, user.id);
+      const result = await installFromZip(buffer, supabase, user.id, homeSkillId || undefined);
       if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
       return NextResponse.json(result);
     }
