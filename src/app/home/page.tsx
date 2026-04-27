@@ -97,8 +97,10 @@ export default function HomePage() {
     const handler = (e: MouseEvent) => {
       if (skillMenuRef.current && !skillMenuRef.current.contains(e.target as Node)) setSkillMenuOpen(false)
     }
+    const onScroll = () => setSkillMenuOpen(false)
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    window.addEventListener('scroll', onScroll, true)
+    return () => { document.removeEventListener('mousedown', handler); window.removeEventListener('scroll', onScroll, true) }
   }, [skillMenuOpen])
 
   const handleSkillUpload = useCallback(async (file: File) => {
