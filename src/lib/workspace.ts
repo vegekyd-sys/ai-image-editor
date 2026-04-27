@@ -433,12 +433,14 @@ export async function installSkill(opts: {
   if (!parsed) return { success: false, skillName: '', error: 'Invalid SKILL.md format' };
 
   let finalName = parsed.name;
-  const existing = await getAllSkills(supabase, userId);
-  const existingNames = new Set(existing.map(s => s.name));
-  if (existingNames.has(finalName)) {
-    let i = 2;
-    while (existingNames.has(`${parsed.name}-${i}`)) i++;
-    finalName = `${parsed.name}-${i}`;
+  if (!marketplaceId) {
+    const existing = await getAllSkills(supabase, userId);
+    const existingNames = new Set(existing.map(s => s.name));
+    if (existingNames.has(finalName)) {
+      let i = 2;
+      while (existingNames.has(`${parsed.name}-${i}`)) i++;
+      finalName = `${parsed.name}-${i}`;
+    }
   }
 
   const uploadedUrls: Record<string, string> = {};
