@@ -8,6 +8,7 @@ import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
 import { useLocale } from '@/lib/i18n'
 import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
+import { getThumbnailUrl } from '@/lib/supabase/storage'
 import RollingTagline from '@/components/RollingTagline'
 import Changelog from '@/components/Changelog'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
@@ -791,7 +792,7 @@ export default function HomePage() {
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={template.image}
+                  src={getThumbnailUrl(template.image, 400, 50, 400)}
                   alt={template.labels.en || ''}
                   style={{
                     width: '100%', height: '100%',
@@ -892,7 +893,7 @@ export default function HomePage() {
             opacity: heroExpanded ? 0 : 1,
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={selectedDetail.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={getThumbnailUrl(selectedDetail.image, 400, 50, 400)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
         )
       })()}
@@ -968,7 +969,7 @@ export default function HomePage() {
                 style={{ height: '100%', minHeight: '100%', position: 'relative', flexShrink: 0 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={template.image} alt="" loading="lazy"
+                <img src={getThumbnailUrl(template.image, 800, 70, 800)} alt="" loading="lazy"
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 30%, transparent 55%)', pointerEvents: 'none' }} />
 
