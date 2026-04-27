@@ -6,7 +6,7 @@ export async function GET() {
     const admin = getSupabaseAdmin()
     const { data, error } = await admin
       .from('home_skills')
-      .select('id, labels, image, prompt, skill_path, image_count, sort_order')
+      .select('id, labels, image, prompt, skill_path, image_count, sort_order, updated_at')
       .eq('is_active', true)
       .order('sort_order')
 

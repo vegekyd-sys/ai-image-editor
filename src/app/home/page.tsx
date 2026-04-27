@@ -10,7 +10,7 @@ import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
 import Changelog from '@/components/Changelog'
-import type { HomeSkill } from '@/lib/home-skills'
+import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 
@@ -33,7 +33,7 @@ export default function HomePage() {
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
   const [showChangelog, setShowChangelog] = useState(false)
   const [slotDragOver, setSlotDragOver] = useState(-1)
-  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
+  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>(getCachedHomeSkills)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
   const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
@@ -49,7 +49,21 @@ export default function HomePage() {
 
   useEffect(() => {
     fetch('/api/home-skills').then(r => r.json()).then(data => {
-      if (Array.isArray(data) && data.length > 0) setHomeSkills(data)
+      if (!Array.isArray(data) || data.length === 0) return
+      setHomeSkills(prev => {
+        if (prev.length === 0) { setCachedHomeSkills(data); return data }
+        const newMap = new Map(data.map((s: HomeSkill) => [s.id, s]))
+        const merged = prev.map(s => {
+          const fresh = newMap.get(s.id)
+          if (!fresh) return null
+          newMap.delete(s.id)
+          return fresh.updated_at === s.updated_at ? s : fresh
+        }).filter(Boolean) as HomeSkill[]
+        for (const s of newMap.values()) merged.push(s)
+        merged.sort((a, b) => a.sort_order - b.sort_order)
+        setCachedHomeSkills(merged)
+        return merged
+      })
     }).catch(() => {})
   }, [])
 
