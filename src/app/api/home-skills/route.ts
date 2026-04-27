@@ -12,9 +12,7 @@ export async function GET() {
 
     if (error) return NextResponse.json([], { status: 200 })
 
-    return NextResponse.json(data || [], {
-      headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=600' },
-    })
+    return NextResponse.json(data || [])
   } catch {
     return NextResponse.json([], { status: 200 })
   }
