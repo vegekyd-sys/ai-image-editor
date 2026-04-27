@@ -647,6 +647,7 @@ export default function HomePage() {
               <button
                 className="mkr-skill-btn"
                 onClick={(e) => {
+                  if (selectedSkill) { setSelectedSkill(null); setSkillMenuOpen(false); return }
                   const rect = e.currentTarget.getBoundingClientRect()
                   setSkillMenuPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left })
                   setSkillMenuOpen(prev => !prev)
@@ -670,8 +671,7 @@ export default function HomePage() {
                   <>{availableSkills.find(s => s.name === selectedSkill)?.label
                     || homeSkills.find(s => s.id === selectedSkill)?.labels[locale]
                     || 'Skill'}
-                  <span onClick={(e) => { e.stopPropagation(); setSelectedSkill(null); setSkillMenuOpen(false) }}
-                    style={{ opacity: 0.6, fontSize: '0.65rem', padding: '0 2px' }}>✕</span></>
+                  <span style={{ opacity: 0.5, fontSize: '0.6rem' }}>✕</span></>
                 ) : 'Skill'}
               </button>
               <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
