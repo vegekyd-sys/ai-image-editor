@@ -97,7 +97,10 @@ export default function HomePage() {
     const handler = (e: MouseEvent) => {
       if (skillMenuRef.current && !skillMenuRef.current.contains(e.target as Node)) setSkillMenuOpen(false)
     }
-    const onScroll = () => setSkillMenuOpen(false)
+    const onScroll = (e: Event) => {
+      if (skillMenuRef.current?.contains(e.target as Node)) return
+      setSkillMenuOpen(false)
+    }
     document.addEventListener('mousedown', handler)
     window.addEventListener('scroll', onScroll, true)
     return () => { document.removeEventListener('mousedown', handler); window.removeEventListener('scroll', onScroll, true) }
@@ -770,6 +773,19 @@ export default function HomePage() {
         .mkr-create-btn:active, .mkr-skill-btn:active { transform: scale(0.96); }
 
         @keyframes mkr-spin { to { transform: rotate(360deg); } }
+
+        @keyframes mkr-menu-up {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes mkr-sheet-up {
+          from { transform: translateY(100%); }
+          to   { transform: translateY(0); }
+        }
+        @keyframes mkr-fade-in {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
         .mkr-spin { animation: mkr-spin 0.9s linear infinite; }
 
         .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
@@ -1080,6 +1096,7 @@ export default function HomePage() {
           borderRadius: 12, padding: '4px 0',
           boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
           zIndex: 300,
+          animation: 'mkr-menu-up 0.2s ease-out',
         }}>
           {availableSkills.length === 0 && (
             <div style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading...</div>
@@ -1120,12 +1137,13 @@ export default function HomePage() {
       ) : (
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
           onClick={(e) => { if (e.target === e.currentTarget) setSkillMenuOpen(false) }}>
-          <div style={{ background: 'rgba(0,0,0,0.5)', position: 'absolute', inset: 0 }} />
+          <div style={{ background: 'rgba(0,0,0,0.5)', position: 'absolute', inset: 0, animation: 'mkr-fade-in 0.2s ease-out' }} />
           <div ref={skillMenuRef} style={{
             position: 'relative', maxHeight: '50dvh', overflowY: 'auto',
             background: 'rgba(24,24,28,0.98)', borderTop: '1px solid rgba(255,255,255,0.1)',
             borderRadius: '18px 18px 0 0', padding: '12px 0',
             paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+            animation: 'mkr-sheet-up 0.25s ease-out',
           }}>
             <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '0 auto 12px' }} />
             {availableSkills.length === 0 && (
