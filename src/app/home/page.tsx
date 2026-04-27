@@ -538,7 +538,7 @@ export default function HomePage() {
             }}
             placeholder="where magic happens"
             disabled={creating}
-            rows={1}
+            rows={3}
             style={{
               border: 'none', background: 'transparent',
               color: 'rgba(255,255,255,0.88)', fontSize: '17px', lineHeight: 1.45,
