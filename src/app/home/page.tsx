@@ -35,6 +35,11 @@ export default function HomePage() {
   const [slotDragOver, setSlotDragOver] = useState(-1)
   const [homeSkills, setHomeSkills] = useState<HomeSkill[]>(getCachedHomeSkills)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
+  const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false)
+  const [skillUploading, setSkillUploading] = useState(false)
+  const skillFileRef = useRef<HTMLInputElement>(null)
+  const skillMenuRef = useRef<HTMLDivElement>(null)
   const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
   const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
@@ -65,6 +70,52 @@ export default function HomePage() {
         return merged
       })
     }).catch(() => {})
+  }, [])
+
+  // Preload user's installed skills
+  const skillsFetchedRef = useRef(false)
+  useEffect(() => {
+    if (skillsFetchedRef.current) return
+    const load = () => {
+      skillsFetchedRef.current = true
+      fetch('/api/skills').then(r => r.json()).then(d => {
+        if (d.skills) setAvailableSkills(d.skills)
+      }).catch(() => {})
+    }
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(load, { timeout: 5000 })
+      return () => cancelIdleCallback(id)
+    }
+    const t = setTimeout(load, 2000)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Close skill menu on click outside
+  useEffect(() => {
+    if (!skillMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (skillMenuRef.current && !skillMenuRef.current.contains(e.target as Node)) setSkillMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [skillMenuOpen])
+
+  const handleSkillUpload = useCallback(async (file: File) => {
+    setSkillUploading(true)
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const res = await fetch('/api/skills', { method: 'POST', body: form })
+      const data = await res.json()
+      if (data.success) {
+        const r = await fetch('/api/skills')
+        const d = await r.json()
+        if (d.skills) setAvailableSkills(d.skills)
+        if (data.skillName) setSelectedSkill(data.skillName)
+        setSkillMenuOpen(false)
+      }
+    } catch {}
+    setSkillUploading(false)
   }, [])
 
   useEffect(() => {
@@ -268,7 +319,7 @@ export default function HomePage() {
     setCreating(true)
     try {
       const supabase = createClient()
-      let installedSkillName: string | undefined
+      let skillName: string | undefined
       if (selectedDetail?.skill_path) {
         const installRes = await fetch('/api/skills', {
           method: 'POST',
@@ -276,11 +327,13 @@ export default function HomePage() {
           body: JSON.stringify({ skillPath: selectedDetail.skill_path, homeSkillId: selectedDetail.id }),
         })
         const installData = await installRes.json()
-        if (installData.skillName) installedSkillName = installData.skillName
+        if (installData.skillName) skillName = installData.skillName
+      } else if (selectedSkill) {
+        skillName = selectedSkill
       }
       const opts: { prompt?: string; skill?: string } = {}
       if (prompt) opts.prompt = prompt
-      if (installedSkillName) opts.skill = installedSkillName
+      if (skillName) opts.skill = skillName
       const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
       router.push(`/projects/${result.projectId}`)
@@ -288,7 +341,7 @@ export default function HomePage() {
       console.error('Create project error:', err)
       setCreating(false)
     }
-  }, [user, creating, router, selectedDetail])
+  }, [user, creating, router, selectedDetail, selectedSkill])
 
   const handleCreate = useCallback(async () => {
     const hasText = inputText.trim()
@@ -305,11 +358,12 @@ export default function HomePage() {
     dragCounterRef.current = 0
     setDragOver(false)
     if (creating) return
-    const droppedFiles = Array.from(e.dataTransfer.files ?? []).filter(
-      f => f.type.startsWith('image/') || isHeicFile(f)
-    )
+    const allFiles = Array.from(e.dataTransfer.files ?? [])
+    const zipFile = allFiles.find(f => f.name.endsWith('.zip'))
+    if (zipFile) { handleSkillUpload(zipFile); return }
+    const droppedFiles = allFiles.filter(f => f.type.startsWith('image/') || isHeicFile(f))
     addFiles(droppedFiles)
-  }, [creating, addFiles])
+  }, [creating, addFiles, handleSkillUpload])
 
   const removeFile = useCallback((index: number) => {
     setAttachedFiles(prev => prev.filter((_, j) => j !== index))
@@ -573,22 +627,107 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-            {selectedSkill && (
+            {/* Skill button + dropdown */}
+            <div style={{ position: 'relative', flexShrink: 0 }} ref={skillMenuRef}>
               <button
-                onClick={() => { setSelectedSkill(null); setSelectedDetail(null); setHeroExpanded(false); setTimeout(() => setHeroRect(null), 350); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]) }}
+                onClick={() => setSkillMenuOpen(prev => !prev)}
                 style={{
-                  flexShrink: 0, padding: '4px 10px', borderRadius: 12, border: 'none',
-                  background: 'rgba(217,70,239,0.15)', color: '#f0abfc',
+                  flexShrink: 0,
+                  padding: selectedSkill ? '4px 10px' : '5px 6px',
+                  borderRadius: selectedSkill ? 12 : 0,
+                  border: 'none',
+                  background: selectedSkill ? 'rgba(217,70,239,0.15)' : 'none',
+                  color: selectedSkill ? '#f0abfc' : 'rgba(255,255,255,0.45)',
                   fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em',
                   cursor: 'pointer', transition: 'all 0.15s',
-                  fontFamily: 'inherit',
-                  whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
+                  fontFamily: 'inherit', whiteSpace: 'nowrap',
                 }}
               >
-                {homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || homeSkills.find(s => s.id === selectedSkill)?.labels.en || ''}
-                <span style={{ opacity: 0.6, fontSize: '0.65rem' }}>✕</span>
+                {selectedSkill
+                  ? (availableSkills.find(s => s.name === selectedSkill)?.label
+                    || homeSkills.find(s => s.id === selectedSkill)?.labels[locale]
+                    || 'Skill')
+                  : 'Skill'}
               </button>
-            )}
+              {skillMenuOpen && (isDesktop ? (
+                /* Desktop: upward popover */
+                <div style={{
+                  position: 'absolute', bottom: '100%', left: 0, marginBottom: 8,
+                  width: 220, maxHeight: 320, overflowY: 'auto',
+                  background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 14, padding: '6px 0',
+                  boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
+                  zIndex: 200,
+                }}>
+                  {availableSkills.map(skill => (
+                    <button key={skill.name} onClick={() => { setSelectedSkill(selectedSkill === skill.name ? null : skill.name); setSkillMenuOpen(false) }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '8px 14px', border: 'none', cursor: 'pointer',
+                        background: selectedSkill === skill.name ? 'rgba(217,70,239,0.12)' : 'transparent',
+                        color: selectedSkill === skill.name ? '#f0abfc' : 'rgba(255,255,255,0.7)',
+                        fontSize: 13, fontFamily: 'inherit', textAlign: 'left',
+                        transition: 'background 0.1s',
+                      }}>
+                      <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{skill.icon || '⚡'}</span>
+                      {skill.label}
+                    </button>
+                  ))}
+                  <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '4px 0' }} />
+                  <button onClick={() => skillFileRef.current?.click()}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 14px', border: 'none', cursor: 'pointer',
+                      background: 'transparent', color: 'rgba(255,255,255,0.4)',
+                      fontSize: 13, fontFamily: 'inherit', textAlign: 'left',
+                    }}>
+                    <span style={{ fontSize: 14, width: 20, textAlign: 'center' }}>+</span>
+                    {skillUploading ? 'Installing...' : 'Upload Skill (.zip)'}
+                  </button>
+                </div>
+              ) : (
+                /* Mobile: bottom sheet + backdrop */
+                <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
+                  onClick={(e) => { if (e.target === e.currentTarget) setSkillMenuOpen(false) }}>
+                  <div style={{ background: 'rgba(0,0,0,0.5)', position: 'absolute', inset: 0 }} />
+                  <div style={{
+                    position: 'relative', maxHeight: '50dvh', overflowY: 'auto',
+                    background: 'rgba(24,24,28,0.98)', borderTop: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '18px 18px 0 0', padding: '12px 0',
+                    paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+                  }}>
+                    <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '0 auto 12px' }} />
+                    {availableSkills.map(skill => (
+                      <button key={skill.name} onClick={() => { setSelectedSkill(selectedSkill === skill.name ? null : skill.name); setSkillMenuOpen(false) }}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '12px 20px', border: 'none', cursor: 'pointer',
+                          background: selectedSkill === skill.name ? 'rgba(217,70,239,0.12)' : 'transparent',
+                          color: selectedSkill === skill.name ? '#f0abfc' : 'rgba(255,255,255,0.7)',
+                          fontSize: 15, fontFamily: 'inherit', textAlign: 'left',
+                          transition: 'background 0.1s',
+                        }}>
+                        <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{skill.icon || '⚡'}</span>
+                        {skill.label}
+                      </button>
+                    ))}
+                    <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '4px 0' }} />
+                    <button onClick={() => skillFileRef.current?.click()}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 20px', border: 'none', cursor: 'pointer',
+                        background: 'transparent', color: 'rgba(255,255,255,0.4)',
+                        fontSize: 15, fontFamily: 'inherit', textAlign: 'left',
+                      }}>
+                      <span style={{ fontSize: 16, width: 24, textAlign: 'center' }}>+</span>
+                      {skillUploading ? 'Installing...' : 'Upload Skill (.zip)'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
+            </div>
             <button
               className="mkr-create-btn"
               onClick={() => { if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
