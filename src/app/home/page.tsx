@@ -10,179 +10,9 @@ import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
 import Changelog from '@/components/Changelog'
+import type { HomeSkill } from '@/lib/home-skills'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
-
-const SKILL_TEMPLATES = [
-  // --- Featured (new assets) ---
-  {
-    id: 'photo-to-video',
-    label: '照片变视频', labelEn: 'Photo to Video',
-    image: '/skills/photo-to-video.jpg',
-    prompt: 'Turn my photo into a cinematic short video with dramatic camera movement',
-    skill: 'photo-to-video' as string | undefined,
-    imageCount: 1 as number | undefined,
-  },
-  {
-    id: 'animated-gif',
-    label: '动态表情包', labelEn: 'Animated GIF',
-    image: '/skills/animated-gif.gif',
-    prompt: 'Turn our selfie into a fun animated GIF with expressive movements',
-    skill: 'animated-gif' as string | undefined,
-    imageCount: undefined as number | undefined,
-  },
-  {
-    id: 'attack-on-titan',
-    label: '进击的巨人', labelEn: 'Attack on Titan',
-    image: '/skills/attack-on-titan.jpg',
-    prompt: 'Put me on top of the Wall from Attack on Titan, wearing the Survey Corps green cloak with Wings of Freedom emblem, 3D maneuvering gear on my waist, looking back at camera with a determined fearless expression. Behind me the skinless Colossal Titan head looms over the wall, steam pouring from its muscles. Dramatic orange sunset sky, ruined city far below. Epic cinematic wide shot, my figure small against the massive titan.',
-  },
-  {
-    id: 'glass-shatter',
-    label: '破屏而出', labelEn: 'Glass Shatter',
-    image: '/skills/glass-shatter.jpg',
-    prompt: 'Transform my photo into a dramatic action shot — I am punching straight through a glass screen toward the viewer, my fist thrust forward in the center of the frame with glass shards exploding outward frozen in mid-air. Give me bleached blonde messy hair, a black leather jacket, a bruise under one eye, and a fierce angry snarl. Teal and warm orange backlight rim-lighting my silhouette. Dark warehouse background. HBO Original Series logo in bottom-left corner. Shot with ultra-wide lens making my fist look huge.',
-  },
-  {
-    id: 'squid-game-player',
-    label: '鱿鱼游戏', labelEn: 'Squid Game',
-    image: '/skills/squid-game-player.jpg',
-    prompt: 'Put me in the Squid Game Red Light Green Light scene — I am wearing the green tracksuit #456, running toward camera with a terrified but determined expression. A woman with shoulder-length black hair in tracksuit #067 runs beside me on my left. Behind us, the giant robotic doll in yellow and orange dress towers over the sandy field, her head turned toward us. Other players in green tracksuits frozen mid-run in the background. Harsh overhead floodlights, overcast sky, dust kicked up. Netflix cinematic quality.',
-  },
-  {
-    id: 'jujutsu-gojo',
-    label: '咒术回战', labelEn: 'Jujutsu Kaisen',
-    image: '/skills/jujutsu-gojo.jpg',
-    prompt: 'Place me standing back-to-back with photorealistic 3D CGI Gojo Satoru from Jujutsu Kaisen on a destroyed Shibuya rooftop at night. I am on the left wearing a black leather jacket, arms crossed with a confident smirk. Gojo is on the right — tall, white spiky hair, black blindfold, dark blue high-collar uniform, one hand raised with blue Infinity sphere spinning. Purple cursed energy lightning cracks across the dark stormy sky, a dark curse silhouette lurks in the clouds. "SHIBUYA INCIDENT" text at the bottom. Movie poster composition, both figures equally prominent.',
-  },
-  {
-    id: 'totoro-forest',
-    label: '龙猫森林', labelEn: 'Totoro Forest',
-    image: '/skills/totoro-forest.jpg',
-    prompt: 'Put me sitting on the big furry belly of a massive photorealistic CGI Totoro in a lush ancient forest. I am leaning back against his soft grey fur, laughing with mouth wide open and pure joy. Totoro has his iconic wide toothy grin. Tiny black soot sprites (susuwatari) float all around us. The Catbus (furry cat-shaped bus with glowing eyes) peeks from between mossy tree trunks in the background. Golden sunlight streams through the giant camphor tree canopy. I am wearing a denim jacket and converse sneakers. Studio Ghibli live-action movie quality.',
-  },
-  {
-    id: 'onepiece-gear5',
-    label: '海贼王·尼卡', labelEn: 'One Piece Gear 5',
-    image: '/skills/onepiece-gear5.jpg',
-    prompt: 'Put me on the wooden deck bow of the Thousand Sunny pirate ship, running and laughing wildly with mouth wide open next to a photorealistic 3D CGI Luffy in Gear 5 Sun God Nika form — white rubbery cartoon-like skin, wild flowing white hair upward, huge exaggerated grin, white shirt open showing abs, purple sash. We are side by side, both mid-stride. I am wearing a black crop top with a skull-and-crossbones Straw Hat logo and denim shorts. Massive stormy ocean waves crash behind us, wind blowing our hair dramatically.',
-  },
-  {
-    id: 'spirited-away',
-    label: '千与千寻', labelEn: 'Spirited Away',
-    image: '/skills/spirited-away-train.jpg',
-    prompt: 'Place me standing barefoot on railway tracks that stretch across an endless calm ocean, looking back over my shoulder at camera with a gentle mysterious smile, long dark hair flowing in the wind. I am wearing a white summer dress. An old weathered red Japanese train approaches from behind in the distance, its headlights on. Shallow water covers the wooden track ties creating perfect mirror reflections of the pink and orange sunset sky. The scene is serene and dreamlike. Spirited Away sea train brought to life as a photograph. Golden hour warm lighting.',
-  },
-  {
-    id: 'iron-throne',
-    label: '铁王座', labelEn: 'Iron Throne',
-    image: '/skills/iron-throne-dragon.jpg',
-    prompt: 'Put me sitting on the Iron Throne from Game of Thrones — legs crossed, hands gripping the sword armrests, chin raised with a cold commanding stare directly at camera. I am wearing a red latex high-slit dress, a thin gold crown, sharp bob haircut with blunt bangs, bold red lips, gold shimmer on my cheekbones. A small dragon perches on my right shoulder breathing a burst of fire. Dark gothic stone throne room lit only by candles and fire braziers. The mood is dangerous, seductive, and regal.',
-  },
-  {
-    id: 'titan-half-face',
-    label: '巨人化', labelEn: 'Titan Transform',
-    image: '/skills/titan-half-face.jpg',
-    prompt: 'Extreme close-up of my face filling the entire frame — the left half is my real face with smudged dark eyeliner, a lip ring, battle scars, and an intense unblinking stare. The right half seamlessly morphs into an Attack on Titan titan form: exposed red muscles and tendons, no skin, one glowing green eye, steam rising where skin meets muscle along the center split line. "THE RUMBLING" text in large white font at the top. Warm sunset city skyline blurred in the background. Movie poster quality.',
-  },
-  {
-    id: 'ghost-in-shell',
-    label: '攻壳机动队', labelEn: 'Ghost in the Shell',
-    image: '/skills/ghost-in-shell.jpg',
-    prompt: 'Shot directly from above looking straight down — I am lying on my back in a shallow neon-lit puddle on a Tokyo rooftop at night. My platinum blonde hair fans out like Medusa tendrils in the dark water. I am wearing a sheer black mesh bodysuit with chrome chain harness across my chest, gripping the center ring with both hands. My eyes are wide open staring straight up at the camera with an intense provocative gaze. Neon reflections in the water — cyan, magenta, green — from surrounding signs. Holographic Japanese kanji (電脳, 攻殻) and UI overlays glow around me. Rain droplets frozen mid-air.',
-  },
-  {
-    id: 'squid-game-vip',
-    label: '鱿鱼游戏 VIP', labelEn: 'Squid Game VIP',
-    image: '/skills/squid-game-vip.jpg',
-    prompt: 'Put me walking down the center of a neon-lit pink corridor from Squid Game VIP area. I am wearing a perfectly tailored black suit with black shirt, a gold ornate owl mask pushed up onto my forehead, adjusting my right cufflink with a cold arrogant smirk. Flanking me on each side: a Squid Game guard in hot pink jumpsuit — left guard has a triangle mask, right guard has a circle mask, both standing at rigid attention with hands behind back. The corridor recedes behind me with repeating rectangular pink and green fluorescent light frames.',
-  },
-  {
-    id: 'time-freeze',
-    label: '时间冻结', labelEn: 'Time Freeze',
-    image: '/skills/time-freeze.jpg',
-    prompt: 'Transform my photo into a zero-gravity frozen moment — I am jumping mid-air in the center of a living room with a huge surprised laugh, arms and legs spread wide. Everything around me is suspended in zero gravity: a white coffee mug with brown coffee splashing out frozen mid-splash, an iPhone floating screen-on, white AirPods hovering, cereal pieces scattered like confetti, newspaper pages mid-flutter, polaroid photos floating, and an orange tabby cat mid-leap with arched back to my right. Warm morning sunlight from a large window behind me. Ultra-wide angle lens from low angle.',
-  },
-  {
-    id: 'skyscraper-spiderman',
-    label: '摩天蜘蛛侠', labelEn: 'Skyscraper Climb',
-    image: '/skills/skyscraper-spiderman.jpg',
-    prompt: 'Put me crouching on the vertical glass wall of a skyscraper at night, defying gravity like Spider-Man. I am wearing a dark bomber jacket and cargo pants, white sneakers planted flat against the glass. My hair falls sideways from gravity. I am looking directly at camera with a cocky confident grin. Below me (appearing as sideways) the city streets are 50+ stories down — tiny cars, neon signs, streetlights stretching into the distance. The shot is taken from a drone at the same height, creating a vertigo-inducing perspective where the building wall looks like the ground.',
-  },
-  {
-    id: 'snow-globe',
-    label: '水晶球女王', labelEn: 'Snow Globe',
-    image: '/skills/snow-globe-queen.jpg',
-    prompt: 'Place me inside a giant crystal snow globe installed in the middle of Times Square New York at night. I am sitting elegantly on a golden crescent moon inside the sphere, wearing a flowing red sparkly ball gown. Artificial snow swirls around me inside the glass. Outside the globe, a crowd of people in winter coats stands watching and taking photos with their phones held up — shot from behind the crowd looking in at me. The globe glows warmly from within (golden light) contrasting the cold blue LED billboards of Times Square behind.',
-  },
-  {
-    id: 'anti-gravity',
-    label: '反重力宫殿', labelEn: 'Anti-Gravity',
-    image: '/skills/anti-gravity-palace.jpg',
-    prompt: 'Place me sitting calmly in an ornate golden chair on the ceiling of a baroque palace room — I am upside down relative to the floor. I am wearing a tailored black suit with a loosened black tie, legs crossed casually, one hand resting on the chair arm. My hair and tie hang downward (toward the floor above me). Below me (the actual floor), crystal chandeliers hang upward as if gravity is reversed. Renaissance ceiling frescoes are behind my head. The room has teal and gold color palette. Disorienting Inception-style perspective — the viewer cannot tell which way is up.',
-  },
-  {
-    id: 'boa-hancock',
-    label: '女帝约会', labelEn: 'Boa Hancock Date',
-    image: '/skills/boa-hancock-bar.jpg',
-    prompt: 'Put me sitting at a dark moody bar counter, sipping whiskey from a rocks glass with a slight knowing smirk. Next to me sits a photorealistic 3D CGI Boa Hancock from One Piece — impossibly beautiful with long straight black hair, glowing pink heart-shaped eyes (her love-love beam), red silk qipao top, gold snake earrings. She is leaning toward me with an adoring expression. Warm amber tungsten bar lighting, rows of backlit whiskey bottles blurred in the bokeh background. Intimate date night atmosphere.',
-  },
-  {
-    id: 'android18',
-    label: '18号公路', labelEn: 'Android 18',
-    image: '/skills/android18-desert.jpg',
-    prompt: 'Place me leaning against a chrome motorcycle on an empty desert highway at golden hour. Next to me stands a photorealistic 3D CGI Android 18 from Dragon Ball Z — sharp blonde bob haircut, piercing icy blue eyes, denim vest over a striped shirt, arms crossed with her signature cold confident expression. I am wearing a black leather jacket, matching her crossed-arms cool attitude. Dusty desert road stretches to the horizon, warm golden backlight, dust particles in the air. Cinematic wide shot, both of us equally prominent.',
-  },
-  {
-    id: 'zerotwo-selfie',
-    label: '02自拍', labelEn: 'Zero Two Selfie',
-    image: '/skills/zerotwo-selfie.jpg',
-    prompt: 'Make it look like I am taking a selfie with photorealistic 3D CGI Zero Two from Darling in the Franxx. She has long pink hair, small red horns on a white headband, bright emerald green eyes, and is doing her playful tongue-out lick toward the camera. She wears her red and white military pilot suit (partially unzipped) and is wrapping one arm possessively around my neck, pulling me close. I am blushing and grinning. Cherry blossom trees behind us with pink petals falling everywhere. Bright spring sunlight, shallow depth of field. Selfie camera angle (slightly above, close-up).',
-  },
-  {
-    id: 'makima-rooftop',
-    label: '玛奇玛天台', labelEn: 'Makima Rooftop',
-    image: '/skills/makima-rooftop.jpg',
-    prompt: 'Put me sitting on a concrete rooftop ledge at night in Tokyo. Next to me crouches a photorealistic 3D CGI Makima from Chainsaw Man — she has auburn red-brown hair in long braids, distinctive yellow ringed spiral eyes that glow faintly, wearing a white dress shirt, black necktie, and dark overcoat. She is reaching toward me and holding my chin with one finger, tilting my face toward her with a cold, knowing, seductive smile. I look mesmerized and slightly nervous. Tokyo skyline glitters far below behind us. Dark moody cinematic lighting with a red color accent from a neon sign.',
-  },
-  {
-    id: 'sunglasses-twinning',
-    label: '墨镜双胞胎', labelEn: 'Sunglasses Twinning',
-    image: '/skills/sunglasses-twinning.jpg',
-    prompt: 'Put matching white oversized retro sunglasses on my pet, same style as mine. We are both looking at camera with the same sassy duck-face attitude. Keep the same framing, lighting, and background. The pet should look like it is posing on purpose. Fun twinning moment, bright playful energy.',
-  },
-  {
-    id: 'holi-portrait',
-    label: '洒红节', labelEn: 'Holi Festival',
-    image: '/skills/holi-portrait.jpg',
-    prompt: 'Cover me in vibrant Holi festival color powder — thick splashes of pink, teal green, bright orange, and yellow across my face, buzzed hair, and white linen shirt. Add a garland of pink and cream flowers draped around my neck. I look serene with a calm proud expression, chin slightly raised, looking off to the side. Dramatic warm side-lighting from the left against a deep matte purple background. The colored powder looks freshly thrown and still dusty. Editorial portrait photography quality, sharp focus on every powder grain.',
-  },
-  // --- Classic styles ---
-  {
-    id: 'night-flash',
-    label: '夜拍闪光', labelEn: 'Night Flash',
-    image: '/skills/night-flash.jpg',
-    prompt: 'Night photography with flash, urban street style',
-  },
-  {
-    id: 'pixel-art',
-    label: '像素风', labelEn: 'Pixel Art',
-    image: '/skills/pixel-art.jpg',
-    prompt: 'Pixel art style retro gaming aesthetic, 16-bit detailed scene',
-  },
-  {
-    id: 'sticker',
-    label: '贴纸设计', labelEn: 'Sticker',
-    image: '/skills/sticker.jpg',
-    prompt: 'Cute kawaii sticker design with thick outline and pastel colors',
-  },
-  {
-    id: 'food-photo',
-    label: '美食摄影', labelEn: 'Food Photo',
-    image: '/skills/food-photo.jpg',
-    prompt: 'Dramatic food photography with studio lighting, commercial advertising style',
-  },
-]
 
 export default function HomePage() {
   const { user, loading: authLoading, signOut } = useAuth()
@@ -203,8 +33,9 @@ export default function HomePage() {
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
   const [showChangelog, setShowChangelog] = useState(false)
   const [slotDragOver, setSlotDragOver] = useState(-1)
+  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
-  const [selectedDetail, setSelectedDetail] = useState<typeof SKILL_TEMPLATES[0] | null>(null)
+  const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
   const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
   const detailSnapRef = useRef<HTMLDivElement>(null)
@@ -215,6 +46,12 @@ export default function HomePage() {
   const inlineBoxRef = useRef<HTMLDivElement>(null)
   const [inlineBoxHeight, setInlineBoxHeight] = useState(0)
   const [showFixedInput, setShowFixedInput] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/home-skills').then(r => r.json()).then(data => {
+      if (Array.isArray(data) && data.length > 0) setHomeSkills(data)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const vv = window.visualViewport
@@ -417,9 +254,19 @@ export default function HomePage() {
     setCreating(true)
     try {
       const supabase = createClient()
+      let installedSkillName: string | undefined
+      if (selectedDetail?.skill_path) {
+        const installRes = await fetch('/api/skills', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skillPath: selectedDetail.skill_path }),
+        })
+        const installData = await installRes.json()
+        if (installData.skillName) installedSkillName = installData.skillName
+      }
       const opts: { prompt?: string; skill?: string } = {}
       if (prompt) opts.prompt = prompt
-      if (selectedSkill) opts.skill = selectedSkill
+      if (installedSkillName) opts.skill = installedSkillName
       const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
       router.push(`/projects/${result.projectId}`)
@@ -427,7 +274,7 @@ export default function HomePage() {
       console.error('Create project error:', err)
       setCreating(false)
     }
-  }, [user, creating, router, selectedSkill])
+  }, [user, creating, router, selectedDetail])
 
   const handleCreate = useCallback(async () => {
     const hasText = inputText.trim()
@@ -461,8 +308,8 @@ export default function HomePage() {
     addFiles(files)
   }, [addFiles])
 
-  const renderUploadSlots = useCallback((template: { imageCount?: number }, isActive: boolean) => {
-    const count = template.imageCount ?? 1
+  const renderUploadSlots = useCallback((template: { image_count?: number }, isActive: boolean) => {
+    const count = template.image_count ?? 1
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {Array.from({ length: count }, (_, i) => {
@@ -503,9 +350,9 @@ export default function HomePage() {
     )
   }, [attachedPreviews, creating, handleSlotDrop, removeFile, slotDragOver])
 
-  const renderTemplateLabel = (template: { label: string; labelEn: string }) => (
+  const renderTemplateLabel = (template: { labels: Record<string, string> }) => (
     <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
-      {locale === 'zh' ? template.label : template.labelEn}
+      {template.labels[locale] || template.labels.en || ''}
     </div>
   )
 
@@ -720,10 +567,7 @@ export default function HomePage() {
                   whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
                 }}
               >
-                {locale === 'zh'
-                  ? SKILL_TEMPLATES.find(s => s.id === selectedSkill || s.skill === selectedSkill)?.label
-                  : SKILL_TEMPLATES.find(s => s.id === selectedSkill || s.skill === selectedSkill)?.labelEn
-                }
+                {homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || homeSkills.find(s => s.id === selectedSkill)?.labels.en || ''}
                 <span style={{ opacity: 0.6, fontSize: '0.65rem' }}>✕</span>
               </button>
             )}
@@ -746,7 +590,7 @@ export default function HomePage() {
     )
   }
 
-  const handleSkillCardClick = (template: typeof SKILL_TEMPLATES[0], e: React.MouseEvent) => {
+  const handleSkillCardClick = (template: HomeSkill, e: React.MouseEvent) => {
     if (selectedDetail?.id === template.id) {
       setHeroExpanded(false)
       setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
@@ -758,9 +602,9 @@ export default function HomePage() {
     setHeroRect(rect)
     setHeroExpanded(false)
     setSelectedDetail(template)
-    setSelectedSkill(template.skill || null)
+    setSelectedSkill(template.skill_path ? template.id : null)
     setInputText(template.prompt)
-    const idx = SKILL_TEMPLATES.findIndex(t => t.id === template.id)
+    const idx = homeSkills.findIndex(t => t.id === template.id)
     requestAnimationFrame(() => {
       setHeroExpanded(true)
       detailSnapRef.current?.children[idx]?.scrollIntoView({ behavior: 'instant' })
@@ -915,7 +759,7 @@ export default function HomePage() {
             gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
             gap: isDesktop ? '14px' : '10px',
           }}>
-            {SKILL_TEMPLATES.map((template, i) => (
+            {homeSkills.map((template, i) => (
               <div
                 key={template.id}
                 className="mkr-skill-card mkr-row-enter"
@@ -934,7 +778,7 @@ export default function HomePage() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={template.image}
-                  alt={template.labelEn}
+                  alt={template.labels.en || ''}
                   style={{
                     width: '100%', height: '100%',
                     objectFit: 'cover',
@@ -961,7 +805,7 @@ export default function HomePage() {
                     color: '#fff',
                     lineHeight: 1.3,
                   }}>
-                    {locale === 'zh' ? template.label : template.labelEn}
+                    {template.labels[locale] || template.labels.en || ''}
                   </div>
                 </div>
 
@@ -1089,10 +933,10 @@ export default function HomePage() {
                 const slideH = el.clientHeight
                 if (slideH === 0) return
                 const idx = Math.round(el.scrollTop / slideH)
-                const t = SKILL_TEMPLATES[idx]
+                const t = homeSkills[idx]
                 if (t && t.id !== selectedDetail?.id) {
                   setSelectedDetail(t)
-                  setSelectedSkill(t.skill || null)
+                  setSelectedSkill(t.skill_path ? t.id : null)
                   setInputText(t.prompt)
                   setAttachedFiles([])
                   setAttachedPreviews([])
@@ -1103,7 +947,7 @@ export default function HomePage() {
                 overflowY: 'auto', overflowX: 'hidden',
               }}
             >
-            {SKILL_TEMPLATES.map((template) => (
+            {homeSkills.map((template) => (
               <div
                 key={template.id}
                 className="mkr-detail-slide"

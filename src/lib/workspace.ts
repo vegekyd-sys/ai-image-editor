@@ -223,7 +223,7 @@ function listDirRecursive(dir: string, prefix = ''): string[] {
 }
 
 /** List built-in skill files from src/skills/ (local, read-only) */
-function listBuiltInFiles(pattern?: string): WorkspaceFile[] {
+export function listBuiltInFiles(pattern?: string): WorkspaceFile[] {
   const files: WorkspaceFile[] = [];
   try {
     const fs = require('fs') as typeof import('fs');
@@ -267,7 +267,7 @@ function listBuiltInFiles(pattern?: string): WorkspaceFile[] {
 }
 
 /** Read a built-in file from local filesystem */
-function readBuiltInFile(filePath: string): WorkspaceReadResult | null {
+export function readBuiltInFile(filePath: string): WorkspaceReadResult | null {
   try {
     const fs = require('fs') as typeof import('fs');
     const pathMod = require('path') as typeof import('path');
