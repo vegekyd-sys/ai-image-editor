@@ -413,12 +413,14 @@ export default function HomePage() {
             cursor: creating || collapseSlot ? 'default' : 'pointer',
             borderRight: collapseSlot ? 'none' : '1px solid rgba(255,255,255,0.08)',
             position: 'relative', overflow: 'hidden',
+            background: attachedFiles.length > 0 ? 'transparent' : 'rgba(217,70,239,0.04)',
             transition: 'width 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-right 0.2s',
           }}
         >
           {attachedFiles.length === 0 ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={isInline ? 'rgba(255,255,255,0.4)' : '#fff'} strokeWidth={isInline ? '1.8' : '2.5'} strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
             </svg>
           ) : attachedFiles.length === 1 ? (
             <>
@@ -538,7 +540,7 @@ export default function HomePage() {
             }}
             placeholder="where magic happens"
             disabled={creating}
-            rows={3}
+            rows={2}
             style={{
               border: 'none', background: 'transparent',
               color: 'rgba(255,255,255,0.88)', fontSize: '17px', lineHeight: 1.45,
