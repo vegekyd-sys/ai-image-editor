@@ -20,7 +20,7 @@ const SYSTEM_PROMPT = fs.readFileSync(
   'utf-8'
 )
 
-const DEFAULT_MODEL = 'gemini-2.5-flash'
+const DEFAULT_MODEL = 'gemini-3-flash-preview'
 
 function parseArgs() {
   const args = process.argv.slice(2)
