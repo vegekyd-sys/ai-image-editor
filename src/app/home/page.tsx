@@ -631,6 +631,7 @@ export default function HomePage() {
             {/* Skill button + dropdown */}
             <div style={{ position: 'relative', flexShrink: 0 }} ref={skillMenuRef}>
               <button
+                className="mkr-skill-btn"
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect()
                   setSkillMenuPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left })
@@ -759,12 +760,12 @@ export default function HomePage() {
           -webkit-user-select: none;
           transition: background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
         }
-        .mkr-create-btn:hover {
+        .mkr-create-btn:hover, .mkr-skill-btn:hover {
           background: rgba(217,70,239,0.1) !important;
-          border-color: rgba(217,70,239,0.5) !important;
+          border-radius: 12px;
           box-shadow: 0 0 20px rgba(217,70,239,0.15);
         }
-        .mkr-create-btn:active { transform: scale(0.96); }
+        .mkr-create-btn:active, .mkr-skill-btn:active { transform: scale(0.96); }
 
         @keyframes mkr-spin { to { transform: rotate(360deg); } }
         .mkr-spin { animation: mkr-spin 0.9s linear infinite; }
