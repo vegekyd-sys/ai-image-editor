@@ -186,10 +186,10 @@ export default function HomePage() {
   const [cardDragX, setCardDragX] = useState(0)
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
   const cardSwipeRef = useRef<HTMLDivElement>(null)
+  const inlineCardSwipeRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const el = cardSwipeRef.current
-    if (!el) return
+  const registerSwipe = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return () => {}
     const onMove = (e: TouchEvent) => {
       if (!cardTouchRef.current) return
       const dx = e.touches[0].clientX - cardTouchRef.current.startX
@@ -201,17 +201,17 @@ export default function HomePage() {
       if (cardTouchRef.current.locked !== 'x') return
       e.preventDefault()
       e.stopPropagation()
-      setCardDragX(prev => {
-        const idx = parseInt(el.dataset.idx || '0')
-        const count = parseInt(el.dataset.count || '0')
-        const atStart = idx === 0 && dx > 0
-        const atEnd = idx >= count - 1 && dx < 0
-        return (atStart || atEnd) ? dx * 0.2 : dx
-      })
+      setCardDragX(() => dx)
     }
     el.addEventListener('touchmove', onMove, { passive: false })
     return () => el.removeEventListener('touchmove', onMove)
-  }, [attachedFiles.length])
+  }, [])
+
+  useEffect(() => {
+    const cleanup1 = registerSwipe(cardSwipeRef.current)
+    const cleanup2 = registerSwipe(inlineCardSwipeRef.current)
+    return () => { cleanup1(); cleanup2() }
+  }, [attachedFiles.length, registerSwipe])
 
   const MAX_FILES = 10
   const [dragOver, setDragOver] = useState(false)
@@ -323,9 +323,10 @@ export default function HomePage() {
   }, [addFiles])
 
   const renderUploadSlots = useCallback((template: { image_count?: number }, isActive: boolean) => {
-    const count = template.image_count ?? 1
+    const minSlots = template.image_count ?? 1
+    const count = Math.max(minSlots, attachedFiles.length + 1)
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'auto' }}>
         {Array.from({ length: count }, (_, i) => {
           const isDragTarget = slotDragOver === i
           return (
@@ -378,7 +379,7 @@ export default function HomePage() {
   }) => {
     const { isInline, taRef, boxRef, slotWidth } = opts
     const collapseSlot = !isInline && !!selectedDetail
-    const swipeRef = !isDesktop && !isInline ? cardSwipeRef : undefined
+    const swipeRef = !isDesktop && !isInline ? cardSwipeRef : !isDesktop && isInline ? inlineCardSwipeRef : undefined
     return (
       <div
         ref={boxRef}
@@ -471,8 +472,9 @@ export default function HomePage() {
                     const touch = cardTouchRef.current; cardTouchRef.current = null
                     if (!touch || touch.locked !== 'x') { setCardDragX(0); return }
                     const idx = Math.min(cardIndex, attachedFiles.length - 1)
-                    if (cardDragX < -25 && idx < attachedFiles.length - 1) setCardIndex(idx + 1)
-                    else if (cardDragX > 25 && idx > 0) setCardIndex(idx - 1)
+                    const n = attachedFiles.length
+                    if (cardDragX < -25) setCardIndex((idx + 1) % n)
+                    else if (cardDragX > 25) setCardIndex((idx - 1 + n) % n)
                     setCardDragX(0)
                   }}
                 >
