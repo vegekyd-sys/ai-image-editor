@@ -20,7 +20,7 @@ const SYSTEM_PROMPT = fs.readFileSync(
   'utf-8'
 )
 
-const DEFAULT_MODEL = 'gemini-3.0-flash'
+const DEFAULT_MODEL = 'gemini-2.5-flash'
 
 function parseArgs() {
   const args = process.argv.slice(2)
@@ -128,8 +128,12 @@ async function analyzeWithGemini(opts: {
   if (opts.videoPath) {
     console.log(`Uploading video: ${opts.videoPath} (${(fs.statSync(opts.videoPath).size / 1024 / 1024).toFixed(1)}MB)`)
 
+    // Copy to tmp with ASCII name to avoid header encoding issues
+    const tmpPath = path.join(os.tmpdir(), `v2t-upload${path.extname(opts.videoPath)}`)
+    fs.copyFileSync(opts.videoPath, tmpPath)
+
     const uploadResult = await ai.files.upload({
-      file: opts.videoPath,
+      file: tmpPath,
       config: { mimeType: getMimeType(opts.videoPath) },
     })
 
