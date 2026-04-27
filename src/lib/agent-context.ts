@@ -151,7 +151,7 @@ export async function buildPromptContext(
     : '';
 
   const draftWarning = isDraft
-    ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). The image passed to you is this draft preview — edit it directly. Do NOT use image_index to switch to another snapshot.\n\n`
+    ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the image index. Omit image_index to edit this draft directly.\n\n`
     : '';
 
   const refContext = referenceImageCount

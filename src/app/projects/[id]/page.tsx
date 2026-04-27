@@ -129,8 +129,10 @@ export default function ProjectPage() {
   }, [projectId])
 
   // Effect 2: Fetch from Supabase via loadProject (source of truth)
+  // Use user?.id instead of user to avoid re-fetch when auth emits the same user object twice
+  const userId = user?.id
   useEffect(() => {
-    if (!user || !projectId) return
+    if (!userId || !projectId) return
     let cancelled = false
 
     loadProject().then(async ({ snapshots, messages, title, animations }) => {
@@ -189,7 +191,7 @@ export default function ProjectPage() {
     })
 
     return () => { cancelled = true }
-  }, [user, projectId, loadProject, updateCover])
+  }, [userId, projectId, loadProject, updateCover])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
     saveSnapshot(snapshot, sortOrder, onUploaded)

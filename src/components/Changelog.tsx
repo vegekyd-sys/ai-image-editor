@@ -8,6 +8,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-04-26',
+    en: { title: 'OpenAI Image 2 Upgrade & Context Mode', items: [
+      'OpenAI Image 2 now 3x faster (~60s) and 2x cheaper',
+      'Context Mode: for design tasks (e-commerce pages, infographics, posters, web design, anime, game UI), Agent passes your request directly to Image 2 — better results than detailed instructions',
+      'Smart aspect ratio: extreme ratios (1:3, 3:1) now use optimal 1792px sizes for text-heavy layouts',
+    ]},
+    zh: { title: 'OpenAI Image 2 升级 & Context Mode', items: [
+      'OpenAI Image 2 提速 3 倍（~60s）、降价 2 倍',
+      'Context Mode：设计类任务（电商详情页、信息图、海报、网页设计、动漫、游戏 UI）Agent 直接传达你的需求给 Image 2 — 比详细指令效果更好',
+      '智能比例：极端宽高比（1:3、3:1 等）自动使用 1792px 最优尺寸，适配长图排版',
+    ]},
+  },
+  {
     date: '2026-04-23',
     en: { title: 'Skill Sharing & Management', items: [
       'Share skills: generate a private link and send it to friends — they can add the Skill to their account in one click',

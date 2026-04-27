@@ -185,7 +185,7 @@ Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_cod
 
 ### run_code
 Execute JavaScript with design mode (React/CSS) and image utilities (sharp).
-When user asks for visual output — use \`run_code\` with design mode instead of \`generate_image\`.
+Use ONLY for video/animation or when user explicitly requests an editable template. For all image tasks (posters, e-commerce, infographics, marketing) use \`generate_image\` instead.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills
@@ -228,16 +228,19 @@ function createTools(ctx: AgentContext) {
         model: z.enum(['gemini', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-        image_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<image_1>>> = 1, <<<image_2>>> = 2, ...). Omit to edit the current snapshot. Use when user references a previous version.'),
+        image_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<image_1>>> = 1, <<<image_2>>> = 2, ...). Omit for text-to-image (no photo sent). For most edits, pass the current snapshot index.'),
         reference_image_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<image_1>>> and <<<image_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from image_1 and the background from image_2". The editPrompt should describe how to combine them (e.g. "Place the person from Image 2 into the scene of Image 1").'),
       }),
       execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, image_index, reference_image_indices }) => {
-        // Resolve which image to edit — image_index overrides currentImage
-        let editTarget = ctx.currentImage;
+        // Resolve which image to edit — agent must pass image_index to include a photo
+        let editTarget: string | undefined;
         if (image_index !== undefined) {
           const v = validateImageIndex(ctx.snapshotImages, image_index);
           if (v.error) return { success: false as const, message: v.error };
           editTarget = ctx.snapshotImages[v.idx];
+        } else if (ctx.currentImage && !ctx.snapshotImages.includes(ctx.currentImage)) {
+          // Draft/preview mode: currentImage not in snapshotImages (e.g. tip preview)
+          editTarget = ctx.currentImage;
         }
 
         // Resolve reference images: user-uploaded + snapshot indices
@@ -254,7 +257,7 @@ function createTools(ctx: AgentContext) {
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
           { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
-          { currentImage: editTarget, originalImage: ctx.originalImage, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
+          { currentImage: editTarget, originalImage: editTarget ? ctx.originalImage : undefined, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
         // Bill for image generation (separate from Agent LLM tokens)
         if (skillResult.usage) {
@@ -1258,13 +1261,15 @@ export async function* runMakaronAgent(
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
           const inp = event.input as { useOriginalAsReference?: boolean; image_index?: number; reference_image_indices?: number[] };
-          // Resolve the actual edit target (respects image_index)
-          let displayTarget = ctx.currentImage;
+          // Resolve the actual edit target (respects image_index; omit = text-to-image)
+          let displayTarget: string | undefined;
           if (inp.image_index !== undefined) {
             const idx = inp.image_index - 1;
             if (idx >= 0 && idx < ctx.snapshotImages.length) {
               displayTarget = ctx.snapshotImages[idx];
             }
+          } else if (ctx.currentImage && !ctx.snapshotImages.includes(ctx.currentImage)) {
+            displayTarget = ctx.currentImage;
           }
           // Resolve reference images from snapshot indices
           const snapshotRefs: string[] = [];
@@ -1276,13 +1281,15 @@ export async function* runMakaronAgent(
               }
             }
           }
-          const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
-          toolCallImages = [
-            displayTarget,
-            ...(twoImageMode ? [ctx.originalImage!] : []),
-            ...(ctx.referenceImages ?? []),
-            ...snapshotRefs,
-          ];
+          if (displayTarget) {
+            const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
+            toolCallImages = [
+              displayTarget,
+              ...(twoImageMode ? [ctx.originalImage!] : []),
+              ...(ctx.referenceImages ?? []),
+              ...snapshotRefs,
+            ];
+          }
         }
         // For run_code: truncate code in tool_call event (full code already streamed via tool-input-delta)
         const toolInput = event.input as Record<string, unknown>;
@@ -1407,9 +1414,9 @@ export async function* runMakaronAgent(
 
     console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
 
-    // Emit token usage for billing
+    // Emit token usage for billing — totalUsage aggregates across all steps (multi-turn)
     try {
-      const usage = await result.usage;
+      const usage = await result.totalUsage;
       if (usage) {
         const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
         yield { type: 'usage', inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0, model: modelId };

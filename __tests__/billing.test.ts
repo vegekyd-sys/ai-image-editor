@@ -221,15 +221,12 @@ describe('credits', () => {
   describe('deductByTokens', () => {
     it('uses fallback rate when no token rate found', async () => {
       const ratesChain = mockQuery([]);
-      const insertFn = vi.fn().mockResolvedValue({ data: null, error: null });
-      const usageChain = { insert: insertFn };
 
       mockRpc.mockResolvedValue({ data: 50, error: null });
 
       mockFrom.mockImplementation((table: string) => {
         if (table === 'app_settings') return billingSettingsChain;
         if (table === 'token_rates') return ratesChain;
-        if (table === 'usage_logs') return usageChain;
         return mockQuery(null);
       });
       ratesChain.order = vi.fn().mockResolvedValue({ data: [], error: null });
@@ -239,12 +236,11 @@ describe('credits', () => {
       invalidateTokenRateCache();
 
       const result = await deductByTokens('user-1', 'agent', 'unknown-model', 1000, 500);
-      // Fallback rate: $5/$25 per 1M, 2x markup
-      // (1000/1M * 5 + 500/1M * 25) * 2 / 0.01 = (0.005 + 0.0125) * 2 / 0.01 = 3.5
       expect(result.charged).toBeGreaterThan(0);
-      // Verify model logged as unknown:
-      expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
-        model_used: 'unknown:unknown-model',
+      // Verify deduct_and_log RPC was called with unknown model
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_user_id: 'user-1',
+        p_model_used: 'unknown:unknown-model',
       }));
     });
 
@@ -255,15 +251,11 @@ describe('credits', () => {
       const ratesChain = mockQuery(rates);
       ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
 
-      const insertFn = vi.fn().mockResolvedValue({ data: null, error: null });
-      const usageChain = { insert: insertFn };
-
-      mockRpc.mockResolvedValue({ data: 40, error: null }); // remaining = 40
+      mockRpc.mockResolvedValue({ data: 40, error: null });
 
       mockFrom.mockImplementation((table: string) => {
         if (table === 'app_settings') return billingSettingsChain;
         if (table === 'token_rates') return ratesChain;
-        if (table === 'usage_logs') return usageChain;
         return mockQuery(null);
       });
 
@@ -271,37 +263,27 @@ describe('credits', () => {
       const { invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
       invalidateTokenRateCache();
 
-      // 15K input + 1K output on Opus = 60 credits (see tokensToCredits test above)
       const result = await deductByTokens('user-1', 'agent', 'us.anthropic.claude-opus-4-6-v1', 15000, 1000);
       expect(result.charged).toBe(60);
       expect(result.remaining).toBe(40);
 
-      // Verify RPC was called with correct amount
-      expect(mockRpc).toHaveBeenCalledWith('deduct_credits', {
+      // Verify deduct_and_log RPC was called with correct params (deduct + log in one transaction)
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', {
         p_user_id: 'user-1',
         p_amount: 60,
+        p_tool_name: 'agent',
+        p_model_used: 'us.anthropic.claude-opus-4-6-v1',
+        p_input_tokens: 15000,
+        p_output_tokens: 1000,
+        p_duration_ms: null,
+        p_source: 'app',
+        p_api_key_id: null,
       });
-
-      // Verify usage_logs insert includes token data
-      expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
-        user_id: 'user-1',
-        tool_name: 'agent',
-        model_used: 'us.anthropic.claude-opus-4-6-v1',
-        credits_charged: 60,
-        input_tokens: 15000,
-        output_tokens: 1000,
-        source: 'app',
-      }));
     });
   });
 
   describe('deductCredits with null apiKeyId', () => {
     it('works for App users without API key', async () => {
-      const insertFn = vi.fn().mockResolvedValue({ data: null, error: null });
-      const usageChain = { insert: insertFn };
-
-      // credit_pricing chain: getAllPricing() does from('credit_pricing').select('*')
-      // select('*') must resolve directly (no .order() chaining)
       const pricingData = [{ tool_name: 'create_video', supplier_cost: 0.56, credits: 112, is_free: false }];
       const pricingChain = {
         select: vi.fn().mockResolvedValue({ data: pricingData, error: null }),
@@ -312,16 +294,12 @@ describe('credits', () => {
       mockFrom.mockImplementation((table: string) => {
         if (table === 'app_settings') return billingSettingsChain;
         if (table === 'credit_pricing') return pricingChain;
-        if (table === 'usage_logs') return usageChain;
         return mockQuery(null);
       });
 
-      // Must invalidate pricing cache BEFORE importing credits
-      // (since pricing.ts caches at module scope)
       const { invalidatePricingCache, getToolPrice } = await import('@/lib/billing/pricing');
       invalidatePricingCache();
 
-      // Verify pricing lookup works with our mock
       const price = await getToolPrice('create_video');
       expect(price).not.toBeNull();
       expect(price!.credits).toBe(112);
@@ -332,11 +310,201 @@ describe('credits', () => {
       expect(result.charged).toBe(112);
       expect(result.remaining).toBe(888);
 
-      // Verify api_key_id is null in usage log
-      expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
-        api_key_id: null,
-        source: 'app',
+      // Verify deduct_and_log RPC has null api_key_id and 'app' source
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_api_key_id: null,
+        p_source: 'app',
       }));
+    });
+  });
+
+  describe('deductByTokens with MCP source', () => {
+    it('marks source as mcp when apiKeyId is provided', async () => {
+      const rates = [
+        { model_id: 'gemini-3.1-flash-image-preview', display_name: 'Flash', input_per_1m: 0.10, output_per_1m: 0.40, markup: 2, is_active: true },
+      ];
+      const ratesChain = mockQuery(rates);
+      ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
+
+      mockRpc.mockResolvedValue({ data: 900, error: null });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
+        if (table === 'token_rates') return ratesChain;
+        return mockQuery(null);
+      });
+
+      const { deductByTokens } = await import('@/lib/billing/credits');
+      const { invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+      invalidateTokenRateCache();
+
+      await deductByTokens('user-1', 'tips', 'gemini-3.1-flash-image-preview', 5000, 1000, undefined, 'api-key-123');
+
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_source: 'mcp',
+        p_api_key_id: 'api-key-123',
+      }));
+    });
+  });
+
+  describe('deductFixedCredits', () => {
+    it('deducts exact amount and logs correctly', async () => {
+      mockRpc.mockResolvedValue({ data: 500, error: null });
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : mockQuery(null));
+
+      const { deductFixedCredits } = await import('@/lib/billing/credits');
+      const result = await deductFixedCredits('user-1', 110, 'create_video', 'kling-v3-omni', 5000);
+
+      expect(result.charged).toBe(110);
+      expect(result.remaining).toBe(500);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', {
+        p_user_id: 'user-1',
+        p_amount: 110,
+        p_tool_name: 'create_video',
+        p_model_used: 'kling-v3-omni',
+        p_input_tokens: null,
+        p_output_tokens: null,
+        p_duration_ms: 5000,
+        p_source: 'app',
+        p_api_key_id: null,
+      });
+    });
+
+    it('skips when credits is 0', async () => {
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : mockQuery(null));
+
+      const { deductFixedCredits } = await import('@/lib/billing/credits');
+      const result = await deductFixedCredits('user-1', 0, 'create_video');
+
+      expect(result.charged).toBe(0);
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deduct_and_log RPC atomicity', () => {
+    it('uses RPC when available — no fallback', async () => {
+      const rates = [
+        { model_id: 'us.anthropic.claude-sonnet-4-6', display_name: 'Sonnet', input_per_1m: 3, output_per_1m: 15, markup: 2, is_active: true },
+      ];
+      const ratesChain = mockQuery(rates);
+      ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
+
+      mockRpc.mockResolvedValue({ data: 42, error: null });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
+        if (table === 'token_rates') return ratesChain;
+        return mockQuery(null);
+      });
+
+      const { deductByTokens } = await import('@/lib/billing/credits');
+      const { invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+      invalidateTokenRateCache();
+
+      await deductByTokens('user-1', 'agent', 'us.anthropic.claude-sonnet-4-6', 10000, 500);
+
+      // RPC called exactly once (deduct_and_log), no fallback queries
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_user_id: 'user-1',
+        p_tool_name: 'agent',
+      }));
+      // No fallback: mockFrom should NOT be called with 'credit_balances' or 'usage_logs'
+      const fromCalls = mockFrom.mock.calls.map((c: string[]) => c[0]);
+      expect(fromCalls).not.toContain('credit_balances');
+      expect(fromCalls).not.toContain('usage_logs');
+    });
+
+    it('falls back to separate deduct + log when RPC fails', async () => {
+      const rates = [
+        { model_id: 'us.anthropic.claude-sonnet-4-6', display_name: 'Sonnet', input_per_1m: 3, output_per_1m: 15, markup: 2, is_active: true },
+      ];
+      const ratesChain = mockQuery(rates);
+      ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
+
+      // RPC fails
+      mockRpc.mockResolvedValue({ data: null, error: { message: 'function not found' } });
+
+      const balanceChain = mockQuery({ balance: 100, lifetime_used: 50 });
+      const insertFn = vi.fn().mockResolvedValue({ data: null, error: null });
+      const usageChain = { insert: insertFn };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
+        if (table === 'token_rates') return ratesChain;
+        if (table === 'credit_balances') return balanceChain;
+        if (table === 'usage_logs') return usageChain;
+        return mockQuery(null);
+      });
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const { deductByTokens } = await import('@/lib/billing/credits');
+      const { invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+      invalidateTokenRateCache();
+
+      await deductByTokens('user-1', 'agent', 'us.anthropic.claude-sonnet-4-6', 10000, 500);
+
+      // Should log warning about fallback
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('deduct_and_log RPC not available'), expect.any(String));
+      // Should have written to usage_logs via fallback
+      expect(insertFn).toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('resolveToolName', () => {
+    it('strips makaron_ prefix', async () => {
+      const { resolveToolName } = await import('@/lib/billing/pricing');
+      expect(resolveToolName('makaron_edit_image', 'gemini')).toBe('edit_image_gemini');
+    });
+
+    it('appends model suffix for edit_image', async () => {
+      const { resolveToolName } = await import('@/lib/billing/pricing');
+      expect(resolveToolName('edit_image', 'qwen')).toBe('edit_image_qwen');
+    });
+
+    it('returns base name for non-edit tools', async () => {
+      const { resolveToolName } = await import('@/lib/billing/pricing');
+      expect(resolveToolName('create_music')).toBe('create_music');
+      expect(resolveToolName('makaron_create_video')).toBe('create_video');
+    });
+  });
+
+  describe('getTokenRate matching', () => {
+    it('strips region prefix for Bedrock models', async () => {
+      const rates = [
+        { model_id: 'anthropic.claude-sonnet-4-6', display_name: 'Sonnet', input_per_1m: 3, output_per_1m: 15, markup: 2, is_active: true },
+      ];
+      const ratesChain = mockQuery(rates);
+      ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
+      mockFrom.mockImplementation((t: string) => t === 'token_rates' ? ratesChain : billingSettingsChain);
+
+      const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+      invalidateTokenRateCache();
+
+      // "us.anthropic.claude-sonnet-4-6" should match "anthropic.claude-sonnet-4-6" after stripping "us."
+      const rate = await getTokenRate('us.anthropic.claude-sonnet-4-6');
+      expect(rate).not.toBeNull();
+      expect(rate!.display_name).toBe('Sonnet');
+    });
+
+    it('matches by prefix for versioned models', async () => {
+      const rates = [
+        { model_id: 'gemini-3.1-flash', display_name: 'Flash', input_per_1m: 0.10, output_per_1m: 0.40, markup: 2, is_active: true },
+      ];
+      const ratesChain = mockQuery(rates);
+      ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
+      mockFrom.mockImplementation((t: string) => t === 'token_rates' ? ratesChain : billingSettingsChain);
+
+      const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+      invalidateTokenRateCache();
+
+      // "gemini-3.1-flash-image-preview:text" should prefix-match "gemini-3.1-flash"
+      const rate = await getTokenRate('gemini-3.1-flash-image-preview:text');
+      expect(rate).not.toBeNull();
+      expect(rate!.display_name).toBe('Flash');
     });
   });
 

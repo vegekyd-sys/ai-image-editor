@@ -112,11 +112,6 @@ export async function POST(req: NextRequest) {
 
           // nameProject: generate a short project name from image description
           if (nameProject) {
-            if (process.env.MOCK_AI === 'true') {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content', text: MOCK_TEXTS.nameProject })}\n\n`));
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`));
-              return;
-            }
             const desc = (description as string) || '';
             const namePrompt = withLocale(
               `Based on this photo description, give a concise project name (2-4 words): ${desc}. Output only the name, no punctuation or explanation.`,

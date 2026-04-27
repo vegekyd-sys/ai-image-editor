@@ -148,7 +148,7 @@ function buildTipsPrompt(
     ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
     : '';
   const dedupeNote = existingLabels?.length
-    ? `[已有以下建议，必须生成完全不同的方向] ${existingLabels.join('、')}\n\n`
+    ? `[DEDUP — CRITICAL] The following tips already exist. You MUST NOT repeat these directions or produce similar variations:\n${existingLabels.map(l => `- ❌ "${l}"`).join('\n')}\nChoose completely different directions from the list above.\n\n`
     : '';
   // enhance: skip image analysis — universal technical improvements don't need content analysis
   const analysisStep = category === 'enhance'

@@ -27,21 +27,19 @@ export async function createProject(
   files: File[],
   options?: { prompt?: string; skill?: string },
 ): Promise<{ projectId: string; metadata?: { takenAt?: string; location?: string } } | null> {
-  // Extract EXIF from first file
-  const metadata = files.length > 0 ? await extractPhotoMetadata(files[0]) : undefined
-  console.log('[METADATA]', JSON.stringify(metadata))
-
-  // Single image: compress first, then create project → store base64 (same as original flow)
+  // Single image: compress + metadata + DB insert in parallel, then navigate immediately
   // Multi image: create project first (need ID for upload) → upload → store URLs
   if (files.length <= 1) {
-    const base64 = files.length === 1 ? await compressFile(files[0]) : undefined
+    // Run compress, metadata, and DB insert in parallel — none depend on each other
+    const [base64, metadata, projectResult] = await Promise.all([
+      files.length === 1 ? compressFile(files[0]) : Promise.resolve(undefined),
+      files.length > 0 ? extractPhotoMetadata(files[0]) : Promise.resolve(undefined),
+      supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single(),
+    ])
+    console.log('[METADATA]', JSON.stringify(metadata))
 
-    const { data: project, error } = await supabase
-      .from('projects')
-      .insert({ user_id: userId, title: 'Untitled' })
-      .select('id')
-      .single()
-    if (error || !project) throw new Error('Failed to create project')
+    if (projectResult.error || !projectResult.data) throw new Error('Failed to create project')
+    const project = projectResult.data
 
     if (base64) sessionStorage.setItem('pendingImages', JSON.stringify([base64]))
     if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
@@ -50,13 +48,14 @@ export async function createProject(
     return { projectId: project.id, metadata }
   }
 
-  // Multi image: create project first (need ID for storage path), then upload
-  const { data: project, error } = await supabase
-    .from('projects')
-    .insert({ user_id: userId, title: 'Untitled' })
-    .select('id')
-    .single()
-  if (error || !project) throw new Error('Failed to create project')
+  // Multi image: create project + extract metadata in parallel, then upload
+  const [projectResult, metadata] = await Promise.all([
+    supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single(),
+    extractPhotoMetadata(files[0]),
+  ])
+  console.log('[METADATA]', JSON.stringify(metadata))
+  if (projectResult.error || !projectResult.data) throw new Error('Failed to create project')
+  const project = projectResult.data
 
   const urls = await Promise.all(files.map(async (file, i) => {
     const base64 = await compressFile(file)

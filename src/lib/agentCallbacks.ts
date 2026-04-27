@@ -249,11 +249,6 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         } : m,
       ));
 
-      // Auto-name project after first image generation
-      if (!ctx.hasTriggeredNamingRef.current && (!ctx.initialTitle || ctx.initialTitle === 'Untitled' || ctx.initialTitle === '未命名' || ctx.initialTitle === '未命名项目')) {
-        ctx.hasTriggeredNamingRef.current = true;
-        ctx.triggerProjectNaming?.(ctx.userPromptText ?? '');
-      }
     },
 
     onToolCall: (tool, input, images) => {
@@ -456,6 +451,18 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         setTimeout(() => {
           if (lastSetStatus === doneText) setStatus(ctx.t('editor.greeting'));
         }, 2000);
+      }
+
+      // Auto-name project if still Untitled
+      if (!ctx.hasTriggeredNamingRef.current &&
+          (!ctx.initialTitle || ctx.initialTitle === 'Untitled' || ctx.initialTitle === '未命名' || ctx.initialTitle === '未命名项目')) {
+        const nameSource = ctx.userPromptText
+          || ctx.snapshotsRef.current.find(s => s.description)?.description
+          || '';
+        if (nameSource.trim()) {
+          ctx.hasTriggeredNamingRef.current = true;
+          ctx.triggerProjectNaming?.(nameSource);
+        }
       }
 
       ctx.onCleanup?.();

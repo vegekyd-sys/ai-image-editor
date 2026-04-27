@@ -1,10 +1,12 @@
-Edit the current photo OR generate a new image from text using a detailed English editPrompt.
-When no photo exists (text-to-image mode), write the editPrompt as a detailed image generation prompt describing the scene, style, lighting, and composition.
+Edit the current photo OR generate a new image from text.
+editPrompt format depends on the mode — see CONTEXT MODE vs Edit Mode sections below.
+When no photo exists (text-to-image mode), write the editPrompt describing the scene.
 
 --- IMAGE INDEX (MULTI-SNAPSHOT) ---
-Use `image_index` (1-based) to edit a specific snapshot instead of the current one.
+Use `image_index` (1-based) to select which snapshot to edit.
 The `[图片索引]` in the prompt lists all snapshots with their edit history and content descriptions.
-When omitted, edits the current snapshot (marked with ← YOU ARE HERE).
+When omitted, no photo is sent — the model generates purely from text (text-to-image mode).
+When editing a photo, you MUST pass image_index. The user's current photo is marked with ← YOU ARE HERE in the image index.
 After generation, the result is appended as <<<image_N+1>>> and immediately available.
 
 CRITICAL: Use `reference_image_indices` whenever your editPrompt mentions multiple images (Image 1, Image 2, etc.).
@@ -60,10 +62,38 @@ When the input image has visible red annotations, the editPrompt MUST reference 
 
 --- MODEL SELECTION ---
 `model` is optional — omit it for normal edits (auto-router handles).
-Set `model: 'openai'` when the edit requires accurate text rendering (posters, titles, captions baked into the image) or when the user complains about face identity drift after a Gemini edit.
-OpenAI takes ~2-3 minutes — always warn the user about the wait time before calling.
+Set `model: 'openai'` when the edit requires accurate text rendering, face identity preservation, or design/layout tasks.
+OpenAI takes ~2-3 minutes per generation — tell the user it will take a couple of minutes.
 
---- WRITING THE EDITPROMPT ---
+--- CONTEXT MODE (model='openai') ---
+For design/layout tasks (电商详情页, infographics, posters, marketing, anime, game/app UI, web design),
+set model='openai'. In this mode your job is to INSPIRE Image 2's judgment, not to make judgments for it.
+
+Context Mode 三个原则：
+1. editPrompt = 用户原话。不改写、不翻译、不压缩、不展开
+2. 启发模型判断，而不是替代模型判断。你描述风格/配色/排版 = 替代它判断 = 更差的结果
+3. 总结上下文，给 Image 2 更好的 context。多轮对话时把之前轮次用户说过的关键反馈带上
+
+示例 — 单轮：
+  用户: "给这个键盘设计一个高级的信息丰富的电商详情页"
+  editPrompt: "给这个键盘设计一个高级的信息丰富的电商详情页"
+  ❌ 错误: "Create a premium e-commerce page with hero shot, feature highlights, spec table..."（替代了模型的判断）
+
+示例 — 多图：
+  用户: "图1是我们的宣传物料ref，图2是主要内容，做个类似图1的物料"
+  editPrompt: "图1是我们的宣传物料ref，图2是主要内容，做个类似图1的物料"
+
+示例 — 多轮（用上下文启发模型）：
+  用户第一轮: "做个电商详情页"
+  用户第二轮: "文字太小了，内容不够详细，图2里的信息要更完整体现"
+  editPrompt: "文字太小了，内容不够详细，图2里的信息要更完整体现"
+
+  用户第三轮: "配色太暗了，整体亮一些，标题换成星擎传媒"
+  editPrompt: "配色太暗了，整体亮一些，标题换成星擎传媒。之前用户还反馈过文字太小、内容要更详细"
+  （把之前的反馈带上，帮助模型理解完整上下文 ✅）
+  ❌ 错误: 写颜色代码、CSS 属性、排版细节（替代了模型的判断）
+
+--- WRITING THE EDITPROMPT (Edit Mode) ---
 
 FACE (when people are present — always include):
   Large face (>10% of frame): "Preserve each person's face exactly as in the current photo. Do NOT change face shape, eyes, skin, or any facial features."

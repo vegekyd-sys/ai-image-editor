@@ -17,8 +17,8 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const inputImageLabels = [t('chat.currentImage'), t('chat.originalImage')];
-  const modelLabels: Record<string, string> = { qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
-  const modelLabel = modelLabels[editModel || ''] || 'nano banana 2';
+  const modelLabels: Record<string, string> = { gemini: 'nano banana 2', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
+  const modelLabel = modelLabels[editModel || ''] || editModel || 'model';
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', maxWidth: 308 }}>
       <button
@@ -451,9 +451,16 @@ export default function AgentChatView({
   const [processingImageCount, setProcessingImageCount] = useState(0);
   // Capture skipSlideIn at mount time — ignore prop changes after mount
   const [mountedWithSkip] = useState(skipSlideIn);
-  // Lazy message rendering: only show last N messages initially to reduce forced reflow
+  // Lazy message rendering: only show last N messages on first open to reduce forced reflow.
+  // Once new messages arrive (active chat), show all to prevent older messages from disappearing.
   const INITIAL_MSG_COUNT = 12;
   const [showAllMessages, setShowAllMessages] = useState(false);
+  const initialMsgCountRef = useRef(messages.length);
+  useEffect(() => {
+    if (!showAllMessages && messages.length > INITIAL_MSG_COUNT && messages.length > initialMsgCountRef.current) {
+      setShowAllMessages(true);
+    }
+  }, [messages.length, showAllMessages]);
   const visibleMessages = showAllMessages || messages.length <= INITIAL_MSG_COUNT
     ? messages
     : messages.slice(-INITIAL_MSG_COUNT);
@@ -818,8 +825,13 @@ export default function AgentChatView({
         const remaining = 10 - attachedImages.length;
         const toProcess = files.slice(0, remaining);
         setProcessingImageCount(toProcess.length);
-        const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
-        setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+        try {
+          const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
+          const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
+          if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+        } catch (err) {
+          console.error('[CUI] image compress error:', err);
+        }
         setProcessingImageCount(0);
       }}
     >
@@ -1216,8 +1228,13 @@ export default function AgentChatView({
           const remaining = 10 - attachedImages.length;
           const toProcess = files.slice(0, remaining);
           setProcessingImageCount(toProcess.length);
-          const compressed = await Promise.all(toProcess.map(f => compressImageFile(f)));
-          setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+          try {
+            const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
+            const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
+            if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+          } catch (err) {
+            console.error('[CUI] image compress error:', err);
+          }
           setProcessingImageCount(0);
         }}
       />
