@@ -762,7 +762,7 @@ export default function HomePage() {
         }
         .mkr-create-btn:hover, .mkr-skill-btn:hover {
           background: rgba(217,70,239,0.1) !important;
-          border-radius: 12px;
+          border-radius: 12px !important;
           box-shadow: 0 0 20px rgba(217,70,239,0.15);
         }
         .mkr-create-btn:active, .mkr-skill-btn:active { transform: scale(0.96); }
