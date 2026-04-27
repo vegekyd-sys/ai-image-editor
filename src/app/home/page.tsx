@@ -109,6 +109,7 @@ export default function HomePage() {
 
   const handleSkillUpload = useCallback(async (file: File) => {
     setSkillUploading(true)
+    setInstallingSkill(true)
     const form = new FormData()
     form.append('file', file)
     try {
@@ -123,6 +124,7 @@ export default function HomePage() {
       }
     } catch {}
     setSkillUploading(false)
+    setInstallingSkill(false)
   }, [])
 
   useEffect(() => {
