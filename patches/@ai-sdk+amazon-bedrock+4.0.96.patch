@@ -1,0 +1,16 @@
+diff --git a/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs b/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs
+index 2b9cfb9..259622c 100644
+--- a/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs
++++ b/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs
+@@ -297,6 +297,11 @@ async function prepareTools({
+         }
+       }
+     });
++    // patch: PR #8137 — add tool cachePoint support (2026-04-28)
++    const toolCachePoint = getCachePoint(tool.providerOptions);
++    if (toolCachePoint) {
++      bedrockTools.push(toolCachePoint);
++    }
+   }
+   let bedrockToolChoice = void 0;
+   if (!usingAnthropicTools && bedrockTools.length > 0 && toolChoice) {

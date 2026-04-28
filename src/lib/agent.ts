@@ -152,7 +152,7 @@ async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function getAgentSystemPrompt(): string {
-  return agentPrompt + '\n\n## Video Script Format\n\n' + animatePrompt;
+  return agentPrompt;
 }
 
 /** Rough token estimate — 1 token ≈ 4 chars for English, ~1.5-2 for CJK. Use 3.5 as middle ground. */
@@ -304,7 +304,9 @@ function createTools(ctx: AgentContext) {
     }),
 
     generate_animation: tool({
-      description: 'Submit a video script for rendering. Write the script yourself first (streamed to user in chat, following the Video Script Format in your system prompt), then call this tool to submit it.',
+      description: `Submit a video script for rendering. Write the script yourself first (streamed to user in chat, following the Video Script Format below), then call this tool to submit it.
+
+${animatePrompt}`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then Shot lines with <<<image_N>>> references, camera directions, sound cues, ending with Style line. Follow the Video Script Format in system prompt.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
@@ -1005,6 +1007,9 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
     }),
 
     generate_music: tool({
+      // Cache point marker — cache all tools preceding this one (PR #8137 patch).
+      // Must stay on the LAST tool in this map so the whole tools block is cached.
+      providerOptions: { bedrock: { cachePoint: { type: 'default' } } },
       description: `Generate background music for the current design/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
@@ -1485,14 +1490,19 @@ export async function* runMakaronAgent(
       const usage = await result.totalUsage;
       if (usage) {
         const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
-        // Bedrock-specific cache fields (may be undefined on other providers)
-        const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; cacheReadInputTokens?: number; cacheWriteInputTokens?: number };
-        const cacheRead = u.cacheReadInputTokens ?? u.cachedInputTokens ?? 0;
-        const cacheWrite = u.cacheWriteInputTokens ?? 0;
+        // Vercel AI SDK v6 normalized shape: inputTokenDetails.cacheReadTokens / cacheWriteTokens
+        // Fallbacks: cachedInputTokens (deprecated), Bedrock raw cacheReadInputTokens / cacheWriteInputTokens
+        const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; cacheReadInputTokens?: number; cacheWriteInputTokens?: number; inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number } };
+        const d = u.inputTokenDetails;
+        const cacheRead = d?.cacheReadTokens ?? u.cacheReadInputTokens ?? u.cachedInputTokens ?? 0;
+        const cacheWrite = d?.cacheWriteTokens ?? u.cacheWriteInputTokens ?? 0;
+        const noCache = d?.noCacheTokens ?? 0;
         const inputT = u.inputTokens ?? 0;
-        const hitRate = inputT > 0 ? ((cacheRead / inputT) * 100).toFixed(1) : '0';
+        // "input" reported by Vercel is typically the non-cached slice; true total = input + cacheRead + cacheWrite
+        const totalInput = inputT + cacheRead + cacheWrite;
+        const hitRate = totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : '0';
         console.log(
-          `[agent-usage] input=${inputT} output=${u.outputTokens ?? 0} cacheRead=${cacheRead} cacheWrite=${cacheWrite} hitRate=${hitRate}% model=${modelId}`
+          `[agent-usage] totalInput=${totalInput} (noCache=${inputT} cacheRead=${cacheRead} cacheWrite=${cacheWrite}) output=${u.outputTokens ?? 0} hitRate=${hitRate}% model=${modelId}`
         );
         yield { type: 'usage', inputTokens: inputT, outputTokens: u.outputTokens ?? 0, model: modelId };
       }
