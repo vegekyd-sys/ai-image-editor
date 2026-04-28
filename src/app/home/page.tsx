@@ -47,6 +47,7 @@ export default function HomePage() {
   const [heroExpanded, setHeroExpanded] = useState(false)
   const detailSnapRef = useRef<HTMLDivElement>(null)
   const [kbInset, setKbInset] = useState(0)
+  const [textareaFocused, setTextareaFocused] = useState(false)
   const scrollStartY = useRef<number | null>(null)
   const inlineInputRef = useRef<HTMLDivElement>(null)
   const inlineTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -603,6 +604,8 @@ export default function HomePage() {
             ref={taRef}
             value={inputText}
             onChange={(e) => { userTypingRef.current = true; setInputText(e.target.value) }}
+            onFocus={() => setTextareaFocused(true)}
+            onBlur={() => setTextareaFocused(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFiles.length > 0)) {
                 e.preventDefault()
@@ -951,7 +954,7 @@ export default function HomePage() {
         {/* ── Bottom Input Box (fixed, slides in when inline is off-screen) ── */}
         <div ref={inputWrapperRef} style={{
           position: 'fixed', left: 0, right: 0,
-          bottom: kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
+          bottom: textareaFocused && kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
           zIndex: Z.INPUT,
           pointerEvents: 'none',
           ...(isDesktop ? {
@@ -960,7 +963,7 @@ export default function HomePage() {
             padding: '60px 12px 8px',
           }),
           transform: (showFixedInput || selectedDetail) ? 'translateY(0)' : 'translateY(calc(100% + 20px))',
-          transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)' + (kbInset > 0 ? ', bottom 0.1s ease-out' : ''),
+          transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), bottom 0.2s ease-out',
         }}>
           {/* No gradient overlay — cards show through below */}
           <div style={{ maxWidth: '480px', margin: '0 auto', position: 'relative', pointerEvents: 'none' }}>
