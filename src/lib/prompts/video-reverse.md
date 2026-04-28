@@ -10,12 +10,44 @@ Output a JSON object with these fields:
   "id": "kebab-case-name",
   "label": "中文标签 (2-4字)",
   "labelEn": "English Label (2-4 words)",
-  "prompt": "The full Kling prompt (Shot format, see below)",
+  "hook": "One sentence: why is this video interesting/viral?",
+  "prompt": "The full Kling prompt",
   "imageCount": 1,
   "duration": 5,
   "aspectRatio": "9:16"
 }
 ```
+
+## STEP 0: Find the "Hook" — What Makes This Video INTERESTING (DO THIS FIRST)
+
+Before describing any technical details, answer this question: **Why would someone share this video?** What's the creative concept that makes it delightful, surprising, or viral?
+
+Examples of hooks:
+- "Real photo → miniature 3D figurines standing IN the original photo's scene, with giant hands interacting with them"
+- "Person transforms into a mech suit in one continuous orbiting shot"
+- "Photo comes alive — person in the photo starts dancing to music"
+- "Split screen: left half is real face, right half morphs into anime/titan/robot"
+
+The hook is the SOUL of the prompt. If your prompt doesn't capture the hook, the video will be technically accurate but creatively dead. Write the hook as `"hook"` field in your JSON output.
+
+**Common creative patterns to look for:**
+- **Scale play**: Real-size hands interacting with miniature versions of people
+- **Dimension break**: 2D photo becoming 3D, flat image coming alive
+- **Transformation**: Person gradually changing into something else
+- **Scene transplant**: Person placed into a different world/setting
+- **Time manipulation**: Freeze, reverse, speed ramp
+- **Style transfer**: Real person becoming cartoon/anime/clay/pixel art while maintaining personality
+
+## STEP 0.5: Determine Shot Structure
+
+Before anything else, count how many **hard cuts** (abrupt transitions to a different camera angle) are in the video.
+
+- **0 hard cuts** → This is a **SINGLE CONTINUOUS TAKE (一镜到底)**. You MUST write the prompt as ONE FLOWING PARAGRAPH. Do NOT use "Shot 1", "Shot 2" format. Instead describe the continuous camera movement and action as a single unbroken sequence.
+- **1+ hard cuts** → This is a **MULTI-SHOT** video. Use "Shot N (Xs):" format, one per cut.
+
+**IMPORTANT**: A camera that orbits, pushes in, pulls out, or changes angle smoothly is NOT a cut. That is still one continuous take. Only count abrupt jumps to a completely different viewpoint.
+
+Include `"shotStructure": "single-take"` or `"shotStructure": "multi-shot"` in your JSON output.
 
 ## How to Analyze the Video — Be OBSESSIVELY Detailed
 
