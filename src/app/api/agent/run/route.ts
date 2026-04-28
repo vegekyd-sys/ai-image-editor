@@ -126,6 +126,7 @@ export async function POST(req: NextRequest) {
           supabase,
           userId: user.id,
           currentDesign: ctx.currentDesign,
+          history: ctx.history,
         })) {
           if (event.type === 'usage') {
             totalInputTokens += event.inputTokens ?? 0;

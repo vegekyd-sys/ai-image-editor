@@ -1085,7 +1085,7 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } } },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }> },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -1165,8 +1165,12 @@ export async function* runMakaronAgent(
   const userImagesCount = Array.isArray(userContent)
     ? userContent.filter((p: { type?: string }) => p?.type === 'image').length
     : 0;
+  // analysis / tipReaction / animation modes intentionally skip history to keep
+  // the request single-turn (matches prior behavior). Normal chat sends it.
+  const sendHistory = !analysisOnly && !tipReactionOnly && !(animImages?.length);
+  const history = sendHistory ? (options?.history ?? []) : [];
   console.log(
-    `[agent-req] systemChars=${systemPrompt.length} toolsChars=${toolsChars} userChars=${userContentChars} images=${userImagesCount} mode=${tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal'}`
+    `[agent-req] systemChars=${systemPrompt.length} toolsChars=${toolsChars} userChars=${userContentChars} images=${userImagesCount} historyTurns=${history.length} mode=${tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal'}`
   );
 
   // Optional full-request dump for offline diffing
@@ -1187,7 +1191,7 @@ export async function* runMakaronAgent(
           : userContent;
       await fs.writeFile(dumpPath, JSON.stringify({
         ts, mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
-        systemPrompt, tools: toolsDump, userContent: userContentDump,
+        systemPrompt, tools: toolsDump, history, userContent: userContentDump,
       }, null, 2));
       console.log(`[agent-req] dumped → ${dumpPath}`);
     } catch (e) { console.log(`[agent-req] dump failed: ${e instanceof Error ? e.message : String(e)}`); }
@@ -1200,7 +1204,7 @@ export async function* runMakaronAgent(
     const result = (streamText as any)({
       model: MODEL,
       system: [{ role: 'system', content: systemPrompt, providerOptions: { bedrock: { cachePoint: { type: 'default' } } } }],
-      messages: [{ role: 'user', content: userContent }],
+      messages: [...history, { role: 'user', content: userContent }],
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),

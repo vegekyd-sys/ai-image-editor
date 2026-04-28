@@ -27,6 +27,10 @@ export interface PromptContextOptions {
 
 export interface PromptContextResult {
   fullPrompt: string;
+  /** Prior user/assistant turns (excluding the current user prompt).
+   *  Passed to streamText as the messages[] prefix so Bedrock sees a real
+   *  multi-turn conversation — required for per-turn cachePoint (B7). */
+  history: Array<{ role: 'user' | 'assistant'; content: string }>;
   snapshotImages: string[];
   currentSnapshotIndex: number;
   currentDesign?: DesignPayload;
@@ -92,15 +96,15 @@ export async function buildPromptContext(
     ? `[图片分析结果]\n${currentSnap.description}\n\n`
     : '';
 
-  // Conversation history
-  const recentMessages = messages
+  // Conversation history — real user/assistant turns, passed to streamText as
+  // messages[] prefix (no longer stringified into user content).
+  // Drop trailing user messages so the current turn's prompt isn't duplicated
+  // if the caller already wrote it to DB before building context.
+  const filtered = messages
     .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
-    .slice(-200)
-    .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 2000)}`)
-    .join('\n');
-  const historyContext = recentMessages
-    ? `[对话历史]\n${recentMessages}\n\n`
-    : '';
+    .map(m => ({ role: m.role, content: m.content }));
+  while (filtered.length && filtered[filtered.length - 1].role === 'user') filtered.pop();
+  const history = filtered.slice(-50);
 
   // Tips
   const currentTips: Tip[] = Array.isArray(currentSnap?.tips) ? currentSnap.tips : [];
@@ -159,14 +163,16 @@ export async function buildPromptContext(
     ? `[用户上传了 ${referenceImageCount} 张参考图，已自动传给 generate_image 工具使用]\n\n`
     : '';
 
-  // Assemble (same order as Editor.tsx)
-  const fullPrompt = `${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  // Assemble (same order as Editor.tsx, minus historyContext — now passed
+  // as structured messages[] alongside fullPrompt).
+  const fullPrompt = `${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map(s => s.image_url || '');
   const originalImage = snapshots[0]?.image_url || undefined;
 
   return {
     fullPrompt,
+    history,
     snapshotImages,
     currentSnapshotIndex,
     currentDesign,

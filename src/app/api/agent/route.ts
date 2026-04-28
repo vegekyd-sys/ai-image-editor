@@ -180,6 +180,7 @@ export async function POST(req: NextRequest) {
           let agentSnapshotImages = snapshotImages?.length ? snapshotImages : undefined;
           let agentCurrentSnapshotIndex = currentSnapshotIndex;
           let agentCurrentDesign = currentDesign || undefined;
+          let agentHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
           if (headless) {
             const { buildPromptContext } = await import('@/lib/agent-context');
@@ -196,6 +197,7 @@ export async function POST(req: NextRequest) {
             agentSnapshotImages = ctx.snapshotImages;
             agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
             agentCurrentDesign = ctx.currentDesign;
+            agentHistory = ctx.history;
 
             // Write user message to DB (frontend does this itself)
             await supabase.from('messages').insert({
@@ -205,6 +207,23 @@ export async function POST(req: NextRequest) {
               content: prompt ?? '',
               has_image: false,
             });
+          } else if (isNormalMode) {
+            // Frontend path: fetch history from DB so Bedrock sees real multi-turn
+            // structure (previously history was stuffed into user content as a
+            // single string, which broke per-turn cachePoint).
+            const { data: msgs } = await supabase
+              .from('messages')
+              .select('role, content')
+              .eq('project_id', projectId)
+              .order('created_at', { ascending: true });
+            const hist = (msgs ?? [])
+              .filter((m: { role: string; content: string }) => m.content && (m.role === 'user' || m.role === 'assistant'))
+              .map((m: { role: 'user' | 'assistant'; content: string }) => ({ role: m.role, content: m.content }));
+            // Drop trailing user messages — the current turn's prompt may or may
+            // not already be in DB (frontend writes fire-and-forget). Keep only
+            // through the last assistant turn to avoid duplicating it.
+            while (hist.length && hist[hist.length - 1].role === 'user') hist.pop();
+            agentHistory = hist.slice(-50);
           }
 
           // Normal agent request — SSE heartbeat every 10s to prevent proxy idle timeout
@@ -220,7 +239,7 @@ export async function POST(req: NextRequest) {
           };
 
           try {
-            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign })) {
+            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign, history: agentHistory })) {
               if (event.type === 'usage') { usageEvent = event; continue; }
               if (writer) {
                 await writer.processAndEnqueue(event);
