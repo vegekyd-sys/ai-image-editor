@@ -1199,12 +1199,26 @@ export async function* runMakaronAgent(
 
   let firstContentAt = 0;
 
+  // B7: cache the conversation history up through the last assistant turn.
+  // Only worth the cacheWrite cost when the conversation has real history
+  // (≥ 2 prior turns including at least one assistant). Short sessions skip.
+  const msgs: Array<{ role: 'user' | 'assistant'; content: unknown; providerOptions?: Record<string, unknown> }> =
+    [...history, { role: 'user', content: userContent }];
+  if (history.length >= 2) {
+    for (let i = msgs.length - 2; i >= 0; i--) {
+      if (msgs[i].role === 'assistant') {
+        msgs[i].providerOptions = { bedrock: { cachePoint: { type: 'default' } } };
+        break;
+      }
+    }
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = (streamText as any)({
       model: MODEL,
       system: [{ role: 'system', content: systemPrompt, providerOptions: { bedrock: { cachePoint: { type: 'default' } } } }],
-      messages: [...history, { role: 'user', content: userContent }],
+      messages: msgs,
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
