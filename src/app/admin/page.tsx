@@ -56,10 +56,8 @@ export default function AdminPage() {
   const [addingCredits, setAddingCredits] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [homeSkills, setHomeSkills] = useState<any[]>([])
-  const [editingSkill, setEditingSkill] = useState<string | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [editSkillFields, setEditSkillFields] = useState<Record<string, any>>({})
-  const [newSkill, setNewSkill] = useState({ labels: '{"zh":"","en":""}', image: '', prompt: '', skill_path: '', image_count: '1', sort_order: '0' })
+  const [modalSkill, setModalSkill] = useState<any | 'new' | null>(null) // null closed, 'new' new, or skill object for edit
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -701,6 +699,12 @@ export default function AdminPage() {
       {/* ══════ SKILLS TAB ══════ */}
       {tab === 'skills' && (
         <>
+          <div className="flex justify-end mb-3">
+            <button
+              onClick={() => setModalSkill('new')}
+              className="px-3 py-1.5 rounded-lg bg-fuchsia-600 text-white text-xs font-medium hover:bg-fuchsia-500"
+            >+ Add Skill</button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -714,163 +718,258 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {homeSkills.map((skill) => {
-                  const isEditing = editingSkill === skill.id
-                  return (
-                    <tr key={skill.id} className="border-b border-white/5 hover:bg-white/5">
-                      <td className="py-2 px-2 text-white/40">{skill.sort_order}</td>
-                      <td className="py-2 px-2">
-                        {skill.image && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={skill.image} alt="" style={{ maxHeight: 48, maxWidth: 64, objectFit: 'contain', borderRadius: 4 }} />
-                        )}
-                      </td>
-                      <td className="py-2 px-2">
-                        {isEditing ? (
-                          <textarea
-                            value={editSkillFields.labels ?? JSON.stringify(skill.labels)}
-                            onChange={(e) => setEditSkillFields(prev => ({ ...prev, labels: e.target.value }))}
-                            className="w-full px-2 py-1 rounded bg-white/10 text-white text-xs border border-white/20 focus:border-fuchsia-500/50 focus:outline-none font-mono"
-                            rows={2}
-                          />
-                        ) : (
-                          <div>
-                            <div className="text-white">{skill.labels?.en || skill.labels?.zh || '—'}</div>
-                            {skill.labels?.zh && <div className="text-white/40 text-xs">{skill.labels.zh}</div>}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-2 px-2">
-                        {skill.skill_path ? (
-                          <span className="text-green-400 text-xs">✓</span>
-                        ) : (
-                          <span className="text-white/20">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center">
+                {homeSkills.map((skill) => (
+                  <tr key={skill.id} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-2 px-2 text-white/40">{skill.sort_order}</td>
+                    <td className="py-2 px-2">
+                      {skill.image && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={skill.image} alt="" style={{ maxHeight: 48, maxWidth: 64, objectFit: 'contain', borderRadius: 4 }} />
+                      )}
+                    </td>
+                    <td className="py-2 px-2">
+                      <div className="text-white">{skill.labels?.en || skill.labels?.zh || '—'}</div>
+                      {skill.labels?.zh && <div className="text-white/40 text-xs">{skill.labels.zh}</div>}
+                    </td>
+                    <td className="py-2 px-2">
+                      {skill.skill_path ? (
+                        <span className="text-green-400 text-xs">✓</span>
+                      ) : (
+                        <span className="text-white/20">—</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-2 text-center">
+                      <button
+                        onClick={async () => {
+                          const next = !skill.is_active
+                          await fetch('/api/admin/home-skills', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: skill.id, is_active: next }),
+                          })
+                          setHomeSkills(prev => prev.map(s => s.id === skill.id ? { ...s, is_active: next } : s))
+                        }}
+                        className={`w-8 h-4 rounded-full transition-all relative ${skill.is_active ? 'bg-fuchsia-600' : 'bg-white/20'}`}
+                      >
+                        <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${skill.is_active ? 'left-4' : 'left-0.5'}`} />
+                      </button>
+                    </td>
+                    <td className="py-2 px-2 text-right">
+                      <div className="flex gap-1 justify-end">
+                        <button onClick={() => setModalSkill(skill)} className="px-2 py-1 rounded text-white/30 text-xs hover:text-white/60 hover:bg-white/5">Edit</button>
                         <button
                           onClick={async () => {
-                            const next = !skill.is_active
+                            if (!confirm('Delete this skill?')) return
                             await fetch('/api/admin/home-skills', {
-                              method: 'PUT',
+                              method: 'DELETE',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ id: skill.id, is_active: next }),
+                              body: JSON.stringify({ id: skill.id }),
                             })
-                            setHomeSkills(prev => prev.map(s => s.id === skill.id ? { ...s, is_active: next } : s))
+                            setHomeSkills(prev => prev.filter(s => s.id !== skill.id))
                           }}
-                          className={`w-8 h-4 rounded-full transition-all relative ${skill.is_active ? 'bg-fuchsia-600' : 'bg-white/20'}`}
-                        >
-                          <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${skill.is_active ? 'left-4' : 'left-0.5'}`} />
-                        </button>
-                      </td>
-                      <td className="py-2 px-2 text-right">
-                        {isEditing ? (
-                          <div className="space-y-1">
-                            <input placeholder="image URL" value={editSkillFields.image ?? skill.image} onChange={(e) => setEditSkillFields(prev => ({ ...prev, image: e.target.value }))}
-                              className="w-full px-2 py-1 rounded bg-white/10 text-white text-xs border border-white/20 focus:border-fuchsia-500/50 focus:outline-none" />
-                            <textarea placeholder="prompt" value={editSkillFields.prompt ?? skill.prompt} onChange={(e) => setEditSkillFields(prev => ({ ...prev, prompt: e.target.value }))}
-                              className="w-full px-2 py-1 rounded bg-white/10 text-white text-xs border border-white/20 focus:border-fuchsia-500/50 focus:outline-none" rows={2} />
-                            <input placeholder="skill_path (zip URL)" value={editSkillFields.skill_path ?? skill.skill_path ?? ''} onChange={(e) => setEditSkillFields(prev => ({ ...prev, skill_path: e.target.value }))}
-                              className="w-full px-2 py-1 rounded bg-white/10 text-white text-xs border border-white/20 focus:border-fuchsia-500/50 focus:outline-none" />
-                            <div className="flex gap-1">
-                              <input placeholder="count" type="number" value={editSkillFields.image_count ?? skill.image_count ?? 1} onChange={(e) => setEditSkillFields(prev => ({ ...prev, image_count: parseInt(e.target.value) || 1 }))}
-                                className="w-16 px-2 py-1 rounded bg-white/10 text-white text-xs border border-white/20 focus:border-fuchsia-500/50 focus:outline-none" />
-                              <input placeholder="order" type="number" value={editSkillFields.sort_order ?? skill.sort_order} onChange={(e) => setEditSkillFields(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 0 }))}
-                                className="w-16 px-2 py-1 rounded bg-white/10 text-white text-xs border border-white/20 focus:border-fuchsia-500/50 focus:outline-none" />
-                            </div>
-                            <div className="flex gap-1 justify-end">
-                              <button
-                                onClick={async () => {
-                                  const updates: Record<string, unknown> = { id: skill.id }
-                                  if (editSkillFields.labels) {
-                                    try { updates.labels = JSON.parse(editSkillFields.labels) } catch { /* invalid JSON, skip */ }
-                                  }
-                                  for (const key of ['image', 'prompt', 'skill_path', 'image_count', 'sort_order'] as const) {
-                                    if (editSkillFields[key] !== undefined) updates[key] = editSkillFields[key]
-                                  }
-                                  await fetch('/api/admin/home-skills', {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify(updates),
-                                  })
-                                  setEditingSkill(null)
-                                  setEditSkillFields({})
-                                  fetchHomeSkills()
-                                }}
-                                className="px-2 py-1 rounded bg-fuchsia-600 text-white text-xs"
-                              >Save</button>
-                              <button onClick={() => { setEditingSkill(null); setEditSkillFields({}) }} className="px-2 py-1 rounded bg-white/10 text-white/50 text-xs">✕</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex gap-1 justify-end">
-                            <button onClick={() => setEditingSkill(skill.id)} className="px-2 py-1 rounded text-white/30 text-xs hover:text-white/60 hover:bg-white/5">Edit</button>
-                            <button
-                              onClick={async () => {
-                                if (!confirm('Delete this skill?')) return
-                                await fetch('/api/admin/home-skills', {
-                                  method: 'DELETE',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ id: skill.id }),
-                                })
-                                setHomeSkills(prev => prev.filter(s => s.id !== skill.id))
-                              }}
-                              className="px-2 py-1 rounded text-red-400/50 text-xs hover:text-red-400 hover:bg-red-400/10"
-                            >Del</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
+                          className="px-2 py-1 rounded text-red-400/50 text-xs hover:text-red-400 hover:bg-red-400/10"
+                        >Del</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-
-          {/* Add new skill */}
-          <div className="bg-white/5 rounded-xl p-4 mt-4 border border-white/10">
-            <div className="text-sm font-medium mb-3">Add Skill</div>
-            <div className="space-y-2">
-              <textarea placeholder='Labels JSON: {"zh":"中文名","en":"English"}' value={newSkill.labels} onChange={(e) => setNewSkill(prev => ({ ...prev, labels: e.target.value }))}
-                className="w-full px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none font-mono" rows={1} />
-              <input placeholder="Image URL" value={newSkill.image} onChange={(e) => setNewSkill(prev => ({ ...prev, image: e.target.value }))}
-                className="w-full px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none" />
-              <textarea placeholder="Prompt" value={newSkill.prompt} onChange={(e) => setNewSkill(prev => ({ ...prev, prompt: e.target.value }))}
-                className="w-full px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none" rows={2} />
-              <input placeholder="Skill path (zip URL, optional)" value={newSkill.skill_path} onChange={(e) => setNewSkill(prev => ({ ...prev, skill_path: e.target.value }))}
-                className="w-full px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none" />
-              <div className="flex gap-2">
-                <input placeholder="img count" type="number" value={newSkill.image_count} onChange={(e) => setNewSkill(prev => ({ ...prev, image_count: e.target.value }))}
-                  className="w-24 px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none" />
-                <input placeholder="sort order" type="number" value={newSkill.sort_order} onChange={(e) => setNewSkill(prev => ({ ...prev, sort_order: e.target.value }))}
-                  className="w-24 px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none" />
-                <button
-                  onClick={async () => {
-                    let labels = {}
-                    try { labels = JSON.parse(newSkill.labels) } catch { return }
-                    if (!newSkill.image) return
-                    await fetch('/api/admin/home-skills', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        labels,
-                        image: newSkill.image,
-                        prompt: newSkill.prompt,
-                        skill_path: newSkill.skill_path || null,
-                        image_count: parseInt(newSkill.image_count) || 1,
-                        sort_order: parseInt(newSkill.sort_order) || 0,
-                      }),
-                    })
-                    setNewSkill({ labels: '{"zh":"","en":""}', image: '', prompt: '', skill_path: '', image_count: '1', sort_order: '0' })
-                    fetchHomeSkills()
-                  }}
-                  className="px-4 py-1.5 rounded-lg bg-fuchsia-600 text-white text-xs font-medium hover:bg-fuchsia-500"
-                >Add</button>
-              </div>
-            </div>
-          </div>
         </>
       )}
+
+      {modalSkill && (
+        <SkillEditorModal
+          skill={modalSkill === 'new' ? null : modalSkill}
+          onClose={() => setModalSkill(null)}
+          onSaved={() => { setModalSkill(null); fetchHomeSkills() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function SkillEditorModal({ skill, onClose, onSaved }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  skill: any | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const isNew = !skill
+  const initLabels = skill?.labels && typeof skill.labels === 'object'
+    ? Object.entries(skill.labels).map(([key, value]) => ({ key, value: String(value) }))
+    : [{ key: 'zh', value: '' }, { key: 'en', value: '' }]
+
+  const [labels, setLabels] = useState<{ key: string; value: string }[]>(initLabels)
+  const [image, setImage] = useState<string>(skill?.image ?? '')
+  const [prompt, setPrompt] = useState<string>(skill?.prompt ?? '')
+  const [skillPath, setSkillPath] = useState<string>(skill?.skill_path ?? '')
+  const [imageCount, setImageCount] = useState<string>(String(skill?.image_count ?? 1))
+  const [sortOrder, setSortOrder] = useState<string>(String(skill?.sort_order ?? 0))
+  const [isActive, setIsActive] = useState<boolean>(skill?.is_active ?? true)
+  const [saving, setSaving] = useState(false)
+
+  const canSave = image.trim() !== '' && labels.some(l => l.key.trim() && l.value.trim())
+
+  const handleSave = async () => {
+    setSaving(true)
+    const labelsObj: Record<string, string> = {}
+    for (const l of labels) {
+      if (l.key.trim() && l.value.trim()) labelsObj[l.key.trim()] = l.value.trim()
+    }
+    const payload = {
+      labels: labelsObj,
+      image: image.trim(),
+      prompt,
+      skill_path: skillPath.trim() || null,
+      image_count: parseInt(imageCount) || 1,
+      sort_order: parseInt(sortOrder) || 0,
+      is_active: isActive,
+    }
+    const res = await fetch('/api/admin/home-skills', {
+      method: isNew ? 'POST' : 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(isNew ? payload : { id: skill.id, ...payload }),
+    })
+    if (res.ok) onSaved()
+    setSaving(false)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-[#18181c] border border-white/10 rounded-2xl w-full max-w-[560px] max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <h3 className="text-white text-base font-semibold">{isNew ? 'New Skill' : 'Edit Skill'}</h3>
+          <button onClick={onClose} className="text-white/40 hover:text-white/70">✕</button>
+        </div>
+
+        <div className="overflow-y-auto px-6 py-4 space-y-5 flex-1">
+          {/* Cover image */}
+          <div>
+            <label className="text-white/60 text-xs font-medium mb-1.5 block">Cover image</label>
+            <div className="flex items-start gap-3">
+              <div className="w-20 h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                {image.trim() ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={image} alt="" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                ) : (
+                  <span className="text-white/20 text-xs">preview</span>
+                )}
+              </div>
+              <input
+                type="url"
+                value={image}
+                onChange={(e) => setImage(e.target.value)}
+                placeholder="https://..."
+                className="flex-1 px-3 py-2 rounded-lg bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Labels */}
+          <div>
+            <label className="text-white/60 text-xs font-medium mb-1.5 block">Labels (per locale)</label>
+            <div className="space-y-1.5">
+              {labels.map((l, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    value={l.key}
+                    onChange={(e) => setLabels(prev => prev.map((p, j) => j === i ? { ...p, key: e.target.value } : p))}
+                    placeholder="locale"
+                    className="w-16 px-2 py-1.5 rounded bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+                  />
+                  <input
+                    value={l.value}
+                    onChange={(e) => setLabels(prev => prev.map((p, j) => j === i ? { ...p, value: e.target.value } : p))}
+                    placeholder="Label text"
+                    className="flex-1 px-2 py-1.5 rounded bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+                  />
+                  {labels.length > 1 && (
+                    <button
+                      onClick={() => setLabels(prev => prev.filter((_, j) => j !== i))}
+                      className="px-2 text-white/30 hover:text-red-400"
+                    >✕</button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={() => setLabels(prev => [...prev, { key: '', value: '' }])}
+                className="text-fuchsia-400/70 text-xs hover:text-fuchsia-400"
+              >+ Add language</button>
+            </div>
+          </div>
+
+          {/* Prompt */}
+          <div>
+            <label className="text-white/60 text-xs font-medium mb-1.5 block">Prompt</label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={4}
+              placeholder="Default prompt text"
+              className="w-full px-3 py-2 rounded-lg bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none resize-none"
+            />
+          </div>
+
+          {/* Skill zip */}
+          <div>
+            <label className="text-white/60 text-xs font-medium mb-1.5 block">Skill zip URL</label>
+            <input
+              type="url"
+              value={skillPath}
+              onChange={(e) => setSkillPath(e.target.value)}
+              placeholder="https://... .zip (leave empty for prompt-only)"
+              className="w-full px-3 py-2 rounded-lg bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+            />
+          </div>
+
+          {/* Numbers */}
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="text-white/60 text-xs font-medium mb-1.5 block">Image slots</label>
+              <input
+                type="number" min={1} max={10}
+                value={imageCount}
+                onChange={(e) => setImageCount(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-white/5 text-white text-sm border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-white/60 text-xs font-medium mb-1.5 block">Sort order</label>
+              <input
+                type="number"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-white/5 text-white text-sm border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Active */}
+          <div className="flex items-center justify-between">
+            <label className="text-white/60 text-xs font-medium">Active (visible on home)</label>
+            <button
+              onClick={() => setIsActive(v => !v)}
+              className={`w-10 h-5 rounded-full transition-all relative ${isActive ? 'bg-fuchsia-600' : 'bg-white/20'}`}
+            >
+              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${isActive ? 'left-5' : 'left-0.5'}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-white/10">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-white/60 text-sm hover:bg-white/5">Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            className="px-4 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-30 disabled:cursor-not-allowed"
+          >{saving ? 'Saving...' : 'Save'}</button>
+        </div>
+      </div>
     </div>
   )
 }
