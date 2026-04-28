@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const body = await req.json()
-  const { labels, image, prompt, skill_path, image_count, sort_order, is_active } = body
+  const { labels, image, prompt, skill_path, image_count, sort_order, is_active, before_images } = body
   if (!labels || !image) {
     return NextResponse.json({ error: 'labels and image required' }, { status: 400 })
   }
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       image_count: image_count ?? 1,
       sort_order: sort_order ?? 0,
       is_active: is_active ?? true,
+      before_images: before_images ?? [],
     })
     .select('id')
     .single()

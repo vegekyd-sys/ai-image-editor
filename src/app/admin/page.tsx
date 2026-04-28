@@ -808,6 +808,9 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
   const [imageCount, setImageCount] = useState<string>(String(skill?.image_count ?? 1))
   const [sortOrder, setSortOrder] = useState<string>(String(skill?.sort_order ?? 0))
   const [isActive, setIsActive] = useState<boolean>(skill?.is_active ?? true)
+  const [beforeImages, setBeforeImages] = useState<string[]>(
+    Array.isArray(skill?.before_images) ? skill.before_images : []
+  )
   const [saving, setSaving] = useState(false)
 
   const canSave = image.trim() !== '' && labels.some(l => l.key.trim() && l.value.trim())
@@ -826,6 +829,7 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
       image_count: parseInt(imageCount) || 1,
       sort_order: parseInt(sortOrder) || 0,
       is_active: isActive,
+      before_images: beforeImages.map(s => s.trim()).filter(Boolean),
     }
     const res = await fetch('/api/admin/home-skills', {
       method: isNew ? 'POST' : 'PUT',
@@ -925,6 +929,36 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
               placeholder="https://... .zip (leave empty for prompt-only)"
               className="w-full px-3 py-2 rounded-lg bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
             />
+          </div>
+
+          {/* Before images */}
+          <div>
+            <label className="text-white/60 text-xs font-medium mb-1.5 block">Example (before) images — 1 to 3</label>
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-14 h-14 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                    {beforeImages[i]?.trim() ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={beforeImages[i]} alt="" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span className="text-white/20 text-xs">{i + 1}</span>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={beforeImages[i] ?? ''}
+                    onChange={(e) => {
+                      const next = [...beforeImages]
+                      next[i] = e.target.value
+                      setBeforeImages(next)
+                    }}
+                    placeholder={`Before image ${i + 1} URL (optional)`}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Numbers */}

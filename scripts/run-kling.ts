@@ -74,14 +74,29 @@ async function main() {
   const durIdx = args.indexOf('--duration')
   if (durIdx !== -1) duration = args[durIdx + 1]
 
-  const imgBase64 = fs.readFileSync(imgPath).toString('base64')
+  let ratio = '9:16'
+  const ratioIdx = args.indexOf('--ratio')
+  if (ratioIdx !== -1) ratio = args[ratioIdx + 1]
+
+  // Collect all --image flags for extra reference images
+  const extraImages: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--image' && args[i + 1]) extraImages.push(args[++i])
+  }
+
+  const imageList = [{ image_url: fs.readFileSync(imgPath).toString('base64') }]
+  for (const extra of extraImages) {
+    if (!fs.existsSync(extra)) { console.error(`Image not found: ${extra}`); process.exit(1) }
+    imageList.push({ image_url: fs.readFileSync(extra).toString('base64') })
+    console.log(`Extra image: ${extra}`)
+  }
 
   const body: Record<string, unknown> = {
     model_name: 'kling-v3-omni',
-    image_list: [{ image_url: imgBase64 }],
+    image_list: imageList,
     prompt,
     mode: 'std',
-    aspect_ratio: '9:16',
+    aspect_ratio: ratio,
     ...(duration ? { duration } : {}),
   }
 
@@ -92,9 +107,10 @@ async function main() {
       console.log(`Note: --video must be a URL. Use Supabase/S3 to host the video first.`)
       process.exit(1)
     }
-    body.video_list = [{ video_url: videoUrl, refer_type: 'feature', keep_original_sound: 'yes' }]
+    const isBase = args.includes('--base')
+    body.video_list = [{ video_url: videoUrl, refer_type: isBase ? 'base' : 'feature', keep_original_sound: 'yes' }]
     body.sound = 'off'
-    console.log(`Reference video: ${videoUrl}`)
+    console.log(`${isBase ? 'Base (edit)' : 'Feature (ref)'} video: ${videoUrl}`)
   } else {
     body.sound = 'on'
   }

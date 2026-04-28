@@ -1083,6 +1083,45 @@ export default function HomePage() {
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 30%, transparent 55%)', pointerEvents: 'none' }} />
 
+                {/* Before images stickers (bottom-left) + arrow pointing down-right to upload */}
+                {template.before_images && template.before_images.length > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    left: 20,
+                    bottom: isDesktop ? 100 : 120,
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    gap: 0,
+                    pointerEvents: 'none',
+                    zIndex: 2,
+                  }}>
+                    {template.before_images.slice(0, 3).map((url, i, arr) => (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img key={i} src={url} alt=""
+                        style={{
+                          width: 70, height: 90, objectFit: 'cover',
+                          border: '2.5px solid rgba(255,255,255,0.95)',
+                          borderRadius: 10,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                          transform: `rotate(${(i - (arr.length - 1) / 2) * 6}deg) translateX(${i * -14}px)`,
+                          transformOrigin: 'bottom center',
+                          background: '#1a1a1a',
+                        }} />
+                    ))}
+                    {/* Arrow: curves from sticker to upload slot */}
+                    <svg width="60" height="70" viewBox="0 0 60 70" style={{ marginLeft: -10, marginBottom: -6 }}>
+                      <path
+                        d="M 5 15 Q 30 20, 40 50 L 36 44 M 40 50 L 46 44"
+                        stroke="rgba(255,255,255,0.9)"
+                        strokeWidth="2"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+                )}
+
                 {/* Desktop: title + upload slots inside card */}
                 {isDesktop && (
                   <div style={{ position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 1 }}>

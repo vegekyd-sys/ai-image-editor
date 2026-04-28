@@ -8,6 +8,7 @@ export interface HomeSkill {
   sort_order: number
   is_active?: boolean
   updated_at?: string
+  before_images?: string[]
 }
 
 let cached: HomeSkill[] | null = null
