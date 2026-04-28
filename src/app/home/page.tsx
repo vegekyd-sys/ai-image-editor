@@ -394,9 +394,10 @@ export default function HomePage() {
     addFiles(files)
   }, [addFiles])
 
-  const renderUploadSlots = useCallback((template: { image_count?: number }, isActive: boolean) => {
+  const renderUploadSlots = useCallback((template: { image_count?: number; before_images?: string[] }, isActive: boolean) => {
     const minSlots = template.image_count ?? 1
     const count = Math.max(minSlots, attachedFiles.length + 1)
+    const befores = (template.before_images || []).slice(0, 3)
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'auto' }}>
         {Array.from({ length: count }, (_, i) => {
@@ -433,9 +434,62 @@ export default function HomePage() {
             </div>
           )
         })}
+        {/* Before images hint: curved upward arrow from upload "+" to example photos */}
+        {befores.length > 0 && attachedFiles.length === 0 && (
+          <>
+            <svg width="40" height="64" viewBox="0 0 40 64" style={{ flexShrink: 0, marginLeft: -2, alignSelf: 'flex-end', marginBottom: 6 }}>
+              <path
+                d="M 4 56 Q 4 20, 36 12"
+                stroke="rgba(255,255,255,0.85)"
+                strokeWidth="1.8"
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray="3 3"
+              />
+              <path
+                d="M 30 8 L 36 12 L 32 18"
+                stroke="rgba(255,255,255,0.85)"
+                strokeWidth="1.8"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+              {befores.map((url, i, arr) => (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img key={i} src={url} alt=""
+                  style={{
+                    width: 52, height: 64, objectFit: 'cover',
+                    border: '2px solid rgba(255,255,255,0.95)',
+                    borderRadius: 8,
+                    boxShadow: '0 3px 10px rgba(0,0,0,0.4)',
+                    transform: `rotate(${(i - (arr.length - 1) / 2) * 5}deg)`,
+                    transformOrigin: 'bottom center',
+                    background: '#1a1a1a',
+                    marginLeft: i === 0 ? 0 : -10,
+                    position: 'relative', zIndex: arr.length - i,
+                  }} />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     )
-  }, [attachedPreviews, creating, handleSlotDrop, removeFile, slotDragOver])
+  }, [attachedFiles.length, attachedPreviews, creating, handleSlotDrop, removeFile, slotDragOver])
+
+  const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
+
+  const renderCoverMedia = (url: string, alt: string, lazy: boolean, extraStyle?: React.CSSProperties) => {
+    const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', ...extraStyle }
+    if (isVideoUrl(url)) {
+      return (
+        <video src={url} autoPlay loop muted playsInline preload="metadata" style={style} />
+      )
+    }
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt={alt} loading={lazy ? 'lazy' : undefined} style={style} />
+  }
 
   const renderTemplateLabel = (template: { labels: Record<string, string> }) => (
     <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
@@ -900,17 +954,7 @@ export default function HomePage() {
                   ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
                 }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={template.image}
-                  alt={template.labels.en || ''}
-                  style={{
-                    width: '100%', height: '100%',
-                    objectFit: 'cover',
-                    display: 'block',
-                    pointerEvents: 'none',
-                  }}
-                />
+                {renderCoverMedia(template.image, template.labels.en || '', true, { position: 'absolute', display: 'block' })}
 
                 {/* Bottom gradient for text readability */}
                 <div style={{
@@ -1003,7 +1047,7 @@ export default function HomePage() {
             opacity: heroExpanded ? 0 : 1,
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={selectedDetail.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {renderCoverMedia(selectedDetail.image, '', false, { position: 'absolute' })}
           </div>
         )
       })()}
@@ -1078,49 +1122,8 @@ export default function HomePage() {
                 className="mkr-detail-slide"
                 style={{ height: '100%', minHeight: '100%', position: 'relative', flexShrink: 0 }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={template.image} alt="" loading="lazy"
-                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                {renderCoverMedia(template.image, '', true)}
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 30%, transparent 55%)', pointerEvents: 'none' }} />
-
-                {/* Before images stickers (bottom-left) + arrow pointing down-right to upload */}
-                {template.before_images && template.before_images.length > 0 && (
-                  <div style={{
-                    position: 'absolute',
-                    left: 20,
-                    bottom: isDesktop ? 100 : 120,
-                    display: 'flex',
-                    alignItems: 'flex-end',
-                    gap: 0,
-                    pointerEvents: 'none',
-                    zIndex: 2,
-                  }}>
-                    {template.before_images.slice(0, 3).map((url, i, arr) => (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img key={i} src={url} alt=""
-                        style={{
-                          width: 70, height: 90, objectFit: 'cover',
-                          border: '2.5px solid rgba(255,255,255,0.95)',
-                          borderRadius: 10,
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-                          transform: `rotate(${(i - (arr.length - 1) / 2) * 6}deg) translateX(${i * -14}px)`,
-                          transformOrigin: 'bottom center',
-                          background: '#1a1a1a',
-                        }} />
-                    ))}
-                    {/* Arrow: curves from sticker to upload slot */}
-                    <svg width="60" height="70" viewBox="0 0 60 70" style={{ marginLeft: -10, marginBottom: -6 }}>
-                      <path
-                        d="M 5 15 Q 30 20, 40 50 L 36 44 M 40 50 L 46 44"
-                        stroke="rgba(255,255,255,0.9)"
-                        strokeWidth="2"
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                )}
 
                 {/* Desktop: title + upload slots inside card */}
                 {isDesktop && (
