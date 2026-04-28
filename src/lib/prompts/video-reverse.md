@@ -49,24 +49,44 @@ Watch the video multiple times. For each second, note:
 
 Use `<<<image_N>>>` to reference user photos (the user provides their own photos).
 
-**MUST use multi-shot structure with precise timing**:
+**First, determine the shot structure**:
+- If the video is a **single continuous take (一镜到底)** — do NOT break it into Shot 1, Shot 2, etc. Write it as one flowing paragraph describing the camera movement and action chronologically.
+- If the video has **clear cuts between different angles** — then use the Shot N (Xs): format.
+
+**Single continuous take example** (camera orbits around subject):
 ```
-Shot 1 (2s): Close-up, static camera. <<<image_1>>> faces camera with neutral expression, then slowly raises right eyebrow, corners of mouth curl into a slight smirk. Eyes shift to look camera-left.
-Shot 2 (3s): Same framing, push-in slowly. <<<image_1>>> suddenly breaks into a wide open-mouth laugh, head tilts back 20°, right hand comes up to cover mouth, then waves dismissively. Eyes squint from laughing.
-Shot 3 (2s): Pull back to mid-shot. <<<image_1>>> composes self, straightens posture, looks directly at camera with confident gaze, one eyebrow slightly raised.
-Style: Cinematic, shallow depth of field, warm tungsten key light from camera-right, soft fill from left, dark moody background.
-Sound: Lo-fi beat, 85 BPM, soft bass pulse.
+低角度摄影机缓慢环绕拍摄。<<<image_1>>>站在机库中央，双臂自然下垂直视镜头。他按下手腕上的触发器，装甲板从小腿弹出锁定，液压活塞沿大腿上升...镜头环绕到侧面...胸甲合拢...最终头盔锁定，变身完成。
+Style: Cinematic sci-fi, matte black metal, anamorphic lens flare.
+Sound: Heavy metallic clanks, hydraulic hisses.
 ```
+
+**Multi-shot example** (with clear cuts):
+```
+Shot 1 (2s): Close-up, static camera. <<<image_1>>> faces camera...
+Shot 2 (3s): Wide shot, push-in. <<<image_1>>> suddenly...
+Style: ...
+Sound: ...
+```
+
+### Camera Movement Description (CRITICAL for single-take videos)
+When the video is one continuous take, describe the camera movement in extreme detail:
+- **Starting position**: "低角度从正面开始" / "eye-level from the left side"
+- **Movement direction**: "缓慢顺时针环绕" / "slowly orbits clockwise around the subject"
+- **Speed changes**: "开始缓慢，在变身高潮处加速" / "accelerates during the transformation peak"
+- **Distance changes**: "从中景推到特写" / "pushes in from mid-shot to close-up while orbiting"
+- **Height changes**: "从低角度逐渐升高到平视" / "rises from low angle to eye level"
+- **Key moments**: Describe what the camera sees at each point in the orbit
 
 ### Key Principles for the Prompt
 
 1. **Describe ACTIONS, not adjectives**: "raises left hand to forehead, fingers spread, palm facing out" NOT "makes a gesture"
 2. **Specify direction and degree**: "turns head 30° to the left" NOT "turns head"
-3. **Sequence matters**: Write gestures in chronological order within each shot
+3. **Sequence matters**: Write gestures in chronological order
 4. **Describe transitions**: "smoothly transitions from smile to surprised O-mouth" NOT just "changes expression"
-5. **Every second counts**: If the shot is 3 seconds, there should be 3 seconds worth of described action
+5. **Every second counts**: Fill every second with described action
 6. **Camera movement WITH action**: Describe what the camera does while the subject acts
 7. **Replace specific people with <<<image_N>>>**: The prompt must work with ANY user's photo
+8. **One take = one paragraph**: Do NOT artificially split a continuous shot into multiple shots
 8. **Style tag**: End with `Style:` line — lighting, color grade, mood, visual quality
 9. **Sound tag**: End with `Sound:` line — music style, tempo, key sounds
 
