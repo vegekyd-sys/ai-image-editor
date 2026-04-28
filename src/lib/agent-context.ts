@@ -114,8 +114,9 @@ export async function buildPromptContext(
     ? `[重要提示] 用户当前正在编辑的是第 ${currentSnapshotIndex + 1} 个版本（共 ${snapshots.length} 个），不是最新版本。对话历史描述的是其他版本的状态，与当前图片无关。请完全以传入的当前图片为准，忽略对话历史中对图片内容的描述。\n\n`
     : '';
 
-  // Snapshot index
-  const snapshotIndexContext = snapshots.length > 1
+  // Snapshot index — emit even for single-snapshot projects so the model always knows
+  // at minimum that an image exists (prevents design-from-nothing hallucination).
+  const snapshotIndexContext = snapshots.length >= 1
     ? `[图片索引 / Image Index — ${snapshots.length} snapshots]\n${snapshots.map((s, i) => {
         const isRef = s.type === 'reference';
         const isDesign = !!s.design_path;

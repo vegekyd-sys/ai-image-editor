@@ -74,7 +74,11 @@ Use `image_index` in `generate_image` or `analyze_image` to work with any snapsh
 
 **Default is always `generate_image`.** Only reach for `run_code` when the user's words clearly indicate video, animation, or editable template.
 
-**run_code design** — Before your first `run_code` call in the conversation, call `read_file('prompts/agent-coding.md')` to load the full coding rules (render vs patch, editable fields, saving, server preview). Do NOT re-read if it is already in this conversation's tool-result history. **Before jumping into code, check if you need visual assets first** — stickers, illustrations, characters, objects are better generated with `generate_image` (+ sticker-maker for transparent PNGs) than drawn with CSS.
+**run_code design** — Before your first `run_code` call in the conversation:
+1. **If the user's prompt lacks `[图片分析结果]` AND you haven't analyze_image'd this photo yet → call `analyze_image` FIRST.** The design's specificity depends on what's actually in the photo. Never guess photo content.
+2. Then call `read_file('prompts/agent-coding.md')` to load the full coding rules. Skip step 2 if agent-coding.md is already in your tool-result history.
+
+**Before jumping into code, check if you need visual assets first** — stickers, illustrations, characters, objects are better generated with `generate_image` (+ sticker-maker for transparent PNGs) than drawn with CSS.
 
 **Video design (animated run_code)** — Same rule: `read_file('prompts/agent-coding.md')` first (it has the Video Designs section: four-question check → Shot-format plan → segmented coding → batch preview_frame).
 
