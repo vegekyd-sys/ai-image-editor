@@ -83,7 +83,7 @@ export type AgentStreamEvent =
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
-  | { type: 'usage'; inputTokens: number; outputTokens: number; model: string }  // token usage for billing
+  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -1504,7 +1504,7 @@ export async function* runMakaronAgent(
         console.log(
           `[agent-usage] totalInput=${totalInput} (noCache=${inputT} cacheRead=${cacheRead} cacheWrite=${cacheWrite}) output=${u.outputTokens ?? 0} hitRate=${hitRate}% model=${modelId}`
         );
-        yield { type: 'usage', inputTokens: inputT, outputTokens: u.outputTokens ?? 0, model: modelId };
+        yield { type: 'usage', inputTokens: inputT, outputTokens: u.outputTokens ?? 0, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, model: modelId };
       }
     } catch { /* best effort — don't fail the stream if usage unavailable */ }
 

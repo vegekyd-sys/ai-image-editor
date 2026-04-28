@@ -140,6 +140,97 @@ describe('token-rates', () => {
     expect(credits).toBeLessThanOrEqual(61);
   });
 
+  // ─── cache-aware breakdown ─────────────────────────────────────
+
+  it('tokensToCreditsBreakdown: noCache-only equals legacy tokensToCredits', async () => {
+    const { tokensToCredits, tokensToCreditsBreakdown } = await import('@/lib/billing/token-rates');
+    const rate = {
+      model_id: 'anthropic.claude-sonnet-4-6',
+      display_name: 'Sonnet 4.6',
+      input_per_1m: 3,
+      output_per_1m: 15,
+      cache_read_per_1m: 0.3,
+      cache_write_per_1m: 3.75,
+      markup: 2,
+      is_active: true,
+    };
+    const legacy = tokensToCredits(rate, 50000, 2000);
+    const breakdown = tokensToCreditsBreakdown(rate, { noCacheInput: 50000, cacheRead: 0, cacheWrite: 0, output: 2000 });
+    expect(breakdown).toBe(legacy);
+  });
+
+  it('tokensToCreditsBreakdown: cacheRead uses 0.1× rate', async () => {
+    const { tokensToCreditsBreakdown } = await import('@/lib/billing/token-rates');
+    const rate = {
+      model_id: 'anthropic.claude-sonnet-4-6',
+      display_name: 'Sonnet 4.6',
+      input_per_1m: 3,
+      output_per_1m: 15,
+      cache_read_per_1m: 0.3,
+      cache_write_per_1m: 3.75,
+      markup: 2,
+      is_active: true,
+    };
+    // 100K cacheRead only → cost = 100000/1M * 0.3 * 2 = 0.06 → 6 credits
+    const credits = tokensToCreditsBreakdown(rate, { noCacheInput: 0, cacheRead: 100000, cacheWrite: 0, output: 0 });
+    expect(credits).toBe(6);
+  });
+
+  it('tokensToCreditsBreakdown: cacheWrite uses 1.25× rate', async () => {
+    const { tokensToCreditsBreakdown } = await import('@/lib/billing/token-rates');
+    const rate = {
+      model_id: 'anthropic.claude-sonnet-4-6',
+      display_name: 'Sonnet 4.6',
+      input_per_1m: 3,
+      output_per_1m: 15,
+      cache_read_per_1m: 0.3,
+      cache_write_per_1m: 3.75,
+      markup: 2,
+      is_active: true,
+    };
+    // 100K cacheWrite only → cost = 100000/1M * 3.75 * 2 = 0.75 → 75 credits
+    const credits = tokensToCreditsBreakdown(rate, { noCacheInput: 0, cacheRead: 0, cacheWrite: 100000, output: 0 });
+    expect(credits).toBe(75);
+  });
+
+  it('tokensToCreditsBreakdown: mixed realistic 4-step turn', async () => {
+    const { tokensToCreditsBreakdown } = await import('@/lib/billing/token-rates');
+    const rate = {
+      model_id: 'anthropic.claude-sonnet-4-6',
+      display_name: 'Sonnet 4.6',
+      input_per_1m: 3,
+      output_per_1m: 15,
+      cache_read_per_1m: 0.3,
+      cache_write_per_1m: 3.75,
+      markup: 2,
+      is_active: true,
+    };
+    // noCache 87694 × $3/M = $0.263082
+    // cacheRead 40635 × $0.3/M = $0.01219
+    // cacheWrite 13545 × $3.75/M = $0.05079
+    // output 600 × $15/M = $0.009
+    // Total = $0.33507, × 2 markup = $0.67014 → 68 credits (ceil)
+    const credits = tokensToCreditsBreakdown(rate, { noCacheInput: 87694, cacheRead: 40635, cacheWrite: 13545, output: 600 });
+    expect(credits).toBe(68);
+  });
+
+  it('tokensToCreditsBreakdown: NULL cache rates fall back to input_per_1m', async () => {
+    const { tokensToCreditsBreakdown } = await import('@/lib/billing/token-rates');
+    const rate = {
+      model_id: 'gemini-3.1-flash-image-preview',
+      display_name: 'Gemini Flash',
+      input_per_1m: 0.1,
+      output_per_1m: 30,
+      cache_read_per_1m: null,
+      cache_write_per_1m: null,
+      markup: 2,
+      is_active: true,
+    };
+    // With fallback: cacheRead 10000 × $0.1/M = $0.001; × 2 = $0.002 → ceil = 1 credit (min)
+    const credits = tokensToCreditsBreakdown(rate, { noCacheInput: 0, cacheRead: 10000, cacheWrite: 0, output: 0 });
+    expect(credits).toBe(1);
+  });
+
   it('getTokenRate returns null for unknown model', async () => {
     const chain = mockQuery([]);
     mockFrom.mockReturnValue(chain);
@@ -278,6 +369,8 @@ describe('credits', () => {
         p_duration_ms: null,
         p_source: 'app',
         p_api_key_id: null,
+        p_cache_read_tokens: null,
+        p_cache_write_tokens: null,
       });
     });
   });
@@ -367,6 +460,8 @@ describe('credits', () => {
         p_duration_ms: 5000,
         p_source: 'app',
         p_api_key_id: null,
+        p_cache_read_tokens: null,
+        p_cache_write_tokens: null,
       });
     });
 

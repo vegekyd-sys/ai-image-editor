@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         // Track token usage for billing
-        let usageEvent: { inputTokens: number; outputTokens: number; model: string } | null = null;
+        let usageEvent: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; model: string } | null = null;
 
         // Helper: iterate agent stream, capture usage event
         async function iterateAgent(gen: AsyncIterable<import('@/lib/agent').AgentStreamEvent>, ctrl: ReadableStreamDefaultController) {
@@ -259,8 +259,12 @@ export async function POST(req: NextRequest) {
         } finally {
           // Deduct credits based on token usage (fire-and-forget)
           if (usageEvent) {
-            deductByTokens(user!.id, 'agent', usageEvent.model, usageEvent.inputTokens, usageEvent.outputTokens)
-              .catch(e => console.error('[billing] agent deduct error:', e));
+            deductByTokens(
+              user!.id, 'agent', usageEvent.model,
+              usageEvent.inputTokens, usageEvent.outputTokens,
+              undefined, undefined,
+              { cacheRead: usageEvent.cacheReadTokens ?? 0, cacheWrite: usageEvent.cacheWriteTokens ?? 0 },
+            ).catch(e => console.error('[billing] agent deduct error:', e));
           }
 
           if (writer) await writer.flush();
