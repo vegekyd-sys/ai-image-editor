@@ -398,8 +398,9 @@ export default function HomePage() {
     const minSlots = template.image_count ?? 1
     const count = Math.max(minSlots, attachedFiles.length + 1)
     const befores = (template.before_images || []).slice(0, 3)
+    const showBefores = befores.length > 0 && attachedFiles.length === 0
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'visible', position: 'relative', minHeight: 64 }}>
         {Array.from({ length: count }, (_, i) => {
           const isDragTarget = slotDragOver === i
           return (
@@ -434,45 +435,50 @@ export default function HomePage() {
             </div>
           )
         })}
-        {/* Before images hint: curved upward arrow from upload "+" to example photos */}
-        {befores.length > 0 && attachedFiles.length === 0 && (
-          <>
-            <svg width="40" height="64" viewBox="0 0 40 64" style={{ flexShrink: 0, marginLeft: -2, alignSelf: 'flex-end', marginBottom: 6 }}>
+        {showBefores && (
+          <div style={{
+            position: 'absolute', right: 0, bottom: 0,
+            display: 'flex', alignItems: 'flex-end', flexShrink: 0,
+            pointerEvents: 'none',
+          }}>
+            {/* Curved dashed arrow, to the LEFT of the before image, arcs up-LEFT away from it (pointing into the cover scene) */}
+            <svg
+              width="72" height="96" viewBox="0 0 72 96"
+              style={{ position: 'absolute', right: '100%', bottom: 24, marginRight: -4, pointerEvents: 'none', overflow: 'visible' }}
+            >
               <path
-                d="M 4 56 Q 4 20, 36 12"
-                stroke="rgba(255,255,255,0.85)"
-                strokeWidth="1.8"
+                d="M 66 30 C 48 58, 18 50, 22 -28"
+                stroke="rgba(255,255,255,0.92)"
+                strokeWidth="2"
                 fill="none"
                 strokeLinecap="round"
-                strokeDasharray="3 3"
+                strokeDasharray="5 5"
               />
               <path
-                d="M 30 8 L 36 12 L 32 18"
-                stroke="rgba(255,255,255,0.85)"
-                strokeWidth="1.8"
+                d="M 12 -20 L 22 -32 L 32 -20"
+                stroke="rgba(255,255,255,0.92)"
+                strokeWidth="2"
                 fill="none"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
             </svg>
-            <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-              {befores.map((url, i, arr) => (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img key={i} src={url} alt=""
-                  style={{
-                    width: 52, height: 64, objectFit: 'cover',
-                    border: '2px solid rgba(255,255,255,0.95)',
-                    borderRadius: 8,
-                    boxShadow: '0 3px 10px rgba(0,0,0,0.4)',
-                    transform: `rotate(${(i - (arr.length - 1) / 2) * 5}deg)`,
-                    transformOrigin: 'bottom center',
-                    background: '#1a1a1a',
-                    marginLeft: i === 0 ? 0 : -10,
-                    position: 'relative', zIndex: arr.length - i,
-                  }} />
-              ))}
-            </div>
-          </>
+            {befores.map((url, i, arr) => (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img key={i} src={url} alt=""
+                style={{
+                  width: 96, height: 120, objectFit: 'cover',
+                  border: '3px solid rgba(255,255,255,0.95)',
+                  borderRadius: 10,
+                  boxShadow: '0 6px 16px rgba(0,0,0,0.5)',
+                  transform: `rotate(${(i - (arr.length - 1) / 2) * 5}deg)`,
+                  transformOrigin: 'bottom center',
+                  background: '#1a1a1a',
+                  marginLeft: i === 0 ? 0 : -18,
+                  position: 'relative', zIndex: arr.length - i,
+                }} />
+            ))}
+          </div>
         )}
       </div>
     )
