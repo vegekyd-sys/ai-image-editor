@@ -11,12 +11,36 @@ Output a JSON object with these fields:
   "label": "中文标签 (2-4字)",
   "labelEn": "English Label (2-4 words)",
   "hook": "One sentence: why is this video interesting/viral?",
-  "prompt": "The full Kling prompt",
+  "needsPreGenImage": true,
+  "editPrompt": "If needsPreGenImage=true: the image editing prompt to transform the user's photo into the 'transformed' state that will serve as the video's first frame (e.g. 'turn the person into a 3D chibi figurine with oversized head, Pixar style'). If false, omit this field.",
+  "prompt": "The full Kling video prompt (assumes <<<image_1>>> is the pre-generated image)",
   "imageCount": 1,
   "duration": 5,
   "aspectRatio": "9:16"
 }
 ```
+
+## Two-Stage Pipeline
+
+Many viral videos start with the subject already transformed (Q-version chibi, mech suit already on, etc). For these, we need a TWO-STAGE pipeline:
+
+1. **Stage 1**: Edit user photo → transformed state (e.g. "real person → Q-version 3D figurine")
+2. **Stage 2**: Animate the transformed image (e.g. "figurines get pinched by giant hands")
+
+**When to use two-stage (`needsPreGenImage: true`)**:
+- The video subject looks different from a normal photo (chibi, mech, cartoon, anime, etc)
+- The transformation itself is NOT the main action (e.g. chibi is already chibi when video starts, the video is about them being pinched)
+- Pre-generating the transformed image gives the video model a clear reference to animate
+
+**When single-stage is enough (`needsPreGenImage: false`)**:
+- The video shows the transformation process (e.g. mech suit-up where you see it happen live)
+- The subject stays as a normal person
+
+**editPrompt rules**:
+- Describe the target style, NOT the action/motion (action is for video prompt)
+- Keep the character's identity/face recognizable
+- Match the video's aesthetic: if video is Pixar-style chibi, editPrompt makes chibi; if anime style, editPrompt says anime
+- Example: "Transform the person(s) into a pair of 3D chibi figurines with Pixar-style rendering: oversized heads, big sparkling eyes, small bodies with short limbs, wearing the exact same clothes as in the original photo. Standing in the same scene as the original photo. Soft studio lighting."
 
 ## STEP 0: Find the "Hook" — What Makes This Video INTERESTING (DO THIS FIRST)
 
