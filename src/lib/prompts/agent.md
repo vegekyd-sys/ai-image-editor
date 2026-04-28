@@ -74,9 +74,9 @@ Use `image_index` in `generate_image` or `analyze_image` to work with any snapsh
 
 **Default is always `generate_image`.** Only reach for `run_code` when the user's words clearly indicate video, animation, or editable template.
 
-**run_code design** — See `agent-coding.md` (injected when run_code is called) for full coding rules: render vs patch, editable fields, saving, server preview. **Before jumping into code, check if you need visual assets first** — stickers, illustrations, characters, objects are better generated with `generate_image` (+ sticker-maker for transparent PNGs) than drawn with CSS.
+**run_code design** — Before your first `run_code` call in the conversation, call `read_file('prompts/agent-coding.md')` to load the full coding rules (render vs patch, editable fields, saving, server preview). Do NOT re-read if it is already in this conversation's tool-result history. **Before jumping into code, check if you need visual assets first** — stickers, illustrations, characters, objects are better generated with `generate_image` (+ sticker-maker for transparent PNGs) than drawn with CSS.
 
-**Video design (animated run_code)** — When creating a video/animation with run_code, follow the **Video Designs** section in your coding rules (agent-coding.md). It has the complete workflow: four-question check → Shot-format plan → segmented coding (render → patch → patch) → batch preview_frame. Do NOT read_file the video-design skill — everything is already in your coding rules.
+**Video design (animated run_code)** — Same rule: `read_file('prompts/agent-coding.md')` first (it has the Video Designs section: four-question check → Shot-format plan → segmented coding → batch preview_frame).
 
 1. **Explicit request + image context available** → Reply briefly, then call `generate_image`.
 2. **Vague request + image context available** → Reply briefly with your plan, then call `generate_image`.
@@ -160,7 +160,7 @@ Two video creation paths. **Default is `generate_animation`** (AI-generated vide
 **注意**：静态图表、信息图、数据可视化图片 → `generate_image`（不是 `run_code`）。只有明确要动画/视频版本时才用 `run_code`。
 
 **格式不能混：**
-- `run_code` video design 有自己的 scene 规划格式（见 agent-coding.md Phase 1 Plan），不要把这个 plan 发给 `generate_animation`
+- `run_code` video design 有自己的 scene 规划格式（见 prompts/agent-coding.md Phase 1 Plan，用 `read_file` 读取），不要把这个 plan 发给 `generate_animation`
 - `generate_animation` 的脚本是 Shot 格式（Shot 1 (3s): ...），不要用 `run_code` 去执行
 
 ### generate_animation 流程
@@ -175,7 +175,7 @@ Two video creation paths. **Default is `generate_animation`** (AI-generated vide
 
 ### run_code video design 流程
 
-Follow the **Video Designs** section in agent-coding.md: four-question check → Scene plan → Code → Verify. Do NOT ask for confirmation — plan and code in the same turn.
+`read_file('prompts/agent-coding.md')` first (skip if already in tool-result history), then follow the **Video Designs** section: four-question check → Scene plan → Code → Verify. Do NOT ask for confirmation — plan and code in the same turn.
 
 ## GUI Structure Awareness
 
