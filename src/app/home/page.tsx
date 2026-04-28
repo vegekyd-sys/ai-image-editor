@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
 import Changelog from '@/components/Changelog'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
+import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 
@@ -65,7 +66,9 @@ export default function HomePage() {
           const fresh = newMap.get(s.id)
           if (!fresh) return null
           newMap.delete(s.id)
-          return fresh.updated_at === s.updated_at ? s : fresh
+          // JSON diff fallback — home_skills has no updated_at trigger,
+          // so updated_at alone can't tell us if before_images/prompt/labels changed.
+          return JSON.stringify(fresh) === JSON.stringify(s) ? s : fresh as HomeSkill
         }).filter(Boolean) as HomeSkill[]
         for (const s of newMap.values()) merged.push(s)
         merged.sort((a, b) => a.sort_order - b.sort_order)
@@ -465,7 +468,7 @@ export default function HomePage() {
             </svg>
             {befores.map((url, i, arr) => (
               /* eslint-disable-next-line @next/next/no-img-element */
-              <img key={i} src={url} alt=""
+              <img key={i} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt=""
                 style={{
                   width: 96, height: 120, objectFit: 'cover',
                   border: '3px solid rgba(255,255,255,0.95)',
@@ -486,15 +489,29 @@ export default function HomePage() {
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
-  const renderCoverMedia = (url: string, alt: string, lazy: boolean, extraStyle?: React.CSSProperties) => {
-    const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', ...extraStyle }
+  type CoverVariant = 'thumb' | 'detail' | 'hero'
+  const renderCoverMedia = (
+    url: string,
+    alt: string,
+    variant: CoverVariant,
+    opts?: { priority?: boolean; extraStyle?: React.CSSProperties },
+  ) => {
+    const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
-      return (
-        <video src={url} autoPlay loop muted playsInline preload="metadata" style={style} />
-      )
+      // Video: plan C — always original URL, autoplay. Known-imperfect (see plan file).
+      return <video src={url} autoPlay loop muted playsInline preload="metadata" style={style} />
     }
+    const src = variant === 'thumb'
+      ? getThumbnailUrl(url, 600, 75, 800, 'cover')
+      : getOptimizedUrl(url, 95)
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt={alt} loading={lazy ? 'lazy' : undefined} style={style} />
+    return <img
+      src={src}
+      alt={alt}
+      loading={variant === 'thumb' && !opts?.priority ? 'lazy' : undefined}
+      fetchPriority={opts?.priority ? 'high' : undefined}
+      style={style}
+    />
   }
 
   const renderTemplateLabel = (template: { labels: Record<string, string> }) => (
@@ -960,7 +977,7 @@ export default function HomePage() {
                   ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
                 }}
               >
-                {renderCoverMedia(template.image, template.labels.en || '', true, { position: 'absolute', display: 'block' })}
+                {renderCoverMedia(template.image, template.labels.en || '', 'thumb', { priority: i < 4, extraStyle: { position: 'absolute', display: 'block' } })}
 
                 {/* Bottom gradient for text readability */}
                 <div style={{
@@ -1053,10 +1070,22 @@ export default function HomePage() {
             opacity: heroExpanded ? 0 : 1,
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {renderCoverMedia(selectedDetail.image, '', false, { position: 'absolute' })}
+            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, extraStyle: { position: 'absolute' } })}
           </div>
         )
       })()}
+
+      {/* Preload all before_images thumbnails so they appear instantly when user scrolls
+          between skill slides (overlay virtualization caches only ±window, but before images
+          are tiny and we always want them ready). */}
+      {selectedDetail && (
+        <div aria-hidden style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+          {homeSkills.flatMap(s => (s.before_images || []).slice(0, 3)).map((url, i) => (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img key={`preload-${i}`} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt="" />
+          ))}
+        </div>
+      )}
 
       {/* ── Skill Detail Overlay ── */}
       {selectedDetail && (
@@ -1122,26 +1151,35 @@ export default function HomePage() {
                 overflowY: 'auto', overflowX: 'hidden',
               }}
             >
-            {homeSkills.map((template) => (
-              <div
-                key={template.id}
-                className="mkr-detail-slide"
-                style={{ height: '100%', minHeight: '100%', position: 'relative', flexShrink: 0 }}
-              >
-                {renderCoverMedia(template.image, '', true)}
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 30%, transparent 55%)', pointerEvents: 'none' }} />
+            {(() => {
+              const activeIdx = Math.max(0, homeSkills.findIndex(s => s.id === selectedDetail?.id))
+              // Window: 4 before + active + 5 after = 10 slides rendered at most.
+              const WINDOW_BEFORE = 4
+              const WINDOW_AFTER = 5
+              return homeSkills.map((template, i) => {
+                const inWindow = i >= activeIdx - WINDOW_BEFORE && i <= activeIdx + WINDOW_AFTER
+                return (
+                  <div
+                    key={template.id}
+                    className="mkr-detail-slide"
+                    style={{ height: '100%', minHeight: '100%', position: 'relative', flexShrink: 0 }}
+                  >
+                    {inWindow && renderCoverMedia(template.image, '', 'detail', { priority: template.id === selectedDetail?.id })}
+                    {inWindow && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 30%, transparent 55%)', pointerEvents: 'none' }} />}
 
-                {/* Desktop: title + upload slots inside card */}
-                {isDesktop && (
-                  <div style={{ position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 1 }}>
-                    <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {renderTemplateLabel(template)}
-                      {template.id === selectedDetail?.id && renderUploadSlots(template, true)}
-                    </div>
+                    {/* Desktop: title + upload slots inside card */}
+                    {inWindow && isDesktop && (
+                      <div style={{ position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 1 }}>
+                        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {renderTemplateLabel(template)}
+                          {template.id === selectedDetail?.id && renderUploadSlots(template, true)}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                )
+              })
+            })()}
           </div>
           </div>
         </div>

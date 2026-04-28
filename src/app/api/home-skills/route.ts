@@ -10,9 +10,10 @@ export async function GET() {
       .eq('is_active', true)
       .order('sort_order')
 
-    if (error) return NextResponse.json([], { status: 200 })
+    const cacheHeaders = { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' }
+    if (error) return NextResponse.json([], { status: 200, headers: cacheHeaders })
 
-    return NextResponse.json(data || [])
+    return NextResponse.json(data || [], { headers: cacheHeaders })
   } catch {
     return NextResponse.json([], { status: 200 })
   }
