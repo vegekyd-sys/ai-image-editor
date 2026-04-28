@@ -1490,21 +1490,26 @@ export async function* runMakaronAgent(
       const usage = await result.totalUsage;
       if (usage) {
         const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
-        // Vercel AI SDK v6 normalized shape: inputTokenDetails.cacheReadTokens / cacheWriteTokens
-        // Fallbacks: cachedInputTokens (deprecated), Bedrock raw cacheReadInputTokens / cacheWriteInputTokens
-        const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; cacheReadInputTokens?: number; cacheWriteInputTokens?: number; inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number } };
+        // Vercel AI SDK v6 semantics (VERIFIED from official source):
+        //   - `usage.inputTokens` = TOTAL (noCache + cacheRead + cacheWrite)
+        //     See ai/src/types/usage.ts asLanguageModelUsage — `inputTokens: usage.inputTokens.total`
+        //     See @ai-sdk/amazon-bedrock/src/convert-bedrock-usage.ts — `total = input + read + write`
+        //   - To bill correctly, we MUST use inputTokenDetails.{noCacheTokens,cacheReadTokens,cacheWriteTokens}
+        //     and charge each at its own rate. Using `inputTokens` directly billed cache @ base 1× (overcharge).
+        const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number } };
         const d = u.inputTokenDetails;
-        const cacheRead = d?.cacheReadTokens ?? u.cacheReadInputTokens ?? u.cachedInputTokens ?? 0;
-        const cacheWrite = d?.cacheWriteTokens ?? u.cacheWriteInputTokens ?? 0;
-        const noCache = d?.noCacheTokens ?? 0;
-        const inputT = u.inputTokens ?? 0;
-        // "input" reported by Vercel is typically the non-cached slice; true total = input + cacheRead + cacheWrite
-        const totalInput = inputT + cacheRead + cacheWrite;
+        const cacheRead = d?.cacheReadTokens ?? u.cachedInputTokens ?? 0;
+        const cacheWrite = d?.cacheWriteTokens ?? 0;
+        // Prefer explicit noCacheTokens; fall back to (total − cache parts) for robustness.
+        const noCache = d?.noCacheTokens ?? Math.max(0, (u.inputTokens ?? 0) - cacheRead - cacheWrite);
+        const totalInput = u.inputTokens ?? (noCache + cacheRead + cacheWrite);
         const hitRate = totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : '0';
         console.log(
-          `[agent-usage] totalInput=${totalInput} (noCache=${inputT} cacheRead=${cacheRead} cacheWrite=${cacheWrite}) output=${u.outputTokens ?? 0} hitRate=${hitRate}% model=${modelId}`
+          `[agent-usage] totalInput=${totalInput} (noCache=${noCache} cacheRead=${cacheRead} cacheWrite=${cacheWrite}) output=${u.outputTokens ?? 0} hitRate=${hitRate}% model=${modelId}`
         );
-        yield { type: 'usage', inputTokens: inputT, outputTokens: u.outputTokens ?? 0, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, model: modelId };
+        // Emit noCache as `inputTokens` so consumers billing with the legacy 2-arg signature
+        // (tokensToCredits) no longer overcharge by billing cache at base rate.
+        yield { type: 'usage', inputTokens: noCache, outputTokens: u.outputTokens ?? 0, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, model: modelId };
       }
     } catch { /* best effort — don't fail the stream if usage unavailable */ }
 
