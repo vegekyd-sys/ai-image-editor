@@ -3,10 +3,21 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 export interface TokenRate {
   model_id: string
   display_name: string
-  input_per_1m: number   // $/1M input tokens
+  input_per_1m: number   // $/1M input tokens (no-cache)
   output_per_1m: number  // $/1M output tokens
+  /** $/1M cache-read tokens. NULL → fallback to input_per_1m. */
+  cache_read_per_1m?: number | null
+  /** $/1M cache-write tokens. NULL → fallback to input_per_1m. */
+  cache_write_per_1m?: number | null
   markup: number         // e.g. 2.0
   is_active: boolean
+}
+
+export interface TokenBreakdown {
+  noCacheInput: number
+  cacheRead: number
+  cacheWrite: number
+  output: number
 }
 
 // 1 credit = $0.01
@@ -56,20 +67,39 @@ export function invalidateTokenRateCache() {
 }
 
 /**
- * Convert token usage to credits.
- * Formula: ceil((inputTokens * inputRate/1M + outputTokens * outputRate/1M) * markup / creditValue)
- * Minimum 1 credit for any non-zero usage.
+ * Convert token usage (with cache breakdown) to credits.
+ * Formula applies different rates to no-cache / cache-read / cache-write slices, then markup.
+ * cache_read_per_1m / cache_write_per_1m = NULL → fallback to input_per_1m (no regression).
+ */
+export function tokensToCreditsBreakdown(
+  rate: TokenRate,
+  t: TokenBreakdown,
+): number {
+  const cacheReadRate = rate.cache_read_per_1m ?? rate.input_per_1m
+  const cacheWriteRate = rate.cache_write_per_1m ?? rate.input_per_1m
+  const cost =
+    (t.noCacheInput / 1_000_000) * rate.input_per_1m +
+    (t.cacheRead / 1_000_000) * cacheReadRate +
+    (t.cacheWrite / 1_000_000) * cacheWriteRate +
+    (t.output / 1_000_000) * rate.output_per_1m
+  const credits = Math.ceil(cost * rate.markup / CREDIT_VALUE)
+  const total = t.noCacheInput + t.cacheRead + t.cacheWrite + t.output
+  if (credits === 0 && total > 0) return 1
+  return credits
+}
+
+/**
+ * Legacy 2-arg signature kept as shim. Internally routes to tokensToCreditsBreakdown.
  */
 export function tokensToCredits(
   rate: TokenRate,
   inputTokens: number,
   outputTokens: number,
 ): number {
-  const inputCost = (inputTokens / 1_000_000) * rate.input_per_1m
-  const outputCost = (outputTokens / 1_000_000) * rate.output_per_1m
-  const totalCost = (inputCost + outputCost) * rate.markup
-  const credits = Math.ceil(totalCost / CREDIT_VALUE)
-  // Minimum 1 credit for any non-zero usage
-  if (credits === 0 && (inputTokens > 0 || outputTokens > 0)) return 1
-  return credits
+  return tokensToCreditsBreakdown(rate, {
+    noCacheInput: inputTokens,
+    cacheRead: 0,
+    cacheWrite: 0,
+    output: outputTokens,
+  })
 }

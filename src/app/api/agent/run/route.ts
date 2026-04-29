@@ -111,6 +111,8 @@ export async function POST(req: NextRequest) {
 
       let totalInputTokens = 0;
       let totalOutputTokens = 0;
+      let totalCacheReadTokens = 0;
+      let totalCacheWriteTokens = 0;
       let agentModel = '';
       try {
         for await (const event of runMakaronAgent(ctx.fullPrompt, ctx.snapshotImages[ctx.currentSnapshotIndex] || '', projectId, {
@@ -124,10 +126,13 @@ export async function POST(req: NextRequest) {
           supabase,
           userId: user.id,
           currentDesign: ctx.currentDesign,
+          history: ctx.history,
         })) {
           if (event.type === 'usage') {
             totalInputTokens += event.inputTokens ?? 0;
             totalOutputTokens += event.outputTokens ?? 0;
+            totalCacheReadTokens += event.cacheReadTokens ?? 0;
+            totalCacheWriteTokens += event.cacheWriteTokens ?? 0;
             if (event.model) agentModel = event.model;
           }
           await writer.processAndEnqueue(event);
@@ -148,9 +153,13 @@ export async function POST(req: NextRequest) {
 
       await writer.flush();
       // Deduct agent LLM tokens
-      if (totalInputTokens > 0 || totalOutputTokens > 0) {
-        deductByTokens(user.id, 'agent', agentModel || 'unknown', totalInputTokens, totalOutputTokens)
-          .catch(e => console.error('[agent/run] billing error:', e));
+      if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+        deductByTokens(
+          user.id, 'agent', agentModel || 'unknown',
+          totalInputTokens, totalOutputTokens,
+          undefined, undefined,
+          { cacheRead: totalCacheReadTokens, cacheWrite: totalCacheWriteTokens },
+        ).catch(e => console.error('[agent/run] billing error:', e));
       }
       const { data: finalRun } = await supabase.from('agent_runs')
         .select('status').eq('id', runId).single();

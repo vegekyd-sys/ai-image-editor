@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getToolPrice, resolveToolName } from './pricing'
-import { getTokenRate, tokensToCredits } from './token-rates'
+import { getTokenRate, tokensToCredits, tokensToCreditsBreakdown } from './token-rates'
 
 // Billing kill switch — cached from DB app_settings
 let _billingEnabled: boolean | null = null
@@ -106,6 +106,7 @@ async function deductAndLog(
   toolName: string, model?: string | null,
   inputTokens?: number | null, outputTokens?: number | null,
   durationMs?: number | null, source?: string, apiKeyId?: string | null,
+  cacheReadTokens?: number | null, cacheWriteTokens?: number | null,
 ): Promise<number> {
   const admin = getSupabaseAdmin()
   const { data, error } = await admin.rpc('deduct_and_log', {
@@ -118,6 +119,8 @@ async function deductAndLog(
     p_duration_ms: durationMs || null,
     p_source: source || 'app',
     p_api_key_id: apiKeyId || null,
+    p_cache_read_tokens: cacheReadTokens || null,
+    p_cache_write_tokens: cacheWriteTokens || null,
   })
   if (!error) return data ?? 0
 
@@ -139,6 +142,7 @@ async function deductAndLog(
     model_used: model || null, credits_charged: credits,
     input_tokens: inputTokens || null, output_tokens: outputTokens || null,
     duration_ms: durationMs || null, source: source || 'app',
+    cache_read_tokens: cacheReadTokens || null, cache_write_tokens: cacheWriteTokens || null,
   })
   return remaining
 }
@@ -174,6 +178,8 @@ export async function deductByTokens(
   outputTokens: number,
   durationMs?: number,
   apiKeyId?: string | null,
+  /** Optional cache-aware breakdown (Bedrock Anthropic). Omit for providers without cache reporting. */
+  cacheBreakdown?: { cacheRead: number; cacheWrite: number },
 ): Promise<{ charged: number; remaining: number }> {
   if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   let rate = await getTokenRate(modelId)
@@ -184,10 +190,24 @@ export async function deductByTokens(
     usedFallback = true
   }
 
-  const credits = tokensToCredits(rate, inputTokens, outputTokens)
+  const credits = cacheBreakdown
+    ? tokensToCreditsBreakdown(rate, {
+        noCacheInput: inputTokens,
+        cacheRead: cacheBreakdown.cacheRead,
+        cacheWrite: cacheBreakdown.cacheWrite,
+        output: outputTokens,
+      })
+    : tokensToCredits(rate, inputTokens, outputTokens)
   if (credits <= 0) return { charged: 0, remaining: 0 }
 
-  const remaining = await deductAndLog(userId, credits, toolName, usedFallback ? `unknown:${modelId}` : modelId, inputTokens, outputTokens, durationMs, apiKeyId ? 'mcp' : 'app', apiKeyId)
+  const remaining = await deductAndLog(
+    userId, credits, toolName,
+    usedFallback ? `unknown:${modelId}` : modelId,
+    inputTokens, outputTokens, durationMs,
+    apiKeyId ? 'mcp' : 'app', apiKeyId,
+    cacheBreakdown?.cacheRead ?? null,
+    cacheBreakdown?.cacheWrite ?? null,
+  )
   return { charged: credits, remaining }
 }
 

@@ -18,7 +18,6 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import animatePrompt from './prompts/animate.md';
-import agentCodingPrompt from './prompts/agent-coding.md';
 import type { Tip } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 
@@ -84,7 +83,7 @@ export type AgentStreamEvent =
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
-  | { type: 'usage'; inputTokens: number; outputTokens: number; model: string }  // token usage for billing
+  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -153,7 +152,12 @@ async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function getAgentSystemPrompt(): string {
-  return agentPrompt + '\n\n## Video Script Format\n\n' + animatePrompt;
+  return agentPrompt;
+}
+
+/** Rough token estimate — 1 token ≈ 4 chars for English, ~1.5-2 for CJK. Use 3.5 as middle ground. */
+function estTokens(chars: number): number {
+  return Math.round(chars / 3.5);
 }
 
 /** Build system prompt with lightweight skill manifest (not full templates) */
@@ -211,7 +215,18 @@ ${manifest}${userSkillLines}
     }
   }
 
-  return base + workspaceSection + memorySection;
+  const full = base + workspaceSection + memorySection;
+
+  // Observability — prompt size breakdown
+  const baseLen = base.length;
+  const wsLen = workspaceSection.length;
+  const memLen = memorySection.length;
+  const total = full.length;
+  console.log(
+    `[agent-prompt] system base=${baseLen} workspace=${wsLen} memory=${memLen} total=${total} chars (~${estTokens(total)} tokens)`
+  );
+
+  return full;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +304,9 @@ function createTools(ctx: AgentContext) {
     }),
 
     generate_animation: tool({
-      description: 'Submit a video script for rendering. Write the script yourself first (streamed to user in chat, following the Video Script Format in your system prompt), then call this tool to submit it.',
+      description: `Submit a video script for rendering. Write the script yourself first (streamed to user in chat, following the Video Script Format below), then call this tool to submit it.
+
+${animatePrompt}`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then Shot lines with <<<image_N>>> references, camera directions, sound cues, ending with Style line. Follow the Video Script Format in system prompt.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
@@ -667,47 +684,37 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
     }),
 
     run_code: tool({
-      description: `Execute JavaScript code with access to image processing libraries and project context.
+      description: `Execute JavaScript for design output (React/Remotion) or image utilities (sharp). Used for video/animation, editable templates, or image processing.
 
-${agentCodingPrompt}
+**BEFORE YOUR FIRST run_code CALL in a conversation**: call \`read_file('prompts/agent-coding.md')\` to load the full coding guide (render vs patch, editable fields, video workflow, composition patterns, cross-platform effects). The guide already includes \`[Current design code]\` injected into your prompt when patching — no need to re-read it. **Do not re-read agent-coding.md if it already appears in this conversation's tool-result history.**
 
-Use this for any task that requires computation:
-- Visual output: design mode (React/CSS) — covers text, layout, images, overlays, animations
-- Image utilities: format conversion, metadata reading (sharp)
-- Data processing: extract colors, analyze image stats, batch operations
-- Skill creation with assets: upload images to storage, build SKILL.md, save to database
+## Hard constraints (apply even before reading the guide)
 
-Available in your code:
-- \`sharp\` — image format conversion and metadata. Example: \`const { width, height } = await sharp(images[0]).metadata();\`
-- \`saveToWorkspace(path, content, contentType?)\` — Save a file directly to workspace (Supabase Storage). Returns \`{ success, storageUrl, error }\`. Use for skill assets, exports, etc.
-- \`JSZip\` — Create zip files. Example: \`const zip = new JSZip(); zip.file('SKILL.md', text); zip.file('assets/ref.jpg', imgBuffer); const buf = await zip.generateAsync({type:'nodebuffer'}); const {storageUrl} = await saveToWorkspace('exports/skill.zip', buf, 'application/zip');\`
-- \`images\` — pre-fetched snapshot Buffers from \`image_refs\` parameter. \`images[0]\` = first ref, \`images[1]\` = second, etc. **Only for sharp operations (metadata, crop, format conversion). Do NOT convert to base64 for design props — use ctx.snapshotImages URLs instead.**
-- \`ctx.snapshotImages\` — array of snapshot URLs (index 0 = <<<image_1>>>). **Use these for design props** (e.g. \`props: { snapshotUrl: ctx.snapshotImages[0] }\`). These are lightweight URLs, not base64.
-- \`ctx.projectId\`, \`ctx.userId\` — current project and user IDs
-- \`fetch\` — make HTTP requests
-- Standard Node.js: Buffer, JSON, Math, Date, etc.
+Return shape — exactly one of:
+- \`{ type: 'render', code, width, height, editables?: [...], props?: {...}, animation?: { fps, durationInSeconds } }\` — first time, or when overall layout changes.
+- \`{ type: 'patch', edits: [{ old, new }], props?: {...}, code_path?: '...' }\` — **default for subsequent edits**. Each \`old\` must match exactly once.
+- \`{ type: 'image', data: base64, mimeType }\` — sharp output.
+- \`{ type: 'text', content }\` — computation/data result.
+- \`{ type: 'error', message }\` — failure.
 
-Your code must return a value:
-- Image (sharp output): return Buffer directly, or \`{ type: 'image', data: base64, mimeType: 'image/jpeg' }\`
-- Text: return \`{ type: 'text', content: 'result' }\`
-- **Render (React design)**: return \`{ type: 'render', code: '...', width: 1080, height: 1350 }\`. The \`code\` string MUST be a complete named function with an explicit return statement. Available in scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio, evolvePath/getLength/getPointAtLength/interpolatePath/parsePath/resetPath/cutPath (@remotion/paths), noise2D/noise3D (@remotion/noise). Rendered by the browser with full CSS + Google Fonts support.
-  **IMPORTANT: Use \`<Img>\` (Remotion) instead of \`<img>\` for all images.** \`<Img>\` ensures images are fully loaded before rendering/screenshot. Plain \`<img>\` causes blank images on mobile.
-  **Embed image URLs directly in code using template literals** — do NOT use props for images:
-  \`\`\`
-  return {
-    type: 'render',
-    width: 1080, height: 1350,
-    code: \\\`function Design() {
-      return (<div style={{width:'100%',height:'100%'}}><Img src="\${ctx.snapshotImages[0]}" style={{width:'100%',height:'100%',objectFit:'cover'}} /></div>);
-    }\\\`
-  }
-  \`\`\`
-  - **Still** (default): omit \`duration\` — renders as a single image.
-  - **Animation**: add \`duration: 5\` (seconds) — renders as a playable video with Remotion Player. Use \`useCurrentFrame()\` + \`interpolate()\` for animation.
-- **Patch (incremental edit)**: return \`{ type: 'patch', edits: [{ old: '...', new: '...' }] }\`. Search & replace on current design code. Each edit.old must match exactly once in the code. Use for text changes, style tweaks, minor additions/removals. Optionally include \`props: {...}\` to merge prop updates. To patch a **different** design snapshot, add \`code_path\` (from the image index, e.g. \`{ type: 'patch', code_path: 'code/xxx.json', edits: [...] }\`). Use \`read_file\` first to see the code before patching.
-- Error: return \`{ type: 'error', message: 'what went wrong' }\`
+Critical design rules:
+- Use \`<Img>\` (Remotion), never plain \`<img>\` — blank screenshots on mobile otherwise.
+- \`render\` MUST declare \`editables: [{ id, type:'text', label, propKey }]\` for every user-facing text (titles, captions). Editable elements need \`display: block | inline-block\`.
+- CJK text: system fonts only (\`PingFang SC\`, \`Noto Sans SC\`) — Google CJK Fonts break on iOS.
+- iOS: keep simultaneous \`<Img>\` ≤ 3; avoid CSS \`filter: blur(...)\` on \`<Img>\` (use CSS gradient instead).
 
-**Default to design for all visual output.** Design supports text, layout, images (embed URLs via template literal \\\`\${ctx.snapshotImages[N]}\\\`), CSS crop/overlay/positioning, fonts, emoji — covers nearly all visual tasks. Only use sharp for format conversion (e.g. PNG→JPEG) or reading image metadata.`,
+## Available in your code
+
+React scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio, evolvePath/getLength/getPointAtLength/interpolatePath/parsePath/resetPath/cutPath (@remotion/paths), noise2D/noise3D (@remotion/noise).
+
+Node scope: \`sharp\`, \`JSZip\`, \`saveToWorkspace(path, content, contentType?)\` → { success, storageUrl }, \`fetch\`, Buffer/JSON/Math/Date.
+
+Context:
+- \`images\` — Buffers pre-fetched from the \`image_refs\` input (sharp ops only, never base64 into design props).
+- \`ctx.snapshotImages\` — array of snapshot URLs (index 0 = <<<image_1>>>). Embed directly via template literal \`\${ctx.snapshotImages[0]}\` inside design \`code\`.
+- \`ctx.projectId\`, \`ctx.userId\`.
+
+Before jumping into code, check if visual assets (stickers, illustrations, objects) would be better generated with \`generate_image\` (sticker-maker skill for transparent PNGs) than drawn with CSS.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For designs/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
@@ -1000,6 +1007,9 @@ Your code must return a value:
     }),
 
     generate_music: tool({
+      // Cache point marker — cache all tools preceding this one (PR #8137 patch).
+      // Must stay on the LAST tool in this map so the whole tools block is cached.
+      providerOptions: { bedrock: { cachePoint: { type: 'default' } } },
       description: `Generate background music for the current design/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
@@ -1036,6 +1046,22 @@ Your code must return a value:
   };
 }
 
+/** Log tool description sizes — call after createTools. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function logToolSizes(tools: Record<string, any>): number {
+  const entries = Object.entries(tools)
+    .map(([name, t]) => ({ name, chars: (t?.description || '').length }))
+    .sort((a, b) => b.chars - a.chars);
+  const total = entries.reduce((s, e) => s + e.chars, 0);
+  const top = entries.slice(0, 5)
+    .map(e => `${e.name}=${e.chars}`)
+    .join(' ');
+  console.log(
+    `[agent-prompt] tools count=${entries.length} totalDescChars=${total} (~${estTokens(total)} tokens)  top: ${top}`
+  );
+  return total;
+}
+
 // ---------------------------------------------------------------------------
 // Agent runner – async generator yielding SSE events
 // ---------------------------------------------------------------------------
@@ -1059,7 +1085,7 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } } },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }> },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -1129,12 +1155,70 @@ export async function* runMakaronAgent(
   // Build system prompt: base agent.md + workspace manifest (lightweight, not full templates)
   const systemPrompt = await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
 
+  // Observability — per-request summary
+  const toolsChars = tools ? logToolSizes(tools as Record<string, unknown>) : 0;
+  const userContentChars = typeof userContent === 'string'
+    ? userContent.length
+    : Array.isArray(userContent)
+      ? userContent.reduce((s: number, p: { type?: string; text?: string }) => s + (p?.type === 'text' ? (p.text?.length ?? 0) : 0), 0)
+      : 0;
+  const userImagesCount = Array.isArray(userContent)
+    ? userContent.filter((p: { type?: string }) => p?.type === 'image').length
+    : 0;
+  // analysis / tipReaction / animation modes intentionally skip history to keep
+  // the request single-turn (matches prior behavior). Normal chat sends it.
+  const sendHistory = !analysisOnly && !tipReactionOnly && !(animImages?.length);
+  const history = sendHistory ? (options?.history ?? []) : [];
+  console.log(
+    `[agent-req] systemChars=${systemPrompt.length} toolsChars=${toolsChars} userChars=${userContentChars} images=${userImagesCount} historyTurns=${history.length} mode=${tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal'}`
+  );
+
+  // Optional full-request dump for offline diffing
+  if (process.env.AGENT_DEBUG_DUMP === '1') {
+    try {
+      const fs = await import('fs/promises');
+      const os = await import('os');
+      const path = await import('path');
+      const ts = Date.now();
+      const dumpPath = path.join(os.tmpdir(), `agent-req-${ts}.json`);
+      const toolsDump = tools
+        ? Object.fromEntries(Object.entries(tools).map(([k, v]: [string, unknown]) => [k, { description: (v as { description?: string })?.description || '' }]))
+        : {};
+      const userContentDump = typeof userContent === 'string'
+        ? userContent
+        : Array.isArray(userContent)
+          ? userContent.map((p: { type?: string; text?: string }) => p?.type === 'image' ? { type: 'image', omitted: true } : p)
+          : userContent;
+      await fs.writeFile(dumpPath, JSON.stringify({
+        ts, mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
+        systemPrompt, tools: toolsDump, history, userContent: userContentDump,
+      }, null, 2));
+      console.log(`[agent-req] dumped → ${dumpPath}`);
+    } catch (e) { console.log(`[agent-req] dump failed: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+
+  let firstContentAt = 0;
+
+  // B7: cache the conversation history up through the last assistant turn.
+  // Only worth the cacheWrite cost when the conversation has real history
+  // (≥ 2 prior turns including at least one assistant). Short sessions skip.
+  const msgs: Array<{ role: 'user' | 'assistant'; content: unknown; providerOptions?: Record<string, unknown> }> =
+    [...history, { role: 'user', content: userContent }];
+  if (history.length >= 2) {
+    for (let i = msgs.length - 2; i >= 0; i--) {
+      if (msgs[i].role === 'assistant') {
+        msgs[i].providerOptions = { bedrock: { cachePoint: { type: 'default' } } };
+        break;
+      }
+    }
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = (streamText as any)({
       model: MODEL,
       system: [{ role: 'system', content: systemPrompt, providerOptions: { bedrock: { cachePoint: { type: 'default' } } } }],
-      messages: [{ role: 'user', content: userContent }],
+      messages: msgs,
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
@@ -1145,6 +1229,11 @@ export async function* runMakaronAgent(
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
 
     for await (const event of result.fullStream) {
+      // ── TTFB — log first stream event that indicates model is producing output ──
+      if (!firstContentAt && (event.type === 'reasoning-start' || event.type === 'reasoning-delta' || event.type === 'text-delta' || event.type === 'tool-input-start')) {
+        firstContentAt = Date.now();
+        console.log(`[agent-ttfb] ${firstContentAt - agentStartTime}ms (first ${event.type})`);
+      }
       // ── Reasoning events — forward to CUI ──
       if (event.type === 'reasoning-start') {
         yield { type: 'reasoning_start' as const };
@@ -1419,7 +1508,26 @@ export async function* runMakaronAgent(
       const usage = await result.totalUsage;
       if (usage) {
         const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
-        yield { type: 'usage', inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0, model: modelId };
+        // Vercel AI SDK v6 semantics (VERIFIED from official source):
+        //   - `usage.inputTokens` = TOTAL (noCache + cacheRead + cacheWrite)
+        //     See ai/src/types/usage.ts asLanguageModelUsage — `inputTokens: usage.inputTokens.total`
+        //     See @ai-sdk/amazon-bedrock/src/convert-bedrock-usage.ts — `total = input + read + write`
+        //   - To bill correctly, we MUST use inputTokenDetails.{noCacheTokens,cacheReadTokens,cacheWriteTokens}
+        //     and charge each at its own rate. Using `inputTokens` directly billed cache @ base 1× (overcharge).
+        const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number } };
+        const d = u.inputTokenDetails;
+        const cacheRead = d?.cacheReadTokens ?? u.cachedInputTokens ?? 0;
+        const cacheWrite = d?.cacheWriteTokens ?? 0;
+        // Prefer explicit noCacheTokens; fall back to (total − cache parts) for robustness.
+        const noCache = d?.noCacheTokens ?? Math.max(0, (u.inputTokens ?? 0) - cacheRead - cacheWrite);
+        const totalInput = u.inputTokens ?? (noCache + cacheRead + cacheWrite);
+        const hitRate = totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : '0';
+        console.log(
+          `[agent-usage] totalInput=${totalInput} (noCache=${noCache} cacheRead=${cacheRead} cacheWrite=${cacheWrite}) output=${u.outputTokens ?? 0} hitRate=${hitRate}% model=${modelId}`
+        );
+        // Emit noCache as `inputTokens` so consumers billing with the legacy 2-arg signature
+        // (tokensToCredits) no longer overcharge by billing cache at base rate.
+        yield { type: 'usage', inputTokens: noCache, outputTokens: u.outputTokens ?? 0, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, model: modelId };
       }
     } catch { /* best effort — don't fail the stream if usage unavailable */ }
 
