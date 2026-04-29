@@ -375,7 +375,7 @@ ${animatePrompt}`,
           import('./billing/pricing').then(({ getToolPrice }) => getToolPrice(toolName)).then(price => {
             const creditsPerSec = price?.credits ?? 22;
             return import('./billing/credits').then(({ deductFixedCredits }) =>
-              deductFixedCredits(ctx.userId ?? '', Math.ceil(videoSec * creditsPerSec), toolName, undefined, undefined));
+              deductFixedCredits(ctx.userId ?? '', Math.ceil(videoSec * creditsPerSec), toolName, videoModel, undefined));
           }).catch(e => console.error('[billing] generate_animation deduct error:', e));
 
           return { success: true as const, taskId, message: 'Video generation task created! It takes about 3–5 minutes. The result will appear here when done.' };

@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     const { getToolPrice } = await import('@/lib/billing/pricing')
     const price = await getToolPrice(toolName)
     const creditsPerSec = price?.credits ?? 22
-    deductFixedCredits(user.id, Math.ceil(videoSec * creditsPerSec), toolName, undefined, undefined)
+    deductFixedCredits(user.id, Math.ceil(videoSec * creditsPerSec), toolName, videoModel || 'kling', undefined)
       .catch(e => console.error('[billing] animate deduct error:', e))
 
     return NextResponse.json({ animationId: animation.id, taskId })
