@@ -47,6 +47,8 @@ export default function HomePage() {
   const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
   const detailSnapRef = useRef<HTMLDivElement>(null)
+  const detailInnerRef = useRef<HTMLDivElement>(null)
+  const detailSwipeRef = useRef<{ startY: number; startIdx: number; swiping: boolean } | null>(null)
   const [kbInset, setKbInset] = useState(0)
   const [textareaFocused, setTextareaFocused] = useState(false)
   const scrollStartY = useRef<number | null>(null)
@@ -55,6 +57,7 @@ export default function HomePage() {
   const inlineBoxRef = useRef<HTMLDivElement>(null)
   const [inlineBoxHeight, setInlineBoxHeight] = useState(0)
   const [showFixedInput, setShowFixedInput] = useState(false)
+
 
   useEffect(() => {
     fetch('/api/home-skills').then(r => r.json()).then(data => {
@@ -498,7 +501,6 @@ export default function HomePage() {
   ) => {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
-      // Video: plan C — always original URL, autoplay. Known-imperfect (see plan file).
       return <video src={url} autoPlay loop muted playsInline preload="metadata" style={style} />
     }
     const src = variant === 'thumb'
@@ -795,7 +797,12 @@ export default function HomePage() {
     const idx = homeSkills.findIndex(t => t.id === template.id)
     requestAnimationFrame(() => {
       setHeroExpanded(true)
-      detailSnapRef.current?.children[idx]?.scrollIntoView({ behavior: 'instant' })
+      // Position to the clicked slide via JS transform (no scroll-snap)
+      if (detailInnerRef.current && detailSnapRef.current) {
+        const slideH = detailSnapRef.current.clientHeight
+        detailInnerRef.current.style.transition = 'none'
+        detailInnerRef.current.style.transform = `translateY(${-idx * slideH}px)`
+      }
     })
   }
 
@@ -822,12 +829,8 @@ export default function HomePage() {
         .mkr-skill-item:hover { background: rgba(255,255,255,0.06) !important; }
 
         .mkr-detail-snap {
-          scroll-snap-type: y mandatory;
-          -webkit-overflow-scrolling: touch;
-        }
-        .mkr-detail-snap > .mkr-detail-slide {
-          scroll-snap-align: start;
-          scroll-snap-stop: always;
+          /* No scroll-snap — JS touch handlers control slide transitions
+             to avoid iOS Safari video compositor vs scroll-snap conflict. */
         }
 
         .mkr-skill-card {
@@ -1128,17 +1131,69 @@ export default function HomePage() {
               }}
             >✕</button>
 
-            {/* Snap scroll container */}
+            {/* Slide container — JS touch handlers instead of CSS scroll-snap
+                to avoid iOS Safari video compositor blocking native scroll. */}
             <div
               ref={detailSnapRef}
-              className="mkr-detail-snap hide-scrollbar"
-              onScroll={(e) => {
-                const el = e.currentTarget
-                const slideH = el.clientHeight
-                if (slideH === 0) return
-                const idx = Math.round(el.scrollTop / slideH)
-                const t = homeSkills[idx]
-                if (t && t.id !== selectedDetail?.id) {
+              className="mkr-detail-snap"
+              onTouchStart={(e) => {
+                const touch = e.touches[0]
+                if (!touch) return
+                detailSwipeRef.current = { startY: touch.clientY, startIdx: homeSkills.findIndex(s => s.id === selectedDetail?.id), swiping: false }
+              }}
+              onTouchMove={(e) => {
+                if (!detailSwipeRef.current) return
+                const touch = e.touches[0]
+                if (!touch) return
+                const deltaY = touch.clientY - detailSwipeRef.current.startY
+                if (!detailSwipeRef.current.swiping && Math.abs(deltaY) > 20) detailSwipeRef.current.swiping = true
+                if (detailSwipeRef.current.swiping && detailInnerRef.current && detailSnapRef.current) {
+                  const idx = detailSwipeRef.current.startIdx
+                  const slideH = detailSnapRef.current.clientHeight
+                  detailInnerRef.current.style.transform = `translateY(${-idx * slideH + deltaY}px)`
+                  detailInnerRef.current.style.transition = 'none'
+                }
+              }}
+              onTouchEnd={(e) => {
+                if (!detailSwipeRef.current) return
+                const touch = e.changedTouches[0]
+                if (!touch) { detailSwipeRef.current = null; return }
+                const deltaY = touch.clientY - detailSwipeRef.current.startY
+                const threshold = 60
+                let newIdx = detailSwipeRef.current.startIdx
+                if (deltaY < -threshold && newIdx < homeSkills.length - 1) newIdx++
+                else if (deltaY > threshold && newIdx > 0) newIdx--
+                if (detailInnerRef.current && detailSnapRef.current) {
+                  const slideH = detailSnapRef.current.clientHeight
+                  detailInnerRef.current.style.transition = 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)'
+                  detailInnerRef.current.style.transform = `translateY(${-newIdx * slideH}px)`
+                }
+                if (newIdx !== detailSwipeRef.current.startIdx) {
+                  const t = homeSkills[newIdx]
+                  if (t) {
+                    setSelectedDetail(t)
+                    setSelectedSkill(t.skill_path ? t.id : null)
+                    setInputText(t.prompt)
+                    setAttachedFiles([])
+                    setAttachedPreviews([])
+                  }
+                }
+                detailSwipeRef.current = null
+              }}
+              onWheel={(e) => {
+                if (Math.abs(e.deltaY) < 30) return
+                const currentIdx = homeSkills.findIndex(s => s.id === selectedDetail?.id)
+                let newIdx = currentIdx
+                if (e.deltaY > 0 && newIdx < homeSkills.length - 1) newIdx++
+                else if (e.deltaY < 0 && newIdx > 0) newIdx--
+                if (newIdx === currentIdx) return
+                if (detailInnerRef.current && detailSnapRef.current) {
+                  const slideH = detailSnapRef.current.clientHeight
+                  detailInnerRef.current.style.transition = 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)'
+                  detailInnerRef.current.style.transform = `translateY(${-newIdx * slideH}px)`
+                }
+                const t = homeSkills[newIdx]
+                if (t) {
                   setSelectedDetail(t)
                   setSelectedSkill(t.skill_path ? t.id : null)
                   setInputText(t.prompt)
@@ -1148,9 +1203,10 @@ export default function HomePage() {
               }}
               style={{
                 position: 'absolute', inset: 0,
-                overflowY: 'auto', overflowX: 'hidden',
+                overflow: 'hidden',
               }}
             >
+            <div ref={detailInnerRef} style={{ position: 'relative', width: '100%', height: '100%', willChange: 'transform' }}>
             {(() => {
               const activeIdx = Math.max(0, homeSkills.findIndex(s => s.id === selectedDetail?.id))
               // Window: 4 before + active + 5 after = 10 slides rendered at most.
@@ -1162,7 +1218,7 @@ export default function HomePage() {
                   <div
                     key={template.id}
                     className="mkr-detail-slide"
-                    style={{ height: '100%', minHeight: '100%', position: 'relative', flexShrink: 0 }}
+                    style={{ position: 'absolute', top: `${i * 100}%`, left: 0, width: '100%', height: '100%' }}
                   >
                     {inWindow && renderCoverMedia(template.image, '', 'detail', { priority: template.id === selectedDetail?.id })}
                     {inWindow && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 30%, transparent 55%)', pointerEvents: 'none' }} />}
@@ -1180,6 +1236,7 @@ export default function HomePage() {
                 )
               })
             })()}
+          </div>
           </div>
           </div>
         </div>
