@@ -22,10 +22,10 @@
 | 场景类型 | 判断依据 | 优先角色 |
 |---------|---------|---------|
 | 亲密日常 | 朋友聚会/情侣/家庭/宠物/食物 | **人物内心 + 旁白者**（不推海报）|
-| 地标/旅行 | 有可识别地名/建筑/景点 | 标题设计师 + 记录者 |
-| 食物/产品 | 食物/饮品/物品特写 | **感官手写（文字渲染在材质上）+ 记录者** |
+| 地标/旅行 | 有可识别地名/建筑/景点 | 标题设计师 + 材质融合 |
+| 食物/产品 | 食物/饮品/物品特写 | **材质融合 + 旁白者** |
 | 街头/城市 | 城市街景/夜景/建筑 | 标题设计师 + 旁白者 |
-| 户外/自然 | 风景/梯田/山水 | 旁白者 + 记录者 |
+| 户外/自然 | 风景/梯田/山水 | 旁白者 + 材质融合 |
 
 ⚠️ 亲密日常照不要强行套海报模板——"朋友吃饭变成电影海报"很生硬，心声才有共鸣。
 
@@ -54,9 +54,8 @@
 用一句话说清楚：画面里正在发生什么，情绪是什么，谁是主角。
 
 **Q2：如果要给这张照片加文字，这段文字扮演什么角色？**
-从以下四种角色里选最适合的一个——必须说出理由：
+以下角色是常见的思路参考，但不限于此——你可以发明新的角色，只要文字和照片的关系让人惊喜：
 - **旁白者**：画面之外的声音，说出画面没说完的。适合情绪强的照片。
-- **记录者**：时间+地点的印记。⚠️ 记录者必须有具体地点，纯时间戳=3分。可加场景相关小图标（小船/山峰/咖啡杯）。
 - **人物内心**：主角此刻的想法——不是气泡（气泡很呆），是融入画面的轻声细语。⚠️ 位置关键：必须放在人物视线方向或动作延伸处附近（人物回眸 → 文字在她视线前方；举起双手 → 文字在手边），不能随意放在角落。
 - **材质融合**：文字渲染在场景的某个物体/表面上，颜色和质感从那个物体来。这是最高级的 caption 手法。适合食物/产品/自然场景。
   - 冰淇淋旁 → 奶油色手写，沿杯口曲线，像是用奶油写的
@@ -141,42 +140,42 @@
 **句子1（场景净化，必须是第一句）：**
 > "FIRST: Clean up the scene — remove any element that draws attention away from the main subject but adds no compositional value (cluttered objects, background people, distracting items). Replace with natural-looking scene."
 
-**句子2（瘦脸，有人物时）：**
-> "If and only if the person has a clearly defined adult jawline: apply a visible V-line face-slimming effect, narrowing the jaw width and slimming the lower face contour. For children or people with naturally round/soft faces, do NOT apply any face-slimming or face modification whatsoever. The upper face (eyes, nose, forehead) must remain completely unchanged for everyone."
+**句子2（人物保护，有人物时）：**
+成人大脸（>10%）→ 追加：
+> "Apply subtle V-line jaw contouring on adults only. Keep eyes, nose, forehead, and all other features pixel-identical to the original."
 
-**句子3（人脸保真）：**
-> "Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider, rounder, or alter jaw lines."
+儿童/圆脸/小脸（<10%）→ 追加：
+> "Apply all enhancements exclusively to lighting, color, environment, and clothing. Leave all people exactly as they are."
+
+没有人 → 不追加任何句子。
 
 ---
 
 ### Part 1：照片如何配合设计
 
-⚠️ 关键约束：调整要克制——增强氛围感可以，但构图/人物/主体场景不能大幅改变，看完还要一眼认出是同一张照片。
+⚠️ 关键约束：
+- 调整要克制——增强氛围感可以，但构图/人物/主体场景不能大幅改变，看完还要一眼认出是同一张照片
+- **绝对禁止裁切（Crop）**：不能改变画面比例或裁掉任何部分
+- **避免 letterbox 黑边**：这是最简单最无聊的手法，已被严重过度使用。文字应该融入画面本身，而不是放在黑边里
 
 - 做**电影海报** → Kodak Portra 400 色调 + 胶片颗粒 + 增强对比度，顶部加暗化渐变为文字让位
-- 做**旅行杂志大片** → 轻微调色（清透感），不裁切主体，利用留白区域
-- 做**电影旁白字幕** → 加黑边（letterbox），轻微电影色调，字幕在黑边内
+- 做**旅行杂志大片** → 轻微调色（清透感），利用留白区域
 - 做**胶片记录** → Kodak Portra 400 暖色调 + 轻微颗粒感，主体完全保留
 - 做**人物内心** → 局部轻微柔化，整体构图不变
 
 ### Part 2：文字设计
 1. **文案内容**：根据照片内容创作具体的文字（Gemini 自己发挥，要有创意和画面感）。如果画面或 metadata 里有**具体地点名**（博物馆、城市、景点），必须用进文案——具体地点比泛化描述好 10 倍
-2. **视觉处理**：文字怎么融入画面——渐变遮罩 / 黑边 / 底部留白区 / 胶片边框 / 海报构图
+2. **视觉处理**：文字怎么融入画面——渐变遮罩 / 底部留白区 / 海报构图 / 材质融合
 3. **字体方向**：与角色和情绪匹配
-   - 旁白者 → 细白 sans-serif，克制，像电影字幕
-   - 记录者 → 橙色数字胶片体 / 手写小字；⚠️ 胶片时间戳**必须包含地点**（没有地点的时间戳 = 3分）；语言统一不要中英混排；可加场景相关小图标增加个性
-
-     🚫 **METADATA 死规则（违反 = 自动失败）**：
-     - **时间**：只能用 `[照片元数据]` 里明确给出的时间。没有 metadata？→ 省略年份，只写月份或季节（"秋"/"OCT"），绝不猜年份
-     - **地点**：只能用 metadata 里的地点 OR 画面里能直接看见的标志（招牌/logo/地标）。看不出来？→ 只写大范围（"中国南方"而不是猜"桂林"），或完全省略
-     - **宁可什么都不写，也不能写错** — 用户看到自己从没去过的地点会立刻 0 分
+   - 旁白者 → 细白 sans-serif，克制
    - 人物内心 → 轻盈手写，融入而非突出
+   - 材质融合 → 颜色和质感必须来自承载物体本身
    - 标题设计师 →
      - **字号用占比描述**：letters tall enough to span 18-25% of frame height（禁止说 "big" 或 "large"，没有意义）
      - **颜色要有理由**，选"意外对"的颜色：暖橙/金色画面 → 冷白/冰蓝；中性灰街景 → 大红；蓝色背景 → 黄/橙。禁止：默认白色+渐变遮罩（这是所有廉价海报的通用默认值）
      - **editPrompt 里必须包含一个风格词**（选一个）："A24 arthouse poster" / "Dazed editorial cover" / "Supreme bold graphic" / "brutalist minimal" / "oversized single-word treatment"
 4. **位置逻辑**：说清楚为什么放这里（来自 Q3 的答案）
-5. **人脸保真**：Preserve each person's face, bone structure, and skin exactly
+5. **人物保护**：按上方句子2的规则追加（有人时）
 
 ---
 
@@ -194,19 +193,10 @@
 - 布鲁克林大桥 → "BROOKLYN STATE OF MIND"（红字，占画面高度 20%，A24 风格）
 - 公式：具体地名/地标 → 成为标题核心词
 
-**8分 — 黑边 + 一句诗意旁白**
-- 上下黑边，黑边内居中白字：梯田朋友照 → "梯田里的风，记得我们曾来过。"
-- 逆光夕阳照 → "Chasing the sun's last stories."
-- 公式：letterbox 黑边 → 字幕在黑边内，一句话，不超过 10 个词
-
 **8分 — 心声/内心独白，放在视线延伸处**
 - 女生回眸，在她视线前方写："此刻，就在这里。"（手写小字贴着砖墙）
 - 男孩双手合十，在手旁写："神明，请让我得到那个玩具吧。"
 - 公式：找人物动作/视线方向 → 文字放那个方向 → 手写小字 → 说出那一刻的心声
-
-**8分 — 胶片时间戳，地点必须准确**
-- "DUMBO, NYC / OCT 14 '18"、"北京烤鸭 | NOV 23 '18"、"上海迪士尼 · OCT 26"
-- 公式：橙色数字胶片体 + 右下角 + 城市/地名 + 月份年份（只用能确认的信息）
 
 **8分 — 杂志感大字，位置出人意料**
 - 女生墨镜照，左侧竖排大号白色"日光"（占画面高度 30%）+ 下方小手写"午后静止"
@@ -224,9 +214,7 @@
 
 - 两个 tip 必须使用不同的角色（Q2 里选的不能一样）
 - 文字渲染必须 photorealistic
-- 胶片时间戳：橙色数字、右下角、复古数字字体，这样才真实
-- 电影旁白：上下黑边必须对称，字幕在黑边内，不覆盖画面主体
 - 海报：标题字够大（至少占画面宽度 35%），天空/背景区域加遮罩让字可读
-- 禁止：对话气泡（很呆）、随意贴在照片上没有构图逻辑的文字
+- 禁止：对话气泡（很呆）、随意贴在照片上没有构图逻辑的文字、裁切画面（Crop）、letterbox 黑边白字、右下角时间戳
 
 
