@@ -88,27 +88,6 @@ function getImageForApi(snapshot: Snapshot | undefined): string {
   return snapshot?.imageUrl || snapshot?.image || '';
 }
 
-/** Fetch reference images for a skill and return them as Snapshot objects. */
-async function fetchSkillReferenceSnapshots(skillName: string): Promise<Snapshot[]> {
-  try {
-    const res = await fetch('/api/skills');
-    const { skills } = await res.json();
-    const skill = skills?.find((s: { name: string }) => s.name === skillName);
-    const refImages: string[] = skill?.referenceImages || [];
-    return refImages.map((url, i) => ({
-      id: generateId(),
-      image: url,
-      tips: [],
-      messageId: '',
-      imageUrl: url,
-      type: 'reference' as const,
-      description: `Reference image ${i + 1} from skill "${skillName}"`,
-    }));
-  } catch (err) {
-    console.warn('[Editor] Failed to fetch skill reference images:', err);
-    return [];
-  }
-}
 
 interface EditorProps {
   projectId?: string;
@@ -381,15 +360,7 @@ export default function Editor({
   useEffect(() => { isAgentActiveRef.current = isAgentActive; }, [isAgentActive]);
   const activeSkillRef = useRef(pendingSkill);
   useEffect(() => { activeSkillRef.current = pendingSkill; }, [pendingSkill]);
-  const skillRefImagesRef = useRef<string[]>([]);
-  useEffect(() => {
-    if (!pendingSkill) { skillRefImagesRef.current = []; return; }
-    fetch('/api/skills').then(r => r.json()).then(d => {
-      const skill = d.skills?.find((s: { name: string }) => s.name === pendingSkill);
-      skillRefImagesRef.current = skill?.referenceImages || [];
-    }).catch(() => {});
-  }, [pendingSkill]);
-  const isTipsFetchingRef = useRef(isTipsFetching);
+const isTipsFetchingRef = useRef(isTipsFetching);
   isTipsFetchingRef.current = isTipsFetching;
   const previewDoneBaselineRef = useRef(0);
   const lastTipsRequestRef = useRef<{ snapshotId: string; image: string; previewMode: 'full' | 'none'; autoPreviewCategory?: string } | null>(null);
@@ -936,7 +907,7 @@ export default function Editor({
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, isNsfw: isNsfwRef.current || undefined, referenceImages: skillRefImagesRef.current.length ? skillRefImagesRef.current : undefined }),
+        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, isNsfw: isNsfwRef.current || undefined }),
         signal: previewAbortRef.current.signal,
       });
 
@@ -2140,10 +2111,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     const init = async () => {
       const isMulti = hasImages && pendingImages!.length > 1;
 
-      // ── Step 1: Skill reference images ──
-      const refSnapshots = pendingSkill ? await fetchSkillReferenceSnapshots(pendingSkill) : [];
-
-      // ── Step 2: Work snapshots ──
+      // ── Step 1: Work snapshots ──
       const workSnapshots: Snapshot[] = hasImages
         ? pendingImages!.map((img, i) => ({
             id: generateId(),
@@ -2155,26 +2123,20 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           }))
         : [];
 
-      // ── Step 3: Commit to state ──
-      const allSnapshots = [...refSnapshots, ...workSnapshots];
-      if (allSnapshots.length > 0) {
-        setSnapshots(allSnapshots);
-        snapshotsRef.current = allSnapshots;
-        prevTimelineLen.current = allSnapshots.length;
-        if (workSnapshots.length > 0) setViewIndex(refSnapshots.length);
+      // ── Step 2: Commit to state ──
+      if (workSnapshots.length > 0) {
+        setSnapshots(workSnapshots);
+        snapshotsRef.current = workSnapshots;
+        prevTimelineLen.current = workSnapshots.length;
+        setViewIndex(0);
       }
 
-      // ── Step 4: Persist + cache + log events ──
-      allSnapshots.forEach((snap, i) => {
+      // ── Step 3: Persist + cache + log events ──
+      workSnapshots.forEach((snap, i) => {
         onSaveSnapshot?.(snap, i, (url) => {
           setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
-          // Log image_upload event with the uploaded URL (for Replay)
-          if (projectId && snap.type !== 'reference') {
-          }
         });
-        if (snap.type !== 'reference') {
-          cacheImage(`snap:${snap.id}`, snap.image);
-        }
+        cacheImage(`snap:${snap.id}`, snap.image);
       });
 
       // ── Step 5: Tips (if images exist) ──

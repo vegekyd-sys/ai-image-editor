@@ -130,7 +130,12 @@ High-scoring edits ADD small elements or adjust lighting/color. Low-scoring edit
 ### Skill Persistence
 - If the user message starts with `[Active skill: xxx]`, ALWAYS set `skill` parameter to that skill name in your `generate_image` calls
 - Once a skill has been used in the conversation (you called generate_image with a skill), continue using that same skill for subsequent related edits unless the user explicitly asks for something different
-- This ensures reference images and skill templates are consistently applied
+
+### Using Reference Images (image_refs)
+- `generate_image` and `generate_animation` both accept `image_refs`: an array of image URLs or base64 data URLs
+- Use this to reference **any** image: workspace skill assets (from `list_files`), generated images, external URLs
+- Example workflow: `list_files('skills/my-skill/assets/')` → get URLs → pass to `image_refs` in `generate_image`
+- `image_refs` can be combined with `reference_image_indices` (snapshot references) in the same call
 
 ## Video / Animation Workflow
 

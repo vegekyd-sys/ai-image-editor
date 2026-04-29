@@ -247,8 +247,9 @@ function createTools(ctx: AgentContext) {
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
         image_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<image_1>>> = 1, <<<image_2>>> = 2, ...). Omit for text-to-image (no photo sent). For most edits, pass the current snapshot index.'),
         reference_image_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<image_1>>> and <<<image_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from image_1 and the background from image_2". The editPrompt should describe how to combine them (e.g. "Place the person from Image 2 into the scene of Image 1").'),
+        image_refs: z.array(z.string()).optional().describe('Reference images as URLs or base64 data URLs. Use for workspace files (skill assets, generated images) or any external image. Accepts Supabase Storage URLs from list_files or base64 from read_file.'),
       }),
-      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, image_index, reference_image_indices }) => {
+      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, image_index, reference_image_indices, image_refs }) => {
         // Resolve which image to edit — agent must pass image_index to include a photo
         let editTarget: string | undefined;
         if (image_index !== undefined) {
@@ -268,6 +269,9 @@ function createTools(ctx: AgentContext) {
             const v = validateImageIndex(ctx.snapshotImages, refIdx);
             if (!v.error) resolvedRefs.push(ctx.snapshotImages[v.idx]);
           }
+        }
+        if (image_refs?.length) {
+          resolvedRefs.push(...image_refs);
         }
 
         // Priority: UI selector > agent tool param > auto-route
@@ -314,12 +318,16 @@ ${animatePrompt}`,
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image. Kling supports 16:9/9:16/1:1. SeeDance also supports 4:3/3:4/21:9/adaptive.'),
         model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (supports real faces, fast). seedance = SeeDance 2.0 (best quality, but no real faces without authorized assets). Default: kling.'),
+        image_refs: z.array(z.string()).optional().describe('Additional image URLs to include (workspace files, skill assets, external URLs). These are appended to snapshot images.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, image_refs }) => {
         // GUI animation mode: use animationImageUrls; CUI mode: fallback to snapshotImages URLs
         let imageUrls = ctx.animationImageUrls;
         if (!imageUrls?.length) {
           imageUrls = ctx.snapshotImages.filter(img => img.startsWith('http'));
+        }
+        if (image_refs?.length) {
+          imageUrls = [...(imageUrls || []), ...image_refs.filter(u => u.startsWith('http'))];
         }
         if (!imageUrls?.length) {
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
@@ -1357,34 +1365,29 @@ export async function* runMakaronAgent(
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
-          const inp = event.input as { useOriginalAsReference?: boolean; image_index?: number; reference_image_indices?: number[] };
-          // Resolve the actual edit target (respects image_index; omit = text-to-image)
+          const inp = event.input as { useOriginalAsReference?: boolean; image_index?: number; reference_image_indices?: number[]; image_refs?: string[] };
           let displayTarget: string | undefined;
           if (inp.image_index !== undefined) {
             const idx = inp.image_index - 1;
-            if (idx >= 0 && idx < ctx.snapshotImages.length) {
-              displayTarget = ctx.snapshotImages[idx];
-            }
+            if (idx >= 0 && idx < ctx.snapshotImages.length) displayTarget = ctx.snapshotImages[idx];
           } else if (ctx.currentImage && !ctx.snapshotImages.includes(ctx.currentImage)) {
             displayTarget = ctx.currentImage;
           }
-          // Resolve reference images from snapshot indices
-          const snapshotRefs: string[] = [];
+          const extraRefs: string[] = [];
           if (inp.reference_image_indices?.length) {
             for (const refIdx of inp.reference_image_indices) {
               const idx = refIdx - 1;
-              if (idx >= 0 && idx < ctx.snapshotImages.length) {
-                snapshotRefs.push(ctx.snapshotImages[idx]);
-              }
+              if (idx >= 0 && idx < ctx.snapshotImages.length) extraRefs.push(ctx.snapshotImages[idx]);
             }
           }
+          if (inp.image_refs?.length) extraRefs.push(...(inp.image_refs as string[]));
           if (displayTarget) {
             const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
             toolCallImages = [
               displayTarget,
               ...(twoImageMode ? [ctx.originalImage!] : []),
               ...(ctx.referenceImages ?? []),
-              ...snapshotRefs,
+              ...extraRefs,
             ];
           }
         }
