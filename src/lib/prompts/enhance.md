@@ -50,21 +50,24 @@ editPrompt 由两部分拼接而成。
 最后以这句收尾：
 > "Do NOT add any text, watermarks, or borders."
 
-### 第二部分：人脸保护（⚠️ 条件追加）
+### 第二部分：人物保护（⚠️ 条件追加，零触发词策略）
 
-先判断：**这张图片里有没有真实的人类面孔？**
-- 卡通角色、动漫人物、动物、风景、物品、雕塑 = 不是人类面孔
-- 只有真实的人类照片 = 有人类面孔
+先判断：**这张图片里有没有真实的人？**
+- 卡通角色、动漫人物、动物、风景、物品、雕塑 = 没有人
+- 只有真实的人类照片 = 有人
 
-**有人类面孔** → 在 editPrompt 末尾（"Do NOT add any text" 之前）追加以下句子：
-> "If and only if the person has a clearly defined adult jawline: apply a visible V-line face-slimming effect, narrowing the jaw width and slimming the lower face contour. For children or people with naturally round/soft faces, do NOT apply any face-slimming, skin smoothing, beautification, or face modification whatsoever — children's faces must remain completely untouched. The upper face (eyes, nose, forehead) must remain completely unchanged for everyone. Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider, rounder, or alter jaw lines."
+**有人且是成人大脸（占画面 >10%）** → 在 editPrompt 末尾（"Do NOT add any text" 之前）追加：
+> "Apply subtle V-line jaw contouring on adults only. Keep eyes, nose, forehead, and all other features pixel-identical to the original."
 
-如果是小脸（全身照/合照/远景，脸部占画面 <10%），改为追加：
-> "CRITICAL: Faces in this photo are small. Leave ALL face areas completely untouched — do NOT sharpen, enhance, retouch, relight, resize, or process any face region in any way. Apply all edits only to background, environment, and clothing."
+**有人且是儿童、圆脸人物、或无法确定年龄** → 追加：
+> "Apply all enhancements exclusively to lighting, color, environment, and clothing. Leave all people exactly as they are."
 
-**没有人类面孔** → **不追加任何句子。第二部分为空。**
+**有人但是小脸（全身照/合照/远景，人物占画面 <10%）** → 追加：
+> "People are small in this frame. Apply all edits only to background, sky, environment, and overall color grading."
 
-⚠️ **为什么这个判断至关重要？** 生图模型会把 editPrompt 中出现的 "face"、"jawline"、"identity" 等词当作生成指令——在非人物图片上会凭空生成人脸。这是已确认的严重 bug。所以：**没有人类面孔时，editPrompt 中绝对不能出现任何人脸相关的词。** 宁可漏掉人脸保护，也不要在非人物图片上触发人脸生成。
+**没有人** → **不追加任何句子。第二部分为空。**
+
+⚠️ **为什么这个判断至关重要？** 生图模型会把 editPrompt 中出现的人体相关词当作生成指令——在非人物图片上会凭空生成人。所以：**没有人时，editPrompt 中绝对不能出现任何人相关的词。**
 
 ---
 

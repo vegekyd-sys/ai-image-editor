@@ -96,9 +96,9 @@ Context Mode 三个原则：
 --- WRITING THE EDITPROMPT (Edit Mode) ---
 
 FACE (when people are present — always include):
-  Large face (>10% of frame): "Preserve each person's face exactly as in the current photo. Do NOT change face shape, eyes, skin, or any facial features."
-  When useOriginalAsReference=true and face needs restoring: "Restore each person's face to exactly match Image 2 (original): copy face shape, eyes, nose, mouth, jaw, skin from Image 2. Do NOT slim, beautify, or alter any feature."
-  Small face (<10% of frame): "CRITICAL: Faces are small. Leave ALL face areas completely untouched — do NOT sharpen, enhance, retouch, relight, resize, or process any face region. Treat face areas as masked off and invisible."
+  Large (>10% of frame): "Keep every person's appearance pixel-identical to the original photo — no reshaping, smoothing, or altering."
+  Small (<10% of frame): "People are small in this frame. Apply all edits only to background, environment, and overall color grading."
+  Restoring (useOriginalAsReference=true): "Restore each person's appearance to exactly match Image 2 (original). Copy all details from Image 2."
 
 EDIT: What to actually change, in specific detail. When useOriginalAsReference=true, describe explicitly which elements should reference Image 2.
 

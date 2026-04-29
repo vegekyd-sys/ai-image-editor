@@ -1,7 +1,6 @@
 import { generateImage } from '../model-router';
 import type { ModelId } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
-import * as workspace from '../workspace';
 
 export interface EditImageInput {
   editPrompt: string;
@@ -20,26 +19,16 @@ export async function editImage(
   input: EditImageInput,
   ctx: SkillContext,
 ): Promise<SkillResult> {
-  const { editPrompt, skill, useOriginalAsReference, aspectRatio, skillPrompts, preferredModel, isNsfw } = input;
+  const { editPrompt, skill, useOriginalAsReference, aspectRatio, preferredModel, isNsfw } = input;
   const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
   const hasReference = !!ctx.referenceImages?.length;
 
-  // Inject skill template if provided
-  // Qwen can't digest creative/wild/captions .md templates — only enhance works well
-  const qwenIncompatibleSkill = preferredModel === 'qwen' && skill && skill !== 'enhance';
-  // Load skill template from workspace (unified source) or legacy skillPrompts
-  let skillTemplate: string | null = null;
-  if (skill && !qwenIncompatibleSkill) {
-    // Try workspace first, then legacy skillPrompts for backward compat
-    skillTemplate = await workspace.getSkillTemplate(skill) ?? skillPrompts?.[skill] ?? null;
-  }
-  const finalPrompt = skillTemplate
-    ? `${skillTemplate}\n\n---\n\nAPPLY THE ABOVE SKILL TO THIS SPECIFIC REQUEST:\n${editPrompt}`
-    : editPrompt;
+  // Agent reads skill templates via read_file and internalizes rules into editPrompt.
+  // No template injection here — keeps the prompt short for the image generation model.
+  const finalPrompt = editPrompt;
 
   const t0 = Date.now();
-  if (qwenIncompatibleSkill) console.log(`⚠️ [edit_image] Skipping ${skill} template for qwen (incompatible)`);
-  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} model=${preferredModel ?? 'auto'}\neditPrompt: ${editPrompt.slice(0, 200)}\nfinalPrompt length: ${finalPrompt.length} chars\n`);
+  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} model=${preferredModel ?? 'auto'}\neditPrompt: ${editPrompt.slice(0, 200)}\n`);
 
   // Build references array for multi-image mode
   let references: { url: string; role: string }[] | undefined;
@@ -84,7 +73,7 @@ export async function editImage(
       aspectRatio,
       thinkingEffort: 'minimal',
       references,
-      fallbackPrompt: skillTemplate ? editPrompt : undefined,
+      fallbackPrompt: undefined,
       isNsfw,
     });
 
