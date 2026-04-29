@@ -980,19 +980,25 @@ export default function Editor({
     shouldPreview: (tip: Tip) => boolean,
   ) => {
     if (!tip.label || !tip.category) return;
+    // Assign tipKey by category arrival order (not label) to avoid same-label overwrite
+    if (!tip.tipKey) {
+      const snap = snapshotsRef.current.find(s => s.id === snapshotId);
+      const categoryCount = snap?.tips.filter(t => t.category === tip.category).length ?? 0;
+      tip.tipKey = `${tip.category}-${categoryCount}`;
+    }
     if (!tip.editPrompt) {
       // Partial tip: label+desc ready, editPrompt still streaming — show immediately
       setSnapshots((prev) => prev.map((s) => {
         if (s.id !== snapshotId) return s;
-        if (s.tips.some(t => t.label === tip.label)) return s;
+        if (s.tips.some(t => t.tipKey === tip.tipKey)) return s;
         return { ...s, tips: [...s.tips, { ...tip, previewStatus: 'none' }] };
       }));
     } else {
-      // Complete tip: upsert by label (updates partial if exists, adds new otherwise)
+      // Complete tip: upsert by tipKey (updates partial if exists, adds new otherwise)
       const doPreview = shouldPreview(tip);
       setSnapshots((prev) => prev.map((s) => {
         if (s.id !== snapshotId) return s;
-        const idx = s.tips.findIndex(t => t.label === tip.label);
+        const idx = s.tips.findIndex(t => t.tipKey === tip.tipKey);
         if (idx >= 0) {
           const newTips = [...s.tips];
           newTips[idx] = { ...newTips[idx], editPrompt: tip.editPrompt, previewStatus: doPreview ? 'pending' : 'none', aspectRatio: tip.aspectRatio };
@@ -1960,7 +1966,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         setSnapshots(prev => prev.map(s =>
           s.id === snap.id ? {
             ...s,
-            tips: s.tips.map(t => t.label === tip.label ? { ...t, previewStatus: 'pending' } : t),
+            tips: s.tips.map(t => (t.tipKey ? t.tipKey === tip.tipKey : t.label === tip.label) ? { ...t, previewStatus: 'pending' } : t),
           } : s
         ));
         generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio, tip.category);
