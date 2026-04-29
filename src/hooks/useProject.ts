@@ -65,7 +65,7 @@ export function useProject(projectId: string, userId: string) {
       tips: (Array.isArray(s.tips) ? s.tips : []).map(t => ({
         ...t,
         previewStatus: t.previewImage ? 'done' as const
-          : t.editPrompt ? 'error' as const : undefined,
+          : t.editPrompt ? 'none' as const : undefined,
       })),
       messageId: s.message_id || '',
       imageUrl: s.image_url,

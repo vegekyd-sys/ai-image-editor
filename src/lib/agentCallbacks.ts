@@ -222,8 +222,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (editDesc) ctx.onUpdateDescription?.(snapId, editDesc);
       ctx.cacheImage(`snap:${snapId}`, imageData);
 
-      const isFirstSnapshot = ctx.snapshotsRef.current.length <= 1;
-      ctx.fetchTipsForSnapshot(snapId, imageData, isFirstSnapshot ? 'full' : 'none');
+      ctx.fetchTipsForSnapshot(snapId, imageData, 'none');
       ctx.autoFetchTriggered.current = true;
       setStatus(ctx.t('status.imageGenerated'));
 

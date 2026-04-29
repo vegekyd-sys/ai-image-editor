@@ -413,9 +413,9 @@ export default function DashboardPage() {
         <div className="space-y-3">
           <div className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
             <div>
-              <div className="font-medium">Auto Tips</div>
+              <div className="font-medium">Auto Tips Previews</div>
               <div className="text-white/40 text-sm mt-1">
-                Auto-generate edit suggestions when uploading a photo
+                Auto-generate preview images for edit suggestions
               </div>
             </div>
             <button

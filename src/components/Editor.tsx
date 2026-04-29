@@ -1083,8 +1083,12 @@ export default function Editor({
                 try {
                   const tip = JSON.parse(payload) as Tip;
                   handleTipEvent(tip, snapshotId, (t) => {
-                    if (previewMode === 'full') return true;
                     if (autoPreviewCategory && t.category === autoPreviewCategory) return true;
+                    if (previewMode === 'full') {
+                      const autoPreview = typeof window !== 'undefined'
+                        ? (localStorage.getItem('mkr_auto_tips') ?? 'auto') : 'auto';
+                      return autoPreview !== 'off';
+                    }
                     return false;
                   });
                   tipsReceived++;
@@ -2168,14 +2172,13 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         }
       });
 
-      // ── Step 5: Tips (if images exist, and auto-tips enabled) ──
-      const autoTips = typeof window !== 'undefined' ? (localStorage.getItem('mkr_auto_tips') ?? 'auto') : 'auto';
-      if (hasImages && autoTips !== 'off') {
+      // ── Step 5: Tips (if images exist) ──
+      if (hasImages) {
         const tipsImage = (img: string) =>
           img.startsWith('http') ? Promise.resolve(img) : compressBase64Image(img, 600_000);
         if (hasPrompt) {
-          // Images + prompt: tips for first image only (full preview)
-          tipsImage(workSnapshots[0].image).then(img => fetchTipsForSnapshot(workSnapshots[0].id, img));
+          // Images + prompt: tips for first image only (no auto-preview — user is in CUI)
+          tipsImage(workSnapshots[0].image).then(img => fetchTipsForSnapshot(workSnapshots[0].id, img, 'none'));
         } else if (isMulti) {
           // Multi-image: tips for all, no preview
           for (const snap of workSnapshots) {
