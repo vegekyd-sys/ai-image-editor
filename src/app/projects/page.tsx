@@ -965,6 +965,16 @@ function ProjectsPageInner() {
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.code === 'Enter') && e.altKey) {
+                      e.preventDefault();
+                      const ta = e.currentTarget;
+                      const start = ta.selectionStart;
+                      const end = ta.selectionEnd;
+                      const val = ta.value;
+                      setInputText(val.substring(0, start) + '\n' + val.substring(end));
+                      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1; });
+                      return;
+                    }
                     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFiles.length > 0)) {
                       e.preventDefault();
                       handleCreate();
