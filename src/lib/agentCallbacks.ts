@@ -58,6 +58,8 @@ export interface AgentCallbackContext {
   onMusicTaskCreated?: (taskId: string) => void;
   /** When true, onDone won't reset status to greeting (music polling shows its own status) */
   musicPollingRef?: { current: boolean };
+  /** When true, onDone won't reset status to greeting (video polling or music polling active) */
+  hasBackgroundTaskRef?: { current: boolean };
 
   // Credits exhausted — show CreditPopup
   onInsufficientCredits?: (balance: number) => void;
@@ -421,8 +423,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       flushAnalyzedDesc();
       const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
       console.log(`⏱️ [agent] DONE total ${elapsed}s`);
-      // Don't overwrite music polling status
-      if (!ctx.musicPollingRef?.current) {
+      if (!ctx.hasBackgroundTaskRef?.current) {
         setStatus(ctx.t('editor.done'));
       }
 
@@ -444,8 +445,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (pendingTeaser) {
         ctx.pendingTeaserRef.current = null;
         setTimeout(() => ctx.triggerTipsTeaser?.(pendingTeaser.snapshotId, pendingTeaser.tips), 400);
-      } else if (!ctx.musicPollingRef?.current) {
-        // Only reset to greeting if status is still "Done" — don't overwrite newer status
+      } else if (!ctx.hasBackgroundTaskRef?.current) {
         const doneText = ctx.t('editor.done');
         setTimeout(() => {
           if (lastSetStatus === doneText) setStatus(ctx.t('editor.greeting'));

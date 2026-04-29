@@ -369,6 +369,8 @@ export default function Editor({
   snapshotsRef.current = snapshots;
   const animationStateRef = useRef(animationState);
   animationStateRef.current = animationState;
+  const hasBackgroundTaskRef = useRef(false);
+  hasBackgroundTaskRef.current = musicPollingRef.current || animationState?.status === 'polling' || animations.some(a => a.status === 'processing');
   const viewIndexRef = useRef(viewIndex);
   viewIndexRef.current = viewIndex;
   const draftParentIndexRef = useRef(draftParentIndex);
@@ -1620,6 +1622,7 @@ export default function Editor({
         setAgentStatus(t('status.generatingMusic'));
       },
       musicPollingRef,
+      hasBackgroundTaskRef,
       captureDesignFrame: async (frame, uploadPath) => {
         const design = draftDesignRef.current || pendingDesignRef.current;
         if (!design) { console.warn('⚠️ captureDesignFrame: no active design'); return; }
@@ -1727,6 +1730,7 @@ export default function Editor({
       t,
       onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
       onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
+      hasBackgroundTaskRef,
     });
 
     agentReconnect(reconnectCallbacks);
