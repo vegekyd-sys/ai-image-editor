@@ -9,15 +9,17 @@ interface ChangelogEntry {
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-04-29',
-    en: { title: 'Skill Marketplace & New Home Page', items: [
+    en: { title: 'Skill Marketplace & Cost Optimization', items: [
       'New Home page: browse 30+ skill templates — anime collabs, photo effects, video styles — tap to preview full-screen, swipe to explore',
       'One-tap create: pick a template, upload your photo, hit Create — the AI does the rest',
-      'Before/after preview: see example "before" photos on anime collab skills so you know what to upload',
+      'Cost optimization: cached prompts reduce AI token usage; tips previews now load on-demand instead of auto-generating — significantly lower per-session cost',
+      'Enhance quality: children\'s faces are now fully protected from unintended modifications',
     ]},
-    zh: { title: 'Skill 市场 & 全新首页', items: [
+    zh: { title: 'Skill 市场 & 成本优化', items: [
       '全新 Home 页：浏览 30+ Skill 模板 — 动漫合影、照片特效、视频风格 — 点击全屏预览，上下滑动探索',
       '一键创作：选模板、上传照片、点 Create — AI 帮你搞定',
-      '示例原图预览：动漫合影类 Skill 展示 "before" 原图，让你知道该上传什么样的照片',
+      '成本优化：Prompt 缓存减少 AI token 消耗；Tips 预览改为按需加载，大幅降低每次使用成本',
+      'Enhance 质量提升：儿童人脸现在完全受保护，不会被意外修改',
     ]},
   },
   {
