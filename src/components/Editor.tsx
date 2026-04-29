@@ -59,6 +59,7 @@ export interface AnimationState {
   error: string | null
   duration: number | null  // null = smart mode (API decides 3-15s)
   pollSeconds: number
+  videoModel: 'kling' | 'seedance'
 }
 
 function generateId() {
@@ -980,25 +981,19 @@ export default function Editor({
     shouldPreview: (tip: Tip) => boolean,
   ) => {
     if (!tip.label || !tip.category) return;
-    // Assign tipKey by category arrival order (not label) to avoid same-label overwrite
-    if (!tip.tipKey) {
-      const snap = snapshotsRef.current.find(s => s.id === snapshotId);
-      const categoryCount = snap?.tips.filter(t => t.category === tip.category).length ?? 0;
-      tip.tipKey = `${tip.category}-${categoryCount}`;
-    }
     if (!tip.editPrompt) {
       // Partial tip: label+desc ready, editPrompt still streaming — show immediately
       setSnapshots((prev) => prev.map((s) => {
         if (s.id !== snapshotId) return s;
-        if (s.tips.some(t => t.tipKey === tip.tipKey)) return s;
+        if (s.tips.some(t => t.label === tip.label)) return s;
         return { ...s, tips: [...s.tips, { ...tip, previewStatus: 'none' }] };
       }));
     } else {
-      // Complete tip: upsert by tipKey (updates partial if exists, adds new otherwise)
+      // Complete tip: upsert by label (updates partial if exists, adds new otherwise)
       const doPreview = shouldPreview(tip);
       setSnapshots((prev) => prev.map((s) => {
         if (s.id !== snapshotId) return s;
-        const idx = s.tips.findIndex(t => t.tipKey === tip.tipKey);
+        const idx = s.tips.findIndex(t => t.label === tip.label);
         if (idx >= 0) {
           const newTips = [...s.tips];
           newTips[idx] = { ...newTips[idx], editPrompt: tip.editPrompt, previewStatus: doPreview ? 'pending' : 'none', aspectRatio: tip.aspectRatio };
@@ -1662,7 +1657,7 @@ export default function Editor({
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), ...(animationState?.videoModel && animationState.videoModel !== 'kling' ? { videoModel: animationState.videoModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1966,7 +1961,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         setSnapshots(prev => prev.map(s =>
           s.id === snap.id ? {
             ...s,
-            tips: s.tips.map(t => (t.tipKey ? t.tipKey === tip.tipKey : t.label === tip.label) ? { ...t, previewStatus: 'pending' } : t),
+            tips: s.tips.map(t => t.label === tip.label ? { ...t, previewStatus: 'pending' } : t),
           } : s
         ));
         generatePreviewForTip(snap.id, tip.editPrompt, getImageForApi(snap), tip.aspectRatio, tip.category);
@@ -3089,6 +3084,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     error: null,
                     duration: null,
                     pollSeconds: 0,
+                    videoModel: 'kling',
                   });
                   setShowAnimateSheet(true);
                 } : undefined}
@@ -3376,7 +3372,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     const imageUrls = allUrls.length <= 7
                       ? allUrls
                       : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0 });
+                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0, videoModel: 'kling' });
                     setShowAnimateSheet(true);
                   } : undefined}
                   hasVideo={hasVideo}
@@ -3401,6 +3397,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: null,
                         pollSeconds: 0,
+                        videoModel: 'kling',
                       });
                       setShowAnimateSheet(true);
                     }}
@@ -3420,6 +3417,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
+                        videoModel: 'kling',
                       });
                       setShowAnimateSheet(true);
                     }}
