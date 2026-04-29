@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const { prompt, image, originalImage, referenceImages, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
-            musicReady, musicAudioUrl, currentDesign,
+            musicReady, musicAudioUrl, currentDesign, videoModel,
             headless, hasAnnotation, isDraft } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
@@ -239,7 +239,7 @@ export async function POST(req: NextRequest) {
           };
 
           try {
-            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign, history: agentHistory })) {
+            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign, history: agentHistory })) {
               if (event.type === 'usage') { usageEvent = event; continue; }
               if (writer) {
                 await writer.processAndEnqueue(event);

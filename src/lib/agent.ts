@@ -50,6 +50,8 @@ interface AgentContext {
   lastUsedModel?: ModelId;
   /** User's preferred model override */
   preferredModel?: ModelId;
+  /** User's preferred video model */
+  videoModel?: string;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event */
@@ -311,8 +313,9 @@ ${animatePrompt}`,
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then Shot lines with <<<image_N>>> references, camera directions, sound cues, ending with Style line. Follow the Video Script Format in system prompt.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
+        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (supports real faces, fast). seedance = SeeDance 2.0 (best quality, but no real faces without authorized assets). Default: kling.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model }) => {
         // GUI animation mode: use animationImageUrls; CUI mode: fallback to snapshotImages URLs
         let imageUrls = ctx.animationImageUrls;
         if (!imageUrls?.length) {
@@ -322,11 +325,13 @@ ${animatePrompt}`,
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
+          const videoModel = model || (ctx as any).videoModel || 'kling';
           const skillResult = await createVideo({
             script: story_prompt,
             images: imageUrls,
             duration,
             aspectRatio: aspect_ratio,
+            videoModel,
           });
 
           if (!skillResult.success || !skillResult.taskId) {
@@ -358,10 +363,12 @@ ${animatePrompt}`,
 
           // Bill for video generation (per-second)
           const videoSec = duration || 10;
-          import('./billing/credits').then(({ deductFixedCredits }) =>
-            deductFixedCredits(ctx.userId ?? '', Math.ceil(videoSec * 22), 'create_video', undefined, undefined)
-              .catch(e => console.error('[billing] generate_animation deduct error:', e))
-          );
+          const toolName = videoModel === 'seedance' ? 'create_video_seedance' : 'create_video_kling';
+          import('./billing/pricing').then(({ getToolPrice }) => getToolPrice(toolName)).then(price => {
+            const creditsPerSec = price?.credits ?? 22;
+            return import('./billing/credits').then(({ deductFixedCredits }) =>
+              deductFixedCredits(ctx.userId ?? '', Math.ceil(videoSec * creditsPerSec), toolName, undefined, undefined));
+          }).catch(e => console.error('[billing] generate_animation deduct error:', e));
 
           return { success: true as const, taskId, message: 'Video generation task created! It takes about 3–5 minutes. The result will appear here when done.' };
         } catch (e) {
@@ -1085,7 +1092,7 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }> },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }> },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -1095,6 +1102,7 @@ export async function* runMakaronAgent(
     generatedImages: [],
     animationImageUrls: options?.animationImageUrls,
     preferredModel: options?.preferredModel,
+    videoModel: options?.videoModel,
     snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,

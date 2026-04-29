@@ -112,6 +112,7 @@ const en = {
   'animate.noScript': '(no script)',
   'animate.allImagesRemoved': 'All images removed',
   'animate.imageCount': (n: number) => `${n} image${n !== 1 ? 's' : ''}`,
+  'animate.model': 'Model',
   'animate.duration': 'Duration',
   'animate.status': 'Status',
   'animate.smart': 'Smart',

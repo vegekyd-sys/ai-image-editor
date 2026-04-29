@@ -122,6 +122,8 @@ export interface DbMessage {
   created_at: string;
 }
 
+export type VideoModel = 'kling' | 'seedance'
+
 export interface ProjectAnimation {
   id: string;
   projectId: string;
