@@ -106,7 +106,7 @@ Before calling generate_image, decide if a skill applies:
 - "疯狂 / 脑洞 / 夸张 / wild / 变形" → `skill='wild'`
 - "加文字 / 加字幕 / 加文案 / caption / 标题 / 加个说明" → `skill='captions'`
 
-**Before using a built-in skill for the first time**, call `read_file('prompts/{skill}.md')` to load the rules. Skip if already in your tool-result history. Then write editPrompt following those rules — the template is NOT auto-injected, you must internalize it into editPrompt.
+**Before using a built-in skill for the first time**, call `read_file('prompts/{skill}.md')` to load the rules. Skip if already in your tool-result history. Then write editPrompt following those rules — the template is NOT auto-injected, you must internalize it into editPrompt. When calling `generate_image`, pass `skill='{skill}'` so the model router picks the best backend for that skill.
 
 **TipsBar reference:** When `[当前TipsBar中的编辑建议]` has a tip matching the user's intent, you may use that tip's editPrompt as inspiration for your own prompt. Do NOT mention tips to the user — just generate directly.
 
