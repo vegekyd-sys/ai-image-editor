@@ -504,7 +504,7 @@ export default function HomePage() {
       return <video src={url} autoPlay loop muted playsInline preload="metadata" style={style} />
     }
     const src = variant === 'thumb'
-      ? getThumbnailUrl(url, 600, 75, 800, 'cover')
+      ? getThumbnailUrl(url, 400, 70, 533, 'cover')
       : getOptimizedUrl(url, 95)
     // eslint-disable-next-line @next/next/no-img-element
     return <img
@@ -817,7 +817,14 @@ export default function HomePage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
+        @font-face {
+          font-family: 'Caveat';
+          font-style: normal;
+          font-weight: 400 500;
+          font-display: swap;
+          src: url('/fonts/caveat-latin-400.woff2') format('woff2');
+          unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
         .mkr-page { font-family: inherit; }
         .mkr-handwrite { font-family: 'Caveat', cursive; }
 
@@ -831,6 +838,16 @@ export default function HomePage() {
         .mkr-detail-snap {
           /* No scroll-snap — JS touch handlers control slide transitions
              to avoid iOS Safari video compositor vs scroll-snap conflict. */
+        }
+
+        @keyframes mkr-shimmer {
+          0% { background-position: -400px 0; }
+          100% { background-position: 400px 0; }
+        }
+        .mkr-skeleton {
+          background: linear-gradient(90deg, #1a1520 25%, #2a2035 50%, #1a1520 75%);
+          background-size: 800px 100%;
+          animation: mkr-shimmer 1.5s ease-in-out infinite;
         }
 
         .mkr-skill-card {
@@ -964,6 +981,16 @@ export default function HomePage() {
             gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
             gap: isDesktop ? '14px' : '10px',
           }}>
+            {homeSkills.length === 0 && Array.from({ length: 8 }, (_, i) => (
+              <div key={`sk-${i}`} className="mkr-skeleton" style={{
+                aspectRatio: '3 / 4', borderRadius: 16,
+                animationDelay: `${i * 0.1}s`,
+              }}>
+                <div style={{ position: 'absolute', bottom: 14, left: 14, right: 14 }}>
+                  <div className="mkr-skeleton" style={{ width: '60%', height: 14, borderRadius: 6 }} />
+                </div>
+              </div>
+            ))}
             {homeSkills.map((template, i) => (
               <div
                 key={template.id}
