@@ -925,6 +925,27 @@ export default function HomePage() {
           }}
         />
 
+        {/* Top bar: link to projects */}
+        <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'flex-start', position: 'relative', zIndex: 10 }}>
+          <button
+            onClick={() => router.push('/projects')}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '0.7rem', letterSpacing: '0.05em',
+              color: 'rgba(255,255,255,0.45)',
+              display: 'flex', alignItems: 'center', gap: 5,
+              transition: 'color 0.2s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+            </svg>
+            {locale === 'zh' ? '我的项目' : 'My Projects'}
+          </button>
+        </div>
+
         {/* ── Hero: Logo + Tagline — matches projects page ── */}
         <div style={{
           paddingTop: '20vh', paddingBottom: '40px',
