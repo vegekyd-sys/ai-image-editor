@@ -140,6 +140,7 @@ async function dbWriteFile(
   path: string,
   content: string | Buffer,
   contentType?: string,
+  marketplaceId?: string,
 ): Promise<{ success: boolean; storageUrl?: string; error?: string }> {
   const ct = contentType || pathToContentType(path);
   const sp = storagePath(userId, path);
@@ -169,6 +170,7 @@ async function dbWriteFile(
     size_bytes: sizeBytes,
     storage_url: publicUrl,
     updated_at: new Date().toISOString(),
+    ...(marketplaceId ? { marketplace_id: marketplaceId } : {}),
   }, { onConflict: 'user_id,path' });
 
   if (dbError) {
@@ -223,7 +225,7 @@ function listDirRecursive(dir: string, prefix = ''): string[] {
 }
 
 /** List built-in skill files from src/skills/ (local, read-only) */
-function listBuiltInFiles(pattern?: string): WorkspaceFile[] {
+export function listBuiltInFiles(pattern?: string): WorkspaceFile[] {
   const files: WorkspaceFile[] = [];
   try {
     const fs = require('fs') as typeof import('fs');
@@ -267,7 +269,7 @@ function listBuiltInFiles(pattern?: string): WorkspaceFile[] {
 }
 
 /** Read a built-in file from local filesystem */
-function readBuiltInFile(filePath: string): WorkspaceReadResult | null {
+export function readBuiltInFile(filePath: string): WorkspaceReadResult | null {
   try {
     const fs = require('fs') as typeof import('fs');
     const pathMod = require('path') as typeof import('path');
@@ -398,8 +400,9 @@ export async function writeFile(
   supabase: SupabaseClient,
   userId: string,
   contentType?: string,
+  marketplaceId?: string,
 ): Promise<{ success: boolean; storageUrl?: string; error?: string }> {
-  return dbWriteFile(supabase, userId, filePath, content, contentType);
+  return dbWriteFile(supabase, userId, filePath, content, contentType, marketplaceId);
 }
 
 /**
@@ -422,19 +425,22 @@ export async function installSkill(opts: {
   assets: SkillAsset[];
   supabase: SupabaseClient;
   userId: string;
+  marketplaceId?: string;
 }): Promise<{ success: boolean; skillName: string; error?: string }> {
-  const { skillMd, assets, supabase, userId } = opts;
+  const { skillMd, assets, supabase, userId, marketplaceId } = opts;
 
   const parsed = parseSkillMd(skillMd);
   if (!parsed) return { success: false, skillName: '', error: 'Invalid SKILL.md format' };
 
   let finalName = parsed.name;
-  const existing = await getAllSkills(supabase, userId);
-  const existingNames = new Set(existing.map(s => s.name));
-  if (existingNames.has(finalName)) {
-    let i = 2;
-    while (existingNames.has(`${parsed.name}-${i}`)) i++;
-    finalName = `${parsed.name}-${i}`;
+  if (!marketplaceId) {
+    const existing = await getAllSkills(supabase, userId);
+    const existingNames = new Set(existing.map(s => s.name));
+    if (existingNames.has(finalName)) {
+      let i = 2;
+      while (existingNames.has(`${parsed.name}-${i}`)) i++;
+      finalName = `${parsed.name}-${i}`;
+    }
   }
 
   const uploadedUrls: Record<string, string> = {};
@@ -454,7 +460,7 @@ export async function installSkill(opts: {
     finalMd = finalMd.replace(new RegExp(relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), publicUrl);
   }
 
-  const mdResult = await writeFile(`skills/${finalName}/SKILL.md`, finalMd, supabase, userId, 'text/markdown');
+  const mdResult = await writeFile(`skills/${finalName}/SKILL.md`, finalMd, supabase, userId, 'text/markdown', marketplaceId);
   if (!mdResult.success) {
     return { success: false, skillName: finalName, error: `Failed to save SKILL.md: ${mdResult.error}` };
   }

@@ -55,7 +55,7 @@ export default function ProjectsPage() {
 
 function ProjectsPageInner() {
   const { user, loading: authLoading, signOut } = useAuth()
-  const { t, locale } = useLocale()
+  const { t, locale, setLocale } = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
@@ -504,7 +504,14 @@ function ProjectsPageInner() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
+        @font-face {
+          font-family: 'Caveat';
+          font-style: normal;
+          font-weight: 400 500;
+          font-display: swap;
+          src: url('/fonts/caveat-latin-400.woff2') format('woff2');
+          unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
         .mkr-page { font-family: inherit; }
         .mkr-handwrite { font-family: 'Caveat', cursive; }
 
@@ -602,7 +609,23 @@ function ProjectsPageInner() {
         {/* Top bar: language toggle (left) + sign out (right) */}
         <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <LocaleToggle />
+            <button
+              onClick={() => router.push('/home')}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.45)',
+                display: 'flex', alignItems: 'center', gap: 5,
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+              {locale === 'zh' ? '探索' : 'Explore'}
+            </button>
             <button
               onClick={() => setShowChangelog(true)}
               style={{
@@ -682,6 +705,19 @@ function ProjectsPageInner() {
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   >
                     Skills
+                  </button>
+                  <button
+                    onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '10px 16px', background: 'none', border: 'none',
+                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
+                      cursor: 'pointer', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    {locale === 'zh' ? 'English' : '中文'}
                   </button>
                   <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
                   <button
