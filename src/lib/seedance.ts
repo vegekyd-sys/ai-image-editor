@@ -16,6 +16,7 @@ export interface SeedanceTaskInput {
   ratio?: string           // adaptive/16:9/9:16/1:1/3:4/4:3/21:9
   resolution?: string      // 720p (default), 480p
   generateAudio?: boolean  // default true
+  videoUrl?: string        // Reference video URL (role: reference_video)
 }
 
 export interface SeedanceTaskResult {
@@ -73,11 +74,16 @@ export async function createSeedanceTask(input: SeedanceTaskInput): Promise<stri
     throw new Error('SEEDANCE_API_KEY not configured')
   }
 
-  const { prompt, images, duration, ratio, resolution, generateAudio } = input
+  const { prompt, images, duration, ratio, resolution, generateAudio, videoUrl } = input
+
+  const content = buildContent(prompt, images)
+  if (videoUrl) {
+    content.push({ type: 'video_url', video_url: { url: videoUrl }, role: 'reference_video' })
+  }
 
   const payload: Record<string, unknown> = {
     model: MODEL,
-    content: buildContent(prompt, images),
+    content,
     generate_audio: generateAudio ?? true,
   }
 
@@ -85,7 +91,7 @@ export async function createSeedanceTask(input: SeedanceTaskInput): Promise<stri
   if (ratio) payload.ratio = ratio
   if (resolution) payload.resolution = resolution
 
-  console.log(`[seedance] Creating task: ${images.length} images, duration=${duration ?? 'smart'}, ratio=${ratio ?? 'adaptive'}`)
+  console.log(`[seedance] Creating task: ${images.length} images${videoUrl ? ' + ref video' : ''}, duration=${duration ?? 'smart'}, ratio=${ratio ?? 'adaptive'}`)
 
   const response = await fetch(`${BASE_URL}/contents/generations/tasks`, {
     method: 'POST',

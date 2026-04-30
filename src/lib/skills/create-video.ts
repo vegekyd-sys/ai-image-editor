@@ -69,11 +69,17 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     let taskId: string;
 
-    // Video editing only supported by Kling direct
-    if (videoUrl && provider !== 'kling') {
+    // Video editing (base mode) only supported by Kling
+    if (videoUrl && videoReferType === 'base' && provider !== 'kling') {
       return {
         success: false,
-        message: `Video editing (video_list) is only supported by Kling. Current model: ${provider}`,
+        message: `Video editing (base mode) is only supported by Kling. Current model: ${provider}`,
+      };
+    }
+    if (videoUrl && provider === 'piapi') {
+      return {
+        success: false,
+        message: 'Video reference is not supported by PiAPI provider.',
       };
     }
 
@@ -85,6 +91,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         duration: resolvedDuration != null ? resolvedDuration : -1,
         ratio: aspectRatio || 'adaptive',
         resolution: '720p',
+        videoUrl,
       });
       console.log(`✅ [create_video] SeeDance task created: ${taskId}`);
     } else if (provider === 'piapi') {

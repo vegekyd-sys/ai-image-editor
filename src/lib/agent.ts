@@ -314,13 +314,16 @@ function createTools(ctx: AgentContext) {
 
 ${animatePrompt}`,
       inputSchema: z.object({
-        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then Shot lines with <<<image_N>>> references, camera directions, sound cues, ending with Style line. Follow the Video Script Format in system prompt.'),
+        story_prompt: z.string().describe('The video script. Follow the Video Script Format in system prompt.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
-        aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image. Kling supports 16:9/9:16/1:1. SeeDance also supports 4:3/3:4/21:9/adaptive.'),
+        aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
         model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (supports real faces, fast). seedance = SeeDance 2.0 (best quality, but no real faces without authorized assets). Default: kling.'),
         image_refs: z.array(z.string()).optional().describe('Additional image URLs to include (workspace files, skill assets, external URLs). These are appended to snapshot images.'),
+        video_ref_url: z.string().optional().describe('Reference video URL (from workspace/skill assets via list_files, or external). Kling: base=edit video, feature=reference motion/style. SeeDance: reference_video.'),
+        video_ref_type: z.enum(['base', 'feature']).optional().describe('base: edit video directly (output duration=input duration, Kling only). feature: reference motion/style for new video. Default: feature.'),
+        keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Only with video_ref_type=base. Default: false.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, image_refs }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, image_refs, video_ref_url, video_ref_type, keep_original_sound }) => {
         // GUI animation mode: use animationImageUrls; CUI mode: fallback to snapshotImages URLs
         let imageUrls = ctx.animationImageUrls;
         if (!imageUrls?.length) {
@@ -340,6 +343,9 @@ ${animatePrompt}`,
             duration,
             aspectRatio: aspect_ratio,
             videoModel,
+            videoUrl: video_ref_url,
+            videoReferType: video_ref_type,
+            keepOriginalSound: keep_original_sound,
           });
 
           if (!skillResult.success || !skillResult.taskId) {
