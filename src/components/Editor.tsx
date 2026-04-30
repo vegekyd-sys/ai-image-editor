@@ -1704,7 +1704,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       hasBackgroundTaskRef,
     });
 
-    agentReconnect(reconnectCallbacks);
+    agentReconnect({
+      ...reconnectCallbacks,
+      onClearRunMessages: (msgIds: string[]) => {
+        const idSet = new Set(msgIds);
+        setMessages(prev => prev.filter(m => !idSet.has(m.id)));
+      },
+    });
 
     return () => { agentDisconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
