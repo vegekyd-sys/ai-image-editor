@@ -337,6 +337,20 @@ ${animatePrompt}`,
         }
         try {
           const videoModel = model || (ctx as any).videoModel || 'kling';
+
+          // Video harness: validate before calling API
+          const { validateVideoScript } = await import('./video-harness');
+          const harnessError = validateVideoScript({
+            prompt: story_prompt,
+            imageCount: imageUrls.length,
+            videoRefUrl: video_ref_url,
+            videoRefType: video_ref_type,
+            model: videoModel,
+          });
+          if (harnessError) {
+            return { success: false as const, message: harnessError };
+          }
+
           const skillResult = await createVideo({
             script: story_prompt,
             images: imageUrls,

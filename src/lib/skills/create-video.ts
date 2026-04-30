@@ -44,10 +44,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     // filterAndRemapImages will enforce the 7-image limit on the filtered result
     const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
 
-    if (filteredImages.length === 0) {
+    if (filteredImages.length === 0 && images.length > 0) {
       return {
         success: false,
-        message: 'No images referenced in the script. The script should use <<<image_N>>> format.',
+        message: `No images referenced in the script but ${images.length} images were provided. Use <<<image_1>>> etc. to reference them in your prompt.`,
       };
     }
 

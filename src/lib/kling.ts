@@ -182,7 +182,7 @@ export function filterAndRemapImages(
       finalPrompt = finalPrompt.replaceAll(`<<<image_${origIdx}>>>`, `<<<image_${newIdx + 1}>>>`)
     })
   } else {
-    filteredImages = imageUrls
+    filteredImages = []
     finalPrompt = prompt
   }
 
