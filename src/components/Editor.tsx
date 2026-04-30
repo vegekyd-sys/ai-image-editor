@@ -31,7 +31,7 @@ function releaseTipsSlot() {
   const next = _tipsQueue.shift();
   if (next) { _tipsRunning++; next(); }
 }
-import { cacheImage } from '@/lib/imageCache';
+import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
 import AnimateSheet from '@/components/AnimateSheet';
@@ -362,6 +362,7 @@ export default function Editor({
   useEffect(() => { activeSkillRef.current = pendingSkill; }, [pendingSkill]);
 const isTipsFetchingRef = useRef(isTipsFetching);
   isTipsFetchingRef.current = isTipsFetching;
+  const tipsFetchCountRef = useRef(0);
   const previewDoneBaselineRef = useRef(0);
   const lastTipsRequestRef = useRef<{ snapshotId: string; image: string; previewMode: 'full' | 'none'; autoPreviewCategory?: string } | null>(null);
   const pendingTeaserRef = useRef<{ snapshotId: string; tips: Tip[] } | null>(null);
@@ -930,9 +931,12 @@ const isTipsFetchingRef = useRef(isTipsFetching);
           );
           return { ...s, tips };
         });
-        // Persist tips with new preview image to Storage+DB (fire-and-forget)
+        // Persist tips with new preview image to Storage+DB+IDB cache
         const snap = updated.find(s => s.id === snapshotId);
-        if (snap) onUpdateTips?.(snapshotId, snap.tips);
+        if (snap) {
+          onUpdateTips?.(snapshotId, snap.tips);
+          if (projectId) updateCachedTips(projectId, snapshotId, snap.tips);
+        }
         return updated;
       });
     } catch (err) {
@@ -983,8 +987,20 @@ const isTipsFetchingRef = useRef(isTipsFetching);
           generatePreviewForTip(snapshotId, tip.editPrompt, imageForPreview, tip.aspectRatio, tip.category);
         }
       }
+      // Incremental persist: save tips to DB + IDB cache as each complete tip arrives
+      setSnapshots((prev) => {
+        const snap = prev.find(s => s.id === snapshotId);
+        if (snap?.tips.length) {
+          const tipsForDb = snap.tips.filter(t => !!t.editPrompt).map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
+          if (tipsForDb.length) {
+            onUpdateTips?.(snapshotId, tipsForDb);
+            if (projectId) updateCachedTips(projectId, snapshotId, tipsForDb);
+          }
+        }
+        return prev;
+      });
     }
-  }, [generatePreviewForTip]);
+  }, [generatePreviewForTip, onUpdateTips]);
 
   // Fetch tips via 3 parallel calls to Claude (fast, ~2-3s vs Gemini ~15s)
   // previewMode: 'full' = all tips get preview; 'none' = no auto-previews
@@ -995,6 +1011,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     previewMode: 'full' | 'none' = 'full',
     autoPreviewCategory?: string,
   ) => {
+    tipsFetchCountRef.current++;
     setIsTipsFetching(true);
     setFailedCategories(new Set());
     previewDoneBaselineRef.current = 0;
@@ -1088,20 +1105,12 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
       completedCount++;
       if (completedCount === categories.length) {
-        setIsTipsFetching(false);
-        setCommittedCategory(null);
-        if (onUpdateTips) {
-          setSnapshots((prev) => {
-            const snap = prev.find(s => s.id === snapshotId);
-            if (snap?.tips.length) {
-              // Only persist complete tips (with editPrompt) — don't save partial streaming stubs
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const tipsForDb = snap.tips.filter(t => !!t.editPrompt).map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
-              onUpdateTips(snapshotId, tipsForDb);
-            }
-            return prev;
-          });
+        tipsFetchCountRef.current--;
+        if (tipsFetchCountRef.current <= 0) {
+          tipsFetchCountRef.current = 0;
+          setIsTipsFetching(false);
         }
+        setCommittedCategory(null);
         setTimeout(() => {
           const snap = snapshotsRef.current.find(s => s.id === snapshotId);
           if (snap?.tips.length) {
