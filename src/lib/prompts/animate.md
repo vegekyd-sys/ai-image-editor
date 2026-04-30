@@ -96,11 +96,18 @@ Shot 2 (3s): Close-up, ...
 
 ## Reference Video Usage
 
+**CRITICAL**: When the user provides a reference video (URL or mentions a video to imitate), you MUST pass it as the `video_ref_url` parameter. Never put video URLs in the prompt text — the model cannot download URLs from prompt text. The video must go through the parameter.
+
+When a user gives you a video URL:
+1. Pass it as `video_ref_url`
+2. Set `video_ref_type: "feature"` (to reference motion/style) or `"base"` (to edit the video)
+3. Set `keep_original_sound: true` if the user wants to keep the original audio/music
+4. Your prompt describes what the result should look like; the reference video provides the motion/timing template
+5. You can still use `<<<image_N>>>` for the user's photos alongside the reference video
+
 When a skill provides a reference video in workspace assets:
 1. Use `list_files` to find the video URL in `skills/{name}/assets/`
-2. Pass it as `video_ref_url` with `video_ref_type: feature`
-3. Your prompt describes the desired result; the reference video provides the motion template
-4. You can still use `<<<image_N>>>` for the user's photos alongside the reference video
+2. Same as above — pass as `video_ref_url`
 
 ## Showcases
 
