@@ -36,7 +36,13 @@ export function validateVideoScript(opts: {
     }
   }
 
-  // 4. base mode only on Kling
+  // 4. Title check: first line should be a short title, not a Shot/prompt line
+  const firstLine = prompt.split('\n').find(l => l.trim())?.trim() || ''
+  if (firstLine.match(/^(Shot\s+\d|<<<|一镜到底|镜头|Long take)/i)) {
+    return `Your script is missing a title. The first line must be a short title (2-5 words, e.g. "周五下午三点" or "Neon Dance Challenge"), then the script body on the next line. Add a title as the first line.`
+  }
+
+  // 5. base mode only on Kling
   if (videoRefUrl && videoRefType === 'base' && model === 'seedance') {
     return 'Video editing (base mode) is only supported by Kling. Either switch to model="kling" or use video_ref_type="feature" for style/motion reference.'
   }
