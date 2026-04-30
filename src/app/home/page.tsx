@@ -696,7 +696,8 @@ export default function HomePage() {
                 requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1 })
                 return
               }
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (inputText.trim() || attachedFiles.length > 0)) {
+              const isMobile = 'ontouchstart' in window
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isMobile && (inputText.trim() || attachedFiles.length > 0)) {
                 e.preventDefault()
                 handleCreate()
               }

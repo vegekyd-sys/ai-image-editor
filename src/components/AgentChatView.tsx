@@ -1282,7 +1282,8 @@ export default function AgentChatView({
                 requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1; });
                 return;
               }
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              const isMobile = 'ontouchstart' in window;
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isMobile) {
                 e.preventDefault();
                 handleSubmit();
               }
