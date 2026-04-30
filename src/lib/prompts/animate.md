@@ -102,6 +102,32 @@ When a skill provides a reference video in workspace assets:
 3. Your prompt describes the desired result; the reference video provides the motion template
 4. You can still use `<<<image_N>>>` for the user's photos alongside the reference video
 
+## Showcases
+
+### Multi-shot with characters:
+Shot 1 (2s): Wide shot, <<<image_1>>> and <<<image_2>>> face off in the center of the rooftop, feet apart in a boxing stance.
+Shot 2 (2s): Both move in, testing each other up close: <<<image_1>>> throws a quick punch, <<<image_2>>> sidesteps and blocks.
+Shot 3 (3s): <<<image_1>>> continues the attack, landing a punch on <<<image_2>>>'s head, and <<<image_2>>> retaliates.
+Shot 4 (4s): Wide shot, the two continue their intense fight.
+Shot 5 (2s): A bird's-eye view of the scene shows the two separated and having stopped fighting.
+
+### Character + dialogue:
+Long take. On a windy day in an Icelandic mountain range, <<<image_1>>> says with a barely contained smile, "Do you think our wedding is too simple—like there's no one here to bless us?" The camera circles the subjects to reveal <<<image_2>>> standing opposite, smiling and replying, "The wind—the wind is their blessing to us." Cinematic, handheld feel.
+
+### Dialogue in shots (台词整合到脚本中):
+When the video needs characters to speak, write dialogue directly inside each Shot using the format `角色（语气描述）：台词`. Kling will synthesize voice. Example:
+
+Shot 1 (3s): 近景，<<<image_1>>> 坐在沙发上。场景设定在家中，客厅空调发出轻微的嗡嗡声，营造出真实的日常生活氛围。妈妈（轻声说道，语气中带着一丝惊讶）：哇，我完全没想到剧情会是这样。爸爸（低声附和，语气平静）：是啊，真是意想不到。
+Shot 2 (3s): 切到近景，儿子和女儿的反应。儿子（兴奋地说道）：这简直是史上最棒的反转！女儿（热情地点头附和）：真不敢相信他们居然这么做了！
+
+### Photo edit story (typical for this app):
+Shot 1 (2s): Extreme close-up, push-in. <<<image_3>>> — a chameleon's eye snaps into focus, scales shifting neon. Sound: sharp synth hit.
+Shot 2 (2s): Pull-out to mid-shot. <<<image_3>>> — chameleon perched on subject's shoulder, surprised glance. Sound: playful pizzicato.
+Shot 3 (3s): Wide shot, slow push-in. <<<image_1>>> — original street scene, warm evening light. Sound: lo-fi beat fades in.
+Shot 4 (2s): Close-up, handheld. <<<image_4>>> — neon color grade, puddles reflecting cyan and magenta. Sound: synth bass pulse.
+Shot 5 (2s): Bird's-eye view, pulling up. <<<image_5>>> — full scene from above, neon reflections on wet pavement. Sound: music swells, fades to rain.
+Style: Urban cinematic, neon noir, handheld energy.
+
 ---
 
 Now analyze the provided images and write the video prompt. Output ONLY the prompt text, nothing else.
