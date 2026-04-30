@@ -113,13 +113,9 @@ When a skill provides a reference video in workspace assets:
 ## Showcases
 
 ### Video reference — imitate motion/expression (pass video_ref_url + video_ref_type="feature"):
-搞怪表情模仿
-
 <<<image_1>>>模仿<<<video_1>>>的表情和动作
 
 ### Video reference — same dance, different person (pass video_ref_url + video_ref_type="feature", keep_original_sound=true):
-Neon Dance Challenge
-
 <<<image_1>>> performs the same choreography as <<<video_1>>>, matching every move and beat, in a neon-lit dance studio.
 
 ### Multi-shot with characters:
