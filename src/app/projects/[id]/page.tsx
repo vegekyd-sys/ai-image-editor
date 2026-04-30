@@ -68,9 +68,11 @@ export default function ProjectPage() {
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
-  // GUI can render immediately if snapshot cache exists
+  const isNewProject = !!(pendingImages || pendingPrompt)
+  // GUI can render immediately if snapshot cache exists or this is a new project
   const [loaded, setLoaded] = useState(() => {
     if (typeof window === 'undefined') return false
+    if (isNewProject) return true
     const sync = getCachedProjectDataSync(projectId)
     return sync !== null && (sync.snapshots as Snapshot[]).length > 0
   })
@@ -128,14 +130,16 @@ export default function ProjectPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  // Effect 2: Fetch from Supabase via loadProject (source of truth)
-  // Use user?.id instead of user to avoid re-fetch when auth emits the same user object twice
+  // Effect 2: Fetch from Supabase via loadProject (existing projects only)
   const userId = user?.id
   useEffect(() => {
     if (!userId || !projectId) return
+    if (isNewProject) return // new project — nothing to load
     let cancelled = false
 
+    const pageT0 = performance.now()
     loadProject().then(async ({ snapshots, messages, title, animations }) => {
+      console.log(`⏱️ [page] loadProject done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       cacheProjectData(projectId, snapshots, messages, title)
 
@@ -168,7 +172,9 @@ export default function ProjectPage() {
         }
       }
 
+      console.log(`⏱️ [page] music query done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       const patched = await patchFromImageCache(snapshots)
+      console.log(`⏱️ [page] patchFromImageCache done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       shownRef.current = true
       setInitialSnapshots(patched)

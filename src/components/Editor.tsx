@@ -2182,10 +2182,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
       // ── Step 7: Agent request (if prompt) ──
       if (hasPrompt) {
-        setTimeout(() => {
-          const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
-          handleAgentRequest(skillPrefix + pendingPrompt!);
-        }, 200);
+        const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
+        handleAgentRequest(skillPrefix + pendingPrompt!);
       }
 
       // ── Step 8: CUI mode ──

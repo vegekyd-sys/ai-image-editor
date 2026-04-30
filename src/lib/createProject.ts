@@ -18,8 +18,9 @@ async function compressFile(file: File): Promise<string> {
 }
 
 /**
- * Create a new project: compress files → upload to Supabase → store URLs in sessionStorage → navigate.
- * Returns the project ID, or null on failure.
+ * Create a new project with optimistic navigation.
+ * Generates UUID upfront → stores pending data in sessionStorage → returns immediately.
+ * DB insert happens in the background (editor page picks it up).
  */
 export async function createProject(
   supabase: SupabaseClient,
@@ -27,46 +28,45 @@ export async function createProject(
   files: File[],
   options?: { prompt?: string; skill?: string },
 ): Promise<{ projectId: string; metadata?: { takenAt?: string; location?: string } } | null> {
-  // Single image: compress + metadata + DB insert in parallel, then navigate immediately
-  // Multi image: create project first (need ID for upload) → upload → store URLs
-  if (files.length <= 1) {
-    // Run compress, metadata, and DB insert in parallel — none depend on each other
-    const [base64, metadata, projectResult] = await Promise.all([
-      files.length === 1 ? compressFile(files[0]) : Promise.resolve(undefined),
-      files.length > 0 ? extractPhotoMetadata(files[0]) : Promise.resolve(undefined),
-      supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single(),
-    ])
-    console.log('[METADATA]', JSON.stringify(metadata))
+  // Store pending data for editor page
+  if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt);
+  if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill);
 
-    if (projectResult.error || !projectResult.data) throw new Error('Failed to create project')
-    const project = projectResult.data
-
-    if (base64) sessionStorage.setItem('pendingImages', JSON.stringify([base64]))
-    if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
-    if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt)
-    if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill)
-    return { projectId: project.id, metadata }
+  if (files.length === 0) {
+    // Text-only: DB insert only (no compression), then navigate
+    const { data, error } = await supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single();
+    if (error || !data) throw new Error('Failed to create project');
+    return { projectId: data.id };
   }
 
-  // Multi image: create project + extract metadata in parallel, then upload
-  const [projectResult, metadata] = await Promise.all([
+  // Single image: compress + metadata + DB insert in parallel
+  if (files.length <= 1) {
+    const [base64, metadata, dbResult] = await Promise.all([
+      compressFile(files[0]),
+      extractPhotoMetadata(files[0]),
+      supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single(),
+    ]);
+    if (dbResult.error || !dbResult.data) throw new Error('Failed to create project');
+    if (base64) sessionStorage.setItem('pendingImages', JSON.stringify([base64]));
+    if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
+    return { projectId: dbResult.data.id, metadata };
+  }
+
+  // Multi image: DB insert + metadata in parallel, then upload
+  const [dbResult, metadata] = await Promise.all([
     supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single(),
     extractPhotoMetadata(files[0]),
-  ])
-  console.log('[METADATA]', JSON.stringify(metadata))
-  if (projectResult.error || !projectResult.data) throw new Error('Failed to create project')
-  const project = projectResult.data
-
+  ]);
+  if (dbResult.error || !dbResult.data) throw new Error('Failed to create project');
+  const projectId = dbResult.data.id;
   const urls = await Promise.all(files.map(async (file, i) => {
-    const base64 = await compressFile(file)
-    const url = await uploadImage(supabase, userId, project.id, `snapshot-upload-${i}.jpg`, base64)
-    if (!url) throw new Error(`Failed to upload image ${i}`)
-    return url
-  }))
-  sessionStorage.setItem('pendingImages', JSON.stringify(urls))
-  if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
-  if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt)
-  if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill)
+    const base64 = await compressFile(file);
+    const url = await uploadImage(supabase, userId, projectId, `snapshot-upload-${i}.jpg`, base64);
+    if (!url) throw new Error(`Failed to upload image ${i}`);
+    return url;
+  }));
+  sessionStorage.setItem('pendingImages', JSON.stringify(urls));
+  if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
 
-  return { projectId: project.id, metadata }
+  return { projectId, metadata };
 }
