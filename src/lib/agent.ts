@@ -314,8 +314,10 @@ function createTools(ctx: AgentContext) {
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
 Hard constraints (apply even before reading the guide):
-- Use \`<<<image_N>>>\` to reference images in your script (N starts at 1)
-- If user provides a reference video URL, you MUST pass it as \`video_ref_url\` parameter — never put video URLs in prompt text
+- First line of script = short title (2-5 words). Then script body.
+- Use \`<<<image_N>>>\` to reference images (N starts at 1)
+- Total duration: 5-15 seconds. Keep script under 2500 characters.
+- If user provides a reference video URL, MUST pass as \`video_ref_url\` parameter — never in prompt text
 - With video reference: keep prompt SHORT (under 200 chars), let the reference video drive motion/timing
 - Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
