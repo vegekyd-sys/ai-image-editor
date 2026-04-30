@@ -297,15 +297,14 @@ export default function Editor({
   useEffect(() => {
     if (!initialMessages?.length) return;
     setMessages(prev => {
-      const existingIds = new Set(prev.map(m => m.id));
-      const newItems = initialMessages.filter(m => !existingIds.has(m.id));
-      if (newItems.length === 0) return prev;
-      // During reconnect: prepend old history before reconnect messages
-      // Normal: replace with Supabase data
-      if (isAgentActive) return [...newItems, ...prev];
-      return initialMessages.length > prev.length ? initialMessages : [...newItems, ...prev];
+      if (prev.length === 0) return initialMessages;
+      // Strict ID-based dedup: build complete list from initialMessages, then append any live messages not in it
+      const initialIds = new Set(initialMessages.map(m => m.id));
+      const liveOnly = prev.filter(m => !initialIds.has(m.id));
+      if (liveOnly.length === 0) return initialMessages;
+      return [...initialMessages, ...liveOnly];
     });
-  }, [initialMessages, isAgentActive]);
+  }, [initialMessages]);
 
   // ── Background Agent reconnection ──────────────────────────────
   const { activeRunId, isReconnecting, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
