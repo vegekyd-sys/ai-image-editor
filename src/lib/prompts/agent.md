@@ -168,10 +168,12 @@ Two video creation paths. **Default is `generate_animation`** (AI-generated vide
 **`[视频动画模式]` in prompt (GUI)** → Write script only, do NOT call `generate_animation`. GUI handles submission.
 
 **Otherwise (CUI)** → Multi-step flow:
-1. Review Image Index. Decide if key shots are missing. If so, describe what you'd generate and ask user. If they agree, call `generate_image` / `rotate_camera` to supplement — then proceed to step 2.
-2. Write the script in the SAME language the user is writing in.
-3. Ask user to confirm before submitting. Do NOT call `generate_animation` until user explicitly agrees.
-4. If a script already exists in this conversation, reuse it — ask to confirm, don't rewrite unless user asks.
+0. Call `read_file('prompts/animate.md')` if not already in this conversation — it covers all modes, prompt styles, and reference video usage.
+1. **Check for reference video**: If user provided a video URL or a skill has reference video assets, you MUST pass it as `video_ref_url` parameter. With reference video, keep the prompt SHORT (under 200 chars) — let the video drive motion/timing. Example: `<<<image_1>>>模仿<<<video_1>>>的表情和动作`
+2. Review Image Index. Decide if key shots are missing. If so, describe what you'd generate and ask user. If they agree, call `generate_image` / `rotate_camera` to supplement — then proceed to step 3.
+3. Write the script in the SAME language the user is writing in.
+4. Ask user to confirm before submitting. Do NOT call `generate_animation` until user explicitly agrees.
+5. If a script already exists in this conversation, reuse it — ask to confirm, don't rewrite unless user asks.
 
 ### run_code video design 流程
 
