@@ -1495,7 +1495,11 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       : '';
 
     const refContext = attachedImages?.length
-      ? `[用户上传了 ${attachedImages.length} 张参考图，已自动传给 generate_image 工具使用]\n\n`
+      ? (() => {
+          const total = snapshotsRef.current.length;
+          const startIdx = total - attachedImages.length + 1;
+          return `[User uploaded ${attachedImages.length} reference image(s) — added to Image Index as <<<image_${startIdx}>>>${attachedImages.length > 1 ? ` to <<<image_${total}>>>` : ''}. Call analyze_image to see them, then use reference_image_indices to include them in generate_image.]\n\n`;
+        })()
       : '';
 
     // Build image index for multi-snapshot navigation — only when >1 snapshot
