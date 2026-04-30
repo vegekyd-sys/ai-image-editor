@@ -22,18 +22,19 @@ Images serve as visual references. Prompt uses `<<<image_N>>>` to reference them
 - Max 7 images
 
 ### Video Reference Mode (feature)
-A reference video provides motion/style template. Your prompt describes what to change.
-- Best for: "make it like this video but with my photo", skill templates with reference videos
+A reference video provides motion/style template. Your prompt should be SHORT — describe what to change, let the video handle motion/timing. Do NOT write detailed shot-by-shot scripts; the reference video already defines the choreography.
 - Pass `video_ref_url` + `video_ref_type: feature`
 - Can combine with reference images
-- You control duration and aspect_ratio independently
+- Prompt example: `<<<image_1>>>模仿<<<video_1>>>的表情和动作`
+- Prompt example: `Based on <<<video_1>>>, <<<image_1>>> performs the same dance in a neon-lit street.`
+- Keep prompt under 200 chars — longer prompts fight the reference video
 
 ### Video Edit Mode (base)
 Directly edit an existing video's content. Output duration = input video duration.
-- Best for: "add X to this video", "change the background", "put a crown on the character"
 - Pass `video_ref_url` + `video_ref_type: base`
 - Kling only
 - `keep_original_sound: true` to preserve the original audio
+- Prompt example: `Put the crown from <<<image_1>>> on the girl in <<<video_1>>>.`
 
 ## Prompt Styles
 
@@ -110,6 +111,12 @@ When a skill provides a reference video in workspace assets:
 2. Same as above — pass as `video_ref_url`
 
 ## Showcases
+
+### Video reference — imitate motion/expression (pass video_ref_url + video_ref_type="feature"):
+<<<image_1>>>模仿<<<video_1>>>的表情和动作
+
+### Video reference — same dance, different person (pass video_ref_url + video_ref_type="feature", keep_original_sound=true):
+<<<image_1>>> performs the same choreography as <<<video_1>>>, matching every move and beat, in a neon-lit dance studio.
 
 ### Multi-shot with characters:
 Shot 1 (2s): Wide shot, <<<image_1>>> and <<<image_2>>> face off in the center of the rooftop, feet apart in a boxing stance.
