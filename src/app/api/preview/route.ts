@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const creditCheck = await requireCredits(user.id, 2);
     if (!creditCheck.ok) return creditCheck.response;
 
-    const { image, editPrompt, aspectRatio, category, isNsfw, referenceImages } = await req.json();
+    const { image, editPrompt, aspectRatio, category, isNsfw } = await req.json();
 
     if (!image || !editPrompt) {
       return new Response(
@@ -37,12 +37,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Skill reference images → model-router references format
-    const references = referenceImages?.length
-      ? (referenceImages as string[]).map((url: string) => ({ url, role: 'Skill reference — use for visual identity' }))
-      : undefined;
-
-    const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw, references });
+    const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw });
 
     // Deduct credits regardless of success (API tokens already consumed)
     if (result.usage) {

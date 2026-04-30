@@ -39,7 +39,6 @@ const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v
 interface AgentContext {
   currentImage: string;       // base64 data URL – updated after each generation
   originalImage?: string;     // base64 data URL – the very first image, never changes
-  referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase?: any;             // Supabase client for workspace operations
@@ -261,9 +260,9 @@ function createTools(ctx: AgentContext) {
           editTarget = ctx.currentImage;
         }
 
-        // Resolve reference images: user-uploaded + snapshot indices
-        let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
-        console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
+        // Resolve reference images: snapshot indices + direct image_refs
+        let resolvedRefs: string[] = [];
+        console.log(`🎯 [generate_image] skill="${skill || 'none'}" editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_image_indices?.length) {
           for (const refIdx of reference_image_indices) {
             const v = validateImageIndex(ctx.snapshotImages, refIdx);
@@ -1100,12 +1099,11 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }> },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }> },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
     originalImage: options?.originalImage,
-    referenceImages: options?.referenceImages,
     projectId,
     generatedImages: [],
     animationImageUrls: options?.animationImageUrls,
@@ -1386,7 +1384,6 @@ export async function* runMakaronAgent(
             toolCallImages = [
               displayTarget,
               ...(twoImageMode ? [ctx.originalImage!] : []),
-              ...(ctx.referenceImages ?? []),
               ...extraRefs,
             ];
           }
