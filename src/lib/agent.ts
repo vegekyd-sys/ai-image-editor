@@ -17,7 +17,6 @@ import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
-import animatePrompt from './prompts/animate.md';
 import type { Tip } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 
@@ -310,9 +309,15 @@ function createTools(ctx: AgentContext) {
     }),
 
     generate_animation: tool({
-      description: `Submit a video script for rendering. Write the script yourself first (streamed to user in chat, following the Video Script Format below), then call this tool to submit it.
+      description: `Submit a video script for rendering.
 
-${animatePrompt}`,
+**BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
+
+Hard constraints (apply even before reading the guide):
+- Use \`<<<image_N>>>\` to reference images in your script (N starts at 1)
+- If user provides a reference video URL, you MUST pass it as \`video_ref_url\` parameter — never put video URLs in prompt text
+- With video reference: keep prompt SHORT (under 200 chars), let the reference video drive motion/timing
+- Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. Follow the Video Script Format in system prompt.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
