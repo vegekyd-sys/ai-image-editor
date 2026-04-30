@@ -123,6 +123,12 @@ export default function AnimateSheet({
 
   const detailUrls = detailAnimation?.snapshotUrls ?? [];
   const detailPrompt = detailAnimation?.prompt ?? '';
+  const detailTitle = (() => {
+    if (!detailPrompt.trim()) return t('animate.detailTitle');
+    const firstLine = detailPrompt.split('\n').find(l => l.trim())?.trim() || '';
+    const clean = firstLine.replace(/^[#*\->]+\s*/, '').replace(/<<<[^>]*>>>/g, '').trim();
+    return clean || t('animate.detailTitle');
+  })();
   const detailDuration = detailAnimation?.duration;
 
   const getBottomButton = () => {
@@ -195,7 +201,7 @@ export default function AnimateSheet({
               fontWeight: 700, color: '#fff',
               letterSpacing: '-0.01em',
             }}>
-              {isDetail ? t('animate.detailTitle') : t('animate.title')}
+              {isDetail ? detailTitle : t('animate.title')}
             </div>
             <button
               onClick={onClose}
