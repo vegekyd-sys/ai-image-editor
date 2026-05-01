@@ -45,6 +45,10 @@ export async function POST(req: NextRequest) {
     // Only dual-write for normal agent flow (not lightweight teaser/name/reaction branches)
     const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction;
 
+    // Query timeline version for video-in-timeline support
+    const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
+    const timelineVersion: number = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
+
     let runId: string | null = null;
     let firstMessageId: string | null = null;
     if (isNormalMode) {
@@ -239,7 +243,7 @@ export async function POST(req: NextRequest) {
           };
 
           try {
-            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign, history: agentHistory })) {
+            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign, history: agentHistory, timelineVersion })) {
               if (event.type === 'usage') { usageEvent = event; continue; }
               if (writer) {
                 await writer.processAndEnqueue(event);

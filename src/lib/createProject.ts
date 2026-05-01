@@ -34,7 +34,7 @@ export async function createProject(
     const [base64, metadata, projectResult] = await Promise.all([
       files.length === 1 ? compressFile(files[0]) : Promise.resolve(undefined),
       files.length > 0 ? extractPhotoMetadata(files[0]) : Promise.resolve(undefined),
-      supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single(),
+      supabase.from('projects').insert({ user_id: userId, title: 'Untitled', timeline_version: 2 }).select('id').single(),
     ])
     console.log('[METADATA]', JSON.stringify(metadata))
 
@@ -50,7 +50,7 @@ export async function createProject(
 
   // Multi image: create project + extract metadata in parallel, then upload
   const [projectResult, metadata] = await Promise.all([
-    supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single(),
+    supabase.from('projects').insert({ user_id: userId, title: 'Untitled', timeline_version: 2 }).select('id').single(),
     extractPhotoMetadata(files[0]),
   ])
   console.log('[METADATA]', JSON.stringify(metadata))
