@@ -687,14 +687,16 @@ export default function ImageCanvas({
 
   // Pause on buffering, resume when assets ready — like a real video player
   // Debounce resume to avoid flicker when multiple images load in quick succession
+  // Skip for designs containing <Video> — video elements handle their own buffering,
+  // and scene cuts trigger spurious waiting events that shouldn't pause the Player.
+  const hasVideoElement = !!(currentDesign?.code?.includes('<Video') || currentDesign?.code?.includes('Video,'));
   const wasPlayingBeforeBufferRef = useRef(false);
   const [remotionBuffering, setRemotionBuffering] = useState(false);
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const player = remotionRef.current;
-    if (!player) return;
+    if (!player || hasVideoElement) return;
     const onWaiting = () => {
-      // Cancel any pending resume — still buffering
       if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
       wasPlayingBeforeBufferRef.current = wasPlayingBeforeBufferRef.current || remotionPlaying;
       setRemotionBuffering(true);
@@ -702,8 +704,6 @@ export default function ImageCanvas({
       setRemotionPlaying(false);
     };
     const onResume = () => {
-      // Debounce: wait 150ms to confirm all assets are truly ready
-      // (prevents flash when image 1 loads but image 2/3 on same frame haven't yet)
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
       resumeTimerRef.current = setTimeout(() => {
         resumeTimerRef.current = null;
