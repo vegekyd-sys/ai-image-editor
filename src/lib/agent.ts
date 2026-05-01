@@ -856,13 +856,17 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             return null;
           };
 
-          // Helper: store image as draft (published via write_file)
-          const pushImage = (b64: string, mime: string) => {
+          // Helper: store image — sharp images auto-send, design drafts need write_file to publish
+          const pushImage = (b64: string, mime: string, isDraft = false) => {
             const dataUrl = `data:${mime};base64,${b64}`;
             ctx.currentImage = dataUrl;
-            // Store as draft — published to timeline via write_file({ fromLastRunCode: true })
-            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
-            (ctx as any).__runCodeDrafts.push({ type: 'image', imageBase64: dataUrl, previewBase64: dataUrl });
+            if (isDraft) {
+              if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+              (ctx as any).__runCodeDrafts.push({ type: 'image', imageBase64: dataUrl, previewBase64: dataUrl });
+            } else {
+              ctx.snapshotImages.push(dataUrl);
+              ctx.generatedImages.push(dataUrl);
+            }
           };
 
           // { type: 'patch', edits: [...] } — Incremental search & replace on last design or a specific design via code_path
@@ -972,26 +976,10 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             return { type: 'text' as const, content: `Design ready — draft ${draftIdx}. Use preview_frame to check key frames, then publish: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
 
-          // Helper: handle image result from run_code — store as draft + upload preview
+          // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
           const handleImageResult = async (b64: string, mime: string): Promise<{ type: 'image'; base64Data: string; mimeType: string; description?: string }> => {
             pushImage(b64, mime);
-            // Upload preview to workspace so it shows in CUI
-            const drafts = (ctx as any).__runCodeDrafts || [];
-            const lastDraft = drafts[drafts.length - 1];
-            if (lastDraft && ctx.supabase && ctx.userId) {
-              try {
-                const buf = Buffer.from(b64, 'base64');
-                const draftN = drafts.length;
-                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
-                const wsResult = await workspace.writeFile(draftPath, buf, ctx.supabase, ctx.userId, mime);
-                if (wsResult.storageUrl) lastDraft.previewUrl = wsResult.storageUrl;
-              } catch (err) {
-                console.warn('⚠️ [agent] image draft upload failed:', (err as Error).message);
-              }
-            }
-            const draftIdx = drafts.length;
-            const previewNote = lastDraft?.previewUrl ? ` Preview: ${lastDraft.previewUrl}` : '';
-            return { type: 'image' as const, base64Data: b64, mimeType: mime, description: `Image draft ${draftIdx}.${previewNote} Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
+            return { type: 'image' as const, base64Data: b64, mimeType: mime, description: `Image generated. Now <<<image_${ctx.snapshotImages.length}>>>.` };
           };
 
           // Buffer or Uint8Array → treat as image
