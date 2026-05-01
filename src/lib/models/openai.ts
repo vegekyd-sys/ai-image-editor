@@ -1,14 +1,19 @@
 /**
- * OpenAI Image 2 backend — dual provider: PiAPI (default) / OpenRouter (fallback)
+ * OpenAI Image 2 backend — triple provider: Azure (default) / PiAPI / OpenRouter
  *
- * PiAPI: /v1/images/edits (img2img) + /v1/images/generations (txt2img)
+ * Azure: /images/edits + /images/generations (same OpenAI format, different auth)
+ * PiAPI: /v1/images/edits + /v1/images/generations
  * OpenRouter: /v1/chat/completions (unified)
  */
 import type { ModelBackend, GenerateImageRequest, TokenUsage } from './types';
 import { ensureJpeg } from '../gemini';
 
 // ── Provider selection ───────────────────────────────────────────
-const PROVIDER = (process.env.OPENAI_IMAGE_PROVIDER || (process.env.PIAPI_API_KEY ? 'piapi' : 'openrouter')) as 'piapi' | 'openrouter';
+const PROVIDER = (process.env.OPENAI_IMAGE_PROVIDER || (process.env.AZURE_OPENAI_API_KEY ? 'azure' : process.env.PIAPI_API_KEY ? 'piapi' : 'openrouter')) as 'azure' | 'piapi' | 'openrouter';
+
+// ── Azure constants ─────────────────────────────────────────────
+const AZURE_EDITS_URL = process.env.AZURE_OPENAI_EDITS_URL || 'https://meo-ultron.openai.azure.com/openai/deployments/gpt-image-2/images/edits?api-version=2025-04-01-preview';
+const AZURE_GENERATIONS_URL = process.env.AZURE_OPENAI_GENERATIONS_URL || 'https://meo-ultron.openai.azure.com/openai/deployments/gpt-image-2/images/generations?api-version=2024-02-01';
 
 // ── PiAPI constants ──────────────────────────────────────────────
 const PIAPI_BASE = 'https://api.piapi.ai/v1';
@@ -47,6 +52,91 @@ async function imageToBlob(image: string): Promise<Blob> {
 }
 
 // ── PiAPI implementation ─────────────────────────────────────────
+
+// ── Azure implementation ────────────────────────────────────────
+
+async function generateAzure(
+  image: string | undefined,
+  prompt: string,
+  references?: { url: string; role: string }[],
+  aspectRatio?: string,
+): Promise<{ image: string | null; usage?: TokenUsage }> {
+  const apiKey = process.env.AZURE_OPENAI_API_KEY;
+  if (!apiKey) {
+    console.warn('[openai/azure] No AZURE_OPENAI_API_KEY');
+    return { image: null };
+  }
+
+  const headers: Record<string, string> = { 'api-key': apiKey };
+  const hasImage = !!(image || references?.length);
+  const size = aspectRatioToSize(aspectRatio, !hasImage);
+  const t0 = Date.now();
+
+  let res: Response;
+
+  if (hasImage) {
+    const form = new FormData();
+    form.append('prompt', prompt);
+    form.append('quality', 'low');
+    form.append('size', size);
+    form.append('moderation', 'low');
+
+    if (references?.length) {
+      for (const ref of references) {
+        const blob = await imageToBlob(ref.url);
+        form.append('image[]', blob, 'ref.png');
+      }
+    } else if (image) {
+      const blob = await imageToBlob(image);
+      form.append('image[]', blob, 'input.png');
+    }
+
+    console.log(`[openai/azure] edits size=${size} images=${references?.length || 1}`);
+    res = await fetch(AZURE_EDITS_URL, { method: 'POST', headers, body: form });
+  } else {
+    const body = { prompt, quality: 'low', size, moderation: 'low' };
+    console.log(`[openai/azure] generations size=${size}`);
+    res = await fetch(AZURE_GENERATIONS_URL, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const totalMs = Date.now() - t0;
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error(`[openai/azure] ${res.status} (${totalMs}ms): ${errText.slice(0, 300)}`);
+    return { image: null };
+  }
+
+  const data = await res.json();
+  console.log(`[openai/azure] total=${(totalMs / 1000).toFixed(1)}s`);
+
+  const imgData = data.data?.[0];
+  if (!imgData) {
+    console.warn('[openai/azure] No image in response');
+    return { image: null };
+  }
+
+  let resultDataUrl: string;
+  if (imgData.b64_json) {
+    resultDataUrl = `data:image/png;base64,${imgData.b64_json}`;
+  } else if (imgData.url) {
+    const imgRes = await fetch(imgData.url);
+    const buf = Buffer.from(await imgRes.arrayBuffer());
+    resultDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+  } else {
+    console.warn('[openai/azure] No b64_json or url in response');
+    return { image: null };
+  }
+
+  const jpeg = await ensureJpeg(resultDataUrl);
+  return { image: jpeg };
+}
+
+// ── PiAPI implementation ────────────────────────────────────────
 
 async function generatePiAPI(
   image: string | undefined,
@@ -256,6 +346,7 @@ export const openaiBackend: ModelBackend = {
   id: 'openai',
 
   canHandle(_req: GenerateImageRequest): boolean {
+    if (PROVIDER === 'azure') return !!process.env.AZURE_OPENAI_API_KEY;
     if (PROVIDER === 'piapi') return !!process.env.PIAPI_API_KEY;
     return !!process.env.OPENROUTER_API_KEY;
   },
@@ -268,6 +359,9 @@ export const openaiBackend: ModelBackend = {
         ]
       : undefined;
 
+    if (PROVIDER === 'azure') {
+      return generateAzure(refs ? undefined : req.image, req.prompt, refs, req.aspectRatio);
+    }
     if (PROVIDER === 'piapi') {
       return generatePiAPI(refs ? undefined : req.image, req.prompt, refs, req.aspectRatio);
     }
