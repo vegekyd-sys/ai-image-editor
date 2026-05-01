@@ -136,6 +136,7 @@ export interface VideoMeta {
   status: 'processing' | 'completed' | 'failed' | 'abandoned';
   duration: number | null;
   model: VideoModel;
+  createdAt?: string;
 }
 
 

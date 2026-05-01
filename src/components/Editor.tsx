@@ -3439,7 +3439,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       snapshotUrls: currentSnap.videoMeta.sourceUrls,
                       status: currentSnap.videoMeta.status,
                       duration: currentSnap.videoMeta.duration,
-                      createdAt: new Date().toISOString(),
+                      createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
                     }] : animations}
                     selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
                     onSelectVideo={isViewingVideoV2 ? () => {} : setSelectedVideoId}

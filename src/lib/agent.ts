@@ -398,6 +398,7 @@ Hard constraints (apply even before reading the guide):
               status: 'processing',
               duration: duration || null,
               model: 'kling',
+              createdAt: new Date().toISOString(),
             };
 
             const { data: maxSort } = await supabase

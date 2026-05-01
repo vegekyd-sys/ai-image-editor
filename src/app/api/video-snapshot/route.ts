@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       status: 'processing',
       duration: duration || null,
       model: videoModel || 'kling',
+      createdAt: new Date().toISOString(),
     }
 
     // Get next sort_order
