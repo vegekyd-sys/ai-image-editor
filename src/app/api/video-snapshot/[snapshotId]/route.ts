@@ -37,11 +37,21 @@ export async function GET(
       return NextResponse.json({ error: 'No task ID' }, { status: 400 })
     }
 
-    // Poll provider
+    // Poll provider — route by taskId prefix
+    const isSeedance = videoMeta.taskId.startsWith('cgt-')
+    const isMotionControl = videoMeta.taskId.startsWith('mc-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
+    const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
 
-    if (provider === 'piapi') {
+    if (isSeedance) {
+      const { getSeedanceTask } = await import('@/lib/seedance')
+      result = await getSeedanceTask(videoMeta.taskId)
+    } else if (isMotionControl) {
+      const { getKlingMotionControlTask } = await import('@/lib/kling')
+      result = await getKlingMotionControlTask(realTaskId)
+      result.taskId = videoMeta.taskId
+    } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(videoMeta.taskId)
     } else {
       result = await getKlingTask(videoMeta.taskId)
