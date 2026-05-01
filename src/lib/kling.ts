@@ -158,6 +158,81 @@ export async function getKlingTask(taskId: string): Promise<KlingTaskResult> {
   }
 }
 
+// ── Motion Control ──────────────────────────────────────────────────────────
+
+export interface KlingMotionControlInput {
+  imageUrl: string
+  videoUrl: string
+  prompt?: string
+  keepOriginalSound?: boolean
+  characterOrientation?: 'image' | 'video'
+}
+
+/** Submit a motion-control task. Returns task ID. */
+export async function createKlingMotionControlTask(input: KlingMotionControlInput): Promise<string> {
+  const body = {
+    model_name: 'kling-v3',
+    image_url: input.imageUrl,
+    video_url: input.videoUrl,
+    prompt: input.prompt || '',
+    keep_original_sound: input.keepOriginalSound !== false ? 'yes' : 'no',
+    character_orientation: input.characterOrientation || 'image',
+    mode: 'std',
+  }
+
+  const res = await fetch(`${KLING_BASE}/v1/videos/motion-control`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Kling motion-control error ${res.status}: ${text}`)
+  }
+
+  const json = await res.json()
+  if (json.code !== 0) {
+    throw new Error(`Kling motion-control error: ${json.message || JSON.stringify(json)}`)
+  }
+
+  const taskId = json?.data?.task_id
+  if (!taskId) throw new Error(`Kling motion-control: no task_id: ${JSON.stringify(json)}`)
+  console.log(`[kling/motion-control] Task created: ${taskId}`)
+  return taskId
+}
+
+/** Poll a motion-control task. */
+export async function getKlingMotionControlTask(taskId: string): Promise<KlingTaskResult> {
+  const res = await fetch(`${KLING_BASE}/v1/videos/motion-control/${taskId}`, {
+    headers: headers(),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Kling motion-control query error ${res.status}: ${text}`)
+  }
+
+  const json = await res.json()
+  if (json.code !== 0) {
+    throw new Error(`Kling motion-control query error: ${json.message || JSON.stringify(json)}`)
+  }
+
+  const data = json?.data
+  const rawStatus: string = data?.task_status ?? 'submitted'
+  let status: KlingTaskResult['status'] = 'pending'
+  if (rawStatus === 'succeed') status = 'completed'
+  else if (rawStatus === 'failed') status = 'failed'
+  else if (rawStatus === 'processing' || rawStatus === 'submitted') status = 'processing'
+
+  return {
+    taskId,
+    status,
+    videoUrl: data?.task_result?.videos?.[0]?.url ?? undefined,
+    error: data?.task_status_msg || undefined,
+  }
+}
+
 /**
  * Filter images to only those referenced in the script (<<<image_N>>>),
  * and remap indices to be sequential (e.g. image_1, image_5, image_9 → image_1, image_2, image_3).

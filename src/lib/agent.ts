@@ -326,9 +326,11 @@ Hard constraints (apply even before reading the guide):
         image_refs: z.array(z.string()).optional().describe('Additional image URLs to include (workspace files, skill assets, external URLs). These are appended to snapshot images.'),
         video_ref_url: z.string().optional().describe('Reference video URL (from workspace/skill assets via list_files, or external). Kling: base=edit video, feature=reference motion/style. SeeDance: reference_video.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('base: edit video directly (output duration=input duration, Kling only). feature: reference motion/style for new video. Default: feature.'),
-        keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Only with video_ref_type=base. Default: false.'),
+        keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
+        motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
+        character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, image_refs, video_ref_url, video_ref_type, keep_original_sound }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, image_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation }) => {
         // GUI animation mode: use animationImageUrls; CUI mode: fallback to snapshotImages URLs
         let imageUrls = ctx.animationImageUrls;
         if (!imageUrls?.length) {
@@ -351,6 +353,7 @@ Hard constraints (apply even before reading the guide):
             videoRefUrl: video_ref_url,
             videoRefType: video_ref_type,
             model: videoModel,
+            motionControl: motion_control,
           });
           if (harnessError) {
             return { success: false as const, message: harnessError };
@@ -365,6 +368,8 @@ Hard constraints (apply even before reading the guide):
             videoUrl: video_ref_url,
             videoReferType: video_ref_type,
             keepOriginalSound: keep_original_sound,
+            motionControl: motion_control,
+            characterOrientation: character_orientation,
           });
 
           if (!skillResult.success || !skillResult.taskId) {

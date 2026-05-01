@@ -36,6 +36,14 @@ Directly edit an existing video's content. Output duration = input video duratio
 - `keep_original_sound: true` to preserve the original audio
 - Prompt example: `Put the crown from <<<image_1>>> on the girl in <<<video_1>>>.`
 
+### Motion Control Mode
+Precise action transfer — the person in the photo performs the exact movements from the reference video. Best for dance, expression mimicry, pose transfer.
+- Pass `motion_control: true` + `video_ref_url` + `keep_original_sound: true`
+- No detailed prompt needed — just a short title as story_prompt
+- Duration is determined by reference video length (not configurable)
+- Kling only
+- `character_orientation`: "image" (match photo orientation, ≤10s video) or "video" (match video orientation, ≤30s)
+
 ## Prompt Styles
 
 Choose based on the content. You decide.
@@ -111,6 +119,11 @@ When a skill provides a reference video in workspace assets:
 2. Same as above — pass as `video_ref_url`
 
 ## Showcases
+
+### Motion control — precise action transfer (motion_control=true, video_ref_url, keep_original_sound=true):
+搞怪表情挑战
+
+<<<image_1>>>
 
 ### Video reference — imitate motion/expression (pass video_ref_url + video_ref_type="feature"):
 搞怪表情模仿

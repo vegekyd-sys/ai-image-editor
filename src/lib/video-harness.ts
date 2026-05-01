@@ -9,8 +9,17 @@ export function validateVideoScript(opts: {
   videoRefUrl?: string
   videoRefType?: string
   model?: string
+  motionControl?: boolean
 }): string | null {
-  const { prompt, imageCount, videoRefUrl, videoRefType, model } = opts
+  const { prompt, imageCount, videoRefUrl, videoRefType, model, motionControl } = opts
+
+  // Motion control: only need video_ref_url, skip image reference checks
+  if (motionControl) {
+    if (!videoRefUrl) {
+      return 'Motion Control requires a reference video. Pass the video URL as video_ref_url.'
+    }
+    return null
+  }
 
   // 1. Image reference check: prompt has images available but doesn't reference any
   const refs = [...new Set(

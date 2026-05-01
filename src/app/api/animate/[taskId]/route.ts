@@ -19,14 +19,21 @@ export async function GET(
 
     const { taskId } = await params
 
-    // Poll task — route by taskId prefix (SeeDance = cgt-*) or env var
+    // Poll task — route by taskId prefix or env var
+    // cgt-* = SeeDance, mc-* = Motion Control, else = Kling omni-video
     const isSeedance = taskId.startsWith('cgt-')
+    const isMotionControl = taskId.startsWith('mc-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
+    const realTaskId = isMotionControl ? taskId.slice(3) : taskId
 
     if (isSeedance) {
       const { getSeedanceTask } = await import('@/lib/seedance')
       result = await getSeedanceTask(taskId)
+    } else if (isMotionControl) {
+      const { getKlingMotionControlTask } = await import('@/lib/kling')
+      result = await getKlingMotionControlTask(realTaskId)
+      result.taskId = taskId // preserve mc- prefix for frontend
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(taskId)
     } else {

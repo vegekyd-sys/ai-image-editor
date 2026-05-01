@@ -11,6 +11,9 @@ export interface CreateVideoInput {
   videoUrl?: string;                    // Reference video URL
   videoReferType?: 'base' | 'feature';  // default: 'base'
   keepOriginalSound?: boolean;          // default: false
+  // Motion Control (Kling only)
+  motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
+  characterOrientation?: 'image' | 'video';  // default: 'image'
 }
 
 export interface CreateVideoResult {
@@ -20,7 +23,7 @@ export interface CreateVideoResult {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, keepOriginalSound } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, keepOriginalSound, motionControl, characterOrientation } = input;
 
   if (images.length === 0) {
     return {
@@ -40,6 +43,27 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   }
 
   try {
+    // Motion Control: separate path — single image + video, no image references needed
+    if (motionControl) {
+      if (!videoUrl) {
+        return { success: false, message: 'Motion Control requires a reference video (videoUrl).' };
+      }
+      const { createKlingMotionControlTask } = await import('../kling');
+      const taskId = await createKlingMotionControlTask({
+        imageUrl: images[0],
+        videoUrl,
+        prompt: script,
+        keepOriginalSound: keepOriginalSound !== false,
+        characterOrientation: characterOrientation || 'image',
+      });
+      console.log(`✅ [create_video] Motion Control task created: mc-${taskId}`);
+      return {
+        success: true,
+        taskId: `mc-${taskId}`,
+        message: `Motion Control video task created. Task ID: mc-${taskId}. Duration matches reference video. Use makaron_get_video_status to poll.`,
+      };
+    }
+
     // Filter to only referenced images and remap indices
     // filterAndRemapImages will enforce the 7-image limit on the filtered result
     const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
