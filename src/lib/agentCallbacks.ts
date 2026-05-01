@@ -338,6 +338,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         videoMeta,
       };
       ctx.setSnapshots(prev => [...prev, newSnap]);
+      if (ctx.pendingNavigateToVideoRef) ctx.pendingNavigateToVideoRef.current = true;
     },
 
     onMusicTask: (taskId) => {
