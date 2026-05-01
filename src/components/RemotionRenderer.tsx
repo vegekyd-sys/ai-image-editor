@@ -79,11 +79,14 @@ async function loadGoogleFontsFromCode(code: string): Promise<void> {
  * Returns JPEG data URL, or empty string on failure.
  */
 export async function captureDesignPoster(design: DesignPayload): Promise<string> {
-  let imageBlobUrls: string[] = [];
+  let allBlobUrls: string[] = [];
   try {
     await preloadBabel().catch(() => {});
-    const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
-    imageBlobUrls = blobUrls;
+    // Resolve video URLs first (mp4/webm → blob for same-origin access)
+    const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
+    // Then resolve image URLs
+    const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
+    allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
     await loadGoogleFontsFromCode(resolvedCode);
     const comp = evalRemotionJSX(resolvedCode);
     if (!comp) return '';
@@ -105,6 +108,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
       frame: Math.min(30, durationInFrames - 1),
       imageFormat: 'jpeg',
       inputProps: (design.props || {}) as Record<string, unknown>,
+      delayRenderTimeoutInMilliseconds: 30000,
     });
 
     const dataUrl = await new Promise<string>((r) => {
@@ -118,7 +122,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
     console.warn('🎨 [design] poster capture failed:', e);
     return '';
   } finally {
-    imageBlobUrls.forEach(url => URL.revokeObjectURL(url));
+    allBlobUrls.forEach(url => URL.revokeObjectURL(url));
   }
 }
 
@@ -127,11 +131,12 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
  * Used by preview_frame tool — frontend renders, server polls for result.
  */
 export async function captureDesignFrame(design: DesignPayload, frame: number): Promise<Blob | null> {
-  let imageBlobUrls: string[] = [];
+  let allBlobUrls: string[] = [];
   try {
     await preloadBabel().catch(() => {});
-    const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
-    imageBlobUrls = blobUrls;
+    const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
+    const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
+    allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
     await loadGoogleFontsFromCode(resolvedCode);
     const comp = evalRemotionJSX(resolvedCode);
     if (!comp) return null;
@@ -152,6 +157,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
       frame: Math.min(frame, durationInFrames - 1),
       imageFormat: 'jpeg',
       inputProps: (design.props || {}) as Record<string, unknown>,
+      delayRenderTimeoutInMilliseconds: 30000,
     });
 
     return result.blob;
@@ -159,7 +165,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
     console.warn('🎨 [design] frame capture failed:', e);
     return null;
   } finally {
-    imageBlobUrls.forEach(url => URL.revokeObjectURL(url));
+    allBlobUrls.forEach(url => URL.revokeObjectURL(url));
   }
 }
 
