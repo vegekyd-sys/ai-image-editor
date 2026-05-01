@@ -44,10 +44,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     // filterAndRemapImages will enforce the 7-image limit on the filtered result
     const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
 
-    if (filteredImages.length === 0) {
+    if (filteredImages.length === 0 && images.length > 0) {
       return {
         success: false,
-        message: 'No images referenced in the script. The script should use <<<image_N>>> format.',
+        message: `No images referenced in the script but ${images.length} images were provided. Use <<<image_1>>> etc. to reference them in your prompt.`,
       };
     }
 
@@ -69,11 +69,17 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     let taskId: string;
 
-    // Video editing only supported by Kling direct
-    if (videoUrl && provider !== 'kling') {
+    // Video editing (base mode) only supported by Kling
+    if (videoUrl && videoReferType === 'base' && provider !== 'kling') {
       return {
         success: false,
-        message: `Video editing (video_list) is only supported by Kling. Current model: ${provider}`,
+        message: `Video editing (base mode) is only supported by Kling. Current model: ${provider}`,
+      };
+    }
+    if (videoUrl && provider === 'piapi') {
+      return {
+        success: false,
+        message: 'Video reference is not supported by PiAPI provider.',
       };
     }
 
@@ -85,6 +91,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         duration: resolvedDuration != null ? resolvedDuration : -1,
         ratio: aspectRatio || 'adaptive',
         resolution: '720p',
+        videoUrl,
       });
       console.log(`✅ [create_video] SeeDance task created: ${taskId}`);
     } else if (provider === 'piapi') {

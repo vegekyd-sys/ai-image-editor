@@ -72,6 +72,7 @@ function extToContentType(ext: string): string {
     '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
     '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf',
     '.zip': 'application/zip',
+    '.mp4': 'video/mp4', '.mov': 'video/quicktime',
   };
   return map[ext.toLowerCase()] || 'application/octet-stream';
 }
