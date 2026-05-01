@@ -1020,7 +1020,7 @@ export default function AgentChatView({
                       </div>
                     )}
                     {msg.content && (
-                      <div className={isPanel ? 'px-3 py-2' : 'px-4 py-2.5'}>{msg.content}</div>
+                      <div className={`whitespace-pre-wrap ${isPanel ? 'px-3 py-2' : 'px-4 py-2.5'}`}>{msg.content}</div>
                     )}
                   </div>
                 </div>
@@ -1272,7 +1272,18 @@ export default function AgentChatView({
             rows={1}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              if ((e.key === 'Enter' || e.code === 'Enter') && e.altKey) {
+                e.preventDefault();
+                const ta = e.currentTarget;
+                const start = ta.selectionStart;
+                const end = ta.selectionEnd;
+                const val = ta.value;
+                setInput(val.substring(0, start) + '\n' + val.substring(end));
+                requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1; });
+                return;
+              }
+              const isMobile = 'ontouchstart' in window;
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isMobile) {
                 e.preventDefault();
                 handleSubmit();
               }

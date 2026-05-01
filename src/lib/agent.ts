@@ -17,7 +17,6 @@ import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
-import animatePrompt from './prompts/animate.md';
 import type { Tip } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 
@@ -39,7 +38,6 @@ const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v
 interface AgentContext {
   currentImage: string;       // base64 data URL – updated after each generation
   originalImage?: string;     // base64 data URL – the very first image, never changes
-  referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase?: any;             // Supabase client for workspace operations
@@ -50,6 +48,8 @@ interface AgentContext {
   lastUsedModel?: ModelId;
   /** User's preferred model override */
   preferredModel?: ModelId;
+  /** User's preferred video model */
+  videoModel?: string;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event (v1) */
@@ -174,7 +174,7 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, use
   let userSkillLines = '';
   if (userSkills?.length) {
     userSkillLines = '\n' + userSkills.map(s =>
-      `- **${s.name}**: ${s.description.trim().split('\n')[0]}${s.makaron?.referenceImages?.length ? ' [has reference images]' : ''}`
+      `- **${s.name}**: ${s.description.trim().split('\n')[0]}${s.makaron?.referenceImages?.length ? ' [has reference images]' : ''}${s.makaron?.referenceVideos?.length ? ' [has reference videos]' : ''}`
     ).join('\n');
   }
 
@@ -250,8 +250,9 @@ function createTools(ctx: AgentContext) {
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
         image_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<image_1>>> = 1, <<<image_2>>> = 2, ...). Omit for text-to-image (no photo sent). For most edits, pass the current snapshot index.'),
         reference_image_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<image_1>>> and <<<image_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from image_1 and the background from image_2". The editPrompt should describe how to combine them (e.g. "Place the person from Image 2 into the scene of Image 1").'),
+        image_refs: z.array(z.string()).optional().describe('Reference images as URLs or base64 data URLs. Use for workspace files (skill assets, generated images) or any external image. Accepts Supabase Storage URLs from list_files or base64 from read_file.'),
       }),
-      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, image_index, reference_image_indices }) => {
+      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, image_index, reference_image_indices, image_refs }) => {
         // Resolve which image to edit — agent must pass image_index to include a photo
         let editTarget: string | undefined;
         if (image_index !== undefined) {
@@ -263,14 +264,17 @@ function createTools(ctx: AgentContext) {
           editTarget = ctx.currentImage;
         }
 
-        // Resolve reference images: user-uploaded + snapshot indices
-        let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
-        console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
+        // Resolve reference images: snapshot indices + direct image_refs
+        let resolvedRefs: string[] = [];
+        console.log(`🎯 [generate_image] skill="${skill || 'none'}" editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_image_indices?.length) {
           for (const refIdx of reference_image_indices) {
             const v = validateImageIndex(ctx.snapshotImages, refIdx);
             if (!v.error) resolvedRefs.push(ctx.snapshotImages[v.idx]);
           }
+        }
+        if (image_refs?.length) {
+          resolvedRefs.push(...image_refs);
         }
 
         // Priority: UI selector > agent tool param > auto-route
@@ -309,29 +313,68 @@ function createTools(ctx: AgentContext) {
     }),
 
     generate_animation: tool({
-      description: `Submit a video script for rendering. Write the script yourself first (streamed to user in chat, following the Video Script Format below), then call this tool to submit it.
+      description: `Submit a video script for rendering.
 
-${animatePrompt}`,
+**BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
+
+Hard constraints (apply even before reading the guide):
+- First line of script = short title (2-5 words). Then script body.
+- Use \`<<<image_N>>>\` to reference images (N starts at 1)
+- Total duration: 5-15 seconds.
+- If user provides a reference video URL, MUST pass as \`video_ref_url\` parameter — never in prompt text
+- Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
-        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then Shot lines with <<<image_N>>> references, camera directions, sound cues, ending with Style line. Follow the Video Script Format in system prompt.'),
+        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<image_N>>> to reference images.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
-        aspect_ratio: z.enum(['16:9', '9:16', '1:1']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
+        aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
+        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (supports real faces, fast). seedance = SeeDance 2.0 (best quality, but no real faces without authorized assets). Default: kling.'),
+        image_refs: z.array(z.string()).optional().describe('Additional image URLs to include (workspace files, skill assets, external URLs). These are appended to snapshot images.'),
+        video_ref_url: z.string().optional().describe('Reference video URL (from workspace/skill assets via list_files, or external). Kling: base=edit video, feature=reference motion/style. SeeDance: reference_video.'),
+        video_ref_type: z.enum(['base', 'feature']).optional().describe('base: edit video directly (output duration=input duration, Kling only). feature: reference motion/style for new video. Default: feature.'),
+        keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
+        motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
+        character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, image_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation }) => {
         // GUI animation mode: use animationImageUrls; CUI mode: fallback to snapshotImages URLs
         let imageUrls = ctx.animationImageUrls;
         if (!imageUrls?.length) {
           imageUrls = ctx.snapshotImages.filter(img => img.startsWith('http'));
         }
+        if (image_refs?.length) {
+          imageUrls = [...(imageUrls || []), ...image_refs.filter(u => u.startsWith('http'))];
+        }
         if (!imageUrls?.length) {
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
+          const videoModel = model || (ctx as any).videoModel || 'kling';
+
+          // Video harness: validate before calling API
+          const { validateVideoScript } = await import('./video-harness');
+          const harnessError = validateVideoScript({
+            prompt: story_prompt,
+            imageCount: imageUrls.length,
+            videoRefUrl: video_ref_url,
+            videoRefType: video_ref_type,
+            model: videoModel,
+            motionControl: motion_control,
+          });
+          if (harnessError) {
+            return { success: false as const, message: harnessError };
+          }
+
           const skillResult = await createVideo({
             script: story_prompt,
             images: imageUrls,
             duration,
             aspectRatio: aspect_ratio,
+            videoModel,
+            videoUrl: video_ref_url,
+            videoReferType: video_ref_type,
+            keepOriginalSound: keep_original_sound,
+            motionControl: motion_control,
+            characterOrientation: character_orientation,
           });
 
           if (!skillResult.success || !skillResult.taskId) {
@@ -398,10 +441,12 @@ ${animatePrompt}`,
 
           // Bill for video generation (per-second)
           const videoSec = duration || 10;
-          import('./billing/credits').then(({ deductFixedCredits }) =>
-            deductFixedCredits(ctx.userId ?? '', Math.ceil(videoSec * 22), 'create_video', undefined, undefined)
-              .catch(e => console.error('[billing] generate_animation deduct error:', e))
-          );
+          const toolName = videoModel === 'seedance' ? 'create_video_seedance' : 'create_video_kling';
+          import('./billing/pricing').then(({ getToolPrice }) => getToolPrice(toolName)).then(price => {
+            const creditsPerSec = price?.credits ?? 22;
+            return import('./billing/credits').then(({ deductFixedCredits }) =>
+              deductFixedCredits(ctx.userId ?? '', Math.ceil(videoSec * creditsPerSec), toolName, videoModel, undefined));
+          }).catch(e => console.error('[billing] generate_animation deduct error:', e));
 
           return { success: true as const, taskId, message: 'Video generation task created! It takes about 3–5 minutes. The result will appear here when done.' };
         } catch (e) {
@@ -1125,16 +1170,16 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }>; timelineVersion?: number },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }>; timelineVersion?: number },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
     originalImage: options?.originalImage,
-    referenceImages: options?.referenceImages,
     projectId,
     generatedImages: [],
     animationImageUrls: options?.animationImageUrls,
     preferredModel: options?.preferredModel,
+    videoModel: options?.videoModel,
     snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
@@ -1390,34 +1435,28 @@ export async function* runMakaronAgent(
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
-          const inp = event.input as { useOriginalAsReference?: boolean; image_index?: number; reference_image_indices?: number[] };
-          // Resolve the actual edit target (respects image_index; omit = text-to-image)
+          const inp = event.input as { useOriginalAsReference?: boolean; image_index?: number; reference_image_indices?: number[]; image_refs?: string[] };
           let displayTarget: string | undefined;
           if (inp.image_index !== undefined) {
             const idx = inp.image_index - 1;
-            if (idx >= 0 && idx < ctx.snapshotImages.length) {
-              displayTarget = ctx.snapshotImages[idx];
-            }
+            if (idx >= 0 && idx < ctx.snapshotImages.length) displayTarget = ctx.snapshotImages[idx];
           } else if (ctx.currentImage && !ctx.snapshotImages.includes(ctx.currentImage)) {
             displayTarget = ctx.currentImage;
           }
-          // Resolve reference images from snapshot indices
-          const snapshotRefs: string[] = [];
+          const extraRefs: string[] = [];
           if (inp.reference_image_indices?.length) {
             for (const refIdx of inp.reference_image_indices) {
               const idx = refIdx - 1;
-              if (idx >= 0 && idx < ctx.snapshotImages.length) {
-                snapshotRefs.push(ctx.snapshotImages[idx]);
-              }
+              if (idx >= 0 && idx < ctx.snapshotImages.length) extraRefs.push(ctx.snapshotImages[idx]);
             }
           }
+          if (inp.image_refs?.length) extraRefs.push(...(inp.image_refs as string[]));
           if (displayTarget) {
             const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
             toolCallImages = [
               displayTarget,
               ...(twoImageMode ? [ctx.originalImage!] : []),
-              ...(ctx.referenceImages ?? []),
-              ...snapshotRefs,
+              ...extraRefs,
             ];
           }
         }

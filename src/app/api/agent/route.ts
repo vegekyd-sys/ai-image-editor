@@ -21,10 +21,10 @@ export async function POST(req: NextRequest) {
     const creditCheck = await requireCredits(user.id, 5);
     if (!creditCheck.ok) return creditCheck.response;
 
-    const { prompt, image, originalImage, referenceImages, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
+    const { prompt, image, originalImage, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
-            musicReady, musicAudioUrl, currentDesign,
+            musicReady, musicAudioUrl, currentDesign, videoModel,
             headless, hasAnnotation, isDraft } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
       previewsReady: '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
     };
 
-    // Only dual-write for normal agent flow (not lightweight teaser/name/reaction branches)
-    const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction;
+    // Only dual-write for normal agent flow (not lightweight teaser/name/reaction/analysis branches)
+    const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly;
 
     // Query timeline version for video-in-timeline support
     const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
@@ -193,7 +193,6 @@ export async function POST(req: NextRequest) {
               currentSnapshotIndex,
               hasAnnotation,
               isDraft,
-              referenceImageCount: referenceImages?.length,
             });
             agentPrompt = ctx.fullPrompt;
             agentImage = ctx.snapshotImages[ctx.currentSnapshotIndex] || '';
@@ -243,7 +242,7 @@ export async function POST(req: NextRequest) {
           };
 
           try {
-            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, referenceImages: referenceImages?.length ? referenceImages : undefined, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign, history: agentHistory, timelineVersion })) {
+            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign, history: agentHistory, timelineVersion })) {
               if (event.type === 'usage') { usageEvent = event; continue; }
               if (writer) {
                 await writer.processAndEnqueue(event);

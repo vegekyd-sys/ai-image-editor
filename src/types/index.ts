@@ -44,6 +44,7 @@ export interface Tip {
   desc: string;        // 1-2 line Chinese description of what the edit does
   editPrompt: string;  // detailed English prompt for image generation
   category: 'enhance' | 'creative' | 'wild' | 'captions'; // tip category
+  tipKey?: string;     // unique key within snapshot (category-N), used for dedup instead of label
   aspectRatio?: string; // target aspect ratio for recomposition (e.g. "4:5", "1:1", "16:9")
   previewImage?: string;    // base64 data URL of generated preview
   previewStatus?: 'pending' | 'generating' | 'done' | 'error' | 'none';
@@ -136,6 +137,7 @@ export interface VideoMeta {
   duration: number | null;
   model: VideoModel;
 }
+
 
 export interface ProjectAnimation {
   id: string;

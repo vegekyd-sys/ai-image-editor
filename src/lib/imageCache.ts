@@ -186,6 +186,20 @@ async function writeProjectToIDB(entry: ProjectCacheEntry): Promise<void> {
   }
 }
 
+/** Update tips for a snapshot in both memory cache and IDB. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function updateCachedTips(projectId: string, snapshotId: string, tips: any[]): void {
+  const mem = projectMemCache.get(projectId)
+  if (!mem) return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const snap = (mem.snapshots as any[]).find((s: any) => s.id === snapshotId)
+  if (snap) {
+    snap.tips = tips
+    mem.cachedAt = Date.now()
+    void writeProjectToIDB(mem)
+  }
+}
+
 // ── Projects List Cache (for /projects page) ──
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

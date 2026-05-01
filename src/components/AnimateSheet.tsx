@@ -26,7 +26,7 @@ export default function AnimateSheet({
 }: AnimateSheetProps) {
   const { t } = useLocale();
   const isDetail = mode === 'detail' && !!detailAnimation;
-  const { prompt, userHint, status, error, duration } = animationState;
+  const { prompt, userHint, status, error, duration, videoModel = 'kling' } = animationState;
 
   const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set());
   const [selectedThumbId, setSelectedThumbId] = useState<string | null>(null);
@@ -104,7 +104,7 @@ export default function AnimateSheet({
       const res = await fetch('/api/animate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration }),
+        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to create task');
@@ -116,7 +116,7 @@ export default function AnimateSheet({
         : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
       onStateChange({ error: friendly, status: 'error' });
     }
-  }, [prompt, projectId, activeUrls, duration, onStateChange, t]);
+  }, [prompt, projectId, activeUrls, duration, videoModel, onStateChange, t]);
 
   const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1;
   const canGenerateScript = activeUrls.length >= 1 && (status === 'idle' || status === 'error' || status === 'ready');
@@ -482,6 +482,30 @@ export default function AnimateSheet({
                 />
               </div>
 
+              {/* Model selector */}
+              {status !== 'submitting' && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{
+                    fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
+                    fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
+                  }}>{t('animate.model')}</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {(['kling', 'seedance'] as const).map(m => (
+                      <button key={m} onClick={() => onStateChange({ videoModel: m })}
+                        style={{
+                          flex: 1, padding: '8px 12px', borderRadius: 10,
+                          border: `1px solid ${videoModel === m ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                          background: videoModel === m ? 'rgba(232,121,249,0.1)' : 'rgba(255,255,255,0.04)',
+                          color: videoModel === m ? '#e879f9' : 'rgba(255,255,255,0.5)',
+                          fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.15s',
+                        }}>
+                        {m === 'kling' ? 'Kling O3' : 'SeeDance 2.0'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Duration + cost row */}
               {status !== 'submitting' && (
                 <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
@@ -520,7 +544,7 @@ export default function AnimateSheet({
                       borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
                       fontSize: '0.82rem', color: 'rgba(255,255,255,0.4)',
                     }}>
-                      {duration != null ? `~$${(duration * 0.112).toFixed(2)}` : t('animate.costByDuration')}
+                      {duration != null ? `~$${(duration * (videoModel === 'seedance' ? 0.121 : 0.112)).toFixed(2)}` : t('animate.costByDuration')}
                     </div>
                   </div>
                 </div>

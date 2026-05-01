@@ -31,7 +31,7 @@ function releaseTipsSlot() {
   const next = _tipsQueue.shift();
   if (next) { _tipsRunning++; next(); }
 }
-import { cacheImage } from '@/lib/imageCache';
+import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
 import AnimateSheet from '@/components/AnimateSheet';
@@ -59,6 +59,7 @@ export interface AnimationState {
   error: string | null
   duration: number | null  // null = smart mode (API decides 3-15s)
   pollSeconds: number
+  videoModel: 'kling' | 'seedance'
 }
 
 function generateId() {
@@ -87,27 +88,6 @@ function getImageForApi(snapshot: Snapshot | undefined): string {
   return snapshot?.imageUrl || snapshot?.image || '';
 }
 
-/** Fetch reference images for a skill and return them as Snapshot objects. */
-async function fetchSkillReferenceSnapshots(skillName: string): Promise<Snapshot[]> {
-  try {
-    const res = await fetch('/api/skills');
-    const { skills } = await res.json();
-    const skill = skills?.find((s: { name: string }) => s.name === skillName);
-    const refImages: string[] = skill?.referenceImages || [];
-    return refImages.map((url, i) => ({
-      id: generateId(),
-      image: url,
-      tips: [],
-      messageId: '',
-      imageUrl: url,
-      type: 'reference' as const,
-      description: `Reference image ${i + 1} from skill "${skillName}"`,
-    }));
-  } catch (err) {
-    console.warn('[Editor] Failed to fetch skill reference images:', err);
-    return [];
-  }
-}
 
 interface EditorProps {
   projectId?: string;
@@ -319,15 +299,14 @@ export default function Editor({
   useEffect(() => {
     if (!initialMessages?.length) return;
     setMessages(prev => {
-      const existingIds = new Set(prev.map(m => m.id));
-      const newItems = initialMessages.filter(m => !existingIds.has(m.id));
-      if (newItems.length === 0) return prev;
-      // During reconnect: prepend old history before reconnect messages
-      // Normal: replace with Supabase data
-      if (isAgentActive) return [...newItems, ...prev];
-      return initialMessages.length > prev.length ? initialMessages : [...newItems, ...prev];
+      if (prev.length === 0) return initialMessages;
+      // Strict ID-based dedup: build complete list from initialMessages, then append any live messages not in it
+      const initialIds = new Set(initialMessages.map(m => m.id));
+      const liveOnly = prev.filter(m => !initialIds.has(m.id));
+      if (liveOnly.length === 0) return initialMessages;
+      return [...initialMessages, ...liveOnly];
     });
-  }, [initialMessages, isAgentActive]);
+  }, [initialMessages]);
 
   // ── Background Agent reconnection ──────────────────────────────
   const { activeRunId, isReconnecting, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
@@ -370,6 +349,8 @@ export default function Editor({
   snapshotsRef.current = snapshots;
   const animationStateRef = useRef(animationState);
   animationStateRef.current = animationState;
+  const hasBackgroundTaskRef = useRef(false);
+  hasBackgroundTaskRef.current = musicPollingRef.current || animationState?.status === 'polling' || animations.some(a => a.status === 'processing');
   const viewIndexRef = useRef(viewIndex);
   viewIndexRef.current = viewIndex;
   const draftParentIndexRef = useRef(draftParentIndex);
@@ -380,16 +361,9 @@ export default function Editor({
   useEffect(() => { isAgentActiveRef.current = isAgentActive; }, [isAgentActive]);
   const activeSkillRef = useRef(pendingSkill);
   useEffect(() => { activeSkillRef.current = pendingSkill; }, [pendingSkill]);
-  const skillRefImagesRef = useRef<string[]>([]);
-  useEffect(() => {
-    if (!pendingSkill) { skillRefImagesRef.current = []; return; }
-    fetch('/api/skills').then(r => r.json()).then(d => {
-      const skill = d.skills?.find((s: { name: string }) => s.name === pendingSkill);
-      skillRefImagesRef.current = skill?.referenceImages || [];
-    }).catch(() => {});
-  }, [pendingSkill]);
-  const isTipsFetchingRef = useRef(isTipsFetching);
+const isTipsFetchingRef = useRef(isTipsFetching);
   isTipsFetchingRef.current = isTipsFetching;
+  const tipsFetchCountRef = useRef(0);
   const previewDoneBaselineRef = useRef(0);
   const lastTipsRequestRef = useRef<{ snapshotId: string; image: string; previewMode: 'full' | 'none'; autoPreviewCategory?: string } | null>(null);
   const pendingTeaserRef = useRef<{ snapshotId: string; tips: Tip[] } | null>(null);
@@ -958,7 +932,7 @@ export default function Editor({
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, isNsfw: isNsfwRef.current || undefined, referenceImages: skillRefImagesRef.current.length ? skillRefImagesRef.current : undefined }),
+        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, isNsfw: isNsfwRef.current || undefined }),
         signal: previewAbortRef.current.signal,
       });
 
@@ -981,9 +955,12 @@ export default function Editor({
           );
           return { ...s, tips };
         });
-        // Persist tips with new preview image to Storage+DB (fire-and-forget)
+        // Persist tips with new preview image to Storage+DB+IDB cache
         const snap = updated.find(s => s.id === snapshotId);
-        if (snap) onUpdateTips?.(snapshotId, snap.tips);
+        if (snap) {
+          onUpdateTips?.(snapshotId, snap.tips);
+          if (projectId) updateCachedTips(projectId, snapshotId, snap.tips);
+        }
         return updated;
       });
     } catch (err) {
@@ -1034,8 +1011,20 @@ export default function Editor({
           generatePreviewForTip(snapshotId, tip.editPrompt, imageForPreview, tip.aspectRatio, tip.category);
         }
       }
+      // Incremental persist: save tips to DB + IDB cache as each complete tip arrives
+      setSnapshots((prev) => {
+        const snap = prev.find(s => s.id === snapshotId);
+        if (snap?.tips.length) {
+          const tipsForDb = snap.tips.filter(t => !!t.editPrompt).map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
+          if (tipsForDb.length) {
+            onUpdateTips?.(snapshotId, tipsForDb);
+            if (projectId) updateCachedTips(projectId, snapshotId, tipsForDb);
+          }
+        }
+        return prev;
+      });
     }
-  }, [generatePreviewForTip]);
+  }, [generatePreviewForTip, onUpdateTips]);
 
   // Fetch tips via 3 parallel calls to Claude (fast, ~2-3s vs Gemini ~15s)
   // previewMode: 'full' = all tips get preview; 'none' = no auto-previews
@@ -1046,6 +1035,7 @@ export default function Editor({
     previewMode: 'full' | 'none' = 'full',
     autoPreviewCategory?: string,
   ) => {
+    tipsFetchCountRef.current++;
     setIsTipsFetching(true);
     setFailedCategories(new Set());
     previewDoneBaselineRef.current = 0;
@@ -1139,20 +1129,12 @@ export default function Editor({
 
       completedCount++;
       if (completedCount === categories.length) {
-        setIsTipsFetching(false);
-        setCommittedCategory(null);
-        if (onUpdateTips) {
-          setSnapshots((prev) => {
-            const snap = prev.find(s => s.id === snapshotId);
-            if (snap?.tips.length) {
-              // Only persist complete tips (with editPrompt) — don't save partial streaming stubs
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const tipsForDb = snap.tips.filter(t => !!t.editPrompt).map(({ previewImage, previewStatus, ...rest }) => rest) as Tip[];
-              onUpdateTips(snapshotId, tipsForDb);
-            }
-            return prev;
-          });
+        tipsFetchCountRef.current--;
+        if (tipsFetchCountRef.current <= 0) {
+          tipsFetchCountRef.current = 0;
+          setIsTipsFetching(false);
         }
+        setCommittedCategory(null);
         setTimeout(() => {
           const snap = snapshotsRef.current.find(s => s.id === snapshotId);
           if (snap?.tips.length) {
@@ -1537,7 +1519,11 @@ export default function Editor({
       : '';
 
     const refContext = attachedImages?.length
-      ? `[用户上传了 ${attachedImages.length} 张参考图，已自动传给 generate_image 工具使用]\n\n`
+      ? (() => {
+          const total = snapshotsRef.current.length;
+          const startIdx = total - attachedImages.length + 1;
+          return `[User uploaded ${attachedImages.length} reference image(s) — added to Image Index as <<<image_${startIdx}>>>${attachedImages.length > 1 ? ` to <<<image_${total}>>>` : ''}. Call analyze_image to see them, then use reference_image_indices to include them in generate_image.]\n\n`;
+        })()
       : '';
 
     // Build image index for multi-snapshot navigation — only when >1 snapshot
@@ -1650,6 +1636,7 @@ export default function Editor({
         setAgentStatus(t('status.generatingMusic'));
       },
       musicPollingRef,
+      hasBackgroundTaskRef,
       captureDesignFrame: async (frame, uploadPath) => {
         const design = draftDesignRef.current || pendingDesignRef.current;
         if (!design) { console.warn('⚠️ captureDesignFrame: no active design'); return; }
@@ -1687,7 +1674,7 @@ export default function Editor({
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(attachedImages?.length ? { referenceImages: attachedImages } : {}), ...(preferredModel !== 'auto' ? { preferredModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModel !== 'auto' ? { preferredModel } : {}), ...(animationState?.videoModel && animationState.videoModel !== 'kling' ? { videoModel: animationState.videoModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1757,6 +1744,7 @@ export default function Editor({
       t,
       onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
       onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
+      hasBackgroundTaskRef,
     });
 
     agentReconnect(reconnectCallbacks);
@@ -2170,10 +2158,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     const init = async () => {
       const isMulti = hasImages && pendingImages!.length > 1;
 
-      // ── Step 1: Skill reference images ──
-      const refSnapshots = pendingSkill ? await fetchSkillReferenceSnapshots(pendingSkill) : [];
-
-      // ── Step 2: Work snapshots ──
+      // ── Step 1: Work snapshots ──
       const workSnapshots: Snapshot[] = hasImages
         ? pendingImages!.map((img, i) => ({
             id: generateId(),
@@ -2185,26 +2170,20 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           }))
         : [];
 
-      // ── Step 3: Commit to state ──
-      const allSnapshots = [...refSnapshots, ...workSnapshots];
-      if (allSnapshots.length > 0) {
-        setSnapshots(allSnapshots);
-        snapshotsRef.current = allSnapshots;
-        prevTimelineLen.current = allSnapshots.length;
-        if (workSnapshots.length > 0) setViewIndex(refSnapshots.length);
+      // ── Step 2: Commit to state ──
+      if (workSnapshots.length > 0) {
+        setSnapshots(workSnapshots);
+        snapshotsRef.current = workSnapshots;
+        prevTimelineLen.current = workSnapshots.length;
+        setViewIndex(0);
       }
 
-      // ── Step 4: Persist + cache + log events ──
-      allSnapshots.forEach((snap, i) => {
+      // ── Step 3: Persist + cache + log events ──
+      workSnapshots.forEach((snap, i) => {
         onSaveSnapshot?.(snap, i, (url) => {
           setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
-          // Log image_upload event with the uploaded URL (for Replay)
-          if (projectId && snap.type !== 'reference') {
-          }
         });
-        if (snap.type !== 'reference') {
-          cacheImage(`snap:${snap.id}`, snap.image);
-        }
+        cacheImage(`snap:${snap.id}`, snap.image);
       });
 
       // ── Step 5: Tips (if images exist) ──
@@ -2250,10 +2229,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
       // ── Step 7: Agent request (if prompt) ──
       if (hasPrompt) {
-        setTimeout(() => {
-          const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
-          handleAgentRequest(skillPrefix + pendingPrompt!);
-        }, 200);
+        const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
+        handleAgentRequest(skillPrefix + pendingPrompt!);
       }
 
       // ── Step 8: CUI mode ──
@@ -3151,6 +3128,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     error: null,
                     duration: null,
                     pollSeconds: 0,
+                    videoModel: 'kling',
                   });
                   setShowAnimateSheet(true);
                 } : undefined}
@@ -3445,7 +3423,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     const imageUrls = allUrls.length <= 7
                       ? allUrls
                       : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0 });
+                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0, videoModel: 'kling' });
                     setShowAnimateSheet(true);
                   } : undefined}
                   hasVideo={hasVideo}
@@ -3480,6 +3458,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: null,
                         pollSeconds: 0,
+                        videoModel: 'kling',
                       });
                       setShowAnimateSheet(true);
                     }}
@@ -3506,6 +3485,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
+                        videoModel: 'kling',
                       });
                       setShowAnimateSheet(true);
                     }}

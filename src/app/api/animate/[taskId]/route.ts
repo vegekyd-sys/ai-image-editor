@@ -19,46 +19,21 @@ export async function GET(
 
     const { taskId } = await params
 
-    // Poll task — provider routing: foldin, piapi, or kling (default)
+    // Poll task — route by taskId prefix or env var
+    // cgt-* = SeeDance, mc-* = Motion Control, else = Kling omni-video
+    const isSeedance = taskId.startsWith('cgt-')
+    const isMotionControl = taskId.startsWith('mc-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
+    const realTaskId = isMotionControl ? taskId.slice(3) : taskId
 
-    if (provider === 'foldin') {
-      const { getFoldinTaskStatus, getFoldinTaskOutputs } = await import('@/lib/foldin')
-      const statusData = await getFoldinTaskStatus(taskId)
-
-      // Map Foldin status to our format
-      let status: string
-      let videoUrl: string | undefined
-
-      switch (statusData.status) {
-        case 'PENDING':
-          status = 'pending'
-          break
-        case 'RUNNING':
-          status = 'processing'
-          break
-        case 'SUCCESS':
-          status = 'completed'
-          const outputs = await getFoldinTaskOutputs(taskId)
-          if (outputs.length > 0) {
-            videoUrl = outputs[0].object_url || outputs[0].upstream_object_url || undefined
-          }
-          break
-        case 'FAILED':
-        case 'CANCELED':
-          status = 'failed'
-          break
-        default:
-          status = 'pending'
-      }
-
-      result = {
-        taskId,
-        status,
-        videoUrl,
-        error: statusData.error || undefined,
-      }
+    if (isSeedance) {
+      const { getSeedanceTask } = await import('@/lib/seedance')
+      result = await getSeedanceTask(taskId)
+    } else if (isMotionControl) {
+      const { getKlingMotionControlTask } = await import('@/lib/kling')
+      result = await getKlingMotionControlTask(realTaskId)
+      result.taskId = taskId // preserve mc- prefix for frontend
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(taskId)
     } else {

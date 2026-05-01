@@ -73,7 +73,13 @@ async function installFromZip(
     if (entry.dir || !path.startsWith(assetsPrefix)) continue;
     const data = await entry.async('nodebuffer');
     const filename = path.substring(assetsPrefix.length);
-    const ct = filename.endsWith('.png') ? 'image/png' : 'image/jpeg';
+    const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp', '.gif': 'image/gif',
+      '.mp4': 'video/mp4', '.mov': 'video/quicktime',
+    };
+    const ct = mimeMap[ext] || 'application/octet-stream';
     assets.push({ filename, data: Buffer.from(data), contentType: ct });
   }
 

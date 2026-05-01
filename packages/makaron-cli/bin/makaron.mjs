@@ -83,7 +83,7 @@ function getAuthCookie() {
     console.error('Not logged in. Run: npx makaron-cli login');
     process.exit(1);
   }
-  return { cookie: buildCookie(auth), baseUrl: auth._baseUrl || BASE_URL };
+  return { cookie: buildCookie(auth), baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL };
 }
 
 // ─── SSE Consumer ────────────────────────────────────────────────────────────

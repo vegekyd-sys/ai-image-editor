@@ -112,6 +112,7 @@ const zh = {
   'animate.noScript': '（无脚本）',
   'animate.allImagesRemoved': '所有图片已移除',
   'animate.imageCount': (n: number) => `${n} 张图片`,
+  'animate.model': '模型',
   'animate.duration': '时长',
   'animate.status': '状态',
   'animate.smart': '智能',

@@ -8,57 +8,59 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
-    date: '2026-04-29',
-    en: { title: 'Skill Marketplace & New Home Page', items: [
-      'New Home page: browse 30+ skill templates — anime collabs, photo effects, video styles — tap to preview full-screen, swipe to explore',
-      'One-tap create: pick a template, upload your photo, hit Create — the AI does the rest',
-      'Before/after preview: see example "before" photos on anime collab skills so you know what to upload',
+    date: '2026-05-01',
+    en: { title: 'SeeDance 2.0 & Reference Video', items: [
+      'SeeDance 2.0: world-class video model now available alongside Kling O3 — choose in the video panel or tell Agent in chat',
+      'Reference video: use any video as a motion template — your photo person performs the same moves, expressions, and dance',
+      'Video template skills: "Funny Face Challenge" — first skill with built-in reference video, more coming soon',
+      'Three video script styles: continuous take, shot-by-shot, and video reference — Agent picks the best one for your scene',
     ]},
-    zh: { title: 'Skill 市场 & 全新首页', items: [
-      '全新 Home 页：浏览 30+ Skill 模板 — 动漫合影、照片特效、视频风格 — 点击全屏预览，上下滑动探索',
+    zh: { title: 'SeeDance 2.0 & 参考视频', items: [
+      'SeeDance 2.0：世界顶级视频模型，与 Kling O3 并列可选 — 在视频面板选择或对话中告诉 Agent',
+      '参考视频：用任意视频作为动作模板 — 让照片中的人做出同样的动作、表情和舞蹈',
+      '视频模板 Skill："搞怪表情挑战" — 首个内置参考视频的 Skill，更多即将上线',
+      '三种视频脚本风格：一镜到底、分镜叙事、参考视频 — Agent 自动选择最适合的方式',
+    ]},
+  },
+  {
+    date: '2026-04-29',
+    en: { title: 'Skill Marketplace', items: [
+      'New Home page: browse 30+ skill templates — anime collabs, photo effects, video styles — tap to preview, swipe to explore',
+      'One-tap create: pick a template, upload your photo, hit Create — the AI does the rest',
+      'Share skills: generate a private link for friends to add your Skill in one click',
+      'Skills page: manage all your skills — share, delete, upload custom ones',
+    ]},
+    zh: { title: 'Skill 市场', items: [
+      '全新 Home 页：浏览 30+ Skill 模板 — 动漫合影、照片特效、视频风格 — 点击预览，滑动探索',
       '一键创作：选模板、上传照片、点 Create — AI 帮你搞定',
-      '示例原图预览：动漫合影类 Skill 展示 "before" 原图，让你知道该上传什么样的照片',
+      '分享 Skill：生成私密链接发给朋友，一键添加到账号',
+      'Skills 管理页：集中管理所有 Skill — 分享、删除、上传自定义 Skill',
     ]},
   },
   {
     date: '2026-04-26',
-    en: { title: 'OpenAI Image 2 Upgrade & Context Mode', items: [
-      'OpenAI Image 2 now 3x faster (~60s) and 2x cheaper',
-      'Context Mode: for design tasks (e-commerce pages, infographics, posters, web design, anime, game UI), Agent passes your request directly to Image 2 — better results than detailed instructions',
-      'Smart aspect ratio: extreme ratios (1:3, 3:1) now use optimal 1792px sizes for text-heavy layouts',
+    en: { title: 'OpenAI Image 2', items: [
+      'OpenAI Image 2: 3x faster (~60s) and 2x cheaper — best text rendering for posters, graphics, and marketing materials',
+      'Context Mode: for design tasks (e-commerce, posters, web design, anime, game UI), Agent passes your request directly to Image 2 — better results than detailed instructions',
+      'Smart aspect ratio: extreme ratios (1:3, 3:1) auto-use optimal sizes for text-heavy layouts',
     ]},
-    zh: { title: 'OpenAI Image 2 升级 & Context Mode', items: [
-      'OpenAI Image 2 提速 3 倍（~60s）、降价 2 倍',
-      'Context Mode：设计类任务（电商详情页、信息图、海报、网页设计、动漫、游戏 UI）Agent 直接传达你的需求给 Image 2 — 比详细指令效果更好',
-      '智能比例：极端宽高比（1:3、3:1 等）自动使用 1792px 最优尺寸，适配长图排版',
-    ]},
-  },
-  {
-    date: '2026-04-23',
-    en: { title: 'Skill Sharing & Management', items: [
-      'Share skills: generate a private link and send it to friends — they can add the Skill to their account in one click',
-      'Skills page: browse all your skills in one place, with share and delete actions',
-      'Claim page: beautiful preview card when opening a share link, with login redirect for new users',
-    ]},
-    zh: { title: 'Skill 分享 & 管理', items: [
-      '分享 Skill：生成私密链接发给朋友，朋友一键即可添加到自己账号',
-      'Skills 页面：集中浏览所有 Skill，支持分享和删除操作',
-      '领取页面：打开分享链接后展示精美预览卡片，未登录自动引导登录',
+    zh: { title: 'OpenAI Image 2', items: [
+      'OpenAI Image 2：提速 3 倍（~60s）、降价 2 倍 — 文字渲染最强，适合海报、营销图、平面设计',
+      'Context Mode：设计类任务（电商、海报、网页、动漫、游戏 UI）Agent 直接传达需求 — 比详细指令效果更好',
+      '智能比例：极端宽高比自动使用最优尺寸，适配长图排版',
     ]},
   },
   {
     date: '2026-04-22',
-    en: { title: 'OpenAI Image 2 & Billing', items: [
-      'OpenAI gpt-5.4-image-2: new image generation model via OpenRouter — superior text rendering for posters/graphics',
-      'CUI model selector: cycle through Auto → Gemini → Qwen → OpenAI (purple pill)',
-      'Token-based billing: per-model usage tracking for Gemini, OpenAI, Bedrock',
-      'Subscription system: 3-tier Stripe recurring plans (Basic/Pro/Business) + one-time top-ups',
+    en: { title: 'Billing & Subscriptions', items: [
+      'Credit system: all AI features now tracked with credits — transparent per-model pricing',
+      'Subscription plans: Basic / Pro / Business monthly plans with annual discount',
+      'Cost optimization: prompt caching reduces AI token usage; tips previews now load on-demand — significantly lower per-session cost',
     ]},
-    zh: { title: 'OpenAI Image 2 & 计费系统', items: [
-      'OpenAI gpt-5.4-image-2：新增生图模型 — 文字渲染远超 Gemini，适合海报/营销图',
-      'CUI 模型选择器：Auto → Gemini → Qwen → OpenAI 循环切换（紫色标签）',
-      'Token 计费：Gemini、OpenAI、Bedrock 按模型用量计费',
-      '订阅系统：Stripe 3 档周期订阅（Basic/Pro/Business）+ 单次充值',
+    zh: { title: '计费 & 订阅', items: [
+      'Credit 系统：所有 AI 功能按 credit 计费 — 按模型透明定价',
+      '订阅计划：Basic / Pro / Business 月付方案，年付享 8 折',
+      '成本优化：Prompt 缓存减少 AI token 消耗；Tips 预览改为按需加载，大幅降低每次使用成本',
     ]},
   },
   {
