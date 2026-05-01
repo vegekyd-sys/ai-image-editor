@@ -65,6 +65,8 @@ interface ImageCanvasProps {
   onStartEditEditable?: (fieldId: string) => void;
   /** Callback with list of editable field IDs visible at the current frame */
   onVisibleEditableFields?: (visibleIds: string[]) => void;
+  /** Timeline indices that are video snapshots (v2) — show play icon instead of dot */
+  videoTimelineIndices?: Set<number>;
 }
 
 export default function ImageCanvas({
@@ -86,6 +88,7 @@ export default function ImageCanvas({
   onUpdateProp,
   onStartEditEditable,
   onVisibleEditableFields,
+  videoTimelineIndices,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -729,7 +732,17 @@ export default function ImageCanvas({
       setRemotionPlaying(false);
     } else {
       if (selectedEditableId) onSelectEditable?.(null);
-      if (remotionFrameRef.current >= remotionTotalFrames - 1) p.seekTo(0);
+      // Always seek to start if at or near the end (video designs may not report exact last frame)
+      if (remotionFrameRef.current >= remotionTotalFrames - 2) {
+        p.seekTo(0);
+        // Small delay to let <Video> element reset before playing
+        requestAnimationFrame(() => {
+          p.play();
+          remotionStartedRef.current = true;
+          setRemotionPlaying(true);
+        });
+        return;
+      }
       p.play();
       remotionStartedRef.current = true;
       setRemotionPlaying(true);
@@ -1249,7 +1262,7 @@ export default function ImageCanvas({
                   {showDivider && (
                     <span className={`${isDesktop ? 'w-px h-3 mr-1.5' : 'w-px h-2 mr-[5px]'} bg-white/20`} />
                   )}
-                  {entry === VIDEO_SENTINEL ? (
+                  {(entry === VIDEO_SENTINEL || videoTimelineIndices?.has(i)) ? (
                     <button
                       onClick={() => goTo(i)}
                       className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-5 h-5 hover:opacity-80' : 'w-3 h-3'}`}

@@ -491,6 +491,20 @@ export default function Editor({
     snapshots.filter(s => s.type === 'reference').length,
   [snapshots]);
 
+  // Timeline indices that should show play icon (video snapshots + animated designs)
+  const videoTimelineIndices = useMemo(() => {
+    const set = new Set<number>();
+    const hasDraft = draftParentIndex !== null;
+    snapshots.forEach((s, i) => {
+      const isVideo = s.type === 'video';
+      const isAnimatedDesign = !!s.design?.animation;
+      if (!isVideo && !isAnimatedDesign) return;
+      const timelineIdx = hasDraft && i > draftParentIndex! ? i + 1 : i;
+      set.add(timelineIdx);
+    });
+    return set.size > 0 ? set : undefined;
+  }, [snapshots, draftParentIndex]);
+
   // Map timeline index → DesignPayload for animated designs (rendered via Player)
   // All design snapshots (still + animated) render via Player in ImageCanvas
   // Map timeline index → design payload (accounts for virtual draft insertion)
@@ -3152,6 +3166,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                   ? (currentSnap?.image || currentSnap?.imageUrl)
                   : snapshots[snapshots.length - 1]?.image}
                 videoPlayTrigger={videoPlayTrigger}
+                videoTimelineIndices={videoTimelineIndices}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
