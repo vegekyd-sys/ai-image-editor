@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     // Text-to-image: no images, just create empty project (agent will generate)
     if (imageCount === 0) {
       const projectId = crypto.randomUUID();
-      await supabase.from('projects').insert({ id: projectId, user_id: user.id, title: title || 'Untitled' });
+      await supabase.from('projects').insert({ id: projectId, user_id: user.id, title: title || 'Untitled', timeline_version: 2 });
       return NextResponse.json({
         projectId,
         snapshots: [],
@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
       id: projectId,
       user_id: user.id,
       title: title || 'Untitled',
+      timeline_version: 2,
     });
     if (projectError) {
       return NextResponse.json({ error: projectError.message }, { status: 500 });

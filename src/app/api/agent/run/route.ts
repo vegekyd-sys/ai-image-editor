@@ -47,6 +47,10 @@ export async function POST(req: NextRequest) {
 
     const locale = req.cookies.get('locale')?.value ?? 'en';
 
+    // Query timeline version
+    const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
+    const timelineVersion: number = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
+
     // Mark stale running runs as failed
     await supabase.from('agent_runs')
       .update({ status: 'failed', ended_at: new Date().toISOString() })
@@ -127,6 +131,7 @@ export async function POST(req: NextRequest) {
           userId: user.id,
           currentDesign: ctx.currentDesign,
           history: ctx.history,
+          timelineVersion,
         })) {
           if (event.type === 'usage') {
             totalInputTokens += event.inputTokens ?? 0;
