@@ -129,6 +129,7 @@ interface EditorProps {
   onNewProject?: (file: File) => void;
   initialAnimations?: ProjectAnimation[];
   initialMusicTaskId?: string | null;
+  timelineVersion?: number;
 }
 
 export default function Editor({
@@ -151,6 +152,7 @@ export default function Editor({
   onNewProject,
   initialAnimations,
   initialMusicTaskId,
+  timelineVersion = 1,
 }: EditorProps = {}) {
   // Merge legacy single + new multi into one array
   const pendingImages = pendingImagesProp ?? (pendingImage ? [pendingImage] : undefined);
@@ -459,7 +461,9 @@ export default function Editor({
   }, [draftDesign]);
 
   // Timeline: committed snapshots with the virtual draft inserted right after its parent
-  // + optional video sentinel at the end (when ANY animation exists)
+  // v1: + optional video sentinel at the end (when ANY animation exists)
+  // v2: video snapshots are already in snapshots array, no sentinel needed
+  const isV2 = timelineVersion >= 2;
   const hasAnyAnimation = animations.length > 0;
   const timeline = useMemo(() => {
     const base = snapshots.map((s, i) => {
@@ -476,11 +480,12 @@ export default function Editor({
     if (draftImage !== null && draftParentIndex !== null) {
       base.splice(draftParentIndex + 1, 0, draftImage);
     }
-    if (hasAnyAnimation) {
+    // v1 only: append video sentinel
+    if (!isV2 && hasAnyAnimation) {
       base.push('__VIDEO__');
     }
     return base;
-  }, [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex]);
+  }, [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex, isV2]);
 
   const referenceCount = useMemo(() =>
     snapshots.filter(s => s.type === 'reference').length,
@@ -518,16 +523,22 @@ export default function Editor({
       });
   }, [viewIndex, snapshots]);
 
-  // Video entry: last item in timeline when any animation exists
+  // Video entry detection
+  // v1: last item in timeline (sentinel) when any animation exists
+  // v2: any snapshot with type='video' at current viewIndex
   const hasVideo = hasAnyAnimation;
-  const videoTimelineIndex = hasAnyAnimation ? timeline.length - 1 : -1;
-  const isViewingVideo = hasAnyAnimation && viewIndex === videoTimelineIndex;
-  // Currently selected video for canvas playback
+  const videoTimelineIndex = !isV2 && hasAnyAnimation ? timeline.length - 1 : -1;
+  const currentSnapIndex = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
+  const currentSnap = snapshots[currentSnapIndex];
+  const isViewingVideoV2 = isV2 && currentSnap?.type === 'video';
+  const isViewingVideoV1 = !isV2 && hasAnyAnimation && viewIndex === videoTimelineIndex;
+  const isViewingVideo = isViewingVideoV1 || isViewingVideoV2;
+  // Currently selected video for canvas playback (v1 only)
   const currentVideo = (selectedVideoId && animations.find(a => a.id === selectedVideoId))
     || animations.find(a => a.status === 'completed' && !!a.videoUrl);
 
   // Design editable: current snapshot has a design with editables
-  const currentDesignSnap = snapshots[snapFromTimeline(viewIndex, draftParentIndex) ?? 0];
+  const currentDesignSnap = snapshots[currentSnapIndex];
   const isViewingDesign = !isViewingVideo && !!currentDesignSnap?.design?.editables?.length;
   const editingDesignField = editingDesignFieldId
     ? currentDesignSnap?.design?.editables?.find(f => f.id === editingDesignFieldId) ?? null
@@ -1519,18 +1530,24 @@ export default function Editor({
     const snapshotIndexContext = snapshotsRef.current.length > 1
       ? `[图片索引 / Image Index — ${snapshotsRef.current.length} snapshots]\n${snapshotsRef.current.map((s, i) => {
           const isRef = s.type === 'reference';
-          const isDesign = !!s.design;
-          const desc = isRef
-            ? (s.description || 'Skill reference image')
-            : isDesign
-              ? (s.description || '[design/video]')
-              : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
-                ? (s.description || '原图 / Original upload')
-                : (s.description || '(use analyze_image to see this snapshot)');
-          const tag = isRef ? ' (reference)' : isDesign ? ' (design)' : '';
+          const isVid = s.type === 'video';
+          const isDesign = !!s.design && !isVid;
+          const desc = isVid
+            ? (s.description || s.videoMeta?.prompt?.split('\n')[0]?.slice(0, 60) || '[video]')
+            : isRef
+              ? (s.description || 'Skill reference image')
+              : isDesign
+                ? (s.description || '[design/video]')
+                : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
+                  ? (s.description || '原图 / Original upload')
+                  : (s.description || '(use analyze_image to see this snapshot)');
+          const tag = isVid
+            ? (s.videoMeta?.status === 'completed' ? ' (video)' : ` (video - ${s.videoMeta?.status || 'unknown'})`)
+            : isRef ? ' (reference)' : isDesign ? ' (design)' : '';
           const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
-          const codePath = isDesign && s.designPath ? ` [code: ${s.designPath}]` : '';
-          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${codePath}`;
+          const videoTag = isVid && s.videoMeta?.videoUrl ? ` [video: ${s.videoMeta.videoUrl}]` : '';
+          const codePath = s.designPath ? ` [code: ${s.designPath}]` : '';
+          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${videoTag}${codePath}`;
         }).join('\n')}\n\n`
       : '';
 
@@ -1774,10 +1791,14 @@ export default function Editor({
 
     // Build Image Index with descriptions so Agent can pick images intelligently
     const imageIndex = snapshotsRef.current.map((s, i) => {
-      const desc = i === 0
-        ? (s.description || 'Original upload')
-        : (s.description || '(no description)');
-      return `<<<image_${i + 1}>>> — ${desc}`;
+      const isVid = s.type === 'video';
+      const tag = isVid ? ' (video)' : '';
+      const desc = isVid
+        ? (s.description || s.videoMeta?.prompt?.split('\n')[0]?.slice(0, 60) || '[video]')
+        : i === 0
+          ? (s.description || 'Original upload')
+          : (s.description || '(no description)');
+      return `<<<image_${i + 1}>>>${tag} — ${desc}`;
     }).join('\n');
 
     const prompt = `[视频动画模式] Create a video story script from the following ${n} snapshots. ${langInstr}${hintLine}
@@ -2299,6 +2320,39 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }, 4000);
     return () => clearInterval(interval);
   }, [animations]);
+
+  // v2: Poll video snapshots with status=processing
+  useEffect(() => {
+    if (!isV2) return;
+    const processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing' && s.videoMeta.taskId);
+    if (processing.length === 0) return;
+    const interval = setInterval(async () => {
+      for (const snap of processing) {
+        try {
+          const res = await fetch(`/api/video-snapshot/${snap.id}`);
+          const data = await res.json();
+          if (data.status === 'completed' && data.videoUrl) {
+            // Generate Remotion wrapper client-side (server also creates one in after())
+            const { createVideoDesign } = await import('@/lib/video-design');
+            const design = createVideoDesign(data.videoUrl, 1080, 1440, snap.videoMeta?.duration || 10);
+            setSnapshots(prev => prev.map(s =>
+              s.id === snap.id ? {
+                ...s,
+                videoMeta: { ...s.videoMeta!, status: 'completed' as const, videoUrl: data.videoUrl },
+                design,
+                designPath: `code/${snap.id}.json`,
+              } : s
+            ));
+          } else if (data.status === 'failed') {
+            setSnapshots(prev => prev.map(s =>
+              s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
+            ));
+          }
+        } catch { /* ignore */ }
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [snapshots, isV2]);
 
   // Preload adjacent snapshots (not yet in DOM) so swipe transitions are instant
   useEffect(() => {
@@ -3088,9 +3142,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 } : undefined}
                 hasVideo={hasVideo}
                 isVideoEntry={isViewingVideo}
-                videoUrl={currentVideo?.videoUrl ?? null}
-                videoProcessing={isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing')}
-                videoPosterImage={snapshots[snapshots.length - 1]?.image}
+                videoUrl={isViewingVideoV2
+                  ? (currentSnap?.videoMeta?.videoUrl ?? null)
+                  : (currentVideo?.videoUrl ?? null)}
+                videoProcessing={isViewingVideoV2
+                  ? (currentSnap?.videoMeta?.status === 'processing')
+                  : (isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing'))}
+                videoPosterImage={isViewingVideoV2
+                  ? (currentSnap?.image || currentSnap?.imageUrl)
+                  : snapshots[snapshots.length - 1]?.image}
                 videoPlayTrigger={videoPlayTrigger}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
@@ -3377,9 +3437,19 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 />
                 {isViewingVideo ? (
                   <VideoResultCard
-                    animations={animations}
-                    selectedVideoId={selectedVideoId}
-                    onSelectVideo={setSelectedVideoId}
+                    animations={isViewingVideoV2 && currentSnap?.videoMeta ? [{
+                      id: currentSnap.id,
+                      projectId: projectId ?? '',
+                      taskId: currentSnap.videoMeta.taskId,
+                      videoUrl: currentSnap.videoMeta.videoUrl,
+                      prompt: currentSnap.videoMeta.prompt,
+                      snapshotUrls: currentSnap.videoMeta.sourceUrls,
+                      status: currentSnap.videoMeta.status,
+                      duration: currentSnap.videoMeta.duration,
+                      createdAt: '',
+                    }] : animations}
+                    selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
+                    onSelectVideo={isViewingVideoV2 ? () => {} : setSelectedVideoId}
                     onCreateNew={() => {
                       const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
                       const imageUrls = allUrls.length <= 7
@@ -3399,8 +3469,15 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       setShowAnimateSheet(true);
                     }}
                     onAbandon={(taskId) => {
-                      setAnimations(prev => prev.filter(a => a.taskId !== taskId));
-                      fetch(`/api/animate/${taskId}`, { method: 'DELETE' }).catch(() => {});
+                      if (isViewingVideoV2 && currentSnap) {
+                        setSnapshots(prev => prev.map(s =>
+                          s.id === currentSnap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'abandoned' as const } } : s
+                        ));
+                        fetch(`/api/video-snapshot/${currentSnap.id}`, { method: 'DELETE' }).catch(() => {});
+                      } else {
+                        setAnimations(prev => prev.filter(a => a.taskId !== taskId));
+                        fetch(`/api/animate/${taskId}`, { method: 'DELETE' }).catch(() => {});
+                      }
                     }}
                     onViewDetail={(anim) => {
                       setDetailAnimation(anim);

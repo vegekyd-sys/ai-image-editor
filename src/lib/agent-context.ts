@@ -45,6 +45,7 @@ interface DbSnapshot {
   design_path?: string;
   tips: Tip[];
   sort_order: number;
+  video_meta?: Record<string, unknown>;
 }
 
 interface DbMessage {
@@ -64,7 +65,7 @@ export async function buildPromptContext(
   const [snapshotsRes, messagesRes] = await Promise.all([
     supabase
       .from('snapshots')
-      .select('id, image_url, description, type, design_path, tips, sort_order')
+      .select('id, image_url, description, type, design_path, tips, sort_order, video_meta')
       .eq('project_id', projectId)
       .order('sort_order', { ascending: true }),
     supabase
@@ -123,18 +124,25 @@ export async function buildPromptContext(
   const snapshotIndexContext = snapshots.length >= 1
     ? `[图片索引 / Image Index — ${snapshots.length} snapshots]\n${snapshots.map((s, i) => {
         const isRef = s.type === 'reference';
-        const isDesign = !!s.design_path;
-        const desc = isRef
-          ? (s.description || 'Skill reference image')
-          : isDesign
-            ? (s.description || '[design/video]')
-            : i === 0 || snapshots.slice(0, i).every(ss => ss.type === 'reference')
-              ? (s.description || '原图 / Original upload')
-              : (s.description || '(use analyze_image to see this snapshot)');
-        const tag = isRef ? ' (reference)' : isDesign ? ' (design)' : '';
+        const isVideo = s.type === 'video';
+        const videoMeta = s.video_meta as Record<string, unknown> | undefined;
+        const isDesign = !!s.design_path && !isVideo;
+        const desc = isVideo
+          ? (s.description || (videoMeta?.prompt as string)?.split('\n')[0]?.slice(0, 60) || '[video]')
+          : isRef
+            ? (s.description || 'Skill reference image')
+            : isDesign
+              ? (s.description || '[design/video]')
+              : i === 0 || snapshots.slice(0, i).every(ss => ss.type === 'reference')
+                ? (s.description || '原图 / Original upload')
+                : (s.description || '(use analyze_image to see this snapshot)');
+        const tag = isVideo
+          ? (videoMeta?.status === 'completed' ? ' (video)' : ` (video - ${videoMeta?.status || 'unknown'})`)
+          : isRef ? ' (reference)' : isDesign ? ' (design)' : '';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
-        const codePath = isDesign && s.design_path ? ` [code: ${s.design_path}]` : '';
-        return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${codePath}`;
+        const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';
+        const codePath = s.design_path ? ` [code: ${s.design_path}]` : '';
+        return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${videoTag}${codePath}`;
       }).join('\n')}\n\n`
     : '';
 

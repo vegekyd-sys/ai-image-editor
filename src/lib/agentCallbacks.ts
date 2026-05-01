@@ -325,6 +325,19 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       });
     },
 
+    onVideoSnapshot: (snapshotId, _taskId, videoMeta, posterUrl) => {
+      const newSnap: import('@/types').Snapshot = {
+        id: snapshotId,
+        image: posterUrl,
+        tips: [],
+        messageId: '',
+        imageUrl: posterUrl,
+        type: 'video',
+        videoMeta,
+      };
+      ctx.setSnapshots(prev => [...prev, newSnap]);
+    },
+
     onMusicTask: (taskId) => {
       console.log(`🎵 [agent] music task created: ${taskId}`);
       ctx.onMusicTaskCreated?.(taskId);

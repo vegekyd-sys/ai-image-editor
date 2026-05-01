@@ -33,6 +33,7 @@ export default function ProjectPage() {
     return sync ? sync.title : 'Untitled'
   })
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
+  const [timelineVersion, setTimelineVersion] = useState(1)
   const [initialMusicTaskId, setInitialMusicTaskId] = useState<string | null>(null)
   const [pendingImages] = useState<string[] | null>(() => {
     if (typeof window === 'undefined') return null
@@ -135,9 +136,10 @@ export default function ProjectPage() {
     if (!userId || !projectId) return
     let cancelled = false
 
-    loadProject().then(async ({ snapshots, messages, title, animations }) => {
+    loadProject().then(async ({ snapshots, messages, title, animations, timelineVersion: tv }) => {
       if (cancelled) return
       cacheProjectData(projectId, snapshots, messages, title)
+      setTimelineVersion(tv)
 
       if (animations.length > 0) {
         setInitialAnimations(animations)
@@ -248,6 +250,7 @@ export default function ProjectPage() {
       onBack={() => router.push('/projects')}
       onNewProject={handleNewProject}
       initialAnimations={initialAnimations}
+      timelineVersion={timelineVersion}
       initialMusicTaskId={initialMusicTaskId}
     />
     </div>

@@ -9,6 +9,7 @@ export interface AgentStreamCallbacks {
   onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onAnimationTask?: (taskId: string, prompt: string) => void;
+  onVideoSnapshot?: (snapshotId: string, taskId: string, videoMeta: import('@/types').VideoMeta, posterUrl: string) => void;
   onMusicTask?: (taskId: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onCaptureFrame?: (frame: number, uploadPath: string, captureId: string) => void;
@@ -116,6 +117,11 @@ export async function streamAgent(
           case 'animation_task':
             callbacks.onAnimationTask?.(event.taskId, event.prompt || '');
             break;
+          case 'video_snapshot': {
+            const vs = event as unknown as { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string };
+            callbacks.onVideoSnapshot?.(vs.snapshotId, vs.taskId, vs.videoMeta, vs.posterUrl);
+            break;
+          }
           case 'music_task':
             callbacks.onMusicTask?.((event as { taskId: string }).taskId);
             break;
