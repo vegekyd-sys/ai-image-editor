@@ -170,7 +170,7 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, use
   let userSkillLines = '';
   if (userSkills?.length) {
     userSkillLines = '\n' + userSkills.map(s =>
-      `- **${s.name}**: ${s.description.trim().split('\n')[0]}${s.makaron?.referenceImages?.length ? ' [has reference images]' : ''}`
+      `- **${s.name}**: ${s.description.trim().split('\n')[0]}${s.makaron?.referenceImages?.length ? ' [has reference images]' : ''}${s.makaron?.referenceVideos?.length ? ' [has reference videos]' : ''}`
     ).join('\n');
   }
 

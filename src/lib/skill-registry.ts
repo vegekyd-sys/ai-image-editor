@@ -22,6 +22,7 @@ export interface MakaronSkillMeta {
   faceProtection?: 'strict' | 'default' | 'none';
   defaultAspectRatio?: string;
   referenceImages?: string[];
+  referenceVideos?: string[];
   tags?: string[];
 }
 
@@ -97,7 +98,7 @@ export function parseSkillMd(content: string): ParsedSkill | null {
       else if (k === 'builtIn') makaron.builtIn = clean === 'true';
       else if (k === 'faceProtection') makaron.faceProtection = clean as 'strict' | 'default' | 'none';
       else if (k === 'defaultAspectRatio') makaron.defaultAspectRatio = clean;
-      else if (k === 'modelPreference' || k === 'tags' || k === 'referenceImages') {
+      else if (k === 'modelPreference' || k === 'tags' || k === 'referenceImages' || k === 'referenceVideos') {
         if (clean.startsWith('[')) {
           (makaron as Record<string, unknown>)[k] = clean.slice(1, -1).split(',').map(s => s.trim());
         } else if (!clean) {
