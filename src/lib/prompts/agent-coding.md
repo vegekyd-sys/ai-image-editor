@@ -258,6 +258,11 @@ When reviewing the screenshots, focus on two things:
 
 These videos play on all platforms. Every effect you use must render correctly on iOS Safari, Android Chrome, and desktop browsers. Follow these rules to avoid platform-specific rendering failures.
 
+**Video elements — MUST use Remotion `<Video>`, NEVER HTML `<video>`:**
+- `<Video src="url" style={{...}} />` — syncs with Remotion Player (play/pause/seek all work)
+- HTML `<video autoPlay>` is NOT controlled by the Player — it plays independently and cannot be paused or seeked. The harness auto-fixes `<video>` → `<Video>` but write it correctly.
+- Remove `autoPlay`, `muted`, `controls` attributes — Remotion controls playback via frames.
+
 **Performance budget (CRITICAL — iOS Safari will CRASH if exceeded):**
 - **MUST use `<Sequence>` for every scene** — `<Sequence from={sceneStart} durationInFrames={sceneDuration + crossfadeDuration}>` to mount/unmount scenes. Do NOT mount all scenes with `opacity: 0` — all `<Img>` tags load simultaneously and crash iOS. This is the #1 cause of iOS crashes.
 - Total `<Img>` tags simultaneously in DOM: **≤ 3** (1 current + 1 crossfade overlap). 8 images with opacity = instant crash on iPhone. No duplicated images for backgrounds.

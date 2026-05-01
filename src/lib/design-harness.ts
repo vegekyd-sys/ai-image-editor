@@ -21,6 +21,7 @@ export interface DesignResult {
 export function validateDesign(result: DesignResult): string | null {
   // Auto-fix: Replace <img> with Remotion <Img> for delayRender support
   result.code = autoFixImgTags(result.code);
+  result.code = autoFixVideoTags(result.code);
 
   // Check 1: Syntax — Sucrase compile only (no runtime execution)
   const compileError = checkCompile(result.code);
@@ -57,6 +58,20 @@ function autoFixImgTags(code: string): string {
   const fixed = code.replace(/<img(?=[\s/>])/g, '<Img');
   if (fixed !== code) {
     console.log('🔧 [design-harness] auto-fixed <img> → <Img> for Remotion delayRender');
+  }
+  return fixed;
+}
+
+/** Replace HTML <video with Remotion <Video and strip native-only attributes */
+function autoFixVideoTags(code: string): string {
+  let fixed = code.replace(/<video(?=[\s/>])/g, '<Video').replace(/<\/video>/g, '</Video>');
+  // Strip attributes that don't apply to Remotion <Video>
+  fixed = fixed.replace(/\s+autoPlay(?=[\s/>])/g, '');
+  fixed = fixed.replace(/\s+muted(?=[\s/>])/g, '');
+  fixed = fixed.replace(/\s+controls(?=[\s/>])/g, '');
+  fixed = fixed.replace(/\s+playsInline(?=[\s/>])/g, '');
+  if (fixed !== code) {
+    console.log('🔧 [design-harness] auto-fixed <video> → <Video> for Remotion Player sync');
   }
   return fixed;
 }
