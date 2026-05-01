@@ -64,11 +64,17 @@ function autoFixImgTags(code: string): string {
 
 /** Replace HTML <video with Remotion <Video and strip native-only attributes */
 function autoFixVideoTags(code: string): string {
-  let fixed = code.replace(/<video(?=[\s/>])/g, '<Video').replace(/<\/video>/g, '</Video>');
+  let fixed = code;
+  // JSX form: <video → <Video
+  fixed = fixed.replace(/<video(?=[\s/>])/g, '<Video').replace(/<\/video>/g, '</Video>');
+  // createElement form: createElement('video' → createElement(Video
+  fixed = fixed.replace(/createElement\(\s*['"]video['"]/g, 'createElement(Video');
   // Strip attributes that don't apply to Remotion <Video> (muted is kept — Remotion supports it)
   fixed = fixed.replace(/\s+autoPlay(?=[\s/>])/g, '');
   fixed = fixed.replace(/\s+controls(?=[\s/>])/g, '');
   fixed = fixed.replace(/\s+playsInline(?=[\s/>])/g, '');
+  // createElement props: autoPlay: true → remove
+  fixed = fixed.replace(/,?\s*autoPlay:\s*true\s*,?/g, (m) => m.startsWith(',') && m.endsWith(',') ? ',' : '');
   if (fixed !== code) {
     console.log('🔧 [design-harness] auto-fixed <video> → <Video> for Remotion Player sync');
   }
