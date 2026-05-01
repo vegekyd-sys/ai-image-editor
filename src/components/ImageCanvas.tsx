@@ -1279,11 +1279,11 @@ export default function ImageCanvas({
                   {(entry === VIDEO_SENTINEL || videoTimelineIndices?.has(i)) ? (
                     <button
                       onClick={() => goTo(i)}
-                      className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-5 h-5 hover:opacity-80' : 'w-3 h-3'}`}
+                      className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-2 h-2 hover:opacity-80' : 'w-1 h-1'}`}
                       style={{ color: i === currentIndex ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
                     >
-                      <svg width={isDesktop ? "11" : "8"} height={isDesktop ? "11" : "8"} viewBox="0 0 8 8" fill="currentColor">
-                        <polygon points="2,1 7,4 2,7" />
+                      <svg width={isDesktop ? "8" : "5"} height={isDesktop ? "8" : "5"} viewBox="0 0 8 8" fill="currentColor">
+                        <polygon points="1,0 8,4 1,8" />
                       </svg>
                     </button>
                   ) : (
