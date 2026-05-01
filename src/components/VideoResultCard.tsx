@@ -6,11 +6,13 @@ import { useLocale } from '@/lib/i18n';
 import PillCarousel from '@/components/PillCarousel';
 
 function ElapsedTimer({ since }: { since: string }) {
-  const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+  const sinceMs = new Date(since || undefined as unknown as string).getTime();
+  const validSince = isNaN(sinceMs) ? Date.now() : sinceMs;
+  const [elapsed, setElapsed] = useState(() => Math.max(0, Math.floor((Date.now() - validSince) / 1000)));
 
   useEffect(() => {
     const t = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+      setElapsed(Math.max(0, Math.floor((Date.now() - validSince) / 1000)));
     }, 1000);
     return () => clearInterval(t);
   }, [since]);
