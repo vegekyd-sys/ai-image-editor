@@ -500,7 +500,8 @@ Hard constraints (apply even before reading the guide):
       description: `Capture a screenshot of your current design at a specific frame or time.
 Use this to verify visual output — check key moments in video designs.
 For still designs, frame 0 is the only frame.
-Returns the rendered image so you can see it with your vision.`,
+Returns the rendered image so you can see it with your vision.
+NOTE: Designs with <Video> components cannot be previewed (server-side rendering lacks video decoder). Publish the design and let the user preview in the Player instead.`,
       inputSchema: z.object({
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
@@ -519,6 +520,11 @@ Returns the rendered image so you can see it with your vision.`,
           targetFrame = Math.max(0, Math.min(frame, totalFrames - 1));
         } else if (timestamp !== undefined) {
           targetFrame = Math.max(0, Math.min(Math.round(timestamp * fps), totalFrames - 1));
+        }
+
+        // Designs with <Video> can't render server-side (no WebCodecs in Sandbox)
+        if (design.code.includes('<Video') || design.code.includes('Video,')) {
+          return { error: 'This design contains <Video> — server-side preview is not available. Publish it and the user can preview in the Player.' };
         }
 
         try {
