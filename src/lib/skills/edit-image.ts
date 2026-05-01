@@ -40,13 +40,17 @@ export async function editImage(
       { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
       ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
     ];
-  } else if (hasReference) {
+  } else if (hasReference && ctx.currentImage) {
     const refs = ctx.referenceImages!;
     console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
     references = [
-      { url: ctx.currentImage!, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
+      { url: ctx.currentImage, role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景】' },
       ...refs.map((r, i) => ({ url: r, role: `Image ${i + 2} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用，例如将此人物/物体合成到 Image 1 中】` })),
     ];
+  } else if (hasReference) {
+    const refs = ctx.referenceImages!;
+    console.log(`📸 Text-to-image with ${refs.length} reference(s)`);
+    references = refs.map((r, i) => ({ url: r, role: `Image ${i + 1} = reference image` }));
   } else if (useOriginalAsReference && hasOriginal) {
     console.log('📸 Two-image mode (original as reference)');
     references = [

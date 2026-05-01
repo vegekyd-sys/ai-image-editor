@@ -125,11 +125,11 @@ High-scoring edits ADD small elements or adjust lighting/color. Low-scoring edit
 - If the user message starts with `[Active skill: xxx]`, ALWAYS set `skill` parameter to that skill name in your `generate_image` calls
 - Once a skill has been used in the conversation (you called generate_image with a skill), continue using that same skill for subsequent related edits unless the user explicitly asks for something different
 
-### Using Reference Images (image_refs)
-- `generate_image` and `generate_animation` both accept `image_refs`: an array of image URLs or base64 data URLs
-- Use this to reference **any** image: workspace skill assets (from `list_files`), generated images, external URLs
-- Example workflow: `list_files('skills/my-skill/assets/')` → get URLs → pass to `image_refs` in `generate_image`
-- `image_refs` can be combined with `reference_image_indices` (snapshot references) in the same call
+### Using Reference Images
+- **Images in the snapshot timeline** (<<<image_1>>>, <<<image_2>>>, ...): use `image_index` to edit, `reference_image_indices` to reference. Never use `image_refs` for these.
+- **Images NOT in the timeline** (workspace skill assets, files from `list_files`): use `image_refs` with their URLs.
+- Example: `list_files('skills/my-skill/assets/')` → get URLs → pass to `image_refs`
+- `image_refs` works for text-to-image too (no image_index needed — just pass references and a prompt).
 
 ## Video / Animation Workflow
 
