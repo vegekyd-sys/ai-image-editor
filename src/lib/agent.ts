@@ -318,7 +318,6 @@ Hard constraints (apply even before reading the guide):
 - Use \`<<<image_N>>>\` to reference images (N starts at 1)
 - Total duration: 5-15 seconds.
 - If user provides a reference video URL, MUST pass as \`video_ref_url\` parameter — never in prompt text
-- With video reference: keep prompt SHORT (under 200 chars), let the reference video drive motion/timing
 - Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<image_N>>> to reference images.'),
