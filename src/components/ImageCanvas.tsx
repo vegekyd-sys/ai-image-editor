@@ -646,18 +646,32 @@ export default function ImageCanvas({
     return () => cancelAnimationFrame(raf);
   }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
-  // Preload all images in design code via browser cache, then call onReady
-  const preloadDesignImages = useCallback((code: string): Promise<void> => {
-    const urls = new Set<string>();
-    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi)) urls.add(m[0]);
-    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi)) urls.add(m[0]);
-    if (urls.size === 0) return Promise.resolve();
-    return Promise.all([...urls].map(url => new Promise<void>(resolve => {
+  // Preload all images + videos in design code via browser cache, then call onReady
+  const preloadDesignAssets = useCallback((code: string): Promise<void> => {
+    const imageUrls = new Set<string>();
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi)) imageUrls.add(m[0]);
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi)) imageUrls.add(m[0]);
+
+    const videoUrls = new Set<string>();
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi)) videoUrls.add(m[0]);
+    // Supabase storage video URLs (no extension)
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*videos\/[^\s"'`<>)}\]]*/gi)) videoUrls.add(m[0]);
+
+    const imagePromises = [...imageUrls].map(url => new Promise<void>(resolve => {
       const img = new Image();
       img.onload = () => resolve();
       img.onerror = () => resolve();
       img.src = url;
-    }))).then(() => {});
+    }));
+
+    // Preload full video into browser cache so <Video> mount/seeks are faster
+    const videoPromises = [...videoUrls].map(url =>
+      fetch(url).then(() => {}).catch(() => {})
+    );
+
+    const all = [...imagePromises, ...videoPromises];
+    if (all.length === 0) return Promise.resolve();
+    return Promise.all(all).then(() => {});
   }, []);
 
   // Reset + auto-play when switching to a design snapshot
@@ -673,7 +687,7 @@ export default function ImageCanvas({
     // Try auto-play now if ref already available — preload images first
     if (currentDesign?.animation && remotionRef.current) {
       let cancelled = false;
-      preloadDesignImages(currentDesign.code).then(() => {
+      preloadDesignAssets(currentDesign.code).then(() => {
         if (cancelled) return;
         remotionRef.current?.play();
         remotionStartedRef.current = true;
@@ -1082,7 +1096,7 @@ export default function ImageCanvas({
                 // Auto-play if pending (ref wasn't ready during useEffect)
                 if (ref && remotionAutoPlayRef.current && currentDesign) {
                   remotionAutoPlayRef.current = false;
-                  preloadDesignImages(currentDesign.code).then(() => {
+                  preloadDesignAssets(currentDesign.code).then(() => {
                     ref.play();
                     remotionStartedRef.current = true;
                     setRemotionPlaying(true);
