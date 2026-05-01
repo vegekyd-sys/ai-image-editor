@@ -316,7 +316,7 @@ function createTools(ctx: AgentContext) {
 Hard constraints (apply even before reading the guide):
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<image_N>>>\` to reference images (N starts at 1)
-- Total duration: 5-15 seconds. Keep script under 2500 characters.
+- Total duration: 5-15 seconds.
 - If user provides a reference video URL, MUST pass as \`video_ref_url\` parameter — never in prompt text
 - With video reference: keep prompt SHORT (under 200 chars), let the reference video drive motion/timing
 - Write script in chat first, then call this tool to submit`,
