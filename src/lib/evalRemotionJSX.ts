@@ -24,6 +24,17 @@ import { Audio, Video } from '@remotion/media';
 import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
 import { noise2D, noise3D } from '@remotion/noise';
 
+// Sequence wrapper: auto-inject premountFor={fps} when not specified
+// premountFor is supported at runtime in v4 but missing from type defs
+const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  props: any,
+  ref: React.Ref<HTMLDivElement>,
+) {
+  const { fps } = useVideoConfig();
+  return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps, ref });
+});
+
 /** All APIs available to Agent's React code */
 const REMOTION_SCOPE: Record<string, unknown> = {
   React,
@@ -36,7 +47,7 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   useVideoConfig,
   interpolate,
   spring,
-  Sequence,
+  Sequence: AutoPremountSequence,
   Series,
   Img,
   AbsoluteFill,

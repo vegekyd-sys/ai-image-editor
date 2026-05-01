@@ -75,6 +75,7 @@ function autoFixVideoTags(code: string): string {
   return fixed;
 }
 
+
 /** Compile code with Sucrase — syntax check only, no runtime execution */
 function checkCompile(code: string): string | null {
   try {

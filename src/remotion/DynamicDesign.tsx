@@ -22,6 +22,13 @@ import { noise2D, noise3D } from '@remotion/noise';
 import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 
+// Sequence wrapper: auto-inject premountFor={fps} for smooth video cuts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(props: any, ref: React.Ref<HTMLDivElement>) {
+  const { fps } = useVideoConfig();
+  return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps, ref });
+});
+
 const REMOTION_SCOPE: Record<string, unknown> = {
   React,
   useState,
@@ -33,7 +40,7 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   useVideoConfig,
   interpolate,
   spring,
-  Sequence,
+  Sequence: AutoPremountSequence,
   Series,
   Img,
   AbsoluteFill,
