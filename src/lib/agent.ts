@@ -1410,10 +1410,10 @@ export async function* runMakaronAgent(
             }
           }
           if (inp.image_refs?.length) extraRefs.push(...(inp.image_refs as string[]));
-          if (displayTarget) {
-            const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
+          if (displayTarget || extraRefs.length) {
+            const twoImageMode = displayTarget && inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
             toolCallImages = [
-              displayTarget,
+              ...(displayTarget ? [displayTarget] : []),
               ...(twoImageMode ? [ctx.originalImage!] : []),
               ...extraRefs,
             ];
