@@ -130,6 +130,7 @@ High-scoring edits ADD small elements or adjust lighting/color. Low-scoring edit
 - **Images NOT in the timeline** (workspace skill assets, files from `list_files`): use `image_refs` with their URLs.
 - Example: `list_files('skills/my-skill/assets/')` → get URLs → pass to `image_refs`
 - `image_refs` works for text-to-image too (no image_index needed — just pass references and a prompt).
+- `image_refs` are NOT remembered between tool calls. If you need the same references again, pass them again.
 
 ## Video / Animation Workflow
 
