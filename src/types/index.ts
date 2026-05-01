@@ -85,9 +85,10 @@ export interface Snapshot {
   imageUrl?: string;      // Supabase Storage URL (persisted)
   description?: string;   // agent's analysis of this image (auto-generated, persisted)
   metadata?: PhotoMetadata; // EXIF metadata (location, time)
-  type?: 'original' | 'edit' | 'reference'; // snapshot kind — reference = skill asset
-  design?: DesignPayload; // live Remotion design (rendered via Player, not screenshot)
-  designPath?: string;    // workspace path to design JSON (e.g. "code/xxx.json")
+  type?: 'original' | 'edit' | 'reference' | 'video';
+  design?: DesignPayload;
+  designPath?: string;
+  videoMeta?: VideoMeta;
 }
 
 export interface Project {
@@ -110,6 +111,7 @@ export interface DbSnapshot {
   description?: string;
   type?: string;
   design_path?: string;
+  video_meta?: VideoMeta;
 }
 
 export interface DbMessage {
@@ -119,6 +121,20 @@ export interface DbMessage {
   content: string;
   has_image: boolean;
   created_at: string;
+}
+
+export type VideoModel = 'kling' | 'seedance'
+
+export interface VideoMeta {
+  taskId: string | null;
+  videoUrl: string | null;
+  videoPath?: string;
+  prompt: string;
+  sourceSnapshotIds: string[];
+  sourceUrls: string[];
+  status: 'processing' | 'completed' | 'failed' | 'abandoned';
+  duration: number | null;
+  model: VideoModel;
 }
 
 export interface ProjectAnimation {

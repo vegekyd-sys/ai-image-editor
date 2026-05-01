@@ -20,7 +20,7 @@ import {
   Img,
   AbsoluteFill,
 } from 'remotion';
-import { Audio } from '@remotion/media';
+import { Audio, Video } from '@remotion/media';
 import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
 import { noise2D, noise3D } from '@remotion/noise';
 
@@ -41,6 +41,7 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   Img,
   AbsoluteFill,
   Audio,
+  Video,
   // @remotion/paths — SVG path animation
   evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath,
   // @remotion/noise — organic textures

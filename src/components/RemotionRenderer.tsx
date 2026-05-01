@@ -14,7 +14,7 @@ export type { RenderMediaOnWebProgress };
 async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   const urlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi;
   // Match Supabase storage URLs but exclude audio files (.mp3/.wav etc) — those are handled by resolveAudioUrls
-  const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/(?![^\s"'`<>)}\]]*\.(?:mp3|wav|m4a|aac|ogg))[^\s"'`<>)}\]]*/gi;
+  const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/(?![^\s"'`<>)}\]]*\.(?:mp3|wav|m4a|aac|ogg|mp4|webm|mov))[^\s"'`<>)}\]]*/gi;
   const urls = new Set<string>();
   for (const m of code.matchAll(urlPattern)) urls.add(m[0]);
   for (const m of code.matchAll(storagePattern)) urls.add(m[0]);
@@ -322,6 +322,25 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 // ─── MP4 Export ──────────────────────────────────────────────────────────────
 
 /** Pre-fetch remote audio URLs via server proxy → blob URLs (fixes CORS + avoids massive data URLs) */
+async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
+  const videoExtPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi;
+  const urls = new Set<string>();
+  for (const m of code.matchAll(videoExtPattern)) urls.add(m[0]);
+  if (urls.size === 0) return { code, blobUrls: [] };
+  let resolved = code;
+  const blobUrls: string[] = [];
+  await Promise.all([...urls].map(async (url) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrls.push(blobUrl);
+      while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
+    } catch { /* skip */ }
+  }));
+  return { code: resolved, blobUrls };
+}
+
 async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   // Strip blob: audio URLs (expired after refresh) — both JSX and createElement forms
   let cleaned = code
@@ -363,8 +382,10 @@ export async function exportDesignVideo(
 ): Promise<Blob> {
   preloadBabel().catch(() => {});
 
+  // Pre-fetch remote video URLs → blob URLs (renderMediaOnWeb requires same-origin)
+  const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
   // Pre-fetch remote image URLs → blob URLs (same-origin, native browser handling)
-  const { code: imageResolved, blobUrls: imageBlobUrls } = await resolveCodeUrls(design.code);
+  const { code: imageResolved, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
   const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
   await loadGoogleFontsFromCode(resolvedCode);
@@ -396,6 +417,6 @@ export async function exportDesignVideo(
 
     return result.getBlob();
   } finally {
-    [...imageBlobUrls, ...audioBlobUrls].forEach(url => URL.revokeObjectURL(url));
+    [...videoBlobUrls, ...imageBlobUrls, ...audioBlobUrls].forEach(url => URL.revokeObjectURL(url));
   }
 }

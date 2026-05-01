@@ -5,13 +5,14 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
-import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation } from '@/types'
+import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
 
 interface LoadedProject {
   snapshots: Snapshot[]
   messages: Message[]
   title: string
   animations: ProjectAnimation[]
+  timelineVersion: number
 }
 
 const MAX_UPLOAD_ATTEMPTS = 3
@@ -32,7 +33,7 @@ export function useProject(projectId: string, userId: string) {
   const loadProject = useCallback(async (): Promise<LoadedProject> => {
     const supabase = getSupabase()
 
-    const [snapshotsRes, messagesRes, projectRes, animationRes] = await Promise.all([
+    const [snapshotsRes, messagesRes, projectRes] = await Promise.all([
       supabase
         .from('snapshots')
         .select('*')
@@ -45,16 +46,22 @@ export function useProject(projectId: string, userId: string) {
         .order('created_at', { ascending: true }),
       supabase
         .from('projects')
-        .select('title')
+        .select('title, timeline_version')
         .eq('id', projectId)
         .single(),
-      supabase
-        .from('project_animations')
-        .select('id, video_url, prompt, snapshot_urls, status, piapi_task_id, created_at')
-        .eq('project_id', projectId)
-        .in('status', ['completed', 'processing'])
-        .order('created_at', { ascending: false }),
     ])
+
+    const timelineVersion: number = (projectRes.data as Record<string, unknown>)?.timeline_version as number ?? 1
+
+    // Only load project_animations for v1 projects (v2 stores videos as snapshots)
+    const animationRes = timelineVersion < 2
+      ? await supabase
+          .from('project_animations')
+          .select('id, video_url, prompt, snapshot_urls, status, piapi_task_id, created_at')
+          .eq('project_id', projectId)
+          .in('status', ['completed', 'processing'])
+          .order('created_at', { ascending: false })
+      : { data: [] }
 
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
     const dbMessages: DbMessage[] = messagesRes.data ?? []
@@ -72,6 +79,7 @@ export function useProject(projectId: string, userId: string) {
       description: s.description ?? undefined,
       ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
       ...(s.design_path ? { designPath: s.design_path } : {}),
+      ...(s.video_meta ? { videoMeta: s.video_meta as VideoMeta } : {}),
     }))
 
     // Load persisted designs from workspace (async, non-blocking)
@@ -159,7 +167,7 @@ export function useProject(projectId: string, userId: string) {
       createdAt: row.created_at as string,
     }))
 
-    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations }
+    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
   }, [projectId])
 
   // --- Write (all fire-and-forget) ---
@@ -226,6 +234,7 @@ export function useProject(projectId: string, userId: string) {
           ...(snapshot.description ? { description: snapshot.description } : {}),
           ...(snapshot.type ? { type: snapshot.type } : {}),
           ...(designPath ? { design_path: designPath } : {}),
+          ...(snapshot.videoMeta ? { video_meta: snapshot.videoMeta } : {}),
         }, { onConflict: 'id' })
 
         if (error) console.warn('saveSnapshot error:', error)
