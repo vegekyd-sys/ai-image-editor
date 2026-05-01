@@ -261,7 +261,7 @@ These videos play on all platforms. Every effect you use must render correctly o
 **Video elements — MUST use Remotion `<Video>`, NEVER HTML `<video>`:**
 - `<Video src="url" style={{...}} />` — syncs with Remotion Player (play/pause/seek all work)
 - HTML `<video autoPlay>` is NOT controlled by the Player — it plays independently and cannot be paused or seeked. The harness auto-fixes `<video>` → `<Video>` but write it correctly.
-- Remove `autoPlay`, `muted`, `controls` attributes — Remotion controls playback via frames.
+- Remove `autoPlay`, `controls` attributes — Remotion controls playback via frames. Keep `muted` if you want silent video.
 
 **Performance budget (CRITICAL — iOS Safari will CRASH if exceeded):**
 - **MUST use `<Sequence>` for every scene** — `<Sequence from={sceneStart} durationInFrames={sceneDuration + crossfadeDuration}>` to mount/unmount scenes. Do NOT mount all scenes with `opacity: 0` — all `<Img>` tags load simultaneously and crash iOS. This is the #1 cause of iOS crashes.

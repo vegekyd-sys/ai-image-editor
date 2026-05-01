@@ -65,9 +65,8 @@ function autoFixImgTags(code: string): string {
 /** Replace HTML <video with Remotion <Video and strip native-only attributes */
 function autoFixVideoTags(code: string): string {
   let fixed = code.replace(/<video(?=[\s/>])/g, '<Video').replace(/<\/video>/g, '</Video>');
-  // Strip attributes that don't apply to Remotion <Video>
+  // Strip attributes that don't apply to Remotion <Video> (muted is kept — Remotion supports it)
   fixed = fixed.replace(/\s+autoPlay(?=[\s/>])/g, '');
-  fixed = fixed.replace(/\s+muted(?=[\s/>])/g, '');
   fixed = fixed.replace(/\s+controls(?=[\s/>])/g, '');
   fixed = fixed.replace(/\s+playsInline(?=[\s/>])/g, '');
   if (fixed !== code) {
