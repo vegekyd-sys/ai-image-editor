@@ -52,9 +52,11 @@ interface AgentContext {
   preferredModel?: ModelId;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
-  /** Task ID + prompt set by generate_animation tool, emitted as animation_task event */
+  /** Task ID + prompt set by generate_animation tool, emitted as animation_task event (v1) */
   animationTaskId?: string;
   animationPrompt?: string;
+  /** Video snapshot pending emit (v2) */
+  pendingVideoSnapshot?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string };
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<image_1>>> */
   snapshotImages: string[];
   /** 0-based index of the snapshot the user is currently viewing */
@@ -63,6 +65,8 @@ interface AgentContext {
   isNsfw?: boolean;
   /** User skills loaded from DB (for reference image lookup) */
   userSkills?: ParsedSkill[];
+  /** Timeline version: 1 = legacy (project_animations), 2 = video-in-timeline (snapshots) */
+  timelineVersion?: number;
 }
 
 export type AgentStreamEvent =
@@ -71,7 +75,8 @@ export type AgentStreamEvent =
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string; usedModel?: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
-  | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
+  | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task (v1)
+  | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string }  // v2: video created as snapshot
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'capture_frame'; frame: number; uploadPath: string; captureId: string }  // request frontend to capture a frame via renderStillOnWeb
   | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
@@ -334,27 +339,62 @@ ${animatePrompt}`,
           }
 
           const taskId = skillResult.taskId;
-
-          // Persist to DB (Agent layer responsibility)
           const { createClient } = await import('@/lib/supabase/server');
           const supabase = await createClient();
           const { filteredImages, finalPrompt } = filterAndRemapImages(story_prompt, imageUrls);
-          const { data: animation, error } = await supabase
-            .from('project_animations')
-            .insert({
-              project_id: ctx.projectId,
-              piapi_task_id: taskId,
-              status: 'processing',
+
+          const isV2 = (ctx.timelineVersion ?? 1) >= 2;
+
+          if (isV2) {
+            // v2: write to snapshots table as type='video'
+            const snapshotId = crypto.randomUUID();
+            const posterUrl = imageUrls[0] || '';
+            const videoMeta: import('@/types').VideoMeta = {
+              taskId,
+              videoUrl: null,
               prompt: finalPrompt,
-              snapshot_urls: filteredImages,
-            })
-            .select('id')
-            .single();
+              sourceSnapshotIds: [],
+              sourceUrls: filteredImages,
+              status: 'processing',
+              duration: duration || null,
+              model: 'kling',
+            };
 
-          if (error) throw error;
+            const { data: maxSort } = await supabase
+              .from('snapshots')
+              .select('sort_order')
+              .eq('project_id', ctx.projectId)
+              .order('sort_order', { ascending: false })
+              .limit(1)
+              .single();
 
-          ctx.animationTaskId = taskId;
-          ctx.animationPrompt = story_prompt;
+            await supabase.from('snapshots').insert({
+              id: snapshotId,
+              project_id: ctx.projectId,
+              image_url: posterUrl,
+              tips: [],
+              message_id: '',
+              sort_order: (maxSort?.sort_order ?? 0) + 1,
+              type: 'video',
+              video_meta: videoMeta,
+            });
+
+            ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta, posterUrl };
+          } else {
+            // v1: write to project_animations (legacy)
+            await supabase
+              .from('project_animations')
+              .insert({
+                project_id: ctx.projectId,
+                piapi_task_id: taskId,
+                status: 'processing',
+                prompt: finalPrompt,
+                snapshot_urls: filteredImages,
+              });
+
+            ctx.animationTaskId = taskId;
+            ctx.animationPrompt = story_prompt;
+          }
 
           // Bill for video generation (per-second)
           const videoSec = duration || 10;
@@ -1472,6 +1512,10 @@ export async function* runMakaronAgent(
           yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '' };
           ctx.animationTaskId = undefined;
           ctx.animationPrompt = undefined;
+        }
+        if (ctx.pendingVideoSnapshot) {
+          yield { type: 'video_snapshot', ...ctx.pendingVideoSnapshot };
+          ctx.pendingVideoSnapshot = undefined;
         }
         if ((ctx as any).musicTaskId) {
           yield { type: 'music_task', taskId: (ctx as any).musicTaskId };
