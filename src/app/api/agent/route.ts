@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
       previewsReady: '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
     };
 
-    // Only dual-write for normal agent flow (not lightweight teaser/name/reaction branches)
-    const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction;
+    // Only dual-write for normal agent flow (not lightweight teaser/name/reaction/analysis branches)
+    const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly;
 
     let runId: string | null = null;
     let firstMessageId: string | null = null;
