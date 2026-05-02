@@ -2129,6 +2129,100 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
 
+  // Video upload: transcode → upload → create video snapshot
+  const handleVideoUpload = useCallback(async (file: File) => {
+    const { processVideoUpload } = await import('@/lib/video-upload');
+    const { createVideoDesign } = await import('@/lib/video-design');
+    const snapId = generateId();
+
+    try {
+      // Step 1: Extract poster immediately for visual feedback
+      const blobUrl = URL.createObjectURL(file);
+      const tempVideo = document.createElement('video');
+      tempVideo.muted = true;
+      tempVideo.src = blobUrl;
+      await new Promise<void>(r => { tempVideo.onloadedmetadata = () => r(); setTimeout(r, 5000); });
+      tempVideo.currentTime = Math.min(0.5, tempVideo.duration * 0.1);
+      await new Promise<void>(r => { tempVideo.onseeked = () => r(); setTimeout(r, 3000); });
+      const c = document.createElement('canvas');
+      c.width = tempVideo.videoWidth; c.height = tempVideo.videoHeight;
+      c.getContext('2d')!.drawImage(tempVideo, 0, 0);
+      const quickPoster = c.toDataURL('image/jpeg', 0.7);
+      tempVideo.pause(); tempVideo.removeAttribute('src'); tempVideo.load();
+      URL.revokeObjectURL(blobUrl);
+
+      // Step 2: Add processing snapshot to timeline immediately
+      const processingSnap: Snapshot = {
+        id: snapId,
+        image: quickPoster,
+        tips: [],
+        messageId: '',
+        type: 'video',
+        videoMeta: {
+          taskId: null,
+          videoUrl: null,
+          prompt: '',
+          sourceSnapshotIds: [],
+          sourceUrls: [],
+          status: 'processing',
+          duration: null,
+          model: 'upload',
+          createdAt: new Date().toISOString(),
+        },
+      };
+      setSnapshots(prev => [...prev, processingSnap]);
+      // Navigate to new video snapshot
+      requestAnimationFrame(() => setViewIndex(snapshots.length));
+
+      // Step 3: Transcode + upload
+      const result = await processVideoUpload(file, (progress) => {
+        setAgentStatus(`视频转码中 ${Math.round(progress * 100)}%`);
+      });
+
+      // Step 4: Upload to Supabase
+      setAgentStatus('上传视频...');
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const uid = (await supabase.auth.getUser()).data.user?.id;
+      if (!uid) throw new Error('Not authenticated');
+      const storagePath = `${uid}/${projectId}/videos/upload-${snapId}.mp4`;
+      const { error: uploadError } = await supabase.storage.from('images')
+        .upload(storagePath, result.videoBlob, { contentType: 'video/mp4', upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath);
+      const videoUrl = urlData?.publicUrl || '';
+
+      // Step 5: Generate Remotion wrapper design
+      const design = createVideoDesign(videoUrl, result.width, result.height, result.duration);
+
+      // Step 6: Update snapshot with completed state
+      const completedSnap: Snapshot = {
+        ...processingSnap,
+        image: result.poster,
+        imageUrl: result.poster,
+        design,
+        designPath: `code/${snapId}.json`,
+        videoMeta: {
+          ...processingSnap.videoMeta!,
+          status: 'completed',
+          videoUrl,
+          duration: result.duration,
+        },
+      };
+      setSnapshots(prev => prev.map(s => s.id === snapId ? completedSnap : s));
+      onSaveSnapshot?.(completedSnap, snapshots.length);
+      setAgentStatus(t('editor.greeting'));
+
+    } catch (err) {
+      console.error('Video upload error:', err);
+      setAgentStatus(`视频上传失败: ${err instanceof Error ? err.message : String(err)}`);
+      // Mark as failed
+      setSnapshots(prev => prev.map(s =>
+        s.id === snapId ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
+      ));
+    }
+  }, [snapshots.length, projectId, onSaveSnapshot, t]);
+
   // Auto-trigger upload when a pending image is passed (new project from projects page)
   // Lock body scroll while editor is mounted to prevent iOS back-navigation jump
   useEffect(() => {
@@ -3022,11 +3116,16 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         data-testid="editor-file-upload"
         aria-label="Upload photo to editor"
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*,video/*,.heic,.heif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) compressAndUpload(file);
+          if (!file) return;
+          if (file.type.startsWith('video/')) {
+            handleVideoUpload(file);
+          } else {
+            compressAndUpload(file);
+          }
           e.target.value = '';
         }}
       />

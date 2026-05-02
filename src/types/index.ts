@@ -124,7 +124,7 @@ export interface DbMessage {
   created_at: string;
 }
 
-export type VideoModel = 'kling' | 'seedance'
+export type VideoModel = 'kling' | 'seedance' | 'upload'
 
 export interface VideoMeta {
   taskId: string | null;
