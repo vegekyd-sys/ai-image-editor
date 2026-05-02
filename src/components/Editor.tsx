@@ -2209,15 +2209,17 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           duration: result.duration,
         },
       };
+      let imageIndex: number | null = null;
       setSnapshots(prev => {
         const next = prev.map(s => s.id === snapId ? completedSnap : s);
+        // Find actual 1-based index by id
+        imageIndex = next.findIndex(s => s.id === snapId) + 1;
         return next;
       });
-      onSaveSnapshot?.(completedSnap, snapshots.length);
+      onSaveSnapshot?.(completedSnap, (imageIndex ?? snapshots.length + 1) - 1);
       setAgentStatus(t('editor.greeting'));
 
-      // Return 1-based index (snapshot was appended at snapshots.length)
-      return snapshots.length + 1;
+      return imageIndex;
 
     } catch (err) {
       console.error('Video upload error:', err);
