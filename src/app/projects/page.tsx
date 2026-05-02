@@ -596,7 +596,7 @@ function ProjectsPageInner() {
           aria-label="Upload photo"
           ref={fileInputRef}
           type="file"
-          accept="image/*,.heic,.heif"
+          accept="image/*,video/*,.heic,.heif"
           multiple
           style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
           onChange={async (e) => {

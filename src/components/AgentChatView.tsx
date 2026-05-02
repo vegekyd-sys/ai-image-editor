@@ -405,6 +405,8 @@ interface AgentChatViewProps {
   hasBackgroundTask?: boolean;
   /** Open CreditPopup when credits are exhausted */
   onOpenCreditPopup?: () => void;
+  /** User uploaded a video file from CUI */
+  onVideoUpload?: (file: File) => void;
 }
 
 export default function AgentChatView({
@@ -433,6 +435,7 @@ export default function AgentChatView({
   onMusicSelect,
   hasBackgroundTask = false,
   onOpenCreditPopup,
+  onVideoUpload,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -1219,23 +1222,33 @@ export default function AgentChatView({
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*,video/*,.heic,.heif"
         multiple
         className="hidden"
         onChange={async (e) => {
           const files = Array.from(e.target.files ?? []);
           e.target.value = '';
-          const remaining = 10 - attachedImages.length;
-          const toProcess = files.slice(0, remaining);
-          setProcessingImageCount(toProcess.length);
-          try {
-            const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
-            const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
-            if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
-          } catch (err) {
-            console.error('[CUI] image compress error:', err);
+          // Separate video files from images
+          const videoFiles = files.filter(f => f.type.startsWith('video/'));
+          const imageFiles = files.filter(f => !f.type.startsWith('video/'));
+          // Handle video uploads via Editor callback
+          if (videoFiles.length > 0 && onVideoUpload) {
+            for (const vf of videoFiles) onVideoUpload(vf);
           }
-          setProcessingImageCount(0);
+          // Handle image attachments
+          if (imageFiles.length > 0) {
+            const remaining = 10 - attachedImages.length;
+            const toProcess = imageFiles.slice(0, remaining);
+            setProcessingImageCount(toProcess.length);
+            try {
+              const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
+              const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
+              if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+            } catch (err) {
+              console.error('[CUI] image compress error:', err);
+            }
+            setProcessingImageCount(0);
+          }
         }}
       />
 
