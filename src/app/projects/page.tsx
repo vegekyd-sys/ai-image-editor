@@ -300,21 +300,22 @@ function ProjectsPageInner() {
   }, [])
 
   // Phase 2: Async IndexedDB cache (cross-session persistence, no auth dependency)
+  const userId = user?.id
   useEffect(() => {
-    if (!user) return
+    if (!userId) return
     let cancelled = false
-    getCachedProjectsList(user.id).then((cached) => {
+    getCachedProjectsList(userId).then((cached) => {
       if (cancelled || shownRef.current || !cached) return
       shownRef.current = true
       setProjects(cached as ProjectWithSnapshots[])
       setLoadingProjects(false)
     })
     return () => { cancelled = true }
-  }, [user])
+  }, [userId])
 
   // Phase 3: Supabase fetch (always runs when user is available, refreshes cache)
   useEffect(() => {
-    if (!user) return
+    if (!userId) return
     const supabase = createClient()
     let cancelled = false
 
@@ -323,7 +324,7 @@ function ProjectsPageInner() {
         const { data: projectRows, error: pErr } = await supabase
           .from('projects')
           .select('id, title, cover_url, updated_at, created_at')
-          .eq('user_id', user!.id)
+          .eq('user_id', userId!)
           .order('created_at', { ascending: false })
 
         if (cancelled) return
@@ -335,7 +336,7 @@ function ProjectsPageInner() {
         }
 
         if (projectRows.length === 0) {
-          cacheProjectsList(user!.id, [])
+          cacheProjectsList(userId!, [])
           shownRef.current = true
           setProjects([])
           setLoadingProjects(false)
@@ -421,7 +422,7 @@ function ProjectsPageInner() {
 
         if (cancelled) return
         // Cache clean Supabase data (with URLs, no base64)
-        cacheProjectsList(user!.id, result)
+        cacheProjectsList(userId!, result)
         shownRef.current = true
         setProjects(displayResult)
         setLoadingProjects(false)
@@ -436,7 +437,7 @@ function ProjectsPageInner() {
     fetchProjects()
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
+  }, [userId])
 
   // Fetch credit balance + detect welcome
   useEffect(() => {

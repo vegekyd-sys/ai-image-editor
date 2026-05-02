@@ -13,6 +13,7 @@ import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProje
 export default function ProjectPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
+  const navigatingRef = useRef(false)
   const params = useParams()
   const projectId = params.id as string
 
@@ -251,7 +252,7 @@ export default function ProjectPage() {
       onSaveDesignProps={saveDesignProps}
       initialTitle={initialTitle}
       onRenameProject={updateTitle}
-      onBack={() => router.push('/projects')}
+      onBack={() => { if (navigatingRef.current) return; navigatingRef.current = true; router.push('/projects'); }}
       onNewProject={handleNewProject}
       initialAnimations={initialAnimations}
       initialMusicTaskId={initialMusicTaskId}
