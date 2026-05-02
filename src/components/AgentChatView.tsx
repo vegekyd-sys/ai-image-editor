@@ -779,10 +779,15 @@ export default function AgentChatView({
     const text = input.trim();
     if ((!text && attachedImages.length === 0 && attachedVideos.length === 0) || isAgentActive) return;
     // Trigger video uploads before sending message
+    let finalText = text;
     if (attachedVideos.length > 0 && onVideoUpload) {
       for (const v of attachedVideos) onVideoUpload(v.file);
+      const videoHint = attachedVideos.length === 1
+        ? '[User attached a video — uploading to timeline. Use preview_frame to see its content once ready.]'
+        : `[User attached ${attachedVideos.length} videos — uploading to timeline. Use preview_frame to see their content once ready.]`;
+      finalText = finalText ? `${finalText}\n\n${videoHint}` : videoHint;
     }
-    onSendMessage(text, attachedImages.length > 0 ? attachedImages : undefined);
+    onSendMessage(finalText, attachedImages.length > 0 ? attachedImages : undefined);
     userScrolledUp.current = false;
     setInput('');
     setAttachedImages([]);
