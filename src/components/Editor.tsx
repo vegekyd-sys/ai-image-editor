@@ -2129,8 +2129,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
 
-  // Video upload: transcode → upload → create video snapshot
-  const handleVideoUpload = useCallback(async (file: File) => {
+  // Video upload: transcode → upload → create video snapshot. Returns 1-based image index.
+  const handleVideoUpload = useCallback(async (file: File): Promise<number | null> => {
     const { processVideoUpload } = await import('@/lib/video-upload');
     const { createVideoDesign } = await import('@/lib/video-design');
     const snapId = generateId();
@@ -2209,17 +2209,23 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           duration: result.duration,
         },
       };
-      setSnapshots(prev => prev.map(s => s.id === snapId ? completedSnap : s));
+      setSnapshots(prev => {
+        const next = prev.map(s => s.id === snapId ? completedSnap : s);
+        return next;
+      });
       onSaveSnapshot?.(completedSnap, snapshots.length);
       setAgentStatus(t('editor.greeting'));
+
+      // Return 1-based index (snapshot was appended at snapshots.length)
+      return snapshots.length + 1;
 
     } catch (err) {
       console.error('Video upload error:', err);
       setAgentStatus(`视频上传失败: ${err instanceof Error ? err.message : String(err)}`);
-      // Mark as failed
       setSnapshots(prev => prev.map(s =>
         s.id === snapId ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
       ));
+      return null;
     }
   }, [snapshots.length, projectId, onSaveSnapshot, t]);
 

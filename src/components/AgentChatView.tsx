@@ -405,8 +405,8 @@ interface AgentChatViewProps {
   hasBackgroundTask?: boolean;
   /** Open CreditPopup when credits are exhausted */
   onOpenCreditPopup?: () => void;
-  /** User uploaded a video file from CUI */
-  onVideoUpload?: (file: File) => void;
+  /** User uploaded a video file — returns 1-based image index once in timeline */
+  onVideoUpload?: (file: File) => Promise<number | null>;
 }
 
 export default function AgentChatView({
@@ -775,24 +775,37 @@ export default function AgentChatView({
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  const handleSubmit = useCallback(() => {
+  const [videoUploading, setVideoUploading] = useState(false);
+  const handleSubmit = useCallback(async () => {
     const text = input.trim();
-    if ((!text && attachedImages.length === 0 && attachedVideos.length === 0) || isAgentActive) return;
-    // Trigger video uploads before sending message
+    if ((!text && attachedImages.length === 0 && attachedVideos.length === 0) || isAgentActive || videoUploading) return;
+
+    // If videos attached: upload them first, wait for completion, then send with indices
     let finalText = text;
     if (attachedVideos.length > 0 && onVideoUpload) {
-      for (const v of attachedVideos) onVideoUpload(v.file);
-      const videoHint = attachedVideos.length === 1
-        ? '[User attached a video — uploading to timeline. Use preview_frame to see its content once ready.]'
-        : `[User attached ${attachedVideos.length} videos — uploading to timeline. Use preview_frame to see their content once ready.]`;
-      finalText = finalText ? `${finalText}\n\n${videoHint}` : videoHint;
+      setVideoUploading(true);
+      try {
+        const indices: number[] = [];
+        for (const v of attachedVideos) {
+          const idx = await onVideoUpload(v.file);
+          if (idx) indices.push(idx);
+        }
+        if (indices.length > 0) {
+          const refs = indices.map(i => `<<<image_${i}>>>`).join(', ');
+          const hint = `[User uploaded ${indices.length === 1 ? 'a video' : `${indices.length} videos`}: ${refs}. Use preview_frame(image_index=N, timestamp=T) to see video frames.]`;
+          finalText = finalText ? `${finalText}\n\n${hint}` : hint;
+        }
+      } finally {
+        setVideoUploading(false);
+      }
     }
+
     onSendMessage(finalText, attachedImages.length > 0 ? attachedImages : undefined);
     userScrolledUp.current = false;
     setInput('');
     setAttachedImages([]);
     setAttachedVideos([]);
-  }, [input, attachedImages, attachedVideos, isAgentActive, onSendMessage, onVideoUpload]);
+  }, [input, attachedImages, attachedVideos, isAgentActive, videoUploading, onSendMessage, onVideoUpload]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
@@ -1455,7 +1468,7 @@ export default function AgentChatView({
                 data-testid="chat-send"
                 aria-label="Send message"
                 onClick={handleSubmit}
-                disabled={!input.trim() && attachedImages.length === 0 && attachedVideos.length === 0}
+                disabled={videoUploading || (!input.trim() && attachedImages.length === 0 && attachedVideos.length === 0)}
                 className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
                 style={{
                   background: (input.trim() || attachedImages.length > 0 || attachedVideos.length > 0) ? '#c026d3' : 'rgba(255,255,255,0.08)',
