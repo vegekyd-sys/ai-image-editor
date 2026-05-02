@@ -191,6 +191,9 @@ export default function ModelSelector({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [popoverPos, setPopoverPos] = useState<{ bottom: number; left?: number; right?: number } | null>(null);
+  const [autoTips, setAutoTips] = useState(() =>
+    typeof window !== 'undefined' ? (localStorage.getItem('mkr_auto_tips') ?? 'auto') !== 'off' : true
+  );
 
   const isAuto = preferredModel === 'auto';
 
@@ -242,6 +245,11 @@ export default function ModelSelector({
   const handleVideoSelect = useCallback((id: string) => {
     onVideoModelChange?.(id as VideoModel);
   }, [onVideoModelChange]);
+
+  const handleAutoTipsToggle = useCallback((on: boolean) => {
+    setAutoTips(on);
+    localStorage.setItem('mkr_auto_tips', on ? 'auto' : 'off');
+  }, []);
 
   const imageModels = getImageModels();
   const videoModels = getVideoModels();
@@ -358,6 +366,56 @@ export default function ModelSelector({
                 }}
               />
             ))}
+          </div>
+
+          {/* Auto Tips Previews — same style as model rows */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 6, paddingTop: 6 }}>
+            <button
+              onClick={() => handleAutoTipsToggle(!autoTips)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                width: '100%',
+                height: ROW_HEIGHT,
+                padding: '0 12px',
+                borderRadius: 12,
+                border: 'none',
+                background: autoTips ? 'rgba(232,121,249,0.08)' : 'transparent',
+                cursor: 'pointer',
+                transition: 'background 0.15s',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: 'rgba(255,255,255,0.06)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.4)',
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="20" rx="2" />
+                  <path d="M7 12h10M12 7v10" />
+                </svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.85)' }}>
+                  {t('model.autoTips')}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, lineHeight: 1.3 }}>
+                  {t('model.autoTips.desc')}
+                </div>
+              </div>
+              <div style={{
+                width: 18, height: 18, borderRadius: 9,
+                border: `2px solid ${autoTips ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                {autoTips && <div style={{ width: 10, height: 10, borderRadius: 5, background: '#c026d3' }} />}
+              </div>
+            </button>
           </div>
         </div>
       )}

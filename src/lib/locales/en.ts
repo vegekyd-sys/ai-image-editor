@@ -248,6 +248,8 @@ const en = {
   'model.kling.desc': 'Supports real faces, fast, with built-in sound.',
   'model.seedance.name': 'SeeDance 2.0',
   'model.seedance.desc': 'Best quality, but no real faces without authorized assets.',
+  'model.autoTips': 'Auto Tips Previews',
+  'model.autoTips.desc': 'Auto-generate preview images',
 } as const;
 
 export default en;

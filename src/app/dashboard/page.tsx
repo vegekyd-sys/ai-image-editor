@@ -46,8 +46,7 @@ const PLANS = [
 ] as const
 
 export default function DashboardPage() {
-  const [tab, setTab] = useState<'subscribe' | 'topup' | 'keys' | 'usage' | 'settings'>('subscribe')
-  const [autoTips, setAutoTips] = useState<'auto' | 'off'>('auto')
+  const [tab, setTab] = useState<'subscribe' | 'topup' | 'keys' | 'usage'>('subscribe')
   const [balance, setBalance] = useState<Balance | null>(null)
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [usage, setUsage] = useState<UsageLog[]>([])
@@ -73,8 +72,6 @@ export default function DashboardPage() {
   useEffect(() => {
     setLoading(true)
     fetchDashboard().finally(() => setLoading(false))
-    const stored = localStorage.getItem('mkr_auto_tips')
-    if (stored === 'auto' || stored === 'off') setAutoTips(stored)
   }, [fetchDashboard])
 
   const handleCreateKey = async () => {
@@ -190,7 +187,7 @@ export default function DashboardPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-white/5 rounded-lg p-1">
-        {(['subscribe', 'topup', 'keys', 'usage', 'settings'] as const).map(t => (
+        {(['subscribe', 'topup', 'keys', 'usage'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -198,7 +195,7 @@ export default function DashboardPage() {
               tab === t ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
             }`}
           >
-            {t === 'subscribe' ? 'Plan' : t === 'topup' ? 'Top Up' : t === 'keys' ? 'API Keys' : t === 'usage' ? 'Usage' : 'Settings'}
+            {t === 'subscribe' ? 'Plan' : t === 'topup' ? 'Top Up' : t === 'keys' ? 'API Keys' : 'Usage'}
           </button>
         ))}
       </div>
@@ -408,29 +405,6 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* ══════ SETTINGS TAB ══════ */}
-      {tab === 'settings' && (
-        <div className="space-y-3">
-          <div className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
-            <div>
-              <div className="font-medium">Auto Tips Previews</div>
-              <div className="text-white/40 text-sm mt-1">
-                Auto-generate preview images for edit suggestions
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                const next = autoTips === 'auto' ? 'off' : 'auto'
-                setAutoTips(next)
-                localStorage.setItem('mkr_auto_tips', next)
-              }}
-              className={`relative w-12 h-6 rounded-full transition-all ${autoTips === 'auto' ? 'bg-fuchsia-600' : 'bg-white/20'}`}
-            >
-              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${autoTips === 'auto' ? 'left-6' : 'left-0.5'}`} />
-            </button>
-          </div>
-        </div>
-      )}
       <CreditPopup
         open={false}
         onClose={() => {}}
