@@ -11,6 +11,7 @@ import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
+import ModelSelector from '@/components/ModelSelector';
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -393,6 +394,8 @@ interface AgentChatViewProps {
   currentSnapshotIndex?: number;
   preferredModel?: PreferredModel;
   onModelChange?: (model: PreferredModel) => void;
+  videoModel?: import('@/types').VideoModel;
+  onVideoModelChange?: (model: import('@/types').VideoModel) => void;
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
@@ -427,6 +430,8 @@ export default function AgentChatView({
   currentSnapshotIndex,
   preferredModel = 'auto',
   onModelChange,
+  videoModel = 'kling',
+  onVideoModelChange,
   onNavigateToSnapshot,
   onVideoTap,
   onDesignPoster,
@@ -503,6 +508,7 @@ export default function AgentChatView({
   const [pipCorner, setPipCorner] = useState<PipCorner>('br');
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
   const [pipHidden, setPipHidden] = useState(false);
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [pipHiddenEdge, setPipHiddenEdge] = useState<'left' | 'right'>('right');
   const [pipHiddenY, setPipHiddenY] = useState(0);
   const pipDragRef = useRef<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
@@ -884,7 +890,8 @@ export default function AgentChatView({
             border: '1.5px solid rgba(255,255,255,0.14)',
             touchAction: 'none',
             cursor: pipFloatPos ? 'grabbing' : 'grab',
-            opacity: hidePip ? 0 : 1,
+            opacity: (hidePip || modelSelectorOpen) ? 0 : 1,
+            pointerEvents: modelSelectorOpen ? 'none' as const : undefined,
           }}
           onPointerDown={onPipPointerDown}
           onPointerMove={onPipPointerMove}
@@ -1311,42 +1318,15 @@ export default function AgentChatView({
               </svg>
             </button>
 
-            {/* Model selector pill */}
+            {/* Model selector */}
             {onModelChange && (
-              <button
-                data-testid="model-selector"
-                data-current-model={preferredModel}
-                aria-label={`Model: ${preferredModel}. Click to switch.`}
-                onClick={() => {
-                  const cycle: PreferredModel[] = ['auto', 'gemini', 'qwen', 'openai'];
-                  const next = cycle[(cycle.indexOf(preferredModel) + 1) % cycle.length];
-                  onModelChange(next);
-                }}
-                className="h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
-                style={{
-                  padding: '0 10px',
-                  background: preferredModel === 'auto' ? 'rgba(255,255,255,0.06)'
-                    : preferredModel === 'qwen' ? 'rgba(16,185,129,0.15)'
-                    : preferredModel === 'openai' ? 'rgba(168,85,247,0.15)'
-                    : 'rgba(59,130,246,0.15)',
-                  border: `1px solid ${preferredModel === 'auto' ? 'rgba(255,255,255,0.08)'
-                    : preferredModel === 'qwen' ? 'rgba(16,185,129,0.3)'
-                    : preferredModel === 'openai' ? 'rgba(168,85,247,0.3)'
-                    : 'rgba(59,130,246,0.3)'}`,
-                }}
-              >
-                <span style={{
-                  fontSize: 8,
-                  fontWeight: 600,
-                  letterSpacing: '0.02em',
-                  color: preferredModel === 'auto' ? 'rgba(255,255,255,0.35)'
-                    : preferredModel === 'qwen' ? 'rgba(16,185,129,0.85)'
-                    : preferredModel === 'openai' ? 'rgba(168,85,247,0.85)'
-                    : 'rgba(59,130,246,0.85)',
-                }}>
-                  {preferredModel === 'auto' ? 'AUTO' : preferredModel.toUpperCase()}
-                </span>
-              </button>
+              <ModelSelector
+                preferredModel={preferredModel}
+                onModelChange={onModelChange}
+                videoModel={videoModel}
+                onVideoModelChange={onVideoModelChange}
+                onOpenChange={(isOpen) => setModelSelectorOpen(isOpen)}
+              />
             )}
 
             {/* Attached image thumbnails */}

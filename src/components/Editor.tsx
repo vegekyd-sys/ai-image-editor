@@ -212,6 +212,11 @@ export default function Editor({
   useEffect(() => { draftDesignRef.current = draftDesign; }, [draftDesign]);
   useEffect(() => { pendingDesignRef.current = pendingDesign; }, [pendingDesign]);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
+  const preferredModelRef = useRef<PreferredModel>('auto');
+  useEffect(() => { preferredModelRef.current = preferredModel; }, [preferredModel]);
+  const [videoModel, setVideoModel] = useState<import('@/types').VideoModel>('kling');
+  const videoModelRef = useRef<import('@/types').VideoModel>('kling');
+  useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   // Design editable state
@@ -1643,7 +1648,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModel !== 'auto' ? { preferredModel } : {}), ...(animationState?.videoModel && animationState.videoModel !== 'kling' ? { videoModel: animationState.videoModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -2924,6 +2929,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     currentSnapshotIndex: isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
     preferredModel: preferredModel as PreferredModel,
     onModelChange: setPreferredModel,
+    videoModel,
+    onVideoModelChange: (m: import('@/types').VideoModel) => {
+      setVideoModel(m);
+      setAnimationState(prev => prev ? { ...prev, videoModel: m } : prev);
+    },
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling',
@@ -3060,7 +3070,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     error: null,
                     duration: null,
                     pollSeconds: 0,
-                    videoModel: 'kling',
+                    videoModel: videoModel,
                   });
                   setShowAnimateSheet(true);
                 } : undefined}
@@ -3348,7 +3358,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     const imageUrls = allUrls.length <= 7
                       ? allUrls
                       : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0, videoModel: 'kling' });
+                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0, videoModel: videoModel });
                     setShowAnimateSheet(true);
                   } : undefined}
                   hasVideo={hasVideo}
@@ -3373,7 +3383,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: null,
                         pollSeconds: 0,
-                        videoModel: 'kling',
+                        videoModel: videoModel,
                       });
                       setShowAnimateSheet(true);
                     }}
@@ -3393,7 +3403,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
-                        videoModel: 'kling',
+                        videoModel: videoModel,
                       });
                       setShowAnimateSheet(true);
                     }}

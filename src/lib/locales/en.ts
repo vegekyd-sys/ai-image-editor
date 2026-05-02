@@ -233,6 +233,21 @@ const en = {
   'misc.saveSuccess': 'Saved successfully',
   'misc.shootingTime': 'Shot on',
   'misc.usingModel': 'Model',
+  // Model selector
+  'model.title': 'Models',
+  'model.auto': 'Auto',
+  'model.tab.image': 'Image',
+  'model.tab.video': 'Video',
+  'model.gemini.name': 'Nano Banana 2',
+  'model.gemini.desc': 'Fast and versatile. Default for most edits.',
+  'model.qwen.name': 'Qwen Edit',
+  'model.qwen.desc': 'Best face preservation. Handles NSFW content.',
+  'model.openai.name': 'GPT Image 2',
+  'model.openai.desc': 'Superior text rendering and creative generation.',
+  'model.kling.name': 'Kling O3',
+  'model.kling.desc': 'Supports real faces, fast, with built-in sound.',
+  'model.seedance.name': 'SeeDance 2.0',
+  'model.seedance.desc': 'Best quality, but no real faces without authorized assets.',
 } as const;
 
 export default en;
