@@ -37,16 +37,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       setUser(session?.user ?? null)
       setLoading(false)
 
-      // Background validation: verify JWT is still valid
+      // Background validation: verify JWT is still valid (non-blocking, never forces logout)
       if (session?.user) {
         supabase.auth.getUser().then(({ data: { user: validatedUser }, error }) => {
           if (error || !validatedUser) {
-            // Session cookie exists but JWT is expired/invalid — force re-login
-            console.warn('[Auth] Session invalid, forcing re-login:', error?.message)
-            document.cookie = 'mkr_activated=; path=/; max-age=0'
-            supabase.auth.signOut().then(() => {
-              window.location.href = '/login'
-            })
+            console.warn('[Auth] Background validation failed (network issue?):', error?.message)
           }
         })
       }

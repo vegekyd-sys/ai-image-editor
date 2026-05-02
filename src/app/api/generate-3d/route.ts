@@ -7,7 +7,8 @@ export const maxDuration = 300;
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     if (!isMeshyAvailable()) {
@@ -33,7 +34,8 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const taskId = req.nextUrl.searchParams.get('taskId');

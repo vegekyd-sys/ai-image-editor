@@ -7,7 +7,8 @@ export const maxDuration = 120;
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return new Response('Unauthorized', { status: 401 });
 
     const url = req.nextUrl.searchParams.get('url');

@@ -6,7 +6,8 @@ import { getActiveSubscription } from '@/lib/billing/subscription'
 // GET: get current user's credit balance + subscription info
 export async function GET() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const [balance, subscription] = await Promise.all([
