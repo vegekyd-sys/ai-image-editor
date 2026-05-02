@@ -497,18 +497,45 @@ Hard constraints (apply even before reading the guide):
     }),
 
     preview_frame: tool({
-      description: `Capture a screenshot of your current design at a specific frame or time.
-Use this to verify visual output — check key moments in video designs.
-For still designs, frame 0 is the only frame.
+      description: `Capture a screenshot of a design at a specific frame or time.
+Use image_index to target any snapshot with a design (including video snapshots).
+For video snapshots: use timestamp to see specific moments in the video.
+Omit image_index to use the current (last edited) design.
 Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
+        image_index: z.number().optional().describe('1-based snapshot index (<<<image_1>>> = 1). Target any snapshot that has a design/video. Omit to use current design.'),
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
       }),
-      execute: async ({ frame, timestamp, question }) => {
-        const design = (ctx as any).__lastDesignPayload;
-        if (!design) return { error: 'No active design. Use run_code with type: "render" first.' };
+      execute: async ({ image_index, frame, timestamp, question }) => {
+        let design = (ctx as any).__lastDesignPayload;
+
+        // Load design from specific snapshot if image_index provided
+        if (image_index !== undefined && ctx.supabase && ctx.userId) {
+          const v = validateImageIndex(ctx.snapshotImages, image_index);
+          if (v.error) return { error: v.error };
+          try {
+            const { data: snaps } = await ctx.supabase
+              .from('snapshots')
+              .select('design_path')
+              .eq('project_id', ctx.projectId)
+              .order('sort_order', { ascending: true });
+            const snap = snaps?.[v.idx];
+            if (snap?.design_path) {
+              const storagePath = `${ctx.userId}/workspace/${snap.design_path}`;
+              const { data: urlData } = ctx.supabase.storage.from('images').getPublicUrl(storagePath);
+              if (urlData?.publicUrl) {
+                const res = await fetch(`${urlData.publicUrl}?t=${Date.now()}`);
+                if (res.ok) design = await res.json();
+              }
+            }
+          } catch (e) {
+            console.warn(`[preview_frame] failed to load design for image_index=${image_index}:`, e);
+          }
+        }
+
+        if (!design) return { error: 'No design found. Use run_code first, or specify image_index of a snapshot with a design/video.' };
 
         const fps = design.animation?.fps || 30;
         const dur = design.animation?.durationInSeconds || 0;

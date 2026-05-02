@@ -448,6 +448,7 @@ export default function AgentChatView({
   const [input, setInput] = useState('');
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
+  const [attachedVideos, setAttachedVideos] = useState<{ file: File; poster: string }[]>([]);
   const [isExiting, setIsExiting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCountRef = useRef(0);
@@ -776,12 +777,17 @@ export default function AgentChatView({
 
   const handleSubmit = useCallback(() => {
     const text = input.trim();
-    if ((!text && attachedImages.length === 0) || isAgentActive) return;
+    if ((!text && attachedImages.length === 0 && attachedVideos.length === 0) || isAgentActive) return;
+    // Trigger video uploads before sending message
+    if (attachedVideos.length > 0 && onVideoUpload) {
+      for (const v of attachedVideos) onVideoUpload(v.file);
+    }
     onSendMessage(text, attachedImages.length > 0 ? attachedImages : undefined);
     userScrolledUp.current = false;
     setInput('');
     setAttachedImages([]);
-  }, [input, attachedImages, isAgentActive, onSendMessage]);
+    setAttachedVideos([]);
+  }, [input, attachedImages, attachedVideos, isAgentActive, onSendMessage, onVideoUpload]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
@@ -1231,9 +1237,23 @@ export default function AgentChatView({
           // Separate video files from images
           const videoFiles = files.filter(f => f.type.startsWith('video/'));
           const imageFiles = files.filter(f => !f.type.startsWith('video/'));
-          // Handle video uploads via Editor callback
-          if (videoFiles.length > 0 && onVideoUpload) {
-            for (const vf of videoFiles) onVideoUpload(vf);
+          // Extract poster for each video and add to attachedVideos
+          for (const vf of videoFiles) {
+            try {
+              const url = URL.createObjectURL(vf);
+              const v = document.createElement('video');
+              v.muted = true; v.src = url;
+              await new Promise<void>(r => { v.onloadedmetadata = () => r(); setTimeout(r, 5000); });
+              v.currentTime = Math.min(0.5, v.duration * 0.1);
+              await new Promise<void>(r => { v.onseeked = () => r(); setTimeout(r, 3000); });
+              const c = document.createElement('canvas');
+              c.width = v.videoWidth; c.height = v.videoHeight;
+              c.getContext('2d')!.drawImage(v, 0, 0);
+              const poster = c.toDataURL('image/jpeg', 0.7);
+              v.pause(); v.removeAttribute('src'); v.load();
+              URL.revokeObjectURL(url);
+              setAttachedVideos(prev => [...prev, { file: vf, poster }]);
+            } catch { /* skip unreadable video */ }
           }
           // Handle image attachments
           if (imageFiles.length > 0) {
@@ -1314,8 +1334,8 @@ export default function AgentChatView({
               disabled={isAgentActive || attachedImages.length >= 10}
               className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
               style={{
-                background: attachedImages.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
-                color: attachedImages.length > 0 ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
+                background: (attachedImages.length > 0 || attachedVideos.length > 0) ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
+                color: (attachedImages.length > 0 || attachedVideos.length > 0) ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
               }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1383,6 +1403,25 @@ export default function AgentChatView({
                 </button>
               </div>
             ))}
+            {/* Attached video thumbnails */}
+            {attachedVideos.map((v, i) => (
+              <div key={`vid-${i}`} className="relative flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={v.poster} alt="" className="w-9 h-9 rounded-lg object-cover" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <svg width="14" height="14" viewBox="0 0 8 8" fill="rgba(255,255,255,0.85)"><polygon points="2,1 7,4 2,7" /></svg>
+                </div>
+                <button
+                  onClick={() => setAttachedVideos(prev => prev.filter((_, j) => j !== i))}
+                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                  style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
+                >
+                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            ))}
             {/* Processing spinner placeholders */}
             {Array.from({ length: processingImageCount }).map((_, i) => (
               <div key={`proc-${i}`} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1411,10 +1450,10 @@ export default function AgentChatView({
                 data-testid="chat-send"
                 aria-label="Send message"
                 onClick={handleSubmit}
-                disabled={!input.trim() && attachedImages.length === 0}
+                disabled={!input.trim() && attachedImages.length === 0 && attachedVideos.length === 0}
                 className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
                 style={{
-                  background: (input.trim() || attachedImages.length > 0) ? '#c026d3' : 'rgba(255,255,255,0.08)',
+                  background: (input.trim() || attachedImages.length > 0 || attachedVideos.length > 0) ? '#c026d3' : 'rgba(255,255,255,0.08)',
                   color: (input.trim() || attachedImages.length > 0) ? '#fff' : 'rgba(255,255,255,0.25)',
                 }}
               >
