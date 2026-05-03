@@ -99,7 +99,6 @@ Shot 2 (3s): Close-up, ...
 9. **Duration**: 5s = compact, 10s = complete detail. Recommend 10s for complex scenes.
 
 10. **Select & reorder**: Pick 3-7 images from the Image Index. Skip duplicates and weak edits. Reorder freely for the strongest story — don't follow upload order.
-
 ## Model Notes
 
 - **Kling**: Supports dialogue with voice synthesis, real human faces, video editing (base mode). Use `Shot N (Xs):` format or continuous prose.
@@ -126,6 +125,7 @@ When a skill provides a reference video in workspace assets:
 搞怪表情挑战
 
 <<<image_1>>>
+
 
 ### Video reference — imitate motion/expression (pass video_ref_url + video_ref_type="feature"):
 搞怪表情模仿
