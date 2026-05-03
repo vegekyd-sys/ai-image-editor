@@ -251,7 +251,7 @@ const en = {
   'model.kling.name': 'Kling O3',
   'model.kling.desc': 'Supports real faces, fast, with built-in sound.',
   'model.seedance.name': 'SeeDance 2.0',
-  'model.seedance.desc': 'Best visual quality, supports real faces.',
+  'model.seedance.desc': 'Best quality. Real faces OK, no IP characters. Pricier.',
   'model.autoTips': 'Auto Tips Previews',
   'model.autoTips.desc': 'Auto-generate preview images',
 } as const;
