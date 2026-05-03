@@ -74,11 +74,11 @@ Shot 2 (3s): Close-up, ...
 
 1. **Language**: Write descriptions in the same language the user is speaking. BUT keep `Shot N (Xs):` format exactly as-is (not "镜头N" or "分镜N") — models require this exact format. Same for `Style:` tag.
 
-2. **Character definition first**: Map `<<<image_N>>>` to roles at the very start. Use descriptive names in the rest of the prompt.
+2. **Character definition first**: Map `<<<image_N>>>` to roles at the very start. Use descriptive names in the rest of the prompt. After every `<<<image_N>>>` reference, always follow with the role name or a noun — never let it directly precede a verb or preposition. Good: `<<<image_1>>>（主角）跑向门口`. Bad: `<<<image_1>>>跑向门口` (ambiguous tokenization).
 
 3. **Image references**: `<<<image_N>>>` for images (N starts at 1). Reusable. In reference video mode, also available: `<<<video_N>>>`.
 
-4. **Camera direction**: Start each shot/segment with framing and motion.
+4. **Camera direction**: Start each shot/segment with framing and motion. One camera motion per shot — never combine push + pan or dolly + tilt in the same shot (causes jittery output).
    - Framing: Wide shot, Mid-shot, Close-up, Extreme close-up
    - Angle: Top-down, Bird's-eye view, Low angle, Side view
    - Motion: Camera circles, Push-in, Pull-out, Whip pan, Dolly, Tracking
@@ -99,6 +99,10 @@ Shot 2 (3s): Close-up, ...
 9. **Duration**: 5s = compact, 10s = complete detail. Recommend 10s for complex scenes.
 
 10. **Select & reorder**: Pick 3-7 images from the Image Index. Skip duplicates and weak edits. Reorder freely for the strongest story — don't follow upload order.
+
+11. **Multi-person positioning**: When 2+ characters face the camera in the same shot, lock their spatial positions with explicit cues (e.g. "左侧穿灰蓝色作训服的角色" / "the character in black leather on the right"). Without this, models swap faces between characters.
+
+12. **Stability safeguard**: For shots with close-up faces or detailed character features, append a brief stability cue at the end of that shot: "人物面部稳定清晰" or "face stable, no distortion". This reduces face deformation in complex motion scenes.
 ## Model Notes
 
 - **Kling**: Supports dialogue with voice synthesis, real human faces, video editing (base mode). Use `Shot N (Xs):` format or continuous prose.
