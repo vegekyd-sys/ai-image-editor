@@ -17,6 +17,8 @@ interface SkillSelectorProps {
   onUploadSkill?: () => void;
   installing?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Override label for the trigger button (e.g. when selectedSkill is a UUID resolved externally) */
+  overrideLabel?: string | null;
 }
 
 export default function SkillSelector({
@@ -27,6 +29,7 @@ export default function SkillSelector({
   onUploadSkill,
   installing,
   onOpenChange,
+  overrideLabel,
 }: SkillSelectorProps) {
   const [open, setOpen] = useState(false);
   useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
@@ -70,9 +73,8 @@ export default function SkillSelector({
     setOpen(v => !v);
   }, []);
 
-  const selectedLabel = selectedSkill
-    ? (skills.find(s => s.name === selectedSkill)?.label || selectedSkill)
-    : null;
+  const selectedLabel = overrideLabel
+    || (selectedSkill ? (skills.find(s => s.name === selectedSkill)?.label || selectedSkill) : null);
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative', flexShrink: 0 }}>

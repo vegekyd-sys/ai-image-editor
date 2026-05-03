@@ -9,6 +9,7 @@ import { useLocale } from '@/lib/i18n'
 import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
+import SkillSelector from '@/components/SkillSelector'
 import Changelog from '@/components/Changelog'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage'
@@ -737,41 +738,25 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-            {/* Skill button + dropdown */}
-            <div style={{ position: 'relative', flexShrink: 0 }} ref={skillMenuRef}>
-              <button
-                className="mkr-skill-btn"
-                onClick={(e) => {
-                  if (selectedSkill) { setSelectedSkill(null); setSkillMenuOpen(false); return }
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  setSkillMenuPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left })
-                  setSkillMenuOpen(prev => !prev)
-                }}
-                style={{
-                  flexShrink: 0,
-                  padding: (selectedSkill || installingSkill) ? '4px 10px' : '5px 6px',
-                  borderRadius: (selectedSkill || installingSkill) ? 12 : 0,
-                  border: 'none',
-                  background: (selectedSkill || installingSkill) ? 'rgba(217,70,239,0.15)' : 'none',
-                  color: (selectedSkill || installingSkill) ? '#f0abfc' : 'rgba(255,255,255,0.45)',
-                  fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                  fontFamily: 'inherit', whiteSpace: 'nowrap',
-                  display: 'flex', alignItems: 'center', gap: 4,
-                }}
-              >
-                {installingSkill ? (
-                  <><Spinner size={10} /> Installing...</>
-                ) : selectedSkill ? (
-                  <>{availableSkills.find(s => s.name === selectedSkill)?.label
-                    || homeSkills.find(s => s.id === selectedSkill)?.labels[locale]
-                    || 'Skill'}
-                  <span style={{ opacity: 0.5, fontSize: '0.6rem' }}>✕</span></>
-                ) : 'Skill'}
-              </button>
-              <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
-            </div>
+            {/* Skill selector */}
+            <SkillSelector
+              skills={availableSkills}
+              selectedSkill={selectedSkill}
+              onSkillChange={setSelectedSkill}
+              onDeleteSkill={(name) => {
+                setAvailableSkills(prev => prev.filter(s => s.name !== name))
+                fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {})
+              }}
+              onUploadSkill={() => skillFileRef.current?.click()}
+              installing={installingSkill}
+              overrideLabel={selectedSkill ? (
+                availableSkills.find(s => s.name === selectedSkill)?.label
+                || homeSkills.find(s => s.id === selectedSkill)?.labels[locale]
+                || null
+              ) : null}
+            />
+            <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
             <button
               className="mkr-create-btn"
               onClick={() => { if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
@@ -1303,102 +1288,7 @@ export default function HomePage() {
 
       {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
 
-      {/* Skill menu — rendered at top level to avoid overflow clipping */}
-      {skillMenuOpen && (isDesktop ? (
-        <div ref={skillMenuRef} style={{
-          position: 'fixed', bottom: skillMenuPos?.bottom ?? 60, left: skillMenuPos?.left ?? 0,
-          width: 200, maxHeight: 320, overflowY: 'auto',
-          background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 12, padding: '4px 0',
-          boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
-          zIndex: 300,
-          animation: 'mkr-menu-up 0.2s ease-out',
-        }}>
-          {availableSkills.length === 0 && (
-            <div style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading...</div>
-          )}
-          {availableSkills.map(skill => (
-            <button key={skill.name}
-              className="mkr-skill-item"
-              onClick={() => { setSelectedSkill(selectedSkill === skill.name ? null : skill.name); setSkillMenuOpen(false) }}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '6px 12px', border: 'none', cursor: 'pointer',
-                background: selectedSkill === skill.name ? 'rgba(217,70,239,0.12)' : 'transparent',
-                color: selectedSkill === skill.name ? '#f0abfc' : 'rgba(255,255,255,0.7)',
-                fontSize: 13, fontFamily: 'inherit', textAlign: 'left',
-              }}>
-              <span>{skill.label}</span>
-              {!skill.builtIn && (
-                <span onClick={(e) => {
-                  e.stopPropagation()
-                  if (selectedSkill === skill.name) setSelectedSkill(null)
-                  setAvailableSkills(prev => prev.filter(s => s.name !== skill.name))
-                  fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skill.name }) }).catch(() => {})
-                }} style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, padding: '0 2px', cursor: 'pointer' }}>✕</span>
-              )}
-            </button>
-          ))}
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '2px 0' }} />
-          <button className="mkr-skill-item" onClick={() => { skillFileRef.current?.click(); setSkillMenuOpen(false) }}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center',
-              padding: '6px 12px', border: 'none', cursor: 'pointer',
-              background: 'transparent', color: 'rgba(255,255,255,0.4)',
-              fontSize: 13, fontFamily: 'inherit', textAlign: 'left',
-            }}>
-            {skillUploading ? 'Installing...' : '+ Upload Skill (.zip)'}
-          </button>
-        </div>
-      ) : (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setSkillMenuOpen(false) }}>
-          <div style={{ background: 'rgba(0,0,0,0.5)', position: 'absolute', inset: 0, animation: 'mkr-fade-in 0.2s ease-out' }} />
-          <div ref={skillMenuRef} style={{
-            position: 'relative', maxHeight: '50dvh', overflowY: 'auto',
-            background: 'rgba(24,24,28,0.98)', borderTop: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '18px 18px 0 0', padding: '12px 0',
-            paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-            animation: 'mkr-sheet-up 0.25s ease-out',
-          }}>
-            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '0 auto 12px' }} />
-            {availableSkills.length === 0 && (
-              <div style={{ padding: '12px 20px', color: 'rgba(255,255,255,0.3)', fontSize: 15 }}>Loading...</div>
-            )}
-            {availableSkills.map(skill => (
-              <button key={skill.name}
-                onClick={() => { setSelectedSkill(selectedSkill === skill.name ? null : skill.name); setSkillMenuOpen(false) }}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 20px', border: 'none', cursor: 'pointer',
-                  background: selectedSkill === skill.name ? 'rgba(217,70,239,0.12)' : 'transparent',
-                  color: selectedSkill === skill.name ? '#f0abfc' : 'rgba(255,255,255,0.7)',
-                  fontSize: 15, fontFamily: 'inherit', textAlign: 'left',
-                }}>
-                <span>{skill.label}</span>
-                {!skill.builtIn && (
-                  <span onClick={(e) => {
-                    e.stopPropagation()
-                    if (selectedSkill === skill.name) setSelectedSkill(null)
-                    setAvailableSkills(prev => prev.filter(s => s.name !== skill.name))
-                    fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skill.name }) }).catch(() => {})
-                  }} style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13, padding: '2px 4px', cursor: 'pointer' }}>✕</span>
-                )}
-              </button>
-            ))}
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '2px 0' }} />
-            <button onClick={() => { skillFileRef.current?.click(); setSkillMenuOpen(false) }}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center',
-                padding: '10px 20px', border: 'none', cursor: 'pointer',
-                background: 'transparent', color: 'rgba(255,255,255,0.4)',
-                fontSize: 15, fontFamily: 'inherit', textAlign: 'left',
-              }}>
-              {skillUploading ? 'Installing...' : '+ Upload Skill (.zip)'}
-            </button>
-          </div>
-        </div>
-      ))}
+      {/* Skill menu now handled by SkillSelector component */}
     </>
   )
 }
