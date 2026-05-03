@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface SkillItem {
   name: string;
@@ -19,6 +20,8 @@ interface SkillSelectorProps {
   onOpenChange?: (open: boolean) => void;
   /** Override label for the trigger button (e.g. when selectedSkill is a UUID resolved externally) */
   overrideLabel?: string | null;
+  /** Popover direction: 'up' (default) or 'down' */
+  direction?: 'up' | 'down';
 }
 
 export default function SkillSelector({
@@ -30,20 +33,24 @@ export default function SkillSelector({
   installing,
   onOpenChange,
   overrideLabel,
+  direction = 'up',
 }: SkillSelectorProps) {
   const [open, setOpen] = useState(false);
   useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [popoverPos, setPopoverPos] = useState<{ bottom: number; left?: number; right?: number } | null>(null);
+  const [popoverPos, setPopoverPos] = useState<{ bottom?: number; top?: number; left?: number; right?: number } | null>(null);
 
-  // Close on outside click (same pattern as ModelSelector)
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: PointerEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (wrapperRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('pointerdown', handler);
     return () => document.removeEventListener('pointerdown', handler);
@@ -54,16 +61,31 @@ export default function SkillSelector({
     if (open && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       const isMobile = window.innerWidth < 640;
-      const bottom = window.innerHeight - rect.top + 6;
-      if (isMobile) {
-        setPopoverPos({ bottom, left: 12, right: 12 });
-      } else {
-        const panelWidth = 200;
-        const spaceRight = window.innerWidth - rect.left;
-        if (spaceRight >= panelWidth + 8) {
-          setPopoverPos({ bottom, left: Math.max(8, rect.left) });
+      if (direction === 'down') {
+        const top = rect.bottom + 6;
+        if (isMobile) {
+          setPopoverPos({ top, left: 12, right: 12 });
         } else {
-          setPopoverPos({ bottom, right: Math.max(8, window.innerWidth - rect.right) });
+          const panelWidth = 200;
+          const spaceRight = window.innerWidth - rect.left;
+          if (spaceRight >= panelWidth + 8) {
+            setPopoverPos({ top, left: Math.max(8, rect.left) });
+          } else {
+            setPopoverPos({ top, right: Math.max(8, window.innerWidth - rect.right) });
+          }
+        }
+      } else {
+        const bottom = window.innerHeight - rect.top + 6;
+        if (isMobile) {
+          setPopoverPos({ bottom, left: 12, right: 12 });
+        } else {
+          const panelWidth = 200;
+          const spaceRight = window.innerWidth - rect.left;
+          if (spaceRight >= panelWidth + 8) {
+            setPopoverPos({ bottom, left: Math.max(8, rect.left) });
+          } else {
+            setPopoverPos({ bottom, right: Math.max(8, window.innerWidth - rect.right) });
+          }
         }
       }
     }
@@ -105,7 +127,7 @@ export default function SkillSelector({
           </>
         ) : selectedLabel ? (
           <>
-            {selectedLabel}
+            <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedLabel}</span>
             <span
               onClick={(e) => { e.stopPropagation(); onSkillChange(null); setOpen(false); }}
               style={{ opacity: 0.5, fontSize: '0.6rem', padding: '0 2px' }}
@@ -114,17 +136,20 @@ export default function SkillSelector({
         ) : 'Skill'}
       </button>
 
-      {/* Popover — same approach as ModelSelector */}
-      {open && popoverPos && (
+      {/* Popover — portaled to body to escape stacking context */}
+      {open && popoverPos && typeof document !== 'undefined' && createPortal(
         <div
+          ref={popoverRef}
           style={{
             position: 'fixed',
-            bottom: popoverPos.bottom,
+            ...(popoverPos.bottom != null ? { bottom: popoverPos.bottom } : {}),
+            ...(popoverPos.top != null ? { top: popoverPos.top } : {}),
             ...(popoverPos.left != null ? { left: popoverPos.left } : {}),
             ...(popoverPos.right != null ? { right: popoverPos.right } : {}),
             ...(popoverPos.left != null && popoverPos.right != null ? {} : { width: 200 }),
             maxHeight: 320,
             overflowY: 'auto',
+            pointerEvents: 'auto' as const,
             background: '#161616',
             border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 12,
@@ -186,7 +211,8 @@ export default function SkillSelector({
               </button>
             </>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

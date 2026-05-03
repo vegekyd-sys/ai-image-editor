@@ -754,6 +754,7 @@ export default function HomePage() {
                 || homeSkills.find(s => s.id === selectedSkill)?.labels[locale]
                 || null
               ) : null}
+              direction={isInline ? 'down' : 'up'}
             />
             <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
@@ -993,6 +994,22 @@ export default function HomePage() {
           width: '100%',
           margin: '0 auto',
         }}>
+          <div style={{ marginBottom: isDesktop ? 16 : 12 }}>
+            <h2 style={{
+              fontSize: isDesktop ? '1.25rem' : '1.1rem',
+              fontWeight: 600,
+              color: 'rgba(255,255,255,0.85)',
+              margin: 0,
+              letterSpacing: '-0.01em',
+              fontFamily: 'var(--font-geist-sans), sans-serif',
+            }}>{t('skills.title')}</h2>
+            <p style={{
+              fontSize: '0.8rem',
+              color: 'rgba(255,255,255,0.35)',
+              margin: '4px 0 0',
+              fontFamily: 'var(--font-geist-sans), sans-serif',
+            }}>{t('skills.subtitle')}</p>
+          </div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
