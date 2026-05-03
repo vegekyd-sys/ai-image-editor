@@ -219,8 +219,26 @@ export default function Editor({
   useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const skillFileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     fetch('/api/skills').then(r => r.json()).then(d => { if (d.skills) setAvailableSkills(d.skills); }).catch(() => {});
+  }, []);
+  const [installingSkill, setInstallingSkill] = useState(false);
+  const handleSkillUpload = useCallback(async (file: File) => {
+    setInstallingSkill(true);
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch('/api/skills', { method: 'POST', body: form });
+      const data = await res.json();
+      if (data.success) {
+        const r = await fetch('/api/skills');
+        const d = await r.json();
+        if (d.skills) setAvailableSkills(d.skills);
+        if (data.skillName) setSelectedSkill(data.skillName);
+      }
+    } catch {}
+    setInstallingSkill(false);
   }, []);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
@@ -2950,6 +2968,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       if (selectedSkill === name) setSelectedSkill(null);
       fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {});
     },
+    onUploadSkill: () => skillFileRef.current?.click(),
+    installingSkill,
+    onDropSkillFile: handleSkillUpload,
     onOpenCreditPopup: () => setCreditPopupOpen(true),
   };
 
@@ -3777,6 +3798,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           setCreditExhausted(false);
         }}
       />
+      <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = ''; }} />
     </div>
   );
 }

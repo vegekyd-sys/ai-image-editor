@@ -414,6 +414,9 @@ interface AgentChatViewProps {
   selectedSkill?: string | null;
   onSkillChange?: (skill: string | null) => void;
   onDeleteSkill?: (name: string) => void;
+  onUploadSkill?: () => void;
+  installingSkill?: boolean;
+  onDropSkillFile?: (file: File) => void;
 }
 
 export default function AgentChatView({
@@ -448,6 +451,9 @@ export default function AgentChatView({
   selectedSkill,
   onSkillChange,
   onDeleteSkill,
+  onUploadSkill,
+  installingSkill,
+  onDropSkillFile,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -839,7 +845,10 @@ export default function AgentChatView({
         e.preventDefault();
         dragCountRef.current = 0;
         setIsDragOver(false);
-        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+        const allFiles = Array.from(e.dataTransfer.files);
+        const zipFile = allFiles.find(f => f.name.endsWith('.zip') || f.type === 'application/zip');
+        if (zipFile && onDropSkillFile) { onDropSkillFile(zipFile); return; }
+        const files = allFiles.filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
         if (!files.length) return;
         const remaining = 10 - attachedImages.length;
         const toProcess = files.slice(0, remaining);
@@ -1383,6 +1392,8 @@ export default function AgentChatView({
                 selectedSkill={selectedSkill ?? null}
                 onSkillChange={onSkillChange}
                 onDeleteSkill={onDeleteSkill}
+                onUploadSkill={onUploadSkill}
+                installing={installingSkill}
                 onOpenChange={(isOpen) => setSkillSelectorOpen(isOpen)}
               />
             )}

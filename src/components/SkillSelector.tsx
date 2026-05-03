@@ -168,7 +168,7 @@ export default function SkillSelector({
             <>
               <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '2px 0' }} />
               <button
-                onClick={() => { onUploadSkill(); setOpen(false); }}
+                onClick={() => { setOpen(false); setTimeout(() => onUploadSkill(), 100); }}
                 className="w-full flex items-center border-none cursor-pointer text-left"
                 style={{
                   padding: '12px 12px',
