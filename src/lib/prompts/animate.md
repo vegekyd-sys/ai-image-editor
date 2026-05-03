@@ -106,7 +106,7 @@ Shot 2 (3s): Close-up, ...
 ## Model Notes
 
 - **Kling**: Supports dialogue with voice synthesis, real human faces, video editing (base mode). Use `Shot N (Xs):` format or continuous prose.
-- **SeeDance**: Best visual quality. No real human face support (needs authorized assets). Supports reference video. `<<<image_N>>>` auto-converted to `[图N]` internally.
+- **SeeDance**: Best visual quality. Supports real human faces and reference video.
 
 ## Reference Video Usage
 
