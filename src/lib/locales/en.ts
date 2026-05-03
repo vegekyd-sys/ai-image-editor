@@ -226,6 +226,10 @@ const en = {
   'billing.upgradeTo': 'Upgrade to',
   'billing.current': 'Current',
 
+  // Skills
+  'skills.title': 'Skill Market',
+  'skills.subtitle': 'ready-made magic from creators worldwide',
+
   // Misc
   'misc.toolUse': 'Tool use',
   'misc.error': 'Error',

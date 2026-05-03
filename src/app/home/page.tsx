@@ -994,20 +994,19 @@ export default function HomePage() {
           width: '100%',
           margin: '0 auto',
         }}>
-          <div style={{ marginBottom: isDesktop ? 16 : 12 }}>
+          <div style={{ textAlign: 'center', marginBottom: isDesktop ? 20 : 14 }}>
             <h2 style={{
-              fontSize: isDesktop ? '1.25rem' : '1.1rem',
+              fontSize: '1rem',
               fontWeight: 600,
               color: 'rgba(255,255,255,0.85)',
               margin: 0,
               letterSpacing: '-0.01em',
-              fontFamily: 'var(--font-geist-sans), sans-serif',
             }}>{t('skills.title')}</h2>
             <p style={{
-              fontSize: '0.8rem',
+              fontSize: '0.75rem',
               color: 'rgba(255,255,255,0.35)',
               margin: '4px 0 0',
-              fontFamily: 'var(--font-geist-sans), sans-serif',
+              letterSpacing: '0.01em',
             }}>{t('skills.subtitle')}</p>
           </div>
           <div style={{

@@ -227,6 +227,10 @@ const zh = {
   'billing.current': '当前',
 
   // Misc
+  // Skills
+  'skills.title': 'Skill 集市',
+  'skills.subtitle': '来自全球创作者的现成魔法',
+
   'misc.toolUse': '工具调用',
   'misc.error': '错误',
   'misc.retry': '重试',
