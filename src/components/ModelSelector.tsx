@@ -356,7 +356,7 @@ export default function ModelSelector({
                 name={t(model.nameKey as Parameters<typeof t>[0])}
                 desc={t(model.descKey as Parameters<typeof t>[0])}
                 selected={model.id === selectedId}
-                disabled={isAuto}
+                disabled={false}
                 onSelect={() => {
                   if (activeTab === 'image') {
                     handleImageSelect(model.id);

@@ -796,7 +796,8 @@ export default function AgentChatView({
     userScrolledUp.current = false;
     setInput('');
     setAttachedImages([]);
-  }, [input, attachedImages, isAgentActive, onSendMessage, selectedSkill]);
+    if (selectedSkill) onSkillChange?.(null);
+  }, [input, attachedImages, isAgentActive, onSendMessage, selectedSkill, onSkillChange]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();

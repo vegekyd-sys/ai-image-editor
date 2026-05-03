@@ -140,10 +140,12 @@ export default function SkillSelector({
               onClick={() => { onSkillChange(selectedSkill === skill.name ? null : skill.name); setOpen(false); }}
               className="w-full flex items-center justify-between border-none cursor-pointer text-left transition-colors"
               style={{
-                padding: '8px 12px',
-                background: selectedSkill === skill.name ? 'rgba(217,70,239,0.12)' : 'transparent',
-                color: selectedSkill === skill.name ? '#f0abfc' : 'rgba(255,255,255,0.7)',
+                padding: '12px 12px',
+                borderRadius: 10,
+                background: selectedSkill === skill.name ? 'rgba(232,121,249,0.08)' : 'transparent',
+                color: selectedSkill === skill.name ? '#e879f9' : 'rgba(255,255,255,0.85)',
                 fontSize: 13,
+                fontWeight: 600,
                 fontFamily: 'inherit',
               }}
             >
@@ -169,10 +171,12 @@ export default function SkillSelector({
                 onClick={() => { onUploadSkill(); setOpen(false); }}
                 className="w-full flex items-center border-none cursor-pointer text-left"
                 style={{
-                  padding: '8px 12px',
+                  padding: '12px 12px',
+                  borderRadius: 10,
                   background: 'transparent',
-                  color: 'rgba(255,255,255,0.4)',
+                  color: 'rgba(255,255,255,0.35)',
                   fontSize: 13,
+                  fontWeight: 600,
                   fontFamily: 'inherit',
                 }}
               >
