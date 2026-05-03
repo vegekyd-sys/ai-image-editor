@@ -12,6 +12,7 @@ import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
+import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -408,6 +409,11 @@ interface AgentChatViewProps {
   hasBackgroundTask?: boolean;
   /** Open CreditPopup when credits are exhausted */
   onOpenCreditPopup?: () => void;
+  /** Skills for skill picker */
+  skills?: SkillItem[];
+  selectedSkill?: string | null;
+  onSkillChange?: (skill: string | null) => void;
+  onDeleteSkill?: (name: string) => void;
 }
 
 export default function AgentChatView({
@@ -438,6 +444,10 @@ export default function AgentChatView({
   onMusicSelect,
   hasBackgroundTask = false,
   onOpenCreditPopup,
+  skills,
+  selectedSkill,
+  onSkillChange,
+  onDeleteSkill,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -509,6 +519,7 @@ export default function AgentChatView({
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
   const [pipHidden, setPipHidden] = useState(false);
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [skillSelectorOpen, setSkillSelectorOpen] = useState(false);
   const [pipHiddenEdge, setPipHiddenEdge] = useState<'left' | 'right'>('right');
   const [pipHiddenY, setPipHiddenY] = useState(0);
   const pipDragRef = useRef<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
@@ -780,11 +791,12 @@ export default function AgentChatView({
   const handleSubmit = useCallback(() => {
     const text = input.trim();
     if ((!text && attachedImages.length === 0) || isAgentActive) return;
-    onSendMessage(text, attachedImages.length > 0 ? attachedImages : undefined);
+    const fullText = selectedSkill && text ? `[Active skill: ${selectedSkill}]\n${text}` : text;
+    onSendMessage(fullText, attachedImages.length > 0 ? attachedImages : undefined);
     userScrolledUp.current = false;
     setInput('');
     setAttachedImages([]);
-  }, [input, attachedImages, isAgentActive, onSendMessage]);
+  }, [input, attachedImages, isAgentActive, onSendMessage, selectedSkill]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
@@ -890,8 +902,8 @@ export default function AgentChatView({
             border: '1.5px solid rgba(255,255,255,0.14)',
             touchAction: 'none',
             cursor: pipFloatPos ? 'grabbing' : 'grab',
-            opacity: (hidePip || modelSelectorOpen) ? 0 : 1,
-            pointerEvents: modelSelectorOpen ? 'none' as const : undefined,
+            opacity: (hidePip || modelSelectorOpen || skillSelectorOpen) ? 0 : 1,
+            pointerEvents: (modelSelectorOpen || skillSelectorOpen) ? 'none' as const : undefined,
           }}
           onPointerDown={onPipPointerDown}
           onPointerMove={onPipPointerMove}
@@ -1329,36 +1341,50 @@ export default function AgentChatView({
               />
             )}
 
-            {/* Attached image thumbnails */}
-            {attachedImages.map((img, i) => (
-              <div key={i} className="relative flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={img}
-                  alt=""
-                  className="w-9 h-9 rounded-lg object-cover"
-                  style={{ border: '1px solid rgba(255,255,255,0.12)' }}
-                />
-                <button
-                  onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
-                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                  style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
-                >
-                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
+            {/* Attached image thumbnails — scrollable */}
+            {(attachedImages.length > 0 || processingImageCount > 0) && (
+              <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 2 }}>
+                {attachedImages.map((img, i) => (
+                  <div key={i} className="relative flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img}
+                      alt=""
+                      className="w-9 h-9 rounded-lg object-cover"
+                      style={{ border: '1px solid rgba(255,255,255,0.12)' }}
+                    />
+                    <button
+                      onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
+                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                      style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
+                    >
+                      <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                {Array.from({ length: processingImageCount }).map((_, i) => (
+                  <div key={`proc-${i}`} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
+                  </div>
+                ))}
               </div>
-            ))}
-            {/* Processing spinner placeholders */}
-            {Array.from({ length: processingImageCount }).map((_, i) => (
-              <div key={`proc-${i}`} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
-              </div>
-            ))}
+            )}
 
-            {/* Spacer */}
-            <div className="flex-1" />
+            {/* Spacer (only when no thumbnails taking flex space) */}
+            {attachedImages.length === 0 && processingImageCount === 0 && <div className="flex-1" />}
+
+            {/* Skill selector — right side, before send */}
+            {skills && skills.length > 0 && onSkillChange && (
+              <SkillSelector
+                skills={skills}
+                selectedSkill={selectedSkill ?? null}
+                onSkillChange={onSkillChange}
+                onDeleteSkill={onDeleteSkill}
+                onOpenChange={(isOpen) => setSkillSelectorOpen(isOpen)}
+              />
+            )}
 
             {/* Send / Stop button */}
             {isAgentActive && onAbort ? (

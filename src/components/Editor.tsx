@@ -217,6 +217,11 @@ export default function Editor({
   const [videoModel, setVideoModel] = useState<import('@/types').VideoModel>('kling');
   const videoModelRef = useRef<import('@/types').VideoModel>('kling');
   useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
+  const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  useEffect(() => {
+    fetch('/api/skills').then(r => r.json()).then(d => { if (d.skills) setAvailableSkills(d.skills); }).catch(() => {});
+  }, []);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   // Design editable state
@@ -2937,6 +2942,14 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling',
+    skills: availableSkills,
+    selectedSkill,
+    onSkillChange: setSelectedSkill,
+    onDeleteSkill: (name: string) => {
+      setAvailableSkills(prev => prev.filter(s => s.name !== name));
+      if (selectedSkill === name) setSelectedSkill(null);
+      fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {});
+    },
     onOpenCreditPopup: () => setCreditPopupOpen(true),
   };
 
