@@ -157,7 +157,7 @@ export default function HomePage() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [user])
+  }, [authLoading])
 
   useEffect(() => {
     const el = inputWrapperRef.current
@@ -167,7 +167,7 @@ export default function HomePage() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [user])
+  }, [authLoading])
 
   useEffect(() => {
     const el = document.querySelector('.mkr-page') as HTMLElement | null
@@ -202,7 +202,7 @@ export default function HomePage() {
     }, { threshold: 0.1 })
     io.observe(el)
     return () => io.disconnect()
-  }, [user])
+  }, [authLoading])
 
   useEffect(() => {
     const el = inlineBoxRef.current
@@ -213,7 +213,7 @@ export default function HomePage() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [user])
+  }, [authLoading])
 
   const userTypingRef = useRef(false)
   const resizeTextarea = useCallback(() => {
@@ -327,12 +327,9 @@ export default function HomePage() {
     setCardIndex(999)
   }, [creating])
 
-  useEffect(() => {
-    if (!authLoading && !user) router.replace('/login')
-  }, [user, authLoading, router])
-
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
-    if (!user || creating || (files.length === 0 && !prompt)) return
+    if (!user) { router.push('/login'); return }
+    if (creating || (files.length === 0 && !prompt)) return
     setCreating(true)
     try {
       const supabase = createClient()
@@ -557,7 +554,7 @@ export default function HomePage() {
       >
         {/* Left: + button / photo slot */}
         <div
-          onClick={() => { if (!creating && !collapseSlot) fileInputRef.current?.click() }}
+          onClick={() => { if (!user) { router.push('/login'); return } if (!creating && !collapseSlot) fileInputRef.current?.click() }}
           style={{
             width: collapseSlot ? 0 : slotWidth,
             flexShrink: 0, alignSelf: 'stretch',
@@ -760,7 +757,7 @@ export default function HomePage() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
             <button
               className="mkr-create-btn"
-              onClick={() => { if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
+              onClick={() => { if (!user) { router.push('/login'); return } if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
               disabled={creating}
               style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
             >
@@ -803,7 +800,7 @@ export default function HomePage() {
     })
   }
 
-  if (authLoading || !user) {
+  if (authLoading) {
     return (
       <div style={{ height: '100dvh', background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Spinner />
@@ -922,26 +919,28 @@ export default function HomePage() {
           }}
         />
 
-        {/* Top bar: link to projects */}
-        <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'flex-start', position: 'relative', zIndex: 10 }}>
-          <button
-            onClick={() => router.push('/projects')}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: '0.7rem', letterSpacing: '0.05em',
-              color: 'rgba(255,255,255,0.45)',
-              display: 'flex', alignItems: 'center', gap: 5,
-              transition: 'color 0.2s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-            </svg>
-            {locale === 'zh' ? '我的项目' : 'My Projects'}
-          </button>
-        </div>
+        {/* Top bar: link to projects (only for logged-in users) */}
+        {user && (
+          <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'flex-start', position: 'relative', zIndex: 10 }}>
+            <button
+              onClick={() => router.push('/projects')}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.7rem', letterSpacing: '0.05em',
+                color: 'rgba(255,255,255,0.45)',
+                display: 'flex', alignItems: 'center', gap: 5,
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+              </svg>
+              {locale === 'zh' ? '我的项目' : 'My Projects'}
+            </button>
+          </div>
+        )}
 
         {/* ── Hero: Logo + Tagline — matches projects page ── */}
         <div style={{

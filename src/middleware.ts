@@ -36,9 +36,9 @@ export async function middleware(request: NextRequest) {
 
   // Not logged in — /login, /landingpage, / are accessible; others → landing page
   if (!user) {
-    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/')) {
+    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/home' && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/')) {
       const url = request.nextUrl.clone()
-      url.pathname = '/landingpage'
+      url.pathname = '/home'
       return NextResponse.redirect(url)
     }
     return supabaseResponse
