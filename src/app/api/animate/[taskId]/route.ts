@@ -20,14 +20,18 @@ export async function GET(
     const { taskId } = await params
 
     // Poll task — route by taskId prefix or env var
-    // cgt-* = SeeDance, mc-* = Motion Control, else = Kling omni-video
+    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, else = Kling
+    const isEvolink = taskId.startsWith('task-unified-')
     const isSeedance = taskId.startsWith('cgt-')
     const isMotionControl = taskId.startsWith('mc-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
 
-    if (isSeedance) {
+    if (isEvolink) {
+      const { getEvolinkTask } = await import('@/lib/evolink')
+      result = await getEvolinkTask(taskId)
+    } else if (isSeedance) {
       const { getSeedanceTask } = await import('@/lib/seedance')
       result = await getSeedanceTask(taskId)
     } else if (isMotionControl) {

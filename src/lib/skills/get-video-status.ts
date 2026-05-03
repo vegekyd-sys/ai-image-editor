@@ -22,8 +22,30 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
   }
 
   try {
-    // Route by taskId prefix (SeeDance IDs start with "cgt-") or env var
-    const isSeedance = taskId.startsWith('cgt-');
+    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine
+    const isEvolink = taskId.startsWith('task-unified-');
+    const isSeedance = isEvolink || taskId.startsWith('cgt-');
+
+    if (isEvolink) {
+      const { getEvolinkTask } = await import('../evolink');
+      const result = await getEvolinkTask(taskId);
+
+      let message: string;
+      switch (result.status) {
+        case 'pending': message = 'Video task is queued.'; break;
+        case 'processing': message = 'Video is rendering. This typically takes 3-5 minutes.'; break;
+        case 'completed': message = 'Video rendering completed!'; break;
+        case 'failed': message = `Video rendering failed: ${result.error || 'Unknown error'}`; break;
+      }
+
+      return {
+        success: true,
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message,
+      };
+    }
 
     if (isSeedance) {
       const { getSeedanceTask } = await import('../seedance');
