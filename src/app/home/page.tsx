@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
-import { useLocale } from '@/lib/i18n'
+import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
@@ -810,15 +810,9 @@ export default function HomePage() {
 
   return (
     <>
+      {/* eslint-disable-next-line @next/next/no-css-tags */}
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');`}</style>
       <style>{`
-        @font-face {
-          font-family: 'Caveat';
-          font-style: normal;
-          font-weight: 400 500;
-          font-display: swap;
-          src: url('/fonts/caveat-latin-400.woff2') format('woff2');
-          unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-        }
         .mkr-page { font-family: inherit; }
         .mkr-handwrite { font-family: 'Caveat', cursive; }
 
@@ -919,9 +913,9 @@ export default function HomePage() {
           }}
         />
 
-        {/* Top bar: link to projects (only for logged-in users) */}
-        {user && (
-          <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'flex-start', position: 'relative', zIndex: 10 }}>
+        {/* Top bar */}
+        <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 10 }}>
+          {user ? (
             <button
               onClick={() => router.push('/projects')}
               style={{
@@ -939,44 +933,35 @@ export default function HomePage() {
               </svg>
               {locale === 'zh' ? '我的项目' : 'My Projects'}
             </button>
-          </div>
-        )}
+          ) : <div />}
+          <LocaleToggle />
+        </div>
 
-        {/* ── Hero: Logo + Tagline — matches projects page ── */}
-        <div style={{
-          paddingTop: '20vh', paddingBottom: '40px',
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', gap: '0px',
-          position: 'relative', zIndex: 1,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <svg
-              width="20" height="20" viewBox="0 0 24 24"
-              fill="none" stroke="rgb(217,70,239)"
-              strokeWidth="1.8" strokeLinecap="round"
-            >
-              <line x1="12" y1="2" x2="12" y2="22" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-              <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
+        {/* ── Hero: Landing-page style ── */}
+        <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
+          {/* Glow */}
+          <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
+
+          <div className="relative z-10 flex flex-col items-center text-center pt-10 lg:pt-16 px-6 max-w-[660px]">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              {[[14,1,14,27],[1,14,27,14],[5,5,23,23],[23,5,5,23]].map(([x1,y1,x2,y2], i) => (
+                <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#d946ef" strokeWidth={1.8} strokeLinecap="round" />
+              ))}
             </svg>
-            <div style={{
-              fontWeight: 800,
-              fontSize: 'clamp(3rem, 12vw, 5rem)',
-              letterSpacing: '-0.04em',
-              color: '#fff',
-              lineHeight: 1,
-            }}>
+            <h1 className="mt-4 text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]">
               Makaron
-            </div>
-          </div>
-          <div style={{ marginTop: '4px' }}>
-            <RollingTagline className="text-[1.25rem] tracking-wide" />
+            </h1>
+            <p className="mt-3 leading-tight">
+              <RollingTagline className="text-2xl lg:text-[32px]" />
+            </p>
+            <p className="mt-6 text-[15px] lg:text-lg text-[#a1a1aa] leading-relaxed max-w-[480px]">
+              {t('landing.heroDesc1')}<br />{t('landing.heroDesc2')}
+            </p>
           </div>
 
-          {/* ── Inline Input Box (in document flow, like projects page) ── */}
-          <div ref={inlineInputRef} style={{
-            marginTop: '24px', width: '100%', maxWidth: '480px', padding: '0 16px',
+          {/* ── Inline Input Box ── */}
+          <div ref={inlineInputRef} className="relative z-10" style={{
+            marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
           }}>
             {renderInputBox({ isInline: true, taRef: inlineTextareaRef, boxRef: inlineBoxRef, slotWidth: inlineBoxHeight > 0 ? inlineBoxHeight : 52 })}
           </div>
@@ -993,18 +978,18 @@ export default function HomePage() {
           width: '100%',
           margin: '0 auto',
         }}>
-          <div style={{ textAlign: 'center', marginBottom: isDesktop ? 20 : 14 }}>
+          <div style={{ textAlign: 'center', marginBottom: isDesktop ? 24 : 16 }}>
             <h2 style={{
-              fontSize: '1rem',
-              fontWeight: 600,
-              color: 'rgba(255,255,255,0.85)',
+              fontSize: isDesktop ? '1.25rem' : '1.1rem',
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.9)',
               margin: 0,
               letterSpacing: '-0.01em',
             }}>{t('skills.title')}</h2>
             <p style={{
-              fontSize: '0.75rem',
+              fontSize: isDesktop ? '0.85rem' : '0.78rem',
               color: 'rgba(255,255,255,0.35)',
-              margin: '4px 0 0',
+              margin: '6px 0 0',
               letterSpacing: '0.01em',
             }}>{t('skills.subtitle')}</p>
           </div>
