@@ -573,11 +573,11 @@ function HomePageInner() {
     url: string,
     alt: string,
     variant: CoverVariant,
-    opts?: { priority?: boolean; extraStyle?: React.CSSProperties },
+    opts?: { priority?: boolean; extraStyle?: React.CSSProperties; muted?: boolean },
   ) => {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
-      return <video src={url} autoPlay loop muted={variant !== 'detail'} playsInline preload="metadata" style={style} />
+      return <video src={url} autoPlay loop muted={opts?.muted !== false} playsInline preload="metadata" style={style} />
     }
     const src = variant === 'thumb'
       ? getThumbnailUrl(url, 400, 70, 533, 'cover')
@@ -1393,7 +1393,7 @@ function HomePageInner() {
                     className="mkr-detail-slide"
                     style={{ position: 'absolute', top: `${i * 100}%`, left: 0, width: '100%', height: '100%' }}
                   >
-                    {inWindow && renderCoverMedia(template.image, '', 'detail', { priority: template.id === selectedDetail?.id })}
+                    {inWindow && renderCoverMedia(template.image, '', 'detail', { priority: template.id === selectedDetail?.id, muted: template.id !== selectedDetail?.id })}
                     {inWindow && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 30%, transparent 55%)', pointerEvents: 'none' }} />}
 
                     {/* Desktop: title + upload slots inside card */}
