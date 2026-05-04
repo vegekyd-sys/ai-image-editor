@@ -24,7 +24,7 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 | `image` | string | | 输入图片：本地文件路径（stdio 模式）、URL、或 base64 data URL。省略则为文生图模式 |
 | `editPrompt` | string | ✅ | 英文编辑指令 |
 | `skill` | string | | `enhance` / `creative` / `wild` / `captions` |
-| `model` | string | | 指定生图模型：`gemini`（默认）/ `qwen` / `pony` / `wai`，见下方说明 |
+| `model` | string | | 指定生图模型：`gemini`（默认）/ `qwen` / `pony` / `wai` / `openai`，见下方说明 |
 | `originalImage` | string | | 原图（人脸修复参考） |
 | `referenceImages` | string[] | | 参考图数组（最多 3 张） |
 | `useOriginalAsReference` | boolean | | 是否用原图做参考 |
@@ -41,6 +41,7 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 - `qwen` — Qwen Edit via ComfyUI，img2img + txt2img，enhance 类推荐，Gemini 内容审核拒绝时可用 qwen 重试
 - `pony` — Pony SDXL via ComfyUI，**仅 txt2img**（无输入图片的纯文生图，anime 风格）
 - `wai` — WAI-Illustrious SDXL via ComfyUI，**仅 txt2img**（illustrious 风格）
+- `openai` — OpenAI Image 2（gpt-image-2），设计/排版/海报/文字类最强，img2img + txt2img，~50s，premium 定价
 
 **Skill → Model 路由（MCP 层自动处理）：**
 
@@ -53,6 +54,7 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 | 文生图（所有风格含二次元） | 省略 | 省略 | gemini→qwen 自动 fallback，默认即可 |
 | 用户指定 pony/wai | 省略 | `pony`/`wai` | 仅用户主动说"用pony"时才传，仅 txt2img |
 | NSFW/敏感内容编辑 | 省略 | `qwen` | Gemini 会拒绝，直接指定 qwen |
+| 设计/排版/海报/文字渲染 | 省略 | `openai` | 文字渲染和版式设计最强，premium 价格 |
 | 不确定 | 省略 | 省略 | 自动路由 + fallback |
 
 **为什么 creative/wild/captions 强制走 gemini？** 这些 skill 会注入结构化 `.md` 模板指导 AI 生图。Qwen 无法消化中文 `.md` 模板（除 enhance 外效果极差），所以 MCP 层强制先走 gemini。如果 gemini 失败（如内容审核拒绝），则去掉 skill 用 qwen 的干净 editPrompt 重试。
