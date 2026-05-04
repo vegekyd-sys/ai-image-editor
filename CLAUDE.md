@@ -125,6 +125,8 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）已完成。用户认证走 Supabase Auth（Email + Password），数据持久化走 Supabase Storage + Database。路由结构：`/` → `/projects` 项目列表 → `/projects/[id]` 编辑器页面。项目列表展示所有历史项目的 snapshot 缩略图，点击进入编辑器，编辑器顶部有返回按钮。新项目通过项目列表页上传图片创建。所有写入异步后台执行，编辑器体验零延迟。
 
+**CUI 消息滚动（2026-05-05 简化）**：去掉了 lazy rendering（INITIAL_MSG_COUNT=12 + IntersectionObserver load-more + scroll restoration），所有消息直接全量渲染。之前三套 scroll 系统（mount ResizeObserver pin-to-bottom、IntersectionObserver load-more、auto-scroll effect）互相打架导致两个 bug：①新消息不滚到底部 ②向上滚历史消息不加载。现在只保留：mount ResizeObserver（5s 内 pin to bottom 等图片加载）+ auto-scroll effect（streaming 时跟踪底部，bigJump 时 instant scroll）+ userScrolledUp ref（用户手动上滚时不打断）。
+
 **v0.6 Makaron Agent（主体完成）**：Claude Sonnet 4.6（Claude Agent SDK + AWS Bedrock）作为 agent 大脑，OpenRouter Gemini 作为生图工具。GUI/CUI 双模切换已实现：GUI = 图片画布模式，CUI = 全屏对话模式（Claude App 风格，无气泡 assistant 文字 + 深色 pill user bubble）。CUI 从右侧滑入，支持 PiP 缩略图、inline 图片（持久化后重进仍显示）。`analyze_image` tool 让 Agent 用 Sonnet 原生视觉看图。AgentStatusBar 常驻底部显示打招呼文字和 Chat 按钮。上传图片不再触发 AI 分析和 CUI 弹出，直接显示 GUI + tips。Agent 消息全量持久化到 Supabase，退出重进历史对话完整恢复。Token 级流式输出（includePartialMessages: true）。多 turn 内容分气泡（analyze 前/后分开）。iOS 右滑拦截（history.pushState）。
 
 **v0.8 PiP 边缘收起**：去掉 72px small 模式（只保留 116/200px）。拖到边角后再推 60px 才收起（两步 UX）。收起后露出 28px peek + 箭头，tap 或 swipe 均可展开。左右两边均可收起。已知：左边收起后用 iOS 右滑手势会触发 back gesture（而非展开 PiP），用户接受 tap 展开作为 workaround。
