@@ -225,7 +225,7 @@ function HomePageInner() {
     }
   }, [selectedDetail])
 
-  // Unmute active slide's video, mute all others
+  // Unmute active slide's video, mute all others (after transition completes)
   useEffect(() => {
     if (!selectedDetail) return
     const tid = setTimeout(() => {
@@ -234,18 +234,18 @@ function HomePageInner() {
       const idx = homeSkills.findIndex(s => s.id === selectedDetail.id)
       const slides = snap.querySelectorAll('.mkr-detail-slide')
       slides.forEach((slide, i) => {
-        const video = slide.querySelector('video')
+        const video = slide.querySelector('video') as HTMLVideoElement | null
         if (!video) return
         if (i === idx) {
           video.currentTime = 0
           video.muted = false
-          video.play().catch(() => {})
+          video.play().catch(() => { video.muted = true })
         } else {
           video.muted = true
           video.pause()
         }
       })
-    }, 100)
+    }, 450)
     return () => clearTimeout(tid)
   }, [selectedDetail, homeSkills])
 
@@ -1343,11 +1343,14 @@ function HomePageInner() {
                 if (!touch) return
                 const deltaY = touch.clientY - detailSwipeRef.current.startY
                 if (!detailSwipeRef.current.swiping && Math.abs(deltaY) > 20) detailSwipeRef.current.swiping = true
-                if (detailSwipeRef.current.swiping && detailInnerRef.current && detailSnapRef.current) {
-                  const idx = detailSwipeRef.current.startIdx
-                  const slideH = detailSnapRef.current.clientHeight
-                  detailInnerRef.current.style.transform = `translateY(${-idx * slideH + deltaY}px)`
-                  detailInnerRef.current.style.transition = 'none'
+                if (detailSwipeRef.current.swiping) {
+                  e.preventDefault()
+                  if (detailInnerRef.current && detailSnapRef.current) {
+                    const idx = detailSwipeRef.current.startIdx
+                    const slideH = detailSnapRef.current.clientHeight
+                    detailInnerRef.current.style.transform = `translateY(${-idx * slideH + deltaY}px)`
+                    detailInnerRef.current.style.transition = 'none'
+                  }
                 }
               }}
               onTouchEnd={(e) => {
@@ -1405,6 +1408,7 @@ function HomePageInner() {
               style={{
                 position: 'absolute', inset: 0,
                 overflow: 'hidden',
+                touchAction: 'none',
               }}
             >
             <div ref={detailInnerRef} style={{ position: 'relative', width: '100%', height: '100%', willChange: 'transform' }}>
