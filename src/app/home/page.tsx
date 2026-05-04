@@ -87,7 +87,8 @@ function HomePageInner() {
     'Storyboard these photos and add a soundtrack',
     'One photo, show me 6 completely different directions',
   ]
-  const [placeholderIdx] = useState(() => Math.floor(Math.random() * placeholders.length))
+  const [placeholderIdx, setPlaceholderIdx] = useState(0)
+  useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch('/api/home-skills').then(r => r.json()).then(data => {
