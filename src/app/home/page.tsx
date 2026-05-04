@@ -55,6 +55,7 @@ function HomePageInner() {
   const detailSnapRef = useRef<HTMLDivElement>(null)
   const detailInnerRef = useRef<HTMLDivElement>(null)
   const detailSwipeRef = useRef<{ startY: number; startIdx: number; swiping: boolean } | null>(null)
+  const wheelCooldownRef = useRef(false)
   const [kbInset, setKbInset] = useState(0)
   const [textareaFocused, setTextareaFocused] = useState(false)
   const scrollStartY = useRef<number | null>(null)
@@ -1377,12 +1378,15 @@ function HomePageInner() {
                 detailSwipeRef.current = null
               }}
               onWheel={(e) => {
-                if (Math.abs(e.deltaY) < 30) return
+                if (wheelCooldownRef.current) return
+                if (Math.abs(e.deltaY) < 20) return
                 const currentIdx = homeSkills.findIndex(s => s.id === selectedDetail?.id)
                 let newIdx = currentIdx
                 if (e.deltaY > 0 && newIdx < homeSkills.length - 1) newIdx++
                 else if (e.deltaY < 0 && newIdx > 0) newIdx--
                 if (newIdx === currentIdx) return
+                wheelCooldownRef.current = true
+                setTimeout(() => { wheelCooldownRef.current = false }, 400)
                 if (detailInnerRef.current && detailSnapRef.current) {
                   const slideH = detailSnapRef.current.clientHeight
                   detailInnerRef.current.style.transition = 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)'
