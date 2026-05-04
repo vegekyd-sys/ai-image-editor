@@ -135,6 +135,8 @@ Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）�
 
 **v0.9.1 Pull-down 手势（2026-03-14）**：canvas 向下拖拽进入 CUI。iOS Photos 风格自由拖拽（2D 跟手 + 等比缩放），松手后 PiP 飞到右下角（300ms）→ CUI slide-in（200ms）。GUI 变暗 + "进入聊天/继续编辑"文字淡入。**关键约束**：GUI/CUI 必须互斥渲染（iOS Safari 右滑手势要求 live DOM 中不能有 CUI），pull-down 期间只渲染 dim overlay + PiP 浮层，CUI 不在 DOM。详见 MEMORY.md "CUI 过渡动画架构"。
 
+**Skill 详情页可分享 URL（2026-05-04）**：`/home/{skillId}` 独立链接，可在社交媒体分享。`/home/[skillId]/page.tsx` server component 生成 OG metadata（封面图+名称），redirect 到 `/home?skill={id}`。客户端读 `?skill=` 自动打开 detail overlay（ref callback 确保 DOM 就绪后定位 slide）。卡片点击/关闭/滑动全部通过 pushState/replaceState 同步 URL。浏览器返回键关闭 overlay。左上角分享按钮（移动端 `navigator.share` 原生面板，桌面端复制链接 + toast）。Middleware 扩展 `/home/*` 为公开路由。
+
 **项目页重设计**：2 列 gallery 展示最新 snapshot，Makaron wordmark 800 字重，副标题"one man studio"（Caveat 手写体）。
 
 **IndexedDB 本地缓存（2026-02-23）**：解决 Supabase 上传未完成时退出、重进图片消失的问题。`src/lib/imageCache.ts` 实现双层缓存：内存 Map（同步写入）+ IndexedDB（异步持久化）。版本 3，三个 store：`images`（图片 base64）、`project-data`（项目元数据 JSON）。5 处写入点：原图上传、agent 生图、commit tip draft、tip preview、pendingImage。`getCachedProjectDataSync()` 同步读内存 cache，在 `useState` 初始值里直接用——同 session 内回到项目完全无 spinner、无延迟。关键 bug 记录：DB 名 `makaron-images` 已存在 v1（store 叫 `"snapshots"`），版本号不触发 `onupgradeneeded`，写入全部静默失败——版本升到 2/3 修复。
