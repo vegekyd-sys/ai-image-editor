@@ -577,7 +577,8 @@ function HomePageInner() {
   ) => {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
-      return <video src={url} autoPlay loop muted={opts?.muted !== false} playsInline preload="metadata" style={style} />
+      const isMuted = opts?.muted !== false
+      return <video key={`${url}-${isMuted}`} src={url} autoPlay loop muted={isMuted} playsInline preload="metadata" style={style} />
     }
     const src = variant === 'thumb'
       ? getThumbnailUrl(url, 400, 70, 533, 'cover')
