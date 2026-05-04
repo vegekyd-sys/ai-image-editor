@@ -1,8 +1,8 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
-import { useRouter } from 'next/navigation'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
@@ -17,9 +17,14 @@ import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage'
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 
 export default function HomePage() {
+  return <Suspense><HomePageInner /></Suspense>
+}
+
+function HomePageInner() {
   const { user, loading: authLoading, signOut } = useAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
 
   const [creating, setCreating] = useState(false)
@@ -58,7 +63,31 @@ export default function HomePage() {
   const inlineBoxRef = useRef<HTMLDivElement>(null)
   const [inlineBoxHeight, setInlineBoxHeight] = useState(0)
   const [showFixedInput, setShowFixedInput] = useState(false)
+  const [shareToast, setShareToast] = useState(false)
+  const openedFromUrlRef = useRef(false)
+  const selectedDetailRef = useRef(selectedDetail)
+  selectedDetailRef.current = selectedDetail
+  const homeSkillsRef = useRef(homeSkills)
+  homeSkillsRef.current = homeSkills
 
+  const placeholders = locale === 'zh' ? [
+    '把这些图片做个 vlog',
+    '用这张产品图帮我做一套小红书素材',
+    '把我P的美一点',
+    '给我的猫拍一组表情包',
+    '把这张图片变成个电商海报',
+    '把这几张照片做成一个故事板，加上配乐',
+    '一张照片，帮我探索 6 个完全不同的方向',
+  ] : [
+    'Turn these photos into a vlog',
+    'Make a set of social media content from this product shot',
+    'Make me look better',
+    "Create an emoji pack from my cat's photo",
+    'Turn this photo into an e-commerce poster',
+    'Storyboard these photos and add a soundtrack',
+    'One photo, show me 6 completely different directions',
+  ]
+  const [placeholderIdx] = useState(() => Math.floor(Math.random() * placeholders.length))
 
   useEffect(() => {
     fetch('/api/home-skills').then(r => r.json()).then(data => {
@@ -193,6 +222,54 @@ export default function HomePage() {
       return () => { document.body.style.overflow = '' }
     }
   }, [selectedDetail])
+
+  // Open detail overlay from URL param (?skill={id})
+  useEffect(() => {
+    const skillId = searchParams.get('skill')
+    if (!skillId || homeSkills.length === 0 || selectedDetail) return
+    const skill = homeSkills.find(s => s.id === skillId)
+    if (!skill) return
+
+    openedFromUrlRef.current = true
+    setSelectedDetail(skill)
+    setSelectedSkill(skill.skill_path ? skill.id : null)
+    setInputText(skill.prompt)
+    setHeroExpanded(true)
+    window.history.replaceState(null, '', `/home/${skillId}`)
+  }, [homeSkills]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
+  const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
+    detailSnapRef.current = el
+    if (!el || !openedFromUrlRef.current) return
+    requestAnimationFrame(() => {
+      const skill = selectedDetailRef.current
+      if (!skill) return
+      const skills = homeSkillsRef.current
+      const idx = skills.findIndex(t => t.id === skill.id)
+      if (detailInnerRef.current && el) {
+        const slideH = el.clientHeight
+        detailInnerRef.current.style.transition = 'none'
+        detailInnerRef.current.style.transform = `translateY(${-idx * slideH}px)`
+      }
+      openedFromUrlRef.current = false
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle browser back button
+  useEffect(() => {
+    if (!selectedDetail) return
+    const onPop = () => {
+      setHeroExpanded(false)
+      setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
+      setSelectedSkill(null)
+      setInputText('')
+      setAttachedFiles([])
+      setAttachedPreviews([])
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [!!selectedDetail]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const el = inlineInputRef.current
@@ -700,7 +777,7 @@ export default function HomePage() {
                 handleCreate()
               }
             }}
-            placeholder="where magic happens"
+            placeholder={placeholders[placeholderIdx]}
             disabled={creating}
             rows={2}
             style={{
@@ -780,8 +857,10 @@ export default function HomePage() {
       setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
       setSelectedSkill(null)
       setInputText('')
+      window.history.pushState(null, '', '/home')
       return
     }
+    openedFromUrlRef.current = false
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setHeroRect(rect)
     setHeroExpanded(false)
@@ -797,6 +876,7 @@ export default function HomePage() {
         detailInnerRef.current.style.transition = 'none'
         detailInnerRef.current.style.transform = `translateY(${-idx * slideH}px)`
       }
+      window.history.pushState(null, '', `/home/${template.id}`)
     })
   }
 
@@ -1137,7 +1217,7 @@ export default function HomePage() {
       {/* ── Skill Detail Overlay ── */}
       {selectedDetail && (
         <div
-          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText('') } }}
+          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText(''); window.history.pushState(null, '', '/home') } }}
           style={{
             position: 'fixed', inset: 0, zIndex: Z.OVERLAY,
             background: isDesktop ? 'rgba(0,0,0,0.7)' : '#000',
@@ -1162,9 +1242,43 @@ export default function HomePage() {
               position: 'absolute', inset: 0,
             }),
           }}>
-            {/* Close button */}
+            {/* Share button — top left */}
             <button
-              onClick={() => { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]) }}
+              onClick={async () => {
+                const url = `${window.location.origin}/home/${selectedDetail.id}`
+                const title = selectedDetail.labels[locale] || selectedDetail.labels.en || 'Makaron'
+                if (navigator.share) {
+                  try { await navigator.share({ url, title }) } catch {}
+                } else {
+                  try { await navigator.clipboard.writeText(url) } catch {
+                    const ta = document.createElement('textarea')
+                    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0'
+                    document.body.appendChild(ta); ta.select(); document.execCommand('copy')
+                    document.body.removeChild(ta)
+                  }
+                  setShareToast(true)
+                  setTimeout(() => setShareToast(false), 2000)
+                }
+              }}
+              style={{
+                position: 'absolute', top: isDesktop ? 12 : 'max(12px, env(safe-area-inset-top))', left: 12,
+                width: 36, height: 36, borderRadius: '50%',
+                background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                border: 'none', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', zIndex: 10,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            </button>
+
+            {/* Close button — top right */}
+            <button
+              onClick={() => { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]); window.history.pushState(null, '', '/home') }}
               style={{
                 position: 'absolute', top: isDesktop ? 12 : 'max(12px, env(safe-area-inset-top))', right: 12,
                 width: 36, height: 36, borderRadius: '50%',
@@ -1175,10 +1289,22 @@ export default function HomePage() {
               }}
             >✕</button>
 
+            {/* Share toast */}
+            {shareToast && (
+              <div style={{
+                position: 'absolute', top: isDesktop ? 60 : 'calc(max(12px, env(safe-area-inset-top)) + 48px)', left: 12,
+                background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                color: '#fff', fontSize: 13, padding: '6px 14px', borderRadius: 8,
+                zIndex: 11, whiteSpace: 'nowrap',
+              }}>
+                Link copied
+              </div>
+            )}
+
             {/* Slide container — JS touch handlers instead of CSS scroll-snap
                 to avoid iOS Safari video compositor blocking native scroll. */}
             <div
-              ref={detailSnapRef}
+              ref={detailSnapCallbackRef}
               className="mkr-detail-snap"
               onTouchStart={(e) => {
                 const touch = e.touches[0]
@@ -1220,6 +1346,7 @@ export default function HomePage() {
                     setInputText(t.prompt)
                     setAttachedFiles([])
                     setAttachedPreviews([])
+                    window.history.replaceState(null, '', `/home/${t.id}`)
                   }
                 }
                 detailSwipeRef.current = null
@@ -1243,6 +1370,7 @@ export default function HomePage() {
                   setInputText(t.prompt)
                   setAttachedFiles([])
                   setAttachedPreviews([])
+                  window.history.replaceState(null, '', `/home/${t.id}`)
                 }
               }}
               style={{
