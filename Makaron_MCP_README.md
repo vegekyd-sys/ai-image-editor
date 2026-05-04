@@ -119,6 +119,7 @@ const result = await client.callTool({
 | `images` | string[] | ✅ | 1-7 张图片的公开 URL（必须 https://） |
 | `duration` | number | | 时长：3/5/7/10/15 秒。省略=智能模式（API 自动决定） |
 | `aspectRatio` | string | | 宽高比：`"9:16"` / `"16:9"` / `"1:1"` |
+| `videoModel` | string | | 视频模型：`kling`（默认，$0.112/s）/ `seedance`（SeeDance 2.0，支持真人脸，$0.161/s） |
 
 **返回：**
 - 文本包含 Task ID，用于后续轮询状态

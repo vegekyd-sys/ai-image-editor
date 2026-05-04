@@ -232,13 +232,17 @@ Tips:
 
   server.tool(
     'makaron_create_video',
-    `Submit a video rendering task to Kling AI. Returns a taskId for polling.
+    `Submit a video rendering task. Returns a taskId for polling.
 
 IMPORTANT:
 - images must be publicly accessible URLs (not base64). Upload to storage first.
 - script should use <<<image_N>>> format (from makaron_write_video_script output)
 - Video rendering takes 3-5 minutes. Use makaron_get_video_status to poll.
 - Duration: omit for smart mode (AI decides 3-15s based on script).
+
+Models:
+- kling (default) — Kling v3-omni, general purpose, $0.112/s
+- seedance — SeeDance 2.0 via Evolink, supports real human faces, $0.161/s
 
 Example script format:
 Shot 1 (2s): Wide shot, <<<image_1>>> ...
@@ -249,6 +253,7 @@ Style: Cinematic, warm golden light.`,
       images: z.array(z.string().url()).min(1).max(7).describe('Publicly accessible image URLs'),
       duration: z.number().optional().describe('Duration: 3, 5, 7, 10, or 15 seconds. Omit for smart mode.'),
       aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
+      videoModel: z.enum(['kling', 'seedance']).optional().describe('Video model: kling (default) or seedance (real faces, premium)'),
     },
     async (params) => {
       try {
@@ -262,6 +267,7 @@ Style: Cinematic, warm golden light.`,
           images: params.images,
           duration: params.duration,
           aspectRatio: params.aspectRatio,
+          videoModel: params.videoModel,
         });
 
         if (result.success) {
