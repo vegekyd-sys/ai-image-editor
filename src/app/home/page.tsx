@@ -597,7 +597,7 @@ function HomePageInner() {
     variant: CoverVariant,
     opts?: { priority?: boolean; extraStyle?: React.CSSProperties },
   ) => {
-    const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', pointerEvents: 'none', ...opts?.extraStyle }
+    const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center top' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
       return <video src={url} autoPlay loop muted playsInline preload="metadata" style={style} />
     }
