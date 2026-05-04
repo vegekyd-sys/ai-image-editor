@@ -15,7 +15,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'openai', nameKey: 'model.openai.name', descKey: 'model.openai.desc', category: 'image', speedLabel: '~50s' },
   // Video
   { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '~180s' },
-  { id: 'seedance', nameKey: 'model.seedance.name', descKey: 'model.seedance.desc', category: 'video', speedLabel: '~300s' },
+  { id: 'seedance', nameKey: 'model.seedance.name', descKey: 'model.seedance.desc', category: 'video', speedLabel: '~300s $$$' },
 ];
 
 export function getImageModels(): ModelInfo[] {

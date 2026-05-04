@@ -91,7 +91,8 @@ export default function SkillSelector({
     }
   }, [open]);
 
-  const handleTriggerClick = useCallback(() => {
+  const handleTriggerClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
     setOpen(v => !v);
   }, []);
 
