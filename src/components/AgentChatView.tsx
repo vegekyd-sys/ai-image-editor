@@ -472,13 +472,6 @@ export default function AgentChatView({
   const [processingImageCount, setProcessingImageCount] = useState(0);
   // Capture skipSlideIn at mount time — ignore prop changes after mount
   const [mountedWithSkip] = useState(skipSlideIn);
-  // Lazy message rendering: only show last N messages on first open to reduce forced reflow.
-  const INITIAL_MSG_COUNT = 12;
-  const [showAllMessages, setShowAllMessages] = useState(false);
-  const visibleMessages = showAllMessages || messages.length <= INITIAL_MSG_COUNT
-    ? messages
-    : messages.slice(-INITIAL_MSG_COUNT);
-  const loadMoreSentinel = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -684,40 +677,6 @@ export default function AgentChatView({
     return () => { ro.disconnect(); mountRoRef.current = null; clearTimeout(timer); cancelAnimationFrame(rafId); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Auto-load earlier messages when scrolling near top — preserve scroll position
-  // Track the first visible message element so we can scroll back to it after loading
-  const firstVisibleMsgRef = useRef<Element | null>(null);
-  useEffect(() => {
-    const sentinel = loadMoreSentinel.current;
-    const scrollEl = messagesRef.current;
-    if (!sentinel || !scrollEl || showAllMessages) return;
-    const io = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) {
-        // Stop mount scroll-pinning before loading (prevents snap to bottom)
-        if (mountRoRef.current) { mountRoRef.current.disconnect(); mountRoRef.current = null; }
-        // Remember the first visible message (the sentinel's next sibling)
-        const msgList = sentinel.parentElement;
-        const firstMsg = msgList?.children[1]; // [0]=sentinel, [1]=first visible msg
-        firstVisibleMsgRef.current = firstMsg || null;
-        setShowAllMessages(true);
-      }
-    }, { root: scrollEl, threshold: 0 });
-    io.observe(sentinel);
-    return () => io.disconnect();
-  }, [showAllMessages]);
-
-  // After earlier messages render, scroll so the previously-first message stays in view
-  useEffect(() => {
-    if (!showAllMessages || !firstVisibleMsgRef.current) return;
-    const el = firstVisibleMsgRef.current as HTMLElement;
-    const scrollEl = messagesRef.current;
-    if (!scrollEl) return;
-    requestAnimationFrame(() => {
-      el.scrollIntoView({ block: 'start' });
-      firstVisibleMsgRef.current = null;
-    });
-  }, [showAllMessages]);
 
   // Auto-scroll ONLY when AI is actively streaming content (not on mount or status changes)
   const prevMsgCountRef = useRef(messages.length);
@@ -1015,11 +974,7 @@ export default function AgentChatView({
 
         {/* Message list */}
         <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
-          {/* Invisible sentinel — triggers auto-load when scrolled into view */}
-          {!showAllMessages && messages.length > INITIAL_MSG_COUNT && (
-            <div ref={loadMoreSentinel} className="h-1" />
-          )}
-          {visibleMessages.map((msg, idx) => (
+          {messages.map((msg, idx) => (
             <div key={msg.id}>
               {msg.role === 'user' ? (
                 /* User bubble — right-aligned pill */
@@ -1137,7 +1092,7 @@ export default function AgentChatView({
                     )}
 
                     {/* Typing dots — show when active, last message, no content yet */}
-                    {!msg.content && isAgentActive && idx === visibleMessages.length - 1 && (
+                    {!msg.content && isAgentActive && idx === messages.length - 1 && (
                       <span className="inline-flex gap-[5px] items-center h-[18px] mt-0.5">
                         <span className="typing-dot w-[6px] h-[6px] rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }} />
                         <span className="typing-dot w-[6px] h-[6px] rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }} />
