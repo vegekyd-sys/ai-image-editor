@@ -236,10 +236,12 @@ function HomePageInner() {
         const video = slide.querySelector('video')
         if (!video) return
         if (i === idx) {
+          video.currentTime = 0
           video.muted = false
           video.play().catch(() => {})
         } else {
           video.muted = true
+          video.pause()
         }
       })
     }, 100)
