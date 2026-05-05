@@ -15,13 +15,14 @@ interface AnimateSheetProps {
   animationState: AnimationState;
   onStateChange: (update: Partial<AnimationState>) => void;
   isDesktop?: boolean;
+  desktopWidth?: number;
   mode?: 'create' | 'detail';
   detailAnimation?: ProjectAnimation;
 }
 
 export default function AnimateSheet({
   snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt, onPreviewImage,
-  animationState, onStateChange, isDesktop,
+  animationState, onStateChange, isDesktop, desktopWidth = 500,
   mode = 'create', detailAnimation,
 }: AnimateSheetProps) {
   const { t } = useLocale();
@@ -154,7 +155,7 @@ export default function AnimateSheet({
       <div ref={sheetRef} style={{
         position: 'fixed',
         ...(isDesktop ? {
-          top: 0, right: 0, bottom: 0, width: 340,
+          top: 0, right: 0, bottom: 0, width: desktopWidth,
           borderRadius: 0,
           animation: 'slideLeftSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both',
           zIndex: 300,
@@ -264,8 +265,15 @@ export default function AnimateSheet({
                 </div>
               </div>
 
-              {/* Duration + Status pills */}
-              <div style={{ display: 'flex', gap: 8 }}>
+              {/* Model + Duration + Status pills */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{
+                  padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
+                  borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
+                }}>
+                  {(detailAnimation?.videoModel || videoModel) === 'seedance' ? 'SeeDance 2.0' : 'Kling O3'}
+                </div>
                 <div style={{
                   padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
                   borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',

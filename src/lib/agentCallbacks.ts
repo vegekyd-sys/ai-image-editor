@@ -299,8 +299,11 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }
     },
 
-    onAnimationTask: (taskId, prompt) => {
-      const urls = ctx.snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
+    onAnimationTask: (taskId, prompt, imageUrls, model) => {
+      const urls = imageUrls?.length
+        ? imageUrls
+        : ctx.snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
+      const videoModel = (model as 'kling' | 'seedance') || 'kling';
       const newAnim: ProjectAnimation = {
         id: taskId,
         projectId: ctx.projectId,
@@ -310,6 +313,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         snapshotUrls: urls,
         status: 'processing',
         createdAt: new Date().toISOString(),
+        videoModel,
       };
       ctx.setAnimations(prev => [newAnim, ...prev]);
       ctx.setSelectedVideoId?.(taskId);
@@ -324,6 +328,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         error: null,
         duration: null,
         pollSeconds: 0,
+        videoModel,
       });
     },
 

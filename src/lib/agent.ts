@@ -55,6 +55,8 @@ interface AgentContext {
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event */
   animationTaskId?: string;
   animationPrompt?: string;
+  animationImageUrls_?: string[];
+  animationModel?: string;
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<image_1>>> */
   snapshotImages: string[];
   /** 0-based index of the snapshot the user is currently viewing */
@@ -71,7 +73,7 @@ export type AgentStreamEvent =
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string; usedModel?: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
-  | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task
+  | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }  // emitted when generate_animation tool creates a task
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'capture_frame'; frame: number; uploadPath: string; captureId: string }  // request frontend to capture a frame via renderStillOnWeb
   | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
@@ -398,6 +400,8 @@ Hard constraints (apply even before reading the guide):
 
           ctx.animationTaskId = taskId;
           ctx.animationPrompt = story_prompt;
+          ctx.animationImageUrls_ = filteredImages;
+          ctx.animationModel = videoModel;
 
           // Bill for video generation (per-second)
           const videoSec = duration || 10;
@@ -1496,9 +1500,11 @@ export async function* runMakaronAgent(
           imagesSent++;
         }
         if (ctx.animationTaskId) {
-          yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '' };
+          yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '', imageUrls: ctx.animationImageUrls_, model: ctx.animationModel };
           ctx.animationTaskId = undefined;
           ctx.animationPrompt = undefined;
+          ctx.animationImageUrls_ = undefined;
+          ctx.animationModel = undefined;
         }
         if ((ctx as any).musicTaskId) {
           yield { type: 'music_task', taskId: (ctx as any).musicTaskId };

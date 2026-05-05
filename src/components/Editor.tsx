@@ -2445,6 +2445,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         status: 'processing',
         createdAt: new Date().toISOString(),
         duration: animationState.duration ?? null,
+        videoModel: animationState.videoModel,
       };
       setAnimations(prev => [newAnim, ...prev]);
       // Close the creation card
@@ -3440,7 +3441,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
-                        videoModel: videoModel,
+                        videoModel: anim.videoModel || videoModel,
                       });
                       setShowAnimateSheet(true);
                     }}
@@ -3490,6 +3491,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               snapshots={snapshots.filter(s => s.imageUrl || s.image)}
               projectId={projectId}
               isDesktop={isDesktop}
+              desktopWidth={cuiPanelWidth}
               mode={detailAnimation ? 'detail' : 'create'}
               detailAnimation={detailAnimation ?? undefined}
               onClose={() => {
