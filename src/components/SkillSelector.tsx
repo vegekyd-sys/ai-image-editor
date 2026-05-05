@@ -166,11 +166,10 @@ export default function SkillSelector({
             <button
               key={skill.name}
               onClick={() => { onSkillChange(selectedSkill === skill.name ? null : skill.name); setOpen(false); }}
-              className="w-full flex items-center justify-between border-none cursor-pointer text-left transition-colors"
+              className={`w-full flex items-center justify-between border-none cursor-pointer text-left transition-colors hover:bg-white/[0.06] ${selectedSkill === skill.name ? 'bg-fuchsia-400/[0.08]' : ''}`}
               style={{
                 padding: '12px 12px',
                 borderRadius: 10,
-                background: selectedSkill === skill.name ? 'rgba(232,121,249,0.08)' : 'transparent',
                 color: selectedSkill === skill.name ? '#e879f9' : 'rgba(255,255,255,0.85)',
                 fontSize: 13,
                 fontWeight: 600,
@@ -197,11 +196,10 @@ export default function SkillSelector({
               <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '2px 0' }} />
               <button
                 onClick={() => { setOpen(false); setTimeout(() => onUploadSkill(), 100); }}
-                className="w-full flex items-center border-none cursor-pointer text-left"
+                className="w-full flex items-center border-none cursor-pointer text-left transition-colors hover:bg-white/[0.06]"
                 style={{
                   padding: '12px 12px',
                   borderRadius: 10,
-                  background: 'transparent',
                   color: 'rgba(255,255,255,0.35)',
                   fontSize: 13,
                   fontWeight: 600,
