@@ -2659,7 +2659,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       const res = await fetch(img);
       const blob = await res.blob();
       const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg';
-      const filename = `ai-edited-${Date.now()}.${ext}`;
+      const slug = (initialTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+      const idx = (snapIdxForSave ?? viewIndex) + 1;
+      const filename = `makaron-${slug}-${idx}.${ext}`;
 
       if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
         const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
