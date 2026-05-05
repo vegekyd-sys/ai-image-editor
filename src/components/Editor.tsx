@@ -2642,7 +2642,6 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     const snapForSave = snapIdxForSave !== null ? snapshotsRef.current[snapIdxForSave] : undefined;
     let img = timeline[viewIndex];
     if (!img) return;
-    const filename = `ai-edited-${Date.now()}.jpg`;
     setIsSaving(true);
 
     try {
@@ -2659,6 +2658,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
       const res = await fetch(img);
       const blob = await res.blob();
+      const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg';
+      const filename = `ai-edited-${Date.now()}.${ext}`;
 
       if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
         const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
@@ -2680,7 +2681,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setIsSaving(false);
       const link = document.createElement('a');
       link.href = img;
-      link.download = filename;
+      link.download = `ai-edited-${Date.now()}.jpg`;
       link.click();
     }
   }, [timeline, viewIndex, isViewingVideo, currentVideo?.videoUrl, showSaveToast]);
