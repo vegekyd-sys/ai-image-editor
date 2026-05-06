@@ -961,10 +961,49 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
               if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
                 return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
               }
+              // Try exact match first
               const count = code.split(edit.old).length - 1;
-              if (count === 0) return { type: 'text' as const, content: `Patch failed: old_string not found in current code.\n"${edit.old.slice(0, 100)}"` };
-              if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
-              code = code.replace(edit.old, edit.new);
+              if (count === 1) {
+                code = code.replace(edit.old, edit.new);
+              } else if (count > 1) {
+                return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
+              } else {
+                // Fuzzy match: normalize whitespace and retry
+                const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+                const normCode = norm(code);
+                const normOld = norm(edit.old);
+                const normCount = normCode.split(normOld).length - 1;
+                if (normCount === 0) {
+                  return { type: 'text' as const, content: `Patch failed: old_string not found in current code (even after whitespace normalization).\n"${edit.old.slice(0, 100)}"` };
+                }
+                if (normCount > 1) {
+                  return { type: 'text' as const, content: `Patch failed: old_string matches ${normCount} times after normalization. Add more context.\n"${edit.old.slice(0, 100)}"` };
+                }
+                // Map normalized position back to original code
+                const normIdx = normCode.indexOf(normOld);
+                let origStart = 0, consumed = 0;
+                for (let i = 0; i < code.length && consumed < normIdx; i++) {
+                  if (/\s/.test(code[i])) {
+                    while (i + 1 < code.length && /\s/.test(code[i + 1])) i++;
+                  }
+                  consumed++;
+                  origStart = i + 1;
+                }
+                // Find the end by matching normalized length
+                let origEnd = origStart, matchConsumed = 0;
+                const normOldLen = normOld.length;
+                for (let i = origStart; i < code.length && matchConsumed < normOldLen; i++) {
+                  if (/\s/.test(code[i])) {
+                    while (i + 1 < code.length && /\s/.test(code[i + 1])) i++;
+                    matchConsumed++; // one space in normalized
+                  } else {
+                    matchConsumed++;
+                  }
+                  origEnd = i + 1;
+                }
+                code = code.slice(0, origStart) + edit.new + code.slice(origEnd);
+                console.log(`🔧 [patch] fuzzy match applied (whitespace normalized)`);
+              }
             }
             const mergedProps = result.props ? { ...(baseDesign.props || {}), ...result.props } : baseDesign.props;
             const patched = { ...baseDesign, code, props: mergedProps };
