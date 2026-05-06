@@ -1827,12 +1827,16 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         onSaveSnapshot?.(videoSnap, snapshots.length);
       }
     }
-    // Combine image base64 + video posters for user message display
-    const allAttachments = [
-      ...(imgs || []),
-      ...(videos?.map(v => v.poster) || []),
-    ];
-    handleAgentRequest(text, allAttachments.length > 0 ? allAttachments : undefined);
+    // Inject video context into prompt so Agent knows videos were uploaded
+    let finalText = text;
+    if (videos?.length) {
+      const videoIndices = Array.from({ length: videos.length }, (_, i) => snapshots.length + (imgs?.length || 0) + i + 1);
+      const refs = videoIndices.map(i => `<<<image_${i}>>>`).join(', ');
+      const hint = `[User uploaded ${videos.length === 1 ? 'a video' : `${videos.length} videos`}: ${refs}. Use preview_frame(image_index=N, timestamp=T) to see video frames.]`;
+      finalText = finalText ? `${finalText}\n\n${hint}` : hint;
+    }
+    // Only pass actual images to handleAgentRequest (videos are already in snapshots)
+    handleAgentRequest(finalText, imgs?.length ? imgs : undefined);
   };
 
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
