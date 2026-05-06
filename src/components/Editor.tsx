@@ -1421,7 +1421,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean }) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[] }) => {
     // CUI reference images → append as new snapshots (so agent sees them in Image Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
@@ -1488,7 +1488,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       || (rawImage.startsWith('data:') ? await compressBase64Image(rawImage, 3_000_000) : rawImage);
     // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
     if (!options?.silent) {
-      addMessage('user', text, undefined, overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
+      const msgImages = options?.displayImages || (overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
+      addMessage('user', text, undefined, msgImages);
     }
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
@@ -1803,13 +1804,15 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       await sendWithAnnotations(text);
       return;
     }
-    // Create video snapshots from attached videos (already uploaded to Storage)
+
+    // Step 1: Create video snapshots (use snapshotsRef for accurate current length)
     if (videos?.length) {
       const { createVideoDesign } = await import('@/lib/video-design');
+      const newVideoSnaps: Snapshot[] = [];
       for (const v of videos) {
         const snapId = generateId();
         const design = createVideoDesign(v.url, v.width, v.height, v.duration);
-        const videoSnap: Snapshot = {
+        newVideoSnaps.push({
           id: snapId,
           image: v.poster,
           tips: [],
@@ -1822,21 +1825,38 @@ const isTipsFetchingRef = useRef(isTipsFetching);
             taskId: null, videoUrl: v.url, prompt: '', sourceSnapshotIds: [], sourceUrls: [],
             status: 'completed', duration: v.duration, model: 'upload', createdAt: new Date().toISOString(),
           },
-        };
-        setSnapshots(prev => [...prev, videoSnap]);
-        onSaveSnapshot?.(videoSnap, snapshots.length);
+        });
       }
+      // Add all video snapshots at once
+      setSnapshots(prev => {
+        const next = [...prev, ...newVideoSnaps];
+        snapshotsRef.current = next;
+        return next;
+      });
+      // Persist each with correct sort_order
+      newVideoSnaps.forEach((snap, i) => {
+        onSaveSnapshot?.(snap, snapshotsRef.current.length - newVideoSnaps.length + i);
+      });
     }
-    // Inject video context into prompt so Agent knows videos were uploaded
+
+    // Step 2: Build hint for agent (videos are now in snapshotsRef)
     let finalText = text;
     if (videos?.length) {
-      const videoIndices = Array.from({ length: videos.length }, (_, i) => snapshots.length + (imgs?.length || 0) + i + 1);
-      const refs = videoIndices.map(i => `<<<image_${i}>>>`).join(', ');
-      const hint = `[User uploaded ${videos.length === 1 ? 'a video' : `${videos.length} videos`}: ${refs}. Use preview_frame(image_index=N, timestamp=T) to see video frames.]`;
+      const hint = `[User uploaded ${videos.length === 1 ? 'a video' : `${videos.length} videos`}. Use analyze_image or preview_frame to see their content.]`;
       finalText = finalText ? `${finalText}\n\n${hint}` : hint;
     }
-    // Only pass actual images to handleAgentRequest (videos are already in snapshots)
-    handleAgentRequest(finalText, imgs?.length ? imgs : undefined);
+
+    // Step 3: Pass images + video posters for user message display
+    const displayAttachments = [
+      ...(imgs || []),
+      ...(videos?.map(v => v.poster) || []),
+    ];
+
+    // Step 4: Only create reference snapshots from actual images (not video posters)
+    // displayAttachments shown in user message bubble (includes video posters for visual)
+    handleAgentRequest(finalText, imgs?.length ? imgs : undefined, undefined, {
+      displayImages: displayAttachments.length > 0 ? displayAttachments : undefined,
+    });
   };
 
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
