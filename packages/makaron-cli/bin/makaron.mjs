@@ -337,6 +337,43 @@ function timeSince(date) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+// ─── MCP Tool Caller ─────────────────────────────────────────────────────────
+
+async function callMcpTool(baseUrl, headers, toolName, args) {
+  const res = await fetch(`${baseUrl}/api/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', ...headers },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: toolName, arguments: args } }),
+  });
+  if (!res.ok) { console.error(`MCP error ${res.status}:`, await res.text()); process.exit(1); }
+  const data = await res.json();
+  if (data.error) { console.error(`MCP error:`, data.error.message); process.exit(1); }
+  return data.result;
+}
+
+function imageToArg(imgPath) {
+  if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) return imgPath;
+  const buf = fs.readFileSync(imgPath);
+  const ext = imgPath.split('.').pop()?.toLowerCase();
+  const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[ext] || 'image/jpeg';
+  return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+function saveMcpImage(result, outputPath) {
+  const content = result?.content || [];
+  const textBlock = content.find(c => c.type === 'text');
+  const imageBlock = content.find(c => c.type === 'image');
+  if (textBlock) process.stderr.write(`${textBlock.text}\n`);
+  if (imageBlock) {
+    const out = outputPath || `makaron-output-${Date.now()}.jpg`;
+    fs.writeFileSync(out, Buffer.from(imageBlock.data, 'base64'));
+    console.log(out);
+    return out;
+  }
+  if (textBlock) console.log(textBlock.text);
+  return null;
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -419,6 +456,119 @@ if (command === 'login') {
   } else {
     console.error(`❌ Abort failed:`, await res.text());
   }
+} else if (command === 'edit') {
+  const { headers, baseUrl } = getAuth();
+  const editArgs = {};
+  const promptParts = [];
+  let outputPath = null;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--image' && args[i + 1]) editArgs.image = imageToArg(args[++i]);
+    else if (args[i] === '--model' && args[i + 1]) editArgs.model = args[++i];
+    else if (args[i] === '--skill' && args[i + 1]) editArgs.skill = args[++i];
+    else if (args[i] === '--ref' && args[i + 1]) {
+      editArgs.referenceImages = editArgs.referenceImages || [];
+      editArgs.referenceImages.push(imageToArg(args[++i]));
+    }
+    else if (args[i] === '--aspect' && args[i + 1]) editArgs.aspectRatio = args[++i];
+    else if (args[i] === '--out' && args[i + 1]) outputPath = args[++i];
+    else promptParts.push(args[i]);
+  }
+  editArgs.editPrompt = promptParts.join(' ');
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
+  process.stderr.write('🎨 Generating...\n');
+  const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
+  saveMcpImage(result, outputPath);
+
+} else if (command === 'video') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+
+  if (sub === 'script') {
+    const images = [];
+    const promptParts = [];
+    let language = 'en';
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--image' && args[i + 1]) images.push(imageToArg(args[++i]));
+      else if (args[i] === '--lang' && args[i + 1]) language = args[++i];
+      else promptParts.push(args[i]);
+    }
+    if (!images.length) { console.error('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"'); process.exit(1); }
+    process.stderr.write('🎬 Writing script...\n');
+    const result = await callMcpTool(baseUrl, headers, 'makaron_write_video_script', { images, userRequest: promptParts.join(' ') || undefined, language });
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else if (sub === 'create') {
+    const images = [];
+    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined;
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
+      else if (args[i] === '--script' && args[i + 1]) script = args[++i];
+      else if (args[i] === '--script-file' && args[i + 1]) script = fs.readFileSync(args[++i], 'utf-8');
+      else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
+      else if (args[i] === '--aspect' && args[i + 1]) aspectRatio = args[++i];
+      else if (args[i] === '--model' && args[i + 1]) videoModel = args[++i];
+    }
+    if (!images.length || !script) { console.error('Usage: makaron video create --script "..." --image <url> [--duration 10] [--aspect 9:16] [--model kling|seedance]'); process.exit(1); }
+    process.stderr.write('🎬 Submitting video...\n');
+    const vArgs = { script, images };
+    if (duration) vArgs.duration = duration;
+    if (aspectRatio) vArgs.aspectRatio = aspectRatio;
+    if (videoModel) vArgs.videoModel = videoModel;
+    const result = await callMcpTool(baseUrl, headers, 'makaron_create_video', vArgs);
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else if (sub === 'status') {
+    const taskId = args[2];
+    if (!taskId) { console.error('Usage: makaron video status <taskId>'); process.exit(1); }
+    const result = await callMcpTool(baseUrl, headers, 'makaron_get_video_status', { taskId });
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else {
+    console.log(`Video commands:
+  video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --image <url> [--duration 10]  Submit video task
+  video status <taskId>                                      Check video status
+`);
+  }
+
+} else if (command === 'music') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+
+  if (sub === 'create') {
+    const promptParts = [];
+    let instrumental = true, style = undefined;
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--vocals') instrumental = false;
+      else if (args[i] === '--style' && args[i + 1]) style = args[++i];
+      else promptParts.push(args[i]);
+    }
+    const prompt = promptParts.join(' ');
+    if (!prompt) { console.error('Usage: makaron music create [--vocals] [--style "lo-fi"] "gentle piano"'); process.exit(1); }
+    process.stderr.write('🎵 Generating music...\n');
+    const mArgs = { prompt, instrumental };
+    if (style) mArgs.style = style;
+    const result = await callMcpTool(baseUrl, headers, 'makaron_create_music', mArgs);
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else if (sub === 'status') {
+    const taskId = args[2];
+    if (!taskId) { console.error('Usage: makaron music status <taskId>'); process.exit(1); }
+    const result = await callMcpTool(baseUrl, headers, 'makaron_get_music_status', { taskId });
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else {
+    console.log(`Music commands:
+  music create [--vocals] [--style "genre"] "description"    Generate music
+  music status <taskId>                                      Check music status
+`);
+  }
+
 } else if (command === 'admin') {
   const { headers, baseUrl } = getAuth();
   const sub = args[1];
@@ -549,6 +699,11 @@ Commands:
   chat --project <id> "message"      Chat with Makaron Agent
   chat --project <id> --image <file> "message"  Add image + chat
   abort <runId>                      Abort a running Agent
+
+  edit [--image <file>] "prompt"     AI image edit / text-to-image
+  video script|create|status         Video generation
+  music create|status                Music generation
+
   admin                              Admin commands (skills, upload, set-admin)
 
 Environment:
