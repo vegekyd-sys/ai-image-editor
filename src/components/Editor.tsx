@@ -3653,7 +3653,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       taskId: currentSnap.videoMeta.taskId,
                       videoUrl: currentSnap.videoMeta.videoUrl,
                       prompt: currentSnap.videoMeta.prompt,
-                      snapshotUrls: currentSnap.videoMeta.sourceUrls,
+                      snapshotUrls: currentSnap.videoMeta.sourceUrls.length > 0 ? currentSnap.videoMeta.sourceUrls : [currentSnap.imageUrl || currentSnap.image],
                       status: currentSnap.videoMeta.status,
                       duration: currentSnap.videoMeta.duration,
                       createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
