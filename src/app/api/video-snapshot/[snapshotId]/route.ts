@@ -38,13 +38,18 @@ export async function GET(
     }
 
     // Poll provider — route by taskId prefix
+    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, else = Kling
+    const isEvolink = videoMeta.taskId.startsWith('task-unified-')
     const isSeedance = videoMeta.taskId.startsWith('cgt-')
     const isMotionControl = videoMeta.taskId.startsWith('mc-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
 
-    if (isSeedance) {
+    if (isEvolink) {
+      const { getEvolinkTask } = await import('@/lib/evolink')
+      result = await getEvolinkTask(videoMeta.taskId)
+    } else if (isSeedance) {
       const { getSeedanceTask } = await import('@/lib/seedance')
       result = await getSeedanceTask(videoMeta.taskId)
     } else if (isMotionControl) {
