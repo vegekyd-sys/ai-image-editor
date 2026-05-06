@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest } from '@/lib/api-auth'
+import { isAdmin } from '@/lib/admin'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { invalidateBillingCache } from '@/lib/billing/credits'
 
-const ADMIN_EMAILS = ['vege_kyd@msn.com']
-
-async function checkAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !ADMIN_EMAILS.includes(user.email || '')) return null
-  return user
+async function checkAdmin(req: Request): Promise<string | null> {
+  const authResult = await authenticateRequest(req)
+  if ('error' in authResult) return null
+  const ok = await isAdmin(authResult.auth.userId)
+  return ok ? authResult.auth.userId : null
 }
 
 // GET: billing settings
-export async function GET() {
-  if (!(await checkAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export async function GET(req: NextRequest) {
+  if (!(await checkAdmin(req))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const admin = getSupabaseAdmin()
   const { data: billing } = await admin.from('app_settings').select('value').eq('key', 'billing_enabled').single()
   const { data: welcome } = await admin.from('app_settings').select('value').eq('key', 'welcome_credits').single()
@@ -26,7 +25,7 @@ export async function GET() {
 
 // PUT: update billing settings
 export async function PUT(req: NextRequest) {
-  if (!(await checkAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await checkAdmin(req))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { enabled, welcomeCredits } = await req.json()
   const admin = getSupabaseAdmin()
   if (enabled !== undefined) {

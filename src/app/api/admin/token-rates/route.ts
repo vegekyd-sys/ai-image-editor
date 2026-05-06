@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest } from '@/lib/api-auth'
+import { isAdmin } from '@/lib/admin'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { invalidateTokenRateCache } from '@/lib/billing/token-rates'
 
-const ADMIN_EMAILS = ['vege_kyd@msn.com']
-
-async function checkAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !ADMIN_EMAILS.includes(user.email || '')) return null
-  return user
+async function checkAdmin(req: Request): Promise<string | null> {
+  const authResult = await authenticateRequest(req)
+  if ('error' in authResult) return null
+  const ok = await isAdmin(authResult.auth.userId)
+  return ok ? authResult.auth.userId : null
 }
 
 // GET: list all token rates
-export async function GET() {
-  if (!(await checkAdmin())) {
+export async function GET(req: NextRequest) {
+  if (!(await checkAdmin(req))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const admin = getSupabaseAdmin()
@@ -28,7 +27,7 @@ export async function GET() {
 
 // PUT: update a token rate
 export async function PUT(req: NextRequest) {
-  if (!(await checkAdmin())) {
+  if (!(await checkAdmin(req))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const { model_id, display_name, input_per_1m, output_per_1m, markup, is_active } = await req.json()
@@ -53,7 +52,7 @@ export async function PUT(req: NextRequest) {
 
 // POST: add a new token rate
 export async function POST(req: NextRequest) {
-  if (!(await checkAdmin())) {
+  if (!(await checkAdmin(req))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const { model_id, display_name, input_per_1m, output_per_1m, markup } = await req.json()
@@ -79,7 +78,7 @@ export async function POST(req: NextRequest) {
 
 // DELETE: remove a token rate
 export async function DELETE(req: NextRequest) {
-  if (!(await checkAdmin())) {
+  if (!(await checkAdmin(req))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const { model_id } = await req.json()
