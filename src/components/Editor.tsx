@@ -1827,7 +1827,12 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         onSaveSnapshot?.(videoSnap, snapshots.length);
       }
     }
-    handleAgentRequest(text, imgs);
+    // Combine image base64 + video posters for user message display
+    const allAttachments = [
+      ...(imgs || []),
+      ...(videos?.map(v => v.poster) || []),
+    ];
+    handleAgentRequest(text, allAttachments.length > 0 ? allAttachments : undefined);
   };
 
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
