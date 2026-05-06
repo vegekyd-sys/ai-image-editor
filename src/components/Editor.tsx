@@ -1798,12 +1798,36 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   };
 
   // CUI send: if annotations exist, merge them; otherwise normal chat
-  const handleCuiSend = async (text: string, imgs?: string[]) => {
+  const handleCuiSend = async (text: string, imgs?: string[], videos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => {
     if (annotationMode && annotationEntries.length > 0) {
       await sendWithAnnotations(text);
-    } else {
-      handleAgentRequest(text, imgs);
+      return;
     }
+    // Create video snapshots from attached videos (already uploaded to Storage)
+    if (videos?.length) {
+      const { createVideoDesign } = await import('@/lib/video-design');
+      for (const v of videos) {
+        const snapId = generateId();
+        const design = createVideoDesign(v.url, v.width, v.height, v.duration);
+        const videoSnap: Snapshot = {
+          id: snapId,
+          image: v.poster,
+          tips: [],
+          messageId: '',
+          imageUrl: v.poster,
+          type: 'video',
+          design,
+          designPath: `code/${snapId}.json`,
+          videoMeta: {
+            taskId: null, videoUrl: v.url, prompt: '', sourceSnapshotIds: [], sourceUrls: [],
+            status: 'completed', duration: v.duration, model: 'upload', createdAt: new Date().toISOString(),
+          },
+        };
+        setSnapshots(prev => [...prev, videoSnap]);
+        onSaveSnapshot?.(videoSnap, snapshots.length);
+      }
+    }
+    handleAgentRequest(text, imgs);
   };
 
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
@@ -3152,7 +3176,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     installingSkill,
     onDropSkillFile: handleSkillUpload,
     onOpenCreditPopup: () => setCreditPopupOpen(true),
-    onVideoUpload: handleVideoUpload,
+    projectId,
   };
 
   return (

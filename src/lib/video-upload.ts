@@ -156,3 +156,33 @@ export async function processVideoUpload(
     URL.revokeObjectURL(blobUrl);
   }
 }
+
+/**
+ * Process + upload a video file to Supabase Storage.
+ * Returns poster + storage URL (does NOT create timeline snapshot).
+ * Used by CUI attachment flow where snapshot creation happens on send.
+ */
+export async function uploadVideoToStorage(
+  file: File,
+  projectId: string,
+  onProgress?: (progress: number) => void,
+): Promise<{ poster: string; videoUrl: string; duration: number; width: number; height: number }> {
+  const result = await processVideoUpload(file, onProgress);
+
+  // Upload to Supabase
+  const { createClient } = await import('@/lib/supabase/client');
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const fileId = crypto.randomUUID();
+  const storagePath = `${user.id}/${projectId}/videos/upload-${fileId}.mp4`;
+  const { error } = await supabase.storage.from('images')
+    .upload(storagePath, result.videoBlob, { contentType: 'video/mp4', upsert: true });
+  if (error) throw error;
+
+  const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath);
+  const videoUrl = urlData?.publicUrl || '';
+
+  return { poster: result.poster, videoUrl, duration: result.duration, width: result.width, height: result.height };
+}

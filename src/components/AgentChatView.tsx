@@ -379,7 +379,7 @@ interface AgentChatViewProps {
   isAgentActive: boolean;
   agentStatus: string;
   currentImage?: string;
-  onSendMessage: (text: string, attachedImages?: string[]) => void;
+  onSendMessage: (text: string, attachedImages?: string[], attachedVideos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => void;
   onAbort?: () => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
@@ -409,8 +409,8 @@ interface AgentChatViewProps {
   hasBackgroundTask?: boolean;
   /** Open CreditPopup when credits are exhausted */
   onOpenCreditPopup?: () => void;
-  /** User uploaded a video file — returns 1-based image index once in timeline */
-  onVideoUpload?: (file: File) => Promise<number | null>;
+  /** Project ID for video upload storage path */
+  projectId?: string;
   /** Skills for skill picker */
   skills?: SkillItem[];
   selectedSkill?: string | null;
@@ -449,7 +449,7 @@ export default function AgentChatView({
   onMusicSelect,
   hasBackgroundTask = false,
   onOpenCreditPopup,
-  onVideoUpload,
+  projectId,
   skills,
   selectedSkill,
   onSkillChange,
@@ -468,13 +468,27 @@ export default function AgentChatView({
 
   const [input, setInput] = useState('');
   const [viewingFile, setViewingFile] = useState<string | null>(null);
-  const [attachedImages, setAttachedImages] = useState<string[]>([]);
-  const [attachedVideos, setAttachedVideos] = useState<{ file: File; poster: string }[]>([]);
-  const [videoUploading, setVideoUploading] = useState(false);
+  // Unified attachment system: images + videos in one array
+  interface Attachment {
+    id: string;
+    type: 'image' | 'video';
+    thumbnail: string;
+    status: 'processing' | 'ready' | 'error';
+    data?: string; // image: base64; video: storage URL
+    duration?: number;
+    width?: number;
+    height?: number;
+  }
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Legacy compat: derive attachedImages for existing code that reads it
+  const attachedImages = attachments.filter(a => a.type === 'image' && a.status === 'ready' && a.data).map(a => a.data!);
+  const processingCount = attachments.filter(a => a.status === 'processing').length;
+  const allReady = attachments.length > 0 && attachments.every(a => a.status === 'ready' || a.status === 'error');
   const [isExiting, setIsExiting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCountRef = useRef(0);
-  const [processingImageCount, setProcessingImageCount] = useState(0);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const processingImageCount = processingCount; // legacy compat for any remaining references
   // Capture skipSlideIn at mount time — ignore prop changes after mount
   const [mountedWithSkip] = useState(skipSlideIn);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -751,38 +765,24 @@ export default function AgentChatView({
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(() => {
     const text = input.trim();
-    if ((!text && attachedImages.length === 0 && attachedVideos.length === 0) || isAgentActive || videoUploading) return;
+    const hasContent = text || attachments.some(a => a.status === 'ready');
+    const hasProcessing = attachments.some(a => a.status === 'processing');
+    if (!hasContent || isAgentActive || hasProcessing) return;
 
-    let finalText = selectedSkill && text ? `[Active skill: ${selectedSkill}]\n${text}` : text;
+    const finalText = selectedSkill && text ? `[Active skill: ${selectedSkill}]\n${text}` : text;
+    const imageData = attachments.filter(a => a.type === 'image' && a.data).map(a => a.data!);
+    const videoData = attachments.filter(a => a.type === 'video' && a.data).map(a => ({
+      url: a.data!, duration: a.duration || 0, width: a.width || 1080, height: a.height || 1920, poster: a.thumbnail,
+    }));
 
-    // If videos attached: upload first, wait for completion, then send with indices
-    if (attachedVideos.length > 0 && onVideoUpload) {
-      setVideoUploading(true);
-      try {
-        const indices: number[] = [];
-        for (const v of attachedVideos) {
-          const idx = await onVideoUpload(v.file);
-          if (idx) indices.push(idx);
-        }
-        if (indices.length > 0) {
-          const refs = indices.map(i => `<<<image_${i}>>>`).join(', ');
-          const hint = `[User uploaded ${indices.length === 1 ? 'a video' : `${indices.length} videos`}: ${refs}. Use preview_frame(image_index=N, timestamp=T) to see video frames.]`;
-          finalText = finalText ? `${finalText}\n\n${hint}` : hint;
-        }
-      } finally {
-        setVideoUploading(false);
-      }
-    }
-
-    onSendMessage(finalText, attachedImages.length > 0 ? attachedImages : undefined);
+    onSendMessage(finalText, imageData.length > 0 ? imageData : undefined, videoData.length > 0 ? videoData : undefined);
     userScrolledUp.current = false;
     setInput('');
-    setAttachedImages([]);
-    setAttachedVideos([]);
+    setAttachments([]);
     if (selectedSkill) onSkillChange?.(null);
-  }, [input, attachedImages, attachedVideos, isAgentActive, videoUploading, onSendMessage, onVideoUpload, selectedSkill, onSkillChange]);
+  }, [input, attachments, isAgentActive, onSendMessage, selectedSkill, onSkillChange]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
@@ -827,19 +827,13 @@ export default function AgentChatView({
         const allFiles = Array.from(e.dataTransfer.files);
         const zipFile = allFiles.find(f => f.name.endsWith('.zip') || f.type === 'application/zip');
         if (zipFile && onDropSkillFile) { onDropSkillFile(zipFile); return; }
-        const files = allFiles.filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+        const files = allFiles.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || /\.(heic|heif)$/i.test(f.name));
         if (!files.length) return;
-        const remaining = 10 - attachedImages.length;
-        const toProcess = files.slice(0, remaining);
-        setProcessingImageCount(toProcess.length);
-        try {
-          const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
-          const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
-          if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
-        } catch (err) {
-          console.error('[CUI] image compress error:', err);
-        }
-        setProcessingImageCount(0);
+        // Trigger same logic as file input onChange — dispatch to input
+        const dt = new DataTransfer();
+        files.forEach(f => dt.items.add(f));
+        const input = imageInputRef.current;
+        if (input) { input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); }
       }}
     >
       {/* Drop zone overlay */}
@@ -1229,40 +1223,43 @@ export default function AgentChatView({
         onChange={async (e) => {
           const files = Array.from(e.target.files ?? []);
           e.target.value = '';
-          const videoFiles = files.filter(f => f.type.startsWith('video/'));
-          const imageFiles = files.filter(f => !f.type.startsWith('video/'));
-          // Extract poster for videos
-          for (const vf of videoFiles) {
-            try {
-              const url = URL.createObjectURL(vf);
-              const v = document.createElement('video');
-              v.muted = true; v.src = url;
-              await new Promise<void>(r => { v.onloadedmetadata = () => r(); setTimeout(r, 5000); });
-              v.currentTime = Math.min(0.5, v.duration * 0.1);
-              await new Promise<void>(r => { v.onseeked = () => r(); setTimeout(r, 3000); });
-              const c = document.createElement('canvas');
-              c.width = v.videoWidth; c.height = v.videoHeight;
-              c.getContext('2d')!.drawImage(v, 0, 0);
-              const poster = c.toDataURL('image/jpeg', 0.7);
-              v.pause(); v.removeAttribute('src'); v.load();
-              URL.revokeObjectURL(url);
-              setAttachedVideos(prev => [...prev, { file: vf, poster }]);
-            } catch { /* skip unreadable video */ }
-          }
-          // Compress images
-          const remaining = 10 - attachedImages.length;
-          const toProcess = imageFiles.slice(0, remaining);
-          if (toProcess.length > 0) {
-            setProcessingImageCount(toProcess.length);
-            try {
-              const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
-              const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
-              if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
-            } catch (err) {
-              console.error('[CUI] image compress error:', err);
+          for (const file of files) {
+            const id = crypto.randomUUID();
+            if (file.type.startsWith('video/')) {
+              // Video: extract poster immediately, process in background
+              try {
+                const url = URL.createObjectURL(file);
+                const v = document.createElement('video');
+                v.muted = true; v.src = url;
+                await new Promise<void>(r => { v.onloadedmetadata = () => r(); setTimeout(r, 5000); });
+                v.currentTime = Math.min(0.5, v.duration * 0.1);
+                await new Promise<void>(r => { v.onseeked = () => r(); setTimeout(r, 3000); });
+                const c = document.createElement('canvas');
+                c.width = Math.min(v.videoWidth, 200); c.height = Math.min(v.videoHeight, 200);
+                c.getContext('2d')!.drawImage(v, 0, 0, c.width, c.height);
+                const poster = c.toDataURL('image/jpeg', 0.6);
+                v.pause(); v.removeAttribute('src'); v.load();
+                URL.revokeObjectURL(url);
+                setAttachments(prev => [...prev, { id, type: 'video', thumbnail: poster, status: 'processing' }]);
+                // Background: transcode + upload
+                import('@/lib/video-upload').then(({ uploadVideoToStorage }) =>
+                  uploadVideoToStorage(file, projectId || '').then(result => {
+                    setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'ready' as const, data: result.videoUrl, duration: result.duration, width: result.width, height: result.height } : a));
+                  }).catch(() => {
+                    setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error' as const } : a));
+                  })
+                );
+              } catch { /* skip unreadable video */ }
+            } else {
+              // Image: show placeholder, compress in background
+              setAttachments(prev => [...prev, { id, type: 'image', thumbnail: '', status: 'processing' }]);
+              compressImageFile(file).then(base64 => {
+                setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'ready' as const, thumbnail: base64, data: base64 } : a));
+              }).catch(() => {
+                setAttachments(prev => prev.filter(a => a.id !== id));
+              });
             }
           }
-          setProcessingImageCount(0);
         }}
       />
 
@@ -1325,11 +1322,11 @@ export default function AgentChatView({
             {/* Image attach button */}
             <button
               onClick={() => imageInputRef.current?.click()}
-              disabled={isAgentActive || videoUploading || attachedImages.length >= 10}
+              disabled={isAgentActive || attachments.length >= 10}
               className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
               style={{
-                background: (attachedImages.length > 0 || attachedVideos.length > 0) ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
-                color: (attachedImages.length > 0 || attachedVideos.length > 0) ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
+                background: attachments.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
+                color: attachments.length > 0 ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
               }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1349,20 +1346,32 @@ export default function AgentChatView({
               />
             )}
 
-            {/* Attached image thumbnails — scrollable */}
-            {(attachedImages.length > 0 || processingImageCount > 0) && (
+            {/* Unified attachments — scrollable thumbnails */}
+            {attachments.length > 0 && (
               <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 2 }}>
-                {attachedImages.map((img, i) => (
-                  <div key={i} className="relative flex-shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img}
-                      alt=""
-                      className="w-9 h-9 rounded-lg object-cover"
-                      style={{ border: '1px solid rgba(255,255,255,0.12)' }}
-                    />
+                {attachments.map((att) => (
+                  <div key={att.id} className="relative flex-shrink-0">
+                    {att.thumbnail ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={att.thumbnail} alt="" className="w-9 h-9 rounded-lg object-cover" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
+                    ) : (
+                      <div className="w-9 h-9 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                    )}
+                    {/* Video play icon */}
+                    {att.type === 'video' && att.status === 'ready' && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <svg width="14" height="14" viewBox="0 0 8 8" fill="rgba(255,255,255,0.85)"><polygon points="2,1 7,4 2,7" /></svg>
+                      </div>
+                    )}
+                    {/* Processing spinner */}
+                    {att.status === 'processing' && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-lg" style={{ background: 'rgba(0,0,0,0.4)' }}>
+                        <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
+                      </div>
+                    )}
+                    {/* Remove button */}
                     <button
-                      onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
+                      onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
                       className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
                       style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
                     >
@@ -1370,37 +1379,13 @@ export default function AgentChatView({
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                       </svg>
                     </button>
-                  </div>
-                ))}
-                {/* Video thumbnails */}
-                {attachedVideos.map((v, i) => (
-                  <div key={`vid-${i}`} className="relative flex-shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={v.poster} alt="" className="w-9 h-9 rounded-lg object-cover" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <svg width="14" height="14" viewBox="0 0 8 8" fill="rgba(255,255,255,0.85)"><polygon points="2,1 7,4 2,7" /></svg>
-                    </div>
-                    <button
-                      onClick={() => setAttachedVideos(prev => prev.filter((_, j) => j !== i))}
-                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                      style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
-                    >
-                      <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-                {Array.from({ length: processingImageCount }).map((_, i) => (
-                  <div key={`proc-${i}`} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
                   </div>
                 ))}
               </div>
             )}
 
             {/* Spacer (only when no thumbnails taking flex space) */}
-            {attachedImages.length === 0 && attachedVideos.length === 0 && processingImageCount === 0 && <div className="flex-1" />}
+            {attachments.length === 0 && <div className="flex-1" />}
 
             {/* Skill selector — right side, before send */}
             {skills && skills.length > 0 && onSkillChange && (
@@ -1433,11 +1418,11 @@ export default function AgentChatView({
                 data-testid="chat-send"
                 aria-label="Send message"
                 onClick={handleSubmit}
-                disabled={videoUploading || (!input.trim() && attachedImages.length === 0 && attachedVideos.length === 0)}
+                disabled={!allReady && attachments.length > 0 ? true : (!input.trim() && attachments.length === 0)}
                 className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
                 style={{
-                  background: (input.trim() || attachedImages.length > 0 || attachedVideos.length > 0) ? '#c026d3' : 'rgba(255,255,255,0.08)',
-                  color: (input.trim() || attachedImages.length > 0 || attachedVideos.length > 0) ? '#fff' : 'rgba(255,255,255,0.25)',
+                  background: (input.trim() || (attachments.length > 0 && allReady)) ? '#c026d3' : 'rgba(255,255,255,0.08)',
+                  color: (input.trim() || (attachments.length > 0 && allReady)) ? '#fff' : 'rgba(255,255,255,0.25)',
                 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
