@@ -12,7 +12,7 @@ import RollingTagline from '@/components/RollingTagline'
 import SkillSelector from '@/components/SkillSelector'
 import Changelog from '@/components/Changelog'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
-import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage'
+import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 
@@ -602,7 +602,7 @@ function HomePageInner() {
   ) => {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
-      return <video src={url} autoPlay loop muted playsInline preload="metadata" style={style} />
+      return <video src={normalizeDomain(url)} autoPlay loop muted playsInline preload="metadata" style={style} />
     }
     const src = variant === 'thumb'
       ? getThumbnailUrl(url, 400, 70, 533, 'cover')

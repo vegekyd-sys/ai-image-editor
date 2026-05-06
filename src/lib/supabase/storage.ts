@@ -1,10 +1,19 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 
 const BUCKET = 'images'
+const LEGACY_HOST = 'https://sdyrtztrjgmmpnirswxt.supabase.co'
+const CDN_HOST = process.env.NEXT_PUBLIC_SUPABASE_URL || LEGACY_HOST
 
-/** Return the Supabase storage URL as-is (no domain rewrite). */
-export function toPublicStorageUrl(url: string): string {
+export function normalizeDomain(url: string): string {
+  if (url.startsWith(LEGACY_HOST) && CDN_HOST !== LEGACY_HOST) {
+    return url.replace(LEGACY_HOST, CDN_HOST)
+  }
   return url
+}
+
+/** Return the Supabase storage URL with normalized domain. */
+export function toPublicStorageUrl(url: string): string {
+  return normalizeDomain(url)
 }
 
 /**
@@ -75,7 +84,7 @@ export function getPublicUrl(supabase: SupabaseClient, path: string): string {
  *  (our uploads are max 2048px, 2.3% smaller is imperceptible). quality=95 is visually lossless. */
 export function getOptimizedUrl(url: string, quality = 95): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
-  const base = url.replace(
+  const base = normalizeDomain(url).replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
   )
@@ -145,7 +154,7 @@ export async function uploadAudio(
 
 export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
-  const base = url.replace(
+  const base = normalizeDomain(url).replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
   )
