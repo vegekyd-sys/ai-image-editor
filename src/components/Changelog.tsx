@@ -8,6 +8,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-05-04',
+    en: { title: 'SeeDance Real Human Faces', items: [
+      'SeeDance now supports real human faces — generate videos with portrait photos, no more face detection blocks',
+      'Model Selector: unified panel for image & video models, one-tap switch with auto mode',
+      'Skill Selector: pick skills from CUI toolbar or Home page — upload, delete, drag-drop',
+    ]},
+    zh: { title: 'SeeDance 支持真人脸', items: [
+      'SeeDance 支持真人脸了 — 用人物照片直接生成视频，不再被人脸检测拦截',
+      '模型选择器：图片和视频模型统一面板，一键切换，支持自动模式',
+      'Skill 选择器：CUI 工具栏和 Home 页均可选择 Skill — 上传、删除、拖拽安装',
+    ]},
+  },
+  {
     date: '2026-05-01',
     en: { title: 'SeeDance 2.0 & Reference Video', items: [
       'SeeDance 2.0: world-class video model now available alongside Kling O3 — choose in the video panel or tell Agent in chat',

@@ -86,25 +86,44 @@ function getAuthCookie() {
   return { cookie: buildCookie(auth), baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL };
 }
 
+function getAuth() {
+  const apiKey = process.env.MAKARON_API_KEY;
+  if (apiKey) {
+    return {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+      baseUrl: process.env.MAKARON_URL || DEFAULT_URL,
+    };
+  }
+  const auth = loadAuth();
+  if (!auth) {
+    console.error('Not logged in. Set MAKARON_API_KEY or run: npx makaron-cli login');
+    process.exit(1);
+  }
+  return {
+    headers: { 'Cookie': buildCookie(auth) },
+    baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
+  };
+}
+
 // ─── SSE Consumer ────────────────────────────────────────────────────────────
 
-async function abortRun(baseUrl, cookie, runId) {
+async function abortRun(baseUrl, headers, runId) {
   try {
     await fetch(`${baseUrl}/api/agent/abort`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({ runId }),
     });
   } catch { /* best effort */ }
 }
 
-async function streamAgent(baseUrl, cookie, projectId, prompt) {
+async function streamAgent(baseUrl, headers, projectId, prompt) {
   const controller = new AbortController();
   const res = await fetch(`${baseUrl}/api/agent`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': cookie,
+      ...headers,
     },
     body: JSON.stringify({
       projectId,
@@ -128,7 +147,7 @@ async function streamAgent(baseUrl, cookie, projectId, prompt) {
   const sigintHandler = async () => {
     process.stderr.write('\n⏹️  Aborting...\n');
     controller.abort();
-    if (runId) await abortRun(baseUrl, cookie, runId);
+    if (runId) await abortRun(baseUrl, headers, runId);
     process.exit(0);
   };
   process.on('SIGINT', sigintHandler);
@@ -209,14 +228,14 @@ async function streamAgent(baseUrl, cookie, projectId, prompt) {
 
 // ─── Async Task Polling ──────────────────────────────────────────────────────
 
-async function pollVideo(baseUrl, cookie, taskId) {
+async function pollVideo(baseUrl, headers, taskId) {
   process.stderr.write(`🎬 Waiting for video ${taskId}...\n`);
   const start = Date.now();
   while (true) {
     await new Promise(r => setTimeout(r, 10_000));
     const elapsed = Math.round((Date.now() - start) / 1000);
     try {
-      const res = await fetch(`${baseUrl}/api/animate/${taskId}`, { headers: { 'Cookie': cookie } });
+      const res = await fetch(`${baseUrl}/api/animate/${taskId}`, { headers });
       if (!res.ok) continue;
       const data = await res.json();
       if (data.videoUrl) { process.stderr.write(`\r🎬 Video done (${elapsed}s): ${data.videoUrl}\n`); return data.videoUrl; }
@@ -227,14 +246,14 @@ async function pollVideo(baseUrl, cookie, taskId) {
   }
 }
 
-async function pollMusic(baseUrl, cookie, taskId) {
+async function pollMusic(baseUrl, headers, taskId) {
   process.stderr.write(`🎵 Waiting for music ${taskId}...\n`);
   const start = Date.now();
   while (true) {
     await new Promise(r => setTimeout(r, 5_000));
     const elapsed = Math.round((Date.now() - start) / 1000);
     try {
-      const res = await fetch(`${baseUrl}/api/music/${taskId}`, { headers: { 'Cookie': cookie } });
+      const res = await fetch(`${baseUrl}/api/music/${taskId}`, { headers });
       if (!res.ok) continue;
       const data = await res.json();
       const trackUrl = data.audioUrl || data.tracks?.[0]?.audioUrl;
@@ -259,7 +278,7 @@ async function pollMusic(baseUrl, cookie, taskId) {
 
 // ─── Create Project ──────────────────────────────────────────────────────────
 
-async function createProject(baseUrl, cookie, opts) {
+async function createProject(baseUrl, headers, opts) {
   const body = {};
   if (opts.imageUrls?.length) {
     body.imageUrls = opts.imageUrls;
@@ -278,7 +297,7 @@ async function createProject(baseUrl, cookie, opts) {
 
   const res = await fetch(`${baseUrl}/api/projects/create`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 
@@ -297,8 +316,8 @@ async function createProject(baseUrl, cookie, opts) {
 
 // ─── List Projects ───────────────────────────────────────────────────────────
 
-async function listProjects(baseUrl, cookie) {
-  const res = await fetch(`${baseUrl}/api/projects/list`, { headers: { 'Cookie': cookie } });
+async function listProjects(baseUrl, headers) {
+  const res = await fetch(`${baseUrl}/api/projects/list`, { headers });
   if (!res.ok) { console.error('List failed:', await res.text()); process.exit(1); }
   const { projects } = await res.json();
   if (!projects.length) { console.log('No projects yet. Create one with: makaron create --image <file>'); return; }
@@ -326,7 +345,7 @@ const command = args[0];
 if (command === 'login') {
   await login();
 } else if (command === 'create') {
-  const { cookie, baseUrl } = getAuthCookie();
+  const { headers, baseUrl } = getAuth();
   const opts = { images: [], imageUrls: [] };
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--image' && args[i + 1]) opts.images.push(args[++i]);
@@ -339,9 +358,9 @@ if (command === 'login') {
     console.error('Usage: makaron create --image <file> [--image <file2>] or --title "name"');
     process.exit(1);
   }
-  await createProject(baseUrl, cookie, opts);
+  await createProject(baseUrl, headers, opts);
 } else if (command === 'chat') {
-  const { cookie, baseUrl } = getAuthCookie();
+  const { headers, baseUrl } = getAuth();
   let projectId = null;
   const chatImages = [];
   const promptParts = [];
@@ -363,7 +382,7 @@ if (command === 'login') {
     });
     const res = await fetch(`${baseUrl}/api/projects/create`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({ imageBase64s: base64s, _addToProject: projectId }),
     });
     if (res.ok) {
@@ -373,18 +392,18 @@ if (command === 'login') {
       process.stderr.write(`⚠️ Failed to upload images: ${await res.text()}\n`);
     }
   }
-  const { results } = await streamAgent(baseUrl, cookie, projectId, prompt);
+  const { results } = await streamAgent(baseUrl, headers, projectId, prompt);
   process.stderr.write('\n━━━ Results ━━━\n');
   for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
   for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
   process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
-  for (const task of results.animationTasks) await pollVideo(baseUrl, cookie, task.taskId);
-  for (const task of results.musicTasks) await pollMusic(baseUrl, cookie, task.taskId);
+  for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId);
+  for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
 } else if (command === 'list' || command === 'ls') {
-  const { cookie, baseUrl } = getAuthCookie();
-  await listProjects(baseUrl, cookie);
+  const { headers, baseUrl } = getAuth();
+  await listProjects(baseUrl, headers);
 } else if (command === 'abort') {
-  const { cookie, baseUrl } = getAuthCookie();
+  const { headers, baseUrl } = getAuth();
   const runId = args[1];
   if (!runId) {
     console.error('Usage: makaron abort <runId>');
@@ -392,13 +411,131 @@ if (command === 'login') {
   }
   const res = await fetch(`${baseUrl}/api/agent/abort`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify({ runId }),
   });
   if (res.ok) {
     console.log(`✅ Run ${runId} aborted`);
   } else {
     console.error(`❌ Abort failed:`, await res.text());
+  }
+} else if (command === 'admin') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+
+  if (sub === 'skills') {
+    const action = args[2]; // add, update, delete, or none (list)
+    if (!action) {
+      // List all skills
+      const res = await fetch(`${baseUrl}/api/admin/home-skills`, { headers });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      const skills = await res.json();
+      console.log(`📋 ${skills.length} skills\n`);
+      for (const s of skills) {
+        const label = s.labels?.en || s.labels?.zh || '(no label)';
+        const active = s.is_active ? '✅' : '❌';
+        const hasZip = s.skill_path ? '📦' : '  ';
+        console.log(`  ${active} ${hasZip} ${String(s.sort_order).padStart(3)}  ${s.id}  ${label}`);
+      }
+    } else if (action === 'add') {
+      const json = args.slice(3).join(' ');
+      if (!json) { console.error('Usage: makaron admin skills add \'{"labels":...,"image":"..."}\''); process.exit(1); }
+      let body;
+      try { body = JSON.parse(json); } catch { console.error('Invalid JSON'); process.exit(1); }
+      const res = await fetch(`${baseUrl}/api/admin/home-skills`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      const data = await res.json();
+      console.log(`✅ Skill created: ${data.id}`);
+    } else if (action === 'update') {
+      const id = args[3];
+      const json = args.slice(4).join(' ');
+      if (!id || !json) { console.error('Usage: makaron admin skills update <id> \'{"field":"value"}\''); process.exit(1); }
+      let body;
+      try { body = JSON.parse(json); } catch { console.error('Invalid JSON'); process.exit(1); }
+      body.id = id;
+      const res = await fetch(`${baseUrl}/api/admin/home-skills`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      console.log(`✅ Skill ${id} updated`);
+    } else if (action === 'delete') {
+      const id = args[3];
+      if (!id) { console.error('Usage: makaron admin skills delete <id>'); process.exit(1); }
+      const res = await fetch(`${baseUrl}/api/admin/home-skills`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ id }),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      console.log(`✅ Skill ${id} deleted`);
+    } else {
+      console.error(`Unknown action: ${action}. Use: add, update, delete, or omit to list.`);
+      process.exit(1);
+    }
+
+  } else if (sub === 'upload') {
+    const filePath = args[2];
+    const storagePath = args[3];
+    if (!filePath || !storagePath) { console.error('Usage: makaron admin upload <local-file> <storage-path>'); process.exit(1); }
+    if (!fs.existsSync(filePath)) { console.error(`File not found: ${filePath}`); process.exit(1); }
+
+    const buf = fs.readFileSync(filePath);
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', mp4: 'video/mp4', zip: 'application/zip' };
+    const mime = mimeMap[ext] || 'application/octet-stream';
+
+    const formData = new FormData();
+    formData.append('file', new Blob([buf], { type: mime }), path.basename(filePath));
+    formData.append('path', storagePath);
+
+    const res = await fetch(`${baseUrl}/api/admin/upload`, { method: 'POST', headers, body: formData });
+    if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+    const { url } = await res.json();
+    console.log(`✅ Uploaded: ${url}`);
+
+  } else if (sub === 'fetch-skill') {
+    const code = args[2];
+    if (!code) { console.error('Usage: makaron admin fetch-skill <share-code>'); process.exit(1); }
+    // Extract code from full URL if given (e.g., https://www.makaron.app/s/4c4cbd57)
+    const shareCode = code.includes('/s/') ? code.split('/s/').pop() : code;
+
+    const res = await fetch(`${baseUrl}/api/skills/share/${shareCode}/download?format=json`, { headers });
+    if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+    const { skillName, files } = await res.json();
+
+    // Create output directory
+    const outDir = path.resolve(skillName);
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+    for (const f of files) {
+      const filePath = path.join(outDir, f.path);
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(filePath, Buffer.from(f.data, 'base64'));
+    }
+
+    console.log(`✅ Skill "${skillName}" downloaded to ./${skillName}/`);
+    console.log(`   Files: ${files.map(f => f.path).join(', ')}`);
+
+  } else if (sub === 'set-admin') {
+    const email = args[2];
+    if (!email) { console.error('Usage: makaron admin set-admin <email>'); process.exit(1); }
+    const res = await fetch(`${baseUrl}/api/admin/set-admin`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ email }),
+    });
+    if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+    console.log(`✅ ${email} is now admin`);
+
+  } else {
+    console.log(`Admin commands:
+  admin skills                         List all marketplace skills
+  admin skills add '<json>'            Add a new skill
+  admin skills update <id> '<json>'    Update a skill
+  admin skills delete <id>             Delete a skill
+  admin upload <file> <storage-path>   Upload file to Storage
+  admin fetch-skill <code|url>         Download skill from share link
+  admin set-admin <email>              Grant admin access to a user
+`);
   }
 } else {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
@@ -412,8 +549,10 @@ Commands:
   chat --project <id> "message"      Chat with Makaron Agent
   chat --project <id> --image <file> "message"  Add image + chat
   abort <runId>                      Abort a running Agent
+  admin                              Admin commands (skills, upload, set-admin)
 
 Environment:
+  MAKARON_API_KEY  API key (mk_live_xxx) — recommended for agents
   MAKARON_URL      API base (default: ${DEFAULT_URL})
 `);
 }

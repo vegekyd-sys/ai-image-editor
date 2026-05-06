@@ -1,14 +1,15 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
-import { useRouter } from 'next/navigation'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
-import { useLocale } from '@/lib/i18n'
+import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
+import SkillSelector from '@/components/SkillSelector'
 import Changelog from '@/components/Changelog'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage'
@@ -16,9 +17,14 @@ import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage'
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 
 export default function HomePage() {
+  return <Suspense><HomePageInner /></Suspense>
+}
+
+function HomePageInner() {
   const { user, loading: authLoading, signOut } = useAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
 
   const [creating, setCreating] = useState(false)
@@ -49,6 +55,7 @@ export default function HomePage() {
   const detailSnapRef = useRef<HTMLDivElement>(null)
   const detailInnerRef = useRef<HTMLDivElement>(null)
   const detailSwipeRef = useRef<{ startY: number; startIdx: number; swiping: boolean } | null>(null)
+  const wheelCooldownRef = useRef(false)
   const [kbInset, setKbInset] = useState(0)
   const [textareaFocused, setTextareaFocused] = useState(false)
   const scrollStartY = useRef<number | null>(null)
@@ -57,7 +64,32 @@ export default function HomePage() {
   const inlineBoxRef = useRef<HTMLDivElement>(null)
   const [inlineBoxHeight, setInlineBoxHeight] = useState(0)
   const [showFixedInput, setShowFixedInput] = useState(false)
+  const [shareToast, setShareToast] = useState(false)
+  const openedFromUrlRef = useRef(false)
+  const selectedDetailRef = useRef(selectedDetail)
+  selectedDetailRef.current = selectedDetail
+  const homeSkillsRef = useRef(homeSkills)
+  homeSkillsRef.current = homeSkills
 
+  const placeholders = locale === 'zh' ? [
+    '把这些图片做个 vlog',
+    '用这张产品图帮我做一套小红书素材',
+    '把我P的美一点',
+    '给我的猫拍一组表情包',
+    '把这张图片变成个电商海报',
+    '把这几张照片做成一个故事板，加上配乐',
+    '一张照片，帮我探索 6 个完全不同的方向',
+  ] : [
+    'Turn these photos into a vlog',
+    'Make a set of social media content from this product shot',
+    'Make me look better',
+    "Create an emoji pack from my cat's photo",
+    'Turn this photo into an e-commerce poster',
+    'Storyboard these photos and add a soundtrack',
+    'One photo, show me 6 completely different directions',
+  ]
+  const [placeholderIdx, setPlaceholderIdx] = useState(0)
+  useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch('/api/home-skills').then(r => r.json()).then(data => {
@@ -156,7 +188,7 @@ export default function HomePage() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [user])
+  }, [authLoading])
 
   useEffect(() => {
     const el = inputWrapperRef.current
@@ -166,7 +198,7 @@ export default function HomePage() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [user])
+  }, [authLoading])
 
   useEffect(() => {
     const el = document.querySelector('.mkr-page') as HTMLElement | null
@@ -193,6 +225,78 @@ export default function HomePage() {
     }
   }, [selectedDetail])
 
+  // Unmute active slide's video, mute all others (after transition completes)
+  useEffect(() => {
+    if (!selectedDetail) return
+    const tid = setTimeout(() => {
+      const snap = detailSnapRef.current
+      if (!snap) return
+      const idx = homeSkills.findIndex(s => s.id === selectedDetail.id)
+      const slides = snap.querySelectorAll('.mkr-detail-slide')
+      slides.forEach((slide, i) => {
+        const video = slide.querySelector('video') as HTMLVideoElement | null
+        if (!video) return
+        if (i === idx) {
+          video.currentTime = 0
+          video.muted = false
+          video.play().catch(() => { video.muted = true })
+        } else {
+          video.muted = true
+          video.pause()
+        }
+      })
+    }, 450)
+    return () => clearTimeout(tid)
+  }, [selectedDetail, homeSkills])
+
+  // Open detail overlay from URL param (?skill={id})
+  useEffect(() => {
+    const skillId = searchParams.get('skill')
+    if (!skillId || homeSkills.length === 0 || selectedDetail) return
+    const skill = homeSkills.find(s => s.id === skillId)
+    if (!skill) return
+
+    openedFromUrlRef.current = true
+    setSelectedDetail(skill)
+    setSelectedSkill(skill.skill_path ? skill.id : null)
+    setInputText(skill.prompt)
+    setHeroExpanded(true)
+    window.history.replaceState(null, '', `/home/${skillId}`)
+  }, [homeSkills]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
+  const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
+    detailSnapRef.current = el
+    if (!el || !openedFromUrlRef.current) return
+    requestAnimationFrame(() => {
+      const skill = selectedDetailRef.current
+      if (!skill) return
+      const skills = homeSkillsRef.current
+      const idx = skills.findIndex(t => t.id === skill.id)
+      if (detailInnerRef.current && el) {
+        const slideH = el.clientHeight
+        detailInnerRef.current.style.transition = 'none'
+        detailInnerRef.current.style.transform = `translateY(${-idx * slideH}px)`
+      }
+      openedFromUrlRef.current = false
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle browser back button
+  useEffect(() => {
+    if (!selectedDetail) return
+    const onPop = () => {
+      setHeroExpanded(false)
+      setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
+      setSelectedSkill(null)
+      setInputText('')
+      setAttachedFiles([])
+      setAttachedPreviews([])
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [!!selectedDetail]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const el = inlineInputRef.current
     if (!el) return
@@ -201,7 +305,7 @@ export default function HomePage() {
     }, { threshold: 0.1 })
     io.observe(el)
     return () => io.disconnect()
-  }, [user])
+  }, [authLoading])
 
   useEffect(() => {
     const el = inlineBoxRef.current
@@ -212,7 +316,7 @@ export default function HomePage() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [user])
+  }, [authLoading])
 
   const userTypingRef = useRef(false)
   const resizeTextarea = useCallback(() => {
@@ -326,12 +430,9 @@ export default function HomePage() {
     setCardIndex(999)
   }, [creating])
 
-  useEffect(() => {
-    if (!authLoading && !user) router.replace('/login')
-  }, [user, authLoading, router])
-
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
-    if (!user || creating || (files.length === 0 && !prompt)) return
+    if (!user) { router.push('/login'); return }
+    if (creating || (files.length === 0 && !prompt)) return
     setCreating(true)
     try {
       const supabase = createClient()
@@ -499,7 +600,7 @@ export default function HomePage() {
     variant: CoverVariant,
     opts?: { priority?: boolean; extraStyle?: React.CSSProperties },
   ) => {
-    const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', ...opts?.extraStyle }
+    const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
       return <video src={url} autoPlay loop muted playsInline preload="metadata" style={style} />
     }
@@ -556,7 +657,7 @@ export default function HomePage() {
       >
         {/* Left: + button / photo slot */}
         <div
-          onClick={() => { if (!creating && !collapseSlot) fileInputRef.current?.click() }}
+          onClick={() => { if (!user) { router.push('/login'); return } if (!creating && !collapseSlot) fileInputRef.current?.click() }}
           style={{
             width: collapseSlot ? 0 : slotWidth,
             flexShrink: 0, alignSelf: 'stretch',
@@ -702,7 +803,7 @@ export default function HomePage() {
                 handleCreate()
               }
             }}
-            placeholder="where magic happens"
+            placeholder={placeholders[placeholderIdx]}
             disabled={creating}
             rows={2}
             style={{
@@ -737,44 +838,29 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-            {/* Skill button + dropdown */}
-            <div style={{ position: 'relative', flexShrink: 0 }} ref={skillMenuRef}>
-              <button
-                className="mkr-skill-btn"
-                onClick={(e) => {
-                  if (selectedSkill) { setSelectedSkill(null); setSkillMenuOpen(false); return }
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  setSkillMenuPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left })
-                  setSkillMenuOpen(prev => !prev)
-                }}
-                style={{
-                  flexShrink: 0,
-                  padding: (selectedSkill || installingSkill) ? '4px 10px' : '5px 6px',
-                  borderRadius: (selectedSkill || installingSkill) ? 12 : 0,
-                  border: 'none',
-                  background: (selectedSkill || installingSkill) ? 'rgba(217,70,239,0.15)' : 'none',
-                  color: (selectedSkill || installingSkill) ? '#f0abfc' : 'rgba(255,255,255,0.45)',
-                  fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                  fontFamily: 'inherit', whiteSpace: 'nowrap',
-                  display: 'flex', alignItems: 'center', gap: 4,
-                }}
-              >
-                {installingSkill ? (
-                  <><Spinner size={10} /> Installing...</>
-                ) : selectedSkill ? (
-                  <>{availableSkills.find(s => s.name === selectedSkill)?.label
-                    || homeSkills.find(s => s.id === selectedSkill)?.labels[locale]
-                    || 'Skill'}
-                  <span style={{ opacity: 0.5, fontSize: '0.6rem' }}>✕</span></>
-                ) : 'Skill'}
-              </button>
-              <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
-            </div>
+            {/* Skill selector */}
+            <SkillSelector
+              skills={availableSkills}
+              selectedSkill={selectedSkill}
+              onSkillChange={setSelectedSkill}
+              onDeleteSkill={(name) => {
+                setAvailableSkills(prev => prev.filter(s => s.name !== name))
+                fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {})
+              }}
+              onUploadSkill={() => skillFileRef.current?.click()}
+              installing={installingSkill}
+              overrideLabel={selectedSkill ? (
+                availableSkills.find(s => s.name === selectedSkill)?.label
+                || homeSkills.find(s => s.id === selectedSkill)?.labels[locale]
+                || null
+              ) : null}
+              direction={isInline ? 'down' : 'up'}
+            />
+            <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
             <button
               className="mkr-create-btn"
-              onClick={() => { if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
+              onClick={() => { if (!user) { router.push('/login'); return } if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
               disabled={creating}
               style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
             >
@@ -797,8 +883,10 @@ export default function HomePage() {
       setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
       setSelectedSkill(null)
       setInputText('')
+      window.history.pushState(null, '', '/home')
       return
     }
+    openedFromUrlRef.current = false
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setHeroRect(rect)
     setHeroExpanded(false)
@@ -814,10 +902,11 @@ export default function HomePage() {
         detailInnerRef.current.style.transition = 'none'
         detailInnerRef.current.style.transform = `translateY(${-idx * slideH}px)`
       }
+      window.history.pushState(null, '', `/home/${template.id}`)
     })
   }
 
-  if (authLoading || !user) {
+  if (authLoading) {
     return (
       <div style={{ height: '100dvh', background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Spinner />
@@ -827,15 +916,9 @@ export default function HomePage() {
 
   return (
     <>
+      {/* eslint-disable-next-line @next/next/no-css-tags */}
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');`}</style>
       <style>{`
-        @font-face {
-          font-family: 'Caveat';
-          font-style: normal;
-          font-weight: 400 500;
-          font-display: swap;
-          src: url('/fonts/caveat-latin-400.woff2') format('woff2');
-          unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-        }
         .mkr-page { font-family: inherit; }
         .mkr-handwrite { font-family: 'Caveat', cursive; }
 
@@ -936,62 +1019,55 @@ export default function HomePage() {
           }}
         />
 
-        {/* Top bar: link to projects */}
-        <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'flex-start', position: 'relative', zIndex: 10 }}>
-          <button
-            onClick={() => router.push('/projects')}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: '0.7rem', letterSpacing: '0.05em',
-              color: 'rgba(255,255,255,0.45)',
-              display: 'flex', alignItems: 'center', gap: 5,
-              transition: 'color 0.2s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-            </svg>
-            {locale === 'zh' ? '我的项目' : 'My Projects'}
-          </button>
+        {/* Top bar */}
+        <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 10 }}>
+          {user ? (
+            <button
+              onClick={() => router.push('/projects')}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.7rem', letterSpacing: '0.05em',
+                color: 'rgba(255,255,255,0.45)',
+                display: 'flex', alignItems: 'center', gap: 5,
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+              </svg>
+              {locale === 'zh' ? '我的项目' : 'My Projects'}
+            </button>
+          ) : <div />}
+          <LocaleToggle />
         </div>
 
-        {/* ── Hero: Logo + Tagline — matches projects page ── */}
-        <div style={{
-          paddingTop: '20vh', paddingBottom: '40px',
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', gap: '0px',
-          position: 'relative', zIndex: 1,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <svg
-              width="20" height="20" viewBox="0 0 24 24"
-              fill="none" stroke="rgb(217,70,239)"
-              strokeWidth="1.8" strokeLinecap="round"
-            >
-              <line x1="12" y1="2" x2="12" y2="22" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-              <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
+        {/* ── Hero: Landing-page style ── */}
+        <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
+          {/* Glow */}
+          <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
+
+          <div className="relative z-10 flex flex-col items-center text-center pt-10 lg:pt-16 px-6 max-w-[660px]">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              {[[14,1,14,27],[1,14,27,14],[5,5,23,23],[23,5,5,23]].map(([x1,y1,x2,y2], i) => (
+                <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#d946ef" strokeWidth={1.8} strokeLinecap="round" />
+              ))}
             </svg>
-            <div style={{
-              fontWeight: 800,
-              fontSize: 'clamp(3rem, 12vw, 5rem)',
-              letterSpacing: '-0.04em',
-              color: '#fff',
-              lineHeight: 1,
-            }}>
+            <h1 className="mt-4 text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]">
               Makaron
-            </div>
-          </div>
-          <div style={{ marginTop: '4px' }}>
-            <RollingTagline className="text-[1.25rem] tracking-wide" />
+            </h1>
+            <p className="mt-3 leading-tight">
+              <RollingTagline className="text-2xl lg:text-[32px]" />
+            </p>
+            <p className="mt-6 text-[15px] lg:text-lg text-[#a1a1aa] leading-relaxed max-w-[480px]">
+              {t('landing.heroDesc1')}<br />{t('landing.heroDesc2')}
+            </p>
           </div>
 
-          {/* ── Inline Input Box (in document flow, like projects page) ── */}
-          <div ref={inlineInputRef} style={{
-            marginTop: '24px', width: '100%', maxWidth: '480px', padding: '0 16px',
+          {/* ── Inline Input Box ── */}
+          <div ref={inlineInputRef} className="relative z-10" style={{
+            marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
           }}>
             {renderInputBox({ isInline: true, taRef: inlineTextareaRef, boxRef: inlineBoxRef, slotWidth: inlineBoxHeight > 0 ? inlineBoxHeight : 52 })}
           </div>
@@ -1008,6 +1084,21 @@ export default function HomePage() {
           width: '100%',
           margin: '0 auto',
         }}>
+          <div style={{ textAlign: 'center', marginBottom: isDesktop ? 24 : 16 }}>
+            <h2 style={{
+              fontSize: isDesktop ? '1.25rem' : '1.1rem',
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.9)',
+              margin: 0,
+              letterSpacing: '-0.01em',
+            }}>{t('skills.title')}</h2>
+            <p style={{
+              fontSize: isDesktop ? '0.85rem' : '0.78rem',
+              color: 'rgba(255,255,255,0.35)',
+              margin: '6px 0 0',
+              letterSpacing: '0.01em',
+            }}>{t('skills.subtitle')}</p>
+          </div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
@@ -1152,7 +1243,7 @@ export default function HomePage() {
       {/* ── Skill Detail Overlay ── */}
       {selectedDetail && (
         <div
-          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText('') } }}
+          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText(''); window.history.pushState(null, '', '/home') } }}
           style={{
             position: 'fixed', inset: 0, zIndex: Z.OVERLAY,
             background: isDesktop ? 'rgba(0,0,0,0.7)' : '#000',
@@ -1177,9 +1268,43 @@ export default function HomePage() {
               position: 'absolute', inset: 0,
             }),
           }}>
-            {/* Close button */}
+            {/* Share button — top left */}
             <button
-              onClick={() => { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]) }}
+              onClick={async () => {
+                const url = `${window.location.origin}/home/${selectedDetail.id}`
+                const title = selectedDetail.labels[locale] || selectedDetail.labels.en || 'Makaron'
+                if (navigator.share) {
+                  try { await navigator.share({ url, title }) } catch {}
+                } else {
+                  try { await navigator.clipboard.writeText(url) } catch {
+                    const ta = document.createElement('textarea')
+                    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0'
+                    document.body.appendChild(ta); ta.select(); document.execCommand('copy')
+                    document.body.removeChild(ta)
+                  }
+                  setShareToast(true)
+                  setTimeout(() => setShareToast(false), 2000)
+                }
+              }}
+              style={{
+                position: 'absolute', top: isDesktop ? 12 : 'max(12px, env(safe-area-inset-top))', left: 12,
+                width: 36, height: 36, borderRadius: '50%',
+                background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                border: 'none', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', zIndex: 10,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            </button>
+
+            {/* Close button — top right */}
+            <button
+              onClick={() => { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]); window.history.pushState(null, '', '/home') }}
               style={{
                 position: 'absolute', top: isDesktop ? 12 : 'max(12px, env(safe-area-inset-top))', right: 12,
                 width: 36, height: 36, borderRadius: '50%',
@@ -1190,10 +1315,22 @@ export default function HomePage() {
               }}
             >✕</button>
 
+            {/* Share toast */}
+            {shareToast && (
+              <div style={{
+                position: 'absolute', top: isDesktop ? 60 : 'calc(max(12px, env(safe-area-inset-top)) + 48px)', left: 12,
+                background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                color: '#fff', fontSize: 13, padding: '6px 14px', borderRadius: 8,
+                zIndex: 11, whiteSpace: 'nowrap',
+              }}>
+                Link copied
+              </div>
+            )}
+
             {/* Slide container — JS touch handlers instead of CSS scroll-snap
                 to avoid iOS Safari video compositor blocking native scroll. */}
             <div
-              ref={detailSnapRef}
+              ref={detailSnapCallbackRef}
               className="mkr-detail-snap"
               onTouchStart={(e) => {
                 const touch = e.touches[0]
@@ -1206,11 +1343,14 @@ export default function HomePage() {
                 if (!touch) return
                 const deltaY = touch.clientY - detailSwipeRef.current.startY
                 if (!detailSwipeRef.current.swiping && Math.abs(deltaY) > 20) detailSwipeRef.current.swiping = true
-                if (detailSwipeRef.current.swiping && detailInnerRef.current && detailSnapRef.current) {
-                  const idx = detailSwipeRef.current.startIdx
-                  const slideH = detailSnapRef.current.clientHeight
-                  detailInnerRef.current.style.transform = `translateY(${-idx * slideH + deltaY}px)`
-                  detailInnerRef.current.style.transition = 'none'
+                if (detailSwipeRef.current.swiping) {
+                  e.preventDefault()
+                  if (detailInnerRef.current && detailSnapRef.current) {
+                    const idx = detailSwipeRef.current.startIdx
+                    const slideH = detailSnapRef.current.clientHeight
+                    detailInnerRef.current.style.transform = `translateY(${-idx * slideH + deltaY}px)`
+                    detailInnerRef.current.style.transition = 'none'
+                  }
                 }
               }}
               onTouchEnd={(e) => {
@@ -1235,17 +1375,21 @@ export default function HomePage() {
                     setInputText(t.prompt)
                     setAttachedFiles([])
                     setAttachedPreviews([])
+                    window.history.replaceState(null, '', `/home/${t.id}`)
                   }
                 }
                 detailSwipeRef.current = null
               }}
               onWheel={(e) => {
-                if (Math.abs(e.deltaY) < 30) return
+                if (wheelCooldownRef.current) return
+                if (Math.abs(e.deltaY) < 20) return
                 const currentIdx = homeSkills.findIndex(s => s.id === selectedDetail?.id)
                 let newIdx = currentIdx
                 if (e.deltaY > 0 && newIdx < homeSkills.length - 1) newIdx++
                 else if (e.deltaY < 0 && newIdx > 0) newIdx--
                 if (newIdx === currentIdx) return
+                wheelCooldownRef.current = true
+                setTimeout(() => { wheelCooldownRef.current = false }, 400)
                 if (detailInnerRef.current && detailSnapRef.current) {
                   const slideH = detailSnapRef.current.clientHeight
                   detailInnerRef.current.style.transition = 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)'
@@ -1258,11 +1402,13 @@ export default function HomePage() {
                   setInputText(t.prompt)
                   setAttachedFiles([])
                   setAttachedPreviews([])
+                  window.history.replaceState(null, '', `/home/${t.id}`)
                 }
               }}
               style={{
                 position: 'absolute', inset: 0,
                 overflow: 'hidden',
+                touchAction: 'none',
               }}
             >
             <div ref={detailInnerRef} style={{ position: 'relative', width: '100%', height: '100%', willChange: 'transform' }}>
@@ -1303,102 +1449,7 @@ export default function HomePage() {
 
       {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
 
-      {/* Skill menu — rendered at top level to avoid overflow clipping */}
-      {skillMenuOpen && (isDesktop ? (
-        <div ref={skillMenuRef} style={{
-          position: 'fixed', bottom: skillMenuPos?.bottom ?? 60, left: skillMenuPos?.left ?? 0,
-          width: 200, maxHeight: 320, overflowY: 'auto',
-          background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 12, padding: '4px 0',
-          boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
-          zIndex: 300,
-          animation: 'mkr-menu-up 0.2s ease-out',
-        }}>
-          {availableSkills.length === 0 && (
-            <div style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading...</div>
-          )}
-          {availableSkills.map(skill => (
-            <button key={skill.name}
-              className="mkr-skill-item"
-              onClick={() => { setSelectedSkill(selectedSkill === skill.name ? null : skill.name); setSkillMenuOpen(false) }}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '6px 12px', border: 'none', cursor: 'pointer',
-                background: selectedSkill === skill.name ? 'rgba(217,70,239,0.12)' : 'transparent',
-                color: selectedSkill === skill.name ? '#f0abfc' : 'rgba(255,255,255,0.7)',
-                fontSize: 13, fontFamily: 'inherit', textAlign: 'left',
-              }}>
-              <span>{skill.label}</span>
-              {!skill.builtIn && (
-                <span onClick={(e) => {
-                  e.stopPropagation()
-                  if (selectedSkill === skill.name) setSelectedSkill(null)
-                  setAvailableSkills(prev => prev.filter(s => s.name !== skill.name))
-                  fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skill.name }) }).catch(() => {})
-                }} style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, padding: '0 2px', cursor: 'pointer' }}>✕</span>
-              )}
-            </button>
-          ))}
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '2px 0' }} />
-          <button className="mkr-skill-item" onClick={() => { skillFileRef.current?.click(); setSkillMenuOpen(false) }}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center',
-              padding: '6px 12px', border: 'none', cursor: 'pointer',
-              background: 'transparent', color: 'rgba(255,255,255,0.4)',
-              fontSize: 13, fontFamily: 'inherit', textAlign: 'left',
-            }}>
-            {skillUploading ? 'Installing...' : '+ Upload Skill (.zip)'}
-          </button>
-        </div>
-      ) : (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setSkillMenuOpen(false) }}>
-          <div style={{ background: 'rgba(0,0,0,0.5)', position: 'absolute', inset: 0, animation: 'mkr-fade-in 0.2s ease-out' }} />
-          <div ref={skillMenuRef} style={{
-            position: 'relative', maxHeight: '50dvh', overflowY: 'auto',
-            background: 'rgba(24,24,28,0.98)', borderTop: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '18px 18px 0 0', padding: '12px 0',
-            paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-            animation: 'mkr-sheet-up 0.25s ease-out',
-          }}>
-            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '0 auto 12px' }} />
-            {availableSkills.length === 0 && (
-              <div style={{ padding: '12px 20px', color: 'rgba(255,255,255,0.3)', fontSize: 15 }}>Loading...</div>
-            )}
-            {availableSkills.map(skill => (
-              <button key={skill.name}
-                onClick={() => { setSelectedSkill(selectedSkill === skill.name ? null : skill.name); setSkillMenuOpen(false) }}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 20px', border: 'none', cursor: 'pointer',
-                  background: selectedSkill === skill.name ? 'rgba(217,70,239,0.12)' : 'transparent',
-                  color: selectedSkill === skill.name ? '#f0abfc' : 'rgba(255,255,255,0.7)',
-                  fontSize: 15, fontFamily: 'inherit', textAlign: 'left',
-                }}>
-                <span>{skill.label}</span>
-                {!skill.builtIn && (
-                  <span onClick={(e) => {
-                    e.stopPropagation()
-                    if (selectedSkill === skill.name) setSelectedSkill(null)
-                    setAvailableSkills(prev => prev.filter(s => s.name !== skill.name))
-                    fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skill.name }) }).catch(() => {})
-                  }} style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13, padding: '2px 4px', cursor: 'pointer' }}>✕</span>
-                )}
-              </button>
-            ))}
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '2px 0' }} />
-            <button onClick={() => { skillFileRef.current?.click(); setSkillMenuOpen(false) }}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center',
-                padding: '10px 20px', border: 'none', cursor: 'pointer',
-                background: 'transparent', color: 'rgba(255,255,255,0.4)',
-                fontSize: 15, fontFamily: 'inherit', textAlign: 'left',
-              }}>
-              {skillUploading ? 'Installing...' : '+ Upload Skill (.zip)'}
-            </button>
-          </div>
-        </div>
-      ))}
+      {/* Skill menu now handled by SkillSelector component */}
     </>
   )
 }

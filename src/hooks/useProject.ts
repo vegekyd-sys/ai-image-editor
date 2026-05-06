@@ -156,16 +156,22 @@ export function useProject(projectId: string, userId: string) {
       }
     })
 
-    const animations: ProjectAnimation[] = (animationRes.data ?? []).map((row: Record<string, unknown>) => ({
-      id: row.id as string,
-      projectId,
-      taskId: (row.piapi_task_id as string) ?? null,
-      videoUrl: (row.video_url as string) ?? null,
-      prompt: (row.prompt as string) ?? '',
-      snapshotUrls: (row.snapshot_urls as string[]) ?? [],
-      status: row.status as ProjectAnimation['status'],
-      createdAt: row.created_at as string,
-    }))
+    const animations: ProjectAnimation[] = (animationRes.data ?? []).map((row: Record<string, unknown>) => {
+      const taskId = (row.piapi_task_id as string) ?? null;
+      const videoModel: 'kling' | 'seedance' = taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
+        ? 'seedance' : 'kling';
+      return {
+        id: row.id as string,
+        projectId,
+        taskId,
+        videoUrl: (row.video_url as string) ?? null,
+        prompt: (row.prompt as string) ?? '',
+        snapshotUrls: (row.snapshot_urls as string[]) ?? [],
+        status: row.status as ProjectAnimation['status'],
+        createdAt: row.created_at as string,
+        videoModel,
+      };
+    })
 
     return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
   }, [projectId])

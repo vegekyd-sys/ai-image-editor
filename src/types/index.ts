@@ -150,4 +150,5 @@ export interface ProjectAnimation {
   status: 'processing' | 'completed' | 'failed' | 'abandoned';
   duration?: number | null;
   createdAt: string;
+  videoModel?: 'kling' | 'seedance';
 }

@@ -96,8 +96,8 @@ async function handleMcp(req: Request): Promise<Response> {
     const headers = new Headers(response.headers);
     // Get updated balance (after deduction)
     try {
-      const { checkBalance: cb } = await import('@/lib/billing/credits');
-      const { balance } = await cb(auth.userId!, 'noop');
+      const { getBalance } = await import('@/lib/billing/credits');
+      const { balance } = await getBalance(auth.userId!);
       headers.set('X-Credits-Remaining', String(balance));
     } catch { /* ignore */ }
     return new Response(response.body, { status: response.status, headers });

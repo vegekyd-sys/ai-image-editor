@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/api-auth';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
@@ -8,17 +8,12 @@ export const maxDuration = 800;
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const authResult = await authenticateRequest(req);
+    if ('error' in authResult) return authResult.error;
+    const { userId, supabase } = authResult.auth;
 
     // Pre-flight credit check
-    const creditCheck = await requireCredits(user.id, 5);
+    const creditCheck = await requireCredits(userId, 5);
     if (!creditCheck.ok) return creditCheck.response;
 
     const { prompt, image, originalImage, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
@@ -56,12 +51,12 @@ export async function POST(req: NextRequest) {
       await supabase.from('agent_runs')
         .update({ status: 'failed', ended_at: new Date().toISOString() })
         .eq('project_id', projectId)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('status', 'running');
 
       const { data: run } = await supabase.from('agent_runs').insert({
         project_id: projectId,
-        user_id: user.id,
+        user_id: userId,
         status: 'running',
         prompt: (prompt ?? '').slice(0, 500),
         metadata: { locale, preferredModel, isNsfw, analysisOnly },
@@ -85,7 +80,7 @@ export async function POST(req: NextRequest) {
 
         // Create dual writer if normal mode with a valid run
         const writer = (runId && isNormalMode)
-          ? new AgentDualWriter(runId, supabase, user!.id, projectId, controller, encoder)
+          ? new AgentDualWriter(runId, supabase, userId, projectId, controller, encoder)
           : null;
         if (writer) {
           firstMessageId = writer.firstMessageId;
@@ -151,7 +146,7 @@ export async function POST(req: NextRequest) {
               locale,
             );
             await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {
-              locale, snapshotImages, currentSnapshotIndex, supabase, userId: user.id,
+              locale, snapshotImages, currentSnapshotIndex, supabase, userId: userId,
             }), controller);
             return;
           }
@@ -174,7 +169,7 @@ export async function POST(req: NextRequest) {
 
           // Load user skills from workspace
           const { getAllSkills } = await import('@/lib/workspace');
-          const allSkills = await getAllSkills(supabase, user.id);
+          const allSkills = await getAllSkills(supabase, userId);
           const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
 
           // Headless mode: build context from DB instead of using frontend-provided context
@@ -188,7 +183,7 @@ export async function POST(req: NextRequest) {
 
           if (headless) {
             const { buildPromptContext } = await import('@/lib/agent-context');
-            const ctx = await buildPromptContext(projectId, supabase, user.id, {
+            const ctx = await buildPromptContext(projectId, supabase, userId, {
               userMessage: prompt ?? '',
               currentSnapshotIndex,
               hasAnnotation,
@@ -242,7 +237,7 @@ export async function POST(req: NextRequest) {
           };
 
           try {
-            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: user.id, currentDesign: agentCurrentDesign, history: agentHistory, timelineVersion })) {
+            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: userId, currentDesign: agentCurrentDesign, history: agentHistory, timelineVersion })) {
               if (event.type === 'usage') { usageEvent = event; continue; }
               if (writer) {
                 await writer.processAndEnqueue(event);
@@ -282,7 +277,7 @@ export async function POST(req: NextRequest) {
           // Deduct credits based on token usage (fire-and-forget)
           if (usageEvent) {
             deductByTokens(
-              user!.id, 'agent', usageEvent.model,
+              userId, 'agent', usageEvent.model,
               usageEvent.inputTokens, usageEvent.outputTokens,
               undefined, undefined,
               { cacheRead: usageEvent.cacheReadTokens ?? 0, cacheWrite: usageEvent.cacheWriteTokens ?? 0 },

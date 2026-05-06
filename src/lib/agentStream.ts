@@ -8,7 +8,7 @@ export interface AgentStreamCallbacks {
   onNewTurn?: (messageId?: string) => void;
   onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
-  onAnimationTask?: (taskId: string, prompt: string) => void;
+  onAnimationTask?: (taskId: string, prompt: string, imageUrls?: string[], model?: string) => void;
   onVideoSnapshot?: (snapshotId: string, taskId: string, videoMeta: import('@/types').VideoMeta, posterUrl: string) => void;
   onMusicTask?: (taskId: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
@@ -114,7 +114,7 @@ export async function streamAgent(
             callbacks.onToolCall?.(event.tool, event.input, event.images);
             break;
           case 'animation_task':
-            callbacks.onAnimationTask?.(event.taskId, event.prompt || '');
+            callbacks.onAnimationTask?.(event.taskId, event.prompt || '', event.imageUrls, event.model);
             break;
           case 'video_snapshot': {
             const vs = event as unknown as { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string };

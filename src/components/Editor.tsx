@@ -214,6 +214,34 @@ export default function Editor({
   useEffect(() => { draftDesignRef.current = draftDesign; }, [draftDesign]);
   useEffect(() => { pendingDesignRef.current = pendingDesign; }, [pendingDesign]);
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
+  const preferredModelRef = useRef<PreferredModel>('auto');
+  useEffect(() => { preferredModelRef.current = preferredModel; }, [preferredModel]);
+  const [videoModel, setVideoModel] = useState<'kling' | 'seedance'>('kling');
+  const videoModelRef = useRef<'kling' | 'seedance'>('kling');
+  useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
+  const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const skillFileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    fetch('/api/skills').then(r => r.json()).then(d => { if (d.skills) setAvailableSkills(d.skills); }).catch(() => {});
+  }, []);
+  const [installingSkill, setInstallingSkill] = useState(false);
+  const handleSkillUpload = useCallback(async (file: File) => {
+    setInstallingSkill(true);
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch('/api/skills', { method: 'POST', body: form });
+      const data = await res.json();
+      if (data.success) {
+        const r = await fetch('/api/skills');
+        const d = await r.json();
+        if (d.skills) setAvailableSkills(d.skills);
+        if (data.skillName) setSelectedSkill(data.skillName);
+      }
+    } catch {}
+    setInstallingSkill(false);
+  }, []);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
   // Design editable state
@@ -1674,7 +1702,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModel !== 'auto' ? { preferredModel } : {}), ...(animationState?.videoModel && animationState.videoModel !== 'kling' ? { videoModel: animationState.videoModel } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -2585,6 +2613,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         status: 'processing',
         createdAt: new Date().toISOString(),
         duration: animationState.duration ?? null,
+        videoModel: animationState.videoModel,
       };
       setAnimations(prev => [newAnim, ...prev]);
       // Close the creation card
@@ -2789,7 +2818,6 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     const snapForSave = snapIdxForSave !== null ? snapshotsRef.current[snapIdxForSave] : undefined;
     let img = timeline[viewIndex];
     if (!img) return;
-    const filename = `ai-edited-${Date.now()}.jpg`;
     setIsSaving(true);
 
     try {
@@ -2806,6 +2834,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
       const res = await fetch(img);
       const blob = await res.blob();
+      const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg';
+      const slug = (initialTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+      const idx = (snapIdxForSave ?? viewIndex) + 1;
+      const filename = `makaron-${slug}-${idx}.${ext}`;
 
       if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
         const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
@@ -2827,7 +2859,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       setIsSaving(false);
       const link = document.createElement('a');
       link.href = img;
-      link.download = filename;
+      link.download = `ai-edited-${Date.now()}.jpg`;
       link.click();
     }
   }, [timeline, viewIndex, isViewingVideo, currentVideo?.videoUrl, showSaveToast]);
@@ -3099,9 +3131,26 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     currentSnapshotIndex: isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
     preferredModel: preferredModel as PreferredModel,
     onModelChange: setPreferredModel,
+    videoModel,
+    onVideoModelChange: (m: import('@/types').VideoModel) => {
+      if (m === 'upload') return;
+      setVideoModel(m);
+      setAnimationState(prev => prev ? { ...prev, videoModel: m } : prev);
+    },
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling',
+    skills: availableSkills,
+    selectedSkill,
+    onSkillChange: setSelectedSkill,
+    onDeleteSkill: (name: string) => {
+      setAvailableSkills(prev => prev.filter(s => s.name !== name));
+      if (selectedSkill === name) setSelectedSkill(null);
+      fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {});
+    },
+    onUploadSkill: () => skillFileRef.current?.click(),
+    installingSkill,
+    onDropSkillFile: handleSkillUpload,
     onOpenCreditPopup: () => setCreditPopupOpen(true),
     onVideoUpload: handleVideoUpload,
   };
@@ -3241,7 +3290,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     error: null,
                     duration: null,
                     pollSeconds: 0,
-                    videoModel: 'kling',
+                    videoModel: videoModel,
                   });
                   setShowAnimateSheet(true);
                 } : undefined}
@@ -3536,7 +3585,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     const imageUrls = allUrls.length <= 7
                       ? allUrls
                       : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0, videoModel: 'kling' });
+                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0, videoModel: videoModel });
                     setShowAnimateSheet(true);
                   } : undefined}
                   hasVideo={hasVideo}
@@ -3571,7 +3620,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: null,
                         pollSeconds: 0,
-                        videoModel: 'kling',
+                        videoModel: videoModel,
                       });
                       setShowAnimateSheet(true);
                     }}
@@ -3598,7 +3647,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
-                        videoModel: 'kling',
+                        videoModel: anim.videoModel || videoModel,
                       });
                       setShowAnimateSheet(true);
                     }}
@@ -3648,6 +3697,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               snapshots={snapshots.filter(s => s.imageUrl || s.image)}
               projectId={projectId}
               isDesktop={isDesktop}
+              desktopWidth={cuiPanelWidth}
               mode={detailAnimation ? 'detail' : 'create'}
               detailAnimation={detailAnimation ?? undefined}
               onClose={() => {
@@ -3959,6 +4009,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           setCreditExhausted(false);
         }}
       />
+      <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = ''; }} />
     </div>
   );
 }

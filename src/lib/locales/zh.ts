@@ -227,12 +227,33 @@ const zh = {
   'billing.current': '当前',
 
   // Misc
+  // Skills
+  'skills.title': 'Skill 集市',
+  'skills.subtitle': '来自全球创作者的现成魔法',
+
   'misc.toolUse': '工具调用',
   'misc.error': '错误',
   'misc.retry': '重试',
   'misc.saveSuccess': '保存成功',
   'misc.shootingTime': '拍摄时间',
   'misc.usingModel': '使用模型',
+  // Model selector
+  'model.title': '模型',
+  'model.auto': '自动',
+  'model.tab.image': '图片',
+  'model.tab.video': '视频',
+  'model.gemini.name': 'Nano Banana 2',
+  'model.gemini.desc': '快速通用，大多数编辑的默认选择。',
+  'model.qwen.name': 'Qwen Edit',
+  'model.qwen.desc': '人脸保真最佳，可处理 NSFW 内容。',
+  'model.openai.name': 'GPT Image 2',
+  'model.openai.desc': '文字渲染和创意生成能力突出。',
+  'model.kling.name': 'Kling O3',
+  'model.kling.desc': '支持真人脸，速度快，内置音效。',
+  'model.seedance.name': 'SeeDance 2.0',
+  'model.seedance.desc': '最高画质，支持真人脸，不支持 IP 角色。价格较贵。',
+  'model.autoTips': '自动预览 Tips',
+  'model.autoTips.desc': '自动生成编辑建议的预览图',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

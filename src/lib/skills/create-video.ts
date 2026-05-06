@@ -108,16 +108,16 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     }
 
     if (provider === 'seedance') {
-      const { createSeedanceTask } = await import('../seedance');
-      taskId = await createSeedanceTask({
+      const { createEvolinkTask } = await import('../evolink');
+      taskId = await createEvolinkTask({
         prompt: finalPrompt,
         images: filteredImages,
-        duration: resolvedDuration != null ? resolvedDuration : -1,
-        ratio: aspectRatio || 'adaptive',
-        resolution: '720p',
-        videoUrl,
+        duration: resolvedDuration != null ? resolvedDuration : undefined,
+        aspectRatio: aspectRatio || 'adaptive',
+        quality: '720p',
+        videoUrls: videoUrl ? [videoUrl] : undefined,
       });
-      console.log(`✅ [create_video] SeeDance task created: ${taskId}`);
+      console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
     } else if (provider === 'piapi') {
       const { createKlingTask: createKlingTaskPiAPI } = await import('../piapi');
       taskId = await createKlingTaskPiAPI({

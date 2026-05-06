@@ -11,6 +11,8 @@ import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
+import ModelSelector from '@/components/ModelSelector';
+import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
@@ -393,6 +395,8 @@ interface AgentChatViewProps {
   currentSnapshotIndex?: number;
   preferredModel?: PreferredModel;
   onModelChange?: (model: PreferredModel) => void;
+  videoModel?: import('@/types').VideoModel;
+  onVideoModelChange?: (model: import('@/types').VideoModel) => void;
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
@@ -405,8 +409,14 @@ interface AgentChatViewProps {
   hasBackgroundTask?: boolean;
   /** Open CreditPopup when credits are exhausted */
   onOpenCreditPopup?: () => void;
-  /** User uploaded a video file — returns 1-based image index once in timeline */
-  onVideoUpload?: (file: File) => Promise<number | null>;
+  /** Skills for skill picker */
+  skills?: SkillItem[];
+  selectedSkill?: string | null;
+  onSkillChange?: (skill: string | null) => void;
+  onDeleteSkill?: (name: string) => void;
+  onUploadSkill?: () => void;
+  installingSkill?: boolean;
+  onDropSkillFile?: (file: File) => void;
 }
 
 export default function AgentChatView({
@@ -429,13 +439,21 @@ export default function AgentChatView({
   currentSnapshotIndex,
   preferredModel = 'auto',
   onModelChange,
+  videoModel = 'kling',
+  onVideoModelChange,
   onNavigateToSnapshot,
   onVideoTap,
   onDesignPoster,
   onMusicSelect,
   hasBackgroundTask = false,
   onOpenCreditPopup,
-  onVideoUpload,
+  skills,
+  selectedSkill,
+  onSkillChange,
+  onDeleteSkill,
+  onUploadSkill,
+  installingSkill,
+  onDropSkillFile,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -448,27 +466,12 @@ export default function AgentChatView({
   const [input, setInput] = useState('');
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
-  const [attachedVideos, setAttachedVideos] = useState<{ file: File; poster: string }[]>([]);
   const [isExiting, setIsExiting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCountRef = useRef(0);
   const [processingImageCount, setProcessingImageCount] = useState(0);
   // Capture skipSlideIn at mount time — ignore prop changes after mount
   const [mountedWithSkip] = useState(skipSlideIn);
-  // Lazy message rendering: only show last N messages on first open to reduce forced reflow.
-  // Once new messages arrive (active chat), show all to prevent older messages from disappearing.
-  const INITIAL_MSG_COUNT = 12;
-  const [showAllMessages, setShowAllMessages] = useState(false);
-  const initialMsgCountRef = useRef(messages.length);
-  useEffect(() => {
-    if (!showAllMessages && messages.length > INITIAL_MSG_COUNT && messages.length > initialMsgCountRef.current) {
-      setShowAllMessages(true);
-    }
-  }, [messages.length, showAllMessages]);
-  const visibleMessages = showAllMessages || messages.length <= INITIAL_MSG_COUNT
-    ? messages
-    : messages.slice(-INITIAL_MSG_COUNT);
-  const loadMoreSentinel = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -507,6 +510,8 @@ export default function AgentChatView({
   const [pipCorner, setPipCorner] = useState<PipCorner>('br');
   const [pipFloatPos, setPipFloatPos] = useState<{ x: number; y: number } | null>(null);
   const [pipHidden, setPipHidden] = useState(false);
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [skillSelectorOpen, setSkillSelectorOpen] = useState(false);
   const [pipHiddenEdge, setPipHiddenEdge] = useState<'left' | 'right'>('right');
   const [pipHiddenY, setPipHiddenY] = useState(0);
   const pipDragRef = useRef<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
@@ -673,40 +678,6 @@ export default function AgentChatView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-load earlier messages when scrolling near top — preserve scroll position
-  // Track the first visible message element so we can scroll back to it after loading
-  const firstVisibleMsgRef = useRef<Element | null>(null);
-  useEffect(() => {
-    const sentinel = loadMoreSentinel.current;
-    const scrollEl = messagesRef.current;
-    if (!sentinel || !scrollEl || showAllMessages) return;
-    const io = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) {
-        // Stop mount scroll-pinning before loading (prevents snap to bottom)
-        if (mountRoRef.current) { mountRoRef.current.disconnect(); mountRoRef.current = null; }
-        // Remember the first visible message (the sentinel's next sibling)
-        const msgList = sentinel.parentElement;
-        const firstMsg = msgList?.children[1]; // [0]=sentinel, [1]=first visible msg
-        firstVisibleMsgRef.current = firstMsg || null;
-        setShowAllMessages(true);
-      }
-    }, { root: scrollEl, threshold: 0 });
-    io.observe(sentinel);
-    return () => io.disconnect();
-  }, [showAllMessages]);
-
-  // After earlier messages render, scroll so the previously-first message stays in view
-  useEffect(() => {
-    if (!showAllMessages || !firstVisibleMsgRef.current) return;
-    const el = firstVisibleMsgRef.current as HTMLElement;
-    const scrollEl = messagesRef.current;
-    if (!scrollEl) return;
-    requestAnimationFrame(() => {
-      el.scrollIntoView({ block: 'start' });
-      firstVisibleMsgRef.current = null;
-    });
-  }, [showAllMessages]);
-
   // Auto-scroll ONLY when AI is actively streaming content (not on mount or status changes)
   const prevMsgCountRef = useRef(messages.length);
   const prevLastMsgLenRef = useRef(0);
@@ -775,37 +746,16 @@ export default function AgentChatView({
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  const [videoUploading, setVideoUploading] = useState(false);
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(() => {
     const text = input.trim();
-    if ((!text && attachedImages.length === 0 && attachedVideos.length === 0) || isAgentActive || videoUploading) return;
-
-    // If videos attached: upload them first, wait for completion, then send with indices
-    let finalText = text;
-    if (attachedVideos.length > 0 && onVideoUpload) {
-      setVideoUploading(true);
-      try {
-        const indices: number[] = [];
-        for (const v of attachedVideos) {
-          const idx = await onVideoUpload(v.file);
-          if (idx) indices.push(idx);
-        }
-        if (indices.length > 0) {
-          const refs = indices.map(i => `<<<image_${i}>>>`).join(', ');
-          const hint = `[User uploaded ${indices.length === 1 ? 'a video' : `${indices.length} videos`}: ${refs}. Use preview_frame(image_index=N, timestamp=T) to see video frames.]`;
-          finalText = finalText ? `${finalText}\n\n${hint}` : hint;
-        }
-      } finally {
-        setVideoUploading(false);
-      }
-    }
-
-    onSendMessage(finalText, attachedImages.length > 0 ? attachedImages : undefined);
+    if ((!text && attachedImages.length === 0) || isAgentActive) return;
+    const fullText = selectedSkill && text ? `[Active skill: ${selectedSkill}]\n${text}` : text;
+    onSendMessage(fullText, attachedImages.length > 0 ? attachedImages : undefined);
     userScrolledUp.current = false;
     setInput('');
     setAttachedImages([]);
-    setAttachedVideos([]);
-  }, [input, attachedImages, attachedVideos, isAgentActive, videoUploading, onSendMessage, onVideoUpload]);
+    if (selectedSkill) onSkillChange?.(null);
+  }, [input, attachedImages, isAgentActive, onSendMessage, selectedSkill, onSkillChange]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
@@ -847,7 +797,10 @@ export default function AgentChatView({
         e.preventDefault();
         dragCountRef.current = 0;
         setIsDragOver(false);
-        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+        const allFiles = Array.from(e.dataTransfer.files);
+        const zipFile = allFiles.find(f => f.name.endsWith('.zip') || f.type === 'application/zip');
+        if (zipFile && onDropSkillFile) { onDropSkillFile(zipFile); return; }
+        const files = allFiles.filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
         if (!files.length) return;
         const remaining = 10 - attachedImages.length;
         const toProcess = files.slice(0, remaining);
@@ -911,7 +864,8 @@ export default function AgentChatView({
             border: '1.5px solid rgba(255,255,255,0.14)',
             touchAction: 'none',
             cursor: pipFloatPos ? 'grabbing' : 'grab',
-            opacity: hidePip ? 0 : 1,
+            opacity: (hidePip || modelSelectorOpen || skillSelectorOpen) ? 0 : 1,
+            pointerEvents: (modelSelectorOpen || skillSelectorOpen) ? 'none' as const : undefined,
           }}
           onPointerDown={onPipPointerDown}
           onPointerMove={onPipPointerMove}
@@ -1020,11 +974,7 @@ export default function AgentChatView({
 
         {/* Message list */}
         <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
-          {/* Invisible sentinel — triggers auto-load when scrolled into view */}
-          {!showAllMessages && messages.length > INITIAL_MSG_COUNT && (
-            <div ref={loadMoreSentinel} className="h-1" />
-          )}
-          {visibleMessages.map((msg, idx) => (
+          {messages.map((msg, idx) => (
             <div key={msg.id}>
               {msg.role === 'user' ? (
                 /* User bubble — right-aligned pill */
@@ -1142,7 +1092,7 @@ export default function AgentChatView({
                     )}
 
                     {/* Typing dots — show when active, last message, no content yet */}
-                    {!msg.content && isAgentActive && idx === visibleMessages.length - 1 && (
+                    {!msg.content && isAgentActive && idx === messages.length - 1 && (
                       <span className="inline-flex gap-[5px] items-center h-[18px] mt-0.5">
                         <span className="typing-dot w-[6px] h-[6px] rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }} />
                         <span className="typing-dot w-[6px] h-[6px] rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }} />
@@ -1246,47 +1196,23 @@ export default function AgentChatView({
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/*,video/*,.heic,.heif"
+        accept="image/*,.heic,.heif"
         multiple
         className="hidden"
         onChange={async (e) => {
           const files = Array.from(e.target.files ?? []);
           e.target.value = '';
-          // Separate video files from images
-          const videoFiles = files.filter(f => f.type.startsWith('video/'));
-          const imageFiles = files.filter(f => !f.type.startsWith('video/'));
-          // Extract poster for each video and add to attachedVideos
-          for (const vf of videoFiles) {
-            try {
-              const url = URL.createObjectURL(vf);
-              const v = document.createElement('video');
-              v.muted = true; v.src = url;
-              await new Promise<void>(r => { v.onloadedmetadata = () => r(); setTimeout(r, 5000); });
-              v.currentTime = Math.min(0.5, v.duration * 0.1);
-              await new Promise<void>(r => { v.onseeked = () => r(); setTimeout(r, 3000); });
-              const c = document.createElement('canvas');
-              c.width = v.videoWidth; c.height = v.videoHeight;
-              c.getContext('2d')!.drawImage(v, 0, 0);
-              const poster = c.toDataURL('image/jpeg', 0.7);
-              v.pause(); v.removeAttribute('src'); v.load();
-              URL.revokeObjectURL(url);
-              setAttachedVideos(prev => [...prev, { file: vf, poster }]);
-            } catch { /* skip unreadable video */ }
+          const remaining = 10 - attachedImages.length;
+          const toProcess = files.slice(0, remaining);
+          setProcessingImageCount(toProcess.length);
+          try {
+            const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
+            const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
+            if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
+          } catch (err) {
+            console.error('[CUI] image compress error:', err);
           }
-          // Handle image attachments
-          if (imageFiles.length > 0) {
-            const remaining = 10 - attachedImages.length;
-            const toProcess = imageFiles.slice(0, remaining);
-            setProcessingImageCount(toProcess.length);
-            try {
-              const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
-              const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
-              if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
-            } catch (err) {
-              console.error('[CUI] image compress error:', err);
-            }
-            setProcessingImageCount(0);
-          }
+          setProcessingImageCount(0);
         }}
       />
 
@@ -1352,8 +1278,8 @@ export default function AgentChatView({
               disabled={isAgentActive || attachedImages.length >= 10}
               className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
               style={{
-                background: (attachedImages.length > 0 || attachedVideos.length > 0) ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
-                color: (attachedImages.length > 0 || attachedVideos.length > 0) ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
+                background: attachedImages.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
+                color: attachedImages.length > 0 ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
               }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1362,93 +1288,63 @@ export default function AgentChatView({
               </svg>
             </button>
 
-            {/* Model selector pill */}
+            {/* Model selector */}
             {onModelChange && (
-              <button
-                data-testid="model-selector"
-                data-current-model={preferredModel}
-                aria-label={`Model: ${preferredModel}. Click to switch.`}
-                onClick={() => {
-                  const cycle: PreferredModel[] = ['auto', 'gemini', 'qwen', 'openai'];
-                  const next = cycle[(cycle.indexOf(preferredModel) + 1) % cycle.length];
-                  onModelChange(next);
-                }}
-                className="h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
-                style={{
-                  padding: '0 10px',
-                  background: preferredModel === 'auto' ? 'rgba(255,255,255,0.06)'
-                    : preferredModel === 'qwen' ? 'rgba(16,185,129,0.15)'
-                    : preferredModel === 'openai' ? 'rgba(168,85,247,0.15)'
-                    : 'rgba(59,130,246,0.15)',
-                  border: `1px solid ${preferredModel === 'auto' ? 'rgba(255,255,255,0.08)'
-                    : preferredModel === 'qwen' ? 'rgba(16,185,129,0.3)'
-                    : preferredModel === 'openai' ? 'rgba(168,85,247,0.3)'
-                    : 'rgba(59,130,246,0.3)'}`,
-                }}
-              >
-                <span style={{
-                  fontSize: 8,
-                  fontWeight: 600,
-                  letterSpacing: '0.02em',
-                  color: preferredModel === 'auto' ? 'rgba(255,255,255,0.35)'
-                    : preferredModel === 'qwen' ? 'rgba(16,185,129,0.85)'
-                    : preferredModel === 'openai' ? 'rgba(168,85,247,0.85)'
-                    : 'rgba(59,130,246,0.85)',
-                }}>
-                  {preferredModel === 'auto' ? 'AUTO' : preferredModel.toUpperCase()}
-                </span>
-              </button>
+              <ModelSelector
+                preferredModel={preferredModel}
+                onModelChange={onModelChange}
+                videoModel={videoModel}
+                onVideoModelChange={onVideoModelChange}
+                onOpenChange={(isOpen) => setModelSelectorOpen(isOpen)}
+              />
             )}
 
-            {/* Attached image thumbnails */}
-            {attachedImages.map((img, i) => (
-              <div key={i} className="relative flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={img}
-                  alt=""
-                  className="w-9 h-9 rounded-lg object-cover"
-                  style={{ border: '1px solid rgba(255,255,255,0.12)' }}
-                />
-                <button
-                  onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
-                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                  style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
-                >
-                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
+            {/* Attached image thumbnails — scrollable */}
+            {(attachedImages.length > 0 || processingImageCount > 0) && (
+              <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 2 }}>
+                {attachedImages.map((img, i) => (
+                  <div key={i} className="relative flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img}
+                      alt=""
+                      className="w-9 h-9 rounded-lg object-cover"
+                      style={{ border: '1px solid rgba(255,255,255,0.12)' }}
+                    />
+                    <button
+                      onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
+                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                      style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
+                    >
+                      <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                {Array.from({ length: processingImageCount }).map((_, i) => (
+                  <div key={`proc-${i}`} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
+                  </div>
+                ))}
               </div>
-            ))}
-            {/* Attached video thumbnails */}
-            {attachedVideos.map((v, i) => (
-              <div key={`vid-${i}`} className="relative flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={v.poster} alt="" className="w-9 h-9 rounded-lg object-cover" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <svg width="14" height="14" viewBox="0 0 8 8" fill="rgba(255,255,255,0.85)"><polygon points="2,1 7,4 2,7" /></svg>
-                </div>
-                <button
-                  onClick={() => setAttachedVideos(prev => prev.filter((_, j) => j !== i))}
-                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                  style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
-                >
-                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
-              </div>
-            ))}
-            {/* Processing spinner placeholders */}
-            {Array.from({ length: processingImageCount }).map((_, i) => (
-              <div key={`proc-${i}`} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
-              </div>
-            ))}
+            )}
 
-            {/* Spacer */}
-            <div className="flex-1" />
+            {/* Spacer (only when no thumbnails taking flex space) */}
+            {attachedImages.length === 0 && processingImageCount === 0 && <div className="flex-1" />}
+
+            {/* Skill selector — right side, before send */}
+            {skills && skills.length > 0 && onSkillChange && (
+              <SkillSelector
+                skills={skills}
+                selectedSkill={selectedSkill ?? null}
+                onSkillChange={onSkillChange}
+                onDeleteSkill={onDeleteSkill}
+                onUploadSkill={onUploadSkill}
+                installing={installingSkill}
+                onOpenChange={(isOpen) => setSkillSelectorOpen(isOpen)}
+              />
+            )}
 
             {/* Send / Stop button */}
             {isAgentActive && onAbort ? (
@@ -1468,10 +1364,10 @@ export default function AgentChatView({
                 data-testid="chat-send"
                 aria-label="Send message"
                 onClick={handleSubmit}
-                disabled={videoUploading || (!input.trim() && attachedImages.length === 0 && attachedVideos.length === 0)}
+                disabled={!input.trim() && attachedImages.length === 0}
                 className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
                 style={{
-                  background: (input.trim() || attachedImages.length > 0 || attachedVideos.length > 0) ? '#c026d3' : 'rgba(255,255,255,0.08)',
+                  background: (input.trim() || attachedImages.length > 0) ? '#c026d3' : 'rgba(255,255,255,0.08)',
                   color: (input.trim() || attachedImages.length > 0) ? '#fff' : 'rgba(255,255,255,0.25)',
                 }}
               >

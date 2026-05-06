@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/api-auth';
 import { uploadImage } from '@/lib/supabase/storage';
 
 /**
@@ -10,11 +10,9 @@ import { uploadImage } from '@/lib/supabase/storage';
  */
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await authenticateRequest(req);
+    if ('error' in authResult) return authResult.error;
+    const { userId, supabase } = authResult.auth;
 
     const { imageUrl, imageBase64, imageUrls, imageBase64s, title, _addToProject } = await req.json();
 
@@ -38,7 +36,7 @@ export async function POST(req: NextRequest) {
         if (!finalUrl && base64s[i]) {
           const snapId = crypto.randomUUID();
           const filename = `snapshot-${snapId}.jpg`;
-          finalUrl = await uploadImage(supabase, user.id, existingProjectId, filename, base64s[i]!) || undefined;
+          finalUrl = await uploadImage(supabase, userId, existingProjectId, filename, base64s[i]!) || undefined;
           if (!finalUrl) continue;
         }
         if (!finalUrl) continue;
@@ -55,7 +53,7 @@ export async function POST(req: NextRequest) {
     // Text-to-image: no images, just create empty project (agent will generate)
     if (imageCount === 0) {
       const projectId = crypto.randomUUID();
-      await supabase.from('projects').insert({ id: projectId, user_id: user.id, title: title || 'Untitled', timeline_version: 2 });
+      await supabase.from('projects').insert({ id: projectId, user_id: userId, title: title || 'Untitled', timeline_version: 2 });
       return NextResponse.json({
         projectId,
         snapshots: [],
@@ -67,7 +65,7 @@ export async function POST(req: NextRequest) {
     const projectId = crypto.randomUUID();
     const { error: projectError } = await supabase.from('projects').insert({
       id: projectId,
-      user_id: user.id,
+      user_id: userId,
       title: title || 'Untitled',
       timeline_version: 2,
     });
@@ -82,7 +80,7 @@ export async function POST(req: NextRequest) {
       if (!finalUrl && base64s[i]) {
         const snapId = crypto.randomUUID();
         const filename = `snapshot-${snapId}.jpg`;
-        finalUrl = await uploadImage(supabase, user.id, projectId, filename, base64s[i]!) || undefined;
+        finalUrl = await uploadImage(supabase, userId, projectId, filename, base64s[i]!) || undefined;
         if (!finalUrl) continue;
       }
       if (!finalUrl) continue;

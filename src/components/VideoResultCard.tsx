@@ -81,13 +81,14 @@ export default function VideoResultCard({
           const thumbUrl = anim.snapshotUrls[0];
           const title = videoTitle(anim.prompt, idx);
 
+          const modelLabel = anim.videoModel === 'seedance' ? 'SD' : 'K3';
           let statusText: React.ReactNode;
           if (isCompleted) {
-            statusText = anim.duration ? `${anim.duration}s · ${t('video.completed')}` : t('video.completed');
+            statusText = anim.duration ? `${anim.duration}s · ${modelLabel}` : modelLabel;
           } else if (isProcessing) {
-            statusText = <><ElapsedTimer since={anim.createdAt} /> {t('video.rendering')}</>;
+            statusText = <><ElapsedTimer since={anim.createdAt} /> · {modelLabel}</>;
           } else if (isFailed) {
-            statusText = t('video.failed');
+            statusText = <>{t('video.failed')} · {modelLabel}</>;
           } else {
             statusText = t('video.abandoned');
           }

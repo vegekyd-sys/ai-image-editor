@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest } from '@/lib/api-auth'
 import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo } from '@/lib/supabase/storage'
@@ -12,22 +12,25 @@ export async function GET(
   { params }: { params: Promise<{ taskId: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    const user = session?.user
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authResult = await authenticateRequest(req)
+    if ('error' in authResult) return authResult.error
+    const { userId, supabase } = authResult.auth
 
     const { taskId } = await params
 
     // Poll task — route by taskId prefix or env var
-    // cgt-* = SeeDance, mc-* = Motion Control, else = Kling omni-video
+    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, else = Kling
+    const isEvolink = taskId.startsWith('task-unified-')
     const isSeedance = taskId.startsWith('cgt-')
     const isMotionControl = taskId.startsWith('mc-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
 
-    if (isSeedance) {
+    if (isEvolink) {
+      const { getEvolinkTask } = await import('@/lib/evolink')
+      result = await getEvolinkTask(taskId)
+    } else if (isSeedance) {
       const { getSeedanceTask } = await import('@/lib/seedance')
       result = await getSeedanceTask(taskId)
     } else if (isMotionControl) {
@@ -103,9 +106,9 @@ export async function DELETE(
   { params }: { params: Promise<{ taskId: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authResult = await authenticateRequest(req)
+    if ('error' in authResult) return authResult.error
+    const { supabase } = authResult.auth
 
     const { taskId } = await params
     await supabase

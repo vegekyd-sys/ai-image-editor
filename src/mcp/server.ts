@@ -80,6 +80,7 @@ export function createMakaronMcpServer(options?: McpServerOptions) {
 | Add text/captions/titles | captions | (auto) | Gemini handles .md templates well |
 | Text-to-image | (omit) | (auto) | gemini→qwen auto fallback, handles all styles including anime |
 | NSFW/sensitive editing | (omit) | qwen | Gemini will refuse |
+| Design/layout/poster/text | (omit) | openai | Best text rendering & design (~50s, premium pricing) |
 | Not sure | (omit) | (auto) | Auto routing with fallback |
 
 When skill is omitted, editPrompt is sent directly. When skill is set, a structured .md template is injected to guide the AI.
@@ -90,7 +91,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('English editing instructions describing what to change'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(['gemini', 'qwen', 'pony', 'wai']).nullish().describe('NEVER set unless user literally names a model. Gemini refused→retry with qwen. Otherwise ALWAYS omit.'),
+      model: z.enum(['gemini', 'qwen', 'pony', 'wai', 'openai']).nullish().describe('NEVER set unless user literally names a model. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
       originalImage: z.string().nullish().describe('Original photo URL/base64 for face restoration reference'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3)'),
       useOriginalAsReference: z.boolean().nullish().describe('Use originalImage as reference for face/color restoration'),
@@ -231,13 +232,17 @@ Tips:
 
   server.tool(
     'makaron_create_video',
-    `Submit a video rendering task to Kling AI. Returns a taskId for polling.
+    `Submit a video rendering task. Returns a taskId for polling.
 
 IMPORTANT:
 - images must be publicly accessible URLs (not base64). Upload to storage first.
 - script should use <<<image_N>>> format (from makaron_write_video_script output)
 - Video rendering takes 3-5 minutes. Use makaron_get_video_status to poll.
 - Duration: omit for smart mode (AI decides 3-15s based on script).
+
+Models:
+- kling (default) — Kling v3-omni, general purpose, $0.112/s
+- seedance — SeeDance 2.0 via Evolink, supports real human faces, $0.161/s
 
 Example script format:
 Shot 1 (2s): Wide shot, <<<image_1>>> ...
@@ -248,6 +253,7 @@ Style: Cinematic, warm golden light.`,
       images: z.array(z.string().url()).min(1).max(7).describe('Publicly accessible image URLs'),
       duration: z.number().optional().describe('Duration: 3, 5, 7, 10, or 15 seconds. Omit for smart mode.'),
       aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
+      videoModel: z.enum(['kling', 'seedance']).optional().describe('Video model: kling (default) or seedance (real faces, premium)'),
     },
     async (params) => {
       try {
@@ -261,6 +267,7 @@ Style: Cinematic, warm golden light.`,
           images: params.images,
           duration: params.duration,
           aspectRatio: params.aspectRatio,
+          videoModel: params.videoModel,
         });
 
         if (result.success) {

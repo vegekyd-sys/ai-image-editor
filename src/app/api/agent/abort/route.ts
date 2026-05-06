@@ -1,13 +1,11 @@
 import { NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/api-auth';
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-    }
+    const authResult = await authenticateRequest(req);
+    if ('error' in authResult) return authResult.error;
+    const { userId, supabase } = authResult.auth;
 
     const { runId } = await req.json();
     if (!runId) {
@@ -19,7 +17,7 @@ export async function POST(req: NextRequest) {
       .from('agent_runs')
       .update({ status: 'aborted', ended_at: new Date().toISOString() })
       .eq('id', runId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('status', 'running');
 
     if (error) {

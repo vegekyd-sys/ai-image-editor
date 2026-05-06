@@ -55,6 +55,8 @@ interface AgentContext {
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event (v1) */
   animationTaskId?: string;
   animationPrompt?: string;
+  animationImageUrls_?: string[];
+  animationModel?: string;
   /** Video snapshot pending emit (v2) */
   pendingVideoSnapshot?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string };
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<image_1>>> */
@@ -75,8 +77,8 @@ export type AgentStreamEvent =
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string; usedModel?: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
-  | { type: 'animation_task'; taskId: string; prompt: string }  // emitted when generate_animation tool creates a task (v1)
-  | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string }  // v2: video created as snapshot
+  | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }
+  | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string }
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'capture_frame'; frame: number; uploadPath: string; captureId: string }  // request frontend to capture a frame via renderStillOnWeb
   | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
@@ -324,7 +326,7 @@ Hard constraints (apply even before reading the guide):
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<image_N>>> to reference images.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
-        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (supports real faces, fast). seedance = SeeDance 2.0 (best quality, but no real faces without authorized assets). Default: kling.'),
+        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: kling.'),
         image_refs: z.array(z.string()).optional().describe('Additional image URLs to include (workspace files, skill assets, external URLs). These are appended to snapshot images.'),
         video_ref_url: z.string().optional().describe('Reference video URL (from workspace/skill assets via list_files, or [video: url] in Image Index). Kling: base=edit video, feature=reference motion/style. SeeDance: reference_video.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('base: edit video directly (output duration=input duration, Kling only). feature: reference motion/style for new video. Default: feature.'),
@@ -435,6 +437,8 @@ Hard constraints (apply even before reading the guide):
 
             ctx.animationTaskId = taskId;
             ctx.animationPrompt = story_prompt;
+            ctx.animationImageUrls_ = filteredImages;
+            ctx.animationModel = videoModel;
           }
 
           // Bill for video generation (per-second)
@@ -919,13 +923,17 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             return null;
           };
 
-          // Helper: store image as draft (published via write_file)
-          const pushImage = (b64: string, mime: string) => {
+          // Helper: store image — sharp images auto-send, design drafts need write_file to publish
+          const pushImage = (b64: string, mime: string, isDraft = false) => {
             const dataUrl = `data:${mime};base64,${b64}`;
             ctx.currentImage = dataUrl;
-            // Store as draft — published to timeline via write_file({ fromLastRunCode: true })
-            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
-            (ctx as any).__runCodeDrafts.push({ type: 'image', imageBase64: dataUrl, previewBase64: dataUrl });
+            if (isDraft) {
+              if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+              (ctx as any).__runCodeDrafts.push({ type: 'image', imageBase64: dataUrl, previewBase64: dataUrl });
+            } else {
+              ctx.snapshotImages.push(dataUrl);
+              ctx.generatedImages.push(dataUrl);
+            }
           };
 
           // { type: 'patch', edits: [...] } — Incremental search & replace on last design or a specific design via code_path
@@ -1035,26 +1043,10 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             return { type: 'text' as const, content: `Design ready — draft ${draftIdx}. Use preview_frame to check key frames, then publish: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
 
-          // Helper: handle image result from run_code — store as draft + upload preview
+          // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
           const handleImageResult = async (b64: string, mime: string): Promise<{ type: 'image'; base64Data: string; mimeType: string; description?: string }> => {
             pushImage(b64, mime);
-            // Upload preview to workspace so it shows in CUI
-            const drafts = (ctx as any).__runCodeDrafts || [];
-            const lastDraft = drafts[drafts.length - 1];
-            if (lastDraft && ctx.supabase && ctx.userId) {
-              try {
-                const buf = Buffer.from(b64, 'base64');
-                const draftN = drafts.length;
-                const draftPath = `${ctx.projectId}/drafts/draft-${draftN}.jpg`;
-                const wsResult = await workspace.writeFile(draftPath, buf, ctx.supabase, ctx.userId, mime);
-                if (wsResult.storageUrl) lastDraft.previewUrl = wsResult.storageUrl;
-              } catch (err) {
-                console.warn('⚠️ [agent] image draft upload failed:', (err as Error).message);
-              }
-            }
-            const draftIdx = drafts.length;
-            const previewNote = lastDraft?.previewUrl ? ` Preview: ${lastDraft.previewUrl}` : '';
-            return { type: 'image' as const, base64Data: b64, mimeType: mime, description: `Image draft ${draftIdx}.${previewNote} Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
+            return { type: 'image' as const, base64Data: b64, mimeType: mime, description: `Image generated. Now <<<image_${ctx.snapshotImages.length}>>>.` };
           };
 
           // Buffer or Uint8Array → treat as image
@@ -1458,7 +1450,7 @@ export async function* runMakaronAgent(
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
-          const inp = event.input as { useOriginalAsReference?: boolean; image_index?: number; reference_image_indices?: number[] };
+          const inp = event.input as { useOriginalAsReference?: boolean; image_index?: number; reference_image_indices?: number[]; image_refs?: string[] };
           // Resolve the actual edit target (respects image_index; omit = text-to-image)
           let displayTarget: string | undefined;
           if (inp.image_index !== undefined) {
@@ -1479,10 +1471,12 @@ export async function* runMakaronAgent(
               }
             }
           }
-          if (displayTarget) {
-            const twoImageMode = inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
+          const extraRefs: string[] = [];
+          if (inp.image_refs?.length) extraRefs.push(...inp.image_refs);
+          if (displayTarget || extraRefs.length) {
+            const twoImageMode = displayTarget && inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
             toolCallImages = [
-              displayTarget,
+              ...(displayTarget ? [displayTarget] : []),
               ...(twoImageMode ? [ctx.originalImage!] : []),
               ...(ctx.referenceImages ?? []),
               ...snapshotRefs,
@@ -1578,9 +1572,11 @@ export async function* runMakaronAgent(
           imagesSent++;
         }
         if (ctx.animationTaskId) {
-          yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '' };
+          yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '', imageUrls: ctx.animationImageUrls_, model: ctx.animationModel };
           ctx.animationTaskId = undefined;
           ctx.animationPrompt = undefined;
+          ctx.animationImageUrls_ = undefined;
+          ctx.animationModel = undefined;
         }
         if (ctx.pendingVideoSnapshot) {
           yield { type: 'video_snapshot', ...ctx.pendingVideoSnapshot };

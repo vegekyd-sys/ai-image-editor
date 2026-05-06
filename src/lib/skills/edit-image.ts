@@ -102,6 +102,10 @@ export async function editImage(
     };
   }
 
-  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel}`);
-  return { success: true, message: 'Image generated successfully.', image: result, usedModel, contentBlocked, usage: lastUsage };
+  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel}${preferredModel && usedModel !== preferredModel ? ` (requested=${preferredModel}, fallback from ${lastFailedModels?.join(',')})` : ''}`);
+  let msg = 'Image generated successfully.';
+  if (preferredModel && usedModel !== preferredModel) {
+    msg += ` ⚠️ Note: requested model "${preferredModel}" failed, fell back to "${usedModel}". Tell the user.`;
+  }
+  return { success: true, message: msg, image: result, usedModel, contentBlocked, usage: lastUsage };
 }
