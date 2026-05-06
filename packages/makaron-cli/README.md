@@ -101,6 +101,76 @@ npx makaron-cli abort <runId>
 
 Press `Ctrl+C` during `chat` to abort automatically.
 
+### `edit` — AI image editing (direct MCP tool call)
+
+Unlike `chat` (which uses the Agent with project context), `edit` directly calls the image generation model for one-shot results.
+
+```bash
+# Text-to-image (no input image)
+npx makaron-cli edit "a cyberpunk cityscape at night, neon reflections"
+
+# Edit an existing image
+npx makaron-cli edit --image photo.jpg "add cinematic warm lighting"
+
+# With model and skill
+npx makaron-cli edit --image photo.jpg --model openai --skill captions "add elegant title"
+
+# With reference images (up to 3)
+npx makaron-cli edit --image photo.jpg --ref style1.jpg --ref style2.jpg "match this style"
+
+# Specify output path and aspect ratio
+npx makaron-cli edit --out result.jpg --aspect 9:16 "vertical poster design"
+```
+
+Options:
+- `--image <file|url>` — input image (omit for text-to-image)
+- `--model gemini|qwen|openai|pony|wai` — model selection (default: auto)
+- `--skill enhance|creative|wild|captions` — activate skill template
+- `--ref <file|url>` — reference image (repeatable, up to 3)
+- `--aspect <ratio>` — target aspect ratio (e.g. `4:5`, `1:1`, `16:9`)
+- `--out <path>` — output file path (default: `makaron-output-{timestamp}.jpg`)
+
+Output: saves image to local file, prints the file path to stdout.
+
+### `video` — Video generation
+
+```bash
+# Write a video script from images
+npx makaron-cli video script --image img1.jpg --image img2.jpg "cinematic story"
+npx makaron-cli video script --image img1.jpg --image img2.jpg --lang zh "电影感故事"
+
+# Submit video rendering (images must be public URLs)
+npx makaron-cli video create --script "Shot 1..." --image https://...img1.jpg --duration 10
+npx makaron-cli video create --script-file script.txt --image https://...jpg --model seedance
+
+# Check status
+npx makaron-cli video status <taskId>
+```
+
+Options for `video create`:
+- `--script "..."` or `--script-file <path>` — video script
+- `--image <url>` — public image URL (repeatable, up to 7)
+- `--duration 3|5|7|10|15` — seconds (omit for smart mode)
+- `--aspect 9:16|16:9|1:1` — aspect ratio
+- `--model kling|seedance` — video model (default: kling)
+
+### `music` — Music generation
+
+```bash
+# Generate instrumental music
+npx makaron-cli music create "gentle piano, warm strings, cinematic"
+
+# With vocals and style
+npx makaron-cli music create --vocals --style "lo-fi, ambient" "rainy day vibes"
+
+# Check status
+npx makaron-cli music status <taskId>
+```
+
+Options for `music create`:
+- `--vocals` — include vocals (default: instrumental only)
+- `--style "genre"` — genre/mood tags
+
 ## Example: Full workflow
 
 ```bash
