@@ -120,7 +120,7 @@ export async function processVideoUpload(
     const code = `function Design() {
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
-      <Video src="${blobUrl}" muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <Video src="${blobUrl}" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
     </AbsoluteFill>
   );
 }`;
