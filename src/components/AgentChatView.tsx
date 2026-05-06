@@ -1078,8 +1078,10 @@ export default function AgentChatView({
                           onNavigateToSnapshot={onNavigateToSnapshot}
                           onViewFile={setViewingFile}
                         />
-                        {/* Inline video — clickable thumbnail, jumps to GUI */}
+                        {/* Inline video — clickable thumbnail, jumps to GUI (skip if message has design/image/code) */}
                         {(() => {
+                          if (msg.design || msg.image) return null;
+                          if (msg.content.includes('```')) return null;
                           const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
                           if (!mp4Match) return null;
                           const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
