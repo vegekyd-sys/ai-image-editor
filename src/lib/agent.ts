@@ -403,13 +403,7 @@ Hard constraints (apply even before reading the guide):
               createdAt: new Date().toISOString(),
             };
 
-            const { data: maxSort } = await supabase
-              .from('snapshots')
-              .select('sort_order')
-              .eq('project_id', ctx.projectId)
-              .order('sort_order', { ascending: false })
-              .limit(1)
-              .single();
+            const { data: sortData } = await supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
 
             await supabase.from('snapshots').insert({
               id: snapshotId,
@@ -417,7 +411,7 @@ Hard constraints (apply even before reading the guide):
               image_url: posterUrl,
               tips: [],
               message_id: '',
-              sort_order: (maxSort?.sort_order ?? 0) + 1,
+              sort_order: sortData ?? 0,
               type: 'video',
               video_meta: videoMeta,
             });

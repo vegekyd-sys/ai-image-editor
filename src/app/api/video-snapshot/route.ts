@@ -61,16 +61,9 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     }
 
-    // Get next sort_order
-    const { data: maxSort } = await supabase
-      .from('snapshots')
-      .select('sort_order')
-      .eq('project_id', projectId)
-      .order('sort_order', { ascending: false })
-      .limit(1)
-      .single()
-
-    const sortOrder = (maxSort?.sort_order ?? 0) + 1
+    // Atomic sort_order allocation
+    const { data: sortData } = await supabase.rpc('next_sort_order', { p_project_id: projectId })
+    const sortOrder = sortData ?? 0
 
     const { error } = await supabase.from('snapshots').insert({
       id: snapshotId,

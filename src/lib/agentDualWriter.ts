@@ -286,17 +286,11 @@ export class AgentDualWriter {
     }
   }
 
-  /** Get next sort_order for snapshots in this project. */
+  /** Get next sort_order for snapshots in this project (atomic). */
   private async nextSortOrder(): Promise<number> {
     try {
-      const { data } = await this.supabase
-        .from('snapshots')
-        .select('sort_order')
-        .eq('project_id', this.projectId)
-        .order('sort_order', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return (data?.sort_order ?? 0) + 1;
+      const { data } = await this.supabase.rpc('next_sort_order', { p_project_id: this.projectId });
+      return data ?? 0;
     } catch {
       return Date.now();
     }

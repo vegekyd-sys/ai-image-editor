@@ -24,11 +24,9 @@ export async function POST(req: NextRequest) {
     // Add images to existing project (used by CLI chat --image)
     if (_addToProject && imageCount > 0) {
       const existingProjectId = _addToProject as string;
-      // Get current max sort_order
-      const { data: maxSnap } = await supabase.from('snapshots')
-        .select('sort_order').eq('project_id', existingProjectId)
-        .order('sort_order', { ascending: false }).limit(1).maybeSingle();
-      let sortOrder = (maxSnap?.sort_order ?? -1) + 1;
+      // Atomic sort_order allocation
+      const { data: startSort } = await supabase.rpc('next_sort_order', { p_project_id: existingProjectId });
+      let sortOrder = startSort ?? 0;
 
       const snapshots: { snapshotId: string; imageUrl: string }[] = [];
       for (let i = 0; i < imageCount; i++) {
