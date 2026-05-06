@@ -263,6 +263,34 @@ These videos play on all platforms. Every effect you use must render correctly o
 - HTML `<video autoPlay>` is NOT controlled by the Player — it plays independently and cannot be paused or seeked. The harness auto-fixes `<video>` → `<Video>` but write it correctly.
 - Remove `autoPlay`, `controls` attributes — Remotion controls playback via frames. Keep `muted` if you want silent video.
 
+**Video editing props:**
+- `startFrom={frame}` — skip first N frames (trim start)
+- `endAt={frame}` — stop at frame N (trim end)
+- `playbackRate={1.5}` — speed (0.25 to 4x)
+- `volume={0.5}` — audio volume (0 to 1, or function of frame for fade)
+
+**Multi-clip splice (CORRECT pattern — use `<Sequence>` per clip):**
+```jsx
+const { fps } = useVideoConfig();
+const clips = [
+  { src: url1, duration: 150 },  // 5s at 30fps
+  { src: url2, duration: 120 },  // 4s
+];
+let offset = 0;
+{clips.map((clip, i) => {
+  const from = offset;
+  offset += clip.duration;
+  return (
+    <Sequence key={i} from={from} durationInFrames={clip.duration}>
+      <AbsoluteFill>
+        <Video src={clip.src} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      </AbsoluteFill>
+    </Sequence>
+  );
+})}
+```
+**WRONG**: Do NOT use opacity/display toggle with all `<Video>` mounted simultaneously — causes playback sync issues and shows stale frames.
+
 **Performance budget (CRITICAL — iOS Safari will CRASH if exceeded):**
 - **MUST use `<Sequence>` for every scene** — `<Sequence from={sceneStart} durationInFrames={sceneDuration + crossfadeDuration}>` to mount/unmount scenes. Do NOT mount all scenes with `opacity: 0` — all `<Img>` tags load simultaneously and crash iOS. This is the #1 cause of iOS crashes.
 - Total `<Img>` tags simultaneously in DOM: **≤ 3** (1 current + 1 crossfade overlap). 8 images with opacity = instant crash on iPhone. No duplicated images for backgrounds.
