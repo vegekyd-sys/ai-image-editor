@@ -86,25 +86,44 @@ function getAuthCookie() {
   return { cookie: buildCookie(auth), baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL };
 }
 
+function getAuth() {
+  const apiKey = process.env.MAKARON_API_KEY;
+  if (apiKey) {
+    return {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+      baseUrl: process.env.MAKARON_URL || DEFAULT_URL,
+    };
+  }
+  const auth = loadAuth();
+  if (!auth) {
+    console.error('Not logged in. Set MAKARON_API_KEY or run: npx makaron-cli login');
+    process.exit(1);
+  }
+  return {
+    headers: { 'Cookie': buildCookie(auth) },
+    baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
+  };
+}
+
 // ─── SSE Consumer ────────────────────────────────────────────────────────────
 
-async function abortRun(baseUrl, cookie, runId) {
+async function abortRun(baseUrl, headers, runId) {
   try {
     await fetch(`${baseUrl}/api/agent/abort`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({ runId }),
     });
   } catch { /* best effort */ }
 }
 
-async function streamAgent(baseUrl, cookie, projectId, prompt) {
+async function streamAgent(baseUrl, headers, projectId, prompt) {
   const controller = new AbortController();
   const res = await fetch(`${baseUrl}/api/agent`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': cookie,
+      ...headers,
     },
     body: JSON.stringify({
       projectId,
@@ -128,7 +147,7 @@ async function streamAgent(baseUrl, cookie, projectId, prompt) {
   const sigintHandler = async () => {
     process.stderr.write('\n⏹️  Aborting...\n');
     controller.abort();
-    if (runId) await abortRun(baseUrl, cookie, runId);
+    if (runId) await abortRun(baseUrl, headers, runId);
     process.exit(0);
   };
   process.on('SIGINT', sigintHandler);
@@ -209,14 +228,14 @@ async function streamAgent(baseUrl, cookie, projectId, prompt) {
 
 // ─── Async Task Polling ──────────────────────────────────────────────────────
 
-async function pollVideo(baseUrl, cookie, taskId) {
+async function pollVideo(baseUrl, headers, taskId) {
   process.stderr.write(`🎬 Waiting for video ${taskId}...\n`);
   const start = Date.now();
   while (true) {
     await new Promise(r => setTimeout(r, 10_000));
     const elapsed = Math.round((Date.now() - start) / 1000);
     try {
-      const res = await fetch(`${baseUrl}/api/animate/${taskId}`, { headers: { 'Cookie': cookie } });
+      const res = await fetch(`${baseUrl}/api/animate/${taskId}`, { headers });
       if (!res.ok) continue;
       const data = await res.json();
       if (data.videoUrl) { process.stderr.write(`\r🎬 Video done (${elapsed}s): ${data.videoUrl}\n`); return data.videoUrl; }
@@ -227,14 +246,14 @@ async function pollVideo(baseUrl, cookie, taskId) {
   }
 }
 
-async function pollMusic(baseUrl, cookie, taskId) {
+async function pollMusic(baseUrl, headers, taskId) {
   process.stderr.write(`🎵 Waiting for music ${taskId}...\n`);
   const start = Date.now();
   while (true) {
     await new Promise(r => setTimeout(r, 5_000));
     const elapsed = Math.round((Date.now() - start) / 1000);
     try {
-      const res = await fetch(`${baseUrl}/api/music/${taskId}`, { headers: { 'Cookie': cookie } });
+      const res = await fetch(`${baseUrl}/api/music/${taskId}`, { headers });
       if (!res.ok) continue;
       const data = await res.json();
       const trackUrl = data.audioUrl || data.tracks?.[0]?.audioUrl;
@@ -259,7 +278,7 @@ async function pollMusic(baseUrl, cookie, taskId) {
 
 // ─── Create Project ──────────────────────────────────────────────────────────
 
-async function createProject(baseUrl, cookie, opts) {
+async function createProject(baseUrl, headers, opts) {
   const body = {};
   if (opts.imageUrls?.length) {
     body.imageUrls = opts.imageUrls;
@@ -278,7 +297,7 @@ async function createProject(baseUrl, cookie, opts) {
 
   const res = await fetch(`${baseUrl}/api/projects/create`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 
@@ -297,8 +316,8 @@ async function createProject(baseUrl, cookie, opts) {
 
 // ─── List Projects ───────────────────────────────────────────────────────────
 
-async function listProjects(baseUrl, cookie) {
-  const res = await fetch(`${baseUrl}/api/projects/list`, { headers: { 'Cookie': cookie } });
+async function listProjects(baseUrl, headers) {
+  const res = await fetch(`${baseUrl}/api/projects/list`, { headers });
   if (!res.ok) { console.error('List failed:', await res.text()); process.exit(1); }
   const { projects } = await res.json();
   if (!projects.length) { console.log('No projects yet. Create one with: makaron create --image <file>'); return; }
@@ -326,7 +345,7 @@ const command = args[0];
 if (command === 'login') {
   await login();
 } else if (command === 'create') {
-  const { cookie, baseUrl } = getAuthCookie();
+  const { headers, baseUrl } = getAuth();
   const opts = { images: [], imageUrls: [] };
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--image' && args[i + 1]) opts.images.push(args[++i]);
@@ -339,9 +358,9 @@ if (command === 'login') {
     console.error('Usage: makaron create --image <file> [--image <file2>] or --title "name"');
     process.exit(1);
   }
-  await createProject(baseUrl, cookie, opts);
+  await createProject(baseUrl, headers, opts);
 } else if (command === 'chat') {
-  const { cookie, baseUrl } = getAuthCookie();
+  const { headers, baseUrl } = getAuth();
   let projectId = null;
   const chatImages = [];
   const promptParts = [];
@@ -363,7 +382,7 @@ if (command === 'login') {
     });
     const res = await fetch(`${baseUrl}/api/projects/create`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({ imageBase64s: base64s, _addToProject: projectId }),
     });
     if (res.ok) {
@@ -373,18 +392,18 @@ if (command === 'login') {
       process.stderr.write(`⚠️ Failed to upload images: ${await res.text()}\n`);
     }
   }
-  const { results } = await streamAgent(baseUrl, cookie, projectId, prompt);
+  const { results } = await streamAgent(baseUrl, headers, projectId, prompt);
   process.stderr.write('\n━━━ Results ━━━\n');
   for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
   for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
   process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
-  for (const task of results.animationTasks) await pollVideo(baseUrl, cookie, task.taskId);
-  for (const task of results.musicTasks) await pollMusic(baseUrl, cookie, task.taskId);
+  for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId);
+  for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
 } else if (command === 'list' || command === 'ls') {
-  const { cookie, baseUrl } = getAuthCookie();
-  await listProjects(baseUrl, cookie);
+  const { headers, baseUrl } = getAuth();
+  await listProjects(baseUrl, headers);
 } else if (command === 'abort') {
-  const { cookie, baseUrl } = getAuthCookie();
+  const { headers, baseUrl } = getAuth();
   const runId = args[1];
   if (!runId) {
     console.error('Usage: makaron abort <runId>');
@@ -392,7 +411,7 @@ if (command === 'login') {
   }
   const res = await fetch(`${baseUrl}/api/agent/abort`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify({ runId }),
   });
   if (res.ok) {
@@ -414,6 +433,7 @@ Commands:
   abort <runId>                      Abort a running Agent
 
 Environment:
+  MAKARON_API_KEY  API key (mk_live_xxx) — recommended for agents
   MAKARON_URL      API base (default: ${DEFAULT_URL})
 `);
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest } from '@/lib/api-auth'
 import { getMusicStatus } from '@/lib/skills/get-music-status'
 import { uploadAudio } from '@/lib/supabase/storage'
 
@@ -10,13 +10,12 @@ export async function GET(
   { params }: { params: Promise<{ taskId: string }> },
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authResult = await authenticateRequest(req)
+    if ('error' in authResult) return authResult.error
+    const { userId, supabase } = authResult.auth
 
     const { taskId } = await params
     const projectId = req.nextUrl.searchParams.get('projectId')
-    const userId = session.user.id
     const result = await getMusicStatus({ taskId })
 
     // On completed: upload to Supabase Storage synchronously, return permanent URLs

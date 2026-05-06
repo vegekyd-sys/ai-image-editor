@@ -1,22 +1,19 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { authenticateRequest } from '@/lib/api-auth';
 
 /**
  * GET /api/projects/list — List user's projects with snapshot counts.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user;
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await authenticateRequest(req);
+    if ('error' in authResult) return authResult.error;
+    const { userId, supabase } = authResult.auth;
 
     const { data: projects } = await supabase
       .from('projects')
       .select('id, title, cover_url, created_at, updated_at')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('updated_at', { ascending: false });
 
     if (!projects?.length) {
