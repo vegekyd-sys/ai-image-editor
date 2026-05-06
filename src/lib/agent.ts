@@ -390,7 +390,7 @@ Hard constraints (apply even before reading the guide):
           if (isV2) {
             // v2: write to snapshots table as type='video'
             const snapshotId = crypto.randomUUID();
-            const posterUrl = imageUrls[0] || '';
+            const posterUrl = filteredImages[0] || imageUrls[0] || '';
             const videoMeta: import('@/types').VideoMeta = {
               taskId,
               videoUrl: null,

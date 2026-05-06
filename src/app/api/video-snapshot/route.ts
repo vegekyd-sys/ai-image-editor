@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, imageUrls)
 
     const snapshotId = crypto.randomUUID()
-    const posterUrl = imageUrls[0] || ''
+    const posterUrl = filteredImages[0] || imageUrls[0] || ''
 
     const videoMeta: VideoMeta = {
       taskId,
