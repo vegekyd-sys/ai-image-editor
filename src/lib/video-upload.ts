@@ -7,7 +7,7 @@ import { createVideoDesign } from '@/lib/video-design';
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 const MAX_DURATION = 60; // 60 seconds
 const TARGET_SHORT_EDGE = 720;
-const DIRECT_UPLOAD_MAX_SIZE = 30 * 1024 * 1024; // 30MB — skip transcode if small H.264
+const DIRECT_UPLOAD_MAX_SIZE = 100 * 1024 * 1024; // 100MB — skip transcode for any H.264 MP4
 
 export interface VideoUploadResult {
   poster: string;       // base64 JPEG data URL
@@ -102,8 +102,9 @@ export async function processVideoUpload(
   const { blobUrl, duration, width, height, poster } = info;
   const out = calcOutputDims(width, height);
 
-  // Fast path: small H.264 MP4 at reasonable resolution → direct upload
-  if (isLikelyH264Mp4(file) && file.size <= DIRECT_UPLOAD_MAX_SIZE && width <= 1920 && height <= 1920) {
+  // Fast path: H.264 MP4 under size limit → direct upload (no transcode needed)
+  // Remotion Player and browsers handle any resolution H.264 natively
+  if (isLikelyH264Mp4(file) && file.size <= DIRECT_UPLOAD_MAX_SIZE) {
     console.log(`📹 [video-upload] direct upload (${(file.size / 1024 / 1024).toFixed(1)}MB, ${width}x${height})`);
     URL.revokeObjectURL(blobUrl);
     return { poster, videoBlob: file, duration, width, height };
