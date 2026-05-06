@@ -1081,9 +1081,9 @@ export default function AgentChatView({
                         {/* Inline video — clickable thumbnail, jumps to GUI */}
                         {(() => {
                           if (msg.design || msg.image) return null;
-                          // Strip code fences before matching — mp4 URLs inside code are not standalone videos
-                          const contentWithoutCode = msg.content.replace(/```[\s\S]*?```/g, '');
-                          const mp4Match = contentWithoutCode.match(/https?:\/\/\S+\.mp4\S*/);
+                          // Skip if content has any code fence (even unclosed during streaming)
+                          if (msg.content.includes('```')) return null;
+                          const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
                           if (!mp4Match) return null;
                           const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
                           const animId = animIdMatch?.[1];
