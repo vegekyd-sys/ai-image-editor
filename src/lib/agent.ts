@@ -399,7 +399,7 @@ Hard constraints (apply even before reading the guide):
               sourceUrls: filteredImages,
               status: 'processing',
               duration: duration || null,
-              model: 'kling',
+              model: videoModel as import('@/types').VideoModel,
               createdAt: new Date().toISOString(),
             };
 
