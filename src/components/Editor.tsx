@@ -1827,12 +1827,14 @@ const isTipsFetchingRef = useRef(isTipsFetching);
           },
         });
       }
-      // Add all video snapshots at once
+      // Add all video snapshots at once + navigate to last one
       setSnapshots(prev => {
         const next = [...prev, ...newVideoSnaps];
         snapshotsRef.current = next;
         return next;
       });
+      // Navigate to the last video snapshot so VideoResultCard shows
+      pendingNavigateToVideoRef.current = true;
       // Persist each with correct sort_order
       newVideoSnaps.forEach((snap, i) => {
         onSaveSnapshot?.(snap, snapshotsRef.current.length - newVideoSnaps.length + i);
