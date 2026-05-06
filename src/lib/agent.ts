@@ -798,12 +798,7 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
     run_code: tool({
       description: `Execute JavaScript for design output (React/Remotion) or image utilities (sharp). Used for video/animation, editable templates, or image processing.
 
-**Loading guides (only when needed):**
-- SIMPLE edits (patch text, swap clips, adjust timing, colors) → just write the patch. No read_file needed.
-- Video editing (splice, trim, overlay, speed) → \`read_file('prompts/coding-video.md')\`
-- New design from scratch (multi-scene, vlog, full layout) → \`read_file('prompts/coding-design.md')\`
-- First time coding in this conversation → \`read_file('prompts/agent-coding.md')\` for core rules (render/patch format, editables, constraints)
-Do NOT re-read files already in this conversation's tool-result history.
+**BEFORE YOUR FIRST run_code CALL in a conversation**: call \`read_file('prompts/agent-coding.md')\` to load the full coding guide (render vs patch, editable fields, video workflow, composition patterns, cross-platform effects). The guide already includes \`[Current design code]\` injected into your prompt when patching — no need to re-read it. **Do not re-read agent-coding.md if it already appears in this conversation's tool-result history.**
 
 ## Hard constraints (apply even before reading the guide)
 
@@ -831,14 +826,7 @@ Context:
 - \`ctx.snapshotImages\` — array of snapshot URLs (index 0 = <<<image_1>>>). Embed directly via template literal \`\${ctx.snapshotImages[0]}\` inside design \`code\`.
 - \`ctx.projectId\`, \`ctx.userId\`.
 
-Before jumping into code, check if visual assets (stickers, illustrations, objects) would be better generated with \`generate_image\` (sticker-maker skill for transparent PNGs) than drawn with CSS.
-
-## Common video patches (no read_file needed)
-- Swap clip order: patch the clips/urls array
-- Add subtitle: insert \`<Sequence from={N}><div data-editable="sub">text</div></Sequence>\`
-- Trim: patch \`startFrom\`/\`endAt\` on \`<Video>\`
-- Speed: patch \`playbackRate\` on \`<Video>\`
-- Splice videos: use \`<Sequence>\` per clip (NOT opacity toggle with all mounted)`,
+Before jumping into code, check if visual assets (stickers, illustrations, objects) would be better generated with \`generate_image\` (sticker-maker skill for transparent PNGs) than drawn with CSS.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For designs/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
