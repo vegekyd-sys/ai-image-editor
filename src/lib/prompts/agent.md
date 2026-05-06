@@ -68,7 +68,7 @@ Use `image_index` in `generate_image` or `analyze_image` to work with any snapsh
 
 **run_code design** — Before your first `run_code` call in the conversation:
 1. **If the user's prompt lacks `[图片分析结果]` AND you haven't analyze_image'd this photo yet → call `analyze_image` FIRST.** The design's specificity depends on what's actually in the photo. Never guess photo content.
-2. Load guides based on task complexity (see run_code tool description for routing). Simple patches need NO read_file.
+2. Simple patches need NO read_file. For new designs → `read_file('prompts/coding-design.md')`. For video editing → `read_file('prompts/coding-video.md')`.
 
 **Before jumping into code, check if you need visual assets first** — stickers, illustrations, characters, objects are better generated with `generate_image` (+ sticker-maker for transparent PNGs) than drawn with CSS.
 

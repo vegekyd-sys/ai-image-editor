@@ -796,49 +796,74 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
     }),
 
     run_code: tool({
-      description: `Execute JavaScript for design output (React/Remotion) or image utilities (sharp). Used for video/animation, editable templates, or image processing.
+      description: `Execute JavaScript for design output (React/Remotion) or image utilities (sharp).
 
-**Loading guides (only when needed):**
-- SIMPLE edits (patch text, swap clips, adjust timing, colors) → just write the patch. No read_file needed.
-- Video editing (splice, trim, overlay, speed) → \`read_file('prompts/coding-video.md')\`
-- New design from scratch (multi-scene, vlog, full layout) → \`read_file('prompts/coding-design.md')\`
-- First time coding in this conversation → \`read_file('prompts/agent-coding.md')\` for core rules (render/patch format, editables, constraints)
+Think like a designer, not a developer. Three checks: **Specificity** (driven by THIS photo?) · **Believability** (professional?) · **Clarity** (intent obvious?)
+
+**Loading extra guides (only when needed — skip for simple patches):**
+- Video editing (splice, trim, overlay) → \`read_file('prompts/coding-video.md')\`
+- New design from scratch (multi-scene, vlog) → \`read_file('prompts/coding-design.md')\`
 Do NOT re-read files already in this conversation's tool-result history.
 
-## Hard constraints (apply even before reading the guide)
-
-Return shape — exactly one of:
-- \`{ type: 'render', code, width, height, editables?: [...], props?: {...}, animation?: { fps, durationInSeconds } }\` — first time, or when overall layout changes.
-- \`{ type: 'patch', edits: [{ old, new }], props?: {...}, code_path?: '...' }\` — **default for subsequent edits**. Each \`old\` must match exactly once.
+## Return shape
+- \`{ type: 'render', code, width, height, editables: [...], props?: {...}, animation?: { fps, durationInSeconds } }\` — new design or full rewrite.
+- \`{ type: 'patch', edits: [{ old, new }], props?: {...}, code_path?: '...' }\` — **default for edits**. Each \`old\` must match once in current code.
 - \`{ type: 'image', data: base64, mimeType }\` — sharp output.
 - \`{ type: 'text', content }\` — computation/data result.
 - \`{ type: 'error', message }\` — failure.
 
-Critical design rules:
-- Use \`<Img>\` (Remotion), never plain \`<img>\` — blank screenshots on mobile otherwise.
-- \`render\` MUST declare \`editables: [{ id, type:'text', label, propKey }]\` for every user-facing text (titles, captions). Editable elements need \`display: block | inline-block\`.
-- CJK text: system fonts only (\`PingFang SC\`, \`Noto Sans SC\`) — Google CJK Fonts break on iOS.
-- iOS: keep simultaneous \`<Img>\` ≤ 3; avoid CSS \`filter: blur(...)\` on \`<Img>\` (use CSS gradient instead).
+## render vs patch
+First time → \`type: 'render'\`. Subsequent edits → **ALWAYS \`type: 'patch'\`**:
+\`\`\`
+return { type: 'patch', edits: [{ old: 'text in current code', new: 'replacement' }] }
+\`\`\`
+\`[Current design code]\` is in your context — just write edits, no read_file needed.
+- Each \`old\` must match once. Include surrounding context if ambiguous.
+- Supports modify, add (new has extra), delete (new is shorter/empty).
+- Include \`props: {...}\` to merge prop updates alongside code changes.
+- Only \`render\` again when layout fundamentally changes or starting fresh.
+- **Sandbox has NO require, NO fs.** Use \`read_file\` tool for file access.
 
-## Available in your code
+## Editable Fields (REQUIRED for every render)
+Every \`type: 'render'\` MUST declare editables for user-facing text (titles, subtitles, captions — NOT decorative text/icons).
+- \`data-editable="fieldId"\` on text elements
+- Elements MUST be \`display: block | inline-block\` (drag/resize needs box model)
+- Text from \`props[propKey]\`: \`{props.title}\`
+- \`editables: [{ id: 'title', type: 'text', label: 'Title', propKey: 'title' }]\`
+- \`data-editable\` value must match \`id\` in editables array
+For video designs: unique IDs per scene (\`scene1Title\`, \`scene2Title\`).
+Example: \`return { type:'render', code:'function Design(props){return <AbsoluteFill><div data-editable="title">{props.title}</div></AbsoluteFill>}', props:{title:'Hello'}, editables:[{id:'title',type:'text',label:'Title',propKey:'title'}], width:1080, height:1350 }\`
 
-React scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio, evolvePath/getLength/getPointAtLength/interpolatePath/parsePath/resetPath/cutPath (@remotion/paths), noise2D/noise3D (@remotion/noise).
+## Draft, Save, Publish
+All \`run_code\` output creates a **draft** (preview only, not on timeline). \`generate_image\` is the exception — it publishes directly.
+- \`write_file({ fromLastRunCode: true, name: "slug", publish: false })\` → save to workspace (iterate)
+- \`write_file({ fromLastRunCode: true, name: "slug" })\` → save + publish to timeline (final)
 
-Node scope: \`sharp\`, \`JSZip\`, \`saveToWorkspace(path, content, contentType?)\` → { success, storageUrl }, \`fetch\`, Buffer/JSON/Math/Date.
+## Verify
+Code review first (positions, colors, URLs reasonable?). \`preview_frame\` only when visual check needed — batch all frames in one turn. Don't preview every patch. Do NOT use \`<<<image_N>>>\` to check drafts — those only reference published snapshots.
 
-Context:
-- \`images\` — Buffers pre-fetched from the \`image_refs\` input (sharp ops only, never base64 into design props).
-- \`ctx.snapshotImages\` — array of snapshot URLs (index 0 = <<<image_1>>>). Embed directly via template literal \`\${ctx.snapshotImages[0]}\` inside design \`code\`.
-- \`ctx.projectId\`, \`ctx.userId\`.
+## Editing existing code
+1. \`[Current design code]\` in context → patch directly.
+2. No code → \`read_file\` from workspace → \`render\` to re-activate → then \`patch\`.
+Build on existing code — do NOT rewrite from scratch.
 
-Before jumping into code, check if visual assets (stickers, illustrations, objects) would be better generated with \`generate_image\` (sticker-maker skill for transparent PNGs) than drawn with CSS.
+## Available scope
+React: useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio, Video, @remotion/paths (evolvePath, getLength, etc), @remotion/noise (noise2D, noise3D).
+Node: \`sharp\`, \`JSZip\`, \`saveToWorkspace(path, content, contentType?)\`, \`fetch\`, Buffer/JSON/Math/Date.
+Context: \`images\` (Buffers from image_refs), \`ctx.snapshotImages\` (URLs, index 0 = <<<image_1>>>), \`ctx.projectId\`, \`ctx.userId\`.
+
+## Constraints
+- \`<Img>\` not \`<img>\` — blank screenshots on mobile otherwise.
+- CJK: system fonts only (PingFang SC, Noto Sans SC). Google CJK fonts crash iOS.
+- iOS: simultaneous \`<Img>\` ≤ 3; no \`filter: blur()\` on \`<Img>\` (use CSS gradient).
+- Visual assets → \`generate_image\` (sticker-maker for transparent PNGs) > CSS drawing.
 
 ## Common video patches (no read_file needed)
-- Swap clip order: patch the clips/urls array
-- Add subtitle: insert \`<Sequence from={N}><div data-editable="sub">text</div></Sequence>\`
+- Swap clip order: patch clips array
+- Add subtitle: insert \`<Sequence from={N}><div data-editable="sub">{props.sub}</div></Sequence>\`
 - Trim: patch \`startFrom\`/\`endAt\` on \`<Video>\`
 - Speed: patch \`playbackRate\` on \`<Video>\`
-- Splice videos: use \`<Sequence>\` per clip (NOT opacity toggle with all mounted)`,
+- Splice: \`<Sequence>\` per clip (NOT opacity toggle)`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For designs/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
