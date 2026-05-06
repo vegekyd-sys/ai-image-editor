@@ -335,10 +335,11 @@ Hard constraints (apply even before reading the guide):
         character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),
       }),
       execute: async ({ story_prompt, duration, aspect_ratio, model, image_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation }) => {
-        // GUI animation mode: use animationImageUrls; CUI mode: fallback to snapshotImages URLs
+        // GUI animation mode: use animationImageUrls; CUI mode: use snapshotImages directly
+        // IMPORTANT: do NOT filter — index must align with Image Index (<<<image_N>>>)
         let imageUrls = ctx.animationImageUrls;
         if (!imageUrls?.length) {
-          imageUrls = ctx.snapshotImages.filter(img => img.startsWith('http'));
+          imageUrls = ctx.snapshotImages;
         }
         if (image_refs?.length) {
           imageUrls = [...(imageUrls || []), ...image_refs.filter(u => u.startsWith('http'))];
