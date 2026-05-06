@@ -1238,9 +1238,9 @@ export default function AgentChatView({
                 v.currentTime = Math.min(0.5, v.duration * 0.1);
                 await new Promise<void>(r => { v.onseeked = () => r(); setTimeout(r, 3000); });
                 const c = document.createElement('canvas');
-                c.width = Math.min(v.videoWidth, 200); c.height = Math.min(v.videoHeight, 200);
-                c.getContext('2d')!.drawImage(v, 0, 0, c.width, c.height);
-                const poster = c.toDataURL('image/jpeg', 0.6);
+                c.width = v.videoWidth; c.height = v.videoHeight;
+                c.getContext('2d')!.drawImage(v, 0, 0);
+                const poster = c.toDataURL('image/jpeg', 0.75);
                 v.pause(); v.removeAttribute('src'); v.load();
                 URL.revokeObjectURL(url);
                 setAttachments(prev => [...prev, { id, type: 'video', thumbnail: poster, status: 'processing' }]);
