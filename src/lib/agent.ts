@@ -375,16 +375,17 @@ Hard constraints (apply even before reading the guide):
           });
 
           if (!skillResult.success || !skillResult.taskId) {
+            console.error('[generate_animation] createVideo failed:', skillResult.message);
             return { success: false as const, message: skillResult.message };
           }
 
           const taskId = skillResult.taskId;
 
-          // Persist to DB (Agent layer responsibility)
-          const { createClient } = await import('@/lib/supabase/server');
-          const supabase = await createClient();
+          // Persist to DB (use admin client to bypass RLS — API key auth has no session)
+          const { getSupabaseAdmin } = await import('@/lib/supabase/service');
+          const adminDb = getSupabaseAdmin();
           const { filteredImages, finalPrompt } = filterAndRemapImages(story_prompt, imageUrls);
-          const { data: animation, error } = await supabase
+          const { data: animation, error } = await adminDb
             .from('project_animations')
             .insert({
               project_id: ctx.projectId,
