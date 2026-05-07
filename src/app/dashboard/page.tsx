@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { CREDIT_TIERS } from '@/lib/billing/tiers'
 import CreditPopup from '@/components/CreditPopup'
 
@@ -47,12 +48,23 @@ const PLANS = [
 ] as const
 
 export default function DashboardPage() {
-  const [tab, setTab] = useState<'subscribe' | 'topup' | 'keys' | 'usage'>(() => {
-    if (typeof window === 'undefined') return 'subscribe'
-    const t = new URLSearchParams(window.location.search).get('tab')
-    if (t === 'keys' || t === 'topup' || t === 'usage' || t === 'subscribe') return t
-    return 'subscribe'
+  return <Suspense><DashboardInner /></Suspense>
+}
+
+type TabType = 'subscribe' | 'topup' | 'keys' | 'usage'
+const VALID_TABS: TabType[] = ['subscribe', 'topup', 'keys', 'usage']
+
+function DashboardInner() {
+  const searchParams = useSearchParams()
+  const [tab, setTab] = useState<TabType>(() => {
+    const t = searchParams.get('tab')
+    return VALID_TABS.includes(t as TabType) ? (t as TabType) : 'subscribe'
   })
+
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    if (VALID_TABS.includes(t as TabType)) setTab(t as TabType)
+  }, [searchParams])
   const [balance, setBalance] = useState<Balance | null>(null)
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [usage, setUsage] = useState<UsageLog[]>([])

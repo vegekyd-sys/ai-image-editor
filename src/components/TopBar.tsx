@@ -41,7 +41,7 @@ export default function TopBar({ page }: TopBarProps) {
 
   return (
     <>
-      <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
+      <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 50 }}>
         {/* Left side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {page === 'home' && user && (
