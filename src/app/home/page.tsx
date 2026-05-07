@@ -16,6 +16,37 @@ import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabas
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 
+function LazyVideo({ src, style }: { src: string; style: React.CSSProperties }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  const [inView, setInView] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setInView(true)
+        io.disconnect()
+      }
+    }, { rootMargin: '200px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  return (
+    <video
+      ref={ref}
+      src={inView ? src : undefined}
+      autoPlay={inView}
+      loop
+      muted
+      playsInline
+      preload={inView ? 'auto' : 'none'}
+      style={style}
+    />
+  )
+}
+
 export default function HomePage() {
   return <Suspense><HomePageInner /></Suspense>
 }
@@ -40,7 +71,7 @@ function HomePageInner() {
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
   const [showChangelog, setShowChangelog] = useState(false)
   const [slotDragOver, setSlotDragOver] = useState(-1)
-  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>(getCachedHomeSkills)
+  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
@@ -92,6 +123,11 @@ function HomePageInner() {
   useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    // Hydrate from sessionStorage first (instant, avoids skeleton flash on same-session)
+    const cached = getCachedHomeSkills()
+    if (cached.length > 0) setHomeSkills(cached)
+
+    // Then fetch fresh data in background
     fetch('/api/home-skills').then(r => r.json()).then(data => {
       if (!Array.isArray(data) || data.length === 0) return
       setHomeSkills(prev => {
@@ -101,8 +137,6 @@ function HomePageInner() {
           const fresh = newMap.get(s.id)
           if (!fresh) return null
           newMap.delete(s.id)
-          // JSON diff fallback — home_skills has no updated_at trigger,
-          // so updated_at alone can't tell us if before_images/prompt/labels changed.
           return JSON.stringify(fresh) === JSON.stringify(s) ? s : fresh as HomeSkill
         }).filter(Boolean) as HomeSkill[]
         for (const s of newMap.values()) merged.push(s)
@@ -188,7 +222,7 @@ function HomePageInner() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [authLoading])
+  }, [])
 
   useEffect(() => {
     const el = inputWrapperRef.current
@@ -198,7 +232,7 @@ function HomePageInner() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [authLoading])
+  }, [])
 
   useEffect(() => {
     const el = document.querySelector('.mkr-page') as HTMLElement | null
@@ -305,7 +339,7 @@ function HomePageInner() {
     }, { threshold: 0.1 })
     io.observe(el)
     return () => io.disconnect()
-  }, [authLoading])
+  }, [])
 
   useEffect(() => {
     const el = inlineBoxRef.current
@@ -316,7 +350,7 @@ function HomePageInner() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [authLoading])
+  }, [])
 
   const userTypingRef = useRef(false)
   const resizeTextarea = useCallback(() => {
@@ -602,7 +636,10 @@ function HomePageInner() {
   ) => {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
-      return <video src={normalizeDomain(url)} autoPlay loop muted playsInline preload="metadata" style={style} />
+      if (variant === 'thumb') {
+        return <LazyVideo src={normalizeDomain(url)} style={style} />
+      }
+      return <video src={normalizeDomain(url)} autoPlay loop muted playsInline preload="auto" style={style} />
     }
     const src = variant === 'thumb'
       ? getThumbnailUrl(url, 400, 70, 533, 'cover')
@@ -866,8 +903,8 @@ function HomePageInner() {
             >
               {creating ? <Spinner size={12} /> : !user ? (
                 <>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" /></svg>
-                  {locale === 'zh' ? '登录' : 'Sign in'}
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+                  {locale === 'zh' ? '免费试用' : 'Try free'}
                 </>
               ) : (
                 <>
@@ -911,13 +948,6 @@ function HomePageInner() {
     })
   }
 
-  if (authLoading) {
-    return (
-      <div style={{ height: '100dvh', background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Spinner />
-      </div>
-    )
-  }
 
   return (
     <>
