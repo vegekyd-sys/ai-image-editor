@@ -101,6 +101,7 @@ export default function ImageCanvas({
   const lastPanPos = useRef({ x: 0, y: 0 });
   const isPanning = useRef(false);
 
+
   // Design overlay refs (for editable designs)
   const [designContainerEl, setDesignContainerEl] = useState<HTMLDivElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -127,6 +128,22 @@ export default function ImageCanvas({
 
   // Image loading state
   const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Long content detection: height/width > 2
+  const activeDesign = animatedDesigns?.get(currentIndex) || null;
+  const isLongContent = (() => {
+    if (activeDesign) return activeDesign.height / activeDesign.width > 2;
+    if (naturalDims.w && naturalDims.h) return naturalDims.h / naturalDims.w > 2;
+    return false;
+  })();
+  const containerHeight = containerRef.current?.getBoundingClientRect().height || 1;
+  const containerWidth = containerRef.current?.getBoundingClientRect().width || 1;
+  const contentAspect = activeDesign
+    ? activeDesign.height / activeDesign.width
+    : (naturalDims.h && naturalDims.w ? naturalDims.h / naturalDims.w : 1);
+  const minScale = isLongContent
+    ? Math.min(1, containerHeight / (containerWidth * contentAspect))
+    : 1;
 
   // Video playback state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -211,8 +228,8 @@ export default function ImageCanvas({
     touchStartX.current = touch.clientX;
     touchStartY.current = touch.clientY;
 
-    if (!isVideoEntry && scale > 1) {
-      // Pan mode when zoomed (not for video)
+    if (!isVideoEntry && (scale > 1 || isLongContent)) {
+      // Pan mode when zoomed or long content (not for video)
       isPanning.current = true;
       lastPanPos.current = { x: touch.clientX, y: touch.clientY };
       swiping.current = false;
@@ -242,7 +259,7 @@ export default function ImageCanvas({
       const dist = Math.hypot(dx, dy);
       const ratio = dist / lastPinchDist.current;
       lastPinchDist.current = dist;
-      setScale(prev => Math.min(5, Math.max(1, prev * ratio)));
+      setScale(prev => Math.min(5, Math.max(minScale, prev * ratio)));
       return;
     }
 
@@ -278,8 +295,8 @@ export default function ImageCanvas({
         return;
       }
 
-      // Pan when zoomed
-      if (isPanning.current && scale > 1) {
+      // Pan when zoomed or long content
+      if (isPanning.current && (scale > 1 || isLongContent)) {
         const panDx = touch.clientX - lastPanPos.current.x;
         const panDy = touch.clientY - lastPanPos.current.y;
         lastPanPos.current = { x: touch.clientX, y: touch.clientY };
@@ -319,11 +336,13 @@ export default function ImageCanvas({
     if (isPinching.current) {
       isPinching.current = false;
       skipClick.current = true;
-      // Snap to 1x if barely zoomed
+      // Snap to 1x if barely zoomed (long content: snap to minScale if close)
       setScale(prev => {
-        if (prev < 1.1) {
-          setTranslate({ x: 0, y: 0 });
-          return 1;
+        if (isLongContent) {
+          if (prev < minScale + 0.05) { setTranslate({ x: 0, y: 0 }); return minScale; }
+          if (prev > 0.95 && prev < 1.05) return 1;
+        } else {
+          if (prev < 1.1) { setTranslate({ x: 0, y: 0 }); return 1; }
         }
         return prev;
       });
@@ -403,8 +422,8 @@ export default function ImageCanvas({
     mouseStartPos.current = { x: e.clientX, y: e.clientY };
     mouseDidDrag.current = false;
 
-    if (scale > 1) {
-      // Pan mode when zoomed (same as touch)
+    if (scale > 1 || isLongContent) {
+      // Pan mode when zoomed or long content (same as touch)
       mousePanning.current = true;
       lastMousePos.current = { x: e.clientX, y: e.clientY };
     }
@@ -432,8 +451,8 @@ export default function ImageCanvas({
       if (isComparing) setIsComparing(false);
     }
 
-    // Pan when zoomed (same as touch)
-    if (mousePanning.current && scale > 1) {
+    // Pan when zoomed or long content (same as touch)
+    if (mousePanning.current && (scale > 1 || isLongContent)) {
       const panDx = e.clientX - lastMousePos.current.x;
       const panDy = e.clientY - lastMousePos.current.y;
       lastMousePos.current = { x: e.clientX, y: e.clientY };
@@ -505,8 +524,8 @@ export default function ImageCanvas({
       const speed = isTrackpadPinch ? 0.01 : 0.003;
       const zoomFactor = 1 - e.deltaY * speed;
       setScale(prev => {
-        const next = Math.min(5, Math.max(1, prev * zoomFactor));
-        if (next <= 1.05) { setTranslate({ x: 0, y: 0 }); return 1; }
+        const next = Math.min(5, Math.max(minScale, prev * zoomFactor));
+        if (!isLongContent && next <= 1.05) { setTranslate({ x: 0, y: 0 }); return 1; }
         return next;
       });
       return;
@@ -805,9 +824,9 @@ export default function ImageCanvas({
       {/* Zoom wrapper */}
       <div
         className="w-full h-full"
-        style={!isVideoEntry && scale > 1 ? {
+        style={!isVideoEntry && (scale !== 1 || (isLongContent && (translate.x !== 0 || translate.y !== 0))) ? {
           transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
-          transformOrigin: 'center center',
+          transformOrigin: isLongContent ? 'top center' : 'center center',
         } : undefined}
       >
         {/* Grey placeholder while loading (skip for drafts — they show a low-res thumbnail instead) */}
@@ -1033,7 +1052,10 @@ export default function ImageCanvas({
           </div>
         ) : currentDesign && !isComparing ? (
           /* Animated design (or draft preview) — Remotion Player with custom controls (same as video) */
-          <div className={`relative w-full h-full transition-all duration-150 ${
+          (() => {
+            const isLongDesign = currentDesign.height / currentDesign.width > 2;
+            return (
+          <div className={`relative w-full ${isLongDesign ? 'h-full overflow-y-auto' : 'h-full'} transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
@@ -1057,7 +1079,7 @@ export default function ImageCanvas({
           >
             <RemotionRenderer
               design={currentDesign!}
-              mode="fill"
+              mode={isLongDesign ? 'inline' : 'fill'}
               hideControls
               posterImage={currentDesign?.animation ? displayImage : undefined}
               onLoading={setRemotionLoading}
@@ -1184,13 +1206,17 @@ export default function ImageCanvas({
               />
             )}
           </div>
+            );
+          })()
         ) : displayImage ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             ref={imgElRef}
             src={displayImage}
             alt="preview"
-            className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
+            className={`select-none pointer-events-none transition-all duration-150 ${
+              isLongContent ? 'w-full h-auto' : 'w-full h-full object-contain'
+            } ${
               pullDownActive ? 'opacity-[0.15] grayscale' :
               animDir === 'left' ? 'opacity-0 -translate-x-8' :
               animDir === 'right' ? 'opacity-0 translate-x-8' :
