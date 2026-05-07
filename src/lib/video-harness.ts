@@ -3,9 +3,21 @@
  * Returns null if OK, or an error string to send back to the Agent for retry.
  */
 
+function urlMatch(a: string, b: string): boolean {
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return ua.origin === ub.origin && ua.pathname === ub.pathname;
+  } catch {
+    return a === b;
+  }
+}
+
 export function validateVideoScript(opts: {
   prompt: string
   imageCount: number
+  imageUrls?: string[]
+  imageRefs?: string[]
   videoRefUrl?: string
   videoRefType?: string
   model?: string
@@ -48,6 +60,20 @@ export function validateVideoScript(opts: {
   // 4. base mode only on Kling
   if (videoRefUrl && videoRefType === 'base' && model === 'seedance') {
     return 'Video editing (base mode) is only supported by Kling. Either switch to model="kling" or use video_ref_type="feature" for style/motion reference.'
+  }
+
+  // 5. image_refs contains URLs already in Image Index
+  if (opts.imageRefs?.length && opts.imageUrls?.length) {
+    const duplicates: string[] = [];
+    for (const ref of opts.imageRefs) {
+      const matchIdx = opts.imageUrls.findIndex(u => u && urlMatch(u, ref));
+      if (matchIdx >= 0) {
+        duplicates.push(`"${ref.slice(0, 80)}" is already <<<image_${matchIdx + 1}>>>`);
+      }
+    }
+    if (duplicates.length > 0) {
+      return `image_refs contains URLs that are already in Image Index — do NOT pass them via image_refs. Use <<<image_N>>> directly in your script instead.\n\nDuplicates found:\n${duplicates.join('\n')}\n\nFix: Remove these from image_refs and reference them with <<<image_N>>> in your script. image_refs is ONLY for URLs NOT in Image Index (workspace files, skill assets).`;
+    }
   }
 
   return null
