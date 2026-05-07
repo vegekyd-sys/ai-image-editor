@@ -23,15 +23,12 @@ async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: 
   const blobUrls: string[] = [];
   await Promise.all([...urls].map(async (url) => {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeout);
+      const res = await fetch(url);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
       while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
-    } catch { /* timeout or network error — leave original URL, Remotion <Img> will load it */ }
+    } catch { /* skip */ }
   }));
   return { code: resolved, blobUrls };
 }
