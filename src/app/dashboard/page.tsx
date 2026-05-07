@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { CREDIT_TIERS } from '@/lib/billing/tiers'
 import CreditPopup from '@/components/CreditPopup'
 
@@ -46,7 +47,12 @@ const PLANS = [
 ] as const
 
 export default function DashboardPage() {
-  const [tab, setTab] = useState<'subscribe' | 'topup' | 'keys' | 'usage'>('subscribe')
+  const [tab, setTab] = useState<'subscribe' | 'topup' | 'keys' | 'usage'>(() => {
+    if (typeof window === 'undefined') return 'subscribe'
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t === 'keys' || t === 'topup' || t === 'usage' || t === 'subscribe') return t
+    return 'subscribe'
+  })
   const [balance, setBalance] = useState<Balance | null>(null)
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [usage, setUsage] = useState<UsageLog[]>([])
@@ -160,7 +166,7 @@ export default function DashboardPage() {
     <div className="min-h-dvh bg-black text-white p-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <a href="/projects" className="text-white/40 text-sm hover:text-white/60">&larr; Back to app</a>
+        <Link href="/projects" className="text-white/40 text-sm hover:text-white/60">&larr; Back to app</Link>
       </div>
 
       {/* Balance card */}

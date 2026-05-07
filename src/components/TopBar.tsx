@@ -153,6 +153,19 @@ export default function TopBar({ page }: TopBarProps) {
                   boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
                 }}>
                   <button
+                    onClick={() => { setUserMenuOpen(false); router.push('/dashboard?tab=keys') }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '10px 16px', background: 'none', border: 'none',
+                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
+                      cursor: 'pointer', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    {locale === 'zh' ? '获取 API' : 'Get API'}
+                  </button>
+                  <button
                     onClick={() => { setUserMenuOpen(false); router.push('/skills') }}
                     style={{
                       display: 'block', width: '100%', textAlign: 'left',
@@ -190,7 +203,7 @@ export default function TopBar({ page }: TopBarProps) {
                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   >
-                    Sign out
+                    {locale === 'zh' ? '退出登录' : 'Sign out'}
                   </button>
                 </div>
               )}
