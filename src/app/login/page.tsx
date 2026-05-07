@@ -16,33 +16,24 @@ const ERROR_KEY_MAP: Record<string, string> = {
   'For security purposes, you can only request this after 60 seconds.': 'auth.err.wait60s',
 }
 
-type View = 'landing' | 'register' | 'login'
+type View = 'register' | 'login' | 'verify-email'
 
 export default function LoginPage() {
   const { t } = useLocale()
-  const [view, setView] = useState<View>('landing')
-
-  // Landing state
-  const [inviteCode, setInviteCode] = useState('')
-  const [inviteLoading, setInviteLoading] = useState(false)
-  const [inviteError, setInviteError] = useState('')
-  const [inviteShake, setInviteShake] = useState(false)
-
-  // Waitlist state
-  const [waitlistEmail, setWaitlistEmail] = useState('')
-  const [waitlistLoading, setWaitlistLoading] = useState(false)
-  const [waitlistDone, setWaitlistDone] = useState(false)
-  const [waitlistError, setWaitlistError] = useState('')
+  const [view, setView] = useState<View>('register')
 
   // Register / Login state
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [errorKey, setErrorKey] = useState<string>('')
   const [errorRaw, setErrorRaw] = useState<string>('')
 
-  // Validated invite code (passed from landing to register)
-  const [validatedCode, setValidatedCode] = useState('')
+  // Verify email state
+  const [verifyEmail, setVerifyEmail] = useState('')
+  const [resent, setResent] = useState(false)
+  const [resending, setResending] = useState(false)
 
   const supabaseRef = useRef<SupabaseClient | null>(null)
   function getSupabase() {
@@ -50,62 +41,24 @@ export default function LoginPage() {
     return supabaseRef.current
   }
 
-  // ── Landing: validate invite code ──
-  const handleInviteSubmit = async () => {
-    const code = inviteCode.trim()
-    if (!code) return
-    setInviteError('')
-    setInviteLoading(true)
-
-    try {
-      const res = await fetch('/api/auth/check-invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      })
-      const data = await res.json()
-      if (data.valid) {
-        setValidatedCode(code.toUpperCase())
-        setView('register')
-      } else {
-        setInviteError(t('auth.err.invalidInviteCode'))
-        setInviteShake(true)
-        setTimeout(() => setInviteShake(false), 500)
-      }
-    } catch {
-      setInviteError(t('auth.networkError'))
-    } finally {
-      setInviteLoading(false)
+  // ── Google OAuth ──
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true)
+    setErrorKey('')
+    setErrorRaw('')
+    const { error } = await getSupabase().auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback`,
+      },
+    })
+    if (error) {
+      setErrorKey('auth.networkError')
+      setGoogleLoading(false)
     }
   }
 
-  // ── Landing: join waitlist ──
-  const handleWaitlist = async () => {
-    const em = waitlistEmail.trim()
-    if (!em) return
-    setWaitlistError('')
-    setWaitlistLoading(true)
-
-    try {
-      const res = await fetch('/api/auth/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: em }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setWaitlistDone(true)
-      } else {
-        setWaitlistError(data.error || t('auth.networkError'))
-      }
-    } catch {
-      setWaitlistError(t('auth.networkError'))
-    } finally {
-      setWaitlistLoading(false)
-    }
-  }
-
-  // ── Register: sign up with validated invite code ──
+  // ── Register ──
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorKey('')
@@ -113,28 +66,20 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const { error } = await getSupabase().auth.signUp({ email, password })
+      const { error } = await getSupabase().auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+        },
+      })
       if (error) {
         const key = ERROR_KEY_MAP[error.message]
         if (key) setErrorKey(key); else setErrorRaw(error.message)
         return
       }
-      // Activate immediately with invite code (don't rely on /activate page)
-      try {
-        const activateRes = await fetch('/api/auth/validate-invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: validatedCode }),
-        })
-        const activateData = await activateRes.json()
-        if (activateData.success && activateData.welcome) {
-          window.location.href = '/projects?welcome=1'
-          return
-        }
-      } catch { /* fall through */ }
-      // Fallback: store code for /activate page
-      sessionStorage.setItem('mkr_invite_code', validatedCode)
-      window.location.href = '/'
+      setVerifyEmail(email)
+      setView('verify-email')
     } catch {
       setErrorKey('auth.networkError')
     } finally {
@@ -142,7 +87,7 @@ export default function LoginPage() {
     }
   }
 
-  // ── Login: sign in ──
+  // ── Login ──
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorKey('')
@@ -164,6 +109,23 @@ export default function LoginPage() {
     }
   }
 
+  // ── Resend verification email ──
+  const handleResend = async () => {
+    setResending(true)
+    setResent(false)
+    try {
+      await getSupabase().auth.resend({
+        type: 'signup',
+        email: verifyEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+        },
+      })
+      setResent(true)
+    } catch { /* ignore */ }
+    finally { setResending(false) }
+  }
+
   const errorMsg = errorKey ? t(errorKey as Parameters<typeof t>[0]) : errorRaw
 
   const switchView = (v: View) => {
@@ -179,14 +141,6 @@ export default function LoginPage() {
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
       .mkr-handwrite { font-family: 'Caveat', cursive; }
-      @keyframes shake {
-        0%, 100% { transform: translateX(0); }
-        20% { transform: translateX(-8px); }
-        40% { transform: translateX(8px); }
-        60% { transform: translateX(-6px); }
-        80% { transform: translateX(6px); }
-      }
-      .shake { animation: shake 0.4s ease-in-out; }
     `}</style>
     <div className="min-h-dvh bg-black flex items-center justify-center px-6 relative overflow-hidden">
       {/* Fuchsia glow */}
@@ -222,110 +176,39 @@ export default function LoginPage() {
           <RollingTagline className="text-[1.15rem] tracking-wide" />
         </div>
 
-        {/* ══════ LANDING VIEW ══════ */}
-        {view === 'landing' && (
-          <>
-            {/* Invite code section */}
-            <div className="space-y-3 mb-8">
-              <div className={inviteShake ? 'shake' : ''}>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={(e) => { setInviteCode(e.target.value); setInviteError('') }}
-                  placeholder={t('auth.inviteCodePlaceholder')}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  onKeyDown={(e) => e.key === 'Enter' && handleInviteSubmit()}
-                  className="w-full px-4 py-4 rounded-xl bg-white/[0.07] text-white text-center text-lg font-mono placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-all uppercase"
-                  style={{ letterSpacing: '0.25em' }}
-                />
-              </div>
-
-              {inviteError && (
-                <p className="text-red-400 text-sm text-center">{inviteError}</p>
-              )}
-
-              <button
-                onClick={handleInviteSubmit}
-                disabled={inviteLoading || !inviteCode.trim()}
-                className="w-full py-3.5 rounded-xl font-medium text-white transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                style={{
-                  background: inviteCode.trim()
-                    ? 'linear-gradient(to right, #c026d3, #9333ea)'
-                    : 'rgba(255,255,255,0.18)',
-                  boxShadow: inviteCode.trim() ? '0 0 20px rgba(192,38,211,0.2)' : 'none',
-                }}
-              >
-                {inviteLoading ? (
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  t('auth.activate')
-                )}
-              </button>
-            </div>
-
-            {/* Divider */}
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex-1 h-px bg-white/10" />
-              <span className="text-white/25 text-xs">{t('auth.noInviteCode')}</span>
-              <div className="flex-1 h-px bg-white/10" />
-            </div>
-
-            {/* Waitlist section */}
-            {waitlistDone ? (
-              <div className="text-center py-4">
-                <div className="text-green-400 text-sm mb-1">✓ {t('auth.waitlistSuccess')}</div>
-                <div className="text-white/30 text-xs">{t('auth.waitlistSuccessDesc')}</div>
-              </div>
-            ) : (
-              <div className="flex gap-2 mb-8">
-                <input
-                  type="email"
-                  value={waitlistEmail}
-                  onChange={(e) => { setWaitlistEmail(e.target.value); setWaitlistError('') }}
-                  placeholder={t('auth.email')}
-                  onKeyDown={(e) => e.key === 'Enter' && handleWaitlist()}
-                  className="flex-1 px-4 py-3 rounded-lg bg-white/[0.07] text-white text-sm placeholder-white/25 border border-white/10 focus:border-fuchsia-500/30 focus:outline-none transition-colors"
-                />
-                <button
-                  onClick={handleWaitlist}
-                  disabled={waitlistLoading || !waitlistEmail.trim()}
-                  className="px-4 py-3 rounded-lg bg-white/10 text-white/70 text-sm font-medium hover:bg-white/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                  {waitlistLoading ? '...' : t('auth.joinWaitlist')}
-                </button>
-              </div>
-            )}
-
-            {waitlistError && (
-              <p className="text-red-400 text-xs text-center mb-4 -mt-4">{waitlistError}</p>
-            )}
-
-            {/* Sign in link */}
-            <p className="text-center text-sm text-white/30">
-              {t('auth.hasAccount')}
-              <button onClick={() => switchView('login')} className="text-fuchsia-400/70 hover:text-fuchsia-300 ml-1">
-                {t('auth.goLogin')}
-              </button>
-            </p>
-          </>
-        )}
-
         {/* ══════ REGISTER VIEW ══════ */}
         {view === 'register' && (
           <>
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-400 text-sm mb-4">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 13l4 4L19 7" />
+            {/* Google OAuth */}
+            <button
+              onClick={handleGoogleLogin}
+              disabled={googleLoading}
+              className="w-full py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}
+            >
+              {googleLoading ? (
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                {validatedCode}
-              </div>
-              <h2 className="text-white text-lg font-medium">{t('auth.createAccount')}</h2>
+              ) : (
+                <>
+                  <svg width="18" height="18" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  {t('auth.continueWithGoogle')}
+                </>
+              )}
+            </button>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 my-6">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-white/25 text-xs">{t('auth.orDivider')}</span>
+              <div className="flex-1 h-px bg-white/10" />
             </div>
 
             <form onSubmit={handleRegister} className="space-y-4">
@@ -366,8 +249,9 @@ export default function LoginPage() {
             </form>
 
             <p className="mt-6 text-center text-sm text-white/30">
-              <button onClick={() => switchView('landing')} className="text-white/40 hover:text-white/60">
-                ← {t('auth.back')}
+              {t('auth.hasAccount')}
+              <button onClick={() => switchView('login')} className="text-fuchsia-400/70 hover:text-fuchsia-300 ml-1">
+                {t('auth.goLogin')}
               </button>
             </p>
           </>
@@ -376,6 +260,38 @@ export default function LoginPage() {
         {/* ══════ LOGIN VIEW ══════ */}
         {view === 'login' && (
           <>
+            {/* Google OAuth */}
+            <button
+              onClick={handleGoogleLogin}
+              disabled={googleLoading}
+              className="w-full py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}
+            >
+              {googleLoading ? (
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <>
+                  <svg width="18" height="18" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  {t('auth.continueWithGoogle')}
+                </>
+              )}
+            </button>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 my-6">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-white/25 text-xs">{t('auth.orDivider')}</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+
             <form onSubmit={handleLogin} className="space-y-4">
               <input
                 type="email"
@@ -413,11 +329,42 @@ export default function LoginPage() {
             </form>
 
             <p className="mt-6 text-center text-sm text-white/30">
-              <button onClick={() => switchView('landing')} className="text-white/40 hover:text-white/60">
-                ← {t('auth.back')}
+              {t('auth.noAccount')}
+              <button onClick={() => switchView('register')} className="text-fuchsia-400/70 hover:text-fuchsia-300 ml-1">
+                {t('auth.goRegister')}
               </button>
             </p>
           </>
+        )}
+
+        {/* ══════ VERIFY EMAIL VIEW ══════ */}
+        {view === 'verify-email' && (
+          <div className="text-center space-y-4">
+            <div className="text-4xl mb-2">📫</div>
+            <h2 className="text-white text-xl font-semibold">{t('auth.verifyEmail.title')}</h2>
+            <p className="text-white/50 text-sm">
+              {t('auth.verifyEmail.sent')}<br />
+              <span className="text-white/80 font-medium">{verifyEmail}</span>
+            </p>
+            <p className="text-white/40 text-xs">{t('auth.verifyEmail.instruction')}</p>
+
+            <button
+              onClick={handleResend}
+              disabled={resending || resent}
+              className="mt-4 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: resent ? '#34d399' : '#fff' }}
+            >
+              {resending ? '...' : resent ? `✓ ${t('auth.verifyEmail.resent')}` : t('auth.verifyEmail.resend')}
+            </button>
+
+            <p className="text-white/30 text-xs mt-4">{t('auth.verifyEmail.checkSpam')}</p>
+
+            <p className="mt-6">
+              <button onClick={() => switchView('login')} className="text-white/40 hover:text-white/60 text-sm">
+                ← {t('auth.back')}
+              </button>
+            </p>
+          </div>
         )}
       </div>
     </div>

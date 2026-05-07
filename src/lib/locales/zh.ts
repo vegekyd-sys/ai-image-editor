@@ -26,6 +26,15 @@ const zh = {
   'auth.waitlistSuccessDesc': '我们会尽快给你发送邀请码。',
   'auth.createAccount': '创建账号',
   'auth.back': '返回',
+  'auth.continueWithGoogle': '使用 Google 登录',
+  'auth.orDivider': '或',
+  'auth.goRegister': '注册',
+  'auth.verifyEmail.title': '查看你的收件箱',
+  'auth.verifyEmail.sent': '验证链接已发送到',
+  'auth.verifyEmail.instruction': '点击邮件中的链接以激活你的账号。',
+  'auth.verifyEmail.resend': '重新发送',
+  'auth.verifyEmail.resent': '邮件已发送！',
+  'auth.verifyEmail.checkSpam': '没看到？检查一下垃圾邮件文件夹。',
 
   // Project management
   'project.untitled': '未命名',

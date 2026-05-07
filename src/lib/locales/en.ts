@@ -26,6 +26,15 @@ const en = {
   'auth.waitlistSuccessDesc': 'We\'ll send you an invite code soon.',
   'auth.createAccount': 'Create your account',
   'auth.back': 'Back',
+  'auth.continueWithGoogle': 'Continue with Google',
+  'auth.orDivider': 'or',
+  'auth.goRegister': 'Sign up',
+  'auth.verifyEmail.title': 'Check your inbox',
+  'auth.verifyEmail.sent': 'We sent a verification link to',
+  'auth.verifyEmail.instruction': 'Click the link in the email to activate your account.',
+  'auth.verifyEmail.resend': 'Resend email',
+  'auth.verifyEmail.resent': 'Email sent!',
+  'auth.verifyEmail.checkSpam': "Don't see it? Check your spam folder.",
 
   // Project management
   'project.untitled': 'Untitled',
