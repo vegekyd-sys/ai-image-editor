@@ -45,6 +45,16 @@ export default function LoginPage() {
     return () => clearTimeout(timer)
   }, [resendCooldown])
 
+  function getReturnUrl(): string {
+    return sessionStorage.getItem('mkr_return_url') || ''
+  }
+
+  function redirectAfterAuth() {
+    const returnUrl = getReturnUrl()
+    sessionStorage.removeItem('mkr_return_url')
+    window.location.href = returnUrl || '/'
+  }
+
   // ── Google OAuth ──
   const handleGoogleLogin = async () => {
     setGoogleLoading(true)
@@ -86,7 +96,7 @@ export default function LoginPage() {
 
       if (check.action === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-        if (!signInError) { window.location.href = '/'; return }
+        if (!signInError) { redirectAfterAuth(); return }
         setError(mapError(signInError.message))
         return
       }
@@ -157,7 +167,7 @@ export default function LoginPage() {
       }
 
       // Signup verified — redirect
-      window.location.href = '/'
+      redirectAfterAuth()
     } catch {
       setOtpError(t('auth.networkError'))
       setOtpLoading(false)
@@ -217,7 +227,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.updateUser({ password: newPassword })
       if (error) { setError(mapError(error.message)); setResetLoading(false); return }
       setResetSuccess(true)
-      setTimeout(() => { window.location.href = '/' }, 1500)
+      setTimeout(() => { redirectAfterAuth() }, 1500)
     } catch {
       setError(t('auth.networkError'))
       setResetLoading(false)
@@ -350,6 +360,11 @@ export default function LoginPage() {
               <button onClick={() => { setError(''); setView('forgot-password') }} className="text-white/30 hover:text-white/50 text-xs transition-colors">
                 {t('auth.forgotPassword')}
               </button>
+            </p>
+            <p className="mt-6 text-center">
+              <a href="/home" className="text-white/25 hover:text-white/50 text-xs transition-colors">
+                ← {t('auth.back')}
+              </a>
             </p>
           </>
         )}

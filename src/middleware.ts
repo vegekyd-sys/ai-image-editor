@@ -60,6 +60,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // /auth-done — client-side redirect after OAuth, always accessible
+  if (pathname === '/auth-done') {
+    return supabaseResponse
+  }
+
   // /activate — accessible when logged in
   if (pathname === '/activate') {
     // Already activated → skip to projects
