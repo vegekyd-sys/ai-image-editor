@@ -8,6 +8,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-05-07',
+    en: { title: 'Open Registration & CLI', items: [
+      'Google sign-in: one tap to get started — no invite code needed',
+      'Open registration: anyone can sign up with email + verification code',
+      'CLI: API key authentication + new edit, video, and music commands',
+    ]},
+    zh: { title: '开放注册 & CLI', items: [
+      'Google 一键登录：无需邀请码，直接开始创作',
+      '开放注册：任何人都可以用邮箱 + 验证码注册',
+      'CLI：支持 API Key 认证 + 新增 edit、video、music 命令',
+    ]},
+  },
+  {
     date: '2026-05-04',
     en: { title: 'SeeDance Real Human Faces', items: [
       'SeeDance now supports real human faces — generate videos with portrait photos, no more face detection blocks',
