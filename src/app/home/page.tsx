@@ -5,12 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
-import { useLocale, LocaleToggle } from '@/lib/i18n'
+import { useLocale } from '@/lib/i18n'
 import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
 import SkillSelector from '@/components/SkillSelector'
-import Changelog from '@/components/Changelog'
+import TopBar from '@/components/TopBar'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 
@@ -52,7 +52,7 @@ export default function HomePage() {
 }
 
 function HomePageInner() {
-  const { user, loading: authLoading, signOut } = useAuth()
+  const { user } = useAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -69,7 +69,6 @@ function HomePageInner() {
   const [inputText, setInputText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
-  const [showChangelog, setShowChangelog] = useState(false)
   const [slotDragOver, setSlotDragOver] = useState(-1)
   const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
@@ -179,6 +178,7 @@ function HomePageInner() {
     window.addEventListener('scroll', onScroll, true)
     return () => { document.removeEventListener('mousedown', handler); window.removeEventListener('scroll', onScroll, true) }
   }, [skillMenuOpen])
+
 
   const handleSkillUpload = useCallback(async (file: File) => {
     setSkillUploading(true)
@@ -1054,29 +1054,7 @@ function HomePageInner() {
           }}
         />
 
-        {/* Top bar */}
-        <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 10 }}>
-          {user ? (
-            <button
-              onClick={() => router.push('/projects')}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.7rem', letterSpacing: '0.05em',
-                color: 'rgba(255,255,255,0.45)',
-                display: 'flex', alignItems: 'center', gap: 5,
-                transition: 'color 0.2s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-              </svg>
-              {locale === 'zh' ? '我的项目' : 'My Projects'}
-            </button>
-          ) : <div />}
-          <LocaleToggle />
-        </div>
+        <TopBar page="home" />
 
         {/* ── Hero: Landing-page style ── */}
         <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
@@ -1481,8 +1459,6 @@ function HomePageInner() {
           </div>
         </div>
       )}
-
-      {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
 
       {/* Skill menu now handled by SkillSelector component */}
     </>

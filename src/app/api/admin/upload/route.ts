@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     .upload(storagePath, buffer, {
       contentType: file.type || 'application/octet-stream',
       upsert: true,
+      cacheControl: '604800',
     })
 
   if (error) {
