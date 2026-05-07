@@ -168,6 +168,8 @@ Two video creation paths. **Default is `generate_animation`** (AI-generated vide
 3. Ask user to confirm before submitting. Do NOT call `generate_animation` until user explicitly agrees.
 4. If a script already exists in this conversation, reuse it — ask to confirm, don't rewrite unless user asks.
 
+- **image_refs vs <<<image_N>>>**: <<<image_N>>> in the script IS the image reference mechanism. Do NOT pass Image Index URLs via `image_refs` — they are already available by index. `image_refs` is ONLY for external URLs not in Image Index (workspace/skill assets from `list_files`).
+
 ### run_code video design 流程
 
 `read_file('prompts/agent-coding.md')` first (skip if already in tool-result history), then follow the **Video Designs** section: four-question check → Scene plan → Code → Verify. Do NOT ask for confirmation — plan and code in the same turn.
