@@ -38,6 +38,11 @@ export default function LoginPage() {
     return supabaseRef.current
   }
 
+  // Clear stale auth state on login page load
+  useEffect(() => {
+    getSupabase().auth.signOut().catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Resend cooldown timer
   useEffect(() => {
     if (resendCooldown <= 0) return
