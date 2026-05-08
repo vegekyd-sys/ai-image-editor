@@ -13,6 +13,9 @@ export async function GET(request: NextRequest) {
 
   const cookieStore = await cookies()
 
+  // Collect cookies that need to be set on the response
+  const cookiesToSetOnResponse: { name: string; value: string; options: Record<string, unknown> }[] = []
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -24,6 +27,7 @@ export async function GET(request: NextRequest) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options)
+            cookiesToSetOnResponse.push({ name, value, options: options as Record<string, unknown> })
           })
         },
       },
@@ -32,6 +36,7 @@ export async function GET(request: NextRequest) {
 
   const { error } = await supabase.auth.exchangeCodeForSession(code)
   if (error) {
+    console.error('[auth/callback] exchangeCodeForSession error:', error.message)
     return NextResponse.redirect(`${origin}/login`)
   }
 
@@ -50,6 +55,10 @@ export async function GET(request: NextRequest) {
 
   if (profile?.activated) {
     const response = NextResponse.redirect(`${origin}/projects`)
+    // Set auth cookies on the redirect response
+    cookiesToSetOnResponse.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, options)
+    })
     response.cookies.set('mkr_activated', '1', {
       path: '/',
       maxAge: 365 * 24 * 60 * 60,
@@ -103,6 +112,10 @@ export async function GET(request: NextRequest) {
 
   const redirectUrl = isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`
   const response = NextResponse.redirect(redirectUrl)
+  // Set auth cookies on the redirect response
+  cookiesToSetOnResponse.forEach(({ name, value, options }) => {
+    response.cookies.set(name, value, options)
+  })
   response.cookies.set('mkr_activated', '1', {
     path: '/',
     maxAge: 365 * 24 * 60 * 60,
