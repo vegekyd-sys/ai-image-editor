@@ -8,6 +8,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-05-08',
+    en: { title: 'Storyboard Long Video — Live on Skill Marketplace', items: [
+      'Break the 15s limit with director-grade storyboards — generate 30-60s cinematic videos with consistent characters, scenes, and style',
+      'Powered by OpenAI Image 2 + SeeDance 2 — the two strongest models, with real human face support',
+    ]},
+    zh: { title: '分镜长视频 - 已上线 Skill 集市', items: [
+      '用导演级分镜图突破 15s 限制，生成 30-60s 电影级长视频，人物/场景/风格全程一致',
+      '基于 OpenAI Image 2 + SeeDance 2 两大最强模型，支持真人脸',
+    ]},
+  },
+  {
     date: '2026-05-07',
     en: { title: 'Open Registration & CLI', items: [
       'Google sign-in: one tap to get started — no invite code needed',
