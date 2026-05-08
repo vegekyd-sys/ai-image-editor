@@ -32,25 +32,19 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     };
   }
 
-  // Validate images are URLs (not base64)
-  for (let i = 0; i < images.length; i++) {
-    if (!images[i].startsWith('http://') && !images[i].startsWith('https://')) {
-      return {
-        success: false,
-        message: `Image ${i + 1} must be a publicly accessible URL (not base64 or local path). Please upload images to storage first.`,
-      };
-    }
-  }
-
   try {
     // Motion Control: separate path — single image + video, no image references needed
     if (motionControl) {
       if (!videoUrl) {
         return { success: false, message: 'Motion Control requires a reference video (videoUrl).' };
       }
+      const firstImage = images[0];
+      if (!firstImage?.startsWith('http')) {
+        return { success: false, message: 'Motion Control requires the first image to be a publicly accessible URL. It may still be uploading — wait and retry.' };
+      }
       const { createKlingMotionControlTask } = await import('../kling');
       const taskId = await createKlingMotionControlTask({
-        imageUrl: images[0],
+        imageUrl: firstImage,
         videoUrl,
         prompt: script,
         keepOriginalSound: keepOriginalSound !== false,
@@ -64,7 +58,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       };
     }
 
-    // Filter to only referenced images and remap indices
+    // Filter to only referenced images and remap indices (preserves index alignment)
     // filterAndRemapImages will enforce the 7-image limit on the filtered result
     const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
 
@@ -73,6 +67,16 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         success: false,
         message: `No images referenced in the script but ${images.length} images were provided. Use <<<image_1>>> etc. to reference them in your prompt.`,
       };
+    }
+
+    // Validate only referenced images are URLs (unreferenced positions may be empty/base64 — that's fine)
+    for (let i = 0; i < filteredImages.length; i++) {
+      if (!filteredImages[i]?.startsWith('http')) {
+        return {
+          success: false,
+          message: `Referenced image ${i + 1} is not a publicly accessible URL — it may still be uploading to storage. Please wait a moment and try again.`,
+        };
+      }
     }
 
     // Resolve duration: explicit > parsed from script > undefined (smart mode)
