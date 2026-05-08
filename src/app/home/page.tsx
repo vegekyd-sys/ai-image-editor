@@ -398,7 +398,19 @@ function HomePageInner() {
       })
       if (atLimit) break
 
-      if (isHeicFile(file)) {
+      if (file.type.startsWith('video/')) {
+        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
+        setAttachedPreviews(prev => [...prev, null].slice(0, MAX_FILES))
+        import('@/lib/video-upload').then(({ extractVideoPoster }) =>
+          extractVideoPoster(file).then(poster => {
+            setAttachedPreviews(prev => {
+              const idx = prev.lastIndexOf(null)
+              if (idx === -1) return prev
+              return prev.map((p, i) => i === idx ? poster : p)
+            })
+          }).catch(() => {})
+        )
+      } else if (isHeicFile(file)) {
         setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
         setAttachedPreviews(prev => [...prev, null].slice(0, MAX_FILES))
         try {
@@ -1009,7 +1021,7 @@ function HomePageInner() {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,.heic,.heif"
+          accept="image/*,video/*,.heic,.heif"
           multiple
           style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
           onChange={async (e) => {

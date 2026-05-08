@@ -159,6 +159,35 @@ export async function processVideoUpload(
   }
 }
 
+/** Extract poster frame from a video file (lightweight, no transcode). */
+export async function extractVideoPoster(file: File): Promise<string> {
+  const blobUrl = URL.createObjectURL(file);
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'metadata';
+  video.src = blobUrl;
+  await new Promise<void>((resolve) => {
+    video.onloadedmetadata = () => resolve();
+    setTimeout(resolve, 5000);
+  });
+  video.currentTime = Math.min(0.5, video.duration * 0.1);
+  await new Promise<void>((resolve) => {
+    video.onseeked = () => resolve();
+    setTimeout(resolve, 3000);
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d')!.drawImage(video, 0, 0);
+  const poster = canvas.toDataURL('image/jpeg', 0.75);
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+  URL.revokeObjectURL(blobUrl);
+  return poster;
+}
+
 /**
  * Process + upload a video file to Supabase Storage.
  * Returns poster + storage URL (does NOT create timeline snapshot).

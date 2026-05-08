@@ -203,21 +203,30 @@ function ProjectsPageInner() {
       })
       if (atLimit) break
 
-      if (isHeicFile(file)) {
-        // Append file + null preview immediately (shows spinner)
+      if (file.type.startsWith('video/')) {
+        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
+        setAttachedPreviews(prev => [...prev, null].slice(0, MAX_FILES))
+        import('@/lib/video-upload').then(({ extractVideoPoster }) =>
+          extractVideoPoster(file).then(poster => {
+            setAttachedPreviews(prev => {
+              const idx = prev.lastIndexOf(null)
+              if (idx === -1) return prev
+              return prev.map((p, i) => i === idx ? poster : p)
+            })
+          }).catch(() => {})
+        )
+      } else if (isHeicFile(file)) {
         setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
         setAttachedPreviews(prev => [...prev, null].slice(0, MAX_FILES))
         try {
           const decodable = await ensureDecodableFile(file)
           const previewUrl = URL.createObjectURL(decodable)
-          // Replace the last-added HEIC entry with the decoded version
           setAttachedFiles(prev => {
             const idx = prev.indexOf(file)
             if (idx === -1) return prev
             return prev.map((f, i) => i === idx ? decodable : f)
           })
           setAttachedPreviews(prev => {
-            // Find the matching null slot from the end
             const idx = prev.lastIndexOf(null)
             if (idx === -1) return prev
             return prev.map((p, i) => i === idx ? previewUrl : p)
