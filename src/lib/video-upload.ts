@@ -6,7 +6,8 @@ import { createVideoDesign } from '@/lib/video-design';
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 const MAX_DURATION = 60; // 60 seconds
-const TARGET_SHORT_EDGE = 720;
+const TARGET_SHORT_EDGE = 1080;
+const MAX_FRAME_PIXELS = 2_086_876; // SeeDance limit: width × height must not exceed this
 const DIRECT_UPLOAD_MAX_SIZE = 100 * 1024 * 1024; // 100MB — skip transcode for any H.264 MP4
 
 export interface VideoUploadResult {
@@ -73,14 +74,15 @@ function isLikelyH264Mp4(file: File): boolean {
   return file.type === 'video/mp4' || file.name.toLowerCase().endsWith('.mp4');
 }
 
-/** Calculate output dimensions (720p, preserve aspect ratio, even numbers) */
+/** Calculate output dimensions (max ~1080p, preserve aspect ratio, even numbers) */
 function calcOutputDims(w: number, h: number): { width: number; height: number } {
-  const shortEdge = Math.min(w, h);
-  if (shortEdge <= TARGET_SHORT_EDGE) return { width: w, height: h };
-  const scale = TARGET_SHORT_EDGE / shortEdge;
+  const pixels = w * h;
+  if (pixels <= MAX_FRAME_PIXELS) return { width: w, height: h };
+  // Scale down so frame pixels fit within limit (floor to stay under)
+  const scale = Math.sqrt(MAX_FRAME_PIXELS / pixels) * 0.99;
   return {
-    width: Math.round(w * scale / 2) * 2,
-    height: Math.round(h * scale / 2) * 2,
+    width: Math.floor(w * scale / 2) * 2,
+    height: Math.floor(h * scale / 2) * 2,
   };
 }
 
@@ -102,9 +104,9 @@ export async function processVideoUpload(
   const { blobUrl, duration, width, height, poster } = info;
   const out = calcOutputDims(width, height);
 
-  // Fast path: H.264 MP4 under size limit → direct upload (no transcode needed)
-  // Remotion Player and browsers handle any resolution H.264 natively
-  if (isLikelyH264Mp4(file) && file.size <= DIRECT_UPLOAD_MAX_SIZE) {
+  // Fast path: H.264 MP4 under size limit AND within resolution limit → direct upload
+  const needsResize = width * height > MAX_FRAME_PIXELS;
+  if (isLikelyH264Mp4(file) && file.size <= DIRECT_UPLOAD_MAX_SIZE && !needsResize) {
     console.log(`📹 [video-upload] direct upload (${(file.size / 1024 / 1024).toFixed(1)}MB, ${width}x${height})`);
     URL.revokeObjectURL(blobUrl);
     return { poster, videoBlob: file, duration, width, height };
