@@ -29,6 +29,20 @@ export async function middleware(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
   const user = session?.user
 
+  // Clear stale auth cookies: if sb- cookies exist but session is invalid, remove them
+  if (!user) {
+    const allCookies = request.cookies.getAll()
+    const hasAuthCookie = allCookies.some(c => c.name.startsWith('sb-'))
+    if (hasAuthCookie) {
+      supabaseResponse = NextResponse.next({ request })
+      allCookies.forEach(c => {
+        if (c.name.startsWith('sb-')) {
+          supabaseResponse.cookies.delete(c.name)
+        }
+      })
+    }
+  }
+
   const { pathname } = request.nextUrl
   // Local dev: skip invite-code activation gate
   const isDev = process.env.NODE_ENV === 'development'
