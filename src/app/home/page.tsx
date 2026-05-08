@@ -578,7 +578,7 @@ function HomePageInner() {
           const isDragTarget = slotDragOver === i
           return (
             <div key={i}
-              onClick={() => { if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
+              onClick={() => { if (!user) { redirectToLogin(); return } if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
               onDragLeave={() => setSlotDragOver(-1)}
