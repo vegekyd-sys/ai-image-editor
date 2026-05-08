@@ -54,17 +54,7 @@ export async function GET(request: NextRequest) {
     .single()
 
   if (profile?.activated) {
-    const response = NextResponse.redirect(`${origin}/projects`)
-    // Set auth cookies on the redirect response
-    cookiesToSetOnResponse.forEach(({ name, value, options }) => {
-      response.cookies.set(name, value, options)
-    })
-    response.cookies.set('mkr_activated', '1', {
-      path: '/',
-      maxAge: 365 * 24 * 60 * 60,
-      sameSite: 'lax',
-    })
-    return response
+    return buildRedirectPage(`${origin}/projects`, cookiesToSetOnResponse)
   }
 
   // Auto-activate: all users who reach callback are verified
@@ -111,9 +101,24 @@ export async function GET(request: NextRequest) {
   }
 
   const redirectUrl = isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`
-  const response = NextResponse.redirect(redirectUrl)
-  // Set auth cookies on the redirect response
-  cookiesToSetOnResponse.forEach(({ name, value, options }) => {
+  return buildRedirectPage(redirectUrl, cookiesToSetOnResponse)
+}
+
+/**
+ * Return an HTML page that sets cookies in first-party context then redirects.
+ * iOS Safari ITP blocks cookies set during cross-origin redirects (OAuth flow),
+ * but allows them when set by a same-origin page via document.cookie or response headers.
+ */
+function buildRedirectPage(
+  redirectUrl: string,
+  authCookies: { name: string; value: string; options: Record<string, unknown> }[],
+) {
+  const response = new NextResponse(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Redirecting...</title></head><body style="background:#000;display:flex;align-items:center;justify-content:center;height:100vh"><script>window.location.href="${redirectUrl}";</script></body></html>`,
+    { status: 200, headers: { 'Content-Type': 'text/html' } }
+  )
+  // Set auth cookies on this first-party response
+  authCookies.forEach(({ name, value, options }) => {
     response.cookies.set(name, value, options)
   })
   response.cookies.set('mkr_activated', '1', {
