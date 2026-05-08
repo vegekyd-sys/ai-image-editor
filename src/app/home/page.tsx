@@ -498,7 +498,7 @@ function HomePageInner() {
     const allFiles = Array.from(e.dataTransfer.files ?? [])
     const zipFile = allFiles.find(f => f.name.endsWith('.zip'))
     if (zipFile) { handleSkillUpload(zipFile); return }
-    const droppedFiles = allFiles.filter(f => f.type.startsWith('image/') || isHeicFile(f))
+    const droppedFiles = allFiles.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || isHeicFile(f))
     addFiles(droppedFiles)
   }, [creating, addFiles, handleSkillUpload])
 

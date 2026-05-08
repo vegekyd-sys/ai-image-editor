@@ -70,7 +70,13 @@ export default function ProjectPage() {
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
-  const isNewProject = !!(pendingImages || pendingPrompt)
+  const [pendingVideos] = useState<Array<{ poster: string; videoUrl: string; duration: number; width: number; height: number }> | null>(() => {
+    if (typeof window === 'undefined') return null
+    const raw = sessionStorage.getItem('pendingVideos')
+    if (raw) { sessionStorage.removeItem('pendingVideos'); try { return JSON.parse(raw) } catch { return null } }
+    return null
+  })
+  const isNewProject = !!(pendingImages || pendingPrompt || pendingVideos)
   // GUI can render immediately if snapshot cache exists or this is a new project
   const [loaded, setLoaded] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -244,6 +250,7 @@ export default function ProjectPage() {
       initialSnapshots={initialSnapshots ?? []}
       initialMessages={initialMessages ?? []}
       pendingImages={pendingImages ?? undefined}
+      pendingVideos={pendingVideos ?? undefined}
       pendingMetadata={pendingMetadata}
       pendingPrompt={pendingPrompt ?? undefined}
       pendingSkill={pendingSkill ?? undefined}

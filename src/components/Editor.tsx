@@ -95,6 +95,7 @@ interface EditorProps {
   initialMessages?: Message[];
   pendingImage?: string;  // legacy single-image (unused, kept for compat)
   pendingImages?: string[];
+  pendingVideos?: Array<{ poster: string; videoUrl: string; duration: number; width: number; height: number }>;
   pendingMetadata?: PhotoMetadata;
   pendingPrompt?: string;
   pendingSkill?: string;
@@ -118,6 +119,7 @@ export default function Editor({
   initialMessages,
   pendingImage,
   pendingImages: pendingImagesProp,
+  pendingVideos,
   pendingMetadata,
   pendingPrompt,
   pendingSkill,
@@ -2333,15 +2335,16 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   // Unified init: handles all entry scenarios (images, text, images+text, with/without skill)
   useEffect(() => {
     const hasImages = pendingImages && pendingImages.length > 0;
+    const hasVideos = pendingVideos && pendingVideos.length > 0;
     const hasPrompt = !!pendingPrompt;
-    if (!hasImages && !hasPrompt) return;
+    if (!hasImages && !hasVideos && !hasPrompt) return;
     if (initHandled.current) return;
     initHandled.current = true;
 
     const init = async () => {
       const isMulti = hasImages && pendingImages!.length > 1;
 
-      // ── Step 1: Work snapshots ──
+      // ── Step 1: Work snapshots (images + videos) ──
       const workSnapshots: Snapshot[] = hasImages
         ? pendingImages!.map((img, i) => ({
             id: generateId(),
@@ -2352,6 +2355,27 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             ...(i === 0 && pendingMetadata ? { metadata: pendingMetadata } : {}),
           }))
         : [];
+      if (hasVideos) {
+        for (const v of pendingVideos!) {
+          const { createVideoDesign } = await import('@/lib/video-design');
+          const design = createVideoDesign(v.videoUrl, v.width, v.height, v.duration);
+          const snapId = generateId();
+          workSnapshots.push({
+            id: snapId,
+            image: v.poster,
+            tips: [],
+            messageId: '',
+            imageUrl: v.poster,
+            type: 'video',
+            design,
+            designPath: `code/${snapId}.json`,
+            videoMeta: {
+              taskId: null, videoUrl: v.videoUrl, prompt: '', sourceSnapshotIds: [], sourceUrls: [],
+              status: 'completed', duration: v.duration, model: 'upload', createdAt: new Date().toISOString(),
+            },
+          });
+        }
+      }
 
       // ── Step 2: Commit to state ──
       if (workSnapshots.length > 0) {

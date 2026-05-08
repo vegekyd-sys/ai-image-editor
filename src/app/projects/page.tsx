@@ -498,7 +498,7 @@ function ProjectsPageInner() {
     setDragOver(false)
     if (creating) return
     const droppedFiles = Array.from(e.dataTransfer.files ?? []).filter(
-      f => f.type.startsWith('image/') || isHeicFile(f)
+      f => f.type.startsWith('image/') || f.type.startsWith('video/') || isHeicFile(f)
     )
     addFiles(droppedFiles)
   }, [creating, addFiles])

@@ -3,6 +3,10 @@ import { uploadImage } from '@/lib/supabase/storage'
 import { compressImageFile } from '@/lib/image/compress'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(file.name)
+}
+
 async function compressFile(file: File): Promise<string> {
   try {
     return await compressImageFile(file, 2048, 0.92)
@@ -39,11 +43,14 @@ export async function createProject(
     return { projectId: data.id };
   }
 
-  // Single image: compress + metadata + DB insert in parallel
-  if (files.length <= 1) {
+  const imageFiles = files.filter(f => !isVideoFile(f));
+  const videoFiles = files.filter(f => isVideoFile(f));
+
+  // Single image (no videos): compress + metadata + DB insert in parallel
+  if (imageFiles.length <= 1 && videoFiles.length === 0) {
     const [base64, metadata, dbResult] = await Promise.all([
-      compressFile(files[0]),
-      extractPhotoMetadata(files[0]),
+      compressFile(imageFiles[0]),
+      extractPhotoMetadata(imageFiles[0]),
       supabase.from('projects').insert({ user_id: userId, title: 'Untitled', timeline_version: 2 }).select('id').single(),
     ]);
     if (dbResult.error || !dbResult.data) throw new Error('Failed to create project');
@@ -52,20 +59,31 @@ export async function createProject(
     return { projectId: dbResult.data.id, metadata };
   }
 
-  // Multi image: DB insert + metadata in parallel, then upload
+  // Multi file (images + videos): DB insert + metadata in parallel, then upload
+  const firstImage = imageFiles[0] || files[0];
   const [dbResult, metadata] = await Promise.all([
     supabase.from('projects').insert({ user_id: userId, title: 'Untitled', timeline_version: 2 }).select('id').single(),
-    extractPhotoMetadata(files[0]),
+    !isVideoFile(firstImage) ? extractPhotoMetadata(firstImage) : Promise.resolve(undefined),
   ]);
   if (dbResult.error || !dbResult.data) throw new Error('Failed to create project');
   const projectId = dbResult.data.id;
-  const urls = await Promise.all(files.map(async (file, i) => {
+
+  // Upload images
+  const imageUrls = await Promise.all(imageFiles.map(async (file, i) => {
     const base64 = await compressFile(file);
     const url = await uploadImage(supabase, userId, projectId, `snapshot-upload-${i}.jpg`, base64);
     if (!url) throw new Error(`Failed to upload image ${i}`);
     return url;
   }));
-  sessionStorage.setItem('pendingImages', JSON.stringify(urls));
+  if (imageUrls.length) sessionStorage.setItem('pendingImages', JSON.stringify(imageUrls));
+
+  // Upload videos (transcode + upload via video-upload.ts)
+  if (videoFiles.length) {
+    const { uploadVideoToStorage } = await import('@/lib/video-upload');
+    const videoData = await Promise.all(videoFiles.map(f => uploadVideoToStorage(f, projectId)));
+    sessionStorage.setItem('pendingVideos', JSON.stringify(videoData));
+  }
+
   if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
 
   return { projectId, metadata };
