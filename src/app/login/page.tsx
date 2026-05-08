@@ -38,10 +38,15 @@ export default function LoginPage() {
     return supabaseRef.current
   }
 
-  // Clear stale auth state on login page load
+  // Clear stale auth cookies on login page load (don't use signOut — it clears PKCE state)
   useEffect(() => {
-    getSupabase().auth.signOut().catch(() => {})
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    document.cookie.split(';').forEach(c => {
+      const name = c.trim().split('=')[0]
+      if (name.startsWith('sb-') || name === 'mkr_activated') {
+        document.cookie = `${name}=; path=/; max-age=0`
+      }
+    })
+  }, [])
 
   // Resend cooldown timer
   useEffect(() => {
