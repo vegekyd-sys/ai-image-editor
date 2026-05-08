@@ -25,23 +25,17 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Clean up legacy auth cookies from old Supabase URL (before custom domain migration)
+  const legacyCookies = request.cookies.getAll().filter(c => c.name.startsWith('sb-sdyrtztrjgmmpnirswxt'))
+  if (legacyCookies.length > 0) {
+    legacyCookies.forEach(c => {
+      supabaseResponse.cookies.set(c.name, '', { path: '/', maxAge: 0 })
+    })
+  }
+
   // Using getSession() for performance (reads from cookie, no network round-trip)
   const { data: { session } } = await supabase.auth.getSession()
   const user = session?.user
-
-  // Clear stale auth cookies: if sb- cookies exist but session is invalid, remove them
-  if (!user) {
-    const allCookies = request.cookies.getAll()
-    const hasAuthCookie = allCookies.some(c => c.name.startsWith('sb-'))
-    if (hasAuthCookie) {
-      supabaseResponse = NextResponse.next({ request })
-      allCookies.forEach(c => {
-        if (c.name.startsWith('sb-')) {
-          supabaseResponse.cookies.delete(c.name)
-        }
-      })
-    }
-  }
 
   const { pathname } = request.nextUrl
   // Local dev: skip invite-code activation gate
