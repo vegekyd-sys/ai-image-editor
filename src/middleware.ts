@@ -33,6 +33,25 @@ export async function middleware(request: NextRequest) {
     })
   }
 
+  // Handle OAuth PKCE code exchange: Supabase redirects to /?code=xxx
+  const code = request.nextUrl.searchParams.get('code')
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) {
+      // Exchange success — redirect to clean URL (remove ?code= param)
+      const url = request.nextUrl.clone()
+      url.searchParams.delete('code')
+      url.pathname = '/projects'
+      const response = NextResponse.redirect(url)
+      // Copy auth cookies from supabaseResponse to redirect response
+      supabaseResponse.cookies.getAll().forEach(c => {
+        response.cookies.set(c.name, c.value, { path: '/' })
+      })
+      response.cookies.set('mkr_activated', '1', { path: '/', maxAge: 365 * 24 * 60 * 60, sameSite: 'lax' })
+      return response
+    }
+  }
+
   // Using getSession() for performance (reads from cookie, no network round-trip)
   const { data: { session } } = await supabase.auth.getSession()
   const user = session?.user
