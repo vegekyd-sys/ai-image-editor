@@ -37,11 +37,7 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code)
   if (error) {
     console.error('[auth/callback] exchangeCodeForSession error:', error.message)
-    // Debug: show error on page instead of silent redirect
-    return new NextResponse(
-      `<html><body style="background:#000;color:#fff;padding:40px;font-family:monospace"><h2>Auth Callback Error</h2><p>${error.message}</p><p>Code: ${code?.slice(0,8)}...</p><a href="/login" style="color:#d946ef">Back to login</a></body></html>`,
-      { status: 200, headers: { 'Content-Type': 'text/html' } }
-    )
+    return NextResponse.redirect(`${origin}/login`)
   }
 
   const { data: { user } } = await supabase.auth.getUser()
