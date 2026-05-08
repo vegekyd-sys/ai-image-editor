@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     .single()
 
   if (profile?.activated) {
-    const response = NextResponse.redirect(`${origin}/auth-done`)
+    const response = NextResponse.redirect(`${origin}/projects`)
     response.cookies.set('mkr_activated', '1', {
       path: '/',
       maxAge: 365 * 24 * 60 * 60,
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     console.error('[auth/callback] Welcome credits failed (non-blocking):', e)
   }
 
-  const redirectUrl = isNewUser ? `${origin}/auth-done?welcome=1` : `${origin}/auth-done`
+  const redirectUrl = isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`
   const response = NextResponse.redirect(redirectUrl)
   response.cookies.set('mkr_activated', '1', {
     path: '/',

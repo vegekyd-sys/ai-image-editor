@@ -930,6 +930,7 @@ function HomePageInner() {
             <button
               className="mkr-create-btn"
               onClick={() => { if (!user) { redirectToLogin(); return } if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
+              onTouchEnd={(e) => { if (!user) { e.preventDefault(); redirectToLogin() } }}
               disabled={creating}
               style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
             >
@@ -1037,10 +1038,12 @@ function HomePageInner() {
           -webkit-user-select: none;
           transition: background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
         }
-        .mkr-create-btn:hover, .mkr-skill-btn:hover {
-          background: rgba(217,70,239,0.1) !important;
-          border-radius: 12px !important;
-          box-shadow: 0 0 20px rgba(217,70,239,0.15);
+        @media (hover: hover) {
+          .mkr-create-btn:hover, .mkr-skill-btn:hover {
+            background: rgba(217,70,239,0.1) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 0 20px rgba(217,70,239,0.15);
+          }
         }
         .mkr-create-btn:active, .mkr-skill-btn:active { transform: scale(0.96); }
 
