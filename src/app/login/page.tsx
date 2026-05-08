@@ -60,15 +60,13 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setGoogleLoading(true)
     setError('')
-    const { data, error } = await getSupabase().auth.signInWithOAuth({
+    const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/api/auth/callback`,
-        skipBrowserRedirect: true,
       },
     })
-    if (error || !data.url) { setError(t('auth.networkError')); setGoogleLoading(false); return }
-    window.location.href = data.url
+    if (error) { setError(t('auth.networkError')); setGoogleLoading(false) }
   }
 
   // ── Smart Continue ──
