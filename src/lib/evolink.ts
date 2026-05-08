@@ -53,6 +53,7 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
   if (quality) payload.quality = quality
 
   console.log(`[evolink] Creating task: model=${model}, ${images.length} images${videoUrls?.length ? ` + ${videoUrls.length} videos` : ''}${audioUrls?.length ? ` + ${audioUrls.length} audios` : ''}, duration=${duration ?? 'default'}, ratio=${aspectRatio ?? 'default'}`)
+  console.log(`[evolink] payload:`, JSON.stringify(payload, null, 2))
 
   const response = await fetch(`${BASE_URL}/v1/videos/generations`, {
     method: 'POST',

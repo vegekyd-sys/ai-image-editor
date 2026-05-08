@@ -3702,8 +3702,19 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         });
                         const json = await res.json();
                         if (!res.ok) throw new Error(json.error || 'Retry failed');
+                        // Update frontend state
                         setAnimations(prev => prev.map(a => a.id === anim.id ? { ...a, taskId: json.taskId, status: 'processing' as const, videoUrl: null, createdAt: new Date().toISOString() } : a));
-                        setSnapshots(prev => prev.map(s => s.id === anim.id && s.videoMeta ? { ...s, videoMeta: { ...s.videoMeta, taskId: json.taskId, status: 'processing' as const, videoUrl: null, error: undefined } } : s));
+                        const newMeta = { taskId: json.taskId, status: 'processing' as const, videoUrl: null, error: undefined };
+                        setSnapshots(prev => prev.map(s => s.id === anim.id && s.videoMeta ? { ...s, videoMeta: { ...s.videoMeta, ...newMeta } } : s));
+                        // Persist to DB (v2: update snapshot video_meta)
+                        const { createClient } = await import('@/lib/supabase/client');
+                        const supabase = createClient();
+                        const snap = snapshots.find(s => s.id === anim.id && s.videoMeta);
+                        if (snap?.videoMeta) {
+                          await supabase.from('snapshots').update({
+                            video_meta: { ...snap.videoMeta, ...newMeta },
+                          }).eq('id', anim.id);
+                        }
                       } catch (e) {
                         console.error('Video retry failed:', e);
                       }
