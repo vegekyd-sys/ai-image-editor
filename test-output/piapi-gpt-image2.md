@@ -1,0 +1,313 @@
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - navigation "Global" [ref=e3]:
+      - generic [ref=e4]:
+        - link "piapi piapi_logo" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: piapi
+          - img "piapi_logo" [ref=e8]
+        - generic [ref=e9]:
+          - button "AI APIs" [active] [ref=e11] [cursor=pointer]:
+            - generic [ref=e12]: AI APIs
+            - img [ref=e13]
+          - link "定价" [ref=e15] [cursor=pointer]:
+            - /url: /zh-CN/pricing
+          - link "权益" [ref=e16] [cursor=pointer]:
+            - /url: /zh-CN/benefits
+          - link "博客" [ref=e17] [cursor=pointer]:
+            - /url: /blogs
+          - link "API 文档" [ref=e18] [cursor=pointer]:
+            - /url: https://piapi.ai/docs/overview
+      - generic [ref=e19]:
+        - button "Switch language" [ref=e21] [cursor=pointer]:
+          - img [ref=e22]
+          - generic [ref=e24]: 简体中文
+        - link "工作台" [ref=e26] [cursor=pointer]:
+          - /url: https://piapi.ai/workspace/
+        - button "注册 / 登录" [ref=e28] [cursor=pointer]
+  - main [ref=e1836]:
+    - generic [ref=e1841]:
+      - generic [ref=e1842]:
+        - generic [ref=e1843]: PiAPI 上的 GPT Images 2 API
+        - heading "GPT Image 2 API 用于高质量视觉内容、图像编辑与面向生产环境的工作流" [level=1] [ref=e1845]
+        - paragraph [ref=e1846]:
+          - text: 由
+          - link "OpenAI" [ref=e1847] [cursor=pointer]:
+            - /url: https://openai.com/index/introducing-chatgpt-images-2-0/
+          - text: ", 提供支持，PiAPI 上的 GPT Images 2 API 支持文生图与图像编辑工作流，并提供 Playground 试用、示例、价格信息，以及面向生产环境的 API 上手体验，适用于 GPT Image 2 和 OpenAI Image 2 的使用场景。"
+        - generic [ref=e1848]:
+          - link "在 Workspace 中试用" [ref=e1849] [cursor=pointer]:
+            - /url: https://piapi.ai/workspace
+          - link "查看示例" [ref=e1850] [cursor=pointer]:
+            - /url: "#examples"
+          - link "查看价格" [ref=e1851] [cursor=pointer]:
+            - /url: "#pricing"
+          - link "API 文档" [ref=e1852] [cursor=pointer]:
+            - /url: https://piapi.ai/docs/gpt-image/gpt-image-api
+            - text: API 文档 ->
+      - generic [ref=e1855]:
+        - generic [ref=e1857]:
+          - paragraph [ref=e1858]: GPT Image 2.0 灵感板
+          - paragraph [ref=e1859]: 用于 Hero 视觉的奢华编辑风格方向
+        - img "GPT Image 2.0 奢华营销灵感板" [ref=e1865]
+        - generic [ref=e1866]:
+          - generic [ref=e1867]:
+            - paragraph [ref=e1868]: 创意方向
+            - paragraph [ref=e1869]: 高端产品营销、编辑式概念板、视觉探索，以及更精致的品牌叙事。
+          - generic [ref=e1870]:
+            - paragraph [ref=e1871]: 视觉方向
+            - paragraph [ref=e1872]: 从通用示例图，过渡到更具设计感、更符合营销质感的 GPT Image 2.0 视觉身份。
+    - generic [ref=e1873]:
+      - generic [ref=e1874]:
+        - generic [ref=e1875]:
+          - heading "GPT Image 2.0 Playground" [level=2] [ref=e1876]
+          - paragraph [ref=e1877]: PiAPI 上用于文生图的 OpenAI GPT Image 2.0 预览 Playground
+        - navigation "Tabs" [ref=e1879]:
+          - button "Playground" [ref=e1880] [cursor=pointer]
+          - button "Task History" [ref=e1881] [cursor=pointer]
+        - generic [ref=e1882]:
+          - generic [ref=e1884]:
+            - heading "Configuration" [level=3] [ref=e1886]
+            - generic [ref=e1887]:
+              - generic [ref=e1888]: Model*
+              - combobox [ref=e1889]:
+                - option "GPT Image 1 — Fast, versatile OpenAI image generation, starting at ~$0.011/image"
+                - option "GPT Image 2.0 — Next-generation OpenAI image generation for polished visuals and fast iteration" [selected]
+                - option "GPT Image 1.5 — High-quality OpenAI image generation, starting at ~$0.011/image"
+            - generic [ref=e1890]:
+              - generic [ref=e1891]: Prompt*
+              - textbox "Describe the image you want to generate..." [ref=e1892]: A luxury skincare product shot on reflective glass, soft rim lighting, water droplets suspended in the air, premium studio photography, high detail, elegant composition.
+              - paragraph [ref=e1893]: A text description of the desired image(s).
+            - button "Additional Settings" [ref=e1895] [cursor=pointer]:
+              - generic [ref=e1896]: Additional Settings
+              - img [ref=e1897]
+            - generic [ref=e1899]:
+              - button "Reset" [ref=e1900] [cursor=pointer]
+              - button "Submit" [ref=e1902] [cursor=pointer]
+          - generic [ref=e1903]:
+            - generic [ref=e1904]:
+              - generic [ref=e1905]:
+                - heading "Result" [level=3] [ref=e1906]
+                - generic [ref=e1907]: Idle
+              - img "GPT Image 2.0 sample output" [ref=e1909]
+              - paragraph [ref=e1910]: This shows preset sample previews. Sign in and click 'Generate image' to create your own.
+            - generic [ref=e1911]:
+              - generic [ref=e1912]:
+                - heading "Logs" [level=3] [ref=e1914]
+                - button "Clear" [ref=e1916] [cursor=pointer]
+              - generic [ref=e1918]: No logs yet
+      - generic [ref=e1919]:
+        - generic [ref=e1921]:
+          - generic [ref=e1922]:
+            - generic [ref=e1923]: 示例
+            - heading "GPT Images 2 API 示例" [level=2] [ref=e1924]
+            - paragraph [ref=e1925]: 这些 GPT Images 2 提示词被组织成更完整的视觉方向，方便你生成更强的 Images 2.0 AI API 输出、比较不同风格，并将通过审核的结果直接放入页面中。
+          - generic [ref=e1926]:
+            - generic [ref=e1927]:
+              - generic [ref=e1928]:
+                - paragraph [ref=e1929]: 文生图
+                - heading "GPT Image 2 创意方向" [level=3] [ref=e1930]
+              - paragraph [ref=e1931]: 一个主视觉概念作为这一部分的核心，同时辅以多个方向，展示同一个 gpt-image-2 页面如何以更整洁的 campaign board 布局呈现产品、建筑与编辑风格输出。
+            - generic [ref=e1932]:
+              - article [ref=e1933]:
+                - img "高端精华液营销图" [ref=e1934]
+                - generic [ref=e1935]:
+                  - generic [ref=e1936]:
+                    - paragraph [ref=e1937]: "01"
+                    - paragraph [ref=e1938]: 主概念
+                  - generic [ref=e1939]:
+                    - heading "高端精华液营销图" [level=4] [ref=e1940]
+                    - paragraph [ref=e1941]: 提示词
+                    - paragraph [ref=e1942]: A luxury skincare serum bottle suspended above reflective glass with floating water droplets, cool cyan rim lighting, ultra-clean luxury beauty campaign photography, crisp label detail, premium glass texture, cinematic studio atmosphere, dark teal gradient background, high contrast reflections, elegant composition.
+                    - button "复制提示词" [ref=e1943] [cursor=pointer]
+              - generic [ref=e1944]:
+                - article [ref=e1945]:
+                  - img "建筑光影研究" [ref=e1946]
+                  - generic [ref=e1947]:
+                    - generic [ref=e1948]:
+                      - paragraph [ref=e1949]: "02"
+                      - paragraph [ref=e1950]: 次级方向
+                    - heading "建筑光影研究" [level=4] [ref=e1951]
+                    - paragraph [ref=e1952]: A minimalist architectural interior with curved walls, warm natural light entering from above, travertine flooring, sculptural shadows, refined neutral palette, editorial interior photography, clean geometry, quiet luxury atmosphere, highly detailed materials, balanced composition.
+                    - button "复制提示词" [ref=e1953] [cursor=pointer]
+                - article [ref=e1954]:
+                  - img "时尚编辑人像" [ref=e1955]
+                  - generic [ref=e1956]:
+                    - generic [ref=e1957]:
+                      - paragraph [ref=e1958]: "03"
+                      - paragraph [ref=e1959]: 替代方向
+                    - heading "时尚编辑人像" [level=4] [ref=e1960]
+                    - paragraph [ref=e1961]: An editorial fashion portrait with sculptural styling, dramatic side lighting, tailored silhouette, refined blue and ivory palette, luxury magazine aesthetic, clean background, elegant pose, visible fabric texture, cinematic composition, high detail.
+                    - button "复制提示词" [ref=e1962] [cursor=pointer]
+        - generic [ref=e1964]:
+          - generic [ref=e1965]:
+            - heading "功能特点" [level=2] [ref=e1966]
+            - paragraph [ref=e1967]: 快速了解 GPT Image 2.0 在高质量图像生成、提示词控制和面向生产环境的创意工作流方面更有价值的能力。
+          - generic [ref=e1968]:
+            - generic [ref=e1969]:
+              - img [ref=e1971]
+              - heading "更强调推理的图像生成" [level=3] [ref=e1973]
+              - paragraph [ref=e1974]: 可以将 GPT Image 2.0 定位为一个更具推理能力的图像模型，能够理解复杂请求、在需要时利用实时上下文，并从单个提示词生成多个不同结果。
+            - generic [ref=e1975]:
+              - img [ref=e1977]
+              - heading "更高的精度与控制力" [level=3] [ref=e1979]
+              - paragraph [ref=e1980]: 突出它更强的提示词一致性、更精细的视觉控制能力，以及在产品、品牌和结构化构图中对细节元素的更好处理能力。
+            - generic [ref=e1981]:
+              - img [ref=e1983]
+              - heading "更强的多语言表现" [level=3] [ref=e1985]
+              - paragraph [ref=e1986]: 可以将该模型描述为具备更强的多语言能力，尤其在理解日语、韩语、中文、印地语和孟加拉语提示词方面表现更明显。
+            - generic [ref=e1987]:
+              - img [ref=e1989]
+              - heading "更高的真实感与风格还原度" [level=3] [ref=e1991]
+              - paragraph [ref=e1992]: 这一部分可强调其更干净的美学执行、更可信的光照与材质呈现，以及对指定视觉风格更强的贴合度。
+            - generic [ref=e1993]:
+              - img [ref=e1995]
+              - heading "灵活的宽高比" [level=3] [ref=e1997]
+              - paragraph [ref=e1998]: 强调它支持更宽或更高的构图比例，最宽可达 3:1、最高可达 1:3，适合营销图、横幅、海报和移动端优先的创意内容。
+            - generic [ref=e1999]:
+              - img [ref=e2001]
+              - heading "更强的现实世界理解与输出规模" [level=3] [ref=e2003]
+              - paragraph [ref=e2004]: 可以把它描述为一个更懂现实世界的模型，知识截至 2025 年 12 月，并且能够在一次生成中连贯地产出最多 10 个结果。
+            - generic [ref=e2005]:
+              - img [ref=e2007]
+              - heading "为生产级提示词工作流而设计" [level=3] [ref=e2009]
+              - paragraph [ref=e2010]: 页面结构支持高密度提示词工作流、并排示例展示，以及 API-first 的实验方式，让用户无需切换上下文即可从概念走向执行。
+      - generic [ref=e2012]:
+        - generic [ref=e2013]:
+          - heading "GPT Images 2 API 定价" [level=2] [ref=e2014]
+          - paragraph [ref=e2015]: 当前适用于 GPT Images 2 API Playground 以及 PiAPI 上本 Images 2.0 API 页面 的预览价格。
+        - generic [ref=e2016]:
+          - paragraph [ref=e2017]: gpt-image-2-preview
+          - paragraph [ref=e2018]: 这是当前在 PiAPI 上访问 GPT Image 2 和 OpenAI Image 2 的预览模型，目前每次生成的价格为 $0.1.
+        - generic [ref=e2019]:
+          - link "查看 PiAPI 定价" [ref=e2020] [cursor=pointer]:
+            - /url: /zh-CN/pricing
+          - link "试用 GPT Image 2.0" [ref=e2021] [cursor=pointer]:
+            - /url: https://piapi.ai/workspace
+      - generic [ref=e2024]:
+        - heading "GPT Images 2 API 常见问题" [level=2] [ref=e2025]
+        - generic [ref=e2026]:
+          - generic [ref=e2027]:
+            - term [ref=e2028]:
+              - generic [ref=e2029]: 什么是 GPT Image 2？
+            - definition [ref=e2030]:
+              - generic [ref=e2031]: GPT Image 2 是本页面展示的图像生成模型。PiAPI 将其包装成一个专门的 GPT Images 2 API 体验，在同一页面中提供 Hero 区块、示例、Playground 入口、价格信息与 FAQ 指引。
+          - generic [ref=e2032]:
+            - term [ref=e2033]:
+              - generic [ref=e2034]: PiAPI 是否提供 GPT Images 2 API？
+            - definition [ref=e2035]:
+              - generic [ref=e2036]: 是的。该页面就是 PiAPI 上的 GPT Images 2 API 落地页，提供 Playground 直达入口、模型示例、价格信息以及与平台整体工作流的连接。
+          - generic [ref=e2037]:
+            - term [ref=e2038]:
+              - generic [ref=e2039]: 我可以直接在 GPT Images 2 API Playground 中生成图片吗？
+            - definition [ref=e2040]:
+              - generic [ref=e2041]: 可以。只要你登录的是具备 API 权限的账号，就可以直接在本页 Playground 中提交提示词，并在浏览器里测试 GPT Images 2 API 流程。
+          - generic [ref=e2042]:
+            - term [ref=e2043]:
+              - generic [ref=e2044]: 这个 Images 2.0 AI API 页面除了文生图，也支持编辑吗？
+            - definition [ref=e2045]:
+              - generic [ref=e2046]: 本页面的定位同时覆盖文生图和图像编辑工作流。当前示例更偏向于展示高质量视觉生成，而 Playground 仍与 PiAPI 更广泛的 GPT image 工作流保持一致。
+          - generic [ref=e2047]:
+            - term [ref=e2048]:
+              - generic [ref=e2049]: 目前 gpt-image-2 支持哪些输出选项？
+            - definition [ref=e2050]:
+              - generic [ref=e2051]: 当前 Playground 支持提示词、图片数量、图片尺寸、质量等级和输出格式。这些控制项来自 gpt-image-2 页面所使用的共享 GPT image Playground 系统。
+          - generic [ref=e2052]:
+            - term [ref=e2053]:
+              - generic [ref=e2054]: Images 2.0 API 的价格是多少？
+            - definition [ref=e2055]:
+              - generic [ref=e2056]: 本页的价格区块反映的是当前预览配置：gpt-image-2-preview 模型目前显示为每次生成 $0.1。如果 PiAPI 之后更新模型或价格档位，这一部分也应随之更新。
+          - generic [ref=e2057]:
+            - term [ref=e2058]:
+              - generic [ref=e2059]: 除了本页面，我还能在哪里试用 OpenAI Image 2？
+            - definition [ref=e2060]:
+              - generic [ref=e2061]:
+                - text: 你可以使用 PiAPI 的
+                - link "Workspace" [ref=e2062] [cursor=pointer]:
+                  - /url: https://piapi.ai/workspace
+                - text: 来直接进行实验，并获取适用于 OpenAI Image 2 工作流的账号级 API 访问能力。
+          - generic [ref=e2063]:
+            - term [ref=e2064]:
+              - generic [ref=e2065]: NSFW 内容如何处理？
+            - definition [ref=e2066]:
+              - generic [ref=e2067]:
+                - text: 请查看
+                - link "NSFW 政策" [ref=e2068] [cursor=pointer]:
+                  - /url: /zh-CN/nsfw-policy
+                - text: 以了解最新使用规范与内容限制。
+          - generic [ref=e2069]:
+            - term [ref=e2070]:
+              - generic [ref=e2071]: 生成的图片可以商用吗？
+            - definition [ref=e2072]:
+              - generic [ref=e2073]: 本页面是面向商业 API 使用场景来定位的，但最终结论仍应以模型提供方条款以及适用于你的账号、地区和 OpenAI Images 2 AI 工作流的 PiAPI 政策为准。
+  - contentinfo [ref=e2074]:
+    - generic [ref=e2078]:
+      - generic [ref=e2079]:
+        - generic [ref=e2080]:
+          - img "PiAPI" [ref=e2082]
+          - paragraph [ref=e2083]: 以开发者为先，统一接入图像、视频、音频、3D 生成等 AI API！
+        - generic [ref=e2084]:
+          - heading "资源" [level=3] [ref=e2085]
+          - list [ref=e2086]:
+            - listitem [ref=e2087]:
+              - link "博客" [ref=e2088] [cursor=pointer]:
+                - /url: /blogs
+            - listitem [ref=e2089]:
+              - link "定价" [ref=e2090] [cursor=pointer]:
+                - /url: /zh-CN/pricing
+            - listitem [ref=e2091]:
+              - link "文档" [ref=e2092] [cursor=pointer]:
+                - /url: https://piapi.ai/docs/overview
+            - listitem [ref=e2093]:
+              - link "N8n 工作流" [ref=e2094] [cursor=pointer]:
+                - /url: https://n8n.io/creators/piapi/
+            - listitem [ref=e2095]:
+              - link "Make.com 工作流" [ref=e2096] [cursor=pointer]:
+                - /url: https://www.make.com/en/integrations/piapi-toolkit
+        - generic [ref=e2097]:
+          - heading "合作伙伴" [level=3] [ref=e2098]
+          - list [ref=e2099]:
+            - listitem [ref=e2100]:
+              - link "权益" [ref=e2101] [cursor=pointer]:
+                - /url: /benefits
+        - generic [ref=e2102]:
+          - heading "联系我们" [level=3] [ref=e2103]
+          - list [ref=e2104]:
+            - listitem [ref=e2105]:
+              - link "contact@piapi.ai" [ref=e2106] [cursor=pointer]:
+                - /url: mailto:contact@piapi.ai
+                - img [ref=e2107]
+                - text: contact@piapi.ai
+        - generic [ref=e2109]:
+          - heading "社交媒体" [level=3] [ref=e2110]
+          - list [ref=e2111]:
+            - listitem [ref=e2112]:
+              - link [ref=e2113] [cursor=pointer]:
+                - /url: https://discord.com/invite/qRRvcGa7Wb
+                - img [ref=e2115]
+      - link "联系我们" [ref=e2118] [cursor=pointer]:
+        - /url: mailto:contact@piapi.ai
+        - generic [ref=e2119]: 联系我们
+        - img [ref=e2120]
+      - generic [ref=e2122]:
+        - generic [ref=e2123]:
+          - link "隐私政策" [ref=e2124] [cursor=pointer]:
+            - /url: /privacy-policy
+            - text: 隐私政策
+          - link "服务条款" [ref=e2125] [cursor=pointer]:
+            - /url: /terms-and-conditions
+            - text: 服务条款
+          - link "退款政策" [ref=e2126] [cursor=pointer]:
+            - /url: /refund-policy
+            - text: 退款政策
+          - link "NSFW 政策" [ref=e2127] [cursor=pointer]:
+            - /url: /nsfw-policy
+            - text: NSFW 政策
+        - generic [ref=e2128]:
+          - generic [ref=e2129]: © 2025 by
+          - generic [ref=e2130]: PiAPI
+          - generic [ref=e2131]: .
+          - generic [ref=e2132]: 版权所有
+  - button "Top up credits" [ref=e1832] [cursor=pointer]:
+    - img [ref=e1833]
+  - alert [ref=e1835]: GPT Images 2 API | OpenAI Image 2 on PiAPI

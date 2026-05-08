@@ -1,6 +1,6 @@
 {
   "name": "makaron-cli",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Talk to Makaron Agent from the terminal — create projects, edit images, generate videos",
   "type": "module",
   "bin": {
@@ -9,7 +9,14 @@
   "files": [
     "bin/"
   ],
-  "keywords": ["makaron", "ai", "image-editing", "video", "cli", "agent"],
+  "keywords": [
+    "makaron",
+    "ai",
+    "image-editing",
+    "video",
+    "cli",
+    "agent"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

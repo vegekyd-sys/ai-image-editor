@@ -37,7 +37,11 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code)
   if (error) {
     console.error('[auth/callback] exchangeCodeForSession error:', error.message)
-    return NextResponse.redirect(`${origin}/login`)
+    // Debug: show error on page instead of silent redirect
+    return new NextResponse(
+      `<html><body style="background:#000;color:#fff;padding:40px;font-family:monospace"><h2>Auth Callback Error</h2><p>${error.message}</p><p>Code: ${code?.slice(0,8)}...</p><a href="/login" style="color:#d946ef">Back to login</a></body></html>`,
+      { status: 200, headers: { 'Content-Type': 'text/html' } }
+    )
   }
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -113,8 +117,16 @@ function buildRedirectPage(
   redirectUrl: string,
   authCookies: { name: string; value: string; options: Record<string, unknown> }[],
 ) {
+  // The HTML page reads sessionStorage for returnUrl (saved by home page before login redirect)
+  // and uses it if available, otherwise falls back to the server-determined redirectUrl.
   const response = new NextResponse(
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Redirecting...</title></head><body style="background:#000;display:flex;align-items:center;justify-content:center;height:100vh"><script>window.location.href="${redirectUrl}";</script></body></html>`,
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Redirecting...</title></head><body style="background:#000;display:flex;align-items:center;justify-content:center;height:100vh"><script>
+var r=sessionStorage.getItem('mkr_return_url');
+sessionStorage.removeItem('mkr_return_url');
+var welcome="${redirectUrl}".includes('welcome=1');
+if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(welcome?sep+'welcome=1':'');}
+else{window.location.href="${redirectUrl}";}
+</script></body></html>`,
     { status: 200, headers: { 'Content-Type': 'text/html' } }
   )
   // Set auth cookies on this first-party response
