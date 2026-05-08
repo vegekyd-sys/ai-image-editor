@@ -2685,7 +2685,6 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   useEffect(() => {
     if (!pendingNavigateToVideoRef.current) return;
     if (isV2) {
-      // v2: find last video snapshot in timeline
       const lastVideoIdx = snapshots.reduce((acc, s, i) => s.type === 'video' ? i : acc, -1);
       if (lastVideoIdx >= 0) {
         pendingNavigateToVideoRef.current = false;

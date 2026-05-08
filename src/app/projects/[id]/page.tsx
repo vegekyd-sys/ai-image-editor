@@ -34,7 +34,7 @@ export default function ProjectPage() {
     return sync ? sync.title : 'Untitled'
   })
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
-  const [timelineVersion, setTimelineVersion] = useState(1)
+  const [timelineVersion, setTimelineVersion] = useState(2)
   const [initialMusicTaskId, setInitialMusicTaskId] = useState<string | null>(null)
   const [pendingImages] = useState<string[] | null>(() => {
     if (typeof window === 'undefined') return null

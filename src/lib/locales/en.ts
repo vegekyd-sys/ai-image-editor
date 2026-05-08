@@ -92,6 +92,7 @@ const en = {
   'video.abandoned': 'Abandoned',
   'video.abandon': 'Abandon',
   'video.retry': 'Retry',
+  'video.invalidParamsHint': 'Possible cause: reference video resolution too high (max 1080p) or duration too long (max 15s). Try re-uploading a smaller video.',
   'video.detail': 'Detail',
   'video.count': (n: number) => `${n} video${n !== 1 ? 's' : ''}`,
 

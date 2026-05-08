@@ -92,6 +92,7 @@ const zh = {
   'video.abandoned': '已放弃',
   'video.abandon': '放弃',
   'video.retry': '重试',
+  'video.invalidParamsHint': '可能原因：参考视频分辨率过高（最大 1080p）或时长过长（最大 15s）。请重新上传较小的视频。',
   'video.detail': '详情',
   'video.count': (n: number) => `视频 · ${n} 个`,
 

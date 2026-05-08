@@ -310,6 +310,11 @@ export default function AnimateSheet({
                   lineHeight: 1.5,
                 }}>
                   {detailAnimation.error}
+                  {detailAnimation.error.includes('Invalid parameters') && (
+                    <div style={{ marginTop: 6, color: 'rgba(255,255,255,0.5)', fontSize: '0.72rem' }}>
+                      {t('video.invalidParamsHint')}
+                    </div>
+                  )}
                 </div>
               )}
             </>
