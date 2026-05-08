@@ -137,6 +137,7 @@ export interface VideoMeta {
   duration: number | null;
   model: VideoModel;
   createdAt?: string;
+  error?: string;
 }
 
 
@@ -151,4 +152,5 @@ export interface ProjectAnimation {
   duration?: number | null;
   createdAt: string;
   videoModel?: 'kling' | 'seedance';
+  error?: string;
 }

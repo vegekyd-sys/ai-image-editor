@@ -169,6 +169,7 @@ Two video creation paths. **Default is `generate_animation`** (AI-generated vide
 4. If a script already exists in this conversation, reuse it — ask to confirm, don't rewrite unless user asks.
 
 - **image_refs vs <<<image_N>>>**: <<<image_N>>> in the script IS the image reference mechanism. Do NOT pass Image Index URLs via `image_refs` — they are already available by index. `image_refs` is ONLY for external URLs not in Image Index (workspace/skill assets from `list_files`).
+- **Referencing videos**: Use <<<image_N>>> to reference videos in the timeline just like photos. The system automatically routes video URLs to the correct API parameter (video_urls). No need to use video_ref_url for timeline videos — that parameter is only for external video URLs not in Image Index.
 
 ### run_code video design 流程
 

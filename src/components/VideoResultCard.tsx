@@ -28,12 +28,13 @@ interface VideoResultCardProps {
   onSelectVideo: (id: string) => void;
   onCreateNew: () => void;
   onAbandon: (taskId: string) => void;
+  onRetry?: (anim: ProjectAnimation) => void;
   onViewDetail: (anim: ProjectAnimation) => void;
   isDesktop?: boolean;
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onViewDetail, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onRetry, onViewDetail, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
@@ -161,6 +162,15 @@ export default function VideoResultCard({
                         style={{ fontSize: '0.56rem' }}
                       >
                         {t('video.abandon')}
+                      </span>
+                    )}
+                    {isFailed && onRetry && (
+                      <span
+                        onClick={(e) => { e.stopPropagation(); onRetry(anim); }}
+                        className="text-fuchsia-400/80 mt-0.5 cursor-pointer underline"
+                        style={{ fontSize: '0.56rem' }}
+                      >
+                        {t('video.retry')}
                       </span>
                     )}
                   </div>

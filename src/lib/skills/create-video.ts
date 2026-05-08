@@ -8,8 +8,9 @@ export interface CreateVideoInput {
   aspectRatio?: string;      // '9:16', '16:9', '1:1'
   videoModel?: VideoModel;   // 'kling' (default) or 'seedance'
   // Video editing (Kling only)
-  videoUrl?: string;                    // Reference video URL
+  videoUrl?: string;                    // Reference video URL (explicit from agent)
   videoReferType?: 'base' | 'feature';  // default: 'base'
+  videoUrls?: string[];                 // Auto-detected video references from timeline
   keepOriginalSound?: boolean;          // default: false
   // Motion Control (Kling only)
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
@@ -23,7 +24,7 @@ export interface CreateVideoResult {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, keepOriginalSound, motionControl, characterOrientation } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, keepOriginalSound, motionControl, characterOrientation } = input;
 
   if (images.length === 0) {
     return {
@@ -113,13 +114,14 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     if (provider === 'seedance') {
       const { createEvolinkTask } = await import('../evolink');
+      const seedanceVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
       taskId = await createEvolinkTask({
         prompt: finalPrompt,
         images: filteredImages,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
         aspectRatio: aspectRatio || 'adaptive',
         quality: '720p',
-        videoUrls: videoUrl ? [videoUrl] : undefined,
+        videoUrls: seedanceVideoUrls.length ? seedanceVideoUrls : undefined,
       });
       console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
     } else if (provider === 'piapi') {

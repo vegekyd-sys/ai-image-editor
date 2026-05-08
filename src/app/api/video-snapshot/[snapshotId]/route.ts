@@ -104,14 +104,14 @@ export async function GET(
     }
 
     if (result.status === 'failed') {
-      const updatedMeta: VideoMeta = { ...videoMeta, status: 'failed' }
+      const updatedMeta: VideoMeta = { ...videoMeta, status: 'failed', error: result.error || undefined }
       await supabase
         .from('snapshots')
         .update({ video_meta: updatedMeta })
         .eq('id', snapshotId)
     }
 
-    return NextResponse.json({ status: result.status, snapshotId })
+    return NextResponse.json({ status: result.status, snapshotId, error: result.error })
   } catch (err) {
     console.error('video-snapshot GET error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

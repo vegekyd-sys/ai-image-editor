@@ -91,6 +91,7 @@ const en = {
   'video.failed': 'Failed',
   'video.abandoned': 'Abandoned',
   'video.abandon': 'Abandon',
+  'video.retry': 'Retry',
   'video.detail': 'Detail',
   'video.count': (n: number) => `${n} video${n !== 1 ? 's' : ''}`,
 

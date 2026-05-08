@@ -18,12 +18,13 @@ interface AnimateSheetProps {
   desktopWidth?: number;
   mode?: 'create' | 'detail';
   detailAnimation?: ProjectAnimation;
+  onRetry?: (animation: ProjectAnimation) => void;
 }
 
 export default function AnimateSheet({
   snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt, onPreviewImage,
   animationState, onStateChange, isDesktop, desktopWidth = 500,
-  mode = 'create', detailAnimation,
+  mode = 'create', detailAnimation, onRetry,
 }: AnimateSheetProps) {
   const { t } = useLocale();
   const isDetail = mode === 'detail' && !!detailAnimation;
@@ -297,6 +298,20 @@ export default function AnimateSheet({
                     : t('video.abandoned')}
                 </div>
               </div>
+
+              {/* Error reason for failed videos */}
+              {detailAnimation?.status === 'failed' && detailAnimation.error && (
+                <div style={{
+                  marginTop: 12, padding: '10px 12px',
+                  background: 'rgba(239,68,68,0.06)',
+                  border: '1px solid rgba(239,68,68,0.15)',
+                  borderRadius: 10,
+                  fontSize: '0.78rem', color: 'rgba(239,68,68,0.85)',
+                  lineHeight: 1.5,
+                }}>
+                  {detailAnimation.error}
+                </div>
+              )}
             </>
           ) : (
             /* ─── CREATE MODE ─── */
@@ -571,6 +586,35 @@ export default function AnimateSheet({
             </>
           )}
         </div>
+
+        {/* Retry button — detail mode, failed only */}
+        {isDetail && detailAnimation?.status === 'failed' && onRetry && (
+          <div style={{
+            padding: '14px 20px',
+            paddingBottom: 'max(14px, env(safe-area-inset-bottom))',
+            borderTop: '1px solid rgba(255,255,255,0.04)',
+          }}>
+            <button
+              onClick={() => onRetry(detailAnimation)}
+              style={{
+                width: '100%', padding: '14px',
+                background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
+                border: 'none', borderRadius: 14,
+                color: '#fff',
+                fontSize: '0.95rem', fontWeight: 700,
+                cursor: 'pointer',
+                letterSpacing: '-0.01em',
+                transition: 'opacity 0.15s, transform 0.1s',
+                boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
+              }}
+              onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.98)')}
+              onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+            >
+              {t('video.retry')}
+            </button>
+          </div>
+        )}
 
         {/* Sticky bottom button — create mode only */}
         {!isDetail && bottomBtn && (

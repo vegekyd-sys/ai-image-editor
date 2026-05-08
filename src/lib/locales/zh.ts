@@ -91,6 +91,7 @@ const zh = {
   'video.failed': '失败',
   'video.abandoned': '已放弃',
   'video.abandon': '放弃',
+  'video.retry': '重试',
   'video.detail': '详情',
   'video.count': (n: number) => `视频 · ${n} 个`,
 

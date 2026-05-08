@@ -23,22 +23,26 @@ Images serve as visual references. Prompt uses `<<<image_N>>>` to reference them
 
 ### Video Reference Mode (feature)
 A reference video provides motion/style template. Your prompt should be SHORT — describe what to change, let the video handle motion/timing. Do NOT write detailed shot-by-shot scripts; the reference video already defines the choreography.
-- Pass `video_ref_url` + `video_ref_type: feature`
+- **Timeline videos**: just use `<<<image_N>>>` like any other reference — the system auto-routes video URLs to video_urls
+- **External videos** (workspace/skill assets): pass `video_ref_url` + `video_ref_type: feature`
 - Can combine with reference images
-- Prompt example: `<<<image_1>>>模仿<<<video_1>>>的表情和动作`
-- Prompt example: `Based on <<<video_1>>>, <<<image_1>>> performs the same dance in a neon-lit street.`
+- Prompt example: `<<<image_1>>>模仿<<<image_2>>>的表情和动作` (where image_2 is a video in timeline)
+- Prompt example: `Based on <<<image_3>>>, <<<image_1>>> performs the same dance.`
 - Keep prompt under 200 chars — longer prompts fight the reference video
 
 ### Video Edit Mode (base)
 Directly edit an existing video's content. Output duration = input video duration.
-- Pass `video_ref_url` + `video_ref_type: base`
+- For timeline videos: use `<<<image_N>>>` to reference the video (auto-routed), set `video_ref_type: 'base'`
+- For external videos: pass `video_ref_url` + `video_ref_type: base`
 - Kling only
 - `keep_original_sound: true` to preserve the original audio
-- Prompt example: `Put the crown from <<<image_1>>> on the girl in <<<video_1>>>.`
+- Prompt example: `Put the crown from <<<image_1>>> on the person in <<<image_2>>>.` (where image_2 is a video)
 
 ### Motion Control Mode
 Precise action transfer — the person in the photo performs the exact movements from the reference video. Best for dance, expression mimicry, pose transfer.
-- Pass `motion_control: true` + `video_ref_url` + `keep_original_sound: true`
+- Pass `motion_control: true` + `keep_original_sound: true`
+- For timeline videos: reference the video with `<<<image_N>>>` in script (auto-routed)
+- For external videos: pass `video_ref_url`
 - No detailed prompt needed — just a short title as story_prompt
 - Duration is determined by reference video length (not configurable)
 - Kling only

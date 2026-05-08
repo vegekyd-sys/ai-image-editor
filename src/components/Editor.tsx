@@ -2519,7 +2519,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             ));
           } else if (data.status === 'failed') {
             setSnapshots(prev => prev.map(s =>
-              s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
+              s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const, error: data.error || undefined } } : s
             ));
           }
         } catch { /* ignore */ }
@@ -2689,11 +2689,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       const lastVideoIdx = snapshots.reduce((acc, s, i) => s.type === 'video' ? i : acc, -1);
       if (lastVideoIdx >= 0) {
         pendingNavigateToVideoRef.current = false;
-        requestAnimationFrame(() => setViewIndex(lastVideoIdx));
+        setViewIndex(lastVideoIdx);
       }
     } else if (videoTimelineIndex >= 0) {
       pendingNavigateToVideoRef.current = false;
-      requestAnimationFrame(() => setViewIndex(videoTimelineIndex));
+      setViewIndex(videoTimelineIndex);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animations.length, snapshots.length]);
@@ -3658,6 +3658,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       duration: currentSnap.videoMeta.duration,
                       createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
                       videoModel: currentSnap.videoMeta.model === 'upload' ? undefined : currentSnap.videoMeta.model,
+                      error: currentSnap.videoMeta.error,
                     }] : animations}
                     selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
                     onSelectVideo={isViewingVideoV2 ? () => {} : setSelectedVideoId}
@@ -3689,6 +3690,22 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       } else {
                         setAnimations(prev => prev.filter(a => a.taskId !== taskId));
                         fetch(`/api/animate/${taskId}`, { method: 'DELETE' }).catch(() => {});
+                      }
+                    }}
+                    onRetry={async (anim) => {
+                      const images = anim.snapshotUrls?.length ? anim.snapshotUrls : snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http')).slice(0, 7);
+                      try {
+                        const res = await fetch('/api/animate', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || 'kling' }),
+                        });
+                        const json = await res.json();
+                        if (!res.ok) throw new Error(json.error || 'Retry failed');
+                        setAnimations(prev => prev.map(a => a.id === anim.id ? { ...a, taskId: json.taskId, status: 'processing' as const, videoUrl: null, createdAt: new Date().toISOString() } : a));
+                        setSnapshots(prev => prev.map(s => s.id === anim.id && s.videoMeta ? { ...s, videoMeta: { ...s.videoMeta, taskId: json.taskId, status: 'processing' as const, videoUrl: null, error: undefined } } : s));
+                      } catch (e) {
+                        console.error('Video retry failed:', e);
                       }
                     }}
                     onViewDetail={(anim) => {
@@ -3776,6 +3793,26 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 if (next) animationStateRef.current = next;
                 return next;
               })}
+              onRetry={async (anim) => {
+                const images = anim.snapshotUrls?.length ? anim.snapshotUrls : snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http')).slice(0, 7);
+                try {
+                  const res = await fetch('/api/animate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || 'kling' }),
+                  });
+                  const json = await res.json();
+                  if (!res.ok) throw new Error(json.error || 'Retry failed');
+                  // Update the same animation entry with new taskId + processing status
+                  setAnimations(prev => prev.map(a => a.id === anim.id ? { ...a, taskId: json.taskId, status: 'processing' as const, videoUrl: null, createdAt: new Date().toISOString() } : a));
+                  // v2: update snapshot videoMeta
+                  setSnapshots(prev => prev.map(s => s.id === anim.id && s.videoMeta ? { ...s, videoMeta: { ...s.videoMeta, taskId: json.taskId, status: 'processing' as const, videoUrl: null } } : s));
+                  setDetailAnimation(null);
+                  setShowAnimateSheet(false);
+                } catch (e) {
+                  console.error('Video retry failed:', e);
+                }
+              }}
             />
           )}
 

@@ -317,18 +317,17 @@ function createTools(ctx: AgentContext) {
 
 Hard constraints (apply even before reading the guide):
 - First line of script = short title (2-5 words). Then script body.
-- Use \`<<<image_N>>>\` to reference images (N starts at 1)
+- Use \`<<<image_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed to video_urls — just reference them like images.
 - Total duration: 5-15 seconds.
-- If user provides a reference video URL, MUST pass as \`video_ref_url\` parameter — never in prompt text
-- To edit an existing video: pass its URL (from [video: url] in Image Index) as \`video_ref_url\` with \`video_ref_type: 'base'\`
+- \`video_ref_url\`: ONLY for external videos not in Image Index (e.g. from workspace/list_files), or to edit a video with \`video_ref_type: 'base'\`. Never put video URLs in prompt text.
 - Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
-        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<image_N>>> to reference images.'),
+        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<image_N>>> to reference images and videos.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
         model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: kling.'),
         image_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Image Index (e.g. workspace files from list_files). Images in Image Index are auto-available — just use <<<image_N>>> in script. Passing Image Index URLs here will be rejected.'),
-        video_ref_url: z.string().optional().describe('Reference video URL (from workspace/skill assets via list_files, or [video: url] in Image Index). Kling: base=edit video, feature=reference motion/style. SeeDance: reference_video.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<image_N>>> — they are auto-routed. Only use this for: external URLs or video editing (base mode).'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('base: edit video directly (output duration=input duration, Kling only). feature: reference motion/style for new video. Default: feature.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
@@ -367,6 +366,30 @@ Hard constraints (apply even before reading the guide):
             return { success: false as const, message: harnessError };
           }
 
+          // Auto-route video references: query DB for snapshot types
+          let autoVideoUrls: string[] = [];
+          if (ctx.supabase && ctx.projectId) {
+            const { data: dbSnaps } = await ctx.supabase
+              .from('snapshots')
+              .select('type, video_meta')
+              .eq('project_id', ctx.projectId)
+              .order('sort_order');
+            if (dbSnaps?.length) {
+              const scriptRefs = [...new Set(
+                Array.from(story_prompt.matchAll(/<<<image_(\d+)>>>/g), m => Number(m[1]))
+              )];
+              for (const ref of scriptRefs) {
+                const snap = dbSnaps[ref - 1];
+                const videoUrl = (snap?.video_meta as Record<string, unknown> | null)?.videoUrl as string | undefined;
+                if (snap?.type === 'video' && videoUrl) {
+                  autoVideoUrls.push(videoUrl);
+                  imageUrls[ref - 1] = '';
+                }
+              }
+            }
+          }
+          const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
+
           const skillResult = await createVideo({
             script: story_prompt,
             images: imageUrls,
@@ -375,6 +398,7 @@ Hard constraints (apply even before reading the guide):
             videoModel,
             videoUrl: video_ref_url,
             videoReferType: video_ref_type,
+            videoUrls: allVideoUrls.length ? allVideoUrls : undefined,
             keepOriginalSound: keep_original_sound,
             motionControl: motion_control,
             characterOrientation: character_orientation,
