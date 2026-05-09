@@ -2,7 +2,7 @@ name: Feishu PR Notification
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review, synchronize]
+    types: [opened, reopened, ready_for_review, synchronize, closed]
 
 permissions:
   contents: read
@@ -10,12 +10,15 @@ permissions:
 
 jobs:
   notify-feishu:
-    if: ${{ secrets.FEISHU_PR_WEBHOOK != '' }}
+    if: ${{ secrets.FEISHU_APP_ID != '' && secrets.FEISHU_APP_SECRET != '' && secrets.FEISHU_RECEIVE_ID != '' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Send PR notification to Feishu
+      - name: Send PR notification to Feishu via OpenAPI
         env:
-          FEISHU_PR_WEBHOOK: ${{ secrets.FEISHU_PR_WEBHOOK }}
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_RECEIVE_ID: ${{ secrets.FEISHU_RECEIVE_ID }}
+          FEISHU_RECEIVE_ID_TYPE: ${{ secrets.FEISHU_RECEIVE_ID_TYPE || 'open_id' }}
           REPO: ${{ github.repository }}
           ACTION: ${{ github.event.action }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -25,41 +28,77 @@ jobs:
           PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
         run: |
           python3 - <<'PY'
           import json
           import os
+          import urllib.parse
           import urllib.request
 
-          webhook = os.environ["FEISHU_PR_WEBHOOK"]
-          title = f"PR #{os.environ['PR_NUMBER']}: {os.environ['PR_TITLE']}"
-          action = os.environ["ACTION"]
-          status = "Draft" if os.environ.get("PR_DRAFT") == "true" else "Ready for review"
+          def post_json(url, payload, headers=None, timeout=15):
+              data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+              req = urllib.request.Request(
+                  url,
+                  data=data,
+                  headers={"Content-Type": "application/json", **(headers or {})},
+                  method="POST",
+              )
+              with urllib.request.urlopen(req, timeout=timeout) as resp:
+                  return resp.status, resp.read().decode("utf-8", errors="replace")
 
+          status, body = post_json(
+              "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+              {
+                  "app_id": os.environ["FEISHU_APP_ID"],
+                  "app_secret": os.environ["FEISHU_APP_SECRET"],
+              },
+          )
+          token_resp = json.loads(body)
+          if token_resp.get("code") != 0:
+              raise SystemExit(f"Failed to get tenant_access_token: {token_resp}")
+          token = token_resp["tenant_access_token"]
+
+          action = os.environ["ACTION"]
+          if action == "closed" and os.environ.get("PR_MERGED") == "true":
+              action_label = "merged"
+              icon = "✅"
+          elif action == "closed":
+              action_label = "closed"
+              icon = "🛑"
+          elif action == "synchronize":
+              action_label = "updated"
+              icon = "🔁"
+          else:
+              action_label = action
+              icon = "🧩"
+
+          review_status = "Draft" if os.environ.get("PR_DRAFT") == "true" else "Ready for review"
           text = "\n".join([
-              "🧩 GitHub PR notification",
+              f"{icon} GitHub PR {action_label}",
               "",
               f"Repo: {os.environ['REPO']}",
-              f"Action: {action}",
-              f"Status: {status}",
+              f"PR: #{os.environ['PR_NUMBER']} {os.environ['PR_TITLE']}",
+              f"Status: {review_status}",
               f"Author: {os.environ['PR_AUTHOR']}",
               f"Branch: {os.environ['PR_HEAD']} → {os.environ['PR_BASE']}",
-              f"Title: {title}",
               f"Link: {os.environ['PR_URL']}",
           ])
 
+          receive_id_type = os.environ.get("FEISHU_RECEIVE_ID_TYPE") or "open_id"
+          query = urllib.parse.urlencode({"receive_id_type": receive_id_type})
           payload = {
+              "receive_id": os.environ["FEISHU_RECEIVE_ID"],
               "msg_type": "text",
-              "content": {"text": text},
+              "content": json.dumps({"text": text}, ensure_ascii=False),
           }
-          data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-          req = urllib.request.Request(
-              webhook,
-              data=data,
-              headers={"Content-Type": "application/json"},
-              method="POST",
+          status, body = post_json(
+              f"https://open.feishu.cn/open-apis/im/v1/messages?{query}",
+              payload,
+              headers={"Authorization": f"Bearer {token}"},
           )
-          with urllib.request.urlopen(req, timeout=15) as resp:
-              body = resp.read().decode("utf-8", errors="replace")
-              print(f"Feishu webhook response: {resp.status} {body[:500]}")
+          msg_resp = json.loads(body)
+          if msg_resp.get("code") != 0:
+              raise SystemExit(f"Failed to send Feishu message: {msg_resp}")
+          print(f"Feishu message sent: {msg_resp.get('data', {}).get('message_id', '<no id>')}")
           PY
