@@ -1,0 +1,65 @@
+name: Feishu PR Notification
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify-feishu:
+    if: ${{ secrets.FEISHU_PR_WEBHOOK != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send PR notification to Feishu
+        env:
+          FEISHU_PR_WEBHOOK: ${{ secrets.FEISHU_PR_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          webhook = os.environ["FEISHU_PR_WEBHOOK"]
+          title = f"PR #{os.environ['PR_NUMBER']}: {os.environ['PR_TITLE']}"
+          action = os.environ["ACTION"]
+          status = "Draft" if os.environ.get("PR_DRAFT") == "true" else "Ready for review"
+
+          text = "\n".join([
+              "🧩 GitHub PR notification",
+              "",
+              f"Repo: {os.environ['REPO']}",
+              f"Action: {action}",
+              f"Status: {status}",
+              f"Author: {os.environ['PR_AUTHOR']}",
+              f"Branch: {os.environ['PR_HEAD']} → {os.environ['PR_BASE']}",
+              f"Title: {title}",
+              f"Link: {os.environ['PR_URL']}",
+          ])
+
+          payload = {
+              "msg_type": "text",
+              "content": {"text": text},
+          }
+          data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+          req = urllib.request.Request(
+              webhook,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=15) as resp:
+              body = resp.read().decode("utf-8", errors="replace")
+              print(f"Feishu webhook response: {resp.status} {body[:500]}")
+          PY
