@@ -85,7 +85,7 @@ export default function VideoResultCard({
           const modelLabel = anim.videoModel === 'seedance' ? 'SD' : 'K3';
           let statusText: React.ReactNode;
           if (isCompleted) {
-            statusText = anim.duration ? `${anim.duration}s · ${modelLabel}` : modelLabel;
+            statusText = anim.duration ? `${Math.round(anim.duration)}s · ${modelLabel}` : modelLabel;
           } else if (isProcessing) {
             statusText = <><ElapsedTimer since={anim.createdAt} /> · {modelLabel}</>;
           } else if (isFailed) {
@@ -143,7 +143,7 @@ export default function VideoResultCard({
                       <div className="absolute bottom-0.5 right-0.5 bg-black/70 rounded text-white/85 leading-none"
                         style={{ fontSize: '0.56rem', padding: '1px 4px' }}
                       >
-                        {anim.duration}s
+                        {Math.round(anim.duration)}s
                       </div>
                     )}
                   </div>
