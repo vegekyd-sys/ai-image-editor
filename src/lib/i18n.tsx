@@ -15,7 +15,7 @@ type TValue<K extends TKey> = Translations[K] extends (...args: infer A) => infe
   ? (...args: A) => R
   : string;
 
-interface LocaleContextValue {
+export interface LocaleContextValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: <K extends TKey>(key: K, ...args: Translations[K] extends (...a: infer A) => unknown ? A : []) => string;
