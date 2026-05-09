@@ -290,6 +290,7 @@ export default function Editor({
   const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
+  const isAgentActiveRef = useRef(false);
 
   // Sync state when initialSnapshots/Messages props change (Supabase fetch or cache)
   useEffect(() => {
@@ -338,6 +339,8 @@ export default function Editor({
   const { activeRunId, isReconnecting, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
     projectId: projectId ?? '',
     enabled: !!projectId && (initialSnapshots?.length ?? 0) > 0,
+    skipRunIdRef: agentRunIdRef,
+    isActiveRef: isAgentActiveRef,
   });
 
   // ── Hero animation (GUI ↔ CUI transition) ───────────────────────
@@ -383,7 +386,6 @@ export default function Editor({
   draftParentIndexRef.current = draftParentIndex;
   const previewingTipIndexRef = useRef(previewingTipIndex);
   previewingTipIndexRef.current = previewingTipIndex;
-  const isAgentActiveRef = useRef(isAgentActive);
   useEffect(() => { isAgentActiveRef.current = isAgentActive; }, [isAgentActive]);
   const activeSkillRef = useRef(pendingSkill);
   useEffect(() => { activeSkillRef.current = pendingSkill; }, [pendingSkill]);
@@ -1710,43 +1712,54 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [agentDisconnect]);
 
   // ── Reconnect to active background agent run ──
-  // Uses the same makeAgentCallbacks factory as the SSE path — identical CUI building logic.
+  // Mount-time detection: use standard reconnect flow (replay + realtime).
+  // Live detection (CLI triggers run while page already loaded): reload page so
+  // the mount-time reconnect handles it identically to a manual refresh.
+  const mountReconnectHandledRef = useRef(false);
   useEffect(() => {
     if (!activeRunId || isAgentActive) return;
-    setIsAgentActive(true);
-    setAgentStatus(t('editor.reconnecting'));
 
-    const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
-      projectId: projectId ?? '',
-      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
-      setDesignDraftParent: (idx) => {
-        if (idx !== null) {
-          setActiveDraftType('design');
-          setPreviewingTipIndex(null);
-          setDraftParentIndex(idx);
-          setViewIndex(idx + 1);
-        } else {
-          setActiveDraftType(null);
-          setDraftParentIndex(null);
-        }
-      },
-      setPendingNotification, setSelectedVideoId, setAnimationState,
-      snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
-      pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
-      agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
-      pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
-      draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
-      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
-      triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
-      t,
-      onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
-      onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
-      hasBackgroundTaskRef,
-    });
+    if (!mountReconnectHandledRef.current) {
+      // First detection after mount — use standard reconnect
+      mountReconnectHandledRef.current = true;
+      setIsAgentActive(true);
+      setAgentStatus(t('editor.reconnecting'));
 
-    agentReconnect(reconnectCallbacks);
+      const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
+        projectId: projectId ?? '',
+        setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+        setDesignDraftParent: (idx) => {
+          if (idx !== null) {
+            setActiveDraftType('design');
+            setPreviewingTipIndex(null);
+            setDraftParentIndex(idx);
+            setViewIndex(idx + 1);
+          } else {
+            setActiveDraftType(null);
+            setDraftParentIndex(null);
+          }
+        },
+        setPendingNotification, setSelectedVideoId, setAnimationState,
+        snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
+        pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
+        agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
+        pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
+        draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
+        cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+        triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
+        t,
+        onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
+        onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
+        hasBackgroundTaskRef,
+      });
 
-    return () => { agentDisconnect(); };
+      agentReconnect(reconnectCallbacks);
+      return () => { agentDisconnect(); };
+    }
+
+    // Live detection — reload page for clean reconnect
+    // Delay slightly to ensure DualWriter has flushed user message to DB
+    setTimeout(() => window.location.reload(), 1500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRunId]);
 
