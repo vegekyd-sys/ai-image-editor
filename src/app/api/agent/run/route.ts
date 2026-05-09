@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { authenticateRequest } from '@/lib/api-auth';
 import { runMakaronAgent } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
@@ -17,12 +17,9 @@ export const maxDuration = 800;
  */
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user;
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await authenticateRequest(req);
+    if ('error' in authResult) return authResult.error;
+    const { userId, supabase } = authResult.auth;
 
     const {
       projectId,
@@ -33,6 +30,7 @@ export async function POST(req: NextRequest) {
       referenceImageCount,
       preferredModel,
       isNsfw,
+      videoModel,
     } = await req.json();
 
     if (!projectId || !prompt) {
@@ -43,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Pre-flight credit check
-    const creditCheck = await requireCredits(user.id, 5);
+    const creditCheck = await requireCredits(userId, 5);
     if (!creditCheck.ok) return creditCheck.response;
 
     const locale = req.cookies.get('locale')?.value ?? 'en';
@@ -52,13 +50,13 @@ export async function POST(req: NextRequest) {
     await supabase.from('agent_runs')
       .update({ status: 'failed', ended_at: new Date().toISOString() })
       .eq('project_id', projectId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('status', 'running');
 
     // Create run
     const { data: run } = await supabase.from('agent_runs').insert({
       project_id: projectId,
-      user_id: user.id,
+      user_id: userId,
       status: 'running',
       prompt: prompt.slice(0, 500),
       metadata: { locale, preferredModel, isNsfw, headless: true },
@@ -70,7 +68,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Build context from DB (no frontend needed)
-    const ctx = await buildPromptContext(projectId, supabase, user.id, {
+    const ctx = await buildPromptContext(projectId, supabase, userId, {
       userMessage: prompt,
       currentSnapshotIndex,
       hasAnnotation,
@@ -89,7 +87,7 @@ export async function POST(req: NextRequest) {
     });
 
     // DualWriter in headless mode (no SSE controller)
-    const writer = new AgentDualWriter(runId, supabase, user.id, projectId);
+    const writer = new AgentDualWriter(runId, supabase, userId, projectId);
 
     // Store firstMessageId in run metadata
     await supabase.from('agent_runs').update({
@@ -98,7 +96,7 @@ export async function POST(req: NextRequest) {
 
     // Load user skills
     const { getAllSkills } = await import('@/lib/workspace');
-    const allSkills = await getAllSkills(supabase, user.id);
+    const allSkills = await getAllSkills(supabase, userId);
     const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
 
     // Run agent after response is sent — next/server after() keeps the function alive
@@ -120,12 +118,13 @@ export async function POST(req: NextRequest) {
           originalImage: ctx.originalImage,
           locale,
           preferredModel,
+          videoModel,
           snapshotImages: ctx.snapshotImages,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,
           userSkills: userSkills.length ? userSkills : undefined,
           supabase,
-          userId: user.id,
+          userId: userId,
           currentDesign: ctx.currentDesign,
           history: ctx.history,
         })) {
@@ -156,7 +155,7 @@ export async function POST(req: NextRequest) {
       // Deduct agent LLM tokens
       if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
         deductByTokens(
-          user.id, 'agent', agentModel || 'unknown',
+          userId, 'agent', agentModel || 'unknown',
           totalInputTokens, totalOutputTokens,
           undefined, undefined,
           { cacheRead: totalCacheReadTokens, cacheWrite: totalCacheWriteTokens },
@@ -178,4 +177,28 @@ export async function POST(req: NextRequest) {
     console.error('[agent/run] Request error:', msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+/**
+ * GET /api/agent/run?projectId=xxx — List runs for a project.
+ */
+export async function GET(req: NextRequest) {
+  const authResult = await authenticateRequest(req);
+  if ('error' in authResult) return authResult.error;
+  const { userId, supabase } = authResult.auth;
+
+  const projectId = new URL(req.url).searchParams.get('projectId');
+  if (!projectId) {
+    return NextResponse.json({ error: 'projectId required' }, { status: 400 });
+  }
+
+  const { data: runs } = await supabase
+    .from('agent_runs')
+    .select('id, status, prompt, started_at, ended_at')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .order('started_at', { ascending: false })
+    .limit(20);
+
+  return NextResponse.json({ runs: runs ?? [] });
 }
