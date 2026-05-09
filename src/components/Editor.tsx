@@ -28,6 +28,7 @@ import DesignEditPanel from '@/components/DesignEditPanel';
 import DesignTextEditor from '@/components/DesignTextEditor';
 import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
+import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
 import { containRect, coverRect } from '@/lib/image/geometry';
 import { extractPhotoMetadata } from '@/lib/image/metadata';
@@ -197,16 +198,7 @@ export default function Editor({
   const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
   // Mobile keyboard offset for text editor panel
-  const [editorKbInset, setEditorKbInset] = useState(0);
-  useEffect(() => {
-    if (isDesktop || !editingDesignFieldId) { setEditorKbInset(0); return; }
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => setEditorKbInset(Math.round(Math.max(0, window.innerHeight - vv.height - vv.offsetTop)));
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
-  }, [isDesktop, editingDesignFieldId]);
+  const editorKbInset = useVisualViewportInset(!isDesktop && Boolean(editingDesignFieldId));
   const [visibleEditableIds, _setVisibleEditableIds] = useState<string[]>([]);
   const handleVisibleEditableFields = useCallback((ids: string[]) => {
     _setVisibleEditableIds(prev => {
