@@ -1277,23 +1277,17 @@ export default function ImageCanvas({
                     <span className={`${isDesktop ? 'w-px h-3 mr-1.5' : 'w-px h-2 mr-[5px]'} bg-white/20`} />
                   )}
                   {(entry === VIDEO_SENTINEL || videoTimelineIndices?.has(i)) ? (
-                    i === currentIndex ? (
-                      <button
-                        onClick={() => goTo(i)}
-                        className={`cursor-pointer transition-all ${isDesktop ? 'w-5 h-2 rounded-full bg-white/70 hover:bg-white/90' : 'w-3 h-1 rounded-full bg-white/70'}`}
-                      />
-                    ) : (
-                      <button
-                        onClick={() => goTo(i)}
-                        className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-2 h-2 hover:opacity-80' : 'w-1 h-1'}`}
-                        style={{ color: 'rgba(255,255,255,0.35)' }}
-                      >
-                        <svg width={isDesktop ? "8" : "5"} height={isDesktop ? "8" : "5"} viewBox="0 0 8 8" fill="currentColor">
-                          <polygon points="1,0 8,4 1,8" />
-                        </svg>
-                      </button>
-                    )
+                    /* Video: square (unselected) → wide rect (selected) — no border-radius */
+                    <button
+                      onClick={() => goTo(i)}
+                      className={`cursor-pointer transition-all ${
+                        i === currentIndex
+                          ? isDesktop ? 'w-5 h-2 rounded-[2px] bg-white/70 hover:bg-white/90' : 'w-3 h-[5px] rounded-[1px] bg-white/70'
+                          : isDesktop ? 'w-2 h-2 rounded-[2px] bg-white/25 hover:bg-white/40' : 'w-[5px] h-[5px] rounded-[1px] bg-white/25'
+                      }`}
+                    />
                   ) : (
+                    /* Image: circle (unselected) → ellipse pill (selected) */
                     <button
                       onClick={() => goTo(i)}
                       className={`transition-all cursor-pointer ${
