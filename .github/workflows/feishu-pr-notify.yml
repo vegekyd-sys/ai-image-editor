@@ -10,10 +10,9 @@ permissions:
 
 jobs:
   notify-feishu:
-    if: ${{ secrets.FEISHU_APP_ID != '' && secrets.FEISHU_APP_SECRET != '' && secrets.FEISHU_RECEIVE_ID != '' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Send PR notification to Feishu via OpenAPI
+      - name: Send PR notification card to Feishu via OpenAPI
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
@@ -33,8 +32,15 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import sys
           import urllib.parse
           import urllib.request
+
+          required = ["FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_RECEIVE_ID"]
+          missing = [name for name in required if not os.environ.get(name)]
+          if missing:
+              print(f"Skip Feishu notification: missing secrets {', '.join(missing)}")
+              sys.exit(0)
 
           def post_json(url, payload, headers=None, timeout=15):
               data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -60,37 +66,80 @@ jobs:
           token = token_resp["tenant_access_token"]
 
           action = os.environ["ACTION"]
-          if action == "closed" and os.environ.get("PR_MERGED") == "true":
+          merged = os.environ.get("PR_MERGED") == "true"
+          if action == "closed" and merged:
               action_label = "merged"
-              icon = "✅"
+              template = "green"
+              emoji = "✅"
           elif action == "closed":
               action_label = "closed"
-              icon = "🛑"
+              template = "grey"
+              emoji = "🛑"
           elif action == "synchronize":
               action_label = "updated"
-              icon = "🔁"
+              template = "blue"
+              emoji = "🔁"
+          elif action == "ready_for_review":
+              action_label = "ready for review"
+              template = "turquoise"
+              emoji = "👀"
           else:
               action_label = action
-              icon = "🧩"
+              template = "blue"
+              emoji = "🧩"
 
           review_status = "Draft" if os.environ.get("PR_DRAFT") == "true" else "Ready for review"
-          text = "\n".join([
-              f"{icon} GitHub PR {action_label}",
-              "",
-              f"Repo: {os.environ['REPO']}",
-              f"PR: #{os.environ['PR_NUMBER']} {os.environ['PR_TITLE']}",
-              f"Status: {review_status}",
-              f"Author: {os.environ['PR_AUTHOR']}",
-              f"Branch: {os.environ['PR_HEAD']} → {os.environ['PR_BASE']}",
-              f"Link: {os.environ['PR_URL']}",
-          ])
+          pr_title = os.environ["PR_TITLE"]
+          pr_number = os.environ["PR_NUMBER"]
+          pr_url = os.environ["PR_URL"]
+
+          card = {
+              "config": {"wide_screen_mode": True},
+              "header": {
+                  "template": template,
+                  "title": {
+                      "tag": "plain_text",
+                      "content": f"{emoji} PR #{pr_number} {action_label}",
+                  },
+              },
+              "elements": [
+                  {
+                      "tag": "div",
+                      "text": {
+                          "tag": "lark_md",
+                          "content": "\n".join([
+                              f"**{pr_title}**",
+                              "",
+                              f"**Repo:** `{os.environ['REPO']}`",
+                              f"**Branch:** `{os.environ['PR_HEAD']}` → `{os.environ['PR_BASE']}`",
+                              f"**Author:** {os.environ['PR_AUTHOR']}",
+                              f"**Status:** {review_status}",
+                          ]),
+                      },
+                  },
+                  {
+                      "tag": "hr",
+                  },
+                  {
+                      "tag": "action",
+                      "actions": [
+                          {
+                              "tag": "button",
+                              "text": {"tag": "plain_text", "content": "Open PR"},
+                              "type": "primary",
+                              "url": pr_url,
+                          }
+                      ],
+                  },
+              ],
+          }
 
           receive_id_type = os.environ.get("FEISHU_RECEIVE_ID_TYPE") or "open_id"
           query = urllib.parse.urlencode({"receive_id_type": receive_id_type})
           payload = {
               "receive_id": os.environ["FEISHU_RECEIVE_ID"],
-              "msg_type": "text",
-              "content": json.dumps({"text": text}, ensure_ascii=False),
+              "msg_type": "interactive",
+              "content": json.dumps(card, ensure_ascii=False),
           }
           status, body = post_json(
               f"https://open.feishu.cn/open-apis/im/v1/messages?{query}",
@@ -99,6 +148,6 @@ jobs:
           )
           msg_resp = json.loads(body)
           if msg_resp.get("code") != 0:
-              raise SystemExit(f"Failed to send Feishu message: {msg_resp}")
-          print(f"Feishu message sent: {msg_resp.get('data', {}).get('message_id', '<no id>')}")
+              raise SystemExit(f"Failed to send Feishu card: {msg_resp}")
+          print(f"Feishu card sent: {msg_resp.get('data', {}).get('message_id', '<no id>')}")
           PY
