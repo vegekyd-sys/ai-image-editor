@@ -79,7 +79,8 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
       <div className="relative">
         <button
           onClick={handleClick}
-          onTouchStart={() => {
+          onTouchStart={(e) => {
+            e.preventDefault();
             didLongPressRef.current = false;
             longPressRef.current = setTimeout(() => {
               longPressRef.current = null;
@@ -100,7 +101,8 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
           }}
           onPointerUp={(e) => { if (e.pointerType === 'touch') return; if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
           onContextMenu={e => e.preventDefault()}
-          className="p-1.5 rounded-full cursor-pointer text-white/80 hover:text-white transition-colors"
+          className="p-1.5 rounded-full cursor-pointer text-white/80 hover:text-white transition-colors select-none"
+          style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
@@ -109,7 +111,7 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
           </svg>
         </button>
         {showPopover && (
-          <div data-share-popover className="absolute bottom-full right-0 mb-2 min-w-[200px] rounded-2xl bg-[#1a1a1a] border border-white/10 shadow-2xl p-4 z-50">
+          <div data-share-popover className="absolute bottom-full right-0 mb-2 min-w-[200px] rounded-2xl border border-white/15 shadow-2xl p-4 z-50" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
             <div className="flex items-center justify-between gap-4 mb-4">
               <span className="text-sm font-medium text-white/90 whitespace-nowrap">Public link</span>
               <button
