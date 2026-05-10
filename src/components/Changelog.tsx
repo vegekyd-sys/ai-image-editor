@@ -8,6 +8,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-05-11',
+    en: { title: 'Project Sharing & CLI Upgrade', items: [
+      'Share projects: every project now has a public link — anyone can view your canvas, tips, and chat history without logging in',
+      'CLI agent integration: fully compatible with OpenClaw — external agents can create and edit projects via API, results sync live to the app',
+      'Real-time collaboration: projects created by CLI or API agents appear instantly in the browser with live progress updates',
+      'Privacy control: long-press the Share button to toggle a project between public and private',
+    ]},
+    zh: { title: '项目分享 & CLI 升级', items: [
+      '项目分享：每个项目都有公开链接 — 任何人无需登录即可查看你的画布、Tips 和聊天记录',
+      'CLI Agent 集成：完美适配 OpenClaw — 外部 Agent 可通过 API 创建和编辑项目，结果实时同步到 App',
+      '实时协作：CLI 或 API Agent 创建的项目即时出现在浏览器中，进度实时更新',
+      '隐私控制：长按 Share 按钮可切换项目公开/私密状态',
+    ]},
+  },
+  {
     date: '2026-05-08',
     en: { title: 'Storyboard Long Video — Live on Skill Marketplace', items: [
       'Break the 15s limit with director-grade storyboards — generate 30-60s cinematic videos with consistent characters, scenes, and style',

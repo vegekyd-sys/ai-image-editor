@@ -29,11 +29,16 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
   const [isPublic, setIsPublic] = useState(true);
   const [toast, setToast] = useState(false);
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPressRef = useRef(false);
 
   useEffect(() => {
     if (!showPopover) return;
-    const close = () => setShowPopover(false);
-    const timer = setTimeout(() => document.addEventListener('pointerdown', close, { once: true }), 0);
+    const close = (e: PointerEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-share-popover]')) return;
+      setShowPopover(false);
+    };
+    const timer = setTimeout(() => document.addEventListener('pointerdown', close), 100);
     return () => { clearTimeout(timer); document.removeEventListener('pointerdown', close); };
   }, [showPopover]);
 
@@ -44,7 +49,8 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
 
   const shareUrl = () => `${window.location.origin}/projects/${projectId}`;
 
-  const handleShare = () => {
+  const handleClick = () => {
+    if (didLongPressRef.current) { didLongPressRef.current = false; return; }
     if (showPopover) { setShowPopover(false); return; }
     const url = shareUrl();
     if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
@@ -72,15 +78,17 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
     <>
       <div className="relative">
         <button
-          onClick={handleShare}
+          onClick={handleClick}
           onPointerDown={() => {
+            didLongPressRef.current = false;
             longPressRef.current = setTimeout(() => {
               longPressRef.current = null;
+              didLongPressRef.current = true;
               setShowPopover(true);
             }, 500);
           }}
           onPointerUp={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
-          onPointerLeave={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
+          onContextMenu={e => e.preventDefault()}
           className="p-1.5 rounded-full cursor-pointer text-white/80 hover:text-white transition-colors"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -90,9 +98,9 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
           </svg>
         </button>
         {showPopover && (
-          <div onPointerDown={e => e.stopPropagation()} className="absolute bottom-full right-0 mb-2 w-52 rounded-xl bg-[#1a1a1a] border border-white/10 shadow-xl p-3 z-50">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs text-white/70">Public link</span>
+          <div data-share-popover className="absolute bottom-full right-0 mb-2 min-w-[200px] rounded-2xl bg-[#1a1a1a] border border-white/10 shadow-2xl p-4 z-50">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <span className="text-sm font-medium text-white/90 whitespace-nowrap">Public link</span>
               <button
                 onClick={() => {
                   const next = !isPublic;
@@ -103,9 +111,13 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
                     body: JSON.stringify({ is_public: next }),
                   }).catch(() => {});
                 }}
-                className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${isPublic ? 'bg-fuchsia-500' : 'bg-white/20'}`}
+                style={{ width: 40, height: 24, flexShrink: 0 }}
+                className={`rounded-full transition-colors relative cursor-pointer ${isPublic ? 'bg-fuchsia-500' : 'bg-white/20'}`}
               >
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${isPublic ? 'left-[18px]' : 'left-0.5'}`} />
+                <span
+                  style={{ width: 18, height: 18, top: 3, left: isPublic ? 19 : 3 }}
+                  className="absolute rounded-full bg-white transition-all duration-200"
+                />
               </button>
             </div>
             <button
@@ -113,7 +125,7 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
                 copyToClipboard(shareUrl()).then(showToast).catch(() => {});
                 setShowPopover(false);
               }}
-              className="w-full text-left text-xs text-white/90 hover:text-white py-1.5 px-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
+              className="w-full text-sm text-white/90 hover:text-white py-2 px-3 rounded-xl hover:bg-white/5 cursor-pointer transition-colors text-center border border-white/10"
             >
               Copy link
             </button>
