@@ -12,13 +12,13 @@ const CHANGELOG: ChangelogEntry[] = [
     en: { title: 'CLI — Works with OpenClaw & Hermes', items: [
       'CLI now fully compatible with OpenClaw & Hermes — external agents can create and edit projects with edit, video, and music commands',
       'Real-time sync: projects created or edited via CLI appear instantly in the browser with live progress updates',
-      'Project sharing: every project has a public link — anyone can view without logging in',
+      'Project sharing: every project has a public link — viewable without logging in',
       'Privacy control: long-press the Share button to toggle public/private',
     ]},
     zh: { title: 'CLI — 完美适配 OpenClaw & Hermes', items: [
       'CLI 完美适配 OpenClaw & Hermes — 外部 Agent 可创建和编辑项目，支持 edit、video、music 命令',
       '实时同步：通过 CLI 创建或编辑的项目即时出现在浏览器中，进度实时更新',
-      '项目分享：每个项目都有公开链接 — 任何人无需登录即可查看',
+      '项目分享：每个项目都有公开链接 — 无需登录即可查看',
       '隐私控制：长按 Share 按钮可切换项目公开/私密状态',
     ]},
   },
