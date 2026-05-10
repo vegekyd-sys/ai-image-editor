@@ -624,11 +624,44 @@ if (command === 'login') {
     else promptParts.push(args[i]);
   }
   const prompt = promptParts.join(' ');
-  if (!projectId || !prompt) {
-    console.error('Usage: makaron chat --project <id> [--image <file>] [--stream] [--background|-b] [--json] "your message"');
+  if (!prompt) {
+    console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--stream] [--background|-b] [--json] "your message"');
     process.exit(1);
   }
-  // Upload images if provided
+  // --project auto: create a new project (with images if provided)
+  if (!projectId || projectId === 'auto') {
+    if (chatImages.length === 0) {
+      // Create empty project
+      process.stderr.write(`📦 Creating new project...\n`);
+      const res = await fetch(`${baseUrl}/api/projects/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ title: prompt.slice(0, 50) }),
+      });
+      if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
+      const data = await res.json();
+      projectId = data.projectId;
+      process.stderr.write(`📦 Project created: ${projectId}\n`);
+    } else {
+      // Create project with images
+      const base64s = chatImages.map(imgPath => {
+        process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
+        const buf = fs.readFileSync(imgPath);
+        return `data:image/jpeg;base64,${buf.toString('base64')}`;
+      });
+      const res = await fetch(`${baseUrl}/api/projects/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ imageBase64s: base64s }),
+      });
+      if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
+      const data = await res.json();
+      projectId = data.projectId;
+      process.stderr.write(`📦 Project created: ${projectId} (${data.snapshots?.length || 0} images)\n`);
+    }
+    chatImages.length = 0; // already uploaded
+  }
+  // Upload additional images to existing project
   if (chatImages.length > 0) {
     const base64s = chatImages.map(imgPath => {
       process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);

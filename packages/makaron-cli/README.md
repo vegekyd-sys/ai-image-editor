@@ -16,16 +16,16 @@ Verify: `npx makaron-cli list` should show projects.
 ## Core Workflow
 
 ```bash
-# 1. Create project with image(s)
-PROJECT_ID=$(npx makaron-cli create --image photo.jpg 2>/dev/null | grep "ID:" | awk '{print $2}')
+# One-shot: create project + upload image + submit prompt — all in one command
+RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video")
 
-# Multi-image project:
-PROJECT_ID=$(npx makaron-cli create --image img1.jpg --image img2.jpg 2>/dev/null | grep "ID:" | awk '{print $2}')
+# Watch until all artifacts are ready
+npx makaron-cli responses watch $RUN_ID --jsonl
+```
 
-# 2. Submit creative request (non-blocking)
-RUN_ID=$(npx makaron-cli chat --project $PROJECT_ID -b "make it cinematic and create a 5s video")
-
-# 3. Watch until all artifacts are ready
+Or with an existing project:
+```bash
+RUN_ID=$(npx makaron-cli chat --project $PROJECT_ID -b "make a 5s video")
 npx makaron-cli responses watch $RUN_ID --jsonl
 ```
 
@@ -36,7 +36,12 @@ Use `chat` for all creative tasks. Makaron Agent decides how to execute — it c
 ### Submit a request
 
 ```bash
+# With existing project
 npx makaron-cli chat --project <id> --json -b "<prompt>"
+
+# Auto-create project (with or without images)
+npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinematic"
+npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
 Returns immediately:
@@ -44,10 +49,9 @@ Returns immediately:
 {"runId": "xxx", "projectId": "...", "projectUrl": "https://www.makaron.app/projects/...", "status": "running"}
 ```
 
-### With additional images
+### With additional images (existing project)
 
 ```bash
-# Add reference images to project before chatting
 npx makaron-cli chat --project <id> --image ref1.jpg --image ref2.jpg -b "use these as style reference"
 ```
 
