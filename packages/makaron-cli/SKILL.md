@@ -1,3 +1,8 @@
+---
+name: makaron
+description: Use Makaron CLI to generate AI images, videos, music, and motion designs. Trigger when user needs creative media production — photo editing, video generation, music composition, or design creation. Requires `npx makaron-cli` and MAKARON_API_KEY env var.
+---
+
 # Makaron CLI — Agent Integration Skill
 
 Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, and it produces images, videos, music, and animated designs — all saved to a persistent project.
@@ -5,9 +10,6 @@ Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, an
 ## Setup
 
 ```bash
-npm install -g makaron-cli
-# or use directly: npx makaron-cli
-
 export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
@@ -193,91 +195,3 @@ type MakaronOutput =
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.
 - Always use `chat` as the primary interface — even for single image edits.
 - `edit`/`video`/`music` are fallback tools for when `chat` is unavailable or you need raw model access without project context.
-
-## Admin: Skill Marketplace Operations
-
-Admin commands require an API key with admin privileges. Ask your admin to run `makaron admin set-admin <your-email>` to grant access.
-
-### List all marketplace skills
-
-```bash
-npx makaron-cli admin skills
-```
-
-### Upload assets to Storage
-
-```bash
-# Upload cover image (3:4 aspect ratio recommended)
-npx makaron-cli admin upload cover.jpg marketplace/covers/skill-name.jpg
-
-# Upload before photo
-npx makaron-cli admin upload before.jpg marketplace/before/before-name.jpg
-
-# Upload skill zip
-npx makaron-cli admin upload skill-name.zip marketplace/skills/skill-name.zip
-```
-
-Storage paths follow this convention:
-- Covers: `marketplace/covers/<skill-name>.jpg` (or `.mp4` for video covers)
-- Before images: `marketplace/before/<name>.jpg`
-- Skill zips: `marketplace/skills/<skill-name>.zip`
-
-### Add a new skill to marketplace
-
-```bash
-npx makaron-cli admin skills add '{
-  "labels": {"zh": "中文名", "en": "English Name"},
-  "image": "https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/covers/skill-name.jpg",
-  "prompt": "Default prompt shown to users",
-  "skill_path": "https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/skills/skill-name.zip",
-  "image_count": 2,
-  "sort_order": 10,
-  "is_active": true,
-  "before_images": ["https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/before/before-name.jpg"]
-}'
-```
-
-### Update / delete a skill
-
-```bash
-npx makaron-cli admin skills update <id> '{"sort_order": 5, "is_active": false}'
-npx makaron-cli admin skills delete <id>
-```
-
-### Download skill from share link
-
-```bash
-# From share code
-npx makaron-cli admin fetch-skill 4c4cbd57
-
-# From full URL
-npx makaron-cli admin fetch-skill https://www.makaron.app/s/4c4cbd57
-
-# → Creates ./skill-name/ directory with SKILL.md + assets/
-```
-
-### End-to-end skill launch workflow
-
-0. **Get skill from share link** — `npx makaron-cli admin fetch-skill <code>`
-1. **Read SKILL.md** — understand the skill's variables, prompt template, and output format
-2. **Generate before photo** — use Makaron MCP `makaron_edit_image` to generate a plain selfie (no phone in frame, natural light)
-3. **Generate cover photo** — use `makaron_edit_image` following the SKILL.md variables/style closely. Match gender pairing (female idol → male fan, male idol → female fan)
-4. **Package zip** — `zip skill-name.zip SKILL.md` (video reference URLs go in SKILL.md metadata, not in the zip)
-5. **Upload all assets**:
-   ```bash
-   npx makaron-cli admin upload cover.jpg marketplace/covers/skill-name.jpg
-   npx makaron-cli admin upload before.jpg marketplace/before/skill-name-before.jpg
-   npx makaron-cli admin upload skill-name.zip marketplace/skills/skill-name.zip
-   ```
-6. **Add to marketplace**:
-   ```bash
-   npx makaron-cli admin skills add '{"labels":{"zh":"...","en":"..."},"image":"<cover_url>","skill_path":"<zip_url>","before_images":["<before_url>"],"image_count":2,"sort_order":10,"is_active":true}'
-   ```
-7. **Verify** — visit https://www.makaron.app/home and confirm the skill appears, can be clicked, and works
-
-### Cover image guidelines
-
-- Target aspect ratio: **3:4** (marketplace cards use `object-fit: cover`)
-- 16:9 images will be severely cropped — resize or stack two 16:9 images vertically
-- Video covers (`.mp4`) are supported — auto-play in the card
-- Before photo should match the person in the cover (hair, clothing, accessories)

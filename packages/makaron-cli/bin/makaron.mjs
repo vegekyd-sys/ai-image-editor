@@ -360,6 +360,79 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
   }
 }
 
+// ─── Pick Helper ────────────────────────────────────────────────────────────
+
+function applyPick(data, field) {
+  switch (field) {
+    case 'first_image_url': return data.output?.find(o => o.type === 'image')?.url || null;
+    case 'image_urls': return (data.output || []).filter(o => o.type === 'image' && o.url).map(o => o.url);
+    case 'first_video_url': return data.output?.find(o => o.type === 'video' && o.url)?.url || null;
+    case 'video_urls': return (data.output || []).filter(o => o.type === 'video' && o.url).map(o => o.url);
+    case 'first_design_url': return data.output?.find(o => o.type === 'design')?.url || null;
+    case 'design_urls': return (data.output || []).filter(o => o.type === 'design' && o.url).map(o => o.url);
+    case 'first_music_url': return data.output?.find(o => o.type === 'music' && o.url)?.url || null;
+    case 'music_urls': return (data.output || []).filter(o => o.type === 'music' && o.url).map(o => o.url);
+    case 'project_url': return data.project_url || null;
+    case 'output': return data.output || [];
+    case 'text': return data.output?.find(o => o.type === 'text')?.content || null;
+    case 'status': return data.status;
+    default: return data[field] !== undefined ? data[field] : null;
+  }
+}
+
+// ─── Watch (incremental event stream) ───────────────────────────────────────
+
+async function watchRun(baseUrl, headers, runId, opts = {}) {
+  const { interval = 5000, jsonl = true } = opts;
+  let lastOutput = [];
+  const start = Date.now();
+
+  while (true) {
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    let data;
+    try {
+      const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
+      if (!res.ok) {
+        if (elapsed > 800) { process.stderr.write(`Timeout after ${elapsed}s\n`); process.exit(2); }
+        await new Promise(r => setTimeout(r, interval));
+        continue;
+      }
+      data = await res.json();
+    } catch {
+      await new Promise(r => setTimeout(r, interval));
+      continue;
+    }
+
+    const currentOutput = data.output || [];
+
+    // Diff: find new or updated items
+    for (const item of currentOutput) {
+      const prev = lastOutput.find(o => o.id === item.id);
+      if (!prev) {
+        // New item
+        if (jsonl) console.log(JSON.stringify({ event: 'output.added', item }));
+        else process.stderr.write(`+ [${item.type}] ${item.url || item.content?.slice(0, 60) || item.status}\n`);
+      } else if (JSON.stringify(prev) !== JSON.stringify(item)) {
+        // Updated item (e.g. video status changed)
+        if (jsonl) console.log(JSON.stringify({ event: 'output.updated', item }));
+        else process.stderr.write(`~ [${item.type}] ${item.status} ${item.url || ''}\n`);
+      }
+    }
+
+    lastOutput = currentOutput;
+
+    // Check terminal status
+    if (!data.incomplete && (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted')) {
+      if (jsonl) console.log(JSON.stringify({ event: 'done', status: data.status }));
+      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
+      process.exit(0);
+    }
+
+    const waitMs = data.next_poll_after_ms || interval;
+    await new Promise(r => setTimeout(r, waitMs));
+  }
+}
+
 // ─── Async Task Polling ──────────────────────────────────────────────────────
 
 async function pollVideo(baseUrl, headers, taskId) {
@@ -605,24 +678,38 @@ if (command === 'login') {
 
   if (sub === 'get') {
     const runId = args[2];
-    if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json]'); process.exit(1); }
-    let wait = false, jsonOutput = false, waitForArtifacts = false;
+    if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]'); process.exit(1); }
+    let wait = false, jsonOutput = false, pick = null;
     for (let i = 3; i < args.length; i++) {
       if (args[i] === '--wait') wait = true;
       if (args[i] === '--json') jsonOutput = true;
-      if (args[i] === '--wait-artifacts') waitForArtifacts = true;
+      if (args[i] === '--pick' && args[i + 1]) pick = args[++i];
     }
 
     if (wait) {
-      await pollRun(baseUrl, headers, runId, { json: jsonOutput, waitForArtifacts });
+      await pollRun(baseUrl, headers, runId, { json: true });
     } else {
-      const params = new URLSearchParams();
-      if (waitForArtifacts) params.set('wait_for_artifacts', 'true');
-      const res = await fetch(`${baseUrl}/api/agent/run/${runId}?${params}`, { headers });
-      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
+      if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
       const data = await res.json();
-      console.log(JSON.stringify(data, null, 2));
+      if (pick) {
+        const picked = applyPick(data, pick);
+        if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
+      } else {
+        console.log(JSON.stringify(data, null, 2));
+      }
+      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
     }
+
+  } else if (sub === 'watch') {
+    const runId = args[2];
+    if (!runId) { console.error('Usage: makaron responses watch <runId> [--jsonl] [--interval <ms>]'); process.exit(1); }
+    let interval = 5000, jsonl = false;
+    for (let i = 3; i < args.length; i++) {
+      if (args[i] === '--jsonl') jsonl = true;
+      if (args[i] === '--interval' && args[i + 1]) interval = parseInt(args[++i]);
+    }
+    await watchRun(baseUrl, headers, runId, { interval, jsonl });
 
   } else if (sub === 'list') {
     let projectId = null;
@@ -630,9 +717,8 @@ if (command === 'login') {
       if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     }
     if (!projectId) { console.error('Usage: makaron responses list --project <id>'); process.exit(1); }
-    // Query runs for project
     const res = await fetch(`${baseUrl}/api/agent/run?projectId=${projectId}`, { headers });
-    if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+    if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
     const data = await res.json();
     if (data.runs?.length) {
       for (const r of data.runs) {
@@ -645,9 +731,10 @@ if (command === 'login') {
 
   } else {
     console.log(`Responses commands:
-  responses get <runId>                  Get run status and results
+  responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
-  responses get <runId> --wait-artifacts Wait for video/music too
+  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses watch <runId> --jsonl        Watch until done (incremental events)
   responses list --project <id>          List runs for a project
 `);
   }
