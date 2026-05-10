@@ -9,21 +9,17 @@ interface ChangelogEntry {
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-05-11',
-    en: { title: 'Project Sharing & CLI Upgrade', items: [
-      'Share projects: every project now has a public link — anyone can view your canvas, tips, and chat history without logging in',
-      'CLI: fully compatible with OpenClaw & Hermes — external agents can create and edit projects, with edit, video, and music commands',
+    en: { title: 'CLI — Works with OpenClaw & Hermes', items: [
+      'CLI now fully compatible with OpenClaw & Hermes — external agents can create and edit projects with edit, video, and music commands',
       'Real-time sync: projects created or edited via CLI appear instantly in the browser with live progress updates',
-      'Privacy control: long-press the Share button to toggle a project between public and private',
-      'Google sign-in: one tap to get started — no invite code needed',
-      'Open registration: anyone can sign up with email + verification code',
+      'Project sharing: every project has a public link — anyone can view your canvas, tips, and chat without logging in',
+      'Privacy control: long-press the Share button to toggle public/private',
     ]},
-    zh: { title: '项目分享 & CLI 升级', items: [
-      '项目分享：每个项目都有公开链接 — 任何人无需登录即可查看你的画布、Tips 和聊天记录',
-      'CLI：完美适配 OpenClaw & Hermes — 外部 Agent 可创建和编辑项目，支持 edit、video、music 命令',
+    zh: { title: 'CLI — 完美适配 OpenClaw & Hermes', items: [
+      'CLI 完美适配 OpenClaw & Hermes — 外部 Agent 可创建和编辑项目，支持 edit、video、music 命令',
       '实时同步：通过 CLI 创建或编辑的项目即时出现在浏览器中，进度实时更新',
+      '项目分享：每个项目都有公开链接 — 任何人无需登录即可查看你的画布、Tips 和聊天记录',
       '隐私控制：长按 Share 按钮可切换项目公开/私密状态',
-      'Google 一键登录：无需邀请码，直接开始创作',
-      '开放注册：任何人都可以用邮箱 + 验证码注册',
     ]},
   },
   {
@@ -35,6 +31,17 @@ const CHANGELOG: ChangelogEntry[] = [
     zh: { title: '分镜长视频 - 已上线 Skill 集市', items: [
       '用导演级分镜图突破 15s 限制，生成 30-60s 电影级长视频，人物/场景/风格全程一致',
       '基于 OpenAI Image 2 + SeeDance 2 两大最强模型，支持真人脸',
+    ]},
+  },
+  {
+    date: '2026-05-07',
+    en: { title: 'Open Registration', items: [
+      'Google sign-in: one tap to get started — no invite code needed',
+      'Open registration: anyone can sign up with email + verification code',
+    ]},
+    zh: { title: '开放注册', items: [
+      'Google 一键登录：无需邀请码，直接开始创作',
+      '开放注册：任何人都可以用邮箱 + 验证码注册',
     ]},
   },
   {
