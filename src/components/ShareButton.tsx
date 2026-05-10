@@ -79,15 +79,26 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
       <div className="relative">
         <button
           onClick={handleClick}
-          onPointerDown={() => {
+          onTouchStart={() => {
             didLongPressRef.current = false;
             longPressRef.current = setTimeout(() => {
               longPressRef.current = null;
               didLongPressRef.current = true;
               setShowPopover(true);
-            }, 500);
+            }, 400);
           }}
-          onPointerUp={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
+          onTouchEnd={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
+          onTouchCancel={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
+          onPointerDown={(e) => {
+            if (e.pointerType === 'touch') return;
+            didLongPressRef.current = false;
+            longPressRef.current = setTimeout(() => {
+              longPressRef.current = null;
+              didLongPressRef.current = true;
+              setShowPopover(true);
+            }, 400);
+          }}
+          onPointerUp={(e) => { if (e.pointerType === 'touch') return; if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
           onContextMenu={e => e.preventDefault()}
           className="p-1.5 rounded-full cursor-pointer text-white/80 hover:text-white transition-colors"
         >
