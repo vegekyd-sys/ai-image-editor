@@ -17,6 +17,7 @@ import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
+import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { downloadAsset } from '@/lib/editor/download';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
@@ -394,26 +395,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Timeline: committed snapshots with the virtual draft inserted right after its parent
   // + optional video sentinel at the end (when ANY animation exists)
   const hasAnyAnimation = animations.length > 0;
-  const timeline = useMemo(() => {
-    const base = snapshots.map((s, i) => {
-      // base64 from IndexedDB cache — use directly, no network cost
-      if (s.image && !s.image.startsWith('http')) return s.image;
-      // URL (first load from DB, or imageUrl fallback)
-      const url = s.image || s.imageUrl || '';
-      if (!url) return '';
-      // Current snapshot and neighbors: high-quality WebP (PNG→WebP, no visible downscale).
-      // Distant snapshots: lightweight thumbnail (user not viewing).
-      if (Math.abs(i - viewIndex) <= 1) return getOptimizedUrl(url);
-      return getThumbnailUrl(url, 800, 75);
-    });
-    if (draftImage !== null && draftParentIndex !== null) {
-      base.splice(draftParentIndex + 1, 0, draftImage);
-    }
-    if (hasAnyAnimation) {
-      base.push('__VIDEO__');
-    }
-    return base;
-  }, [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex]);
+  const timeline = useMemo(() => buildImageTimeline({
+    snapshots,
+    draftImage,
+    draftParentIndex,
+    hasAnyAnimation,
+    viewIndex,
+  }), [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex]);
 
   const referenceCount = useMemo(() =>
     snapshots.filter(s => s.type === 'reference').length,
@@ -422,33 +410,14 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Map timeline index → DesignPayload for animated designs (rendered via Player)
   // All design snapshots (still + animated) render via Player in ImageCanvas
   // Map timeline index → design payload (accounts for virtual draft insertion)
-  const designsMap = useMemo(() => {
-    const map = new Map<number, import('@/types').DesignPayload>();
-    const hasDraft = draftParentIndex !== null;
-    snapshots.forEach((s, i) => {
-      if (!s.design) return;
-      // When draft is active, snapshots after draftParentIndex shift +1 in timeline
-      const timelineIdx = hasDraft && i > draftParentIndex! ? i + 1 : i;
-      map.set(timelineIdx, s.design);
-    });
-    return map;
-  }, [snapshots, draftParentIndex]);
+  const designsMap = useMemo(() => buildDesignsMap(snapshots, draftParentIndex), [snapshots, draftParentIndex]);
 
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
-    [viewIndex - 2, viewIndex - 1, viewIndex + 1, viewIndex + 2]
-      .filter(i => i >= 0 && i < snapshots.length)
-      .forEach(i => {
-        const s = snapshots[i];
-        if (!s) return;
-        // Already base64 cached — no preload needed
-        if (s.image && !s.image.startsWith('http')) return;
-        const url = s.imageUrl || s.image;
-        if (url) {
-          const img = new Image();
-          img.src = getOptimizedUrl(url);
-        }
-      });
+    getNearbyOptimizedPreloadUrls(snapshots, viewIndex).forEach(url => {
+      const img = new Image();
+      img.src = url;
+    });
   }, [viewIndex, snapshots]);
 
   // Video entry: last item in timeline when any animation exists
@@ -1975,21 +1944,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // Previous image for long-press compare
   // Must match timeline precedence: prefer base64 from IndexedDB (instant) over URL (network fetch)
-  const previousImage = useMemo(() => {
-    let snap: typeof snapshots[number] | undefined;
-    if (isViewingDraft && draftParentIndex !== null) {
-      snap = snapshots[draftParentIndex];
-    } else {
-      const snapIdx = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
-      if (snapIdx > 0) snap = snapshots[snapIdx - 1];
-    }
-    if (!snap) return undefined;
-    // base64 from cache → use directly, no network cost (same logic as timeline)
-    if (snap.image && !snap.image.startsWith('http')) return snap.image;
-    const url = snap.image || snap.imageUrl || '';
-    if (!url) return undefined;
-    return getOptimizedUrl(url);
-  }, [isViewingDraft, draftParentIndex, snapshots, viewIndex]);
+  const previousImage = useMemo(() => getPreviousImageForCompare({
+    snapshots,
+    viewIndex,
+    draftParentIndex,
+    isViewingDraft,
+  }), [isViewingDraft, draftParentIndex, snapshots, viewIndex]);
 
   // Dismiss draft: remove virtual draft entry, return to parent
   const dismissDraft = useCallback(() => {
