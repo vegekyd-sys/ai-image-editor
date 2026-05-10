@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
@@ -62,6 +63,7 @@ interface EditorProps {
   onNewProject?: (file: File) => void;
   initialAnimations?: ProjectAnimation[];
   initialMusicTaskId?: string | null;
+  readOnly?: boolean;
 }
 
 export default function Editor({
@@ -84,11 +86,20 @@ export default function Editor({
   onNewProject,
   initialAnimations,
   initialMusicTaskId,
+  readOnly,
 }: EditorProps = {}) {
   // Merge legacy single + new multi into one array
   const pendingImages = pendingImagesProp ?? (pendingImage ? [pendingImage] : undefined);
   const isDesktop = useIsDesktop();
   const { t, locale } = useLocale();
+  const router = useRouter();
+
+  const gateInteraction = useCallback(() => {
+    if (!readOnly) return false;
+    sessionStorage.setItem('mkr_return_url', window.location.pathname);
+    router.push('/login');
+    return true;
+  }, [readOnly, router]);
   const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
@@ -98,6 +109,7 @@ export default function Editor({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
+  const [shareToast, setShareToast] = useState(false);
   const pendingVideoRef = useRef<{ blob: Blob; filename: string } | null>(null);
   // Babel CDN loading status for UI feedback
   const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
@@ -1679,6 +1691,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // CUI send: if annotations exist, merge them; otherwise normal chat
   const handleCuiSend = async (text: string, imgs?: string[]) => {
+    if (gateInteraction()) return;
     if (annotationMode && annotationEntries.length > 0) {
       await sendWithAnnotations(text);
     } else {
@@ -1791,6 +1804,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
+    if (gateInteraction()) return;
     if (draftParentIndex === null || previewingTipIndex === null) return;
 
     const parentTips = snapshots[draftParentIndex]?.tips ?? [];
@@ -1869,6 +1883,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   //   - Same tip while selected → handled by onTipDeselect (dismissDraft) in TipsBar
   //   - Commit → handled by onTipCommit (commitDraft) in TipsBar
   const handleTipInteraction = useCallback((tip: Tip, tipIndex: number) => {
+    if (gateInteraction()) return;
     const viewingDraft = draftParentIndex !== null && viewIndex === draftParentIndex + 1;
 
     // Safety net: same tip re-clicked while draft is visible (shouldn't happen with new UI)
@@ -2730,6 +2745,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     installingSkill,
     onDropSkillFile: handleSkillUpload,
     onOpenCreditPopup: () => setCreditPopupOpen(true),
+    readOnly,
   };
 
   return (
@@ -2841,7 +2857,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 })()}
                 onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
                 textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
-                onAnimate={snapshots.length >= 1 ? () => {
+                onAnimate={!readOnly && snapshots.length >= 1 ? () => {
                   if (hasAnyAnimation) {
                     // Animations exist — navigate to video entry (shows result card)
                     setViewIndex(videoTimelineIndex);
@@ -2901,6 +2917,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       </svg>
                     </button>
                   )}
+                  {!readOnly && (
                   <button
                     onClick={() => newProjectFileInputRef.current?.click()}
                     className="text-white/80 hover:text-white p-2 cursor-pointer"
@@ -2909,8 +2926,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       <path d="M12 5v14M5 12h14" />
                     </svg>
                   </button>
+                  )}
                   {/* Annotation (paintbrush) toggle */}
-                  {!isViewingVideo && timeline.length > 0 && (
+                  {!readOnly && !isViewingVideo && timeline.length > 0 && (
                     <button
                       onClick={() => {
                         if (annotationMode) {
@@ -2932,7 +2950,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     </button>
                   )}
                   {/* Camera rotation toggle */}
-                  {!isViewingVideo && timeline.length > 0 && (
+                  {!readOnly && !isViewingVideo && timeline.length > 0 && (
                     <button
                       onClick={() => {
                         if (showCameraPanel) {
@@ -2974,6 +2992,51 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     <span className="text-[10px] text-red-400/60" title="Design engine failed to load">⚠</span>
                   )}
                   {snapshots.length > 0 && (
+                    <>
+                    {!readOnly ? (
+                    <button
+                      onClick={() => {
+                        const url = `${window.location.origin}/projects/${projectId}`;
+                        if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+                          navigator.share({ url }).catch(() => {});
+                        } else if (navigator.clipboard?.writeText) {
+                          navigator.clipboard.writeText(url).then(() => {
+                            setShareToast(true);
+                            setTimeout(() => setShareToast(false), 2000);
+                          }).catch(() => {});
+                        } else {
+                          // Fallback for non-HTTPS contexts
+                          const ta = document.createElement('textarea');
+                          ta.value = url;
+                          ta.style.position = 'fixed';
+                          ta.style.opacity = '0';
+                          document.body.appendChild(ta);
+                          ta.select();
+                          document.execCommand('copy');
+                          document.body.removeChild(ta);
+                          setShareToast(true);
+                          setTimeout(() => setShareToast(false), 2000);
+                        }
+                      }}
+                      className="p-1.5 rounded-full cursor-pointer text-white/80 hover:text-white transition-colors"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                        <polyline points="16 6 12 2 8 6" />
+                        <line x1="12" y1="2" x2="12" y2="15" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        sessionStorage.setItem('mkr_return_url', window.location.pathname);
+                        router.push('/login');
+                      }}
+                      className="px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all cursor-pointer text-white bg-white/10 border-white/20 hover:bg-white/20"
+                    >
+                      Log in
+                    </button>
+                  )}
                     <button
                       onClick={handleDownload}
                       disabled={isSaving}
@@ -2993,6 +3056,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         </span>
                       ) : pendingVideoRef.current && /iPhone|iPad|Android/i.test(navigator.userAgent) ? t('editor.share') : 'Save'}
                     </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -3141,7 +3205,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                   snapshotCount={snapshots.length}
                   notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : pendingNotification}
                   onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : handleSeeNotification}
-                  onAnimate={snapshots.length >= 1 ? () => {
+                  onAnimate={!readOnly && snapshots.length >= 1 ? () => {
                     if (hasAnyAnimation) {
                       setViewIndex(videoTimelineIndex);
                       return;
@@ -3478,10 +3542,19 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       {/* Save success toast */}
       {saveToast && (
         <div
-          className="fixed top-16 left-1/2 -translate-x-1/2 z-[300] px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-sm text-white text-sm font-medium shadow-lg"
+          className="fixed top-20 left-1/2 -translate-x-1/2 z-[300] px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-sm text-white text-sm font-medium shadow-lg"
           style={{ animation: 'fadeInOut 2s ease both' }}
         >
           {t('misc.saveSuccess')}
+        </div>
+      )}
+      {/* Share link copied toast */}
+      {shareToast && (
+        <div
+          className="fixed top-20 left-1/2 -translate-x-1/2 z-[300] px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-sm text-white text-sm font-medium shadow-lg"
+          style={{ animation: 'fadeInOut 2s ease both' }}
+        >
+          Link copied!
         </div>
       )}
       <style>{`

@@ -417,6 +417,7 @@ interface AgentChatViewProps {
   onUploadSkill?: () => void;
   installingSkill?: boolean;
   onDropSkillFile?: (file: File) => void;
+  readOnly?: boolean;
 }
 
 export default function AgentChatView({
@@ -454,6 +455,7 @@ export default function AgentChatView({
   onUploadSkill,
   installingSkill,
   onDropSkillFile,
+  readOnly,
 }: AgentChatViewProps) {
   const { t } = useLocale();
 
@@ -1216,7 +1218,7 @@ export default function AgentChatView({
         }}
       />
 
-      <div
+      {!readOnly && <div
         ref={inputBarRef}
         className={isPanel ? 'flex-shrink-0 px-3' : 'absolute left-0 right-0 px-3'}
         style={isPanel ? {
@@ -1379,7 +1381,7 @@ export default function AgentChatView({
             )}
           </div>
         </div>
-      </div>
+      </div>}
     </div>
     {viewingFile && <FileViewer path={viewingFile} onClose={() => setViewingFile(null)} />}
     </>

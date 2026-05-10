@@ -63,6 +63,10 @@ export async function middleware(request: NextRequest) {
 
   // Not logged in — /login, /landingpage, / are accessible; others → landing page
   if (!user) {
+    // Allow /projects/[uuid] through for public project viewing (page-level checks visibility)
+    const isProjectView = /^\/projects\/[0-9a-f-]{36}$/.test(pathname)
+    if (isProjectView) return supabaseResponse
+
     if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/home' && !pathname.startsWith('/home/') && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/')) {
       const url = request.nextUrl.clone()
       url.pathname = '/home'
