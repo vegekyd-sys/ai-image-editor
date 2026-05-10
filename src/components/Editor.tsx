@@ -10,6 +10,7 @@ import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import CreditPopup from '@/components/CreditPopup';
+import ShareButton from '@/components/ShareButton';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
@@ -109,7 +110,6 @@ export default function Editor({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
-  const [shareToast, setShareToast] = useState(false);
   const pendingVideoRef = useRef<{ blob: Blob; filename: string } | null>(null);
   // Babel CDN loading status for UI feedback
   const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
@@ -2993,50 +2993,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                   )}
                   {snapshots.length > 0 && (
                     <>
-                    {!readOnly ? (
-                    <button
-                      onClick={() => {
-                        const url = `${window.location.origin}/projects/${projectId}`;
-                        if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
-                          navigator.share({ url }).catch(() => {});
-                        } else if (navigator.clipboard?.writeText) {
-                          navigator.clipboard.writeText(url).then(() => {
-                            setShareToast(true);
-                            setTimeout(() => setShareToast(false), 2000);
-                          }).catch(() => {});
-                        } else {
-                          // Fallback for non-HTTPS contexts
-                          const ta = document.createElement('textarea');
-                          ta.value = url;
-                          ta.style.position = 'fixed';
-                          ta.style.opacity = '0';
-                          document.body.appendChild(ta);
-                          ta.select();
-                          document.execCommand('copy');
-                          document.body.removeChild(ta);
-                          setShareToast(true);
-                          setTimeout(() => setShareToast(false), 2000);
-                        }
-                      }}
-                      className="p-1.5 rounded-full cursor-pointer text-white/80 hover:text-white transition-colors"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-                        <polyline points="16 6 12 2 8 6" />
-                        <line x1="12" y1="2" x2="12" y2="15" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        sessionStorage.setItem('mkr_return_url', window.location.pathname);
-                        router.push('/login');
-                      }}
-                      className="px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all cursor-pointer text-white bg-white/10 border-white/20 hover:bg-white/20"
-                    >
-                      Log in
-                    </button>
-                  )}
+                    <ShareButton projectId={projectId || ''} readOnly={readOnly} />
                     <button
                       onClick={handleDownload}
                       disabled={isSaving}
@@ -3546,15 +3503,6 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           style={{ animation: 'fadeInOut 2s ease both' }}
         >
           {t('misc.saveSuccess')}
-        </div>
-      )}
-      {/* Share link copied toast */}
-      {shareToast && (
-        <div
-          className="fixed top-20 left-1/2 -translate-x-1/2 z-[300] px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-sm text-white text-sm font-medium shadow-lg"
-          style={{ animation: 'fadeInOut 2s ease both' }}
-        >
-          Link copied!
         </div>
       )}
       <style>{`
