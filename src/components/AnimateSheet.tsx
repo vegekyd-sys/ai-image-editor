@@ -226,7 +226,7 @@ export default function AnimateSheet({
               <div style={{
                 display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16,
               }}>
-                {detailUrls.map((url, i) => (
+                {detailUrls.filter(Boolean).map((url, i) => (
                   <div key={i} className="animate-sheet-thumb" style={{
                     flexShrink: 0, width: thumbSize, height: thumbSize, borderRadius: 10,
                     overflow: 'hidden', background: 'rgba(255,255,255,0.04)', position: 'relative',
