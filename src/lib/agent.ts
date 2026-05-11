@@ -436,7 +436,7 @@ Hard constraints (apply even before reading the guide):
 
             const { data: sortData } = await supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
 
-            await supabase.from('snapshots').insert({
+            const { error: insertError } = await supabase.from('snapshots').insert({
               id: snapshotId,
               project_id: ctx.projectId,
               image_url: posterUrl,
@@ -446,6 +446,10 @@ Hard constraints (apply even before reading the guide):
               type: 'video',
               video_meta: videoMeta,
             });
+            if (insertError) {
+              console.error('[generate_animation] v2 snapshot insert failed:', insertError.message);
+              throw new Error(`DB insert failed: ${insertError.message}`);
+            }
 
             ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta, posterUrl };
           } else {
