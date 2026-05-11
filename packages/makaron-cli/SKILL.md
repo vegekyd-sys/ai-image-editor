@@ -5,15 +5,26 @@ description: Use Makaron CLI to generate AI images, videos, music, and motion de
 
 # Makaron CLI — Agent Integration Skill
 
+> **makaron.app** is for humans. **makaron-cli** is for AI agents.
+
 Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, and it produces images, videos, music, and animated designs — all saved to a persistent project.
 
 ## Setup
+
+### Get your API key
+
+1. Go to [makaron.app](https://makaron.app) and log in
+2. Open the menu (top-right)
+3. Click **Get API Key**
+4. Copy your `mk_live_...` key
 
 ```bash
 export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Verify: `npx makaron-cli list` should show projects.
+
+> **Agent Self-Registration**: Coming soon — agents will be able to register and obtain API keys programmatically without human login.
 
 ## Core Workflow
 
@@ -183,7 +194,7 @@ type MakaronOutput =
 | Add/remove elements | "add a cat on the table" / "remove background person" |
 | Text-to-image | "generate a cyberpunk cityscape" |
 | Video from image | "create a 5 second video of her walking" |
-| Video with model | "用seedance模型做5秒视频" |
+| Video with model | "use seedance model, make a 5s video" |
 | Background music | "add calm piano music" |
 | Motion design | "create an Instagram story with animated text" |
 | Multi-step | "edit the photo then make a video from it" |
@@ -193,15 +204,15 @@ type MakaronOutput =
 When serving end-users in a chat environment (Feishu, Slack, Discord), use this proactive message pattern:
 
 ```bash
-# 1. Immediately reply to user: "收到，开始做"
-send_message "收到！正在为你制作..."
+# 1. Immediately acknowledge the user
+send_message "Got it! Working on it now..."
 
 # 2. Create project + submit (one command)
 RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video")
 
 # 3. Send project link proactively
 PROJECT_URL=$(npx makaron-cli responses get $RUN_ID --pick project_url)
-send_message "项目已创建：$PROJECT_URL"
+send_message "Project created: $PROJECT_URL"
 
 # 4. Watch and send each artifact as it appears
 npx makaron-cli responses watch $RUN_ID --jsonl | while read -r line; do
@@ -217,7 +228,7 @@ npx makaron-cli responses watch $RUN_ID --jsonl | while read -r line; do
     # Video ready — send as media
     send_video "$URL"
   elif [ "$EVENT" = "done" ]; then
-    send_message "全部完成 ✨"
+    send_message "All done!"
   fi
 done
 ```
@@ -225,7 +236,7 @@ done
 **Key principles for service agents:**
 - **Proactive, not reactive**: Don't wait for the full run to finish. Send progress messages and artifacts as they appear.
 - **Media over links**: When possible, send images/videos as native media in the chat (download URL and upload as attachment), not just paste the URL.
-- **Immediate acknowledgment**: Reply "收到" within 1 second of receiving user request. Don't make users wait for project creation.
+- **Immediate acknowledgment**: Reply within 1 second of receiving user request. Don't make users wait for project creation.
 - **Project link early**: Send the project URL right after creation so users can check anytime.
 - **Stream artifacts**: Use `watch --jsonl` to push each artifact the moment it's ready. An image at 15s should reach the user at 15s, not after the video finishes at 5 minutes.
 
