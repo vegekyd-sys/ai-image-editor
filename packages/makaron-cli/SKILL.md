@@ -13,18 +13,36 @@ Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, an
 
 ### Get your API key
 
+**Option A: Human login**
 1. Go to [makaron.app](https://makaron.app) and log in
-2. Open the menu (top-right)
-3. Click **Get API Key**
-4. Copy your `mk_live_...` key
+2. Open the menu (top-right) → **Get API Key**
+3. Copy your `mk_live_...` key
+
+**Option B: Self-Registration (no human required)**
+```bash
+# Step 1: Get challenge
+curl -X POST https://www.makaron.app/api/agent/register
+# → { "challenge_id": "uuid", "challenge": "obfuscated math problem" }
+
+# Step 2: Solve and verify
+curl -X POST https://www.makaron.app/api/agent/register/verify \
+  -H "Content-Type: application/json" \
+  -d '{"challenge_id": "...", "answer": "34.5"}'
+# → { "api_key": "mk_live_...", "credits": 500 }
+
+# Step 3: (Optional) Let a human claim this account
+curl -X POST https://www.makaron.app/api/agent/claim \
+  -H "Authorization: Bearer mk_live_your_key"
+# → { "claim_url": "..." } — share with human to link key to their account
+```
+
+Discovery endpoint: `GET https://www.makaron.app/api/agent/register` — returns full registration flow + CLI usage as JSON.
 
 ```bash
 export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Verify: `npx makaron-cli list` should show projects.
-
-> **Agent Self-Registration**: Coming soon — agents will be able to register and obtain API keys programmatically without human login.
 
 ## Core Workflow
 

@@ -13,10 +13,30 @@ npm install -g makaron-cli
 
 ### Get your API key
 
+**Option A: Human login**
 1. Go to [makaron.app](https://makaron.app) and log in
 2. Open the menu (top-right)
 3. Click **Get API Key**
 4. Copy your `mk_live_...` key
+
+**Option B: Agent Self-Registration (no human required)**
+```bash
+# Step 1: Get challenge
+curl -X POST https://www.makaron.app/api/agent/register
+
+# Step 2: Solve the obfuscated math problem and verify
+curl -X POST https://www.makaron.app/api/agent/register/verify \
+  -H "Content-Type: application/json" \
+  -d '{"challenge_id": "...", "answer": "34.5"}'
+# → { "api_key": "mk_live_...", "credits": 500 }
+```
+
+Discovery endpoint (returns full registration flow + CLI usage as JSON):
+```bash
+curl https://www.makaron.app/api/agent/register
+```
+
+Docs: [makaron.app/agent](https://www.makaron.app/agent)
 
 ```bash
 export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -24,7 +44,15 @@ export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Verify: `npx makaron-cli list` should show projects.
 
-> **Agent Self-Registration**: Coming soon — agents will be able to register and obtain API keys programmatically without human login.
+### Let a human claim your account
+
+After registering, you can generate a link for a human to link your API key to their account:
+```bash
+curl -X POST https://www.makaron.app/api/agent/claim \
+  -H "Authorization: Bearer mk_live_your_key"
+# → { "claim_url": "https://www.makaron.app/claim?token=clm_..." }
+```
+Share the `claim_url` with a human. They log in and the API key gets linked to their account.
 
 ## Core Workflow
 
