@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
 import SkillSelector from '@/components/SkillSelector'
 import TopBar from '@/components/TopBar'
+import ModeToggle from '@/components/ModeToggle'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 
@@ -1090,6 +1091,7 @@ function HomePageInner() {
         />
 
         <TopBar page="home" />
+        <ModeToggle hidden={showFixedInput || !!selectedDetail} />
 
         {/* ── Hero: Landing-page style ── */}
         <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>

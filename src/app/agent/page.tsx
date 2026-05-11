@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import CopyButton from './CopyButton'
+import ModeToggle from '@/components/ModeToggle'
 
 export const metadata = {
   title: 'Makaron — For AI Agents',
@@ -9,14 +9,9 @@ export const metadata = {
 export default function AgentPage() {
   return (
     <div className="min-h-screen bg-black text-gray-200 font-mono p-6 md:p-12 max-w-4xl mx-auto">
-      <header className="flex items-center justify-between mb-12">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-white">makaron<span className="text-fuchsia-400">-cli</span></h1>
-          <CopyButton />
-        </div>
-        <Link href="/home" className="text-sm text-gray-500 hover:text-white transition-colors">
-          ← For Humans
-        </Link>
+      <header className="flex items-center gap-2 mb-12">
+        <h1 className="text-2xl font-bold text-white">makaron<span className="text-fuchsia-400">-cli</span></h1>
+        <CopyButton />
       </header>
 
       {/* Hero */}
@@ -232,9 +227,10 @@ Share claim_url with a human. They log in and link the API key to their account.
         </pre>
       </section>
 
-      <footer className="border-t border-gray-800 pt-6 text-sm text-gray-500">
+      <footer className="border-t border-gray-800 pt-6 pb-16 text-sm text-gray-500">
         <p>Makaron AI — One Man Studio</p>
       </footer>
+      <ModeToggle />
     </div>
   )
 }
