@@ -54,12 +54,13 @@ export default function LoginPage() {
   }, [resendCooldown])
 
   function getReturnUrl(): string {
-    return sessionStorage.getItem('mkr_return_url') || ''
+    return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
   }
 
   function redirectAfterAuth() {
     const returnUrl = getReturnUrl()
     sessionStorage.removeItem('mkr_return_url')
+    localStorage.removeItem('mkr_return_url')
     window.location.href = returnUrl || '/'
   }
 

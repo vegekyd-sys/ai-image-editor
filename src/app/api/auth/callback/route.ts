@@ -117,8 +117,9 @@ function buildRedirectPage(
   // and uses it if available, otherwise falls back to the server-determined redirectUrl.
   const response = new NextResponse(
     `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Redirecting...</title></head><body style="background:#000;display:flex;align-items:center;justify-content:center;height:100vh"><script>
-var r=sessionStorage.getItem('mkr_return_url');
+var r=sessionStorage.getItem('mkr_return_url')||localStorage.getItem('mkr_return_url');
 sessionStorage.removeItem('mkr_return_url');
+localStorage.removeItem('mkr_return_url');
 var welcome="${redirectUrl}".includes('welcome=1');
 if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(welcome?sep+'welcome=1':'');}
 else{window.location.href="${redirectUrl}";}

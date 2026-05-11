@@ -95,6 +95,28 @@ export default function TopBar({ page }: TopBarProps) {
           >
             {locale === 'zh' ? '更新日志' : "What's new"}
           </button>
+          {page === 'home' && (
+            <Link
+              href="/agent"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '3px 8px', borderRadius: 6,
+                background: 'rgba(232,121,249,0.08)',
+                border: '1px solid rgba(232,121,249,0.2)',
+                fontSize: '0.6rem', letterSpacing: '0.08em', textTransform: 'uppercase',
+                color: 'rgba(232,121,249,0.7)',
+                textDecoration: 'none',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,121,249,0.15)'; e.currentTarget.style.color = 'rgba(232,121,249,0.9)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(232,121,249,0.08)'; e.currentTarget.style.color = 'rgba(232,121,249,0.7)' }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 9h6M9 13h6M9 17h4" />
+              </svg>
+              For Agents
+            </Link>
+          )}
         </div>
 
         {/* Right side */}

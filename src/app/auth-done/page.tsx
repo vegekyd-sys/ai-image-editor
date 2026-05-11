@@ -4,8 +4,9 @@ import { useEffect } from 'react'
 
 export default function AuthDonePage() {
   useEffect(() => {
-    let returnUrl = sessionStorage.getItem('mkr_return_url') || ''
+    let returnUrl = sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
     sessionStorage.removeItem('mkr_return_url')
+    localStorage.removeItem('mkr_return_url')
 
     const params = new URLSearchParams(window.location.search)
     const welcome = params.get('welcome')
