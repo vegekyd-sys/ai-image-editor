@@ -614,7 +614,11 @@ if (command === 'login') {
   let videoModel = undefined;
   let preferredModel = undefined;
   for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
+    if (args[i] === '--help' || args[i] === '-h') {
+      console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--stream] [--background|-b] [--json] "your message"');
+      process.exit(0);
+    }
+    else if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else if (args[i] === '--stream') useStream = true;
     else if (args[i] === '--background' || args[i] === '-b') background = true;
