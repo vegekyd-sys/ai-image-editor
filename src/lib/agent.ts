@@ -405,12 +405,15 @@ Hard constraints (apply even before reading the guide):
           });
 
           if (!skillResult.success || !skillResult.taskId) {
+            console.error('[generate_animation] createVideo failed:', skillResult.message);
             return { success: false as const, message: skillResult.message };
           }
 
           const taskId = skillResult.taskId;
-          const { createClient } = await import('@/lib/supabase/server');
-          const supabase = await createClient();
+
+          // Persist to DB (use admin client to bypass RLS — API key auth has no session)
+          const { getSupabaseAdmin } = await import('@/lib/supabase/service');
+          const supabase = getSupabaseAdmin();
           const { filteredImages, finalPrompt } = filterAndRemapImages(story_prompt, imageUrls);
 
           const isV2 = (ctx.timelineVersion ?? 1) >= 2;

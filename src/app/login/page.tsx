@@ -1,48 +1,43 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import RollingTagline from '@/components/RollingTagline'
 
-const ERROR_KEY_MAP: Record<string, string> = {
-  'Invalid login credentials': 'auth.err.invalidCredentials',
-  'Email not confirmed': 'auth.err.emailNotConfirmed',
-  'User already registered': 'auth.err.alreadyRegistered',
-  'Password should be at least 6 characters': 'auth.err.passwordTooShort',
-  'Unable to validate email address: invalid format': 'auth.err.invalidEmail',
-  'Email rate limit exceeded': 'auth.err.rateLimited',
-  'For security purposes, you can only request this after 60 seconds.': 'auth.err.wait60s',
+type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
+type OtpPurpose = 'signup' | 'recovery'
+
+function isInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  return /MicroMessenger|WeChat|QQ|DingTalk|Douyin|BytedanceWebview|FBAN|FBAV|Instagram|Line|Twitter/i.test(ua)
 }
 
-type View = 'landing' | 'register' | 'login'
-
 export default function LoginPage() {
-  const { t } = useLocale()
-  const [view, setView] = useState<View>('landing')
+  const { t, locale } = useLocale()
+  const [view, setView] = useState<View>('form')
+  const [inApp] = useState(isInAppBrowser)
 
-  // Landing state
-  const [inviteCode, setInviteCode] = useState('')
-  const [inviteLoading, setInviteLoading] = useState(false)
-  const [inviteError, setInviteError] = useState('')
-  const [inviteShake, setInviteShake] = useState(false)
-
-  // Waitlist state
-  const [waitlistEmail, setWaitlistEmail] = useState('')
-  const [waitlistLoading, setWaitlistLoading] = useState(false)
-  const [waitlistDone, setWaitlistDone] = useState(false)
-  const [waitlistError, setWaitlistError] = useState('')
-
-  // Register / Login state
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [errorKey, setErrorKey] = useState<string>('')
-  const [errorRaw, setErrorRaw] = useState<string>('')
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  // Validated invite code (passed from landing to register)
-  const [validatedCode, setValidatedCode] = useState('')
+  // OTP state (8 digits)
+  const [otpPurpose, setOtpPurpose] = useState<OtpPurpose>('signup')
+  const [otpDigits, setOtpDigits] = useState<string[]>(Array(8).fill(''))
+  const [otpError, setOtpError] = useState('')
+  const [otpLoading, setOtpLoading] = useState(false)
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([])
+  const [resendCooldown, setResendCooldown] = useState(0)
+
+  // Reset password state
+  const [newPassword, setNewPassword] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetSuccess, setResetSuccess] = useState(false)
 
   const supabaseRef = useRef<SupabaseClient | null>(null)
   function getSupabase() {
@@ -50,128 +45,250 @@ export default function LoginPage() {
     return supabaseRef.current
   }
 
-  // ── Landing: validate invite code ──
-  const handleInviteSubmit = async () => {
-    const code = inviteCode.trim()
-    if (!code) return
-    setInviteError('')
-    setInviteLoading(true)
 
-    try {
-      const res = await fetch('/api/auth/check-invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      })
-      const data = await res.json()
-      if (data.valid) {
-        setValidatedCode(code.toUpperCase())
-        setView('register')
-      } else {
-        setInviteError(t('auth.err.invalidInviteCode'))
-        setInviteShake(true)
-        setTimeout(() => setInviteShake(false), 500)
-      }
-    } catch {
-      setInviteError(t('auth.networkError'))
-    } finally {
-      setInviteLoading(false)
-    }
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setTimeout(() => setResendCooldown(c => c - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [resendCooldown])
+
+  function getReturnUrl(): string {
+    return sessionStorage.getItem('mkr_return_url') || ''
   }
 
-  // ── Landing: join waitlist ──
-  const handleWaitlist = async () => {
-    const em = waitlistEmail.trim()
-    if (!em) return
-    setWaitlistError('')
-    setWaitlistLoading(true)
-
-    try {
-      const res = await fetch('/api/auth/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: em }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setWaitlistDone(true)
-      } else {
-        setWaitlistError(data.error || t('auth.networkError'))
-      }
-    } catch {
-      setWaitlistError(t('auth.networkError'))
-    } finally {
-      setWaitlistLoading(false)
-    }
+  function redirectAfterAuth() {
+    const returnUrl = getReturnUrl()
+    sessionStorage.removeItem('mkr_return_url')
+    window.location.href = returnUrl || '/'
   }
 
-  // ── Register: sign up with validated invite code ──
-  const handleRegister = async (e: React.FormEvent) => {
+  // ── Google OAuth ──
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true)
+    setError('')
+    const { error } = await getSupabase().auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback`,
+      },
+    })
+    if (error) { setError(t('auth.networkError')); setGoogleLoading(false) }
+  }
+
+  // ── Smart Continue ──
+  const handleContinue = async (e: React.FormEvent) => {
     e.preventDefault()
-    setErrorKey('')
-    setErrorRaw('')
+    setError('')
     setLoading(true)
 
     try {
-      const { error } = await getSupabase().auth.signUp({ email, password })
-      if (error) {
-        const key = ERROR_KEY_MAP[error.message]
-        if (key) setErrorKey(key); else setErrorRaw(error.message)
+      const supabase = getSupabase()
+
+      // Check user existence
+      const checkRes = await fetch('/api/auth/continue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const check = await checkRes.json()
+
+      if (check.action === 'verify-email') {
+        // User exists but unconfirmed — send OTP
+        const { error: otpErr } = await supabase.auth.signInWithOtp({ email })
+        const waitMatch = otpErr?.message?.match(/after (\d+) seconds/)
+        setOtpPurpose('signup')
+        setOtpDigits(Array(8).fill(''))
+        setResendCooldown(waitMatch ? parseInt(waitMatch[1]) : 60)
+        setView('verify-otp')
         return
       }
-      // Activate immediately with invite code (don't rely on /activate page)
-      try {
-        const activateRes = await fetch('/api/auth/validate-invite', {
+
+      if (check.action === 'login') {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+        if (!signInError) { redirectAfterAuth(); return }
+        setError(mapError(signInError.message))
+        return
+      }
+
+      if (check.action === 'signup') {
+        // Create user with password (no email sent)
+        const signupRes = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: validatedCode }),
+          body: JSON.stringify({ email, password }),
         })
-        const activateData = await activateRes.json()
-        if (activateData.success && activateData.welcome) {
-          window.location.href = '/projects?welcome=1'
+        const signupData = await signupRes.json()
+        if (!signupRes.ok) {
+          setError(mapError(signupData.error || 'Registration failed'))
           return
         }
-      } catch { /* fall through */ }
-      // Fallback: store code for /activate page
-      sessionStorage.setItem('mkr_invite_code', validatedCode)
-      window.location.href = '/'
-    } catch {
-      setErrorKey('auth.networkError')
-    } finally {
-      setLoading(false)
-    }
-  }
 
-  // ── Login: sign in ──
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErrorKey('')
-    setErrorRaw('')
-    setLoading(true)
-
-    try {
-      const { error } = await getSupabase().auth.signInWithPassword({ email, password })
-      if (error) {
-        const key = ERROR_KEY_MAP[error.message]
-        if (key) setErrorKey(key); else setErrorRaw(error.message)
+        // Send OTP verification code
+        const { error: otpErr2 } = await supabase.auth.signInWithOtp({ email })
+        const waitMatch2 = otpErr2?.message?.match(/after (\d+) seconds/)
+        setOtpPurpose('signup')
+        setOtpDigits(Array(8).fill(''))
+        setResendCooldown(waitMatch2 ? parseInt(waitMatch2[1]) : 60)
+        setView('verify-otp')
         return
       }
-      window.location.href = '/'
+
+      setError(check.message || check.error || t('auth.networkError'))
     } catch {
-      setErrorKey('auth.networkError')
+      setError(t('auth.networkError'))
     } finally {
       setLoading(false)
     }
   }
 
-  const errorMsg = errorKey ? t(errorKey as Parameters<typeof t>[0]) : errorRaw
+  // ── Verify OTP ──
+  const handleVerifyOtp = async () => {
+    const token = otpDigits.join('')
+    if (token.length < 6) return
+    setOtpError('')
+    setOtpLoading(true)
 
-  const switchView = (v: View) => {
-    setView(v)
-    setErrorKey('')
-    setErrorRaw('')
-    setEmail('')
-    setPassword('')
+    try {
+      const supabase = getSupabase()
+      // Try verification: recovery uses 'recovery', signup tries 'magiclink' then 'email'
+      let verifyError: string | null = null
+      if (otpPurpose === 'recovery') {
+        const { error } = await supabase.auth.verifyOtp({ email, token, type: 'recovery' })
+        if (error) verifyError = error.message
+      } else {
+        const { error } = await supabase.auth.verifyOtp({ email, token, type: 'magiclink' })
+        if (error) {
+          const { error: err2 } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
+          if (err2) verifyError = err2.message
+        }
+      }
+
+      if (verifyError) {
+        setOtpError(mapError(verifyError))
+        setOtpLoading(false)
+        return
+      }
+
+      if (otpPurpose === 'recovery') {
+        setView('reset-password')
+        setOtpLoading(false)
+        return
+      }
+
+      // Signup verified — redirect
+      redirectAfterAuth()
+    } catch {
+      setOtpError(t('auth.networkError'))
+      setOtpLoading(false)
+    }
+  }
+
+  // ── Resend OTP ──
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return
+    const supabase = getSupabase()
+    if (otpPurpose === 'recovery') {
+      await supabase.auth.resetPasswordForEmail(email)
+    } else {
+      await supabase.auth.signInWithOtp({ email })
+    }
+    setResendCooldown(60)
+  }
+
+  // ── Forgot Password ──
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const supabase = getSupabase()
+      const { error } = await supabase.auth.resetPasswordForEmail(email)
+      if (error) {
+        // "wait X seconds" means code was already sent — go to OTP view
+        const waitMatch = error.message.match(/after (\d+) seconds/)
+        if (waitMatch) {
+          setOtpPurpose('recovery')
+          setOtpDigits(Array(8).fill(''))
+          setResendCooldown(parseInt(waitMatch[1]))
+          setView('verify-otp')
+          return
+        }
+        setError(mapError(error.message))
+        return
+      }
+      setOtpPurpose('recovery')
+      setOtpDigits(Array(8).fill(''))
+      setResendCooldown(60)
+      setView('verify-otp')
+    } catch {
+      setError(t('auth.networkError'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Reset Password ──
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setResetLoading(true)
+    try {
+      const supabase = getSupabase()
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) { setError(mapError(error.message)); setResetLoading(false); return }
+      setResetSuccess(true)
+      setTimeout(() => { redirectAfterAuth() }, 1500)
+    } catch {
+      setError(t('auth.networkError'))
+      setResetLoading(false)
+    }
+  }
+
+  // OTP Input Handling (8 digits)
+  const handleOtpChange = (idx: number, value: string) => {
+    if (!/^\d*$/.test(value)) return
+    const digit = value.slice(-1)
+    const newDigits = [...otpDigits]
+    newDigits[idx] = digit
+    setOtpDigits(newDigits)
+    if (digit && idx < 7) otpRefs.current[idx + 1]?.focus()
+  }
+
+  const handleOtpKeyDown = (idx: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otpDigits[idx] && idx > 0) {
+      otpRefs.current[idx - 1]?.focus()
+    }
+  }
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault()
+    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 8)
+    if (!text) return
+    const newDigits = Array(8).fill('')
+    for (let i = 0; i < text.length; i++) newDigits[i] = text[i]
+    setOtpDigits(newDigits)
+    const focusIdx = Math.min(text.length, 7)
+    otpRefs.current[focusIdx]?.focus()
+  }
+
+  // Auto-submit when all 8 digits filled
+  useEffect(() => {
+    if (otpDigits.every(d => d) && view === 'verify-otp') handleVerifyOtp()
+  }, [otpDigits]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function mapError(msg: string): string {
+    const map: Record<string, string> = {
+      'Invalid login credentials': 'auth.err.invalidCredentials',
+      'Email not confirmed': 'auth.err.emailNotConfirmed',
+      'User already registered': 'auth.err.alreadyRegistered',
+      'Password should be at least 6 characters': 'auth.err.passwordTooShort',
+      'Unable to validate email address: invalid format': 'auth.err.invalidEmail',
+      'Email rate limit exceeded': 'auth.err.rateLimited',
+      'For security purposes, you can only request this after 60 seconds.': 'auth.err.wait60s',
+      'Token has expired or is invalid': 'auth.err.invalidCredentials',
+    }
+    const key = map[msg]
+    return key ? t(key as Parameters<typeof t>[0]) : msg
   }
 
   return (
@@ -179,22 +296,11 @@ export default function LoginPage() {
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
       .mkr-handwrite { font-family: 'Caveat', cursive; }
-      @keyframes shake {
-        0%, 100% { transform: translateX(0); }
-        20% { transform: translateX(-8px); }
-        40% { transform: translateX(8px); }
-        60% { transform: translateX(-6px); }
-        80% { transform: translateX(6px); }
-      }
-      .shake { animation: shake 0.4s ease-in-out; }
     `}</style>
     <div className="min-h-dvh bg-black flex items-center justify-center px-6 relative overflow-hidden">
-      {/* Fuchsia glow */}
       <div className="absolute inset-0 pointer-events-none" style={{
         background: 'radial-gradient(ellipse 60% 40% at 50% 60%, rgba(217,70,239,0.06) 0%, transparent 70%)',
       }} />
-
-      {/* Language toggle */}
       <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10 }}>
         <LocaleToggle />
       </div>
@@ -203,18 +309,10 @@ export default function LoginPage() {
         {/* Wordmark */}
         <div className="flex items-center justify-center gap-3 mb-1">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(217,70,239)" strokeWidth="1.8" strokeLinecap="round">
-            <line x1="12" y1="2" x2="12" y2="22" />
-            <line x1="2" y1="12" x2="22" y2="12" />
-            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-            <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
+            <line x1="12" y1="2" x2="12" y2="22" /><line x1="2" y1="12" x2="22" y2="12" />
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /><line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
           </svg>
-          <div style={{
-            fontWeight: 800,
-            fontSize: 'clamp(2.2rem, 10vw, 3.2rem)',
-            letterSpacing: '-0.04em',
-            color: '#fff',
-            lineHeight: 1,
-          }}>
+          <div style={{ fontWeight: 800, fontSize: 'clamp(2.2rem, 10vw, 3.2rem)', letterSpacing: '-0.04em', color: '#fff', lineHeight: 1 }}>
             Makaron
           </div>
         </div>
@@ -222,202 +320,181 @@ export default function LoginPage() {
           <RollingTagline className="text-[1.15rem] tracking-wide" />
         </div>
 
-        {/* ══════ LANDING VIEW ══════ */}
-        {view === 'landing' && (
+        {/* ══════ FORM VIEW ══════ */}
+        {view === 'form' && (
           <>
-            {/* Invite code section */}
-            <div className="space-y-3 mb-8">
-              <div className={inviteShake ? 'shake' : ''}>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={(e) => { setInviteCode(e.target.value); setInviteError('') }}
-                  placeholder={t('auth.inviteCodePlaceholder')}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  onKeyDown={(e) => e.key === 'Enter' && handleInviteSubmit()}
-                  className="w-full px-4 py-4 rounded-xl bg-white/[0.07] text-white text-center text-lg font-mono placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-all uppercase"
-                  style={{ letterSpacing: '0.25em' }}
-                />
-              </div>
+            {!inApp && (
+              <>
+                <button
+                  onClick={handleGoogleLogin}
+                  disabled={googleLoading}
+                  className="w-full py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}
+                >
+                  {googleLoading ? (
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  ) : (
+                    <>
+                      <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                      </svg>
+                      {t('auth.continueWithGoogle')}
+                    </>
+                  )}
+                </button>
 
-              {inviteError && (
-                <p className="text-red-400 text-sm text-center">{inviteError}</p>
-              )}
+                <div className="flex items-center gap-3 my-6">
+                  <div className="flex-1 h-px bg-white/10" />
+                  <span className="text-white/25 text-xs">{t('auth.orDivider')}</span>
+                  <div className="flex-1 h-px bg-white/10" />
+                </div>
+              </>
+            )}
 
-              <button
-                onClick={handleInviteSubmit}
-                disabled={inviteLoading || !inviteCode.trim()}
-                className="w-full py-3.5 rounded-xl font-medium text-white transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                style={{
-                  background: inviteCode.trim()
-                    ? 'linear-gradient(to right, #c026d3, #9333ea)'
-                    : 'rgba(255,255,255,0.18)',
-                  boxShadow: inviteCode.trim() ? '0 0 20px rgba(192,38,211,0.2)' : 'none',
-                }}
-              >
-                {inviteLoading ? (
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  t('auth.activate')
-                )}
+
+            <form onSubmit={handleContinue} className="space-y-4">
+              <input type="email" placeholder={t('auth.email')} value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} required
+                className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
+              <input type="password" placeholder={t('auth.password')} value={password} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
+                className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
+
+              {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+
+              <button type="submit" disabled={loading}
+                className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                style={{ background: 'linear-gradient(to right, #c026d3, #9333ea)' }}>
+                {loading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {t('auth.continue')}
               </button>
+            </form>
+
+            <p className="mt-4 text-center">
+              <button onClick={() => { setError(''); setView('forgot-password') }} className="text-white/30 hover:text-white/50 text-xs transition-colors">
+                {t('auth.forgotPassword')}
+              </button>
+            </p>
+            <p className="mt-6 text-center">
+              <a href="/home" className="text-white/25 hover:text-white/50 text-xs transition-colors">
+                ← {t('auth.back')}
+              </a>
+            </p>
+          </>
+        )}
+
+        {/* ══════ VERIFY OTP VIEW ══════ */}
+        {view === 'verify-otp' && (
+          <div className="text-center">
+            <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-full mb-5" style={{ background: 'rgba(217,70,239,0.08)', border: '1px solid rgba(217,70,239,0.15)' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.8)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="4" width="20" height="16" rx="2" /><path d="M22 7l-10 6L2 7" />
+              </svg>
             </div>
 
-            {/* Divider */}
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex-1 h-px bg-white/10" />
-              <span className="text-white/25 text-xs">{t('auth.noInviteCode')}</span>
-              <div className="flex-1 h-px bg-white/10" />
+            <h2 className="text-white text-xl font-bold mb-2">{t('auth.otp.title')}</h2>
+            <p className="text-white/50 text-sm mb-1">{t('auth.otp.subtitle')}</p>
+            <p className="text-white font-medium text-sm mb-8">{email}</p>
+
+            {/* 8-digit OTP input */}
+            <div className="flex justify-center gap-1.5 mb-6" onPaste={handleOtpPaste}>
+              {otpDigits.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={el => { otpRefs.current[i] = el }}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleOtpChange(i, e.target.value)}
+                  onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                  autoFocus={i === 0}
+                  className="w-9 h-12 text-center text-lg font-bold rounded-lg bg-white/[0.07] text-white border border-white/15 focus:border-fuchsia-500/60 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/40 transition-colors"
+                  style={{ caretColor: 'rgb(217,70,239)' }}
+                />
+              ))}
             </div>
 
-            {/* Waitlist section */}
-            {waitlistDone ? (
-              <div className="text-center py-4">
-                <div className="text-green-400 text-sm mb-1">✓ {t('auth.waitlistSuccess')}</div>
-                <div className="text-white/30 text-xs">{t('auth.waitlistSuccessDesc')}</div>
+            {otpError && <p className="text-red-400 text-sm mb-4">{otpError}</p>}
+
+            <button
+              onClick={handleVerifyOtp}
+              disabled={otpLoading || otpDigits.some(d => !d)}
+              className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mb-4"
+              style={{ background: 'linear-gradient(to right, #c026d3, #9333ea)' }}
+            >
+              {otpLoading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+              {t('auth.otp.verify')}
+            </button>
+
+            <button
+              onClick={handleResendOtp}
+              disabled={resendCooldown > 0}
+              className="text-sm transition-colors disabled:cursor-not-allowed"
+              style={{ color: resendCooldown > 0 ? 'rgba(255,255,255,0.25)' : 'rgba(217,70,239,0.8)' }}
+            >
+              {resendCooldown > 0 ? `${t('auth.otp.resendIn')} ${resendCooldown}s` : t('auth.otp.resend')}
+            </button>
+
+            <p className="mt-6">
+              <button onClick={() => { setView('form'); setOtpError('') }} className="text-white/35 hover:text-white/60 text-sm transition-colors">
+                ← {t('auth.back')}
+              </button>
+            </p>
+          </div>
+        )}
+
+        {/* ══════ FORGOT PASSWORD VIEW ══════ */}
+        {view === 'forgot-password' && (
+          <div>
+            <h2 className="text-white text-xl font-bold text-center mb-6">{t('auth.resetPassword.title')}</h2>
+            <form onSubmit={handleForgotSubmit} className="space-y-4">
+              <input type="email" placeholder={t('auth.email')} value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} required
+                className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
+
+              {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+
+              <button type="submit" disabled={loading}
+                className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                style={{ background: 'linear-gradient(to right, #c026d3, #9333ea)' }}>
+                {loading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {t('auth.resetPassword.send')}
+              </button>
+            </form>
+            <p className="mt-6 text-center">
+              <button onClick={() => { setView('form'); setError('') }} className="text-white/35 hover:text-white/60 text-sm transition-colors">
+                ← {t('auth.back')}
+              </button>
+            </p>
+          </div>
+        )}
+
+        {/* ══════ RESET PASSWORD VIEW ══════ */}
+        {view === 'reset-password' && (
+          <div>
+            <h2 className="text-white text-xl font-bold text-center mb-6">{t('auth.resetPassword.title')}</h2>
+            {resetSuccess ? (
+              <div className="text-center">
+                <div className="text-green-400 text-lg font-medium mb-2">✓</div>
+                <p className="text-green-400 text-sm">{t('auth.resetPassword.success')}</p>
               </div>
             ) : (
-              <div className="flex gap-2 mb-8">
-                <input
-                  type="email"
-                  value={waitlistEmail}
-                  onChange={(e) => { setWaitlistEmail(e.target.value); setWaitlistError('') }}
-                  placeholder={t('auth.email')}
-                  onKeyDown={(e) => e.key === 'Enter' && handleWaitlist()}
-                  className="flex-1 px-4 py-3 rounded-lg bg-white/[0.07] text-white text-sm placeholder-white/25 border border-white/10 focus:border-fuchsia-500/30 focus:outline-none transition-colors"
-                />
-                <button
-                  onClick={handleWaitlist}
-                  disabled={waitlistLoading || !waitlistEmail.trim()}
-                  className="px-4 py-3 rounded-lg bg-white/10 text-white/70 text-sm font-medium hover:bg-white/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                  {waitlistLoading ? '...' : t('auth.joinWaitlist')}
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <input type="password" placeholder={t('auth.resetPassword.newPassword')} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6}
+                  className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
+
+                {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+
+                <button type="submit" disabled={resetLoading}
+                  className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(to right, #c026d3, #9333ea)' }}>
+                  {resetLoading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                  {t('auth.resetPassword.confirm')}
                 </button>
-              </div>
+              </form>
             )}
-
-            {waitlistError && (
-              <p className="text-red-400 text-xs text-center mb-4 -mt-4">{waitlistError}</p>
-            )}
-
-            {/* Sign in link */}
-            <p className="text-center text-sm text-white/30">
-              {t('auth.hasAccount')}
-              <button onClick={() => switchView('login')} className="text-fuchsia-400/70 hover:text-fuchsia-300 ml-1">
-                {t('auth.goLogin')}
-              </button>
-            </p>
-          </>
-        )}
-
-        {/* ══════ REGISTER VIEW ══════ */}
-        {view === 'register' && (
-          <>
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-400 text-sm mb-4">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 13l4 4L19 7" />
-                </svg>
-                {validatedCode}
-              </div>
-              <h2 className="text-white text-lg font-medium">{t('auth.createAccount')}</h2>
-            </div>
-
-            <form onSubmit={handleRegister} className="space-y-4">
-              <input
-                type="email"
-                placeholder={t('auth.email')}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors"
-              />
-              <input
-                type="password"
-                placeholder={t('auth.password')}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors"
-              />
-
-              {errorMsg && <p className="text-red-400 text-sm text-center">{errorMsg}</p>}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                style={{ background: 'linear-gradient(to right, #c026d3, #9333ea)' }}
-              >
-                {loading && (
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                )}
-                {t('auth.register')}
-              </button>
-            </form>
-
-            <p className="mt-6 text-center text-sm text-white/30">
-              <button onClick={() => switchView('landing')} className="text-white/40 hover:text-white/60">
-                ← {t('auth.back')}
-              </button>
-            </p>
-          </>
-        )}
-
-        {/* ══════ LOGIN VIEW ══════ */}
-        {view === 'login' && (
-          <>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <input
-                type="email"
-                placeholder={t('auth.email')}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors"
-              />
-              <input
-                type="password"
-                placeholder={t('auth.password')}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors"
-              />
-
-              {errorMsg && <p className="text-red-400 text-sm text-center">{errorMsg}</p>}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-lg bg-fuchsia-600 text-white font-medium hover:bg-fuchsia-500 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loading && (
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                )}
-                {t('auth.login')}
-              </button>
-            </form>
-
-            <p className="mt-6 text-center text-sm text-white/30">
-              <button onClick={() => switchView('landing')} className="text-white/40 hover:text-white/60">
-                ← {t('auth.back')}
-              </button>
-            </p>
-          </>
+          </div>
         )}
       </div>
     </div>

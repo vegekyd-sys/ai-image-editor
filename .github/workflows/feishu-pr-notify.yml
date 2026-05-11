@@ -1,0 +1,153 @@
+name: Feishu PR Notification
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize, closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify-feishu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send PR notification card to Feishu via OpenAPI
+        env:
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_RECEIVE_ID: ${{ secrets.FEISHU_RECEIVE_ID }}
+          FEISHU_RECEIVE_ID_TYPE: ${{ secrets.FEISHU_RECEIVE_ID_TYPE || 'open_id' }}
+          REPO: ${{ github.repository }}
+          ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.parse
+          import urllib.request
+
+          required = ["FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_RECEIVE_ID"]
+          missing = [name for name in required if not os.environ.get(name)]
+          if missing:
+              print(f"Skip Feishu notification: missing secrets {', '.join(missing)}")
+              sys.exit(0)
+
+          def post_json(url, payload, headers=None, timeout=15):
+              data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+              req = urllib.request.Request(
+                  url,
+                  data=data,
+                  headers={"Content-Type": "application/json", **(headers or {})},
+                  method="POST",
+              )
+              with urllib.request.urlopen(req, timeout=timeout) as resp:
+                  return resp.status, resp.read().decode("utf-8", errors="replace")
+
+          status, body = post_json(
+              "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+              {
+                  "app_id": os.environ["FEISHU_APP_ID"],
+                  "app_secret": os.environ["FEISHU_APP_SECRET"],
+              },
+          )
+          token_resp = json.loads(body)
+          if token_resp.get("code") != 0:
+              raise SystemExit(f"Failed to get tenant_access_token: {token_resp}")
+          token = token_resp["tenant_access_token"]
+
+          action = os.environ["ACTION"]
+          merged = os.environ.get("PR_MERGED") == "true"
+          if action == "closed" and merged:
+              action_label = "merged"
+              template = "green"
+              emoji = "✅"
+          elif action == "closed":
+              action_label = "closed"
+              template = "grey"
+              emoji = "🛑"
+          elif action == "synchronize":
+              action_label = "updated"
+              template = "blue"
+              emoji = "🔁"
+          elif action == "ready_for_review":
+              action_label = "ready for review"
+              template = "turquoise"
+              emoji = "👀"
+          else:
+              action_label = action
+              template = "blue"
+              emoji = "🧩"
+
+          review_status = "Draft" if os.environ.get("PR_DRAFT") == "true" else "Ready for review"
+          pr_title = os.environ["PR_TITLE"]
+          pr_number = os.environ["PR_NUMBER"]
+          pr_url = os.environ["PR_URL"]
+
+          card = {
+              "config": {"wide_screen_mode": True},
+              "header": {
+                  "template": template,
+                  "title": {
+                      "tag": "plain_text",
+                      "content": f"{emoji} PR #{pr_number} {action_label}",
+                  },
+              },
+              "elements": [
+                  {
+                      "tag": "div",
+                      "text": {
+                          "tag": "lark_md",
+                          "content": "\n".join([
+                              f"**{pr_title}**",
+                              "",
+                              f"**Repo:** `{os.environ['REPO']}`",
+                              f"**Branch:** `{os.environ['PR_HEAD']}` → `{os.environ['PR_BASE']}`",
+                              f"**Author:** {os.environ['PR_AUTHOR']}",
+                              f"**Status:** {review_status}",
+                          ]),
+                      },
+                  },
+                  {
+                      "tag": "hr",
+                  },
+                  {
+                      "tag": "action",
+                      "actions": [
+                          {
+                              "tag": "button",
+                              "text": {"tag": "plain_text", "content": "Open PR"},
+                              "type": "primary",
+                              "url": pr_url,
+                          }
+                      ],
+                  },
+              ],
+          }
+
+          receive_id_type = os.environ.get("FEISHU_RECEIVE_ID_TYPE") or "open_id"
+          query = urllib.parse.urlencode({"receive_id_type": receive_id_type})
+          payload = {
+              "receive_id": os.environ["FEISHU_RECEIVE_ID"],
+              "msg_type": "interactive",
+              "content": json.dumps(card, ensure_ascii=False),
+          }
+          status, body = post_json(
+              f"https://open.feishu.cn/open-apis/im/v1/messages?{query}",
+              payload,
+              headers={"Authorization": f"Bearer {token}"},
+          )
+          msg_resp = json.loads(body)
+          if msg_resp.get("code") != 0:
+              raise SystemExit(f"Failed to send Feishu card: {msg_resp}")
+          print(f"Feishu card sent: {msg_resp.get('data', {}).get('message_id', '<no id>')}")
+          PY

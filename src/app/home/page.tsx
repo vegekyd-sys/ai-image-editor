@@ -5,23 +5,54 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
-import { useLocale, LocaleToggle } from '@/lib/i18n'
+import { useLocale } from '@/lib/i18n'
 import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
 import SkillSelector from '@/components/SkillSelector'
-import Changelog from '@/components/Changelog'
+import TopBar from '@/components/TopBar'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
-import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage'
+import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
+
+function LazyVideo({ src, style }: { src: string; style: React.CSSProperties }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  const [inView, setInView] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setInView(true)
+        io.disconnect()
+      }
+    }, { rootMargin: '200px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  return (
+    <video
+      ref={ref}
+      src={inView ? src : undefined}
+      autoPlay={inView}
+      loop
+      muted
+      playsInline
+      preload={inView ? 'auto' : 'none'}
+      style={style}
+    />
+  )
+}
 
 export default function HomePage() {
   return <Suspense><HomePageInner /></Suspense>
 }
 
 function HomePageInner() {
-  const { user, loading: authLoading, signOut } = useAuth()
+  const { user } = useAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -38,9 +69,8 @@ function HomePageInner() {
   const [inputText, setInputText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
-  const [showChangelog, setShowChangelog] = useState(false)
   const [slotDragOver, setSlotDragOver] = useState(-1)
-  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>(getCachedHomeSkills)
+  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
@@ -89,9 +119,39 @@ function HomePageInner() {
     'One photo, show me 6 completely different directions',
   ]
   const [placeholderIdx, setPlaceholderIdx] = useState(0)
+  const [showWelcome, setShowWelcome] = useState(false)
+  const [welcomeCredits, setWelcomeCredits] = useState(0)
   useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Restore state from login redirect + detect welcome
+  const returnTextRef = useRef<string | null>(null)
   useEffect(() => {
+    const text = sessionStorage.getItem('mkr_return_text')
+    if (text) { returnTextRef.current = text; sessionStorage.removeItem('mkr_return_text') }
+    sessionStorage.removeItem('mkr_return_skill')
+    sessionStorage.removeItem('mkr_return_url')
+    // Welcome credits popup
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('welcome')) {
+        window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
+        fetch('/api/billing/credits').then(r => r.json()).then(d => {
+          if (d.balance > 0) { setWelcomeCredits(d.balance); setShowWelcome(true) }
+        }).catch(() => {})
+      }
+    }
+    // Delay text restore to run after skill overlay sets its default prompt
+    setTimeout(() => {
+      if (returnTextRef.current) { setInputText(returnTextRef.current); returnTextRef.current = null }
+    }, 100)
+  }, [])
+
+  useEffect(() => {
+    // Hydrate from sessionStorage first (instant, avoids skeleton flash on same-session)
+    const cached = getCachedHomeSkills()
+    if (cached.length > 0) setHomeSkills(cached)
+
+    // Then fetch fresh data in background
     fetch('/api/home-skills').then(r => r.json()).then(data => {
       if (!Array.isArray(data) || data.length === 0) return
       setHomeSkills(prev => {
@@ -101,8 +161,6 @@ function HomePageInner() {
           const fresh = newMap.get(s.id)
           if (!fresh) return null
           newMap.delete(s.id)
-          // JSON diff fallback — home_skills has no updated_at trigger,
-          // so updated_at alone can't tell us if before_images/prompt/labels changed.
           return JSON.stringify(fresh) === JSON.stringify(s) ? s : fresh as HomeSkill
         }).filter(Boolean) as HomeSkill[]
         for (const s of newMap.values()) merged.push(s)
@@ -146,6 +204,7 @@ function HomePageInner() {
     return () => { document.removeEventListener('mousedown', handler); window.removeEventListener('scroll', onScroll, true) }
   }, [skillMenuOpen])
 
+
   const handleSkillUpload = useCallback(async (file: File) => {
     setSkillUploading(true)
     setInstallingSkill(true)
@@ -188,7 +247,7 @@ function HomePageInner() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [authLoading])
+  }, [])
 
   useEffect(() => {
     const el = inputWrapperRef.current
@@ -198,7 +257,7 @@ function HomePageInner() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [authLoading])
+  }, [])
 
   useEffect(() => {
     const el = document.querySelector('.mkr-page') as HTMLElement | null
@@ -305,7 +364,7 @@ function HomePageInner() {
     }, { threshold: 0.1 })
     io.observe(el)
     return () => io.disconnect()
-  }, [authLoading])
+  }, [])
 
   useEffect(() => {
     const el = inlineBoxRef.current
@@ -316,7 +375,7 @@ function HomePageInner() {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [authLoading])
+  }, [])
 
   const userTypingRef = useRef(false)
   const resizeTextarea = useCallback(() => {
@@ -442,8 +501,15 @@ function HomePageInner() {
     setCardIndex(999)
   }, [creating])
 
+  const redirectToLogin = useCallback(() => {
+    sessionStorage.setItem('mkr_return_url', window.location.pathname + window.location.search)
+    if (inputText.trim()) sessionStorage.setItem('mkr_return_text', inputText)
+    if (selectedDetail?.id) sessionStorage.setItem('mkr_return_skill', selectedDetail.id)
+    router.push('/login')
+  }, [inputText, selectedDetail, router])
+
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
-    if (!user) { router.push('/login'); return }
+    if (!user) { redirectToLogin(); return }
     if (creating || (files.length === 0 && !prompt)) return
     setCreating(true)
     try {
@@ -524,7 +590,7 @@ function HomePageInner() {
           const isDragTarget = slotDragOver === i
           return (
             <div key={i}
-              onClick={() => { if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
+              onClick={() => { if (!user) { redirectToLogin(); return } if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
               onDragLeave={() => setSlotDragOver(-1)}
@@ -614,7 +680,10 @@ function HomePageInner() {
   ) => {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
-      return <video src={url} autoPlay loop muted playsInline preload="metadata" style={style} />
+      if (variant === 'thumb') {
+        return <LazyVideo src={normalizeDomain(url)} style={style} />
+      }
+      return <video src={normalizeDomain(url)} autoPlay loop muted playsInline preload="auto" style={style} />
     }
     const src = variant === 'thumb'
       ? getThumbnailUrl(url, 400, 70, 533, 'cover')
@@ -669,7 +738,7 @@ function HomePageInner() {
       >
         {/* Left: + button / photo slot */}
         <div
-          onClick={() => { if (!user) { router.push('/login'); return } if (!creating && !collapseSlot) fileInputRef.current?.click() }}
+          onClick={() => { if (!user) { redirectToLogin(); return } if (!creating && !collapseSlot) fileInputRef.current?.click() }}
           style={{
             width: collapseSlot ? 0 : slotWidth,
             flexShrink: 0, alignSelf: 'stretch',
@@ -872,11 +941,17 @@ function HomePageInner() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
             <button
               className="mkr-create-btn"
-              onClick={() => { if (!user) { router.push('/login'); return } if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
+              onClick={() => { if (!user) { redirectToLogin(); return } if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
+              onTouchEnd={(e) => { if (!user) { e.preventDefault(); redirectToLogin() } }}
               disabled={creating}
               style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
             >
-              {creating ? <Spinner size={12} /> : (
+              {creating ? <Spinner size={12} /> : !user ? (
+                <>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+                  {locale === 'zh' ? '免费试用' : 'Try free'}
+                </>
+              ) : (
                 <>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                   Create
@@ -918,13 +993,6 @@ function HomePageInner() {
     })
   }
 
-  if (authLoading) {
-    return (
-      <div style={{ height: '100dvh', background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Spinner />
-      </div>
-    )
-  }
 
   return (
     <>
@@ -982,10 +1050,12 @@ function HomePageInner() {
           -webkit-user-select: none;
           transition: background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
         }
-        .mkr-create-btn:hover, .mkr-skill-btn:hover {
-          background: rgba(217,70,239,0.1) !important;
-          border-radius: 12px !important;
-          box-shadow: 0 0 20px rgba(217,70,239,0.15);
+        @media (hover: hover) {
+          .mkr-create-btn:hover, .mkr-skill-btn:hover {
+            background: rgba(217,70,239,0.1) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 0 20px rgba(217,70,239,0.15);
+          }
         }
         .mkr-create-btn:active, .mkr-skill-btn:active { transform: scale(0.96); }
 
@@ -1031,29 +1101,7 @@ function HomePageInner() {
           }}
         />
 
-        {/* Top bar */}
-        <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 10 }}>
-          {user ? (
-            <button
-              onClick={() => router.push('/projects')}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.7rem', letterSpacing: '0.05em',
-                color: 'rgba(255,255,255,0.45)',
-                display: 'flex', alignItems: 'center', gap: 5,
-                transition: 'color 0.2s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-              </svg>
-              {locale === 'zh' ? '我的项目' : 'My Projects'}
-            </button>
-          ) : <div />}
-          <LocaleToggle />
-        </div>
+        <TopBar page="home" />
 
         {/* ── Hero: Landing-page style ── */}
         <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
@@ -1459,9 +1507,53 @@ function HomePageInner() {
         </div>
       )}
 
-      {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
-
       {/* Skill menu now handled by SkillSelector component */}
+
+      {/* Welcome credits popup */}
+      {showWelcome && welcomeCredits > 0 && (
+        <>
+          <div onClick={() => setShowWelcome(false)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} />
+          <div style={{
+            position: 'fixed', zIndex: 301, left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            width: '92%', maxWidth: 400, background: 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
+            borderRadius: 20, border: '1px solid rgba(255,255,255,0.08)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.8)', padding: '48px 24px 36px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
+              {locale === 'zh' ? '欢迎来到 Makaron!' : 'Welcome to Makaron!'}
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
+              {locale === 'zh' ? '我们送了你一份创作礼物' : "Here's a gift to get you started"}
+            </div>
+            <div style={{
+              marginTop: 24, padding: '20px 0', borderRadius: 16,
+              background: 'rgba(192,38,211,0.06)', border: '1px solid rgba(192,38,211,0.15)',
+            }}>
+              <div style={{
+                fontSize: 48, fontWeight: 800, letterSpacing: '-0.03em',
+                background: 'linear-gradient(135deg, #e879f9, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              }}>
+                {welcomeCredits.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                credits · ${(welcomeCredits * 0.01).toFixed(2)} {locale === 'zh' ? '价值' : 'value'}
+              </div>
+            </div>
+            <button
+              onClick={() => setShowWelcome(false)}
+              style={{
+                width: '100%', marginTop: 24, padding: 14, borderRadius: 14, border: 'none',
+                background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
+                color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
+              }}
+            >
+              {locale === 'zh' ? '开始创作' : 'Start Creating'}
+            </button>
+          </div>
+        </>
+      )}
     </>
   )
 }

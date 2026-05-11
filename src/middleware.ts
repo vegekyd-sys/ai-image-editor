@@ -25,6 +25,33 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Clean up legacy auth cookies from old Supabase URL (before custom domain migration)
+  const legacyCookies = request.cookies.getAll().filter(c => c.name.startsWith('sb-sdyrtztrjgmmpnirswxt'))
+  if (legacyCookies.length > 0) {
+    legacyCookies.forEach(c => {
+      supabaseResponse.cookies.set(c.name, '', { path: '/', maxAge: 0 })
+    })
+  }
+
+  // Handle OAuth PKCE code exchange: Supabase redirects to /?code=xxx
+  const code = request.nextUrl.searchParams.get('code')
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) {
+      // Exchange success — redirect to clean URL (remove ?code= param)
+      const url = request.nextUrl.clone()
+      url.searchParams.delete('code')
+      url.pathname = '/projects'
+      const response = NextResponse.redirect(url)
+      // Copy auth cookies from supabaseResponse to redirect response
+      supabaseResponse.cookies.getAll().forEach(c => {
+        response.cookies.set(c.name, c.value, { path: '/' })
+      })
+      response.cookies.set('mkr_activated', '1', { path: '/', maxAge: 365 * 24 * 60 * 60, sameSite: 'lax' })
+      return response
+    }
+  }
+
   // Using getSession() for performance (reads from cookie, no network round-trip)
   const { data: { session } } = await supabase.auth.getSession()
   const user = session?.user
@@ -36,6 +63,10 @@ export async function middleware(request: NextRequest) {
 
   // Not logged in — /login, /landingpage, / are accessible; others → landing page
   if (!user) {
+    // Allow /projects/[uuid] through for public project viewing (page-level checks visibility)
+    const isProjectView = /^\/projects\/[0-9a-f-]{36}$/.test(pathname)
+    if (isProjectView) return supabaseResponse
+
     if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/home' && !pathname.startsWith('/home/') && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/')) {
       const url = request.nextUrl.clone()
       url.pathname = '/home'
@@ -58,6 +89,11 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = activated ? '/projects' : '/activate'
     return NextResponse.redirect(url)
+  }
+
+  // /auth-done — client-side redirect after OAuth, always accessible
+  if (pathname === '/auth-done') {
+    return supabaseResponse
   }
 
   // /activate — accessible when logged in

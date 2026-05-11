@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Emoji Font Test</title>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
+<style>
+body { background: #1a1a1a; color: #fff; font-family: sans-serif; padding: 40px; }
+.test { margin: 20px 0; padding: 20px; background: #2a2a2a; border-radius: 8px; }
+.label { font-size: 14px; color: #888; margin-bottom: 8px; }
+.content { font-size: 36px; }
+</style>
+</head>
+<body>
+<h2>Emoji Rendering Test</h2>
+
+<div class="test">
+  <div class="label">1. Great Vibes (hardcoded emoji in HTML)</div>
+  <div class="content" style="font-family: 'Great Vibes', cursive">
+    tastes like sunshine😁 hello🌸🎉💖
+  </div>
+</div>
+
+<div class="test">
+  <div class="label">2. Great Vibes (emoji injected via JS — simulates props)</div>
+  <div class="content" id="js-test" style="font-family: 'Great Vibes', cursive"></div>
+</div>
+
+<div class="test">
+  <div class="label">3. sans-serif (hardcoded emoji)</div>
+  <div class="content" style="font-family: sans-serif">
+    tastes like sunshine😁 hello🌸🎉💖
+  </div>
+</div>
+
+<div class="test">
+  <div class="label">4. Great Vibes + Noto Color Emoji fallback</div>
+  <div class="content" style="font-family: 'Great Vibes', 'Noto Color Emoji', cursive">
+    tastes like sunshine😁 hello🌸🎉💖
+  </div>
+</div>
+
+<script>
+// Simulate what happens when user types emoji into editable field (props injection)
+document.getElementById('js-test').textContent = 'tastes like sunshine😁 hello🌸🎉💖';
+</script>
+</body>
+</html>

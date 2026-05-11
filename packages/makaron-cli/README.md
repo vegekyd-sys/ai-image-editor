@@ -1,186 +1,243 @@
-# makaron-cli
+# Makaron CLI — Agent Integration Skill
 
-Talk to **Makaron Agent** from the terminal — create projects, edit images, generate videos, and compose music.
+Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, and it produces images, videos, music, and animated designs — all saved to a persistent project.
 
-Zero dependencies. Single file. Works with `npx`.
-
-## Install
+## Setup
 
 ```bash
-npx makaron-cli          # run directly (always latest)
-# or
 npm install -g makaron-cli
-```
+# or use directly: npx makaron-cli
 
-## Authentication
-
-### API Key (recommended for agents)
-
-Set the `MAKARON_API_KEY` environment variable. That's it — no login step needed.
-
-```bash
 export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-npx makaron-cli list
 ```
 
-Get your API key from the Makaron dashboard (Settings → API Keys), or ask your admin to generate one.
+Verify: `npx makaron-cli list` should show projects.
 
-### Interactive login (humans)
+## Core Workflow
 
 ```bash
-npx makaron-cli login
-# Enter email + password → token saved to ~/.makaron/auth.json
+# One-shot: create project + upload image + submit prompt — all in one command
+RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video")
+
+# Watch until all artifacts are ready
+npx makaron-cli responses watch $RUN_ID --jsonl
 ```
 
-The CLI checks `MAKARON_API_KEY` first, then falls back to the saved session in `~/.makaron/auth.json`.
+Or with an existing project:
+```bash
+RUN_ID=$(npx makaron-cli chat --project $PROJECT_ID -b "make a 5s video")
+npx makaron-cli responses watch $RUN_ID --jsonl
+```
 
-## Commands
+## Primary: `chat` (Agent-driven creative work)
 
-### `list` — Show all projects
+Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
+
+### Submit a request
 
 ```bash
-npx makaron-cli list
+# With existing project
+npx makaron-cli chat --project <id> --json -b "<prompt>"
+
+# Auto-create project (with or without images)
+npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinematic"
+npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-Output:
-```
-📁 12 projects
-
-  abc123def  My Photo                        3 snaps  2h ago
-  xyz789ghi  Sunset Edit                     5 snaps  1d ago
+Returns immediately:
+```json
+{"runId": "xxx", "projectId": "...", "projectUrl": "https://www.makaron.app/projects/...", "status": "running"}
 ```
 
-### `create` — Create a new project
+### With additional images (existing project)
 
 ```bash
-# From local image file(s)
-npx makaron-cli create --image photo.jpg
-npx makaron-cli create --image img1.jpg --image img2.jpg
-
-# From URL(s)
-npx makaron-cli create --image-url https://example.com/photo.jpg
-
-# Empty project (for text-to-image)
-npx makaron-cli create --title "My New Project"
+npx makaron-cli chat --project <id> --image ref1.jpg --image ref2.jpg -b "use these as style reference"
 ```
 
-Output:
-```
-✅ Project created
-   ID: abc123def456
-   Images: 1
-   [1] https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/...
-   URL: https://www.makaron.app/projects/abc123def456
-```
-
-### `chat` — Send a message to Makaron Agent
-
-This is the main command. The Agent can edit images, generate videos, compose music, and create designs.
+### Check status (single query)
 
 ```bash
-npx makaron-cli chat --project <id> "make it look cinematic"
+npx makaron-cli responses get <runId> --json
 ```
 
-The Agent streams its response in real-time:
-- **Text** → stdout (pipe-friendly)
-- **Status/progress** → stderr
-- **Images, videos, music** → URLs printed to stderr
+### Watch until done (streaming events)
 
 ```bash
-# Add extra reference images to the project before chatting
-npx makaron-cli chat --project <id> --image ref.jpg "use this style"
+npx makaron-cli responses watch <runId> --jsonl
 ```
 
-After the Agent finishes, the CLI automatically polls for any pending video/music tasks until they complete.
+Outputs one JSON per line as artifacts appear:
+```
+{"event":"output.added","item":{"id":"out_1","type":"image","status":"completed","url":"https://..."}}
+{"event":"output.added","item":{"id":"out_2","type":"video","status":"rendering","task_id":"xxx"}}
+{"event":"output.updated","item":{"id":"out_2","type":"video","status":"completed","url":"https://..."}}
+{"event":"done","status":"completed"}
+```
 
-### `abort` — Stop a running Agent
+### Extract specific results
 
 ```bash
-npx makaron-cli abort <runId>
+npx makaron-cli responses get <runId> --pick first_image_url
+npx makaron-cli responses get <runId> --pick image_urls        # all images (JSON array)
+npx makaron-cli responses get <runId> --pick first_video_url
+npx makaron-cli responses get <runId> --pick video_urls        # all videos
+npx makaron-cli responses get <runId> --pick project_url
+npx makaron-cli responses get <runId> --pick text              # agent's text reply
+npx makaron-cli responses get <runId> --pick output            # full output array
+npx makaron-cli responses get <runId> --pick status
 ```
 
-Press `Ctrl+C` during `chat` to abort automatically.
+## Fallback: Direct tool calls (no project context)
 
-## Example: Full workflow
+Use these only when `chat` is unavailable or you need raw model access without project/conversation context.
+
+### `edit` — One-shot image editing
 
 ```bash
-# 1. Login (once)
-npx makaron-cli login
+# Edit an existing image
+npx makaron-cli edit --image photo.jpg "add cinematic warm lighting"
 
-# 2. Create a project from a photo
-npx makaron-cli create --image my-photo.jpg
-# → ID: proj_abc123
+# Text-to-image (no input)
+npx makaron-cli edit "a cyberpunk cityscape at night"
 
-# 3. Edit the image
-npx makaron-cli chat --project proj_abc123 "add dramatic lighting and film grain"
+# With model/skill/reference
+npx makaron-cli edit --image photo.jpg --model openai --skill captions "add title"
+npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 
-# 4. Generate a video from the result
-npx makaron-cli chat --project proj_abc123 "make a 5 second cinematic video"
-
-# 5. Add background music
-npx makaron-cli chat --project proj_abc123 "add epic orchestral background music"
+# Output to file
+npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 ```
 
-## Agent Integration Guide
+Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
 
-For AI agents (Claude Code, Cursor, etc.) calling this CLI programmatically:
-
-### Setup (one-time)
+### `video` — Video generation (3 steps)
 
 ```bash
-export MAKARON_API_KEY=mk_live_your_key_here
-npx makaron-cli list   # verify it works
+# 1. Write script from images
+npx makaron-cli video script --image img1.jpg "cinematic story"
+
+# 2. Submit rendering (images must be public URLs from step 1 or uploaded)
+npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --model kling
+
+# 3. Check status
+npx makaron-cli video status <taskId>
 ```
 
-### Best practices
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--duration 3|5|7|10|15`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`
 
-1. **Always capture the project ID** from `create` output — you need it for all `chat` commands
-2. **One instruction per `chat` call** — the Agent handles complex requests, but single clear instructions work best
-3. **Check results via the URL** — every project has a web URL at `https://www.makaron.app/projects/<id>`
-4. **Video generation takes 2-5 minutes** — the CLI auto-polls and prints the URL when done
-5. **Music generation takes ~60 seconds** — also auto-polled
+### `music` — Music generation
 
-### What the Agent can do
+```bash
+npx makaron-cli music create "gentle piano, warm strings, cinematic"
+npx makaron-cli music create --vocals --style "lo-fi" "rainy day vibes"
+npx makaron-cli music status <taskId>
+```
 
-| Capability | Example prompt |
-|-----------|---------------|
-| Image editing | "make the sky more dramatic" |
+Options: `--vocals` (include vocals), `--style "genre"`
+
+## Response Schema
+
+```typescript
+type MakaronRunResponse = {
+  id: string
+  status: "in_progress" | "completed" | "failed" | "aborted"
+  incomplete: boolean                // true = keep polling
+  project_id: string
+  project_url: string
+  next_poll_after_ms?: number        // suggested poll interval
+  output: MakaronOutput[]
+}
+
+type MakaronOutput =
+  | { id: string; type: "text"; status: "completed"; content: string }
+  | { id: string; type: "image"; status: "completed"; url: string; snapshot_id: string }
+  | { id: string; type: "design"; status: "completed"; url: string; width: number; height: number; animated: boolean; duration?: number }
+  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
+  | { id: string; type: "music"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
+```
+
+## Polling Rules
+
+1. Poll while `incomplete: true` or `status` is `"in_progress"`
+2. Use `next_poll_after_ms` as interval (default 5000ms)
+3. Stop when `status` is `"completed"`, `"failed"`, or `"aborted"`
+4. Top-level `status: "completed"` means ALL artifacts are ready (including rendered videos)
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (completed) or valid in-progress response |
+| 1 | Failed, aborted, or HTTP error |
+| 2 | Timeout (partial response still printed to stdout) |
+
+## What Makaron Agent Can Do
+
+| Task | Example prompt |
+|------|---------------|
+| Edit photo | "make it cinematic with warm tones" |
 | Style transfer | "convert to oil painting style" |
-| Add elements | "add a cat sitting on the table" |
-| Remove elements | "remove the person in the background" |
-| Text-to-image | "generate a cyberpunk cityscape" (on empty project) |
-| Video from image | "create a 5 second video" |
-| Video with script | "make a video: camera slowly zooms in while leaves fall" |
+| Add/remove elements | "add a cat on the table" / "remove background person" |
+| Text-to-image | "generate a cyberpunk cityscape" |
+| Video from image | "create a 5 second video of her walking" |
+| Video with model | "用seedance模型做5秒视频" |
 | Background music | "add calm piano music" |
-| Design/motion graphics | "create an Instagram story with animated text" |
+| Motion design | "create an Instagram story with animated text" |
+| Multi-step | "edit the photo then make a video from it" |
 
-### Output parsing
+## Recommended Pattern: Service Flow (Feishu/OpenClaw/Group Chat)
 
-- **stdout** = Agent's text response (markdown)
-- **stderr** = progress, tool calls, result URLs
-- Key patterns in stderr:
-  - `🖼️  Image: <url>` — generated/edited image URL
-  - `🎬 Video done (<seconds>s): <url>` — completed video URL
-  - `🎵 Music done (<seconds>s): <url>` — completed music URL
-  - `🎨 Design published: <description>` — motion graphic/design created
-  - `🔗  <url>` — project web URL (always last)
+When serving end-users in a chat environment (Feishu, Slack, Discord), use this proactive message pattern:
 
-### Environment variables
+```bash
+# 1. Immediately reply to user: "收到，开始做"
+send_message "收到！正在为你制作..."
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `MAKARON_API_KEY` | API key (`mk_live_xxx`) | — |
-| `MAKARON_URL` | API endpoint override | `https://www.makaron.app` |
+# 2. Create project + submit (one command)
+RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video")
 
-## Viewing results
+# 3. Send project link proactively
+PROJECT_URL=$(npx makaron-cli responses get $RUN_ID --pick project_url)
+send_message "项目已创建：$PROJECT_URL"
 
-All generated content (images, videos, designs) is saved to the project and visible at:
+# 4. Watch and send each artifact as it appears
+npx makaron-cli responses watch $RUN_ID --jsonl | while read -r line; do
+  EVENT=$(echo "$line" | jq -r '.event')
+  TYPE=$(echo "$line" | jq -r '.item.type // empty')
+  URL=$(echo "$line" | jq -r '.item.url // empty')
+  STATUS=$(echo "$line" | jq -r '.item.status // empty')
 
+  if [ "$EVENT" = "output.added" ] && [ "$TYPE" = "image" ]; then
+    # Send image immediately as media (not just link)
+    send_image "$URL"
+  elif [ "$EVENT" = "output.updated" ] && [ "$TYPE" = "video" ] && [ "$STATUS" = "completed" ]; then
+    # Video ready — send as media
+    send_video "$URL"
+  elif [ "$EVENT" = "done" ]; then
+    send_message "全部完成 ✨"
+  fi
+done
 ```
-https://www.makaron.app/projects/<project-id>
-```
 
-Open this URL in a browser to see the timeline of all edits, play videos, and download assets.
+**Key principles for service agents:**
+- **Proactive, not reactive**: Don't wait for the full run to finish. Send progress messages and artifacts as they appear.
+- **Media over links**: When possible, send images/videos as native media in the chat (download URL and upload as attachment), not just paste the URL.
+- **Immediate acknowledgment**: Reply "收到" within 1 second of receiving user request. Don't make users wait for project creation.
+- **Project link early**: Send the project URL right after creation so users can check anytime.
+- **Stream artifacts**: Use `watch --jsonl` to push each artifact the moment it's ready. An image at 15s should reach the user at 15s, not after the video finishes at 5 minutes.
+
+## Important Notes
+
+- One project = one conversation thread. All history is preserved.
+- One run at a time per project. New message interrupts previous run.
+- Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
+- Videos take 2-5 minutes to render. Use `watch` to get URL when ready.
+- Music takes ~60 seconds. Appears in output when done.
+- Images are typically ready in 15-30 seconds.
+- stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.
+- Always use `chat` as the primary interface — even for single image edits.
+- `edit`/`video`/`music` are fallback tools for when `chat` is unavailable or you need raw model access without project context.
 
 ## Admin: Skill Marketplace Operations
 
@@ -202,7 +259,7 @@ npx makaron-cli admin upload cover.jpg marketplace/covers/skill-name.jpg
 npx makaron-cli admin upload before.jpg marketplace/before/before-name.jpg
 
 # Upload skill zip
-npx makaron-cli admin upload skill.zip marketplace/skills/skill-name.zip
+npx makaron-cli admin upload skill-name.zip marketplace/skills/skill-name.zip
 ```
 
 Storage paths follow this convention:

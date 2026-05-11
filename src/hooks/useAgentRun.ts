@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, type RefObject } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
 import type { AgentStreamCallbacks } from '@/lib/agentStream'
@@ -29,6 +29,8 @@ export interface AgentRunRow {
 interface UseAgentRunOptions {
   projectId: string
   enabled: boolean
+  skipRunIdRef?: RefObject<string | null>
+  isActiveRef?: RefObject<boolean>
 }
 
 interface UseAgentRunReturn {
@@ -53,7 +55,7 @@ interface UseAgentRunReturn {
  * 3. reconnect() replays historical events then subscribes to Realtime for new ones
  * 4. When run completes (status change), automatically unsubscribes
  */
-export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgentRunReturn {
+export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: UseAgentRunOptions): UseAgentRunReturn {
   const supabaseRef = useRef<SupabaseClient | null>(null)
   const channelsRef = useRef<RealtimeChannel[]>([])
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
@@ -67,46 +69,33 @@ export function useAgentRun({ projectId, enabled }: UseAgentRunOptions): UseAgen
     return supabaseRef.current
   }
 
-  // Check for still-running agent runs on mount
-  // Completed runs don't need reconnect — DualWriter already wrote to snapshots/messages tables,
-  // so loadProject() will have the complete data.
+  // Persistent watcher: polls /api/agent/poll to detect running agent runs
   useEffect(() => {
     if (!enabled || !projectId) return
+    if (activeRunId) return
 
-    const checkActiveRun = async () => {
-      const supabase = getSupabase()
+    const poll = async () => {
+      if (isActiveRef?.current) return
+      if (skipRunIdRef?.current) return
 
-      // Wait for auth session — RLS requires auth.uid()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+      try {
+        const res = await fetch(`/api/agent/poll?projectId=${projectId}`)
+        if (!res.ok) return
 
-      const { data: runningRun, error } = await supabase
-        .from('agent_runs')
-        .select('id, status, started_at, metadata')
-        .eq('project_id', projectId)
-        .eq('status', 'running')
-        .order('started_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+        const run = await res.json() as { id: string; started_at: string } | null
+        if (!run) return
+        if (run.id === skipRunIdRef?.current) return
+        if (Date.now() - new Date(run.started_at).getTime() > 800_000) return
 
-      if (error || !runningRun) return
-
-      // Check if run is stale (started >800s ago — matches Vercel maxDuration)
-      const startedAt = new Date(runningRun.started_at).getTime()
-      const staleThreshold = Date.now() - 800 * 1000
-      if (startedAt < staleThreshold) {
-        await supabase.from('agent_runs').update({
-          status: 'failed',
-          ended_at: new Date().toISOString(),
-        }).eq('id', runningRun.id)
-        return
-      }
-
-      setActiveRunId(runningRun.id)
+        setActiveRunId(run.id)
+      } catch { /* polling is best-effort */ }
     }
 
-    checkActiveRun()
-  }, [enabled, projectId])
+    poll()
+    const timer = setInterval(poll, 3000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, projectId, activeRunId])
 
   const disconnect = useCallback(() => {
     for (const ch of channelsRef.current) {

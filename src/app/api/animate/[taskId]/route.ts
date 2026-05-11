@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
 import { authenticateRequest } from '@/lib/api-auth'
+import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo } from '@/lib/supabase/storage'
@@ -14,7 +15,6 @@ export async function GET(
   try {
     const authResult = await authenticateRequest(req)
     if ('error' in authResult) return authResult.error
-    const { userId, supabase } = authResult.auth
 
     const { taskId } = await params
 
@@ -43,16 +43,17 @@ export async function GET(
       result = await getKlingTask(taskId)
     }
 
-    // If completed, update DB
+    // If completed, update DB (use admin client to bypass RLS)
     if (result.status === 'completed' && result.videoUrl) {
-      // Get animation record for project info
-      const { data: anim } = await supabase
+      const admin = getSupabaseAdmin()
+
+      const { data: anim } = await admin
         .from('project_animations')
         .select('id, project_id, projects(user_id)')
         .eq('piapi_task_id', taskId)
         .single()
 
-      await supabase
+      await admin
         .from('project_animations')
         .update({ status: 'completed', video_url: result.videoUrl })
         .eq('piapi_task_id', taskId)
@@ -65,7 +66,7 @@ export async function GET(
         const videoUrl = result.videoUrl
         const animId = anim.id
         const projectId = anim.project_id
-        const userId = ownerUserId as string
+        const ownerId = ownerUserId as string
         after(async () => {
           try {
             const res = await fetch(videoUrl)
@@ -74,9 +75,10 @@ export async function GET(
               return
             }
             const buffer = new Uint8Array(await res.arrayBuffer())
-            const permanentUrl = await uploadVideo(supabase, userId, projectId, animId, buffer)
+            const adminClient = getSupabaseAdmin()
+            const permanentUrl = await uploadVideo(adminClient, ownerId, projectId, animId, buffer)
             if (permanentUrl) {
-              await supabase
+              await adminClient
                 .from('project_animations')
                 .update({ video_url: permanentUrl })
                 .eq('id', animId)
@@ -88,7 +90,8 @@ export async function GET(
         })
       }
     } else if (result.status === 'failed') {
-      await supabase
+      const admin = getSupabaseAdmin()
+      await admin
         .from('project_animations')
         .update({ status: 'failed' })
         .eq('piapi_task_id', taskId)
@@ -108,10 +111,10 @@ export async function DELETE(
   try {
     const authResult = await authenticateRequest(req)
     if ('error' in authResult) return authResult.error
-    const { supabase } = authResult.auth
 
     const { taskId } = await params
-    await supabase
+    const admin = getSupabaseAdmin()
+    await admin
       .from('project_animations')
       .update({ status: 'abandoned' })
       .eq('piapi_task_id', taskId)

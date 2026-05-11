@@ -13,7 +13,7 @@ import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
 import { createProject } from '@/lib/createProject'
 import RollingTagline from '@/components/RollingTagline'
-import Changelog from '@/components/Changelog'
+import TopBar from '@/components/TopBar'
 
 interface ProjectWithSnapshots {
   id: string
@@ -54,13 +54,11 @@ export default function ProjectsPage() {
 }
 
 function ProjectsPageInner() {
-  const { user, loading: authLoading, signOut } = useAuth()
-  const { t, locale, setLocale } = useLocale()
+  const { user, loading: authLoading } = useAuth()
+  const { t, locale } = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const userMenuRef = useRef<HTMLDivElement>(null)
   // Phase 1: Synchronous memory cache — same-session instant render
   const [projects, setProjects] = useState<ProjectWithSnapshots[]>(() => {
     if (typeof window === 'undefined') return []
@@ -81,7 +79,6 @@ function ProjectsPageInner() {
   const [inputText, setInputText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
-  const [showChangelog, setShowChangelog] = useState(false)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
   const [skillsExpanded, setSkillsExpanded] = useState(false)
@@ -144,18 +141,6 @@ function ProjectsPageInner() {
       window.history.replaceState({}, '', '/projects')
     }
   }, [searchParams, availableSkills])
-
-  // Close user menu on click outside
-  useEffect(() => {
-    if (!userMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [userMenuOpen])
 
   const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
   const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
@@ -616,138 +601,7 @@ function ProjectsPageInner() {
           }}
         />
 
-        {/* Top bar: language toggle (left) + sign out (right) */}
-        <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button
-              onClick={() => router.push('/home')}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.45)',
-                display: 'flex', alignItems: 'center', gap: 5,
-                transition: 'color 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-              {locale === 'zh' ? '探索' : 'Explore'}
-            </button>
-            <button
-              onClick={() => setShowChangelog(true)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.45)',
-                transition: 'color 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-            >
-              {locale === 'zh' ? '更新日志' : "What's new"}
-            </button>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {creditBalance !== null && (
-              <Link
-                href="/dashboard"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '4px 10px', borderRadius: 8,
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  textDecoration: 'none',
-                  transition: 'all 0.2s',
-                  cursor: 'pointer',
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={creditBalance < 20 ? '#fbbf24' : '#e879f9'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                </svg>
-                <span style={{
-                  fontSize: '0.7rem', fontWeight: 600,
-                  color: creditBalance < 20 ? '#fbbf24' : 'rgba(255,255,255,0.5)',
-                }}>
-                  {creditBalance.toLocaleString()}
-                </span>
-              </Link>
-            )}
-            <div ref={userMenuRef} style={{ position: 'relative' }}>
-              <button
-                onClick={() => setUserMenuOpen(v => !v)}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                  color: userMenuOpen ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.45)',
-                  transition: 'color 0.2s',
-                  display: 'flex', alignItems: 'center', gap: 4,
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-                onMouseLeave={(e) => { if (!userMenuOpen) e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: userMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </button>
-              {userMenuOpen && (
-                <div style={{
-                  position: 'absolute', top: '100%', right: 0, marginTop: 8,
-                  background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 12, padding: '4px 0', minWidth: 140,
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
-                }}>
-                  <button
-                    onClick={() => { setUserMenuOpen(false); router.push('/skills') }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '10px 16px', background: 'none', border: 'none',
-                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
-                      cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    Skills
-                  </button>
-                  <button
-                    onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '10px 16px', background: 'none', border: 'none',
-                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
-                      cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    {locale === 'zh' ? 'English' : '中文'}
-                  </button>
-                  <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
-                  <button
-                    onClick={() => { setUserMenuOpen(false); signOut() }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '10px 16px', background: 'none', border: 'none',
-                      color: 'rgba(255,255,255,0.45)', fontSize: '0.75rem',
-                      cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <TopBar page="projects" />
 
         {/* ═══════════════════════════════
             HERO — ~45dvh, fully centered
@@ -1418,7 +1272,6 @@ function ProjectsPageInner() {
           </div>
         </div>
       )}
-      {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
 
       {/* Welcome credits popup */}
       {showWelcome && creditBalance !== null && creditBalance > 0 && (

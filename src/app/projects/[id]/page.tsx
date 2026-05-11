@@ -20,6 +20,10 @@ export default function ProjectPage() {
   const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle, saveDesignProps } =
     useProject(projectId, user?.id ?? '')
 
+  // Project visibility state
+  const [projectOwnerId, setProjectOwnerId] = useState<string | null>(null)
+  const [isPublicProject, setIsPublicProject] = useState<boolean | null>(null)
+
   // Sync cache for instant render (snapshots + messages from IDB/memory)
   const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
@@ -86,11 +90,42 @@ export default function ProjectPage() {
   })
   const shownRef = useRef(loaded)
 
+  // Check project visibility (works for both authenticated and unauthenticated users)
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.replace('/login')
+    if (authLoading) return
+    const supabase = createClient()
+    supabase
+      .from('projects')
+      .select('user_id, is_public')
+      .eq('id', projectId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setProjectOwnerId(data.user_id)
+          setIsPublicProject(data.is_public)
+        } else {
+          // Not found or not accessible (private + not owner)
+          if (!user) {
+            sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
+            router.replace('/login')
+          } else {
+            router.replace('/projects')
+          }
+        }
+      })
+  }, [projectId, authLoading, user, router])
+
+  // Redirect if project is private and user is not the owner
+  useEffect(() => {
+    if (authLoading || isPublicProject === null) return
+    if (!isPublicProject && (!user || user.id !== projectOwnerId)) {
+      if (!user) sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
+      router.replace(user ? '/projects' : '/login')
     }
-  }, [user, authLoading, router])
+  }, [authLoading, isPublicProject, user, projectOwnerId, router])
+
+  const isOwner = user?.id === projectOwnerId
+  const readOnly = !isOwner
 
   // Helper: patch missing images from IndexedDB image cache
   async function patchFromImageCache(snapshots: Snapshot[]): Promise<Snapshot[]> {
@@ -115,10 +150,6 @@ export default function ProjectPage() {
     }))
   }
 
-  // DISABLED: Effect 1 (cache) — always wait for Supabase to ensure data consistency
-  // TODO: Re-enable with proper cache invalidation when background agent is active
-  // useEffect(() => {
-  //   if (pendingImages) return
   // Effect 1: Load from IDB cache (no auth needed, fast)
   useEffect(() => {
     if (pendingImages || shownRef.current) return
@@ -138,18 +169,22 @@ export default function ProjectPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  // Effect 2: Fetch from Supabase via loadProject (existing projects only)
+  // Effect 2: Fetch from Supabase via loadProject
+  // For owner: needs userId. For public projects: anon client can read via RLS.
   const userId = user?.id
   useEffect(() => {
-    if (!userId || !projectId) return
-    if (isNewProject) return // new project — nothing to load
-    let cancelled = false
+    if (!projectId) return
+    if (isNewProject) return
+    // Wait until we know visibility; for owners wait for userId
+    if (isPublicProject === null) return
+    if (!isPublicProject && !userId) return
 
+    let cancelled = false
     const pageT0 = performance.now()
     loadProject().then(async ({ snapshots, messages, title, animations, timelineVersion: tv }) => {
       console.log(`⏱️ [page] loadProject done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
-      cacheProjectData(projectId, snapshots, messages, title)
+      if (userId) cacheProjectData(projectId, snapshots, messages, title)
       setTimelineVersion(tv)
 
       if (animations.length > 0) {
@@ -191,7 +226,7 @@ export default function ProjectPage() {
       setInitialTitle(title)
       setLoaded(true)
 
-      if (snapshots.length > 0 && snapshots[0].imageUrl) {
+      if (userId && snapshots.length > 0 && snapshots[0].imageUrl) {
         updateCover(snapshots[0].imageUrl)
       }
     }).catch((err: unknown) => {
@@ -206,7 +241,7 @@ export default function ProjectPage() {
     })
 
     return () => { cancelled = true }
-  }, [userId, projectId, loadProject, updateCover])
+  }, [userId, projectId, loadProject, updateCover, isPublicProject])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
     saveSnapshot(snapshot, sortOrder, onUploaded)
@@ -249,23 +284,24 @@ export default function ProjectPage() {
       projectId={projectId}
       initialSnapshots={initialSnapshots ?? []}
       initialMessages={initialMessages ?? []}
-      pendingImages={pendingImages ?? undefined}
-      pendingVideos={pendingVideos ?? undefined}
-      pendingMetadata={pendingMetadata}
-      pendingPrompt={pendingPrompt ?? undefined}
-      pendingSkill={pendingSkill ?? undefined}
-      onSaveSnapshot={handleSaveSnapshot}
-      onSaveMessage={handleSaveMessage}
-      onUpdateTips={handleUpdateTips}
-      onUpdateDescription={updateDescription}
-      onSaveDesignProps={saveDesignProps}
+      pendingImages={!readOnly ? (pendingImages ?? undefined) : undefined}
+      pendingVideos={!readOnly ? (pendingVideos ?? undefined) : undefined}
+      pendingMetadata={!readOnly ? pendingMetadata : undefined}
+      pendingPrompt={!readOnly ? (pendingPrompt ?? undefined) : undefined}
+      pendingSkill={!readOnly ? (pendingSkill ?? undefined) : undefined}
+      onSaveSnapshot={!readOnly ? handleSaveSnapshot : undefined}
+      onSaveMessage={!readOnly ? handleSaveMessage : undefined}
+      onUpdateTips={!readOnly ? handleUpdateTips : undefined}
+      onUpdateDescription={!readOnly ? updateDescription : undefined}
+      onSaveDesignProps={!readOnly ? saveDesignProps : undefined}
       initialTitle={initialTitle}
-      onRenameProject={updateTitle}
-      onBack={() => { if (navigatingRef.current) return; navigatingRef.current = true; router.push('/projects'); }}
-      onNewProject={handleNewProject}
+      onRenameProject={!readOnly ? updateTitle : undefined}
+      onBack={() => { if (navigatingRef.current) return; navigatingRef.current = true; router.push(user ? '/projects' : '/home'); }}
+      onNewProject={!readOnly ? handleNewProject : undefined}
       initialAnimations={initialAnimations}
       timelineVersion={timelineVersion}
       initialMusicTaskId={initialMusicTaskId}
+      readOnly={readOnly}
     />
     </div>
   )

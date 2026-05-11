@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
@@ -9,6 +10,7 @@ import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import CreditPopup from '@/components/CreditPopup';
+import ShareButton from '@/components/ShareButton';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
@@ -16,21 +18,10 @@ import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
-// Semaphore to limit concurrent /api/tips requests across all snapshots.
-// Single image: 4 categories run in parallel (fine). Multi-image: 10 images × 4 = 40 concurrent → rate limit risk.
-// With maxConcurrent=4, multi-image tips are effectively serialized per snapshot.
-const _tipsQueue: Array<() => void> = [];
-let _tipsRunning = 0;
-const TIPS_MAX_CONCURRENT = 20;
-function acquireTipsSlot(): Promise<void> {
-  if (_tipsRunning < TIPS_MAX_CONCURRENT) { _tipsRunning++; return Promise.resolve(); }
-  return new Promise(resolve => _tipsQueue.push(resolve));
-}
-function releaseTipsSlot() {
-  _tipsRunning--;
-  const next = _tipsQueue.shift();
-  if (next) { _tipsRunning++; next(); }
-}
+import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
+import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare } from '@/lib/editor/timeline-derivations';
+import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
+import { downloadAsset } from '@/lib/editor/download';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
@@ -40,6 +31,7 @@ import DesignEditPanel from '@/components/DesignEditPanel';
 import DesignTextEditor from '@/components/DesignTextEditor';
 import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
+import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
 import { containRect, coverRect } from '@/lib/image/geometry';
 import { extractPhotoMetadata } from '@/lib/image/metadata';
@@ -49,44 +41,7 @@ import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 
-export interface AnimationState {
-  imageUrls: string[]
-  prompt: string
-  userHint: string
-  taskId: string | null
-  videoUrl: string | null
-  status: 'idle' | 'generating_prompt' | 'ready' | 'submitting' | 'polling' | 'done' | 'error'
-  error: string | null
-  duration: number | null  // null = smart mode (API decides 3-15s)
-  pollSeconds: number
-  videoModel: 'kling' | 'seedance'
-}
-
-function generateId() {
-  return Date.now().toString() + Math.random().toString(36).slice(2);
-}
-
-/** Map a timeline index to the corresponding snapshot index.
- *  Returns null when the timeline index points at the virtual draft entry. */
-function snapFromTimeline(timelineIdx: number, draftParentIdx: number | null): number | null {
-  if (draftParentIdx === null) return timelineIdx;
-  if (timelineIdx === draftParentIdx + 1) return null; // draft slot
-  if (timelineIdx <= draftParentIdx) return timelineIdx;
-  return timelineIdx - 1; // shift back past the draft slot
-}
-
-/** Map a snapshot index to its timeline index (accounting for draft slot). */
-function timelineFromSnap(snapIdx: number, draftParentIdx: number | null): number {
-  if (draftParentIdx === null || snapIdx <= draftParentIdx) return snapIdx;
-  return snapIdx + 1;
-}
-
-// t('editor.greeting') is now locale-aware via t('editor.greeting') in the component
-
-/** Get best image representation for API calls: URL if available (tiny payload), else raw image (base64) */
-function getImageForApi(snapshot: Snapshot | undefined): string {
-  return snapshot?.imageUrl || snapshot?.image || '';
-}
+export type { AnimationState } from '@/lib/editor/types';
 
 
 interface EditorProps {
@@ -111,6 +66,7 @@ interface EditorProps {
   initialAnimations?: ProjectAnimation[];
   initialMusicTaskId?: string | null;
   timelineVersion?: number;
+  readOnly?: boolean;
 }
 
 export default function Editor({
@@ -135,11 +91,20 @@ export default function Editor({
   initialAnimations,
   initialMusicTaskId,
   timelineVersion = 1,
+  readOnly,
 }: EditorProps = {}) {
   // Merge legacy single + new multi into one array
   const pendingImages = pendingImagesProp ?? (pendingImage ? [pendingImage] : undefined);
   const isDesktop = useIsDesktop();
   const { t, locale } = useLocale();
+  const router = useRouter();
+
+  const gateInteraction = useCallback(() => {
+    if (!readOnly) return false;
+    sessionStorage.setItem('mkr_return_url', window.location.pathname);
+    router.push('/login');
+    return true;
+  }, [readOnly, router]);
   const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
@@ -250,16 +215,7 @@ export default function Editor({
   const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
   // Mobile keyboard offset for text editor panel
-  const [editorKbInset, setEditorKbInset] = useState(0);
-  useEffect(() => {
-    if (isDesktop || !editingDesignFieldId) { setEditorKbInset(0); return; }
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => setEditorKbInset(Math.round(Math.max(0, window.innerHeight - vv.height - vv.offsetTop)));
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
-  }, [isDesktop, editingDesignFieldId]);
+  const editorKbInset = useVisualViewportInset(!isDesktop && Boolean(editingDesignFieldId));
   const [visibleEditableIds, _setVisibleEditableIds] = useState<string[]>([]);
   const handleVisibleEditableFields = useCallback((ids: string[]) => {
     _setVisibleEditableIds(prev => {
@@ -294,6 +250,7 @@ export default function Editor({
   const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
+  const isAgentActiveRef = useRef(false);
 
   // Sync state when initialSnapshots/Messages props change (Supabase fetch or cache)
   useEffect(() => {
@@ -342,6 +299,8 @@ export default function Editor({
   const { activeRunId, isReconnecting, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
     projectId: projectId ?? '',
     enabled: !!projectId && (initialSnapshots?.length ?? 0) > 0,
+    skipRunIdRef: agentRunIdRef,
+    isActiveRef: isAgentActiveRef,
   });
 
   // ── Hero animation (GUI ↔ CUI transition) ───────────────────────
@@ -350,20 +309,6 @@ export default function Editor({
   const lastImageAR = useRef(1); // cached image aspect ratio for CUI→GUI direction
   const cuiInputBarH = useRef(96); // cached CUI input bar height for PiP target position
   const HERO_DURATION = 380;
-  interface HeroAnim {
-    src: string;
-    // Container rect (overflow:hidden clip)
-    fromRect: { l: number; t: number; w: number; h: number };
-    toRect:   { l: number; t: number; w: number; h: number };
-    // Img absolute rect within container (simulates contain/cover).
-    // Unused when objectCover=true (img fills container with object-cover instead).
-    fromImg:  { l: number; t: number; w: number; h: number };
-    toImg:    { l: number; t: number; w: number; h: number };
-    fromRadius: string;
-    toRadius: string;
-    active: boolean;
-    objectCover?: boolean; // when true, img uses w-full h-full object-cover (no img animation)
-  }
   const [heroAnim, setHeroAnim] = useState<HeroAnim | null>(null);
   // ────────────────────────────────────────────────────────────────
 
@@ -387,7 +332,6 @@ export default function Editor({
   draftParentIndexRef.current = draftParentIndex;
   const previewingTipIndexRef = useRef(previewingTipIndex);
   previewingTipIndexRef.current = previewingTipIndex;
-  const isAgentActiveRef = useRef(isAgentActive);
   useEffect(() => { isAgentActiveRef.current = isAgentActive; }, [isAgentActive]);
   const activeSkillRef = useRef(pendingSkill);
   useEffect(() => { activeSkillRef.current = pendingSkill; }, [pendingSkill]);
@@ -469,27 +413,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // v2: video snapshots are already in snapshots array, no sentinel needed
   const isV2 = timelineVersion >= 2;
   const hasAnyAnimation = animations.length > 0;
-  const timeline = useMemo(() => {
-    const base = snapshots.map((s, i) => {
-      // base64 from IndexedDB cache — use directly, no network cost
-      if (s.image && !s.image.startsWith('http')) return s.image;
-      // URL (first load from DB, or imageUrl fallback)
-      const url = s.image || s.imageUrl || '';
-      if (!url) return '';
-      // Current snapshot and neighbors: high-quality WebP (PNG→WebP, no visible downscale).
-      // Distant snapshots: lightweight thumbnail (user not viewing).
-      if (Math.abs(i - viewIndex) <= 1) return getOptimizedUrl(url);
-      return getThumbnailUrl(url, 800, 75);
-    });
-    if (draftImage !== null && draftParentIndex !== null) {
-      base.splice(draftParentIndex + 1, 0, draftImage);
-    }
-    // v1 only: append video sentinel
-    if (!isV2 && hasAnyAnimation) {
-      base.push('__VIDEO__');
-    }
-    return base;
-  }, [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex, isV2]);
+  const timeline = useMemo(() => buildImageTimeline({
+    snapshots,
+    draftImage,
+    draftParentIndex,
+    hasAnyAnimation: !isV2 && hasAnyAnimation, // v2: no sentinel, videos are in snapshots array
+    viewIndex,
+  }), [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex, isV2]);
 
   const referenceCount = useMemo(() =>
     snapshots.filter(s => s.type === 'reference').length,
@@ -512,33 +442,14 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Map timeline index → DesignPayload for animated designs (rendered via Player)
   // All design snapshots (still + animated) render via Player in ImageCanvas
   // Map timeline index → design payload (accounts for virtual draft insertion)
-  const designsMap = useMemo(() => {
-    const map = new Map<number, import('@/types').DesignPayload>();
-    const hasDraft = draftParentIndex !== null;
-    snapshots.forEach((s, i) => {
-      if (!s.design) return;
-      // When draft is active, snapshots after draftParentIndex shift +1 in timeline
-      const timelineIdx = hasDraft && i > draftParentIndex! ? i + 1 : i;
-      map.set(timelineIdx, s.design);
-    });
-    return map;
-  }, [snapshots, draftParentIndex]);
+  const designsMap = useMemo(() => buildDesignsMap(snapshots, draftParentIndex), [snapshots, draftParentIndex]);
 
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
-    [viewIndex - 2, viewIndex - 1, viewIndex + 1, viewIndex + 2]
-      .filter(i => i >= 0 && i < snapshots.length)
-      .forEach(i => {
-        const s = snapshots[i];
-        if (!s) return;
-        // Already base64 cached — no preload needed
-        if (s.image && !s.image.startsWith('http')) return;
-        const url = s.imageUrl || s.image;
-        if (url) {
-          const img = new Image();
-          img.src = getOptimizedUrl(url);
-        }
-      });
+    getNearbyOptimizedPreloadUrls(snapshots, viewIndex).forEach(url => {
+      const img = new Image();
+      img.src = url;
+    });
   }, [viewIndex, snapshots]);
 
   // Video entry detection
@@ -1744,43 +1655,54 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [agentDisconnect]);
 
   // ── Reconnect to active background agent run ──
-  // Uses the same makeAgentCallbacks factory as the SSE path — identical CUI building logic.
+  // Mount-time detection: use standard reconnect flow (replay + realtime).
+  // Live detection (CLI triggers run while page already loaded): reload page so
+  // the mount-time reconnect handles it identically to a manual refresh.
+  const mountReconnectHandledRef = useRef(false);
   useEffect(() => {
     if (!activeRunId || isAgentActive) return;
-    setIsAgentActive(true);
-    setAgentStatus(t('editor.reconnecting'));
 
-    const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
-      projectId: projectId ?? '',
-      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
-      setDesignDraftParent: (idx) => {
-        if (idx !== null) {
-          setActiveDraftType('design');
-          setPreviewingTipIndex(null);
-          setDraftParentIndex(idx);
-          setViewIndex(idx + 1);
-        } else {
-          setActiveDraftType(null);
-          setDraftParentIndex(null);
-        }
-      },
-      setPendingNotification, setSelectedVideoId, setAnimationState,
-      snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
-      pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
-      agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
-      pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
-      draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
-      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
-      triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
-      t,
-      onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
-      onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
-      hasBackgroundTaskRef,
-    });
+    if (!mountReconnectHandledRef.current) {
+      // First detection after mount — use standard reconnect
+      mountReconnectHandledRef.current = true;
+      setIsAgentActive(true);
+      setAgentStatus(t('editor.reconnecting'));
 
-    agentReconnect(reconnectCallbacks);
+      const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
+        projectId: projectId ?? '',
+        setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+        setDesignDraftParent: (idx) => {
+          if (idx !== null) {
+            setActiveDraftType('design');
+            setPreviewingTipIndex(null);
+            setDraftParentIndex(idx);
+            setViewIndex(idx + 1);
+          } else {
+            setActiveDraftType(null);
+            setDraftParentIndex(null);
+          }
+        },
+        setPendingNotification, setSelectedVideoId, setAnimationState,
+        snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
+        pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
+        agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
+        pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
+        draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
+        cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+        triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
+        t,
+        onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
+        onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
+        hasBackgroundTaskRef,
+      });
 
-    return () => { agentDisconnect(); };
+      agentReconnect(reconnectCallbacks);
+      return () => { agentDisconnect(); };
+    }
+
+    // Live detection — reload page for clean reconnect
+    // Delay slightly to ensure DualWriter has flushed user message to DB
+    setTimeout(() => window.location.reload(), 1500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRunId]);
 
@@ -1802,6 +1724,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // CUI send: if annotations exist, merge them; otherwise normal chat
   const handleCuiSend = async (text: string, imgs?: string[], videos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => {
+    if (gateInteraction()) return;
     if (annotationMode && annotationEntries.length > 0) {
       await sendWithAnnotations(text);
       return;
@@ -1972,6 +1895,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
+    if (gateInteraction()) return;
     if (draftParentIndex === null || previewingTipIndex === null) return;
 
     const parentTips = snapshots[draftParentIndex]?.tips ?? [];
@@ -2050,6 +1974,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   //   - Same tip while selected → handled by onTipDeselect (dismissDraft) in TipsBar
   //   - Commit → handled by onTipCommit (commitDraft) in TipsBar
   const handleTipInteraction = useCallback((tip: Tip, tipIndex: number) => {
+    if (gateInteraction()) return;
     const viewingDraft = draftParentIndex !== null && viewIndex === draftParentIndex + 1;
 
     // Safety net: same tip re-clicked while draft is visible (shouldn't happen with new UI)
@@ -2125,21 +2050,12 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
   // Previous image for long-press compare
   // Must match timeline precedence: prefer base64 from IndexedDB (instant) over URL (network fetch)
-  const previousImage = useMemo(() => {
-    let snap: typeof snapshots[number] | undefined;
-    if (isViewingDraft && draftParentIndex !== null) {
-      snap = snapshots[draftParentIndex];
-    } else {
-      const snapIdx = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
-      if (snapIdx > 0) snap = snapshots[snapIdx - 1];
-    }
-    if (!snap) return undefined;
-    // base64 from cache → use directly, no network cost (same logic as timeline)
-    if (snap.image && !snap.image.startsWith('http')) return snap.image;
-    const url = snap.image || snap.imageUrl || '';
-    if (!url) return undefined;
-    return getOptimizedUrl(url);
-  }, [isViewingDraft, draftParentIndex, snapshots, viewIndex]);
+  const previousImage = useMemo(() => getPreviousImageForCompare({
+    snapshots,
+    viewIndex,
+    draftParentIndex,
+    isViewingDraft,
+  }), [isViewingDraft, draftParentIndex, snapshots, viewIndex]);
 
   // Dismiss draft: remove virtual draft entry, return to parent
   const dismissDraft = useCallback(() => {
@@ -2778,169 +2694,21 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   }, []);
 
   const handleDownload = useCallback(async () => {
-    // Video download — proxy through our API to avoid CORS
-    if (isViewingVideo && currentVideo?.videoUrl) {
-      const videoSrc = currentVideo.videoUrl;
-      const filename = `makaron-video-${Date.now()}.mp4`;
-      setIsSaving(true);
-      try {
-        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}&download=1`;
-        const res = await fetch(proxyUrl);
-        const blob = await res.blob();
-        const file = new File([blob], filename, { type: 'video/mp4' });
-        // Try native share (iOS/Android) — check canShare first since large videos may be unsupported
-        if (navigator.share && navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
-          await navigator.share({ files: [file] });
-          setIsSaving(false);
-          showSaveToast();
-          return;
-        }
-        // Fallback: trigger download via blob URL (works on desktop + iOS when share fails)
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        link.click();
-        URL.revokeObjectURL(url);
-        setIsSaving(false);
-        showSaveToast();
-      } catch {
-        setIsSaving(false);
-        // Last resort: open video URL directly (iOS will show video player, user can long-press to save)
-        window.open(videoSrc, '_blank');
-      }
-      return;
-    }
-
-    // Animated design → export as MP4 via renderMediaOnWeb
-    const snapIdx = snapFromTimeline(viewIndex, draftParentIndexRef.current);
-    const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
-    if (currentSnap?.design?.animation) {
-      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-
-      // Mobile step 2: video already exported → share with fresh user gesture
-      if (isMobile && pendingVideoRef.current) {
-        const { blob, filename } = pendingVideoRef.current;
-        pendingVideoRef.current = null;
-        const file = new File([blob], filename, { type: 'video/mp4' });
-        try {
-          if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
-            await navigator.share({ files: [file] });
-            setAgentStatus(t('editor.done'));
-            showSaveToast();
-          } else {
-            // Fallback: open in new tab (iOS Safari ignores <a download> for blobs)
-            const url = URL.createObjectURL(blob);
-            window.open(url, '_blank');
-            setAgentStatus(t('editor.done'));
-            showSaveToast();
-            setTimeout(() => URL.revokeObjectURL(url), 120000);
-          }
-        } catch { /* user cancelled share sheet */ }
-        return;
-      }
-
-      setIsSaving(true);
-      // Pause Remotion Player during export to avoid competing for resources
-      document.dispatchEvent(new Event('music-play'));
-      try {
-        const { exportDesignVideo } = await import('@/components/RemotionRenderer');
-        const blob = await exportDesignVideo(currentSnap.design, (p) => {
-          setAgentStatus(`Exporting video... ${Math.round(p.progress * 100)}%`);
-        });
-
-        if (isMobile) {
-          const filename = `makaron-design-${Date.now()}.mp4`;
-          const file = new File([blob], filename, { type: 'video/mp4' });
-          if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
-            // Mobile + share available: store blob, prompt user to tap Share
-            pendingVideoRef.current = { blob, filename };
-            setIsSaving(false);
-            setAgentStatus(t('editor.videoReady'));
-          } else {
-            // Mobile but no share (localhost/HTTP): download directly
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 60000);
-            setIsSaving(false);
-            setAgentStatus(t('editor.done'));
-            showSaveToast();
-          }
-        } else {
-          // Desktop: download directly
-          const filename = `makaron-design-${Date.now()}.mp4`;
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filename;
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 60000);
-          setIsSaving(false);
-          setAgentStatus(t('editor.done'));
-          showSaveToast();
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error('MP4 export failed:', msg, e);
-        setIsSaving(false);
-        setAgentStatus(`Export failed: ${msg.slice(0, 100)}`);
-      }
-      return;
-    }
-
-    // Image download — for designs with editable transforms, re-capture poster to include drag/scale
-    const snapIdxForSave = snapFromTimeline(viewIndex, draftParentIndexRef.current);
-    const snapForSave = snapIdxForSave !== null ? snapshotsRef.current[snapIdxForSave] : undefined;
-    let img = timeline[viewIndex];
-    if (!img) return;
-    setIsSaving(true);
-
-    try {
-      // Re-capture poster for static designs (includes drag/scale transforms via HOC)
-      if (snapForSave?.design && !snapForSave.design.animation) {
-        try {
-          const { captureDesignPoster } = await import('@/components/RemotionRenderer');
-          const freshPoster = await captureDesignPoster(snapForSave.design);
-          if (freshPoster) img = freshPoster;
-        } catch (e) {
-          console.warn('Re-capture poster for save failed, using cached:', e);
-        }
-      }
-
-      const res = await fetch(img);
-      const blob = await res.blob();
-      const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg';
-      const slug = (initialTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
-      const idx = (snapIdxForSave ?? viewIndex) + 1;
-      const filename = `makaron-${slug}-${idx}.${ext}`;
-
-      if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
-        const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
-        await navigator.share({ files: [file] });
-        setIsSaving(false);
-        showSaveToast();
-        return;
-      }
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(url);
-      setIsSaving(false);
-      showSaveToast();
-    } catch {
-      setIsSaving(false);
-      const link = document.createElement('a');
-      link.href = img;
-      link.download = `ai-edited-${Date.now()}.jpg`;
-      link.click();
-    }
-  }, [timeline, viewIndex, isViewingVideo, currentVideo?.videoUrl, showSaveToast]);
+    await downloadAsset({
+      timeline,
+      viewIndex,
+      isViewingVideo,
+      currentVideoUrl: currentVideo?.videoUrl,
+      draftParentIndex: draftParentIndexRef.current,
+      snapshotsRef,
+      pendingVideoRef,
+      setIsSaving,
+      setAgentStatus,
+      showSaveToast,
+      t,
+      projectTitle: initialTitle,
+    });
+  }, [timeline, viewIndex, isViewingVideo, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
@@ -3231,6 +2999,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     onDropSkillFile: handleSkillUpload,
     onOpenCreditPopup: () => setCreditPopupOpen(true),
     projectId,
+    readOnly,
   };
 
   return (
@@ -3347,7 +3116,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 })()}
                 onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
                 textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
-                onAnimate={snapshots.length >= 1 ? () => {
+                onAnimate={!readOnly && snapshots.length >= 1 ? () => {
                   if (hasAnyAnimation) {
                     // Animations exist — navigate to video entry (shows result card)
                     setViewIndex(videoTimelineIndex);
@@ -3414,6 +3183,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       </svg>
                     </button>
                   )}
+                  {!readOnly && (
                   <button
                     onClick={() => newProjectFileInputRef.current?.click()}
                     className="text-white/80 hover:text-white p-2 cursor-pointer"
@@ -3422,8 +3192,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       <path d="M12 5v14M5 12h14" />
                     </svg>
                   </button>
+                  )}
                   {/* Annotation (paintbrush) toggle */}
-                  {!isViewingVideo && timeline.length > 0 && (
+                  {!readOnly && !isViewingVideo && timeline.length > 0 && (
                     <button
                       onClick={() => {
                         if (annotationMode) {
@@ -3445,7 +3216,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     </button>
                   )}
                   {/* Camera rotation toggle */}
-                  {!isViewingVideo && timeline.length > 0 && (
+                  {!readOnly && !isViewingVideo && timeline.length > 0 && (
                     <button
                       onClick={() => {
                         if (showCameraPanel) {
@@ -3487,6 +3258,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     <span className="text-[10px] text-red-400/60" title="Design engine failed to load">⚠</span>
                   )}
                   {snapshots.length > 0 && (
+                    <>
+                    <ShareButton projectId={projectId || ''} readOnly={readOnly} />
                     <button
                       onClick={handleDownload}
                       disabled={isSaving}
@@ -3506,6 +3279,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         </span>
                       ) : pendingVideoRef.current && /iPhone|iPad|Android/i.test(navigator.userAgent) ? t('editor.share') : 'Save'}
                     </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -3654,7 +3428,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                   snapshotCount={snapshots.length}
                   notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : pendingNotification}
                   onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : handleSeeNotification}
-                  onAnimate={snapshots.length >= 1 ? () => {
+                  onAnimate={!readOnly && snapshots.length >= 1 ? () => {
                     if (hasAnyAnimation) {
                       setViewIndex(videoTimelineIndex);
                       return;
@@ -4057,7 +3831,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       {/* Save success toast */}
       {saveToast && (
         <div
-          className="fixed top-16 left-1/2 -translate-x-1/2 z-[300] px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-sm text-white text-sm font-medium shadow-lg"
+          className="fixed top-20 left-1/2 -translate-x-1/2 z-[300] px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-sm text-white text-sm font-medium shadow-lg"
           style={{ animation: 'fadeInOut 2s ease both' }}
         >
           {t('misc.saveSuccess')}

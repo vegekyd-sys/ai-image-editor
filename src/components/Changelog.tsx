@@ -8,6 +8,43 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-05-11',
+    en: { title: 'CLI — Works with OpenClaw & Hermes', items: [
+      'CLI now fully compatible with OpenClaw & Hermes — external agents can create and edit projects with edit, video, and music commands',
+      'Real-time sync: projects created or edited via CLI appear instantly in the browser with live progress updates',
+      'Project sharing: every project has a public link — viewable without logging in',
+      'Privacy control: long-press the Share button to toggle public/private',
+    ]},
+    zh: { title: 'CLI — 完美适配 OpenClaw & Hermes', items: [
+      'CLI 完美适配 OpenClaw & Hermes — 外部 Agent 可创建和编辑项目，支持 edit、video、music 命令',
+      '实时同步：通过 CLI 创建或编辑的项目即时出现在浏览器中，进度实时更新',
+      '项目分享：每个项目都有公开链接 — 无需登录即可查看',
+      '隐私控制：长按 Share 按钮可切换项目公开/私密状态',
+    ]},
+  },
+  {
+    date: '2026-05-08',
+    en: { title: 'Storyboard Long Video — Live on Skill Marketplace', items: [
+      'Break the 15s limit with director-grade storyboards — generate 30-60s cinematic videos with consistent characters, scenes, and style',
+      'Powered by OpenAI Image 2 + SeeDance 2 — the two strongest models, with real human face support',
+    ]},
+    zh: { title: '分镜长视频 - 已上线 Skill 集市', items: [
+      '用导演级分镜图突破 15s 限制，生成 30-60s 电影级长视频，人物/场景/风格全程一致',
+      '基于 OpenAI Image 2 + SeeDance 2 两大最强模型，支持真人脸',
+    ]},
+  },
+  {
+    date: '2026-05-07',
+    en: { title: 'Open Registration', items: [
+      'Google sign-in: one tap to get started — no invite code needed',
+      'Open registration: anyone can sign up with email + verification code',
+    ]},
+    zh: { title: '开放注册', items: [
+      'Google 一键登录：无需邀请码，直接开始创作',
+      '开放注册：任何人都可以用邮箱 + 验证码注册',
+    ]},
+  },
+  {
     date: '2026-05-04',
     en: { title: 'SeeDance Real Human Faces', items: [
       'SeeDance now supports real human faces — generate videos with portrait photos, no more face detection blocks',

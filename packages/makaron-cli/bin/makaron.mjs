@@ -6,6 +6,8 @@
  *   npx makaron-cli login
  *   npx makaron-cli create --image photo.jpg
  *   npx makaron-cli chat --project <id> "make it look cinematic"
+ *   npx makaron-cli chat --project <id> -b "message"       # background, returns runId
+ *   npx makaron-cli responses get <runId> --wait            # poll until done
  *   npx makaron-cli list
  */
 
@@ -226,6 +228,211 @@ async function streamAgent(baseUrl, headers, projectId, prompt) {
   return { runId, results };
 }
 
+// ─── Run + Poll (non-blocking) ──────────────────────────────────────────────
+
+async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
+  const body = { projectId, prompt };
+  if (opts.preferredModel) body.preferredModel = opts.preferredModel;
+  if (opts.videoModel) body.videoModel = opts.videoModel;
+  if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
+  if (opts.isNsfw) body.isNsfw = opts.isNsfw;
+
+  const res = await fetch(`${baseUrl}/api/agent/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(`Error ${res.status}: ${text}`);
+    process.exit(1);
+  }
+
+  return await res.json();
+}
+
+async function pollRun(baseUrl, headers, runId, opts = {}) {
+  const { json = false, waitForArtifacts = false, background = false } = opts;
+  if (background) return;
+
+  let lastSeq = -1;
+  let printedText = '';
+  const start = Date.now();
+
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000));
+    const elapsed = Math.round((Date.now() - start) / 1000);
+
+    const params = new URLSearchParams({ events: 'true' });
+    if (lastSeq >= 0) params.set('after', String(lastSeq));
+    if (waitForArtifacts) params.set('wait_for_artifacts', 'true');
+
+    let data;
+    try {
+      const res = await fetch(`${baseUrl}/api/agent/run/${runId}?${params}`, { headers });
+      if (!res.ok) {
+        if (elapsed > 800) { process.stderr.write(`\n❌ Timeout after ${elapsed}s\n`); process.exit(1); }
+        continue;
+      }
+      data = await res.json();
+    } catch {
+      continue;
+    }
+
+    // Process incremental events
+    if (data.events?.length) {
+      for (const ev of data.events) {
+        if (ev.seq > lastSeq) lastSeq = ev.seq;
+        if (json) continue; // skip printing in json mode
+        switch (ev.type) {
+          case 'content': {
+            const newText = ev.data?.text || '';
+            process.stdout.write(newText);
+            printedText += newText;
+            break;
+          }
+          case 'status':
+            process.stderr.write(`\r⏳ ${ev.data?.text || ''}`);
+            break;
+          case 'tool_call':
+            process.stderr.write(`\n🔧 ${ev.data?.tool || ''}`);
+            if (ev.data?.input?.editPrompt) process.stderr.write(`\n   editPrompt: ${ev.data.input.editPrompt}`);
+            if (ev.data?.input?.model) process.stderr.write(`\n   model: ${ev.data.input.model}`);
+            if (ev.data?.input?.description) process.stderr.write(`: ${ev.data.input.description.substring(0, 80)}`);
+            process.stderr.write('\n');
+            break;
+          case 'image':
+            process.stderr.write(`\n🖼️  Image: ${ev.data?.imageUrl || '(uploading...)'}\n`);
+            break;
+          case 'render':
+            if (ev.data?.published) {
+              const desc = ev.data.animation
+                ? `${ev.data.animation.durationInSeconds}s video (${ev.data.width}x${ev.data.height})`
+                : `still design (${ev.data.width}x${ev.data.height})`;
+              process.stderr.write(`\n🎨 Design published: ${desc}\n`);
+            }
+            break;
+          case 'animation_task':
+            process.stderr.write(`\n🎬 Video submitted: ${ev.data?.taskId}\n`);
+            break;
+          case 'music_task':
+            process.stderr.write(`\n🎵 Music submitted: ${ev.data?.taskId}\n`);
+            break;
+          case 'error':
+            process.stderr.write(`\n❌ Error: ${ev.data?.message}\n`);
+            break;
+        }
+      }
+    } else if (!json) {
+      process.stderr.write(`\r⏳ Working... ${elapsed}s (${data.eventCount || 0} events)`);
+    }
+
+    // Check terminal status
+    if (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted') {
+      if (printedText && !json) process.stdout.write('\n');
+
+      if (json) {
+        // Structured JSON output — add projectUrl
+        data.projectUrl = `${APP_URL}/projects/${data.projectId}`;
+        console.log(JSON.stringify(data, null, 2));
+      } else {
+        process.stderr.write('\n━━━ Results ━━━\n');
+        if (data.result) {
+          for (const img of data.result.images || []) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
+          for (const d of data.result.designs || []) process.stderr.write(`🎨  Design (${d.width}x${d.height})\n`);
+          for (const v of data.result.videos || []) {
+            if (v.videoUrl) process.stderr.write(`🎬  Video: ${v.videoUrl}\n`);
+            else process.stderr.write(`🎬  Video ${v.taskId}: ${v.status || 'submitted'}\n`);
+          }
+          for (const m of data.result.music || []) {
+            if (m.audioUrl) process.stderr.write(`🎵  Music: ${m.audioUrl}\n`);
+            else process.stderr.write(`🎵  Music ${m.taskId}: ${m.status || 'submitted'}\n`);
+          }
+          if (data.result.error) process.stderr.write(`❌  ${data.result.error}\n`);
+        }
+        process.stderr.write(`🔗  ${APP_URL}/projects/${data.projectId}\n`);
+      }
+
+      if (data.status === 'failed') process.exit(1);
+      return data;
+    }
+  }
+}
+
+// ─── Pick Helper ────────────────────────────────────────────────────────────
+
+function applyPick(data, field) {
+  switch (field) {
+    case 'first_image_url': return data.output?.find(o => o.type === 'image')?.url || null;
+    case 'image_urls': return (data.output || []).filter(o => o.type === 'image' && o.url).map(o => o.url);
+    case 'first_video_url': return data.output?.find(o => o.type === 'video' && o.url)?.url || null;
+    case 'video_urls': return (data.output || []).filter(o => o.type === 'video' && o.url).map(o => o.url);
+    case 'first_design_url': return data.output?.find(o => o.type === 'design')?.url || null;
+    case 'design_urls': return (data.output || []).filter(o => o.type === 'design' && o.url).map(o => o.url);
+    case 'first_music_url': return data.output?.find(o => o.type === 'music' && o.url)?.url || null;
+    case 'music_urls': return (data.output || []).filter(o => o.type === 'music' && o.url).map(o => o.url);
+    case 'project_url': return data.project_url || null;
+    case 'output': return data.output || [];
+    case 'text': return data.output?.find(o => o.type === 'text')?.content || null;
+    case 'status': return data.status;
+    default: return data[field] !== undefined ? data[field] : null;
+  }
+}
+
+// ─── Watch (incremental event stream) ───────────────────────────────────────
+
+async function watchRun(baseUrl, headers, runId, opts = {}) {
+  const { interval = 5000, jsonl = true } = opts;
+  let lastOutput = [];
+  const start = Date.now();
+
+  while (true) {
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    let data;
+    try {
+      const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
+      if (!res.ok) {
+        if (elapsed > 800) { process.stderr.write(`Timeout after ${elapsed}s\n`); process.exit(2); }
+        await new Promise(r => setTimeout(r, interval));
+        continue;
+      }
+      data = await res.json();
+    } catch {
+      await new Promise(r => setTimeout(r, interval));
+      continue;
+    }
+
+    const currentOutput = data.output || [];
+
+    // Diff: find new or updated items
+    for (const item of currentOutput) {
+      const prev = lastOutput.find(o => o.id === item.id);
+      if (!prev) {
+        // New item
+        if (jsonl) console.log(JSON.stringify({ event: 'output.added', item }));
+        else process.stderr.write(`+ [${item.type}] ${item.url || item.content?.slice(0, 60) || item.status}\n`);
+      } else if (JSON.stringify(prev) !== JSON.stringify(item)) {
+        // Updated item (e.g. video status changed)
+        if (jsonl) console.log(JSON.stringify({ event: 'output.updated', item }));
+        else process.stderr.write(`~ [${item.type}] ${item.status} ${item.url || ''}\n`);
+      }
+    }
+
+    lastOutput = currentOutput;
+
+    // Check terminal status
+    if (!data.incomplete && (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted')) {
+      if (jsonl) console.log(JSON.stringify({ event: 'done', status: data.status }));
+      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
+      process.exit(0);
+    }
+
+    const waitMs = data.next_poll_after_ms || interval;
+    await new Promise(r => setTimeout(r, waitMs));
+  }
+}
+
 // ─── Async Task Polling ──────────────────────────────────────────────────────
 
 async function pollVideo(baseUrl, headers, taskId) {
@@ -337,6 +544,43 @@ function timeSince(date) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+// ─── MCP Tool Caller ─────────────────────────────────────────────────────────
+
+async function callMcpTool(baseUrl, headers, toolName, args) {
+  const res = await fetch(`${baseUrl}/api/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', ...headers },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: toolName, arguments: args } }),
+  });
+  if (!res.ok) { console.error(`MCP error ${res.status}:`, await res.text()); process.exit(1); }
+  const data = await res.json();
+  if (data.error) { console.error(`MCP error:`, data.error.message); process.exit(1); }
+  return data.result;
+}
+
+function imageToArg(imgPath) {
+  if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) return imgPath;
+  const buf = fs.readFileSync(imgPath);
+  const ext = imgPath.split('.').pop()?.toLowerCase();
+  const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[ext] || 'image/jpeg';
+  return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+function saveMcpImage(result, outputPath) {
+  const content = result?.content || [];
+  const textBlock = content.find(c => c.type === 'text');
+  const imageBlock = content.find(c => c.type === 'image');
+  if (textBlock) process.stderr.write(`${textBlock.text}\n`);
+  if (imageBlock) {
+    const out = outputPath || `makaron-output-${Date.now()}.jpg`;
+    fs.writeFileSync(out, Buffer.from(imageBlock.data, 'base64'));
+    console.log(out);
+    return out;
+  }
+  if (textBlock) console.log(textBlock.text);
+  return null;
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -364,16 +608,64 @@ if (command === 'login') {
   let projectId = null;
   const chatImages = [];
   const promptParts = [];
+  let useStream = false;
+  let background = false;
+  let jsonOutput = false;
+  let videoModel = undefined;
+  let preferredModel = undefined;
   for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
+    if (args[i] === '--help' || args[i] === '-h') {
+      console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--stream] [--background|-b] [--json] "your message"');
+      process.exit(0);
+    }
+    else if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
+    else if (args[i] === '--stream') useStream = true;
+    else if (args[i] === '--background' || args[i] === '-b') background = true;
+    else if (args[i] === '--json') jsonOutput = true;
+    else if (args[i] === '--video-model' && args[i + 1]) videoModel = args[++i];
+    else if (args[i] === '--model' && args[i + 1]) preferredModel = args[++i];
     else promptParts.push(args[i]);
   }
   const prompt = promptParts.join(' ');
-  if (!projectId || !prompt) {
-    console.error('Usage: makaron chat --project <id> [--image <file>] "your message"');
+  if (!prompt) {
+    console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--stream] [--background|-b] [--json] "your message"');
     process.exit(1);
   }
+  // --project auto: create a new project (with images if provided)
+  if (!projectId || projectId === 'auto') {
+    if (chatImages.length === 0) {
+      // Create empty project
+      process.stderr.write(`📦 Creating new project...\n`);
+      const res = await fetch(`${baseUrl}/api/projects/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ title: prompt.slice(0, 50) }),
+      });
+      if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
+      const data = await res.json();
+      projectId = data.projectId;
+      process.stderr.write(`📦 Project created: ${projectId}\n`);
+    } else {
+      // Create project with images
+      const base64s = chatImages.map(imgPath => {
+        process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
+        const buf = fs.readFileSync(imgPath);
+        return `data:image/jpeg;base64,${buf.toString('base64')}`;
+      });
+      const res = await fetch(`${baseUrl}/api/projects/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ imageBase64s: base64s }),
+      });
+      if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
+      const data = await res.json();
+      projectId = data.projectId;
+      process.stderr.write(`📦 Project created: ${projectId} (${data.snapshots?.length || 0} images)\n`);
+    }
+    chatImages.length = 0; // already uploaded
+  }
+  // Upload additional images to existing project
   if (chatImages.length > 0) {
     const base64s = chatImages.map(imgPath => {
       process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
@@ -392,13 +684,97 @@ if (command === 'login') {
       process.stderr.write(`⚠️ Failed to upload images: ${await res.text()}\n`);
     }
   }
-  const { results } = await streamAgent(baseUrl, headers, projectId, prompt);
-  process.stderr.write('\n━━━ Results ━━━\n');
-  for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
-  for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
-  process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
-  for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId);
-  for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
+
+  if (useStream) {
+    // Legacy SSE mode
+    const { results } = await streamAgent(baseUrl, headers, projectId, prompt);
+    process.stderr.write('\n━━━ Results ━━━\n');
+    for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
+    for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
+    process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
+    for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId);
+    for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
+  } else {
+    // Default: fire-and-forget + poll
+    const { runId } = await submitRun(baseUrl, headers, projectId, prompt, { videoModel, preferredModel });
+    if (background) {
+      // Just print runId and exit
+      if (jsonOutput) {
+        console.log(JSON.stringify({ runId, projectId, projectUrl: `${APP_URL}/projects/${projectId}`, status: 'running' }));
+      } else {
+        console.log(runId);
+      }
+    } else {
+      process.stderr.write(`🚀 Run started: ${runId}\n`);
+      await pollRun(baseUrl, headers, runId, { json: jsonOutput });
+    }
+  }
+} else if (command === 'responses' || command === 'run') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+
+  if (sub === 'get') {
+    const runId = args[2];
+    if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]'); process.exit(1); }
+    let wait = false, jsonOutput = false, pick = null;
+    for (let i = 3; i < args.length; i++) {
+      if (args[i] === '--wait') wait = true;
+      if (args[i] === '--json') jsonOutput = true;
+      if (args[i] === '--pick' && args[i + 1]) pick = args[++i];
+    }
+
+    if (wait) {
+      await pollRun(baseUrl, headers, runId, { json: true });
+    } else {
+      const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
+      if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
+      const data = await res.json();
+      if (pick) {
+        const picked = applyPick(data, pick);
+        if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
+      } else {
+        console.log(JSON.stringify(data, null, 2));
+      }
+      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
+    }
+
+  } else if (sub === 'watch') {
+    const runId = args[2];
+    if (!runId) { console.error('Usage: makaron responses watch <runId> [--jsonl] [--interval <ms>]'); process.exit(1); }
+    let interval = 5000, jsonl = false;
+    for (let i = 3; i < args.length; i++) {
+      if (args[i] === '--jsonl') jsonl = true;
+      if (args[i] === '--interval' && args[i + 1]) interval = parseInt(args[++i]);
+    }
+    await watchRun(baseUrl, headers, runId, { interval, jsonl });
+
+  } else if (sub === 'list') {
+    let projectId = null;
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
+    }
+    if (!projectId) { console.error('Usage: makaron responses list --project <id>'); process.exit(1); }
+    const res = await fetch(`${baseUrl}/api/agent/run?projectId=${projectId}`, { headers });
+    if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
+    const data = await res.json();
+    if (data.runs?.length) {
+      for (const r of data.runs) {
+        const age = timeSince(new Date(r.started_at));
+        console.log(`  ${r.id}  ${r.status.padEnd(10)} ${age}  ${(r.prompt || '').slice(0, 50)}`);
+      }
+    } else {
+      console.log('No runs found for this project.');
+    }
+
+  } else {
+    console.log(`Responses commands:
+  responses get <runId>                  Get status and output (JSON)
+  responses get <runId> --wait           Poll until completed
+  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses watch <runId> --jsonl        Watch until done (incremental events)
+  responses list --project <id>          List runs for a project
+`);
+  }
 } else if (command === 'list' || command === 'ls') {
   const { headers, baseUrl } = getAuth();
   await listProjects(baseUrl, headers);
@@ -419,6 +795,119 @@ if (command === 'login') {
   } else {
     console.error(`❌ Abort failed:`, await res.text());
   }
+} else if (command === 'edit') {
+  const { headers, baseUrl } = getAuth();
+  const editArgs = {};
+  const promptParts = [];
+  let outputPath = null;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--image' && args[i + 1]) editArgs.image = imageToArg(args[++i]);
+    else if (args[i] === '--model' && args[i + 1]) editArgs.model = args[++i];
+    else if (args[i] === '--skill' && args[i + 1]) editArgs.skill = args[++i];
+    else if (args[i] === '--ref' && args[i + 1]) {
+      editArgs.referenceImages = editArgs.referenceImages || [];
+      editArgs.referenceImages.push(imageToArg(args[++i]));
+    }
+    else if (args[i] === '--aspect' && args[i + 1]) editArgs.aspectRatio = args[++i];
+    else if (args[i] === '--out' && args[i + 1]) outputPath = args[++i];
+    else promptParts.push(args[i]);
+  }
+  editArgs.editPrompt = promptParts.join(' ');
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
+  process.stderr.write('🎨 Generating...\n');
+  const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
+  saveMcpImage(result, outputPath);
+
+} else if (command === 'video') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+
+  if (sub === 'script') {
+    const images = [];
+    const promptParts = [];
+    let language = 'en';
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--image' && args[i + 1]) images.push(imageToArg(args[++i]));
+      else if (args[i] === '--lang' && args[i + 1]) language = args[++i];
+      else promptParts.push(args[i]);
+    }
+    if (!images.length) { console.error('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"'); process.exit(1); }
+    process.stderr.write('🎬 Writing script...\n');
+    const result = await callMcpTool(baseUrl, headers, 'makaron_write_video_script', { images, userRequest: promptParts.join(' ') || undefined, language });
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else if (sub === 'create') {
+    const images = [];
+    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined;
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
+      else if (args[i] === '--script' && args[i + 1]) script = args[++i];
+      else if (args[i] === '--script-file' && args[i + 1]) script = fs.readFileSync(args[++i], 'utf-8');
+      else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
+      else if (args[i] === '--aspect' && args[i + 1]) aspectRatio = args[++i];
+      else if (args[i] === '--model' && args[i + 1]) videoModel = args[++i];
+    }
+    if (!images.length || !script) { console.error('Usage: makaron video create --script "..." --image <url> [--duration 10] [--aspect 9:16] [--model kling|seedance]'); process.exit(1); }
+    process.stderr.write('🎬 Submitting video...\n');
+    const vArgs = { script, images };
+    if (duration) vArgs.duration = duration;
+    if (aspectRatio) vArgs.aspectRatio = aspectRatio;
+    if (videoModel) vArgs.videoModel = videoModel;
+    const result = await callMcpTool(baseUrl, headers, 'makaron_create_video', vArgs);
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else if (sub === 'status') {
+    const taskId = args[2];
+    if (!taskId) { console.error('Usage: makaron video status <taskId>'); process.exit(1); }
+    const result = await callMcpTool(baseUrl, headers, 'makaron_get_video_status', { taskId });
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else {
+    console.log(`Video commands:
+  video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --image <url> [--duration 10]  Submit video task
+  video status <taskId>                                      Check video status
+`);
+  }
+
+} else if (command === 'music') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+
+  if (sub === 'create') {
+    const promptParts = [];
+    let instrumental = true, style = undefined;
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--vocals') instrumental = false;
+      else if (args[i] === '--style' && args[i + 1]) style = args[++i];
+      else promptParts.push(args[i]);
+    }
+    const prompt = promptParts.join(' ');
+    if (!prompt) { console.error('Usage: makaron music create [--vocals] [--style "lo-fi"] "gentle piano"'); process.exit(1); }
+    process.stderr.write('🎵 Generating music...\n');
+    const mArgs = { prompt, instrumental };
+    if (style) mArgs.style = style;
+    const result = await callMcpTool(baseUrl, headers, 'makaron_create_music', mArgs);
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else if (sub === 'status') {
+    const taskId = args[2];
+    if (!taskId) { console.error('Usage: makaron music status <taskId>'); process.exit(1); }
+    const result = await callMcpTool(baseUrl, headers, 'makaron_get_music_status', { taskId });
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
+
+  } else {
+    console.log(`Music commands:
+  music create [--vocals] [--style "genre"] "description"    Generate music
+  music status <taskId>                                      Check music status
+`);
+  }
+
 } else if (command === 'admin') {
   const { headers, baseUrl } = getAuth();
   const sub = args[1];
@@ -546,9 +1035,21 @@ Commands:
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   create --title "name"              Create empty project (text-to-image)
-  chat --project <id> "message"      Chat with Makaron Agent
-  chat --project <id> --image <file> "message"  Add image + chat
+
+  chat --project <id> "message"      Chat (non-blocking, polls for result)
+  chat --project <id> -b "message"   Background: submit and print runId
+  chat --project <id> --stream "msg" Legacy: stream SSE in real-time
+  chat --project <id> --json "msg"   Output structured JSON result
+
+  responses get <runId>              Get run status and results
+  responses get <runId> --wait       Poll until completed
+  responses list --project <id>      List runs for a project
   abort <runId>                      Abort a running Agent
+
+  edit [--image <file>] "prompt"     AI image edit / text-to-image
+  video script|create|status         Video generation
+  music create|status                Music generation
+
   admin                              Admin commands (skills, upload, set-admin)
 
 Environment:

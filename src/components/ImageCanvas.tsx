@@ -131,6 +131,15 @@ export default function ImageCanvas({
   // Image loading state
   const [imageLoaded, setImageLoaded] = useState(false);
 
+  // Long content: height/width > 2 — disables zoom, enables scroll
+  const isLongContent = (() => {
+    const design = animatedDesigns?.get(currentIndex);
+    if (design) return design.height / design.width > 2;
+    if (naturalDims.w && naturalDims.h) return naturalDims.h / naturalDims.w > 2;
+    return false;
+  })();
+  const longScrollRef = useRef<HTMLDivElement>(null);
+
   // Video playback state
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoPlaying, setVideoPlaying] = useState(false);
@@ -198,8 +207,8 @@ export default function ImageCanvas({
     if (annotationMode) return;
     if (selectedEditableId) return; // Design Editor mode — all canvas gestures disabled
     if (e.touches.length === 2) {
-      // Pinch start — skip for video entry
-      if (isVideoEntry) return;
+      // Pinch start — skip for video entry and long content
+      if (isVideoEntry || isLongContent) return;
       clearLongPress();
       isPinching.current = true;
       swiping.current = false;
@@ -406,8 +415,8 @@ export default function ImageCanvas({
     mouseStartPos.current = { x: e.clientX, y: e.clientY };
     mouseDidDrag.current = false;
 
-    if (scale > 1) {
-      // Pan mode when zoomed (same as touch)
+    if (scale > 1 || isLongContent) {
+      // Pan mode when zoomed or long content scroll
       mousePanning.current = true;
       lastMousePos.current = { x: e.clientX, y: e.clientY };
     }
@@ -435,17 +444,21 @@ export default function ImageCanvas({
       if (isComparing) setIsComparing(false);
     }
 
-    // Pan when zoomed (same as touch)
-    if (mousePanning.current && scale > 1) {
+    // Pan when zoomed, or scroll for long content
+    if (mousePanning.current && (scale > 1 || isLongContent)) {
       const panDx = e.clientX - lastMousePos.current.x;
       const panDy = e.clientY - lastMousePos.current.y;
       lastMousePos.current = { x: e.clientX, y: e.clientY };
-      setTranslate(prev => ({
-        x: prev.x + panDx / scale,
-        y: prev.y + panDy / scale,
-      }));
+      if (isLongContent && longScrollRef.current) {
+        longScrollRef.current.scrollTop -= panDy;
+      } else {
+        setTranslate(prev => ({
+          x: prev.x + panDx / scale,
+          y: prev.y + panDy / scale,
+        }));
+      }
     }
-  }, [clearLongPress, isComparing, scale, selectedEditableId]);
+  }, [clearLongPress, isComparing, scale, isLongContent, selectedEditableId]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (selectedEditableId) return;
@@ -500,6 +513,15 @@ export default function ImageCanvas({
   const handleWheel = useCallback((e: WheelEvent) => {
     if (isVideoEntry || annotationMode) return;
 
+    // Long content: wheel scrolls vertically instead of zooming
+    if (isLongContent) {
+      if (longScrollRef.current) {
+        longScrollRef.current.scrollTop += e.deltaY;
+        e.preventDefault();
+      }
+      return;
+    }
+
     // Zoom: trackpad pinch (ctrlKey+deltaY) or plain mouse wheel (deltaY, no deltaX)
     const isTrackpadPinch = e.ctrlKey;
     const isMouseWheel = !e.ctrlKey && Math.abs(e.deltaY) > 0 && Math.abs(e.deltaX) < 5;
@@ -528,7 +550,7 @@ export default function ImageCanvas({
       setAnimDir('right');
       setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
     }
-  }, [currentIndex, timeline.length, onIndexChange, isVideoEntry, annotationMode]);
+  }, [currentIndex, timeline.length, onIndexChange, isVideoEntry, annotationMode, isLongContent]);
 
   // Attach native wheel listener (non-passive) so preventDefault works for pinch-to-zoom
   useEffect(() => {
@@ -1060,7 +1082,10 @@ export default function ImageCanvas({
           </div>
         ) : currentDesign && !isComparing ? (
           /* Animated design (or draft preview) — Remotion Player with custom controls (same as video) */
-          <div className={`relative w-full h-full transition-all duration-150 ${
+          (() => {
+            const isLongDesign = currentDesign.height / currentDesign.width > 2;
+            return (
+          <div ref={isLongDesign ? longScrollRef : undefined} className={`relative w-full h-full ${isLongDesign ? 'overflow-y-auto overflow-x-hidden' : ''} transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
@@ -1084,7 +1109,7 @@ export default function ImageCanvas({
           >
             <RemotionRenderer
               design={currentDesign!}
-              mode="fill"
+              mode={isLongDesign ? 'inline' : 'fill'}
               hideControls
               posterImage={currentDesign?.animation ? displayImage : undefined}
               onLoading={setRemotionLoading}
@@ -1211,21 +1236,42 @@ export default function ImageCanvas({
               />
             )}
           </div>
+            );
+          })()
         ) : displayImage ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            ref={imgElRef}
-            src={displayImage}
-            alt="preview"
-            className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
-              pullDownActive ? 'opacity-[0.15] grayscale' :
-              animDir === 'left' ? 'opacity-0 -translate-x-8' :
-              animDir === 'right' ? 'opacity-0 translate-x-8' :
-              imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
-            }`}
-            draggable={false}
-            onLoad={() => { setImageLoaded(true); updateImageRect(); }}
-          />
+          isLongContent ? (
+            <div ref={longScrollRef} className="w-full h-full overflow-y-auto overflow-x-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                ref={imgElRef}
+                src={displayImage}
+                alt="preview"
+                className={`w-full h-auto select-none pointer-events-none transition-all duration-150 ${
+                  pullDownActive ? 'opacity-[0.15] grayscale' :
+                  animDir === 'left' ? 'opacity-0 -translate-x-8' :
+                  animDir === 'right' ? 'opacity-0 translate-x-8' :
+                  imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
+                }`}
+                draggable={false}
+                onLoad={() => { setImageLoaded(true); updateImageRect(); }}
+              />
+            </div>
+          ) : (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              ref={imgElRef}
+              src={displayImage}
+              alt="preview"
+              className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
+                pullDownActive ? 'opacity-[0.15] grayscale' :
+                animDir === 'left' ? 'opacity-0 -translate-x-8' :
+                animDir === 'right' ? 'opacity-0 translate-x-8' :
+                imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
+              }`}
+              draggable={false}
+              onLoad={() => { setImageLoaded(true); updateImageRect(); }}
+            />
+          )
         ) : (
           /* Design snapshot without poster — placeholder until captureDesignPoster runs */
           <div className="w-full h-full flex items-center justify-center text-white/30 text-sm">
