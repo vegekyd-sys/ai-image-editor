@@ -100,21 +100,22 @@ export default function TopBar({ page }: TopBarProps) {
               href="/agent"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '3px 8px', borderRadius: 6,
-                background: 'rgba(232,121,249,0.08)',
-                border: '1px solid rgba(232,121,249,0.2)',
-                fontSize: '0.6rem', letterSpacing: '0.08em', textTransform: 'uppercase',
-                color: 'rgba(232,121,249,0.7)',
+                padding: '4px 10px', borderRadius: 20,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase',
+                fontWeight: 500,
+                color: 'rgba(255,255,255,0.55)',
                 textDecoration: 'none',
                 transition: 'all 0.2s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,121,249,0.15)'; e.currentTarget.style.color = 'rgba(232,121,249,0.9)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(232,121,249,0.08)'; e.currentTarget.style.color = 'rgba(232,121,249,0.7)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.85)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}
             >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 9h6M9 13h6M9 17h4" />
               </svg>
-              For Agents
+              FOR AGENTS
             </Link>
           )}
         </div>
