@@ -186,6 +186,47 @@ type MakaronOutput =
 | Motion design | "create an Instagram story with animated text" |
 | Multi-step | "edit the photo then make a video from it" |
 
+## Recommended Pattern: Service Flow (Feishu/OpenClaw/Group Chat)
+
+When serving end-users in a chat environment (Feishu, Slack, Discord), use this proactive message pattern:
+
+```bash
+# 1. Immediately reply to user: "收到，开始做"
+send_message "收到！正在为你制作..."
+
+# 2. Create project + submit (one command)
+RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video")
+
+# 3. Send project link proactively
+PROJECT_URL=$(npx makaron-cli responses get $RUN_ID --pick project_url)
+send_message "项目已创建：$PROJECT_URL"
+
+# 4. Watch and send each artifact as it appears
+npx makaron-cli responses watch $RUN_ID --jsonl | while read -r line; do
+  EVENT=$(echo "$line" | jq -r '.event')
+  TYPE=$(echo "$line" | jq -r '.item.type // empty')
+  URL=$(echo "$line" | jq -r '.item.url // empty')
+  STATUS=$(echo "$line" | jq -r '.item.status // empty')
+
+  if [ "$EVENT" = "output.added" ] && [ "$TYPE" = "image" ]; then
+    # Send image immediately as media (not just link)
+    send_image "$URL"
+  elif [ "$EVENT" = "output.updated" ] && [ "$TYPE" = "video" ] && [ "$STATUS" = "completed" ]; then
+    # Video ready — send as media
+    send_video "$URL"
+  elif [ "$EVENT" = "done" ]; then
+    send_message "全部完成 ✨"
+  fi
+done
+```
+
+**Key principles for service agents:**
+- **Proactive, not reactive**: Don't wait for the full run to finish. Send progress messages and artifacts as they appear.
+- **Media over links**: When possible, send images/videos as native media in the chat (download URL and upload as attachment), not just paste the URL.
+- **Immediate acknowledgment**: Reply "收到" within 1 second of receiving user request. Don't make users wait for project creation.
+- **Project link early**: Send the project URL right after creation so users can check anytime.
+- **Stream artifacts**: Use `watch --jsonl` to push each artifact the moment it's ready. An image at 15s should reach the user at 15s, not after the video finishes at 5 minutes.
+
 ## Important Notes
 
 - One project = one conversation thread. All history is preserved.
