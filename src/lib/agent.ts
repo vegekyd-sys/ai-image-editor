@@ -410,6 +410,7 @@ Hard constraints (apply even before reading the guide):
           }
 
           const taskId = skillResult.taskId;
+          console.log(`[generate_animation] taskId=${taskId} timelineVersion=${ctx.timelineVersion} isV2=${(ctx.timelineVersion ?? 1) >= 2} projectId=${ctx.projectId}`);
 
           // Persist to DB (use admin client to bypass RLS — API key auth has no session)
           const { getSupabaseAdmin } = await import('@/lib/supabase/service');
