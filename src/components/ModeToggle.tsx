@@ -1,15 +1,28 @@
 'use client'
 
-import { usePathname, useRouter } from 'next/navigation'
-
 interface ModeToggleProps {
   hidden?: boolean
+  mode?: 'human' | 'agent'
+  onToggle?: (mode: 'human' | 'agent') => void
 }
 
-export default function ModeToggle({ hidden }: ModeToggleProps) {
-  const pathname = usePathname()
-  const router = useRouter()
-  const isAgent = pathname === '/agent'
+export default function ModeToggle({ hidden, mode, onToggle }: ModeToggleProps) {
+  const isAgent = mode === 'agent'
+
+  const btnStyle = (active: boolean): React.CSSProperties => ({
+    padding: '6px 14px',
+    borderRadius: 16,
+    border: 'none',
+    cursor: 'pointer',
+    textDecoration: 'none',
+    fontSize: '0.65rem',
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    transition: 'all 0.2s',
+    background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
+    color: active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)',
+  })
 
   return (
     <div
@@ -34,40 +47,10 @@ export default function ModeToggle({ hidden }: ModeToggleProps) {
           padding: 3,
         }}
       >
-        <button
-          onClick={() => !isAgent ? undefined : router.push('/home')}
-          style={{
-            padding: '6px 14px',
-            borderRadius: 16,
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '0.65rem',
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            transition: 'all 0.2s',
-            background: !isAgent ? 'rgba(255,255,255,0.12)' : 'transparent',
-            color: !isAgent ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)',
-          }}
-        >
+        <button onClick={() => onToggle?.('human')} style={btnStyle(!isAgent)}>
           Human
         </button>
-        <button
-          onClick={() => isAgent ? undefined : router.push('/agent')}
-          style={{
-            padding: '6px 14px',
-            borderRadius: 16,
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '0.65rem',
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            transition: 'all 0.2s',
-            background: isAgent ? 'rgba(255,255,255,0.12)' : 'transparent',
-            color: isAgent ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)',
-          }}
-        >
+        <button onClick={() => onToggle?.('agent')} style={btnStyle(isAgent)}>
           Agent
         </button>
       </div>

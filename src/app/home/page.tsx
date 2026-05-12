@@ -12,6 +12,7 @@ import RollingTagline from '@/components/RollingTagline'
 import SkillSelector from '@/components/SkillSelector'
 import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
+import AgentContent from '@/components/AgentContent'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 
@@ -59,6 +60,7 @@ function HomePageInner() {
   const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
 
+  const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputBoxRef = useRef<HTMLDivElement>(null)
@@ -1091,8 +1093,11 @@ function HomePageInner() {
         />
 
         <TopBar page="home" />
-        <ModeToggle hidden={showFixedInput || !!selectedDetail} />
+        <ModeToggle mode={viewMode} onToggle={setViewMode} hidden={showFixedInput || !!selectedDetail} />
 
+        {viewMode === 'agent' && <AgentContent />}
+
+        <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
         {/* ── Hero: Landing-page style ── */}
         <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
           {/* Glow */}
@@ -1544,6 +1549,7 @@ function HomePageInner() {
           </div>
         </>
       )}
+      </div>
     </>
   )
 }
