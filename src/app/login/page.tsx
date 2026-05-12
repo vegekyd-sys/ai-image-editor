@@ -58,9 +58,12 @@ export default function LoginPage() {
   }
 
   function redirectAfterAuth() {
-    const returnUrl = getReturnUrl()
+    let returnUrl = getReturnUrl()
     sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
+    // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect
+    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
+    if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
     window.location.href = returnUrl || '/'
   }
 
@@ -142,15 +145,15 @@ export default function LoginPage() {
 
     try {
       const supabase = getSupabase()
-      // Try verification: recovery uses 'recovery', signup tries 'magiclink' then 'email'
+      // Try verification: recovery uses 'recovery', signup tries 'email' then 'magiclink'
       let verifyError: string | null = null
       if (otpPurpose === 'recovery') {
         const { error } = await supabase.auth.verifyOtp({ email, token, type: 'recovery' })
         if (error) verifyError = error.message
       } else {
-        const { error } = await supabase.auth.verifyOtp({ email, token, type: 'magiclink' })
+        const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
         if (error) {
-          const { error: err2 } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
+          const { error: err2 } = await supabase.auth.verifyOtp({ email, token, type: 'magiclink' })
           if (err2) verifyError = err2.message
         }
       }
@@ -169,8 +172,11 @@ export default function LoginPage() {
 
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
-        const returnUrl = sessionStorage.getItem('mkr_return_url')
+        let returnUrl = sessionStorage.getItem('mkr_return_url') || ''
         sessionStorage.removeItem('mkr_return_url')
+        // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
+        const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
+        if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
         const target = returnUrl || '/home'
         const sep = target.includes('?') ? '&' : '?'
         window.location.href = target + sep + 'welcome=1'

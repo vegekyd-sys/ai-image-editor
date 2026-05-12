@@ -133,24 +133,25 @@ function HomePageInner() {
     if (text) { returnTextRef.current = text; sessionStorage.removeItem('mkr_return_text') }
     sessionStorage.removeItem('mkr_return_skill')
     sessionStorage.removeItem('mkr_return_url')
-    // Welcome credits popup — also triggers activation for new users
+    // Welcome credits popup — activates new user + grants credits
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       if (params.get('welcome')) {
         window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
-        // Activate new user + grant welcome credits, then show popup
-        fetch('/api/auth/validate-invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ autoActivate: true }),
-        }).then(() =>
-          fetch('/api/billing/credits').then(r => r.json()).then(d => {
-            if (d.balance > 0) {
-              setWelcomeCredits(d.balance); setShowWelcome(true)
+        fetch('/api/auth/activate', { method: 'POST' })
+          .then(r => r.json())
+          .then(d => {
+            if (d.credits > 0) {
+              setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
+            } else if (d.isNew === false) {
+              // Already activated user revisiting with ?welcome=1 — just refresh credits
+              fetch('/api/billing/credits').then(r => r.json()).then(b => {
+                if (b.balance > 0) { setWelcomeCredits(b.balance); setShowWelcome(true); window.dispatchEvent(new Event('credits-updated')) }
+              })
             }
           })
-        ).catch(() => {})
+          .catch(() => {})
       }
     }
     // Delay text restore to run after skill overlay sets its default prompt
