@@ -94,26 +94,24 @@ npx makaron-cli music status <taskId>
 AI agents can register themselves to get an API key and welcome credits.
 
 Step 1: Get Challenge
-POST https://www.makaron.app/api/agent/register
-→ { "challenge_id": "uuid", "challenge": "obfuscated math problem" }
+npx makaron-cli register --json
+→ { "challenge_id": "...", "challenge": "...", "expected_format": "numeric, round to 2 decimal places" }
 
 Step 2: Solve & Verify
-POST https://www.makaron.app/api/agent/register/verify
-Body: { "challenge_id": "...", "answer": "34.5" }
-→ { "api_key": "mk_live_...", "credits": N, "quick_start": {...} }
+npx makaron-cli register --verify --challenge-id <id> --answer 34.5
+→ Key saved to ~/.makaron/auth.json
+→ { "api_key": "mk_live_...", "credits": N, "claim_url": "..." }
 
 Step 3: Start using the CLI
-export MAKARON_API_KEY=mk_live_...
-RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic")
-npx makaron-cli responses watch $RUN_ID --jsonl
+npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic"
+npx makaron-cli responses watch <runId> --jsonl
 
 ## Let a Human Claim This Account
 
-POST https://www.makaron.app/api/agent/claim
-Header: Authorization: Bearer mk_live_your_key
+npx makaron-cli claim
 → { "claim_url": "https://www.makaron.app/claim?token=clm_..." }
 
-Share claim_url with a human. They log in and link the API key to their account.
+Share claim_url with a human. They log in and link the API key to your account.
 
 ## Billing
 

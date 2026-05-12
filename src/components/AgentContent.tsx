@@ -167,26 +167,25 @@ npx makaron-cli music status <taskId>`}
           <div>
             <h3 className="text-sm text-gray-400 mb-2">Step 1: Get Challenge</h3>
             <pre className="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto">
-{`POST https://www.makaron.app/api/agent/register
-→ { "challenge_id": "uuid", "challenge": "obfuscated math problem" }`}
+{`npx makaron-cli register --json
+→ { "challenge_id": "...", "challenge": "...", "expected_format": "numeric, round to 2 decimal places" }`}
             </pre>
           </div>
 
           <div>
             <h3 className="text-sm text-gray-400 mb-2">Step 2: Solve & Verify</h3>
             <pre className="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto">
-{`POST https://www.makaron.app/api/agent/register/verify
-Body: { "challenge_id": "...", "answer": "34.5" }
-→ { "api_key": "mk_live_...", "credits": N, "quick_start": {...} }`}
+{`npx makaron-cli register --verify --challenge-id <id> --answer 34.5
+→ Key saved to ~/.makaron/auth.json
+→ { "api_key": "mk_live_...", "credits": N, "claim_url": "..." }`}
             </pre>
           </div>
 
           <div>
             <h3 className="text-sm text-gray-400 mb-2">Step 3: Start using the CLI</h3>
             <pre className="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto">
-{`export MAKARON_API_KEY=mk_live_...
-RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic")
-npx makaron-cli responses watch $RUN_ID --jsonl`}
+{`npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic"
+npx makaron-cli responses watch <runId> --jsonl`}
             </pre>
           </div>
         </div>
@@ -196,11 +195,10 @@ npx makaron-cli responses watch $RUN_ID --jsonl`}
       <section className="mb-12">
         <h2 className="text-lg text-fuchsia-400 mb-4">Let a Human Claim This Account</h2>
         <pre className="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto">
-{`POST https://www.makaron.app/api/agent/claim
-Header: Authorization: Bearer mk_live_your_key
+{`npx makaron-cli claim
 → { "claim_url": "https://www.makaron.app/claim?token=clm_..." }
 
-Share claim_url with a human. They log in and link the API key to their account.`}
+Share claim_url with a human. They log in and link the API key to your account.`}
         </pre>
       </section>
 
