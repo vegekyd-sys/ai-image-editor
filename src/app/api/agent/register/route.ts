@@ -7,24 +7,31 @@ export async function GET() {
     name: 'Makaron AI',
     description: 'AI image/video/music creation via CLI',
     registration: {
-      step1: { method: 'POST', url: '/api/agent/register', body: {} },
-      step2: { method: 'POST', url: '/api/agent/register/verify', body: { challenge_id: 'string', answer: 'string (numeric)' } },
+      method_a_cli: {
+        step1: 'npx makaron-cli register --json → { challenge_id, challenge, expected_format }',
+        step2: 'npx makaron-cli register --verify --challenge-id <id> --answer <number> → { api_key, credits, claim_url }',
+      },
+      method_b_api: {
+        step1: { method: 'POST', url: '/api/agent/register', body: {} },
+        step2: { method: 'POST', url: '/api/agent/register/verify', body: { challenge_id: 'string', answer: 'string (numeric, 2dp)' } },
+      },
     },
     after_registration: {
       setup: 'export MAKARON_API_KEY=<your_api_key>',
-      install: 'npx makaron-cli',
-      verify: 'npx makaron-cli list',
+      one_shot: 'RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic")',
+      watch: 'npx makaron-cli responses watch $RUN_ID --jsonl',
     },
     cli_usage: {
-      create_project: 'npx makaron-cli create --image <path_or_url>',
-      edit_image: 'npx makaron-cli chat --project <id> "your instruction"',
-      generate_video: 'npx makaron-cli chat --project <id> "create a 5 second video"',
-      add_music: 'npx makaron-cli chat --project <id> "add background music"',
+      one_shot: 'npx makaron-cli chat --project auto --image <path> -b "<prompt>"',
+      existing_project: 'npx makaron-cli chat --project <id> -b "<prompt>"',
+      watch_results: 'npx makaron-cli responses watch <runId> --jsonl',
+      pick_result: 'npx makaron-cli responses get <runId> --pick first_image_url',
       list_projects: 'npx makaron-cli list',
     },
     capabilities: ['image editing', 'style transfer', 'text-to-image', 'video generation', 'background music', 'motion graphics'],
-    welcome_credits: 500,
-    claim: { method: 'POST', url: '/api/agent/claim', auth: 'Bearer <api_key>', returns: 'claim_url for human' },
+    welcome_credits: 'auto (configured by admin)',
+    claim: { method: 'POST', url: '/api/agent/claim', auth: 'Bearer <api_key>', returns: 'claim_url (7 day expiry)' },
+    claim_cli: 'npx makaron-cli claim',
     docs: 'https://www.makaron.app/agent',
   })
 }
@@ -72,6 +79,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     challenge_id: data.id,
     challenge: challenge.text,
-    hint: 'Solve the math problem and POST your answer to /api/agent/register/verify',
+    expected_format: 'numeric, round to 2 decimal places',
+    hint: 'Solve the math problem. Numbers may be in Chinese or Esperanto. Ignore special characters.',
   })
 }

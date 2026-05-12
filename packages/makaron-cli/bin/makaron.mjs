@@ -98,8 +98,17 @@ function getAuth() {
   }
   const auth = loadAuth();
   if (!auth) {
-    console.error('Not logged in. Set MAKARON_API_KEY or run: npx makaron-cli login');
+    console.error('No API key found. Set MAKARON_API_KEY or run:');
+    console.error('  npx makaron-cli register --json   (agent self-registration)');
+    console.error('  npx makaron-cli login             (human interactive login)');
     process.exit(1);
+  }
+  // Registered via `register --verify` (saved as _apiKey)
+  if (auth._apiKey) {
+    return {
+      headers: { 'Authorization': `Bearer ${auth._apiKey}` },
+      baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
+    };
   }
   return {
     headers: { 'Cookie': buildCookie(auth) },
@@ -1026,11 +1035,98 @@ if (command === 'login') {
   admin set-admin <email>              Grant admin access to a user
 `);
   }
+} else if (command === 'register') {
+  const baseUrl = process.env.MAKARON_URL || DEFAULT_URL;
+  const isVerify = args.includes('--verify');
+
+  if (isVerify) {
+    let challengeId = null, answer = null;
+    for (let i = 1; i < args.length; i++) {
+      if (args[i] === '--challenge-id' && args[i + 1]) challengeId = args[++i];
+      else if (args[i] === '--answer' && args[i + 1]) answer = args[++i];
+    }
+    if (!challengeId || !answer) {
+      console.error('Usage: makaron register --verify --challenge-id <id> --answer <number>');
+      process.exit(1);
+    }
+    const res = await fetch(`${baseUrl}/api/agent/register/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challenge_id: challengeId, answer }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error(`Registration failed: ${data.error || data.message || res.status}`);
+      process.exit(1);
+    }
+    // Save key to auth file
+    saveAuth({ _apiKey: data.api_key, _baseUrl: baseUrl });
+    // Request claim URL
+    let claimUrl = null;
+    try {
+      const claimRes = await fetch(`${baseUrl}/api/agent/claim`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${data.api_key}`, 'Content-Type': 'application/json' },
+      });
+      const claimData = await claimRes.json();
+      if (claimRes.ok) claimUrl = claimData.claim_url;
+    } catch { /* non-fatal */ }
+    const result = { api_key: data.api_key, credits: data.credits, claim_url: claimUrl };
+    console.log(JSON.stringify(result));
+    console.error(`✅ Registered! Key saved to ${AUTH_FILE}`);
+    if (claimUrl) console.error(`🔗 Claim URL (share with human): ${claimUrl}`);
+  } else {
+    // Check if already has a key
+    const existingKey = process.env.MAKARON_API_KEY;
+    const existingAuth = loadAuth();
+    if (existingKey) {
+      console.error(`Already have API key: ${existingKey.slice(0, 16)}...`);
+      process.exit(0);
+    }
+    if (existingAuth?._apiKey) {
+      console.error(`Already registered: ${existingAuth._apiKey.slice(0, 16)}...`);
+      process.exit(0);
+    }
+    // Request challenge
+    const res = await fetch(`${baseUrl}/api/agent/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error(`Registration failed: ${data.error || data.message || res.status}`);
+      process.exit(1);
+    }
+    if (args.includes('--json')) {
+      console.log(JSON.stringify(data));
+    } else {
+      console.log(JSON.stringify(data));
+      console.error(`\nChallenge received. Solve and run:`);
+      console.error(`  npx makaron-cli register --verify --challenge-id ${data.challenge_id} --answer <your_answer>`);
+    }
+  }
+} else if (command === 'claim') {
+  const auth = getAuth();
+  const res = await fetch(`${auth.baseUrl}/api/agent/claim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...auth.headers },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    console.error(`Claim failed: ${data.error || data.message || res.status}`);
+    process.exit(1);
+  }
+  console.log(JSON.stringify(data));
+  console.error(`🔗 Share this link with a human: ${data.claim_url}`);
 } else {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
 
 Commands:
-  login                              Log in to Makaron
+  register --json                    Get challenge for agent self-registration
+  register --verify --challenge-id <id> --answer <n>  Verify and save API key
+  claim                              Get claim URL for human to link account
+  login                              Log in to Makaron (human interactive)
   list (ls)                          List all projects
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL

@@ -91,7 +91,7 @@ npx makaron-cli music status <taskId>
 
 ## Self-Registration (No Human Required)
 
-AI agents can register themselves to get an API key and 500 welcome credits.
+AI agents can register themselves to get an API key and welcome credits.
 
 Step 1: Get Challenge
 POST https://www.makaron.app/api/agent/register
@@ -100,7 +100,7 @@ POST https://www.makaron.app/api/agent/register
 Step 2: Solve & Verify
 POST https://www.makaron.app/api/agent/register/verify
 Body: { "challenge_id": "...", "answer": "34.5" }
-→ { "api_key": "mk_live_...", "credits": 500, "quick_start": {...} }
+→ { "api_key": "mk_live_...", "credits": N, "quick_start": {...} }
 
 Step 3: Start using the CLI
 export MAKARON_API_KEY=mk_live_...
@@ -117,7 +117,7 @@ Share claim_url with a human. They log in and link the API key to their account.
 
 ## Billing
 
-- 500 welcome credits on registration
+- welcome credits on registration
 - Credits consumed per operation (varies by tool)
 - Top up: https://www.makaron.app/dashboard
 

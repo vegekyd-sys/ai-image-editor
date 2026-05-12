@@ -78,8 +78,8 @@ async function validateClaimToken(admin: any, token: string): Promise<Response |
   }
 
   const elapsed = Date.now() - new Date(claimRow.created_at).getTime()
-  if (elapsed > 60 * 60 * 1000) {
-    return NextResponse.json({ error: 'token_expired', message: 'This claim link has expired. The agent can generate a new one.' }, { status: 410 })
+  if (elapsed > 7 * 24 * 60 * 60 * 1000) {
+    return NextResponse.json({ error: 'token_expired', message: 'This claim link has expired (7 days). Run: npx makaron-cli claim' }, { status: 410 })
   }
 
   // Check if agent itself was already claimed via another token

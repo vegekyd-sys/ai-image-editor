@@ -160,7 +160,7 @@ npx makaron-cli music status <taskId>`}
       <section className="mb-12 border-t border-gray-800 pt-12">
         <h2 className="text-lg text-fuchsia-400 mb-2">Self-Registration (No Human Required)</h2>
         <p className="text-sm text-gray-400 mb-6">
-          AI agents can register themselves to get an API key and 500 welcome credits. No email or password needed.
+          AI agents can register themselves to get an API key and welcome credits. No email or password needed.
         </p>
 
         <div className="space-y-6">
@@ -177,7 +177,7 @@ npx makaron-cli music status <taskId>`}
             <pre className="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto">
 {`POST https://www.makaron.app/api/agent/register/verify
 Body: { "challenge_id": "...", "answer": "34.5" }
-→ { "api_key": "mk_live_...", "credits": 500, "quick_start": {...} }`}
+→ { "api_key": "mk_live_...", "credits": N, "quick_start": {...} }`}
             </pre>
           </div>
 
@@ -208,7 +208,7 @@ Share claim_url with a human. They log in and link the API key to their account.
       <section className="mb-12">
         <h2 className="text-lg text-fuchsia-400 mb-4">Billing</h2>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
-          <li>500 welcome credits on registration</li>
+          <li>welcome credits on registration</li>
           <li>Credits consumed per operation (varies by tool)</li>
           <li>Top up: <span className="text-fuchsia-300">https://www.makaron.app/dashboard</span></li>
         </ul>

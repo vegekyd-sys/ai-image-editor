@@ -93,8 +93,9 @@ export async function POST(req: NextRequest) {
     credits: welcomeCredits,
     quick_start: {
       step1: `export MAKARON_API_KEY=${key}`,
-      step2: 'npx makaron-cli create --image photo.jpg',
-      step3: 'npx makaron-cli chat --project <id> "make it cinematic"',
+      step2: 'RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic")',
+      step3: 'npx makaron-cli responses watch $RUN_ID --jsonl',
     },
+    claim: 'npx makaron-cli claim',
   })
 }
