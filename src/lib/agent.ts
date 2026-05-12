@@ -53,6 +53,7 @@ interface AgentContext {
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event (v1) */
+  // Legacy v1 fields — no longer set by generate_animation, but kept for SSE event type compat
   animationTaskId?: string;
   animationPrompt?: string;
   animationImageUrls_?: string[];
@@ -410,66 +411,44 @@ Hard constraints (apply even before reading the guide):
           }
 
           const taskId = skillResult.taskId;
-          console.log(`[generate_animation] taskId=${taskId} timelineVersion=${ctx.timelineVersion} isV2=${(ctx.timelineVersion ?? 1) >= 2} projectId=${ctx.projectId}`);
 
-          // Persist to DB (use admin client to bypass RLS — API key auth has no session)
+          // Persist to DB as video snapshot (all new videos go here)
           const { getSupabaseAdmin } = await import('@/lib/supabase/service');
           const supabase = getSupabaseAdmin();
           const { filteredImages, finalPrompt } = filterAndRemapImages(story_prompt, imageUrls);
 
-          const isV2 = (ctx.timelineVersion ?? 1) >= 2;
+          const snapshotId = crypto.randomUUID();
+          const posterUrl = filteredImages[0] || imageUrls[0] || '';
+          const videoMeta: import('@/types').VideoMeta = {
+            taskId,
+            videoUrl: null,
+            prompt: finalPrompt,
+            sourceSnapshotIds: [],
+            sourceUrls: filteredImages,
+            status: 'processing',
+            duration: duration || null,
+            model: videoModel as import('@/types').VideoModel,
+            createdAt: new Date().toISOString(),
+          };
 
-          if (isV2) {
-            // v2: write to snapshots table as type='video'
-            const snapshotId = crypto.randomUUID();
-            const posterUrl = filteredImages[0] || imageUrls[0] || '';
-            const videoMeta: import('@/types').VideoMeta = {
-              taskId,
-              videoUrl: null,
-              prompt: finalPrompt,
-              sourceSnapshotIds: [],
-              sourceUrls: filteredImages,
-              status: 'processing',
-              duration: duration || null,
-              model: videoModel as import('@/types').VideoModel,
-              createdAt: new Date().toISOString(),
-            };
+          const { data: sortData } = await supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
 
-            const { data: sortData } = await supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
-
-            const { error: insertError } = await supabase.from('snapshots').insert({
-              id: snapshotId,
-              project_id: ctx.projectId,
-              image_url: posterUrl,
-              tips: [],
-              message_id: '',
-              sort_order: sortData ?? 0,
-              type: 'video',
-              video_meta: videoMeta,
-            });
-            if (insertError) {
-              console.error('[generate_animation] v2 snapshot insert failed:', insertError.message);
-              throw new Error(`DB insert failed: ${insertError.message}`);
-            }
-
-            ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta, posterUrl };
-          } else {
-            // v1: write to project_animations (legacy)
-            await supabase
-              .from('project_animations')
-              .insert({
-                project_id: ctx.projectId,
-                piapi_task_id: taskId,
-                status: 'processing',
-                prompt: finalPrompt,
-                snapshot_urls: filteredImages,
-              });
-
-            ctx.animationTaskId = taskId;
-            ctx.animationPrompt = story_prompt;
-            ctx.animationImageUrls_ = filteredImages;
-            ctx.animationModel = videoModel;
+          const { error: insertError } = await supabase.from('snapshots').insert({
+            id: snapshotId,
+            project_id: ctx.projectId,
+            image_url: posterUrl,
+            tips: [],
+            message_id: '',
+            sort_order: sortData ?? 0,
+            type: 'video',
+            video_meta: videoMeta,
+          });
+          if (insertError) {
+            console.error('[generate_animation] snapshot insert failed:', insertError.message);
+            throw new Error(`DB insert failed: ${insertError.message}`);
           }
+
+          ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta, posterUrl };
 
           // Bill for video generation (per-second)
           const videoSec = duration || 10;
