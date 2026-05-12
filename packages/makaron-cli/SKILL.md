@@ -21,22 +21,22 @@ Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, an
 **Option B: Self-Registration (no human required)**
 ```bash
 # Step 1: Get challenge
-curl -X POST https://www.makaron.app/api/agent/register
-# → { "challenge_id": "uuid", "challenge": "obfuscated math problem" }
+npx makaron-cli register --json
+# → { "challenge_id": "...", "challenge": "...", "expected_format": "numeric, round to 2 decimal places" }
 
 # Step 2: Solve and verify
-curl -X POST https://www.makaron.app/api/agent/register/verify \
-  -H "Content-Type: application/json" \
-  -d '{"challenge_id": "...", "answer": "34.5"}'
-# → { "api_key": "mk_live_...", "credits": 500 }
+npx makaron-cli register --verify --challenge-id <id> --answer 34.5
+# → Key saved to ~/.makaron/auth.json
+# → { "api_key": "mk_live_...", "credits": N, "claim_url": "..." }
 
-# Step 3: (Optional) Let a human claim this account
-curl -X POST https://www.makaron.app/api/agent/claim \
-  -H "Authorization: Bearer mk_live_your_key"
-# → { "claim_url": "..." } — share with human to link key to their account
+# (Optional) Let a human claim this account
+npx makaron-cli claim
+# → { "claim_url": "..." } — share with human to link key to their account (valid 7 days)
 ```
 
 Discovery endpoint: `GET https://www.makaron.app/api/agent/register` — returns full registration flow + CLI usage as JSON.
+
+After self-registration the key is saved locally — no need to export `MAKARON_API_KEY`.
 
 ```bash
 export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

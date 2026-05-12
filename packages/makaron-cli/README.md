@@ -22,14 +22,16 @@ npm install -g makaron-cli
 **Option B: Agent Self-Registration (no human required)**
 ```bash
 # Step 1: Get challenge
-curl -X POST https://www.makaron.app/api/agent/register
+npx makaron-cli register --json
+# → { "challenge_id": "...", "challenge": "...", "expected_format": "numeric, round to 2 decimal places" }
 
-# Step 2: Solve the obfuscated math problem and verify
-curl -X POST https://www.makaron.app/api/agent/register/verify \
-  -H "Content-Type: application/json" \
-  -d '{"challenge_id": "...", "answer": "34.5"}'
-# → { "api_key": "mk_live_...", "credits": 500 }
+# Step 2: Solve the math problem and verify
+npx makaron-cli register --verify --challenge-id <id> --answer 34.5
+# → Key saved to ~/.makaron/auth.json
+# → { "api_key": "mk_live_...", "credits": N, "claim_url": "..." }
 ```
+
+After registration, the key is saved locally — no need to export `MAKARON_API_KEY`.
 
 Discovery endpoint (returns full registration flow + CLI usage as JSON):
 ```bash
@@ -46,13 +48,12 @@ Verify: `npx makaron-cli list` should show projects.
 
 ### Let a human claim your account
 
-After registering, you can generate a link for a human to link your API key to their account:
+After registering, generate a link for a human to link your API key to their account:
 ```bash
-curl -X POST https://www.makaron.app/api/agent/claim \
-  -H "Authorization: Bearer mk_live_your_key"
+npx makaron-cli claim
 # → { "claim_url": "https://www.makaron.app/claim?token=clm_..." }
 ```
-Share the `claim_url` with a human. They log in and the API key gets linked to their account.
+Share the `claim_url` with a human. They log in and the API key gets linked to their account. Claim links are valid for 7 days. Run `claim` again anytime to get a new link.
 
 ## Core Workflow
 
