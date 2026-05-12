@@ -23,12 +23,18 @@ export default function AgentContent() {
 
       {/* Install */}
       <section className="mb-12">
-        <h2 className="text-lg text-fuchsia-400 mb-4">Install & Auth</h2>
-        <pre className="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto">
-{`npm install -g makaron-cli
-# or use directly: npx makaron-cli
-
-export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        <h2 className="text-lg text-fuchsia-400 mb-4">Install</h2>
+        <div className="bg-gray-900 rounded-lg p-4 flex items-center justify-between gap-3">
+          <code className="text-sm text-gray-200 whitespace-nowrap">npx makaron-cli</code>
+          <button
+            onClick={() => { navigator.clipboard?.writeText('npx makaron-cli').catch(() => {}); }}
+            className="shrink-0 px-3 py-1.5 rounded-md border border-gray-700 text-xs text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+          >
+            Copy
+          </button>
+        </div>
+        <pre className="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto mt-4">
+{`export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 npx makaron-cli list   # verify it works`}
         </pre>
       </section>
