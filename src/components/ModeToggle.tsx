@@ -19,7 +19,9 @@ export default function ModeToggle({ hidden, mode, onToggle }: ModeToggleProps) 
     fontWeight: 600,
     letterSpacing: '0.08em',
     textTransform: 'uppercase',
-    transition: 'all 0.2s',
+    transition: 'all 0.15s',
+    touchAction: 'manipulation',
+    WebkitTapHighlightColor: 'transparent',
     background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
     color: active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)',
   })
