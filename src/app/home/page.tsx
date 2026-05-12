@@ -1103,7 +1103,7 @@ function HomePageInner() {
           }}
         />
 
-        <TopBar page="home" />
+        {viewMode === 'human' && <TopBar page="home" />}
 
         {viewMode === 'agent' && <AgentContent />}
         <ModeToggle mode={viewMode} onToggle={setViewMode} hidden={viewMode === 'human' && (showFixedInput || !!selectedDetail)} />
