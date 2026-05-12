@@ -38,12 +38,21 @@ export async function middleware(request: NextRequest) {
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      // Exchange success — redirect to clean URL (remove ?code= param)
+      // Check if new user (no profile yet) → activate + welcome
+      const { data: { user } } = await supabase.auth.getUser()
+      let isNewUser = false
+      if (user) {
+        const { data: profile } = await supabase.from('user_profiles').select('activated').eq('id', user.id).single()
+        if (!profile?.activated) {
+          isNewUser = true
+        }
+      }
+
       const url = request.nextUrl.clone()
       url.searchParams.delete('code')
-      url.pathname = '/projects'
+      url.pathname = isNewUser ? '/home' : '/projects'
+      if (isNewUser) url.searchParams.set('welcome', '1')
       const response = NextResponse.redirect(url)
-      // Copy auth cookies from supabaseResponse to redirect response
       supabaseResponse.cookies.getAll().forEach(c => {
         response.cookies.set(c.name, c.value, { path: '/' })
       })

@@ -23,9 +23,12 @@ export default function TopBar({ page }: TopBarProps) {
 
   useEffect(() => {
     if (!user) return
-    fetch('/api/billing/credits').then(r => r.json()).then(d => {
+    const refresh = () => fetch('/api/billing/credits').then(r => r.json()).then(d => {
       setCreditBalance(d.balance ?? 0)
     }).catch(() => {})
+    refresh()
+    window.addEventListener('credits-updated', refresh)
+    return () => window.removeEventListener('credits-updated', refresh)
   }, [user])
 
   useEffect(() => {

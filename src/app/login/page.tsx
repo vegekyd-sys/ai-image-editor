@@ -94,16 +94,6 @@ export default function LoginPage() {
       })
       const check = await checkRes.json()
 
-      if (check.action === 'verify-email') {
-        // User exists but unconfirmed — send OTP
-        const { error: otpErr } = await supabase.auth.signInWithOtp({ email })
-        const waitMatch = otpErr?.message?.match(/after (\d+) seconds/)
-        setOtpPurpose('signup')
-        setOtpDigits(Array(8).fill(''))
-        setResendCooldown(waitMatch ? parseInt(waitMatch[1]) : 60)
-        setView('verify-otp')
-        return
-      }
 
       if (check.action === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
@@ -177,8 +167,16 @@ export default function LoginPage() {
         return
       }
 
-      // Signup verified — redirect
-      redirectAfterAuth()
+      // Signup verified — redirect (new user goes to home with welcome)
+      if (otpPurpose === 'signup') {
+        const returnUrl = sessionStorage.getItem('mkr_return_url')
+        sessionStorage.removeItem('mkr_return_url')
+        const target = returnUrl || '/home'
+        const sep = target.includes('?') ? '&' : '?'
+        window.location.href = target + sep + 'welcome=1'
+      } else {
+        redirectAfterAuth()
+      }
     } catch {
       setOtpError(t('auth.networkError'))
       setOtpLoading(false)

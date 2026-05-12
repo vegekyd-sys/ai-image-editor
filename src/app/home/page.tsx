@@ -133,14 +133,24 @@ function HomePageInner() {
     if (text) { returnTextRef.current = text; sessionStorage.removeItem('mkr_return_text') }
     sessionStorage.removeItem('mkr_return_skill')
     sessionStorage.removeItem('mkr_return_url')
-    // Welcome credits popup
+    // Welcome credits popup — also triggers activation for new users
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       if (params.get('welcome')) {
         window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
-        fetch('/api/billing/credits').then(r => r.json()).then(d => {
-          if (d.balance > 0) { setWelcomeCredits(d.balance); setShowWelcome(true) }
-        }).catch(() => {})
+        // Activate new user + grant welcome credits, then show popup
+        fetch('/api/auth/validate-invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ autoActivate: true }),
+        }).then(() =>
+          fetch('/api/billing/credits').then(r => r.json()).then(d => {
+            if (d.balance > 0) {
+              setWelcomeCredits(d.balance); setShowWelcome(true)
+              window.dispatchEvent(new Event('credits-updated'))
+            }
+          })
+        ).catch(() => {})
       }
     }
     // Delay text restore to run after skill overlay sets its default prompt
@@ -1095,7 +1105,7 @@ function HomePageInner() {
         <TopBar page="home" />
 
         {viewMode === 'agent' && <AgentContent />}
-        <ModeToggle mode={viewMode} onToggle={setViewMode} hidden={showFixedInput || !!selectedDetail} />
+        <ModeToggle mode={viewMode} onToggle={setViewMode} hidden={viewMode === 'human' && (showFixedInput || !!selectedDetail)} />
 
         <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
         {/* ── Hero: Landing-page style ── */}
