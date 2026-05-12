@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
+import { getSupabaseAdmin } from '@/lib/supabase/service';
 
 /**
  * GET /api/agent/run/[id] — Query run status and results.
@@ -163,23 +165,95 @@ export async function GET(
         try {
           const { data: anim } = await supabase
             .from('project_animations')
-            .select('status, video_url, created_at')
+            .select('id, status, video_url, created_at, project_id, projects(user_id)')
             .eq('piapi_task_id', v.task_id)
             .single();
           if (anim) {
-            v.status = anim.status === 'processing' ? 'rendering' : anim.status;
-            if (anim.video_url) v.url = anim.video_url;
-            if (anim.status === 'processing' && anim.created_at) {
-              v.elapsed_seconds = Math.round((Date.now() - new Date(anim.created_at).getTime()) / 1000);
+            // If still processing, actively poll the video API (server-side polling for CLI)
+            if (anim.status === 'processing') {
+              try {
+                const taskId = v.task_id as string;
+                const isEvolink = taskId.startsWith('task-unified-');
+                const isSeedance = taskId.startsWith('cgt-');
+                const isMotionControl = taskId.startsWith('mc-');
+                let result: { taskId: string; status: string; videoUrl?: string; error?: string };
+                const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
+
+                if (isEvolink) {
+                  const { getEvolinkTask } = await import('@/lib/evolink');
+                  result = await getEvolinkTask(taskId);
+                } else if (isSeedance) {
+                  const { getSeedanceTask } = await import('@/lib/seedance');
+                  result = await getSeedanceTask(taskId);
+                } else if (isMotionControl) {
+                  const { getKlingMotionControlTask } = await import('@/lib/kling');
+                  result = await getKlingMotionControlTask(realTaskId);
+                  result.taskId = taskId;
+                } else {
+                  const { getKlingTask } = await import('@/lib/kling');
+                  result = await getKlingTask(taskId);
+                }
+
+                if (result.status === 'completed' && result.videoUrl) {
+                  const admin = getSupabaseAdmin();
+                  await admin.from('project_animations')
+                    .update({ status: 'completed', video_url: result.videoUrl })
+                    .eq('piapi_task_id', taskId);
+                  v.status = 'completed';
+                  v.url = result.videoUrl;
+                  // Persist video to Storage in background
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const projects = anim.projects as any;
+                  const ownerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id;
+                  if (anim.project_id && ownerUserId) {
+                    const videoUrl = result.videoUrl;
+                    const animId = anim.id;
+                    const projectId = anim.project_id;
+                    const ownerId = ownerUserId as string;
+                    after(async () => {
+                      try {
+                        const { uploadVideo } = await import('@/lib/supabase/storage');
+                        const res = await fetch(videoUrl);
+                        if (!res.ok) return;
+                        const buffer = new Uint8Array(await res.arrayBuffer());
+                        const adminClient = getSupabaseAdmin();
+                        const permanentUrl = await uploadVideo(adminClient, ownerId, projectId, animId, buffer);
+                        if (permanentUrl) {
+                          await adminClient.from('project_animations')
+                            .update({ video_url: permanentUrl })
+                            .eq('id', animId);
+                        }
+                      } catch (err) {
+                        console.error('Video persist error:', err);
+                      }
+                    });
+                  }
+                } else if (result.status === 'failed') {
+                  const admin = getSupabaseAdmin();
+                  await admin.from('project_animations')
+                    .update({ status: 'failed' })
+                    .eq('piapi_task_id', taskId);
+                  v.status = 'failed';
+                  v.error = result.error;
+                } else {
+                  v.status = 'rendering';
+                  if (anim.created_at) {
+                    v.elapsed_seconds = Math.round((Date.now() - new Date(anim.created_at).getTime()) / 1000);
+                  }
+                }
+              } catch {
+                // Fallback: just report DB state
+                v.status = 'rendering';
+                if (anim.created_at) {
+                  v.elapsed_seconds = Math.round((Date.now() - new Date(anim.created_at).getTime()) / 1000);
+                }
+              }
+            } else {
+              v.status = anim.status === 'processing' ? 'rendering' : anim.status;
+              if (anim.video_url) v.url = anim.video_url;
             }
           }
         } catch { /* best effort */ }
-      })());
-      // Also update legacy
-      const lv = legacyVideos.find(x => x.taskId === v.task_id);
-      if (lv) enrichPromises.push((async () => {
-        if (v.status) lv.status = v.status as string;
-        if (v.url) lv.videoUrl = v.url as string;
       })());
     }
 
@@ -201,14 +275,25 @@ export async function GET(
           }
         } catch { /* best effort */ }
       })());
-      const lm = legacyMusic.find(x => x.taskId === m.task_id);
-      if (lm) enrichPromises.push((async () => {
-        if (m.status) lm.status = m.status as string;
-        if (m.url) lm.audioUrl = m.url as string;
-      })());
     }
 
     await Promise.all(enrichPromises);
+
+    // Sync legacy video/music after enrich completes
+    for (const v of videoItems) {
+      const lv = legacyVideos.find(x => x.taskId === v.task_id);
+      if (lv) {
+        if (v.status) lv.status = v.status as string;
+        if (v.url) lv.videoUrl = v.url as string;
+      }
+    }
+    for (const m of musicItems) {
+      const lm = legacyMusic.find(x => x.taskId === m.task_id);
+      if (lm) {
+        if (m.status) lm.status = m.status as string;
+        if (m.url) lm.audioUrl = m.url as string;
+      }
+    }
 
     // Determine effective status:
     // - "completed" only when agent is done AND all video/music are terminal
