@@ -1,6 +1,6 @@
 {
   "name": "makaron-cli",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Talk to Makaron Agent from the terminal — create projects, edit images, generate videos",
   "type": "module",
   "bin": {
