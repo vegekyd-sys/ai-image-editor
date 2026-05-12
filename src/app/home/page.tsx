@@ -1093,9 +1093,9 @@ function HomePageInner() {
         />
 
         <TopBar page="home" />
-        <ModeToggle mode={viewMode} onToggle={setViewMode} hidden={showFixedInput || !!selectedDetail} />
 
         {viewMode === 'agent' && <AgentContent />}
+        <ModeToggle mode={viewMode} onToggle={setViewMode} hidden={showFixedInput || !!selectedDetail} />
 
         <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
         {/* ── Hero: Landing-page style ── */}
