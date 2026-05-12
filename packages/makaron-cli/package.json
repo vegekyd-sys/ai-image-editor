@@ -8,6 +8,9 @@
   },
   "files": [
     "bin/",
+    "skills/",
+    ".codex-plugin/",
+    ".claude-plugin/",
     "SKILL.md",
     "README.md"
   ],
