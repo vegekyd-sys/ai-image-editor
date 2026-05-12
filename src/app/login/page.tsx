@@ -98,10 +98,28 @@ export default function LoginPage() {
       })
       const check = await checkRes.json()
 
+      if (check.action === 'verify-email') {
+        // User exists but hasn't verified OTP — resend code
+        await supabase.auth.signInWithOtp({ email })
+        setOtpPurpose('signup')
+        setOtpDigits(Array(8).fill(''))
+        setResendCooldown(60)
+        setView('verify-otp')
+        return
+      }
 
       if (check.action === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
         if (!signInError) { redirectAfterAuth(); return }
+        if (signInError.message === 'Email not confirmed') {
+          // Edge case: user exists but unconfirmed — send OTP
+          await supabase.auth.signInWithOtp({ email })
+          setOtpPurpose('signup')
+          setOtpDigits(Array(8).fill(''))
+          setResendCooldown(60)
+          setView('verify-otp')
+          return
+        }
         setError(mapError(signInError.message))
         return
       }

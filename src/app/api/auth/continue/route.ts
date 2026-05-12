@@ -30,6 +30,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ action: 'signup' })
     }
 
+    if (!userData.user.email_confirmed_at) {
+      return NextResponse.json({ action: 'verify-email' })
+    }
+
     return NextResponse.json({ action: 'login' })
   } catch (e) {
     console.error('[auth/continue] Error:', e)
