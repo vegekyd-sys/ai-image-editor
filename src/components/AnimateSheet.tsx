@@ -103,14 +103,14 @@ export default function AnimateSheet({
         .map(i => activeUrls[Math.min(i, activeUrls.length - 1)]);
     onStateChange({ imageUrls: urls, status: 'submitting', error: null });
     try {
-      const res = await fetch('/api/animate', {
+      const res = await fetch('/api/video-snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to create task');
-      onStateChange({ taskId: json.taskId, status: 'polling', pollSeconds: 0 });
+      onStateChange({ taskId: json.taskId, snapshotId: json.snapshotId, status: 'polling', pollSeconds: 0 });
     } catch (err) {
       const raw = String(err);
       const friendly = raw.includes('523') || raw.includes('unreachable') ? t('animate.errUnavailable')

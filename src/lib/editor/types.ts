@@ -3,6 +3,7 @@ export interface AnimationState {
   prompt: string
   userHint: string
   taskId: string | null
+  snapshotId?: string | null
   videoUrl: string | null
   status: 'idle' | 'generating_prompt' | 'ready' | 'submitting' | 'polling' | 'done' | 'error'
   error: string | null
