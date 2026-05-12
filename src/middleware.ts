@@ -112,6 +112,11 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
+  // /home is always accessible (new users land here with ?welcome=1 before activation completes)
+  if (pathname === '/home' || pathname.startsWith('/home/')) {
+    return supabaseResponse
+  }
+
   // All other routes — require activation
   if (!activated) {
     const url = request.nextUrl.clone()
