@@ -1103,9 +1103,13 @@ function HomePageInner() {
           }}
         />
 
-        {viewMode === 'human' && <TopBar page="home" />}
+        <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
+          <TopBar page="home" />
+        </div>
 
-        {viewMode === 'agent' && <AgentContent />}
+        <div style={{ display: viewMode === 'agent' ? undefined : 'none' }}>
+          <AgentContent />
+        </div>
         <ModeToggle mode={viewMode} onToggle={setViewMode} hidden={viewMode === 'human' && (showFixedInput || !!selectedDetail)} />
 
         <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
