@@ -54,13 +54,14 @@ export default function LoginPage() {
   }, [resendCooldown])
 
   function getReturnUrl(): string {
-    return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
+    return localStorage.getItem('mkr_return_url') || ''
   }
 
   function redirectAfterAuth() {
     let returnUrl = getReturnUrl()
-    sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
+    localStorage.removeItem('mkr_return_text')
+    localStorage.removeItem('mkr_return_skill')
     // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect
     const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
     if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
@@ -172,14 +173,17 @@ export default function LoginPage() {
 
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
-        let returnUrl = sessionStorage.getItem('mkr_return_url') || ''
-        sessionStorage.removeItem('mkr_return_url')
+        let returnUrl = localStorage.getItem('mkr_return_url') || ''
+        localStorage.removeItem('mkr_return_url')
+        localStorage.removeItem('mkr_return_text')
+        localStorage.removeItem('mkr_return_skill')
         // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
         const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
         if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
         const target = returnUrl || '/home'
         const sep = target.includes('?') ? '&' : '?'
-        window.location.href = target + sep + 'welcome=1'
+        // Small delay to ensure Supabase SDK writes session cookie before redirect
+        setTimeout(() => { window.location.href = target + sep + 'welcome=1' }, 100)
       } else {
         redirectAfterAuth()
       }

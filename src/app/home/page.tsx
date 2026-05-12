@@ -129,10 +129,10 @@ function HomePageInner() {
   // Restore state from login redirect + detect welcome
   const returnTextRef = useRef<string | null>(null)
   useEffect(() => {
-    const text = sessionStorage.getItem('mkr_return_text')
-    if (text) { returnTextRef.current = text; sessionStorage.removeItem('mkr_return_text') }
-    sessionStorage.removeItem('mkr_return_skill')
-    sessionStorage.removeItem('mkr_return_url')
+    const text = localStorage.getItem('mkr_return_text')
+    if (text) { returnTextRef.current = text; localStorage.removeItem('mkr_return_text') }
+    localStorage.removeItem('mkr_return_skill')
+    localStorage.removeItem('mkr_return_url')
     // Welcome credits popup — activates new user + grants credits
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -504,9 +504,9 @@ function HomePageInner() {
   }, [creating])
 
   const redirectToLogin = useCallback(() => {
-    sessionStorage.setItem('mkr_return_url', window.location.pathname + window.location.search)
-    if (inputText.trim()) sessionStorage.setItem('mkr_return_text', inputText)
-    if (selectedDetail?.id) sessionStorage.setItem('mkr_return_skill', selectedDetail.id)
+    localStorage.setItem('mkr_return_url', window.location.pathname + window.location.search)
+    if (inputText.trim()) localStorage.setItem('mkr_return_text', inputText)
+    if (selectedDetail?.id) localStorage.setItem('mkr_return_skill', selectedDetail.id)
     router.push('/login')
   }, [inputText, selectedDetail, router])
 
