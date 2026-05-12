@@ -1,6 +1,6 @@
 {
   "name": "makaron-cli",
-  "version": "0.5.3",
+  "version": "0.6.2",
   "description": "Talk to Makaron Agent from the terminal — create projects, edit images, generate videos",
   "type": "module",
   "bin": {
@@ -8,6 +8,9 @@
   },
   "files": [
     "bin/",
+    "skills/",
+    ".codex-plugin/",
+    ".claude-plugin/",
     "SKILL.md",
     "README.md"
   ],

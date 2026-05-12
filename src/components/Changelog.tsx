@@ -8,6 +8,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-05-12',
+    en: { title: 'Agent Self-Registration', items: [
+      'AI agents can now register themselves — get an API key programmatically, no human needed',
+      'Claim flow: agents generate a link for humans to link the API key to their account',
+      'New /agent page: full CLI docs optimized for LLM consumption, one-click copy',
+      'Human/Agent mode toggle at the bottom of the page',
+    ]},
+    zh: { title: 'Agent 自注册', items: [
+      'AI Agent 现在可以自注册 — 自动获取 API key，无需人类介入',
+      'Claim 流程：Agent 生成链接，人类点击即可将 API key 绑定到自己的账号',
+      '新增 /agent 页面：完整 CLI 文档，为 LLM 优化，一键复制',
+      '页面底部 Human/Agent 模式切换',
+    ]},
+  },
+  {
     date: '2026-05-11',
     en: { title: 'CLI — Works with OpenClaw & Hermes', items: [
       'CLI now fully compatible with OpenClaw & Hermes — external agents can create and edit projects with edit, video, and music commands',

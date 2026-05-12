@@ -13,10 +13,22 @@ export async function GET(
   { params }: { params: Promise<{ taskId: string }> }
 ) {
   try {
-    const authResult = await authenticateRequest(req)
-    if ('error' in authResult) return authResult.error
-
     const { taskId } = await params
+
+    // Allow anonymous access for public projects; require auth otherwise
+    const authResult = await authenticateRequest(req)
+    if ('error' in authResult) {
+      const adminCheck = getSupabaseAdmin()
+      const { data: animCheck } = await adminCheck
+        .from('project_animations')
+        .select('project_id, projects(is_public)')
+        .eq('piapi_task_id', taskId)
+        .single()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const proj = animCheck?.projects as any
+      const isPublic = Array.isArray(proj) ? proj[0]?.is_public : proj?.is_public
+      if (!isPublic) return authResult.error
+    }
 
     // Poll task — route by taskId prefix or env var
     // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, else = Kling

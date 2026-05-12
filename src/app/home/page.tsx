@@ -11,6 +11,8 @@ import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
 import SkillSelector from '@/components/SkillSelector'
 import TopBar from '@/components/TopBar'
+import ModeToggle from '@/components/ModeToggle'
+import AgentContent from '@/components/AgentContent'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 
@@ -58,6 +60,7 @@ function HomePageInner() {
   const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
 
+  const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputBoxRef = useRef<HTMLDivElement>(null)
@@ -126,18 +129,29 @@ function HomePageInner() {
   // Restore state from login redirect + detect welcome
   const returnTextRef = useRef<string | null>(null)
   useEffect(() => {
-    const text = sessionStorage.getItem('mkr_return_text')
-    if (text) { returnTextRef.current = text; sessionStorage.removeItem('mkr_return_text') }
-    sessionStorage.removeItem('mkr_return_skill')
-    sessionStorage.removeItem('mkr_return_url')
-    // Welcome credits popup
+    const text = localStorage.getItem('mkr_return_text')
+    if (text) { returnTextRef.current = text; localStorage.removeItem('mkr_return_text') }
+    localStorage.removeItem('mkr_return_skill')
+    localStorage.removeItem('mkr_return_url')
+    // Welcome credits popup — activates new user + grants credits
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       if (params.get('welcome')) {
         window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
-        fetch('/api/billing/credits').then(r => r.json()).then(d => {
-          if (d.balance > 0) { setWelcomeCredits(d.balance); setShowWelcome(true) }
-        }).catch(() => {})
+        fetch('/api/auth/activate', { method: 'POST' })
+          .then(r => r.json())
+          .then(d => {
+            if (d.credits > 0) {
+              setWelcomeCredits(d.credits); setShowWelcome(true)
+              window.dispatchEvent(new Event('credits-updated'))
+            } else if (d.isNew === false) {
+              // Already activated user revisiting with ?welcome=1 — just refresh credits
+              fetch('/api/billing/credits').then(r => r.json()).then(b => {
+                if (b.balance > 0) { setWelcomeCredits(b.balance); setShowWelcome(true); window.dispatchEvent(new Event('credits-updated')) }
+              })
+            }
+          })
+          .catch(() => {})
       }
     }
     // Delay text restore to run after skill overlay sets its default prompt
@@ -502,9 +516,9 @@ function HomePageInner() {
   }, [creating])
 
   const redirectToLogin = useCallback(() => {
-    sessionStorage.setItem('mkr_return_url', window.location.pathname + window.location.search)
-    if (inputText.trim()) sessionStorage.setItem('mkr_return_text', inputText)
-    if (selectedDetail?.id) sessionStorage.setItem('mkr_return_skill', selectedDetail.id)
+    localStorage.setItem('mkr_return_url', window.location.pathname + window.location.search)
+    if (inputText.trim()) localStorage.setItem('mkr_return_text', inputText)
+    if (selectedDetail?.id) localStorage.setItem('mkr_return_skill', selectedDetail.id)
     router.push('/login')
   }, [inputText, selectedDetail, router])
 
@@ -1101,8 +1115,16 @@ function HomePageInner() {
           }}
         />
 
-        <TopBar page="home" />
+        <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
+          <TopBar page="home" />
+        </div>
 
+        <div style={{ display: viewMode === 'agent' ? undefined : 'none' }}>
+          <AgentContent />
+        </div>
+        <ModeToggle mode={viewMode} onToggle={setViewMode} hidden={viewMode === 'human' && (showFixedInput || !!selectedDetail)} />
+
+        <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
         {/* ── Hero: Landing-page style ── */}
         <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
           {/* Glow */}
@@ -1554,6 +1576,7 @@ function HomePageInner() {
           </div>
         </>
       )}
+      </div>
     </>
   )
 }

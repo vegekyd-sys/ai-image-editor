@@ -83,14 +83,32 @@ export async function requireCredits(
     return { ok: true, balance }
   }
 
+  // Check if this is an unclaimed agent account
+  const { data: profile } = await admin
+    .from('user_profiles')
+    .select('is_agent')
+    .eq('id', userId)
+    .single()
+
+  const isAgent = profile?.is_agent === true
+
   return {
     ok: false,
     balance,
     response: new Response(
-      JSON.stringify({
+      JSON.stringify(isAgent ? {
         error: 'insufficient_credits',
         balance,
         needed: estimatedCredits,
+        action: 'claim',
+        message: 'Credits exhausted. Let a human claim and top up your account.',
+        claim_command: 'npx makaron-cli claim',
+      } : {
+        error: 'insufficient_credits',
+        balance,
+        needed: estimatedCredits,
+        action: 'topup',
+        message: 'Insufficient credits.',
         upgradeUrl: 'https://www.makaron.app/dashboard',
       }),
       { status: 402, headers: { 'Content-Type': 'application/json' } },

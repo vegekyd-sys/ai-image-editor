@@ -98,8 +98,17 @@ function getAuth() {
   }
   const auth = loadAuth();
   if (!auth) {
-    console.error('Not logged in. Set MAKARON_API_KEY or run: npx makaron-cli login');
+    console.error('No API key found. Set MAKARON_API_KEY or run:');
+    console.error('  npx makaron-cli register --json   (agent self-registration)');
+    console.error('  npx makaron-cli login             (human interactive login)');
     process.exit(1);
+  }
+  // Registered via `register --verify` (saved as _apiKey)
+  if (auth._apiKey) {
+    return {
+      headers: { 'Authorization': `Bearer ${auth._apiKey}` },
+      baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
+    };
   }
   return {
     headers: { 'Cookie': buildCookie(auth) },
@@ -490,15 +499,11 @@ async function createProject(baseUrl, headers, opts) {
   if (opts.imageUrls?.length) {
     body.imageUrls = opts.imageUrls;
   } else if (opts.images?.length) {
-    body.imageBase64s = opts.images.map(f => {
-      const buf = fs.readFileSync(f);
-      return `data:image/jpeg;base64,${buf.toString('base64')}`;
-    });
+    body.imageBase64s = opts.images.map(f => readImageAsDataUrl(f));
   } else if (opts.imageUrl) {
     body.imageUrl = opts.imageUrl;
   } else if (opts.image) {
-    const buf = fs.readFileSync(opts.image);
-    body.imageBase64 = `data:image/jpeg;base64,${buf.toString('base64')}`;
+    body.imageBase64 = readImageAsDataUrl(opts.image);
   }
   if (opts.title) body.title = opts.title;
 
@@ -558,12 +563,43 @@ async function callMcpTool(baseUrl, headers, toolName, args) {
   return data.result;
 }
 
+// ─── Image Validation ────────────────────────────────────────────────────────
+
+function detectMime(buf) {
+  if (buf[0]===0xFF && buf[1]===0xD8) return 'image/jpeg';
+  if (buf[0]===0x89 && buf[1]===0x50 && buf[2]===0x4E && buf[3]===0x47) return 'image/png';
+  if (buf[0]===0x52 && buf[1]===0x49 && buf[2]===0x46 && buf[3]===0x46 && buf[8]===0x57 && buf[9]===0x45 && buf[10]===0x42 && buf[11]===0x50) return 'image/webp';
+  if (buf[0]===0x47 && buf[1]===0x49 && buf[2]===0x46) return 'image/gif';
+  if (buf.length >= 8 && buf[4]===0x66 && buf[5]===0x74 && buf[6]===0x79 && buf[7]===0x70) return 'image/heic';
+  return null;
+}
+
+function validateImage(filePath) {
+  if (!fs.existsSync(filePath)) return { error: `File not found: ${filePath}` };
+  const stat = fs.statSync(filePath);
+  if (stat.size === 0) return { error: `File is empty: ${filePath}` };
+  if (stat.size > 10 * 1024 * 1024) return { error: `File too large: ${(stat.size/1024/1024).toFixed(1)}MB (max 10MB). Resize before uploading.` };
+  const header = Buffer.alloc(12);
+  const fd = fs.openSync(filePath, 'r');
+  fs.readSync(fd, header, 0, 12, 0);
+  fs.closeSync(fd);
+  const mime = detectMime(header);
+  if (!mime) return { error: `Unsupported format: ${path.extname(filePath)}. Supported: JPEG, PNG, WebP` };
+  if (mime === 'image/heic') return { error: `HEIC format not supported via CLI. Convert first:\n   sips -s format jpeg "${filePath}" --out output.jpg` };
+  if (mime === 'image/gif') return { error: `GIF format not supported. Convert to JPEG or PNG first.` };
+  return { ok: true, mime };
+}
+
+function readImageAsDataUrl(filePath) {
+  const v = validateImage(filePath);
+  if (!v.ok) { console.error(`❌ Cannot upload: ${path.basename(filePath)}\n   ${v.error}`); process.exit(1); }
+  const buf = fs.readFileSync(filePath);
+  return `data:${v.mime};base64,${buf.toString('base64')}`;
+}
+
 function imageToArg(imgPath) {
   if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) return imgPath;
-  const buf = fs.readFileSync(imgPath);
-  const ext = imgPath.split('.').pop()?.toLowerCase();
-  const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[ext] || 'image/jpeg';
-  return `data:${mime};base64,${buf.toString('base64')}`;
+  return readImageAsDataUrl(imgPath);
 }
 
 function saveMcpImage(result, outputPath) {
@@ -650,8 +686,7 @@ if (command === 'login') {
       // Create project with images
       const base64s = chatImages.map(imgPath => {
         process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
-        const buf = fs.readFileSync(imgPath);
-        return `data:image/jpeg;base64,${buf.toString('base64')}`;
+        return readImageAsDataUrl(imgPath);
       });
       const res = await fetch(`${baseUrl}/api/projects/create`, {
         method: 'POST',
@@ -669,8 +704,7 @@ if (command === 'login') {
   if (chatImages.length > 0) {
     const base64s = chatImages.map(imgPath => {
       process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
-      const buf = fs.readFileSync(imgPath);
-      return `data:image/jpeg;base64,${buf.toString('base64')}`;
+      return readImageAsDataUrl(imgPath);
     });
     const res = await fetch(`${baseUrl}/api/projects/create`, {
       method: 'POST',
@@ -1026,11 +1060,98 @@ if (command === 'login') {
   admin set-admin <email>              Grant admin access to a user
 `);
   }
+} else if (command === 'register') {
+  const baseUrl = process.env.MAKARON_URL || DEFAULT_URL;
+  const isVerify = args.includes('--verify');
+
+  if (isVerify) {
+    let challengeId = null, answer = null;
+    for (let i = 1; i < args.length; i++) {
+      if (args[i] === '--challenge-id' && args[i + 1]) challengeId = args[++i];
+      else if (args[i] === '--answer' && args[i + 1]) answer = args[++i];
+    }
+    if (!challengeId || !answer) {
+      console.error('Usage: makaron register --verify --challenge-id <id> --answer <number>');
+      process.exit(1);
+    }
+    const res = await fetch(`${baseUrl}/api/agent/register/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challenge_id: challengeId, answer }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error(`Registration failed: ${data.error || data.message || res.status}`);
+      process.exit(1);
+    }
+    // Save key to auth file
+    saveAuth({ _apiKey: data.api_key, _baseUrl: baseUrl });
+    // Request claim URL
+    let claimUrl = null;
+    try {
+      const claimRes = await fetch(`${baseUrl}/api/agent/claim`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${data.api_key}`, 'Content-Type': 'application/json' },
+      });
+      const claimData = await claimRes.json();
+      if (claimRes.ok) claimUrl = claimData.claim_url;
+    } catch { /* non-fatal */ }
+    const result = { api_key: data.api_key, credits: data.credits, claim_url: claimUrl };
+    console.log(JSON.stringify(result));
+    console.error(`✅ Registered! Key saved to ${AUTH_FILE}`);
+    if (claimUrl) console.error(`🔗 Claim URL (share with human): ${claimUrl}`);
+  } else {
+    // Check if already has a key
+    const existingKey = process.env.MAKARON_API_KEY;
+    const existingAuth = loadAuth();
+    if (existingKey) {
+      console.error(`Already have API key: ${existingKey.slice(0, 16)}...`);
+      process.exit(0);
+    }
+    if (existingAuth?._apiKey) {
+      console.error(`Already registered: ${existingAuth._apiKey.slice(0, 16)}...`);
+      process.exit(0);
+    }
+    // Request challenge
+    const res = await fetch(`${baseUrl}/api/agent/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error(`Registration failed: ${data.error || data.message || res.status}`);
+      process.exit(1);
+    }
+    if (args.includes('--json')) {
+      console.log(JSON.stringify(data));
+    } else {
+      console.log(JSON.stringify(data));
+      console.error(`\nChallenge received. Solve and run:`);
+      console.error(`  npx makaron-cli register --verify --challenge-id ${data.challenge_id} --answer <your_answer>`);
+    }
+  }
+} else if (command === 'claim') {
+  const auth = getAuth();
+  const res = await fetch(`${auth.baseUrl}/api/agent/claim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...auth.headers },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    console.error(`Claim failed: ${data.error || data.message || res.status}`);
+    process.exit(1);
+  }
+  console.log(JSON.stringify(data));
+  console.error(`🔗 Share this link with a human: ${data.claim_url}`);
 } else {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
 
 Commands:
-  login                              Log in to Makaron
+  register --json                    Get challenge for agent self-registration
+  register --verify --challenge-id <id> --answer <n>  Verify and save API key
+  claim                              Get claim URL for human to link account
+  login                              Log in to Makaron (human interactive)
   list (ls)                          List all projects
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL

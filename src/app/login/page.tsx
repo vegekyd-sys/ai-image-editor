@@ -54,12 +54,17 @@ export default function LoginPage() {
   }, [resendCooldown])
 
   function getReturnUrl(): string {
-    return sessionStorage.getItem('mkr_return_url') || ''
+    return localStorage.getItem('mkr_return_url') || ''
   }
 
   function redirectAfterAuth() {
-    const returnUrl = getReturnUrl()
-    sessionStorage.removeItem('mkr_return_url')
+    let returnUrl = getReturnUrl()
+    localStorage.removeItem('mkr_return_url')
+    localStorage.removeItem('mkr_return_text')
+    localStorage.removeItem('mkr_return_skill')
+    // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect
+    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
+    if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
     window.location.href = returnUrl || '/'
   }
 
@@ -94,12 +99,11 @@ export default function LoginPage() {
       const check = await checkRes.json()
 
       if (check.action === 'verify-email') {
-        // User exists but unconfirmed — send OTP
-        const { error: otpErr } = await supabase.auth.signInWithOtp({ email })
-        const waitMatch = otpErr?.message?.match(/after (\d+) seconds/)
+        // User exists but hasn't verified OTP — resend code
+        await supabase.auth.signInWithOtp({ email })
         setOtpPurpose('signup')
         setOtpDigits(Array(8).fill(''))
-        setResendCooldown(waitMatch ? parseInt(waitMatch[1]) : 60)
+        setResendCooldown(60)
         setView('verify-otp')
         return
       }
@@ -107,6 +111,15 @@ export default function LoginPage() {
       if (check.action === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
         if (!signInError) { redirectAfterAuth(); return }
+        if (signInError.message === 'Email not confirmed') {
+          // Edge case: user exists but unconfirmed — send OTP
+          await supabase.auth.signInWithOtp({ email })
+          setOtpPurpose('signup')
+          setOtpDigits(Array(8).fill(''))
+          setResendCooldown(60)
+          setView('verify-otp')
+          return
+        }
         setError(mapError(signInError.message))
         return
       }
@@ -151,15 +164,15 @@ export default function LoginPage() {
 
     try {
       const supabase = getSupabase()
-      // Try verification: recovery uses 'recovery', signup tries 'magiclink' then 'email'
+      // Try verification: recovery uses 'recovery', signup tries 'email' then 'magiclink'
       let verifyError: string | null = null
       if (otpPurpose === 'recovery') {
         const { error } = await supabase.auth.verifyOtp({ email, token, type: 'recovery' })
         if (error) verifyError = error.message
       } else {
-        const { error } = await supabase.auth.verifyOtp({ email, token, type: 'magiclink' })
+        const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
         if (error) {
-          const { error: err2 } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
+          const { error: err2 } = await supabase.auth.verifyOtp({ email, token, type: 'magiclink' })
           if (err2) verifyError = err2.message
         }
       }
@@ -176,8 +189,22 @@ export default function LoginPage() {
         return
       }
 
-      // Signup verified — redirect
-      redirectAfterAuth()
+      // Signup verified — redirect (new user goes to home with welcome)
+      if (otpPurpose === 'signup') {
+        let returnUrl = localStorage.getItem('mkr_return_url') || ''
+        localStorage.removeItem('mkr_return_url')
+        localStorage.removeItem('mkr_return_text')
+        localStorage.removeItem('mkr_return_skill')
+        // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
+        const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
+        if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
+        const target = returnUrl || '/home'
+        const sep = target.includes('?') ? '&' : '?'
+        // Small delay to ensure Supabase SDK writes session cookie before redirect
+        setTimeout(() => { window.location.href = target + sep + 'welcome=1' }, 100)
+      } else {
+        redirectAfterAuth()
+      }
     } catch {
       setOtpError(t('auth.networkError'))
       setOtpLoading(false)

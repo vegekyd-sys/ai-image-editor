@@ -1,5 +1,7 @@
 # Makaron CLI — Agent Integration Skill
 
+> **makaron.app** is for humans. **makaron-cli** is for AI agents.
+
 Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, and it produces images, videos, music, and animated designs — all saved to a persistent project.
 
 ## Setup
@@ -7,11 +9,51 @@ Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, an
 ```bash
 npm install -g makaron-cli
 # or use directly: npx makaron-cli
+```
 
+### Get your API key
+
+**Option A: Human login**
+1. Go to [makaron.app](https://makaron.app) and log in
+2. Open the menu (top-right)
+3. Click **Get API Key**
+4. Copy your `mk_live_...` key
+
+**Option B: Agent Self-Registration (no human required)**
+```bash
+# Step 1: Get challenge
+npx makaron-cli register --json
+# → { "challenge_id": "...", "challenge": "...", "expected_format": "numeric, round to 2 decimal places" }
+
+# Step 2: Solve the math problem and verify
+npx makaron-cli register --verify --challenge-id <id> --answer 34.5
+# → Key saved to ~/.makaron/auth.json
+# → { "api_key": "mk_live_...", "credits": N, "claim_url": "..." }
+```
+
+After registration, the key is saved locally — no need to export `MAKARON_API_KEY`.
+
+Discovery endpoint (returns full registration flow + CLI usage as JSON):
+```bash
+curl https://www.makaron.app/api/agent/register
+```
+
+Docs: [makaron.app/agent](https://www.makaron.app/agent)
+
+```bash
 export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Verify: `npx makaron-cli list` should show projects.
+
+### Let a human claim your account
+
+After registering, generate a link for a human to link your API key to their account:
+```bash
+npx makaron-cli claim
+# → { "claim_url": "https://www.makaron.app/claim?token=clm_..." }
+```
+Share the `claim_url` with a human. They log in and the API key gets linked to their account. Claim links are valid for 7 days. Run `claim` again anytime to get a new link.
 
 ## Core Workflow
 
@@ -181,7 +223,7 @@ type MakaronOutput =
 | Add/remove elements | "add a cat on the table" / "remove background person" |
 | Text-to-image | "generate a cyberpunk cityscape" |
 | Video from image | "create a 5 second video of her walking" |
-| Video with model | "用seedance模型做5秒视频" |
+| Video with model | "use seedance model, make a 5s video" |
 | Background music | "add calm piano music" |
 | Motion design | "create an Instagram story with animated text" |
 | Multi-step | "edit the photo then make a video from it" |
@@ -191,15 +233,15 @@ type MakaronOutput =
 When serving end-users in a chat environment (Feishu, Slack, Discord), use this proactive message pattern:
 
 ```bash
-# 1. Immediately reply to user: "收到，开始做"
-send_message "收到！正在为你制作..."
+# 1. Immediately acknowledge the user
+send_message "Got it! Working on it now..."
 
 # 2. Create project + submit (one command)
 RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video")
 
 # 3. Send project link proactively
 PROJECT_URL=$(npx makaron-cli responses get $RUN_ID --pick project_url)
-send_message "项目已创建：$PROJECT_URL"
+send_message "Project created: $PROJECT_URL"
 
 # 4. Watch and send each artifact as it appears
 npx makaron-cli responses watch $RUN_ID --jsonl | while read -r line; do
@@ -215,7 +257,7 @@ npx makaron-cli responses watch $RUN_ID --jsonl | while read -r line; do
     # Video ready — send as media
     send_video "$URL"
   elif [ "$EVENT" = "done" ]; then
-    send_message "全部完成 ✨"
+    send_message "All done!"
   fi
 done
 ```
@@ -223,7 +265,7 @@ done
 **Key principles for service agents:**
 - **Proactive, not reactive**: Don't wait for the full run to finish. Send progress messages and artifacts as they appear.
 - **Media over links**: When possible, send images/videos as native media in the chat (download URL and upload as attachment), not just paste the URL.
-- **Immediate acknowledgment**: Reply "收到" within 1 second of receiving user request. Don't make users wait for project creation.
+- **Immediate acknowledgment**: Reply within 1 second of receiving user request. Don't make users wait for project creation.
 - **Project link early**: Send the project URL right after creation so users can check anytime.
 - **Stream artifacts**: Use `watch --jsonl` to push each artifact the moment it's ready. An image at 15s should reach the user at 15s, not after the video finishes at 5 minutes.
 

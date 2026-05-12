@@ -40,21 +40,48 @@ export async function POST(req: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
 
-    if (count && count > 0) {
-      await admin
-        .from('user_profiles')
-        .upsert({ id: user.id, activated: true }, { onConflict: 'id' })
+    // Auto-activate: any authenticated user (new registration or legacy with projects)
+    await admin
+      .from('user_profiles')
+      .upsert({ id: user.id, activated: true }, { onConflict: 'id' })
 
-      const response = NextResponse.json({ success: true, autoActivated: true })
-      response.cookies.set('mkr_activated', '1', {
-        path: '/',
-        maxAge: 365 * 24 * 60 * 60,
-        sameSite: 'lax',
-      })
-      return response
+    // Grant welcome credits if no balance exists
+    let isNewUser = false
+    const { data: existingBalance } = await admin
+      .from('credit_balances')
+      .select('balance')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!existingBalance) {
+      isNewUser = true
+      const { data: setting } = await admin
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'welcome_credits')
+        .single()
+      const welcomeCredits = parseInt(setting?.value || '500')
+      if (welcomeCredits > 0) {
+        const { addCredits } = await import('@/lib/billing/credits')
+        await addCredits(user.id, welcomeCredits)
+        await admin.from('credit_purchases').insert({
+          user_id: user.id,
+          stripe_session_id: 'welcome_gift',
+          credits: welcomeCredits,
+          amount_usd: 0,
+          status: 'completed',
+          source: 'welcome',
+        })
+      }
     }
 
-    return NextResponse.json({ success: false, error: 'Not activated' })
+    const response = NextResponse.json({ success: true, autoActivated: true, welcome: isNewUser })
+    response.cookies.set('mkr_activated', '1', {
+      path: '/',
+      maxAge: 365 * 24 * 60 * 60,
+      sameSite: 'lax',
+    })
+    return response
   }
 
   // Normal flow: validate invite code

@@ -38,12 +38,21 @@ export async function middleware(request: NextRequest) {
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      // Exchange success — redirect to clean URL (remove ?code= param)
+      // Check if new user (no profile yet) → activate + welcome
+      const { data: { user } } = await supabase.auth.getUser()
+      let isNewUser = false
+      if (user) {
+        const { data: profile } = await supabase.from('user_profiles').select('activated').eq('id', user.id).single()
+        if (!profile?.activated) {
+          isNewUser = true
+        }
+      }
+
       const url = request.nextUrl.clone()
       url.searchParams.delete('code')
-      url.pathname = '/projects'
+      url.pathname = isNewUser ? '/home' : '/projects'
+      if (isNewUser) url.searchParams.set('welcome', '1')
       const response = NextResponse.redirect(url)
-      // Copy auth cookies from supabaseResponse to redirect response
       supabaseResponse.cookies.getAll().forEach(c => {
         response.cookies.set(c.name, c.value, { path: '/' })
       })
@@ -67,7 +76,7 @@ export async function middleware(request: NextRequest) {
     const isProjectView = /^\/projects\/[0-9a-f-]{36}$/.test(pathname)
     if (isProjectView) return supabaseResponse
 
-    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/home' && !pathname.startsWith('/home/') && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/')) {
+    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/home' && !pathname.startsWith('/home/') && pathname !== '/agent' && pathname !== '/claim' && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/')) {
       const url = request.nextUrl.clone()
       url.pathname = '/home'
       return NextResponse.redirect(url)
@@ -91,10 +100,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // /auth-done — client-side redirect after OAuth, always accessible
-  if (pathname === '/auth-done') {
-    return supabaseResponse
-  }
 
   // /activate — accessible when logged in
   if (pathname === '/activate') {
@@ -104,6 +109,11 @@ export async function middleware(request: NextRequest) {
       url.pathname = '/projects'
       return NextResponse.redirect(url)
     }
+    return supabaseResponse
+  }
+
+  // /home is always accessible (new users land here with ?welcome=1 before activation completes)
+  if (pathname === '/home' || pathname.startsWith('/home/')) {
     return supabaseResponse
   }
 
