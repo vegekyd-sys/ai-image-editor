@@ -24,7 +24,7 @@ export async function GET(
     // Load snapshot with video_meta
     const { data: snap } = await supabase
       .from('snapshots')
-      .select('id, project_id, video_meta')
+      .select('id, project_id, video_meta, image_url')
       .eq('id', snapshotId)
       .single()
 
@@ -100,7 +100,7 @@ export async function GET(
         }
       })
 
-      return NextResponse.json({ status: 'completed', videoUrl: result.videoUrl, snapshotId })
+      return NextResponse.json({ status: 'completed', videoUrl: result.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
     }
 
     if (result.status === 'failed') {
@@ -111,7 +111,7 @@ export async function GET(
         .eq('id', snapshotId)
     }
 
-    return NextResponse.json({ status: result.status, snapshotId, error: result.error })
+    return NextResponse.json({ status: result.status, snapshotId, imageUrl: snap.image_url || undefined, error: result.error })
   } catch (err) {
     console.error('video-snapshot GET error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

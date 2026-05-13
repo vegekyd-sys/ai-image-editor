@@ -265,19 +265,28 @@ export default function Editor({
         return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
       }
 
-      // Same IDs — merge design/props updates from Supabase into cached snapshots.
-      // This handles: cache shows stale design, then Supabase loads fresh design JSON.
+      // Same IDs — merge updates from Supabase into cached snapshots.
+      // This handles: cache shows stale data, then Supabase loads fresh values.
       const incoming = new Map(initialSnapshots.map(s => [s.id, s]));
       let changed = false;
       const merged = prev.map(s => {
         const fresh = incoming.get(s.id);
-        if (!fresh?.design) return s;
-        // If fresh has a design but prev doesn't, or fresh design has newer props
-        if (!s.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(s.design.props))) {
+        if (!fresh) return s;
+        let updated = s;
+        // Merge missing image/imageUrl (video snapshots loaded from cache before DB)
+        if (!s.image && fresh.image) {
+          updated = { ...updated, image: fresh.image, imageUrl: fresh.imageUrl };
           changed = true;
-          return { ...s, design: fresh.design };
+        } else if (!s.imageUrl && fresh.imageUrl) {
+          updated = { ...updated, imageUrl: fresh.imageUrl };
+          changed = true;
         }
-        return s;
+        // Merge design/props updates
+        if (fresh.design && (!updated.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(updated.design.props)))) {
+          updated = { ...updated, design: fresh.design };
+          changed = true;
+        }
+        return updated;
       });
       return changed ? merged : prev;
     });
@@ -2200,7 +2209,6 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       const completedSnap: Snapshot = {
         ...processingSnap,
         image: result.poster,
-        imageUrl: result.poster,
         design,
         designPath: `code/${snapId}.json`,
         videoMeta: {
@@ -2214,7 +2222,9 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         const next = prev.map(s => s.id === snapId ? completedSnap : s);
         return next;
       });
-      onSaveSnapshot?.(completedSnap, snapshots.length);
+      onSaveSnapshot?.(completedSnap, snapshots.length, (uploadedUrl) => {
+        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: uploadedUrl } : s));
+      });
       setAgentStatus(t('editor.greeting'));
 
       // Return 1-based index (snapshot was appended at snapshots.length)
@@ -2452,6 +2462,8 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? {
                 ...s,
+                image: data.imageUrl || s.image,
+                imageUrl: data.imageUrl || s.imageUrl,
                 videoMeta: { ...s.videoMeta!, status: 'completed' as const, videoUrl: data.videoUrl },
                 design,
                 designPath: `code/${snap.id}.json`,
@@ -2599,7 +2611,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     // Submitting → polling: add a processing entry to animations array
     if (prev === 'submitting' && curr === 'polling' && animationState?.taskId) {
       const newAnim: ProjectAnimation = {
-        id: animationState.taskId,
+        id: animationState.snapshotId || animationState.taskId,
         projectId: projectId ?? '',
         taskId: animationState.taskId,
         videoUrl: null,
@@ -2611,10 +2623,34 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         videoModel: animationState.videoModel,
       };
       setAnimations(prev => [newAnim, ...prev]);
+      // v2: add video snapshot to snapshots array for polling
+      if (isV2 && animationState.snapshotId) {
+        const posterUrl = animationState.imageUrls.find(u => u?.startsWith('http')) || '';
+        const newSnap: Snapshot = {
+          id: animationState.snapshotId,
+          image: posterUrl,
+          imageUrl: posterUrl || undefined,
+          tips: [],
+          messageId: '',
+          type: 'video',
+          videoMeta: {
+            taskId: animationState.taskId,
+            videoUrl: null,
+            prompt: animationState.prompt,
+            sourceSnapshotIds: [],
+            sourceUrls: animationState.imageUrls.filter(u => u?.startsWith('http')),
+            status: 'processing',
+            duration: animationState.duration,
+            model: animationState.videoModel,
+            createdAt: new Date().toISOString(),
+          },
+        };
+        setSnapshots(prev => [...prev, newSnap]);
+      }
       // Close the creation card
       setShowAnimateSheet(false);
       setAnimationState(null);
-      setSelectedVideoId(animationState.taskId);
+      setSelectedVideoId(animationState.snapshotId || animationState.taskId);
       // Navigate to video entry on next render (timeline hasn't updated yet)
       pendingNavigateToVideoRef.current = true;
     }
@@ -3492,7 +3528,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                     onRetry={async (anim) => {
                       const images = anim.snapshotUrls?.length ? anim.snapshotUrls : snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http')).slice(0, 7);
                       try {
-                        const res = await fetch('/api/animate', {
+                        const res = await fetch('/api/video-snapshot', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || 'kling' }),
@@ -3604,7 +3640,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
               onRetry={async (anim) => {
                 const images = anim.snapshotUrls?.length ? anim.snapshotUrls : snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http')).slice(0, 7);
                 try {
-                  const res = await fetch('/api/animate', {
+                  const res = await fetch('/api/video-snapshot', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || 'kling' }),

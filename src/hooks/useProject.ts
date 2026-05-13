@@ -66,21 +66,27 @@ export function useProject(projectId: string, userId: string) {
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
     const dbMessages: DbMessage[] = messagesRes.data ?? []
 
-    const snapshots: Snapshot[] = dbSnapshots.map((s) => ({
-      id: s.id,
-      image: s.image_url, // Use Storage URL as the image source
-      tips: (Array.isArray(s.tips) ? s.tips : []).map(t => ({
-        ...t,
-        previewStatus: t.previewImage ? 'done' as const
-          : t.editPrompt ? 'none' as const : undefined,
-      })),
-      messageId: s.message_id || '',
-      imageUrl: s.image_url,
-      description: s.description ?? undefined,
-      ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
-      ...(s.design_path ? { designPath: s.design_path } : {}),
-      ...(s.video_meta ? { videoMeta: s.video_meta as VideoMeta } : {}),
-    }))
+    // Fallback image_url for video snapshots with empty poster
+    const firstValidImageUrl = dbSnapshots.find(s => s.image_url?.startsWith('http'))?.image_url || ''
+
+    const snapshots: Snapshot[] = dbSnapshots.map((s) => {
+      const imageUrl = s.image_url || (s.type === 'video' ? firstValidImageUrl : '')
+      return {
+        id: s.id,
+        image: imageUrl,
+        tips: (Array.isArray(s.tips) ? s.tips : []).map(t => ({
+          ...t,
+          previewStatus: t.previewImage ? 'done' as const
+            : t.editPrompt ? 'none' as const : undefined,
+        })),
+        messageId: s.message_id || '',
+        imageUrl: imageUrl || undefined,
+        description: s.description ?? undefined,
+        ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
+        ...(s.design_path ? { designPath: s.design_path } : {}),
+        ...(s.video_meta ? { videoMeta: s.video_meta as VideoMeta } : {}),
+      }
+    })
 
     // Load persisted designs from workspace (async, non-blocking)
     // Derive userId from first snapshot's image_url if userId param is empty (race condition on page load)

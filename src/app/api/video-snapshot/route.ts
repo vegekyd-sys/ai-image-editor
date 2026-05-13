@@ -32,11 +32,37 @@ export async function POST(req: NextRequest) {
     const creditCheck = await requireCredits(user.id, 50)
     if (!creditCheck.ok) return creditCheck.response
 
+    // Save first valid URL before auto-detect may clear them (for poster)
+    const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http')) || ''
+
+    // Auto-route video references: detect video snapshots in imageUrls
+    const { data: dbSnaps } = await supabase
+      .from('snapshots')
+      .select('type, video_meta, image_url')
+      .eq('project_id', projectId)
+      .order('sort_order')
+    let autoVideoUrls: string[] = []
+    if (dbSnaps?.length) {
+      const scriptRefs = [...new Set(
+        Array.from(prompt.matchAll(/<<<image_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))
+      )]
+      for (const ref of scriptRefs) {
+        const snap = dbSnaps[ref - 1]
+        const videoUrl = (snap?.video_meta as Record<string, unknown> | null)?.videoUrl as string | undefined
+        if (snap?.type === 'video' && videoUrl) {
+          autoVideoUrls.push(videoUrl)
+          imageUrls[ref - 1] = ''
+        }
+      }
+    }
+
     const skillResult = await createVideo({
       script: prompt,
       images: imageUrls,
       duration,
       aspectRatio,
+      videoModel,
+      videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
     })
 
     if (!skillResult.success || !skillResult.taskId) {
@@ -47,7 +73,7 @@ export async function POST(req: NextRequest) {
     const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, imageUrls)
 
     const snapshotId = crypto.randomUUID()
-    const posterUrl = filteredImages[0] || imageUrls[0] || ''
+    const posterUrl = filteredImages[0] || originalFirstUrl || imageUrls.find((u: string) => u?.startsWith('http')) || ''
 
     const videoMeta: VideoMeta = {
       taskId,

@@ -34,11 +34,12 @@ export function validateVideoScript(opts: {
   }
 
   // 1. Image reference check: prompt has images available but doesn't reference any
+  // Skip when video_ref_url is provided (video editing doesn't require image references)
   const refs = [...new Set(
     Array.from(prompt.matchAll(/<<<image_(\d+)>>>/g), m => Number(m[1]))
   )]
 
-  if (refs.length === 0 && imageCount > 0) {
+  if (refs.length === 0 && imageCount > 0 && !videoRefUrl) {
     return `Your script doesn't reference any images with <<<image_N>>> format, but ${imageCount} images are available. You MUST use <<<image_1>>>${imageCount > 1 ? ` through <<<image_${imageCount}>>>` : ''} in your prompt to reference them. The video model needs these markers to know which image to use where.`
   }
 
