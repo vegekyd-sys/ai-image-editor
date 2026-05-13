@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       videoUrl: null,
       prompt: finalPrompt,
       sourceSnapshotIds: sourceSnapshotIds || [],
-      sourceUrls: filteredImages,
+      sourceUrls: filteredImages.length > 0 ? filteredImages : (originalFirstUrl ? [originalFirstUrl] : []),
       status: 'processing',
       duration: duration || null,
       model: videoModel || 'kling',

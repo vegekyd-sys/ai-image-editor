@@ -367,6 +367,9 @@ Hard constraints (apply even before reading the guide):
             return { success: false as const, message: harnessError };
           }
 
+          // Save first valid URL before auto-detect may clear them (for poster)
+          const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http')) || '';
+
           // Auto-route video references: query DB for snapshot types
           let autoVideoUrls: string[] = [];
           if (ctx.supabase && ctx.projectId) {
@@ -418,13 +421,13 @@ Hard constraints (apply even before reading the guide):
           const { filteredImages, finalPrompt } = filterAndRemapImages(story_prompt, imageUrls);
 
           const snapshotId = crypto.randomUUID();
-          const posterUrl = filteredImages[0] || imageUrls[0] || '';
+          const posterUrl = filteredImages[0] || originalFirstUrl || imageUrls.find((u: string) => u?.startsWith('http')) || '';
           const videoMeta: import('@/types').VideoMeta = {
             taskId,
             videoUrl: null,
             prompt: finalPrompt,
             sourceSnapshotIds: [],
-            sourceUrls: filteredImages,
+            sourceUrls: filteredImages.length > 0 ? filteredImages : (originalFirstUrl ? [originalFirstUrl] : []),
             status: 'processing',
             duration: duration || null,
             model: videoModel as import('@/types').VideoModel,
