@@ -668,6 +668,10 @@ if (command === 'login') {
     console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--stream] [--background|-b] [--json] "your message"');
     process.exit(1);
   }
+  // Split images into URLs vs local files
+  const imageUrlList = chatImages.filter(p => p.startsWith('http://') || p.startsWith('https://'));
+  const imageFileList = chatImages.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
+
   // --project auto: create a new project (with images if provided)
   if (!projectId || projectId === 'auto') {
     if (chatImages.length === 0) {
@@ -683,33 +687,43 @@ if (command === 'login') {
       projectId = data.projectId;
       process.stderr.write(`📦 Project created: ${projectId}\n`);
     } else {
-      // Create project with images
-      const base64s = chatImages.map(imgPath => {
+      // Create project with images (URLs and/or local files)
+      const base64s = imageFileList.map(imgPath => {
         process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
         return readImageAsDataUrl(imgPath);
       });
+      if (imageUrlList.length) process.stderr.write(`📤 Attaching ${imageUrlList.length} URL image(s)...\n`);
+      const body = {};
+      if (base64s.length) body.imageBase64s = base64s;
+      if (imageUrlList.length) body.imageUrls = imageUrlList;
       const res = await fetch(`${baseUrl}/api/projects/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ imageBase64s: base64s }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
       const data = await res.json();
       projectId = data.projectId;
       process.stderr.write(`📦 Project created: ${projectId} (${data.snapshots?.length || 0} images)\n`);
     }
-    chatImages.length = 0; // already uploaded
+    chatImages.length = 0;
+    imageUrlList.length = 0;
+    imageFileList.length = 0;
   }
   // Upload additional images to existing project
-  if (chatImages.length > 0) {
-    const base64s = chatImages.map(imgPath => {
+  if (imageFileList.length > 0 || imageUrlList.length > 0) {
+    const base64s = imageFileList.map(imgPath => {
       process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
       return readImageAsDataUrl(imgPath);
     });
+    if (imageUrlList.length) process.stderr.write(`📤 Attaching ${imageUrlList.length} URL image(s)...\n`);
+    const body = { _addToProject: projectId };
+    if (base64s.length) body.imageBase64s = base64s;
+    if (imageUrlList.length) body.imageUrls = imageUrlList;
     const res = await fetch(`${baseUrl}/api/projects/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ imageBase64s: base64s, _addToProject: projectId }),
+      body: JSON.stringify(body),
     });
     if (res.ok) {
       const data = await res.json();
