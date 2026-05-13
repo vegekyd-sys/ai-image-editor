@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     let autoVideoUrls: string[] = []
     if (dbSnaps?.length) {
       const scriptRefs = [...new Set(
-        Array.from(prompt.matchAll(/<<<image_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))
+        Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))
       )]
       for (const ref of scriptRefs) {
         const snap = dbSnaps[ref - 1]

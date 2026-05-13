@@ -2,23 +2,23 @@ Edit the current photo OR generate a new image from text.
 editPrompt format depends on the mode — see CONTEXT MODE vs Edit Mode sections below.
 When no photo exists (text-to-image mode), write the editPrompt describing the scene.
 
---- IMAGE INDEX (MULTI-SNAPSHOT) ---
-Use `image_index` (1-based) to select which snapshot to edit.
-The `[图片索引]` in the prompt lists all snapshots with their edit history and content descriptions.
+--- MEDIA INDEX (MULTI-SNAPSHOT) ---
+Use `media_index` (1-based) to select which snapshot to edit.
+The `[Media Index]` in the prompt lists all snapshots with their edit history and content descriptions.
 When omitted, no photo is sent — the model generates purely from text (text-to-image mode).
-When editing a photo, you MUST pass image_index. The user's current photo is marked with ← YOU ARE HERE in the image index.
-After generation, the result is appended as <<<image_N+1>>> and immediately available.
+When editing a photo, you MUST pass media_index. The user's current photo is marked with ← YOU ARE HERE in the Media Index.
+After generation, the result is appended as <<<media_N+1>>> and immediately available.
 
-CRITICAL: Use `reference_image_indices` whenever your editPrompt mentions multiple images (Image 1, Image 2, etc.).
+CRITICAL: Use `reference_media_indices` whenever your editPrompt mentions multiple images (Image 1, Image 2, etc.).
 Without this parameter, only ONE image is sent to the AI model — references in the prompt like "Image 2" will be ignored.
 
-`image_index` selects the edit base (Image 1). `reference_image_indices` adds extra images (Image 2, Image 3, ...).
+`media_index` selects the edit base (Image 1). `reference_media_indices` adds extra images (Image 2, Image 3, ...).
 
-Example: user says "use the background from image_2 and the person from image_3"
-→ `image_index: 2` (edit base = background = Image 1), `reference_image_indices: [3]` (person = Image 2)
+Example: user says "use the background from media_2 and the person from media_3"
+→ `media_index: 2` (edit base = background = Image 1), `reference_media_indices: [3]` (person = Image 2)
 → editPrompt: "Place the person from Image 2 into the beach background scene of Image 1. Preserve..."
 
-RULE: If your editPrompt says "Image 2" but you didn't set reference_image_indices → the model only sees 1 image and will hallucinate Image 2. Always pass the actual images.
+RULE: If your editPrompt says "Image 2" but you didn't set reference_media_indices → the model only sees 1 image and will hallucinate Image 2. Always pass the actual images.
 
 --- SKILL PARAMETER ---
 Use `skill` to auto-inject a proven quality template into the prompt. When skill is set,

@@ -66,7 +66,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (filteredImages.length === 0 && images.length > 0 && !videoUrl && !(videoUrls?.length)) {
       return {
         success: false,
-        message: `No images referenced in the script but ${images.length} images were provided. Use <<<image_1>>> etc. to reference them in your prompt.`,
+        message: `No images referenced in the script but ${images.length} images were provided. Use <<<media_1>>> etc. to reference them in your prompt.`,
       };
     }
 
@@ -127,7 +127,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     } else if (provider === 'piapi') {
       const { createKlingTask: createKlingTaskPiAPI } = await import('../piapi');
       taskId = await createKlingTaskPiAPI({
-        prompt: finalPrompt.replace(/<<<image_(\d+)>>>/g, '@image_$1'), // PiAPI format
+        prompt: finalPrompt.replace(/<<<(?:image|media)_(\d+)>>>/g, '@image_$1'), // PiAPI format
         images: filteredImages,
         duration: resolvedDuration ?? 10,
         aspect_ratio: aspectRatio ?? '9:16',

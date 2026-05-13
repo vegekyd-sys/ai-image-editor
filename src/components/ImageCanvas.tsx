@@ -812,7 +812,7 @@ export default function ImageCanvas({
     if (isDraft) return 'Draft';
     // Reference snapshot
     if (referenceCount > 0 && index < referenceCount) return `@Ref ${index + 1}`;
-    // 1-based index matching <<<image_N>>> convention
+    // 1-based index matching <<<media_N>>> convention
     const editNum = (draftTimelineIndex !== undefined && index > draftTimelineIndex)
       ? index
       : index + 1;

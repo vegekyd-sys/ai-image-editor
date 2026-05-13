@@ -1344,7 +1344,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // Agent request: route user message through Makaron Agent
   const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[] }) => {
-    // CUI reference images → append as new snapshots (so agent sees them in Image Index)
+    // CUI reference images → append as new snapshots (so agent sees them in Media Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
       for (const img of attachedImages) {
@@ -1473,16 +1473,19 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       ? (() => {
           const total = snapshotsRef.current.length;
           const startIdx = total - attachedImages.length + 1;
-          return `[User uploaded ${attachedImages.length} reference image(s) — added to Image Index as <<<image_${startIdx}>>>${attachedImages.length > 1 ? ` to <<<image_${total}>>>` : ''}. Call analyze_image to see them, then use reference_image_indices to include them in generate_image.]\n\n`;
+          return `[User uploaded ${attachedImages.length} reference image(s) — added to Media Index as <<<media_${startIdx}>>>${attachedImages.length > 1 ? ` to <<<media_${total}>>>` : ''}. Call analyze_image to see them, then use reference_media_indices to include them in generate_image.]\n\n`;
         })()
       : '';
 
-    // Build image index for multi-snapshot navigation — only when >1 snapshot
+    // Build media index for multi-snapshot navigation — only when >1 snapshot
     const snapshotIndexContext = snapshotsRef.current.length > 1
-      ? `[图片索引 / Image Index — ${snapshotsRef.current.length} snapshots]\n${snapshotsRef.current.map((s, i) => {
+      ? `[Media Index — ${snapshotsRef.current.length} items]\n${snapshotsRef.current.map((s, i) => {
           const isRef = s.type === 'reference';
           const isVid = s.type === 'video';
           const isDesign = !!s.design && !isVid;
+          const typeLabel = isVid
+            ? (s.videoMeta?.status === 'completed' && s.videoMeta?.duration ? `video, ${s.videoMeta.duration}s` : s.videoMeta?.status === 'completed' ? 'video' : `video, ${s.videoMeta?.status || 'processing'}`)
+            : isDesign ? 'design' : isRef ? 'reference' : 'image';
           const desc = isVid
             ? (s.description || s.videoMeta?.prompt?.split('\n')[0]?.slice(0, 60) || '[video]')
             : isRef
@@ -1492,13 +1495,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
                 : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
                   ? (s.description || '原图 / Original upload')
                   : (s.description || '(use analyze_image to see this snapshot)');
-          const tag = isVid
-            ? (s.videoMeta?.status === 'completed' ? ' (video)' : ` (video - ${s.videoMeta?.status || 'unknown'})`)
-            : isRef ? ' (reference)' : isDesign ? ' (design)' : '';
           const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
           const videoTag = isVid && s.videoMeta?.videoUrl ? ` [video: ${s.videoMeta.videoUrl}]` : '';
           const codePath = s.designPath ? ` [code: ${s.designPath}]` : '';
-          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${videoTag}${codePath}`;
+          return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${codePath}`;
         }).join('\n')}\n\n`
       : '';
 
@@ -1509,13 +1509,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       : '';
 
     const annotationWarning = overrideImage
-      ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use image_index to switch to another snapshot. Call analyze_image first (without image_index) to see the annotations, then generate_image (without image_index) to edit.\n\n`
+      ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use media_index to switch to another snapshot. Call analyze_image first (without media_index) to see the annotations, then generate_image (without media_index) to edit.\n\n`
       : '';
 
     // When viewing a draft/preview (tip not yet committed), warn agent to edit the current image directly
     const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
     const draftWarning = isDraftMode
-      ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the image index. Omit image_index to edit this draft directly.\n\n`
+      ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the media index. Omit media_index to edit this draft directly.\n\n`
       : '';
 
     // Inject current design editable state so Agent sees GUI changes
@@ -1808,24 +1808,24 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     const langInstr = locale === 'en' ? 'Write the script in English.' : '用中文写脚本。';
     const hintLine = userHint ? `\nUser requirements: ${userHint}` : '';
 
-    // Build Image Index with descriptions so Agent can pick images intelligently
-    const imageIndex = snapshotsRef.current.map((s, i) => {
+    // Build Media Index with descriptions so Agent can pick items intelligently
+    const mediaIndex = snapshotsRef.current.map((s, i) => {
       const isVid = s.type === 'video';
-      const tag = isVid ? ' (video)' : '';
+      const typeLabel = isVid ? 'video' : 'image';
       const desc = isVid
         ? (s.description || s.videoMeta?.prompt?.split('\n')[0]?.slice(0, 60) || '[video]')
         : i === 0
           ? (s.description || 'Original upload')
           : (s.description || '(no description)');
-      return `<<<image_${i + 1}>>>${tag} — ${desc}`;
+      return `<<<media_${i + 1}>>> [${typeLabel}] — ${desc}`;
     }).join('\n');
 
-    const prompt = `[视频动画模式] Create a video story script from the following ${n} snapshots. ${langInstr}${hintLine}
+    const prompt = `[视频动画模式] Create a video story script from the following ${n} items. ${langInstr}${hintLine}
 
-[Image Index — ${n} snapshots]
-${imageIndex}
+[Media Index — ${n} items]
+${mediaIndex}
 
-Select the best 3-7 images for a compelling video. You do NOT need to use all images or follow their order — pick the ones that create the strongest narrative arc. Output only the script, no confirmation needed.`;
+Select the best 3-7 items for a compelling video. You do NOT need to use all or follow their order — pick the ones that create the strongest narrative arc. Output only the script, no confirmation needed.`;
 
     const userMsg = { id: generateId(), role: 'user' as const, content: t('editor.makeVideo'), timestamp: Date.now() };
     const assistantMsgId = generateId();
@@ -2152,6 +2152,10 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       tempVideo.muted = true;
       tempVideo.src = blobUrl;
       await new Promise<void>(r => { tempVideo.onloadedmetadata = () => r(); setTimeout(r, 5000); });
+      if (tempVideo.duration > 15) {
+        URL.revokeObjectURL(blobUrl);
+        throw new Error(`Video too long (${Math.round(tempVideo.duration)}s). Maximum 15s.`);
+      }
       tempVideo.currentTime = Math.min(0.5, tempVideo.duration * 0.1);
       await new Promise<void>(r => { tempVideo.onseeked = () => r(); setTimeout(r, 3000); });
       const c = document.createElement('canvas');
@@ -2232,7 +2236,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
 
     } catch (err) {
       console.error('Video upload error:', err);
-      setAgentStatus(`视频上传失败: ${err instanceof Error ? err.message : String(err)}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      const tooLongMatch = msg.match(/Video too long \((\d+)s\)/);
+      setAgentStatus(tooLongMatch
+        ? t('video.tooLong').replace('{duration}', tooLongMatch[1]).replace('{max}', '15')
+        : `视频上传失败: ${msg}`);
       setSnapshots(prev => prev.map(s =>
         s.id === snapId ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
       ));
@@ -2350,7 +2358,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           ).then(() => {
             setIsAgentActive(false);
             handleAgentRequest(
-              `[System] User uploaded ${workSnapshots.length} images. All images have been analyzed (see Image Index descriptions). Briefly greet the user and mention what you see in each image in 1 sentence each.`,
+              `[System] User uploaded ${workSnapshots.length} images. All images have been analyzed (see Media Index descriptions). Briefly greet the user and mention what you see in each image in 1 sentence each.`,
               undefined, undefined, { silent: true }
             );
           });

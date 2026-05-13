@@ -31,7 +31,7 @@ export interface WriteVideoScriptInput {
 
 export interface WriteVideoScriptResult {
   success: boolean;
-  script?: string;           // Kling format script with <<<image_N>>> references
+  script?: string;           // Kling format script with <<<media_N>>> references
   title?: string;            // first line of script (2-5 words)
   estimatedDuration?: number; // parsed from Shot durations
   message: string;

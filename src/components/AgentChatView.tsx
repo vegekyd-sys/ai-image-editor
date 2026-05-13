@@ -282,12 +282,12 @@ function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) 
 }
 
 /** Shared Markdown renderer to avoid duplicating component overrides.
- *  <<<image_N>>> tokens are converted to `IMG_REF_N` inline code before parsing,
+ *  <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
 function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onViewFile?: (path: string) => void }) {
-  // Replace <<<image_N>>> with inline code `IMG_REF_N` so markdown structure stays intact
+  // Replace <<<media_N>>> and <<<image_N>>> with inline code `MEDIA_REF_N` so markdown structure stays intact
   let processed = snapshots
-    ? text.replace(/<<<image_(\d+)>>>/g, '`IMG_REF_$1`')
+    ? text.replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
     : text;
   // Replace `path/to/file.md` with FILE_REF token for clickable file chips
   processed = processed.replace(/`([^`]*\.md)`/g, '`FILE_REF_$1`');
@@ -304,10 +304,10 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
     em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
     del: ({ children }: { children?: React.ReactNode }) => <del className="line-through opacity-50">{children}</del>,
     code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) => {
-      // Intercept IMG_REF_N tokens → render ImageRefChip (check regardless of inline flag)
+      // Intercept MEDIA_REF_N tokens → render ImageRefChip (check regardless of inline flag)
       if (snapshots) {
         const str = String(children);
-        const m = str.match(/^IMG_REF_(\d+)$/);
+        const m = str.match(/^MEDIA_REF_(\d+)$/);
         if (m) {
           const idx = parseInt(m[1]) - 1;
           return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
@@ -1237,6 +1237,15 @@ export default function AgentChatView({
                 const v = document.createElement('video');
                 v.muted = true; v.src = url;
                 await new Promise<void>(r => { v.onloadedmetadata = () => r(); setTimeout(r, 5000); });
+                const videoDuration = v.duration;
+                if (videoDuration > 15) {
+                  v.pause(); v.removeAttribute('src'); v.load();
+                  URL.revokeObjectURL(url);
+                  setAttachments(prev => [...prev, { id, type: 'video', thumbnail: '', status: 'error' as const }]);
+                  setTimeout(() => setAttachments(prev => prev.filter(a => a.id !== id)), 3000);
+                  alert(t('video.tooLong').replace('{duration}', String(Math.round(videoDuration))).replace('{max}', '15'));
+                  continue;
+                }
                 v.currentTime = Math.min(0.5, v.duration * 0.1);
                 await new Promise<void>(r => { v.onseeked = () => r(); setTimeout(r, 3000); });
                 const c = document.createElement('canvas');

@@ -122,7 +122,7 @@ export async function buildPromptContext(
   // Snapshot index — emit even for single-snapshot projects so the model always knows
   // at minimum that an image exists (prevents design-from-nothing hallucination).
   const snapshotIndexContext = snapshots.length >= 1
-    ? `[图片索引 / Image Index — ${snapshots.length} snapshots]\n${snapshots.map((s, i) => {
+    ? `[Media Index — ${snapshots.length} items]\n${snapshots.map((s, i) => {
         const isRef = s.type === 'reference';
         const isVideo = s.type === 'video';
         const videoMeta = s.video_meta as Record<string, unknown> | undefined;
@@ -136,13 +136,13 @@ export async function buildPromptContext(
               : i === 0 || snapshots.slice(0, i).every(ss => ss.type === 'reference')
                 ? (s.description || '原图 / Original upload')
                 : (s.description || '(use analyze_image to see this snapshot)');
-        const tag = isVideo
-          ? (videoMeta?.status === 'completed' ? ' (video)' : ` (video - ${videoMeta?.status || 'unknown'})`)
-          : isRef ? ' (reference)' : isDesign ? ' (design)' : '';
+        const typeLabel = isVideo
+          ? (videoMeta?.status === 'completed' && videoMeta?.duration ? `video, ${videoMeta.duration}s` : videoMeta?.status && videoMeta.status !== 'completed' ? `video, ${videoMeta.status}` : 'video')
+          : isRef ? 'reference' : isDesign ? 'design' : 'image';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
         const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';
         const codePath = s.design_path ? ` [code: ${s.design_path}]` : '';
-        return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${videoTag}${codePath}`;
+        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${codePath}`;
       }).join('\n')}\n\n`
     : '';
 
@@ -160,11 +160,11 @@ export async function buildPromptContext(
 
   // Frontend-only warnings
   const annotationWarning = hasAnnotation
-    ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use image_index to switch to another snapshot. Call analyze_image first (without image_index) to see the annotations, then generate_image (without image_index) to edit.\n\n`
+    ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use media_index to switch to another snapshot. Call analyze_image first (without media_index) to see the annotations, then generate_image (without media_index) to edit.\n\n`
     : '';
 
   const draftWarning = isDraft
-    ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the image index. Omit image_index to edit this draft directly.\n\n`
+    ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the media index. Omit media_index to edit this draft directly.\n\n`
     : '';
 
   const refContext = referenceImageCount

@@ -25,11 +25,11 @@ export async function POST(req: NextRequest) {
 
     // Build message with all images
     const imageCount = imageUrls.length
-    const imageRefs = Array.from({ length: imageCount }, (_, i) => `<<<image_${i + 1}>>>`).join('、')
+    const mediaRefs = Array.from({ length: imageCount }, (_, i) => `<<<media_${i + 1}>>>`).join('、')
 
     const userMessage = `请分析以下 ${imageCount} 张图片（按顺序排列），写出视频故事 prompt。
 
-【重要】引用图片时必须使用三尖括号格式：${imageRefs}。不要使用 @image_N 格式，必须使用 <<<image_N>>> 格式。
+【重要】引用图片时必须使用三尖括号格式：${mediaRefs}。不要使用 @image_N 格式，必须使用 <<<media_N>>> 格式。
 
 直接输出 prompt，不加任何解释。`
 
