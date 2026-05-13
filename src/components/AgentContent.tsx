@@ -10,8 +10,9 @@ export default function AgentContent() {
         <AgentCopyButton />
       </header>
 
+
       {/* Hero */}
-      <section className="mb-12 border border-gray-800 rounded-xl p-6">
+      <section className="mb-12">
         <p className="text-lg text-white mb-2">
           <span className="text-fuchsia-400">makaron.app</span> is for humans.{' '}
           <span className="text-fuchsia-400">makaron-cli</span> is for AI agents.

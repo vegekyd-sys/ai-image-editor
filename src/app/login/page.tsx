@@ -60,9 +60,7 @@ export default function LoginPage() {
   function redirectAfterAuth() {
     let returnUrl = getReturnUrl()
     localStorage.removeItem('mkr_return_url')
-    localStorage.removeItem('mkr_return_text')
-    localStorage.removeItem('mkr_return_skill')
-    // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect
+    // mkr_return_text and mkr_return_skill are consumed by the home page on mount
     const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
     if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
     window.location.href = returnUrl || '/'
@@ -193,8 +191,6 @@ export default function LoginPage() {
       if (otpPurpose === 'signup') {
         let returnUrl = localStorage.getItem('mkr_return_url') || ''
         localStorage.removeItem('mkr_return_url')
-        localStorage.removeItem('mkr_return_text')
-        localStorage.removeItem('mkr_return_skill')
         // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
         const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
         if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
