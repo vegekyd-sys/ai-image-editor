@@ -138,13 +138,16 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     } else {
       const { createKlingTask, detectAspectRatio } = await import('../kling');
       const resolvedRatio = aspectRatio || await detectAspectRatio(filteredImages[0] || images[0]);
+      // Auto-routed videos: use first as feature reference if no explicit videoUrl
+      const effectiveVideoUrl = videoUrl || (videoUrls?.length ? videoUrls[0] : undefined);
+      const effectiveVideoReferType = videoUrl ? videoReferType : (effectiveVideoUrl ? 'feature' : undefined);
       taskId = await createKlingTask({
         prompt: finalPrompt,
         images: filteredImages,
         duration: resolvedDuration,
         aspect_ratio: resolvedRatio,
-        videoUrl,
-        videoReferType,
+        videoUrl: effectiveVideoUrl,
+        videoReferType: effectiveVideoReferType,
         keepOriginalSound,
       });
       console.log(`✅ [create_video] Kling task created: ${taskId}`);
