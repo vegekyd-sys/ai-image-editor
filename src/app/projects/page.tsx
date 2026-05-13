@@ -462,6 +462,11 @@ function ProjectsPageInner() {
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('Create project error:', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('Video too long')) {
+        const { MAX_DURATION } = await import('@/lib/video-upload')
+        alert(t('video.tooLong').replace('{duration}', msg.match(/\((\d+)s\)/)?.[1] || '?').replace('{max}', String(MAX_DURATION)))
+      }
       setCreating(false)
     }
   }, [user, creating, router, selectedSkill])

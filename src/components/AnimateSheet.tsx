@@ -268,13 +268,15 @@ export default function AnimateSheet({
 
               {/* Model + Duration + Status pills */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {detailAnimation?.videoModel && detailAnimation.videoModel !== 'upload' && (
                 <div style={{
                   padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
                   borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
                   fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
                 }}>
-                  {(detailAnimation?.videoModel || videoModel) === 'seedance' ? 'SeeDance 2.0' : (detailAnimation?.videoModel || videoModel) === 'upload' ? 'Upload' : 'Kling O3'}
+                  {detailAnimation.videoModel === 'seedance' ? 'SeeDance 2.0' : 'Kling O3'}
                 </div>
+                )}
                 <div style={{
                   padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
                   borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',

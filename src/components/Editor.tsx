@@ -2152,9 +2152,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       tempVideo.muted = true;
       tempVideo.src = blobUrl;
       await new Promise<void>(r => { tempVideo.onloadedmetadata = () => r(); setTimeout(r, 5000); });
-      if (tempVideo.duration > 15) {
+      const { MAX_DURATION } = await import('@/lib/video-upload');
+      if (tempVideo.duration > MAX_DURATION) {
         URL.revokeObjectURL(blobUrl);
-        throw new Error(`Video too long (${Math.round(tempVideo.duration)}s). Maximum 15s.`);
+        throw new Error(`Video too long (${Math.round(tempVideo.duration)}s). Maximum ${MAX_DURATION}s.`);
       }
       tempVideo.currentTime = Math.min(0.5, tempVideo.duration * 0.1);
       await new Promise<void>(r => { tempVideo.onseeked = () => r(); setTimeout(r, 3000); });
@@ -2239,7 +2240,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       const msg = err instanceof Error ? err.message : String(err);
       const tooLongMatch = msg.match(/Video too long \((\d+)s\)/);
       setAgentStatus(tooLongMatch
-        ? t('video.tooLong').replace('{duration}', tooLongMatch[1]).replace('{max}', '15')
+        ? t('video.tooLong').replace('{duration}', tooLongMatch[1]).replace('{max}', msg.match(/Maximum (\d+)s/)?.[1] || '16')
         : `视频上传失败: ${msg}`);
       setSnapshots(prev => prev.map(s =>
         s.id === snapId ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
@@ -3498,7 +3499,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       status: currentSnap.videoMeta.status,
                       duration: currentSnap.videoMeta.duration,
                       createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
-                      videoModel: currentSnap.videoMeta.model === 'upload' ? undefined : currentSnap.videoMeta.model,
+                      videoModel: currentSnap.videoMeta.model,
                       error: currentSnap.videoMeta.error,
                     }] : animations}
                     selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
