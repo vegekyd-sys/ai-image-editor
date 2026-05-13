@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { uploadImage } from '@/lib/supabase/storage';
+import sharp from 'sharp';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+async function resolveImageUrl(
+  url: string,
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+): Promise<string> {
+  if (url.includes('makaron.app/storage/') || url.includes('supabase.co/storage/')) {
+    return url;
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const jpeg = await sharp(buffer)
+    .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 92 })
+    .toBuffer();
+  const base64 = `data:image/jpeg;base64,${jpeg.toString('base64')}`;
+  const filename = `snapshot-${crypto.randomUUID()}.jpg`;
+  const storageUrl = await uploadImage(supabase, userId, projectId, filename, base64);
+  return storageUrl || url;
+}
 
 /**
  * POST /api/projects/create — Create a new project with an initial image.
@@ -32,7 +56,7 @@ export async function POST(req: NextRequest) {
 
       const snapshots: { snapshotId: string; imageUrl: string }[] = [];
       for (let i = 0; i < imageCount; i++) {
-        let finalUrl = urls[i];
+        let finalUrl = urls[i] ? await resolveImageUrl(urls[i]!, supabase, userId, existingProjectId) : undefined;
         if (!finalUrl && base64s[i]) {
           const snapId = crypto.randomUUID();
           const filename = `snapshot-${snapId}.jpg`;
@@ -75,7 +99,7 @@ export async function POST(req: NextRequest) {
     // Create snapshots for each image
     const snapshots: { snapshotId: string; imageUrl: string }[] = [];
     for (let i = 0; i < imageCount; i++) {
-      let finalUrl = urls[i];
+      let finalUrl = urls[i] ? await resolveImageUrl(urls[i]!, supabase, userId, projectId) : undefined;
       if (!finalUrl && base64s[i]) {
         const snapId = crypto.randomUUID();
         const filename = `snapshot-${snapId}.jpg`;
