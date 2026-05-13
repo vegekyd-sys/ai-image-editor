@@ -3572,7 +3572,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         error: null,
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
-                        videoModel: anim.videoModel || videoModel,
+                        videoModel: (anim.videoModel === 'kling' || anim.videoModel === 'seedance') ? anim.videoModel : videoModel,
                       });
                       setShowAnimateSheet(true);
                     }}
