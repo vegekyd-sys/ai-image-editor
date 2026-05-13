@@ -44,6 +44,45 @@ Precise action transfer — the person in the photo performs the exact movements
 - Kling only
 - `character_orientation`: "image" (match photo orientation, ≤10s video) or "video" (match video orientation, ≤30s)
 
+## Bringing Photos to Life (图片动起来)
+
+Most requests are **single photo → 5s video**. Your job is to make the scene ALIVE in those 5 seconds — not just slow-motion zoom. The worst output is a photo that barely moves. The best output has a clear action arc with beginning and end.
+
+### Anti-patterns (DO NOT):
+- ❌ Slow push-in on a static scene for 5 seconds (Ken Burns)
+- ❌ "The scene comes alive with subtle movement" — too vague, produces nothing
+- ❌ Describing what's already visible instead of what HAPPENS next
+- ❌ Only camera motion, no character/element action
+
+### 5-second formula (single image):
+
+**Structure: Setup (0-1s) → Action (1-4s) → Punctuation (4-5s)**
+
+The key: describe ONE clear action that fills the 5 seconds. Not three things happening simultaneously, not a vague mood — one specific thing the subject DOES.
+
+**1. Make the subject DO something:**
+- Person: turns to camera, breaks into a smile, flips hair, takes a step forward, raises a hand
+- Animal: tilts head curiously, suddenly perks up ears, stretches and yawns
+- Food/Object: steam rises and curls, liquid pours and splashes, fabric catches wind
+- Scene: rain starts falling, lights flicker on one by one, crowd parts to reveal subject
+
+**2. Good 5s prompt patterns:**
+- "She turns toward the camera, her hair catching the wind, and breaks into a confident smile. The city lights behind her blur into bokeh."
+- "The cat's ears suddenly perk up. It turns its head sharply to the left, eyes widening, then crouches into hunting position."
+- "He takes one step forward out of the shadow into golden hour light. His expression shifts from serious to a slow grin."
+- "Wind suddenly picks up — her dress billows, leaves scatter across the frame, she laughs and reaches up to hold her hat."
+
+**3. Camera + subject motion together:**
+Don't rely on camera alone. Combine:
+- Push-in + subject turns toward camera
+- Slow orbit + subject's expression changes
+- Pull-out reveal + environment comes alive (lights, particles, movement)
+
+### Multi-image (5-10s montage):
+- Don't give every image equal time — hook (1s), rapid context (0.5s each), climax (2-3s)
+- Use contrast: quiet → explosive, close → wide
+- End with impact: freeze frame, dramatic zoom, or callback to first shot
+
 ## Prompt Styles
 
 Choose based on the content. You decide.
