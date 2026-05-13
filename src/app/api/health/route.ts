@@ -144,6 +144,21 @@ async function checkPiAPI(): Promise<ServiceResult> {
   }, 3000)
 }
 
+async function checkAzureOpenAI(): Promise<ServiceResult> {
+  const key = process.env.AZURE_OPENAI_API_KEY
+  if (!key) return unavailable('AZURE_OPENAI_API_KEY not set')
+
+  const url = process.env.AZURE_OPENAI_EDITS_URL || 'https://meo-ultron.openai.azure.com/openai/deployments/gpt-image-2/images/edits?api-version=2025-04-01-preview'
+  const baseUrl = new URL(url).origin
+
+  return checkWithTimeout('azure_openai', async () => {
+    const res = await fetch(`${baseUrl}/openai/models?api-version=2024-02-01`, {
+      headers: { 'api-key': key },
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  }, 5000)
+}
+
 async function checkHuggingFace(): Promise<ServiceResult> {
   const token = process.env.HF_TOKEN
   if (!token) return unavailable('HF_TOKEN not set')
@@ -170,6 +185,7 @@ export async function GET() {
     comfyuiPony,
     kling,
     piapi,
+    azureOpenai,
     huggingface,
   ] = await Promise.all([
     checkSupabaseDB(),
@@ -182,6 +198,7 @@ export async function GET() {
     checkComfyUI('comfyui_pony', 'COMFYUI_PONY_URL'),
     checkKling(),
     checkPiAPI(),
+    checkAzureOpenAI(),
     checkHuggingFace(),
   ])
 
@@ -196,6 +213,7 @@ export async function GET() {
     comfyui_pony: comfyuiPony,
     kling,
     piapi,
+    azure_openai: azureOpenai,
     huggingface,
   }
 
