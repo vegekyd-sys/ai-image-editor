@@ -318,9 +318,10 @@ function createTools(ctx: AgentContext) {
 
 Hard constraints (apply even before reading the guide):
 - First line of script = short title (2-5 words). Then script body.
-- Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed to video_urls — just reference them like images.
+- Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
+- To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. Works for both Kling and SeeDance.
 - Total duration: 5-15 seconds.
-- \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files), or to edit a video with \`video_ref_type: 'base'\`. Never put video URLs in prompt text.
+- \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos.'),
@@ -328,8 +329,8 @@ Hard constraints (apply even before reading the guide):
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
         model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: kling.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for: external URLs or video editing (base mode).'),
-        video_ref_type: z.enum(['base', 'feature']).optional().describe('base: edit video directly (output duration=input duration, Kling only). feature: reference motion/style for new video. Default: feature.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index.'),
+        video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
         character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),

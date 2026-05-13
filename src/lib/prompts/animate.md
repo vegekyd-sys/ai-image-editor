@@ -21,22 +21,28 @@ Images serve as visual references. Prompt uses `<<<media_N>>>` to reference them
 - Requires `aspect_ratio` (or omit to auto-detect)
 - Max 7 images
 
-### Video Reference Mode (feature)
-A reference video provides motion/style template. Your prompt should be SHORT — describe what to change, let the video handle motion/timing. Do NOT write detailed shot-by-shot scripts; the reference video already defines the choreography.
-- **Timeline videos**: just use `<<<media_N>>>` like any other reference — the system auto-routes video URLs to video_urls
-- **External videos** (workspace/skill assets): pass `video_ref_url` + `video_ref_type: feature`
-- Can combine with reference images
-- Prompt example: `<<<media_1>>>模仿<<<media_2>>>的表情和动作` (where media_2 is a video in timeline)
-- Prompt example: `Based on <<<media_3>>>, <<<media_1>>> performs the same dance.`
-- Keep prompt under 200 chars — longer prompts fight the reference video
+### Video Editing Mode (SeeDance only)
+Edit, remix, or build upon an existing video. Use `<<<media_N>>>` to reference timeline videos — the system auto-routes them. **This mode requires SeeDance** (`model: 'seedance'`). Kling does not support video editing well.
 
-### Video Edit Mode (base)
-Directly edit an existing video's content. Output duration = input video duration.
-- For timeline videos: use `<<<media_N>>>` to reference the video (auto-routed), set `video_ref_type: 'base'`
-- For external videos: pass `video_ref_url` + `video_ref_type: base`
-- Kling only
+Use cases:
+- **Edit video content**: add effects, characters, or elements to an existing video
+- **Reference motion/style**: use a video as motion template for photos
+- **Remix**: combine photos + video into something new
+
+Rules:
+- **Always set `model: 'seedance'`** when editing or referencing a video
+- **Timeline videos**: just use `<<<media_N>>>` — auto-routed to SeeDance
+- **External videos** (workspace/skill assets): pass `video_ref_url` + `video_ref_type: feature`
+- Can combine images + videos in the same prompt
+- Keep prompt concise (under 200 chars when referencing video for motion)
 - `keep_original_sound: true` to preserve the original audio
-- Prompt example: `Put the crown from <<<media_1>>> on the person in <<<media_2>>>.` (where media_2 is a video)
+
+Prompt examples:
+- Edit: `在<<<media_1>>>（视频）的基础上，加入飞舞的金色粒子特效`
+- Edit: `Add a glowing fairy sprite flying around the character in <<<media_1>>>`
+- Motion reference: `<<<media_2>>>模仿<<<media_1>>>的表情和动作` (media_1 is video)
+- Remix: `Based on <<<media_3>>>, <<<media_1>>> performs the same dance in a neon studio.`
+- Combine: `Put <<<media_2>>> (photo person) into the scene of <<<media_1>>> (video)`
 
 ### Motion Control Mode
 Precise action transfer — the person in the photo performs the exact movements from the reference video. Best for dance, expression mimicry, pose transfer.
@@ -47,6 +53,45 @@ Precise action transfer — the person in the photo performs the exact movements
 - Duration is determined by reference video length (not configurable)
 - Kling only
 - `character_orientation`: "image" (match photo orientation, ≤10s video) or "video" (match video orientation, ≤30s)
+
+## Bringing Photos to Life (图片动起来)
+
+Most requests are **single photo → 5s video**. Your job is to make the scene ALIVE in those 5 seconds — not just slow-motion zoom. The worst output is a photo that barely moves. The best output has a clear action arc with beginning and end.
+
+### Anti-patterns (DO NOT):
+- ❌ Slow push-in on a static scene for 5 seconds (Ken Burns)
+- ❌ "The scene comes alive with subtle movement" — too vague, produces nothing
+- ❌ Describing what's already visible instead of what HAPPENS next
+- ❌ Only camera motion, no character/element action
+
+### 5-second formula (single image):
+
+**Structure: Setup (0-1s) → Action (1-4s) → Punctuation (4-5s)**
+
+The key: describe ONE clear action that fills the 5 seconds. Not three things happening simultaneously, not a vague mood — one specific thing the subject DOES.
+
+**1. Make the subject DO something:**
+- Person: turns to camera, breaks into a smile, flips hair, takes a step forward, raises a hand
+- Animal: tilts head curiously, suddenly perks up ears, stretches and yawns
+- Food/Object: steam rises and curls, liquid pours and splashes, fabric catches wind
+- Scene: rain starts falling, lights flicker on one by one, crowd parts to reveal subject
+
+**2. Good 5s prompt patterns:**
+- "She turns toward the camera, her hair catching the wind, and breaks into a confident smile. The city lights behind her blur into bokeh."
+- "The cat's ears suddenly perk up. It turns its head sharply to the left, eyes widening, then crouches into hunting position."
+- "He takes one step forward out of the shadow into golden hour light. His expression shifts from serious to a slow grin."
+- "Wind suddenly picks up — her dress billows, leaves scatter across the frame, she laughs and reaches up to hold her hat."
+
+**3. Camera + subject motion together:**
+Don't rely on camera alone. Combine:
+- Push-in + subject turns toward camera
+- Slow orbit + subject's expression changes
+- Pull-out reveal + environment comes alive (lights, particles, movement)
+
+### Multi-image (5-10s montage):
+- Don't give every image equal time — hook (1s), rapid context (0.5s each), climax (2-3s)
+- Use contrast: quiet → explosive, close → wide
+- End with impact: freeze frame, dramatic zoom, or callback to first shot
 
 ## Prompt Styles
 
@@ -78,7 +123,12 @@ Shot 2 (3s): Close-up, ...
 
 1. **Language**: Write descriptions in the same language the user is speaking. BUT keep `Shot N (Xs):` format exactly as-is (not "镜头N" or "分镜N") — models require this exact format. Same for `Style:` tag.
 
-2. **Character definition first**: Map `<<<media_N>>>` to roles at the very start. Use descriptive names in the rest of the prompt. After every `<<<media_N>>>` reference, always follow with the role name or a noun — never let it directly precede a verb or preposition. Good: `<<<media_1>>>（主角）跑向门口`. Bad: `<<<media_1>>>跑向门口` (ambiguous tokenization).
+2. **Character/media definition first** (HIGHEST PRIORITY — this produces the best results): Map every `<<<media_N>>>` to a role or label at the very start of the script. This applies to BOTH images and videos. After every `<<<media_N>>>` reference, always follow with the role name or a noun — never let it directly precede a verb or preposition.
+   - Good: `<<<media_1>>>（原视频）的基础上，加入粒子特效`
+   - Good: `<<<media_1>>>（主角）跑向门口`
+   - Good: `主角是<<<media_2>>>，参考视频是<<<media_1>>>（舞蹈动作）`
+   - Bad: `<<<media_1>>>跑向门口` (ambiguous tokenization)
+   - Bad: `在<<<media_1>>>上加特效` (missing role label)
 
 3. **Image references**: `<<<media_N>>>` for images (N starts at 1). Reusable. In reference video mode, also available: `<<<video_N>>>`.
 
@@ -114,18 +164,16 @@ Shot 2 (3s): Close-up, ...
 
 ## Reference Video Usage
 
-**CRITICAL**: When the user provides a reference video (URL or mentions a video to imitate), you MUST pass it as the `video_ref_url` parameter. Never put video URLs in the prompt text — the model cannot download URLs from prompt text. The video must go through the parameter.
+**Timeline videos** (in Media Index marked as `[video]`): Just use `<<<media_N>>>（角色/标签）` in your script. The system auto-routes video URLs to the video model. This is the primary and preferred way to reference videos.
 
-When a user gives you a video URL:
-1. Pass it as `video_ref_url`
-2. Set `video_ref_type: "feature"` (to reference motion/style) or `"base"` (to edit the video)
-3. Set `keep_original_sound: true` if the user wants to keep the original audio/music
-4. Your prompt describes what the result should look like; the reference video provides the motion/timing template
-5. You can still use `<<<media_N>>>` for the user's photos alongside the reference video
+**External videos** (user pastes a URL, or workspace/skill assets): Pass as `video_ref_url` + `video_ref_type: "feature"`. Never put raw video URLs in the prompt text — they must go through the parameter.
+- Set `keep_original_sound: true` if the user wants to keep the original audio
+- Your prompt describes the desired result; the reference video provides motion/timing
+- You can combine `<<<media_N>>>` (photos) + `video_ref_url` (external video)
 
 When a skill provides a reference video in workspace assets:
 1. Use `list_files` to find the video URL in `skills/{name}/assets/`
-2. Same as above — pass as `video_ref_url`
+2. Pass as `video_ref_url` + `video_ref_type: "feature"`
 
 ## Showcases
 
@@ -135,15 +183,21 @@ When a skill provides a reference video in workspace assets:
 <<<media_1>>>
 
 
-### Video reference — imitate motion/expression (pass video_ref_url + video_ref_type="feature"):
+### Video editing — imitate motion/expression from timeline video:
 搞怪表情模仿
 
-<<<media_1>>>模仿<<<video_1>>>的表情和动作
+<<<media_1>>>模仿<<<media_2>>>的表情和动作
 
-### Video reference — same dance, different person (pass video_ref_url + video_ref_type="feature", keep_original_sound=true):
+### Video editing — add effects to existing video:
+显卡小精灵入场
+
+在<<<media_1>>>（视频）的基础上，加入一个发光的显卡小精灵在画面中飞舞围绕主角转圈，留下蓝绿色粒子光迹。
+Style: Cyberpunk tech fantasy, neon particles.
+
+### Video editing — same dance, different person (external video_ref_url):
 Neon Dance Challenge
 
-<<<media_1>>> performs the same choreography as <<<video_1>>>, matching every move and beat, in a neon-lit dance studio.
+<<<media_1>>> performs the same choreography, matching every move and beat, in a neon-lit dance studio.
 
 ### Multi-shot with characters:
 Shot 1 (2s): Wide shot, <<<media_1>>> and <<<media_2>>> face off in the center of the rooftop, feet apart in a boxing stance.
