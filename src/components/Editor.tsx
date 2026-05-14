@@ -2745,7 +2745,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       timeline,
       viewIndex,
       isViewingVideo,
-      currentVideoUrl: currentVideo?.videoUrl,
+      currentVideoUrl: currentSnap?.videoMeta?.videoUrl || currentVideo?.videoUrl,
       draftParentIndex: draftParentIndexRef.current,
       snapshotsRef,
       pendingVideoRef,
@@ -2755,7 +2755,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       t,
       projectTitle: initialTitle,
     });
-  }, [timeline, viewIndex, isViewingVideo, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
+  }, [timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
