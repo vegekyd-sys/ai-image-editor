@@ -337,15 +337,24 @@ async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls:
   const blobUrls: string[] = [];
   await Promise.all([...urls].map(async (url) => {
     try {
-      // Fetch full video file (no Range header) for complete blob
       const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(url)}&full=1`;
       const res = await fetch(proxyUrl);
       if (!res.ok) throw new Error(`Video proxy failed: ${res.status}`);
+      const contentType = res.headers.get('Content-Type') || '';
+      if (!contentType.startsWith('video/') && !contentType.includes('octet-stream')) {
+        throw new Error(`Video proxy returned non-video content: ${contentType}`);
+      }
       const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
+      if (blob.size < 1000) {
+        throw new Error(`Video blob too small (${blob.size} bytes), likely error page`);
+      }
+      const videoBlob = new Blob([blob], { type: 'video/mp4' });
+      const blobUrl = URL.createObjectURL(videoBlob);
       blobUrls.push(blobUrl);
       while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
-    } catch { /* skip */ }
+    } catch (e) {
+      console.error('[resolveVideoUrls] failed:', url, e);
+    }
   }));
   return { code: resolved, blobUrls };
 }
@@ -385,10 +394,30 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
   return { code: resolved, blobUrls };
 }
 
+/** Detect pure video-wrapper design (only <Video src="..."> inside <AbsoluteFill>, no overlays) */
+function extractSingleVideoUrl(code: string): string | null {
+  const videoMatch = code.match(/<Video\s[^>]*src=["']([^"']+)["']/);
+  if (!videoMatch) return null;
+  // If code has other visual elements, it's not a simple wrapper
+  if (/<Img\s/.test(code) || /<Audio\s/.test(code) || /<Text[\s>]/.test(code)) return null;
+  // Check for text content nodes (spans, divs with text) — skip if complex
+  if (/>[^<]*[a-zA-Z一-鿿]/.test(code.replace(/<Video[^>]*>/, '').replace(/function\s+Design[^{]*\{/, ''))) return null;
+  return videoMatch[1];
+}
+
 export async function exportDesignVideo(
   design: DesignPayload,
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
+  // Pure video design → download source mp4 directly (no Remotion render needed)
+  const singleVideoUrl = extractSingleVideoUrl(design.code);
+  if (singleVideoUrl) {
+    const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(singleVideoUrl)}&full=1`;
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error(`Video download failed: ${res.status}`);
+    return res.blob();
+  }
+
   preloadBabel().catch(() => {});
 
   // Pre-fetch remote video URLs → blob URLs (renderMediaOnWeb requires same-origin)

@@ -123,6 +123,22 @@ export function useProject(projectId: string, userId: string) {
       }
     }))
 
+    // Generate designs for video snapshots that don't have one (front-end owns design creation)
+    if (typeof window !== 'undefined') {
+      const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design')
+      await Promise.all(snapshots.map(async (snap) => {
+        if (snap.type !== 'video' || snap.design) return
+        const videoUrl = (snap.videoMeta as VideoMeta | undefined)?.videoUrl
+        if (!videoUrl) return
+        try {
+          const dims = await probeVideoDimensions(videoUrl)
+          snap.design = createVideoDesign(videoUrl, dims.width, dims.height, (snap.videoMeta as VideoMeta).duration || 10)
+        } catch (e) {
+          console.warn('Failed to generate video design:', snap.id, e)
+        }
+      }))
+    }
+
     // Background: resolve expired audio URLs in design code (non-blocking)
     Promise.resolve().then(async () => {
       for (const snap of snapshots) {

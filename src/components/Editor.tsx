@@ -2467,9 +2467,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           const res = await fetch(`/api/video-snapshot/${snap.id}`);
           const data = await res.json();
           if (data.status === 'completed' && data.videoUrl) {
-            // Generate Remotion wrapper client-side (server also creates one in after())
-            const { createVideoDesign } = await import('@/lib/video-design');
-            const design = createVideoDesign(data.videoUrl, 1080, 1440, snap.videoMeta?.duration || 10);
+            const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design');
+            const dims = await probeVideoDimensions(data.videoUrl);
+            const design = createVideoDesign(data.videoUrl, dims.width, dims.height, snap.videoMeta?.duration || 10);
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? {
                 ...s,

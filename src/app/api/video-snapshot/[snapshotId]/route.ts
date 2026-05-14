@@ -4,7 +4,6 @@ import { createClient } from '@/lib/supabase/server'
 import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo } from '@/lib/supabase/storage'
-import { createVideoDesign } from '@/lib/video-design'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 60
@@ -70,7 +69,7 @@ export async function GET(
         .update({ video_meta: updatedMeta })
         .eq('id', snapshotId)
 
-      // Persist video to Storage + generate Remotion wrapper design (after response)
+      // Persist video to Supabase Storage (after response)
       const projectId = snap.project_id
       after(async () => {
         try {
@@ -80,20 +79,11 @@ export async function GET(
           const permanentUrl = await uploadVideo(supabase, user.id, projectId, snapshotId, buffer)
           if (permanentUrl) {
             const finalMeta: VideoMeta = { ...updatedMeta, videoUrl: permanentUrl, videoPath: `${user.id}/projects/${projectId}/animation/${snapshotId}.mp4` }
-
-            // Generate Remotion wrapper design
-            const design = createVideoDesign(permanentUrl, 1080, 1440, videoMeta.duration || 10)
-            const designPath = `code/${snapshotId}.json`
-            const designJson = JSON.stringify(design)
-            await supabase.storage.from('images')
-              .upload(`${user.id}/workspace/${designPath}`, new Blob([designJson], { type: 'application/json' }), { upsert: true })
-
             await supabase
               .from('snapshots')
-              .update({ video_meta: finalMeta, design_path: designPath })
+              .update({ video_meta: finalMeta })
               .eq('id', snapshotId)
-
-            console.log(`Video snapshot ${snapshotId} persisted + design created`)
+            console.log(`Video snapshot ${snapshotId} persisted`)
           }
         } catch (err) {
           console.error('Video snapshot persist error:', err)
