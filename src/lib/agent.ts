@@ -1261,6 +1261,23 @@ export async function* runMakaronAgent(
       ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
       onStepFinish: () => { stepCount++; },
+      providerOptions: {
+        anthropic: {
+          contextManagement: {
+            edits: [
+              {
+                type: 'clear_tool_uses_20250919',
+                trigger: { type: 'input_tokens', value: 80000 },
+                keep: { type: 'tool_uses', value: 3 },
+              },
+              {
+                type: 'compact_20260112',
+                trigger: { type: 'input_tokens', value: 150000 },
+              },
+            ],
+          },
+        },
+      },
     });
 
     // State machine for extracting code from run_code tool-input-delta
