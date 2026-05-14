@@ -3083,7 +3083,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       <input
         ref={newProjectFileInputRef}
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*,video/*,.heic,.heif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
