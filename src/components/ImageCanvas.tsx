@@ -628,9 +628,8 @@ export default function ImageCanvas({
   }, [videoPlayTrigger, isVideoEntry, videoUrl]);
 
   // Remotion Player: poll current frame for custom seek bar
-  // draftDesign only shown when viewing the draft slot (not other snapshots)
-  const isViewingDraftSlot = isDraft && draftTimelineIndex !== undefined && currentIndex === draftTimelineIndex;
-  const currentDesign = (isViewingDraftSlot ? draftDesign : null) || animatedDesigns?.get(currentIndex);
+  // draftDesign takes priority when agent pushed a new design (before publish)
+  const currentDesign = draftDesign || animatedDesigns?.get(currentIndex);
   const remotionFps = currentDesign?.animation?.fps || 30;
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
