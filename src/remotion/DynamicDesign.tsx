@@ -13,6 +13,7 @@ import {
   Series,
   Img,
   AbsoluteFill,
+  OffthreadVideo,
   delayRender,
   continueRender,
 } from 'remotion';
@@ -46,6 +47,7 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   AbsoluteFill,
   Audio,
   Video,
+  OffthreadVideo,
   // @remotion/paths
   evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath,
   // @remotion/noise

@@ -394,9 +394,9 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
   return { code: resolved, blobUrls };
 }
 
-/** Detect pure video-wrapper design (only <Video src="..."> inside <AbsoluteFill>, no overlays) */
+/** Detect pure video-wrapper design (only <Video>/<OffthreadVideo> inside <AbsoluteFill>, no overlays) */
 function extractSingleVideoUrl(code: string): string | null {
-  const videoMatch = code.match(/<Video\s[^>]*src=["']([^"']+)["']/);
+  const videoMatch = code.match(/<(?:Video|OffthreadVideo)\s[^>]*src=["']([^"']+)["']/);
   if (!videoMatch) return null;
   // If code has other visual elements, it's not a simple wrapper
   if (/<Img\s/.test(code) || /<Audio\s/.test(code) || /<Text[\s>]/.test(code)) return null;

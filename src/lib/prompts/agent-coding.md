@@ -258,16 +258,18 @@ When reviewing the screenshots, focus on two things:
 
 These videos play on all platforms. Every effect you use must render correctly on iOS Safari, Android Chrome, and desktop browsers. Follow these rules to avoid platform-specific rendering failures.
 
-**Video elements — MUST use Remotion `<Video>`, NEVER HTML `<video>`:**
-- `<Video src="url" style={{...}} />` — syncs with Remotion Player (play/pause/seek all work)
+**Video elements — MUST use Remotion `<Video>` or `<OffthreadVideo>`, NEVER HTML `<video>`:**
+- `<Video src="url" style={{...}} />` — syncs with Remotion Player (play/pause/seek all work). Best for preview/playback.
+- `<OffthreadVideo src="url" style={{...}} />` — decodes video off the main thread. Better for rendering/export. Supports same props as `<Video>`.
 - HTML `<video autoPlay>` is NOT controlled by the Player — it plays independently and cannot be paused or seeked. The harness auto-fixes `<video>` → `<Video>` but write it correctly.
 - Remove `autoPlay`, `controls` attributes — Remotion controls playback via frames. Keep `muted` if you want silent video.
 
-**Video editing props:**
-- `startFrom={frame}` — skip first N frames (trim start)
-- `endAt={frame}` — stop at frame N (trim end)
+**Video editing props (work on both `<Video>` and `<OffthreadVideo>`):**
+- `startFrom={frame}` — skip first N frames (trim start). Example: `startFrom={30}` skips first 1s at 30fps
+- `endAt={frame}` — stop at frame N (trim end). Example: `endAt={150}` ends at 5s
 - `playbackRate={1.5}` — speed (0.25 to 4x)
 - `volume={0.5}` — audio volume (0 to 1, or function of frame for fade)
+- These props are passed directly to the Remotion component — no additional wiring needed
 
 **Multi-clip splice (CORRECT pattern — use `<Sequence>` per clip):**
 ```jsx

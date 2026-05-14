@@ -19,6 +19,7 @@ import {
   Series,
   Img,
   AbsoluteFill,
+  OffthreadVideo,
 } from 'remotion';
 import { Audio, Video } from '@remotion/media';
 import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
@@ -53,6 +54,7 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   AbsoluteFill,
   Audio,
   Video,
+  OffthreadVideo,
   // @remotion/paths — SVG path animation
   evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath,
   // @remotion/noise — organic textures
