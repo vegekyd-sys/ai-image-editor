@@ -33,10 +33,11 @@ export default function ModeToggle({ hidden, mode, onToggle }: ModeToggleProps) 
         bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
         left: '50%',
         transform: 'translateX(-50%)',
-        zIndex: 60,
+        zIndex: 101,
         opacity: hidden ? 0 : 1,
         pointerEvents: hidden ? 'none' : 'auto',
         transition: 'opacity 0.2s',
+        touchAction: 'manipulation',
       }}
     >
       <div

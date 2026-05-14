@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { useRequireAuth } from '@/hooks/useRequireAuth'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
@@ -55,6 +56,7 @@ export default function HomePage() {
 
 function HomePageInner() {
   const { user } = useAuth()
+  const requireAuth = useRequireAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -515,15 +517,15 @@ function HomePageInner() {
     setCardIndex(999)
   }, [creating])
 
-  const redirectToLogin = useCallback(() => {
-    localStorage.setItem('mkr_return_url', window.location.pathname + window.location.search)
+  const saveContextBeforeLogin = useCallback(() => {
     if (inputText.trim()) localStorage.setItem('mkr_return_text', inputText)
     if (selectedDetail?.id) localStorage.setItem('mkr_return_skill', selectedDetail.id)
-    router.push('/login')
-  }, [inputText, selectedDetail, router])
+  }, [inputText, selectedDetail])
 
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
-    if (!user) { redirectToLogin(); return }
+    saveContextBeforeLogin()
+    const authedUser = await requireAuth()
+    if (!authedUser) return
     if (creating || (files.length === 0 && !prompt)) return
     setCreating(true)
     try {
@@ -551,14 +553,14 @@ function HomePageInner() {
       const opts: { prompt?: string; skill?: string } = {}
       if (prompt) opts.prompt = prompt
       if (skillName) opts.skill = skillName
-      const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined)
+      const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('Create project error:', err)
       setCreating(false)
     }
-  }, [user, creating, router, selectedDetail, selectedSkill])
+  }, [requireAuth, saveContextBeforeLogin, creating, router, selectedDetail, selectedSkill])
 
   const handleCreate = useCallback(async () => {
     const hasText = inputText.trim()
@@ -604,7 +606,7 @@ function HomePageInner() {
           const isDragTarget = slotDragOver === i
           return (
             <div key={i}
-              onClick={() => { if (!user) { redirectToLogin(); return } if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
+              onClick={async () => { const u = await requireAuth(); if (!u) return; if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
               onDragLeave={() => setSlotDragOver(-1)}
@@ -752,7 +754,7 @@ function HomePageInner() {
       >
         {/* Left: + button / photo slot */}
         <div
-          onClick={() => { if (!user) { redirectToLogin(); return } if (!creating && !collapseSlot) fileInputRef.current?.click() }}
+          onClick={async () => { const u = await requireAuth(); if (!u) return; if (!creating && !collapseSlot) fileInputRef.current?.click() }}
           style={{
             width: collapseSlot ? 0 : slotWidth,
             flexShrink: 0, alignSelf: 'stretch',
@@ -955,8 +957,7 @@ function HomePageInner() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
             <button
               className="mkr-create-btn"
-              onClick={() => { if (!user) { redirectToLogin(); return } if (inputText.trim() || attachedFiles.length > 0) handleCreate(); else fileInputRef.current?.click() }}
-              onTouchEnd={(e) => { if (!user) { e.preventDefault(); redirectToLogin() } }}
+              onClick={async () => { if (inputText.trim() || attachedFiles.length > 0) { handleCreate() } else { const u = await requireAuth(); if (!u) return; fileInputRef.current?.click() } }}
               disabled={creating}
               style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
             >
@@ -1268,10 +1269,10 @@ function HomePageInner() {
           transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), bottom 0.2s ease-out',
         }}>
           {/* No gradient overlay — cards show through below */}
-          <div style={{ maxWidth: '480px', margin: '0 auto', position: 'relative', pointerEvents: 'none' }}>
+          <div style={{ maxWidth: '480px', margin: '0 auto', position: 'relative' }}>
             {/* Mobile only: title + upload slots above input when overlay is open */}
             {selectedDetail && !isDesktop && (
-              <div style={{ padding: '0 4px 10px', display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
+              <div style={{ padding: '0 4px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {renderTemplateLabel(selectedDetail)}
                 {renderUploadSlots(selectedDetail, true)}
               </div>

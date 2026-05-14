@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
-import { runMakaronAgent } from '@/lib/agent';
+import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
@@ -173,6 +173,31 @@ export async function POST(req: NextRequest) {
           status: 'completed', ended_at: new Date().toISOString(),
         }).eq('id', runId);
       }
+
+      // Auto-name project if still Untitled
+      try {
+        const { data: proj } = await supabase.from('projects').select('title').eq('id', projectId).single();
+        if (proj && (!proj.title || proj.title === 'Untitled' || proj.title === '未命名' || proj.title === '未命名项目')) {
+          const nameSource = prompt.slice(0, 200);
+          if (nameSource.trim()) {
+            const namePrompt = withLocale(
+              `Based on this user request, give a concise project name (2-4 words, no quotes): "${nameSource}". Output only the name.`,
+              locale,
+            );
+            let projectName = '';
+            for await (const ev of runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale })) {
+              if (ev.type === 'content' && ev.text) projectName += ev.text;
+            }
+            projectName = projectName.trim().replace(/^["']|["']$/g, '');
+            if (projectName && projectName.length <= 50) {
+              await supabase.from('projects').update({ title: projectName }).eq('id', projectId);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[agent/run] auto-name error:', e);
+      }
+
       console.log(`[agent/run] Run ${runId} completed`);
     });
 

@@ -8,6 +8,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-05-15',
+    en: { title: 'China Access & Cost Optimization', items: [
+      'China users can now access Makaron without VPN',
+      'Agent cost control: Anthropic context management prevents token explosion in long conversations (1.6M → 130K tokens)',
+    ]},
+    zh: { title: '中国用户开放 & 成本优化', items: [
+      '中国用户无需 VPN 即可使用 Makaron',
+      'Agent 成本控制：Anthropic context management 防止长对话 token 爆炸（160万 → 13万 tokens）',
+    ]},
+  },
+  {
     date: '2026-05-12',
     en: { title: 'Agent Self-Registration', items: [
       'AI agents can now register themselves — get an API key programmatically, no human needed',
