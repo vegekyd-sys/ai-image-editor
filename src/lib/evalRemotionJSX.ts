@@ -10,23 +10,14 @@
 
 import { transform as sucraseTransform } from 'sucrase';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-  useCurrentFrame,
-  useVideoConfig,
-  interpolate,
-  spring,
-  Sequence,
-  Series,
-  Img,
-  AbsoluteFill,
-  OffthreadVideo,
-} from 'remotion';
+import * as Remotion from 'remotion';
 import { Audio, Video } from '@remotion/media';
-import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
-import { noise2D, noise3D } from '@remotion/noise';
+import * as RemotionPaths from '@remotion/paths';
+import * as RemotionNoise from '@remotion/noise';
+
+const { Sequence, useVideoConfig } = Remotion;
 
 // Sequence wrapper: auto-inject premountFor={fps} when not specified
-// premountFor is supported at runtime in v4 but missing from type defs
 const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   props: any,
@@ -36,30 +27,22 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
   return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps, ref });
 });
 
-/** All APIs available to Agent's React code */
+/** All Remotion APIs available to Agent's React code — open scope, no artificial limits */
 const REMOTION_SCOPE: Record<string, unknown> = {
-  React,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-  useCurrentFrame,
-  useVideoConfig,
-  interpolate,
-  spring,
+  React, useState, useEffect, useCallback, useMemo, useRef,
+  ...Remotion,
+  ...RemotionPaths,
+  ...RemotionNoise,
+  // @remotion/media Video/Audio: supports web-renderer export + trimBefore/trimAfter
+  Audio, Video,
+  // OffthreadVideo not supported in web-renderer — alias to @remotion/media Video
+  OffthreadVideo: Video,
+  // Override: Sequence with auto premountFor
   Sequence: AutoPremountSequence,
-  Series,
-  Img,
-  AbsoluteFill,
-  Audio,
-  Video,
-  OffthreadVideo,
-  // @remotion/paths — SVG path animation
-  evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath,
-  // @remotion/noise — organic textures
-  noise2D, noise3D,
 };
+// Remove keys that are invalid as function parameter names
+delete REMOTION_SCOPE['default'];
+delete REMOTION_SCOPE['__esModule'];
 
 // Babel CDN fallback (lazy-loaded only when Sucrase fails)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

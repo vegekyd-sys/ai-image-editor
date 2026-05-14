@@ -26,6 +26,8 @@ Rules:
 
 **IMPORTANT: run_code sandbox has NO require, NO fs, NO file system access.** Do not try to `require('fs')` or read files inside run_code. Use the `read_file` tool instead if you need file contents.
 
+**Remotion APIs**: All exports from `remotion` are available (Easing, Loop, Freeze, random, interpolateColors, OffthreadVideo, delayRender, continueRender, etc.). Also `@remotion/paths` (evolvePath, getLength, etc.), `@remotion/noise` (noise2D, noise3D), and `@remotion/media-utils` (getVideoMetadata, getAudioDurationInSeconds, useAudioData). Standard globals (Math, Object, Array, JSON, console) work normally.
+
 ### Editable Fields (REQUIRED)
 
 Every `type: 'render'` design MUST declare editable fields. Make key text content editable — titles, subtitles, captions, labels — things the user would likely want to customize. Decorative text, icons, or structural elements don't need to be editable.
@@ -264,12 +266,12 @@ These videos play on all platforms. Every effect you use must render correctly o
 - HTML `<video autoPlay>` is NOT controlled by the Player — it plays independently and cannot be paused or seeked. The harness auto-fixes `<video>` → `<Video>` but write it correctly.
 - Remove `autoPlay`, `controls` attributes — Remotion controls playback via frames. Keep `muted` if you want silent video.
 
-**Video editing props (work on both `<Video>` and `<OffthreadVideo>`):**
-- `startFrom={frame}` — skip first N frames (trim start). Example: `startFrom={30}` skips first 1s at 30fps
-- `endAt={frame}` — stop at frame N (trim end). Example: `endAt={150}` ends at 5s
+**Video trimming props (frame numbers at 30fps):**
+- `trimBefore={frame}` — start playback from this frame in the source video. Example: `trimBefore={36}` starts at 1.2s
+- `trimAfter={frame}` — stop playback at this frame. Example: `trimAfter={150}` ends at 5s
 - `playbackRate={1.5}` — speed (0.25 to 4x)
 - `volume={0.5}` — audio volume (0 to 1, or function of frame for fade)
-- These props are passed directly to the Remotion component — no additional wiring needed
+- Do NOT use `startFrom`/`endAt` — those are for `remotion` package's Video which is not available here. Use `trimBefore`/`trimAfter` directly.
 
 **Multi-clip splice (CORRECT pattern — use `<Sequence>` per clip):**
 ```jsx
