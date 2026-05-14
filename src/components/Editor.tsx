@@ -1769,9 +1769,11 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       });
       // Navigate to the last video snapshot so VideoResultCard shows
       pendingNavigateToVideoRef.current = true;
-      // Persist each with correct sort_order
+      // Persist each with correct sort_order + update imageUrl when upload completes
       newVideoSnaps.forEach((snap, i) => {
-        onSaveSnapshot?.(snap, snapshotsRef.current.length - newVideoSnaps.length + i);
+        onSaveSnapshot?.(snap, snapshotsRef.current.length - newVideoSnaps.length + i, (url) => {
+          setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+        });
       });
     }
 
