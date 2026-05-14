@@ -527,15 +527,19 @@ Hard constraints (apply even before reading the guide):
         let videoUrl: string | undefined;
         if (ctx.supabase && ctx.userId) {
           try {
-            const { data: snaps } = await ctx.supabase
+            const { data: snaps, error: snapErr } = await ctx.supabase
               .from('snapshots')
               .select('video_meta')
               .eq('project_id', ctx.projectId)
               .order('sort_order', { ascending: true });
+            if (snapErr) console.error('[analyze_video] DB query error:', snapErr.message);
             const snap = snaps?.[v.idx];
             const vm = snap?.video_meta as Record<string, unknown> | undefined;
             videoUrl = vm?.videoUrl as string | undefined;
-          } catch { /* fallback below */ }
+            if (!videoUrl) console.log(`[analyze_video] media_index=${media_index} idx=${v.idx} snapsCount=${snaps?.length} hasVM=${!!vm} vmKeys=${vm ? Object.keys(vm).join(',') : 'none'}`);
+          } catch (e) { console.error('[analyze_video] exception:', e); }
+        } else {
+          console.log('[analyze_video] no supabase client available');
         }
 
         if (!videoUrl) {

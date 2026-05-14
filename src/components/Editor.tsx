@@ -1778,7 +1778,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // Step 2: Build hint for agent (videos are now in snapshotsRef)
     let finalText = text;
     if (videos?.length) {
-      const hint = `[User uploaded ${videos.length === 1 ? 'a video' : `${videos.length} videos`}. Use analyze_image or preview_frame to see their content.]`;
+      const hint = `[User uploaded ${videos.length === 1 ? 'a video' : `${videos.length} videos`}. Use analyze_video to understand the content.]`;
       finalText = finalText ? `${finalText}\n\n${hint}` : hint;
     }
 
