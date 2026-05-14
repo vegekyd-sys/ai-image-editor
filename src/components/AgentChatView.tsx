@@ -1229,7 +1229,7 @@ export default function AgentChatView({
           const files = Array.from(e.target.files ?? []);
           e.target.value = '';
           for (const file of files) {
-            const id = crypto.randomUUID();
+            const id = (typeof crypto.randomUUID === 'function') ? crypto.randomUUID() : `${Date.now()}${Math.random().toString(36).slice(2)}`;
             if (file.type.startsWith('video/')) {
               // Video: extract poster immediately, process in background
               try {

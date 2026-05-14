@@ -206,7 +206,7 @@ export async function uploadVideoToStorage(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const fileId = crypto.randomUUID();
+  const fileId = (typeof crypto.randomUUID === 'function') ? crypto.randomUUID() : `${Date.now()}${Math.random().toString(36).slice(2)}`;
   const storagePath = `${user.id}/${projectId}/videos/upload-${fileId}.mp4`;
   const { error } = await supabase.storage.from('images')
     .upload(storagePath, result.videoBlob, { contentType: 'video/mp4', upsert: true });
