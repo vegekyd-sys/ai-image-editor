@@ -327,7 +327,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
 // ─── MP4 Export ──────────────────────────────────────────────────────────────
 
-/** Pre-fetch remote audio URLs via server proxy → blob URLs (fixes CORS + avoids massive data URLs) */
+/** Pre-fetch remote video URLs via server proxy → blob URLs (fixes CORS for renderMediaOnWeb) */
 async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   const videoExtPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi;
   const urls = new Set<string>();
@@ -337,7 +337,10 @@ async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls:
   const blobUrls: string[] = [];
   await Promise.all([...urls].map(async (url) => {
     try {
-      const res = await fetch(url);
+      // Fetch full video file (no Range header) for complete blob
+      const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(url)}&full=1`;
+      const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error(`Video proxy failed: ${res.status}`);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);

@@ -10,9 +10,11 @@ export async function GET(req: NextRequest) {
 
   // Download mode: ?download=1 (used by save button)
   const isDownload = req.nextUrl.searchParams.get('download') === '1'
+  // Full mode: ?full=1 (used by export — need complete file, no Range)
+  const isFull = req.nextUrl.searchParams.get('full') === '1'
 
   try {
-    const range = req.headers.get('range')
+    const range = !isFull ? req.headers.get('range') : null
     const fetchHeaders: HeadersInit = {}
     if (range) fetchHeaders['Range'] = range
 

@@ -11,7 +11,7 @@ export function createVideoDesign(
   const { width, height } = useVideoConfig();
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
-      <Video src="${escaped}" muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <Video src="${escaped}" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
     </AbsoluteFill>
   );
 }`;
