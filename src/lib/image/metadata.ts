@@ -22,10 +22,13 @@ export async function extractPhotoMetadata(file: File): Promise<PhotoMetadata | 
 
 async function reverseGeocodeClient(lat: number, lng: number): Promise<string | undefined> {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=zh-CN`,
-      { headers: { 'User-Agent': 'Makaron-App/1.0' } },
+      { headers: { 'User-Agent': 'Makaron-App/1.0' }, signal: controller.signal },
     );
+    clearTimeout(timeout);
     if (!res.ok) return undefined;
     const geo = await res.json();
     const addr = geo?.address;
