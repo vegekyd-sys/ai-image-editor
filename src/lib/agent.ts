@@ -513,10 +513,60 @@ Hard constraints (apply even before reading the guide):
       },
     }),
 
+    analyze_video: tool({
+      description: 'Analyze video content using Gemini vision. Returns scene descriptions, actions, pacing, audio cues. Use for understanding what happens in a video. For checking a specific frame visually, use preview_frame instead.',
+      inputSchema: z.object({
+        media_index: z.number().describe('1-based snapshot index of the video to analyze (<<<media_1>>> = 1)'),
+        question: z.string().optional().describe('Specific aspect to focus on (e.g. "what happens at 5s?", "describe the pacing", "what audio/dialogue is there?")'),
+      }),
+      execute: async ({ media_index, question }) => {
+        const v = validateImageIndex(ctx.snapshotImages, media_index);
+        if (v.error) return { error: v.error };
+
+        // Get video URL from DB (videoMeta.videoUrl)
+        let videoUrl: string | undefined;
+        if (ctx.supabase && ctx.userId) {
+          try {
+            const { data: snaps } = await ctx.supabase
+              .from('snapshots')
+              .select('video_meta')
+              .eq('project_id', ctx.projectId)
+              .order('sort_order', { ascending: true });
+            const snap = snaps?.[v.idx];
+            const vm = snap?.video_meta as Record<string, unknown> | undefined;
+            videoUrl = vm?.videoUrl as string | undefined;
+          } catch { /* fallback below */ }
+        }
+
+        if (!videoUrl) {
+          return { error: `No video found at <<<media_${media_index}>>>. This snapshot may not be a video, or video is still processing. Use analyze_image to see the poster, or preview_frame for design frames.` };
+        }
+
+        try {
+          const { analyzeVideoContent } = await import('./gemini');
+          const analysis = await analyzeVideoContent(videoUrl, question);
+          return { analysis, media_index, videoUrl };
+        } catch (err) {
+          return { error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
+        }
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toModelOutput({ output }: { output: any }) {
+        if (output.error) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: `Video Analysis (<<<media_${output.media_index}>>>):\n\n${output.analysis}` }],
+        };
+      },
+    }),
+
     preview_frame: tool({
       description: `Capture a screenshot of a design at a specific frame or time.
 Use media_index to target any snapshot with a design (including video snapshots).
 For video snapshots: use timestamp to see specific moments in the video.
+For understanding video content (what happens, scenes, pacing), use analyze_video instead.
 Omit media_index to use the current (last edited) design.
 Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
