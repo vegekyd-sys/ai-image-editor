@@ -628,8 +628,11 @@ export default function ImageCanvas({
   }, [videoPlayTrigger, isVideoEntry, videoUrl]);
 
   // Remotion Player: poll current frame for custom seek bar
-  // draftDesign takes priority when agent pushed a new design (before publish)
-  const currentDesign = draftDesign || animatedDesigns?.get(currentIndex);
+  // draftDesign only shown when viewing the draft slot (not other snapshots)
+  const isViewingDraftSlot = isDraft && draftTimelineIndex !== undefined && currentIndex === draftTimelineIndex;
+  const currentDesign = isViewingDraftSlot
+    ? (draftDesign || null)
+    : animatedDesigns?.get(currentIndex);
   const remotionFps = currentDesign?.animation?.fps || 30;
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
@@ -673,11 +676,6 @@ export default function ImageCanvas({
     for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi)) imageUrls.add(m[0]);
     for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi)) imageUrls.add(m[0]);
 
-    const videoUrls = new Set<string>();
-    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi)) videoUrls.add(m[0]);
-    // Supabase storage video URLs (no extension)
-    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*videos\/[^\s"'`<>)}\]]*/gi)) videoUrls.add(m[0]);
-
     const imagePromises = [...imageUrls].map(url => new Promise<void>(resolve => {
       const img = new Image();
       img.onload = () => resolve();
@@ -685,14 +683,8 @@ export default function ImageCanvas({
       img.src = url;
     }));
 
-    // Preload full video into browser cache so <Video> mount/seeks are faster
-    const videoPromises = [...videoUrls].map(url =>
-      fetch(url).then(() => {}).catch(() => {})
-    );
-
-    const all = [...imagePromises, ...videoPromises];
-    if (all.length === 0) return Promise.resolve();
-    return Promise.all(all).then(() => {});
+    if (imagePromises.length === 0) return Promise.resolve();
+    return Promise.all(imagePromises).then(() => {});
   }, []);
 
   // Reset + auto-play when switching to a design snapshot
@@ -871,8 +863,8 @@ export default function ImageCanvas({
           </div>
         )}
 
-        {/* Video entry */}
-        {isVideoEntry && videoUrl ? (
+        {/* Video entry — skip native player if there's a real design (agent trim/edit) */}
+        {isVideoEntry && videoUrl && !currentDesign ? (
           <div
             className="relative w-full h-full flex items-center justify-center"
             onPointerMove={resetControlsTimer}
