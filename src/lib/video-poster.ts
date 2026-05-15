@@ -3,6 +3,7 @@ import { renderDesignFrame } from '@/lib/remotion-server'
 
 /**
  * Capture a poster frame from a video URL using Vercel Sandbox + Remotion.
+ * The Sandbox loads the video via URL and renders frame 15 (0.5s at 30fps).
  * Returns JPEG Buffer or null on failure.
  */
 export async function captureVideoPoster(
@@ -13,7 +14,7 @@ export async function captureVideoPoster(
 ): Promise<Buffer | null> {
   try {
     const design = createVideoDesign(videoUrl, width, height, durationSec || 10)
-    return await renderDesignFrame(design, 15) // frame 15 = 0.5s at 30fps
+    return await renderDesignFrame(design, 15)
   } catch (err) {
     console.error('[captureVideoPoster] Failed:', err)
     return null

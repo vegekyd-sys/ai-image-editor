@@ -12,7 +12,7 @@
     "mcp:http": "npx tsx --require ./md-loader.cjs mcp-server.ts"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^4.0.63",
+    "@ai-sdk/amazon-bedrock": "4.0.96",
     "@babel/standalone": "^7.29.2",
     "@fal-ai/client": "^1.9.5",
     "@google/genai": "^1.40.0",

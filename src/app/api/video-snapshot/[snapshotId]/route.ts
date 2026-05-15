@@ -84,24 +84,19 @@ export async function GET(
           const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 }
           console.log(`[poster] Dimensions: ${dims.width}x${dims.height}`)
 
-          // Upload video to Supabase Storage
-          const permanentUrl = await uploadVideo(supabase, user.id, projectId, snapshotId, buffer)
-          console.log(`[poster] Video uploaded: ${Date.now() - t0}ms`)
+          // Upload video + extract poster in parallel
+          // Poster uses the original CDN URL (no need to wait for Supabase upload)
+          const { captureVideoPoster } = await import('@/lib/video-poster')
+          const [permanentUrl, posterBuffer] = await Promise.all([
+            uploadVideo(supabase, user.id, projectId, snapshotId, buffer),
+            captureVideoPoster(result.videoUrl!, dims.width, dims.height, videoMeta.duration || undefined).catch(() => null),
+          ])
+          console.log(`[poster] Video uploaded + frame captured: ${Date.now() - t0}ms`)
 
-          // Extract poster frame via Sandbox + Remotion
           let posterUrl: string | null = null
-          if (permanentUrl) {
-            try {
-              const { captureVideoPoster } = await import('@/lib/video-poster')
-              const posterBuffer = await captureVideoPoster(permanentUrl, dims.width, dims.height, videoMeta.duration || undefined)
-              console.log(`[poster] Frame captured: ${Date.now() - t0}ms`)
-              if (posterBuffer) {
-                posterUrl = await uploadPoster(supabase, user.id, projectId, snapshotId, new Uint8Array(posterBuffer))
-                console.log(`[poster] Poster uploaded: ${Date.now() - t0}ms`)
-              }
-            } catch (posterErr) {
-              console.error('[poster] Capture failed (non-fatal):', posterErr)
-            }
+          if (posterBuffer) {
+            posterUrl = await uploadPoster(supabase, user.id, projectId, snapshotId, new Uint8Array(posterBuffer))
+            console.log(`[poster] Poster uploaded: ${Date.now() - t0}ms`)
           }
 
           // Update DB — video URL + dimensions + poster
