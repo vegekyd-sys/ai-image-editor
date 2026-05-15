@@ -2484,7 +2484,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [animations]);
 
   // v2: Poll video snapshots with status=processing
-  const posterPollRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!isV2) return;
     const processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing' && s.videoMeta.taskId);
@@ -2508,11 +2507,28 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 designPath: `code/${snap.id}.json`,
               } : s
             ));
-            // Start poster poll if imageUrl hasn't changed yet (still source image)
-            const originalImageUrl = snap.imageUrl || snap.image;
-            if (!data.imageUrl || data.imageUrl === originalImageUrl) {
-              posterPollRef.current.add(snap.id);
-            }
+            // Front-end poster capture
+            try {
+              const { captureVideoFrame } = await import('@/lib/video-upload');
+              const poster = await captureVideoFrame(data.videoUrl);
+              if (poster) {
+                setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, image: poster } : s));
+                import('@/lib/supabase/client').then(async ({ createClient }) => {
+                  const supabase = createClient();
+                  const uid = (await supabase.auth.getUser()).data.user?.id;
+                  if (!uid || !projectId) return;
+                  const blob = await fetch(poster).then(r => r.blob());
+                  const path = `${uid}/${projectId}/posters/${snap.id}.jpg`;
+                  const { error } = await supabase.storage.from('images').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+                  if (error) return;
+                  const { data: urlData } = supabase.storage.from('images').getPublicUrl(path);
+                  if (urlData?.publicUrl) {
+                    setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: urlData.publicUrl } : s));
+                    await supabase.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snap.id);
+                  }
+                });
+              }
+            } catch { /* poster capture failed — non-fatal */ }
           } else if (data.status === 'failed') {
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const, error: data.error || undefined } } : s
@@ -2524,39 +2540,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     return () => clearInterval(interval);
   }, [snapshots, isV2]);
 
-  // v2: Poll for poster after video completion (server extracts frame async)
-  useEffect(() => {
-    if (!isV2 || posterPollRef.current.size === 0) return;
-    const ids = [...posterPollRef.current];
-    let attempts = 0;
-    const maxAttempts = 8; // ~32s max wait
-    const interval = setInterval(async () => {
-      attempts++;
-      if (attempts > maxAttempts) {
-        posterPollRef.current.clear();
-        clearInterval(interval);
-        return;
-      }
-      for (const id of ids) {
-        try {
-          const res = await fetch(`/api/video-snapshot/${id}`);
-          const data = await res.json();
-          if (data.imageUrl) {
-            const snap = snapshots.find(s => s.id === id);
-            const originalImageUrl = snap?.imageUrl || snap?.image;
-            if (data.imageUrl !== originalImageUrl) {
-              setSnapshots(prev => prev.map(s =>
-                s.id === id ? { ...s, image: data.imageUrl, imageUrl: data.imageUrl } : s
-              ));
-              posterPollRef.current.delete(id);
-            }
-          }
-        } catch { /* ignore */ }
-      }
-      if (posterPollRef.current.size === 0) clearInterval(interval);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [snapshots, isV2]);
 
   // Preload adjacent snapshots (not yet in DOM) so swipe transitions are instant
   useEffect(() => {
