@@ -1255,7 +1255,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     snapshotId: string,
     imageBase64: string,
     context: 'initial' | 'post-edit' = 'initial',
-    options?: { silent?: boolean },
+    options?: { silent?: boolean; isVideo?: boolean },
   ) => {
     if (!projectId) return;
 
@@ -1282,8 +1282,15 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
 
     try {
+      // For video analysis, pass snapshotImages so agent can find the video URL
+      const snapshotImagesForAnalysis = options?.isVideo ? snapshotsRef.current.map((s) => {
+        if (s.type === 'video' && s.videoMeta?.videoUrl) return s.videoMeta.videoUrl;
+        if (s.imageUrl) return s.imageUrl;
+        return getImageForApi(s) || '';
+      }) : undefined;
+      const snapIndex = options?.isVideo ? snapshotsRef.current.findIndex(s => s.id === snapshotId) : undefined;
       await streamAgent(
-        { prompt: '', image: imageBase64, projectId, analysisOnly: true, analysisContext: context },
+        { prompt: '', image: imageBase64, projectId, analysisOnly: true, analysisContext: context, isVideoAnalysis: options?.isVideo, snapshotImages: snapshotImagesForAnalysis, currentSnapshotIndex: snapIndex !== undefined && snapIndex >= 0 ? snapIndex : undefined },
         {
           onStatus: (s) => { if (!silent) setAgentStatus(s); },
           onContent: (delta) => {
@@ -2232,7 +2239,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       onSaveSnapshot?.(completedSnap, snapshots.length, (uploadedUrl) => {
         setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: uploadedUrl } : s));
       });
-      setAgentStatus(t('editor.greeting'));
+
+      // Auto-analyze video content — use normal agent request (DB is ready by now)
+      handleAgentRequest('[System] User just uploaded a video. Use analyze_video to see what it contains, then briefly describe it to the user.', undefined, undefined, { silent: true });
 
       // Return 1-based index (snapshot was appended at snapshots.length)
       return snapshots.length + 1;
@@ -2369,6 +2378,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           // Single image: non-silent analysis (shows in CUI)
           runAutoAnalysis(workSnapshots[0].id, workSnapshots[0].image, 'initial');
         }
+      }
+
+      // ── Step 6b: Video analysis (if videos, no prompt) ──
+      if (hasVideos && !hasPrompt) {
+        handleAgentRequest('[System] User just uploaded a video. Use analyze_video to see what it contains, then briefly describe it to the user.', undefined, undefined, { silent: true });
       }
 
       // ── Step 7: Agent request (if prompt) ──

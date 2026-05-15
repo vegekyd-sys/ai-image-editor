@@ -529,9 +529,13 @@ Hard constraints (apply even before reading the guide):
         const v = validateImageIndex(ctx.snapshotImages, media_index);
         if (v.error) return { error: v.error };
 
-        // Get video URL from DB (videoMeta.videoUrl)
+        // Get video URL: first check snapshotImages (may already contain video URL), then DB fallback
         let videoUrl: string | undefined;
-        if (ctx.supabase && ctx.userId) {
+        const mediaUrl = ctx.snapshotImages[v.idx];
+        console.log(`[analyze_video] media_index=${media_index} idx=${v.idx} mediaUrl=${mediaUrl?.substring(0, 80)} isVideo=${/\.(mp4|webm|mov)/i.test(mediaUrl || '')}`);
+        if (mediaUrl && /\.(mp4|webm|mov)/i.test(mediaUrl)) {
+          videoUrl = mediaUrl;
+        } else if (ctx.supabase && ctx.userId) {
           try {
             const { data: snaps, error: snapErr } = await ctx.supabase
               .from('snapshots')
@@ -1253,12 +1257,16 @@ const ANALYSIS_PROMPT_INITIAL = `描述这张照片里的内容，1-2句，语�
 // Used for post-edit analysis — acknowledges the edit context
 const ANALYSIS_PROMPT_POSTEDIT = `P完图了，看看效果。以"P完之后，"开头，用1句话描述一下现在这张图的整体效果和氛围。禁止用"我来看看"等铺垫语，直接说结果。`;
 
+// Used for video upload auto-analysis
+const ANALYSIS_PROMPT_VIDEO_TEMPLATE = (mediaIndex: number) =>
+  `[System: User just uploaded a video at <<<media_${mediaIndex}>>>. Analyze it and describe the content.]\nDescribe this video in 2-3 sentences — duration, key subjects/actions, mood. Be conversational. No preamble.`;
+
 export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }>; timelineVersion?: number },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }>; timelineVersion?: number },
 ): AsyncGenerator<AgentStreamEvent> {
   const ctx: AgentContext = {
     currentImage,
@@ -1289,19 +1297,22 @@ export async function* runMakaronAgent(
   const agentStartTime = Date.now();
 
   const analysisOnly = options?.analysisOnly ?? false;
+  const isVideoAnalysis = options?.isVideoAnalysis ?? false;
   const tipReactionOnly = options?.tipReactionOnly ?? false;
   const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : 30;
+  const videoMediaIndex = isVideoAnalysis ? (options?.currentSnapshotIndex ?? 0) + 1 : 0;
   const analysisPrompt = withLocale(
-    options?.analysisContext === 'post-edit' ? ANALYSIS_PROMPT_POSTEDIT : ANALYSIS_PROMPT_INITIAL,
+    isVideoAnalysis ? ANALYSIS_PROMPT_VIDEO_TEMPLATE(videoMediaIndex)
+      : options?.analysisContext === 'post-edit' ? ANALYSIS_PROMPT_POSTEDIT : ANALYSIS_PROMPT_INITIAL,
     options?.locale,
   );
 
   // Determine which tools to expose
   // tipReactionOnly: no tools (text-only response)
-  // analysisOnly: only analyze_image (agent uses tool to see the photo)
+  // analysisOnly: only analyze_image or analyze_video (agent uses tool to see the content)
   // normal chat / animation: all tools including workspace (agent.md controls behavior)
   const tools = tipReactionOnly ? undefined : analysisOnly
-    ? { analyze_image: allTools.analyze_image }
+    ? (isVideoAnalysis ? { analyze_video: allTools.analyze_video } : { analyze_image: allTools.analyze_image })
     : allTools;
 
   // Build user message content — animation mode includes all snapshot images as visual content

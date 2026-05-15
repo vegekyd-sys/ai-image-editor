@@ -1418,6 +1418,7 @@ export async function analyzeVideoContent(
   videoUrl: string,
   question?: string,
 ): Promise<string> {
+  console.log(`[analyzeVideoContent] url=${videoUrl.substring(0, 100)}`);
   const ai = getAI();
   const prompt = question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.';
 
