@@ -106,7 +106,7 @@ export default function VideoResultCard({
               style={{ background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)' }}
             >
               <button
-                onClick={() => { if (isCompleted) onSelectVideo(anim.id); }}
+                onClick={() => { if (isCompleted) onSelectVideo(anim.id); onViewDetail(anim); }}
                 className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
                 style={{
                   width: cardWidth,

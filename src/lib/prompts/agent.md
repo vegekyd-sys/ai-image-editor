@@ -38,6 +38,8 @@ Use `media_index` in `generate_image` or `analyze_image` to work with any snapsh
 - `media_index` → the edit base (becomes Image 1 for the model)
 - `reference_media_indices` → additional images (become Image 2, Image 3, ... for the model)
 
+**Video snapshots → generate_animation:** When the user's instruction targets a `[video]` snapshot (e.g. "编辑@1", "给@1加特效", "用@5的画风改@1" where @1 is video), this is a VIDEO EDIT — use `generate_animation` (not `generate_image`). Reference the video with `<<<media_N>>>` in the script. Read `prompts/animate.md` for video editing syntax.
+
 **Resolving vague references:**
 - "上一张" / "前一个" → the snapshot before ← YOU ARE HERE
 - "之前那张XXX" / "the one with XXX" → match keywords in the index descriptions
@@ -136,22 +138,25 @@ High-scoring edits ADD small elements or adjust lighting/color. Low-scoring edit
 
 ## Video / Animation Workflow
 
-Two video creation paths. **Default is `generate_animation`** (AI-generated video with sound). Only use `run_code` video design when user explicitly asks for vlog/recording/花字.
+Two video paths. **Default is `generate_animation`** — it handles ALL video content creation and editing. `run_code` video design is only for post-production packaging.
 
-**核心区分：讲故事 vs 记录**
-- **讲故事**（叙事、剧情、镜头语言、让画面动起来）→ `generate_animation`
-- **记录**（vlog、旅行记录、日常合集、花字排版）→ `run_code` video design
+**核心区分：内容 vs 包装**
+- **`generate_animation`** = 视频内容（创建、编辑、特效、延长、合并、画风转换、讲故事、叙事、剧情、镜头语言）
+- **`run_code` video design** = 视频包装 / 后期 / 记录（加字幕、花字、标题卡、片头片尾、剪辑拼接、vlog、旅行记录、日常合集排版）
 
-**默认 `generate_animation`**（真实视频 + 声音 + 镜头运动）：
+**`generate_animation`（默认，内容层）**：
 - "做个视频" / "做个短视频" / "让照片动起来" → `generate_animation`
 - "讲故事" / "有剧情的视频" → `generate_animation`
 - "搞笑视频" / "让猫/人动起来" → `generate_animation`
+- "加特效" / "改画风" / "延长视频" / "编辑视频" → `generate_animation`
+- **任何针对 [video] snapshot 的指令**（编辑、加特效、改画风、合并、延长）→ `generate_animation`
 - 任何不明确的视频请求 → `generate_animation`
 
-**仅当用户明确说这些时才用 `run_code` video design**：
-- "做个 vlog" / "旅行记录" / "日常合集" → `run_code`（多照片 + 花字编排）
-- "做花字动效" / "加文字动画" → `run_code`
-- "做数据分析视频" / "做动态图表视频" → `run_code`（必须有"视频/动画"关键词）
+**`run_code` video design（包装层 / 后期）**：
+- "加字幕" / "加花字" / "加标题" → `run_code`（文字叠加在视频上）
+- "做个 vlog" / "旅行记录" / "日常合集" → `run_code`（多段素材 + 花字编排）
+- "做片头" / "做片尾" / "加转场" → `run_code`
+- "剪辑" / "把几段视频拼一起" → `run_code`（Remotion 时间轴编排）
 - 已有 design code 要修改 → `run_code` patch
 
 **注意**：静态图表、信息图、数据可视化图片 → `generate_image`（不是 `run_code`）。只有明确要动画/视频版本时才用 `run_code`。
