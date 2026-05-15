@@ -1,5 +1,5 @@
 diff --git a/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs b/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs
-index 2b9cfb9..1df46fa 100644
+index 2b9cfb9..259622c 100644
 --- a/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs
 +++ b/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs
 @@ -297,6 +297,11 @@ async function prepareTools({
@@ -14,23 +14,3 @@ index 2b9cfb9..1df46fa 100644
    }
    let bedrockToolChoice = void 0;
    if (!usingAnthropicTools && bedrockTools.length > 0 && toolChoice) {
-@@ -521,6 +526,19 @@ async function convertToBedrockChatMessages(prompt, isMistral = false) {
-                               source: { bytes: contentPart.data }
-                             }
-                           };
-+                        case "file-data":
-+                          if (contentPart.mediaType.startsWith("image/")) {
-+                            const fileFormat = getBedrockImageFormat(
-+                              contentPart.mediaType
-+                            );
-+                            return {
-+                              image: {
-+                                format: fileFormat,
-+                                source: { bytes: contentPart.data }
-+                              }
-+                            };
-+                          }
-+                          return { text: `[file: ${contentPart.mediaType}]` };
-                         default: {
-                           throw new UnsupportedFunctionalityError2({
-                             functionality: `unsupported tool content part type: ${contentPart.type}`
