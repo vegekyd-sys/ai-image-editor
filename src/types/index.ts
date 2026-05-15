@@ -138,6 +138,8 @@ export interface VideoMeta {
   model: VideoModel;
   createdAt?: string;
   error?: string;
+  width?: number;
+  height?: number;
 }
 
 

@@ -122,6 +122,36 @@ export async function uploadVideo(
 }
 
 /**
+ * Upload a video poster (JPEG) to Supabase Storage.
+ * Returns the public URL on success, null on failure.
+ */
+export async function uploadPoster(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+  snapshotId: string,
+  jpegBuffer: Uint8Array,
+): Promise<string | null> {
+  try {
+    const path = `${userId}/${projectId}/posters/${snapshotId}.jpg`
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(path, jpegBuffer, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      })
+    if (error) {
+      console.warn('Poster upload error:', error)
+      return null
+    }
+    return getPublicUrl(supabase, path)
+  } catch (err) {
+    console.warn('uploadPoster error:', err)
+    return null
+  }
+}
+
+/**
  * Upload an audio binary to Supabase Storage.
  * Returns the public URL on success, null on failure.
  */

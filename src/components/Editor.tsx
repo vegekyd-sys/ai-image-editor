@@ -2471,6 +2471,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [animations]);
 
   // v2: Poll video snapshots with status=processing
+  const posterPollRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!isV2) return;
     const processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing' && s.videoMeta.taskId);
@@ -2494,6 +2495,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 designPath: `code/${snap.id}.json`,
               } : s
             ));
+            // Start poster poll if imageUrl hasn't changed yet (still source image)
+            const originalImageUrl = snap.imageUrl || snap.image;
+            if (!data.imageUrl || data.imageUrl === originalImageUrl) {
+              posterPollRef.current.add(snap.id);
+            }
           } else if (data.status === 'failed') {
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const, error: data.error || undefined } } : s
@@ -2501,6 +2507,40 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           }
         } catch { /* ignore */ }
       }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [snapshots, isV2]);
+
+  // v2: Poll for poster after video completion (server extracts frame async)
+  useEffect(() => {
+    if (!isV2 || posterPollRef.current.size === 0) return;
+    const ids = [...posterPollRef.current];
+    let attempts = 0;
+    const maxAttempts = 8; // ~32s max wait
+    const interval = setInterval(async () => {
+      attempts++;
+      if (attempts > maxAttempts) {
+        posterPollRef.current.clear();
+        clearInterval(interval);
+        return;
+      }
+      for (const id of ids) {
+        try {
+          const res = await fetch(`/api/video-snapshot/${id}`);
+          const data = await res.json();
+          if (data.imageUrl) {
+            const snap = snapshots.find(s => s.id === id);
+            const originalImageUrl = snap?.imageUrl || snap?.image;
+            if (data.imageUrl !== originalImageUrl) {
+              setSnapshots(prev => prev.map(s =>
+                s.id === id ? { ...s, image: data.imageUrl, imageUrl: data.imageUrl } : s
+              ));
+              posterPollRef.current.delete(id);
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      if (posterPollRef.current.size === 0) clearInterval(interval);
     }, 4000);
     return () => clearInterval(interval);
   }, [snapshots, isV2]);
@@ -3028,14 +3068,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     messagesLoading: messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0,
     isAgentActive,
     agentStatus,
-    currentImage: isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex],
+    currentImage: isViewingVideo ? (currentSnap?.image || timeline[viewIndex]) : timeline[viewIndex],
     onSendMessage: handleCuiSend,
     onAbort: handleAgentAbort,
     onInputBarHeight: (h: number) => { cuiInputBarH.current = h; },
     onImageTap: handleImageTap,
     onVideoTap: handleVideoTap,
     snapshots,
-    currentSnapshotIndex: isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
+    currentSnapshotIndex: isViewingVideo ? (currentSnapIndex + 1) : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
     preferredModel: preferredModel as PreferredModel,
     onModelChange: setPreferredModel,
     videoModel,

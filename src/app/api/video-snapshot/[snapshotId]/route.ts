@@ -3,7 +3,7 @@ import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
-import { uploadVideo } from '@/lib/supabase/storage'
+import { uploadVideo, uploadPoster } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 60
@@ -69,21 +69,57 @@ export async function GET(
         .update({ video_meta: updatedMeta })
         .eq('id', snapshotId)
 
-      // Persist video to Supabase Storage (after response)
+      // Persist video + extract poster (after response)
       const projectId = snap.project_id
       after(async () => {
+        const t0 = Date.now()
         try {
           const res = await fetch(result.videoUrl!)
           if (!res.ok) return
           const buffer = new Uint8Array(await res.arrayBuffer())
+          console.log(`[poster] Video downloaded: ${Date.now() - t0}ms (${(buffer.length / 1024 / 1024).toFixed(1)}MB)`)
+
+          // Parse video dimensions from MP4 header
+          const { probeMP4Dimensions } = await import('@/lib/mp4-probe')
+          const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 }
+          console.log(`[poster] Dimensions: ${dims.width}x${dims.height}`)
+
+          // Upload video to Supabase Storage
           const permanentUrl = await uploadVideo(supabase, user.id, projectId, snapshotId, buffer)
+          console.log(`[poster] Video uploaded: ${Date.now() - t0}ms`)
+
+          // Extract poster frame via Sandbox + Remotion
+          let posterUrl: string | null = null
           if (permanentUrl) {
-            const finalMeta: VideoMeta = { ...updatedMeta, videoUrl: permanentUrl, videoPath: `${user.id}/projects/${projectId}/animation/${snapshotId}.mp4` }
+            try {
+              const { captureVideoPoster } = await import('@/lib/video-poster')
+              const posterBuffer = await captureVideoPoster(permanentUrl, dims.width, dims.height, videoMeta.duration || undefined)
+              console.log(`[poster] Frame captured: ${Date.now() - t0}ms`)
+              if (posterBuffer) {
+                posterUrl = await uploadPoster(supabase, user.id, projectId, snapshotId, new Uint8Array(posterBuffer))
+                console.log(`[poster] Poster uploaded: ${Date.now() - t0}ms`)
+              }
+            } catch (posterErr) {
+              console.error('[poster] Capture failed (non-fatal):', posterErr)
+            }
+          }
+
+          // Update DB — video URL + dimensions + poster
+          if (permanentUrl) {
+            const finalMeta: VideoMeta = {
+              ...updatedMeta,
+              videoUrl: permanentUrl,
+              videoPath: `${user.id}/projects/${projectId}/animation/${snapshotId}.mp4`,
+              width: dims.width,
+              height: dims.height,
+            }
+            const update: Record<string, unknown> = { video_meta: finalMeta }
+            if (posterUrl) update.image_url = posterUrl
             await supabase
               .from('snapshots')
-              .update({ video_meta: finalMeta })
+              .update(update)
               .eq('id', snapshotId)
-            console.log(`Video snapshot ${snapshotId} persisted`)
+            console.log(`[poster] Done: ${Date.now() - t0}ms total, poster=${!!posterUrl}`)
           }
         } catch (err) {
           console.error('Video snapshot persist error:', err)
