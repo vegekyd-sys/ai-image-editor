@@ -482,6 +482,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     ? currentDesignSnap?.design?.editables?.find(f => f.id === editingDesignFieldId) ?? null
     : null;
 
+  // Unified "current display image" — poster for video, timeline image otherwise
+  const currentDisplayImage = isViewingVideo
+    ? (currentSnap?.image || currentSnap?.imageUrl || timeline[viewIndex] || '')
+    : (timeline[viewIndex] || '');
+  const currentDisplayImageRef = useRef(currentDisplayImage);
+  useEffect(() => { currentDisplayImageRef.current = currentDisplayImage; }, [currentDisplayImage]);
+
   // Clear editing state when view changes (index, mode, or design disappears)
   useEffect(() => {
     setEditingDesignFieldId(null);
@@ -632,7 +639,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Shared hero animation: fly fromRect → PiP corner, then mount CUI.
   // Used by both Chat button (openCUI) and pull-down gesture commit.
   const startHeroToCUI = useCallback((fromRect: { l: number; t: number; w: number; h: number }, fromRadius: string) => {
-    const src = timeline[viewIndex];
+    const src = currentDisplayImageRef.current;
     if (!src) { setViewMode('cui'); return; }
 
     // pushState if not already done (pull-down pushes at gesture start)
@@ -691,7 +698,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Handle PiP tap: hero animation (PiP → canvas), then trigger GUI return
   const handlePipTap = useCallback((pipRect: DOMRect) => {
     const cr = lastCanvasRect.current;
-    const src = timeline[viewIndex];
+    const src = currentDisplayImageRef.current;
     if (cr && src) {
       const ar = lastImageAR.current;
       const fromRect = { l: pipRect.left, t: pipRect.top, w: pipRect.width, h: pipRect.height };
@@ -3068,7 +3075,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     messagesLoading: messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0,
     isAgentActive,
     agentStatus,
-    currentImage: isViewingVideo ? (currentSnap?.image || timeline[viewIndex]) : timeline[viewIndex],
+    currentImage: currentDisplayImage,
     onSendMessage: handleCuiSend,
     onAbort: handleAgentAbort,
     onInputBarHeight: (h: number) => { cuiInputBarH.current = h; },
@@ -3880,7 +3887,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={timeline[viewIndex]}
+              src={currentDisplayImage}
               draggable={false}
               alt=""
               className="w-full h-full object-cover"
