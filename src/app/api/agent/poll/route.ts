@@ -11,22 +11,23 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
-    return NextResponse.json(null, { status: 401 })
-  }
 
   const projectId = new URL(req.url).searchParams.get('projectId')
   if (!projectId) {
     return NextResponse.json(null, { status: 400 })
   }
 
-  // Verify project ownership
-  const { data: project } = await supabase
+  // Allow public projects without auth; private projects require login
+  const admin = getSupabaseAdmin()
+  const { data: project } = await admin
     .from('projects')
-    .select('id')
+    .select('id, user_id, is_public')
     .eq('id', projectId)
     .maybeSingle()
   if (!project) {
+    return NextResponse.json(null, { status: 404 })
+  }
+  if (!project.is_public && (!session || session.user.id !== project.user_id)) {
     return NextResponse.json(null, { status: 403 })
   }
 
