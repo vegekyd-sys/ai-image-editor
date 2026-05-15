@@ -1543,9 +1543,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         if (hasAllUrls()) break;
       }
     }
-    // Build snapshot images: prefer Storage URLs, base64 fallback for all snapshots
-    // (Agent needs URLs for all images to reference in designs, not just current)
+    // Build snapshot media: video snapshots use video URL, image snapshots use Storage URL/base64
     const snapshotImagesForApi = snapshotsRef.current.map((s) => {
+      if (s.type === 'video' && s.videoMeta?.videoUrl) return s.videoMeta.videoUrl;
       if (s.imageUrl) return s.imageUrl;
       return getImageForApi(s) || '';
     });

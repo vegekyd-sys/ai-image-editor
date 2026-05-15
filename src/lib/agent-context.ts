@@ -175,7 +175,10 @@ export async function buildPromptContext(
   // as structured messages[] alongside fullPrompt).
   const fullPrompt = `${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
-  const snapshotImages = snapshots.map(s => s.image_url || '');
+  const snapshotImages = snapshots.map(s => {
+    if (s.type === 'video' && s.video_meta?.videoUrl) return s.video_meta.videoUrl as string;
+    return s.image_url || '';
+  });
   const originalImage = snapshots[0]?.image_url || undefined;
 
   return {

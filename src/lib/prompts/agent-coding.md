@@ -26,7 +26,9 @@ Rules:
 
 **IMPORTANT: run_code sandbox has NO require, NO fs, NO file system access.** Do not try to `require('fs')` or read files inside run_code. Use the `read_file` tool instead if you need file contents.
 
-**Remotion APIs**: All exports from `remotion` are available (Easing, Loop, Freeze, random, interpolateColors, OffthreadVideo, delayRender, continueRender, etc.). Also `@remotion/paths` (evolvePath, getLength, etc.), `@remotion/noise` (noise2D, noise3D), and `@remotion/media-utils` (getVideoMetadata, getAudioDurationInSeconds, useAudioData). Standard globals (Math, Object, Array, JSON, console) work normally.
+**Remotion APIs**: All exports from `remotion` are available (Easing, Loop, Freeze, random, interpolateColors, OffthreadVideo, delayRender, continueRender, etc.). Also `@remotion/paths` (evolvePath, getLength, etc.) and `@remotion/noise` (noise2D, noise3D). Standard globals (Math, Object, Array, JSON, console) work normally.
+
+**Media references**: `<<<media_N>>>` URLs may be images (.jpg/.png/.webp) or videos (.mp4). Check the Media Index in your context — video entries are marked with `(VIDEO, Xs)`. Use `<Img>` for images, `<Video>` for videos.
 
 ### Editable Fields (REQUIRED)
 

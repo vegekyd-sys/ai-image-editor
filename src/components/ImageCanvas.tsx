@@ -13,6 +13,14 @@ const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), 
 
 const VIDEO_SENTINEL = '__VIDEO__';
 
+function isSimpleVideoWrapper(code: string): boolean {
+  if (!/<(?:Video|OffthreadVideo)\s/.test(code)) return false;
+  if (/<Img\s/.test(code) || /<Audio\s/.test(code) || /<Text[\s>]/.test(code)) return false;
+  if (/trimBefore|trimAfter|startFrom|endAt/.test(code)) return false;
+  if ((code.match(/<Sequence[\s>]/g) || []).length > 1) return false;
+  return true;
+}
+
 interface ImageCanvasProps {
   timeline: string[];
   currentIndex: number;
@@ -791,8 +799,8 @@ export default function ImageCanvas({
     updateRemotionUI();
   }, [remotionTotalFrames, updateRemotionUI]);
 
-  // Non-Supabase video URLs (Kling CDN etc.) are proxied to avoid CORS and expiry issues
-  const effectiveVideoUrl = videoUrl && !videoUrl.includes('supabase.co')
+  // Only proxy third-party CDN URLs (Kling etc.) — Supabase URLs play directly (better audio on iOS)
+  const effectiveVideoUrl = videoUrl && !videoUrl.includes('cdn.makaron.app') && !videoUrl.includes('supabase.co')
     ? `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`
     : videoUrl;
 
@@ -863,8 +871,8 @@ export default function ImageCanvas({
           </div>
         )}
 
-        {/* Video entry — skip native player if there's a real design (agent trim/edit) */}
-        {isVideoEntry && videoUrl && !currentDesign ? (
+        {/* Video entry — use native player unless design has real edits (trim/overlay) */}
+        {isVideoEntry && videoUrl && !(currentDesign && !isSimpleVideoWrapper(currentDesign.code)) ? (
           <div
             className="relative w-full h-full flex items-center justify-center"
             onPointerMove={resetControlsTimer}
@@ -872,14 +880,15 @@ export default function ImageCanvas({
               e.stopPropagation();
               if (!showControls) { resetControlsTimer(); return; }
               if (videoPlaying) { videoRef.current?.pause(); }
-              else { setVideoLoading(true); videoRef.current?.play().catch(() => {}); }
+              else { if (videoRef.current) videoRef.current.muted = false; setVideoLoading(true); videoRef.current?.play().catch(() => {}); }
             }}
           >
             <video
               key={effectiveVideoUrl}
               ref={videoRef}
-              src={effectiveVideoUrl ?? undefined}
+              src={effectiveVideoUrl ? `${effectiveVideoUrl}#t=0.001` : undefined}
               playsInline
+              muted
               preload="metadata"
               className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
                 animDir === 'left' ? 'opacity-0 -translate-x-8' :
@@ -923,8 +932,8 @@ export default function ImageCanvas({
               }}
             />
 
-            {/* Snapshot poster overlay — shown until video first frame loads */}
-            {!videoFrameLoaded && !videoPlaying && (() => {
+            {/* Snapshot poster overlay — only for proxied videos (Supabase direct videos load fast enough) */}
+            {!videoFrameLoaded && !videoPlaying && effectiveVideoUrl !== videoUrl && (() => {
               const prev = timeline[timeline.length - 2];
               const posterSrc = prev && prev !== VIDEO_SENTINEL ? prev : undefined;
               return posterSrc ? (
@@ -960,7 +969,7 @@ export default function ImageCanvas({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (videoPlaying) { videoRef.current?.pause(); }
-                    else { videoRef.current?.play().catch(() => {}); }
+                    else { if (videoRef.current) videoRef.current.muted = false; videoRef.current?.play().catch(() => {}); }
                   }}
                   className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
                 >

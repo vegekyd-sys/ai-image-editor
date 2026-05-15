@@ -136,20 +136,26 @@ async function fetchImageBuffer(
   return buf;
 }
 
-/** Refresh ctx.snapshotImages from DB — replaces base64 entries with Storage URLs. */
+/** Refresh ctx.snapshotImages from DB — replaces base64 entries with Storage URLs, video snapshots with video URLs. */
 async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
   if (!ctx.supabase || !ctx.projectId) return;
   try {
     const { data: dbSnaps } = await ctx.supabase
       .from('snapshots')
-      .select('image_url, sort_order')
+      .select('image_url, sort_order, type, video_meta')
       .eq('project_id', ctx.projectId)
       .order('sort_order');
     if (!dbSnaps?.length) return;
     for (let i = 0; i < Math.min(dbSnaps.length, ctx.snapshotImages.length); i++) {
-      const dbUrl = dbSnaps[i]?.image_url;
-      if (dbUrl && !ctx.snapshotImages[i]?.startsWith('http')) {
-        ctx.snapshotImages[i] = dbUrl;
+      const snap = dbSnaps[i];
+      // Video snapshot: use video URL
+      if (snap.type === 'video' && snap.video_meta?.videoUrl) {
+        ctx.snapshotImages[i] = snap.video_meta.videoUrl;
+        continue;
+      }
+      // Image snapshot: upgrade base64 to Storage URL
+      if (snap.image_url && !ctx.snapshotImages[i]?.startsWith('http')) {
+        ctx.snapshotImages[i] = snap.image_url;
       }
     }
   } catch { /* best effort */ }
