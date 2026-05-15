@@ -678,8 +678,11 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       const cr = el.getBoundingClientRect();
       lastCanvasRect.current = { l: cr.left, t: cr.top, w: cr.width, h: cr.height };
       const imgEl = el.querySelector('img');
+      const vidEl = el.querySelector('video');
       const ar = (imgEl && imgEl.naturalWidth && imgEl.naturalHeight)
-        ? imgEl.naturalWidth / imgEl.naturalHeight : 1;
+        ? imgEl.naturalWidth / imgEl.naturalHeight
+        : (vidEl && vidEl.videoWidth && vidEl.videoHeight)
+          ? vidEl.videoWidth / vidEl.videoHeight : 1;
       lastImageAR.current = ar;
       const imgBounds = containRect(cr.width, cr.height, ar);
       const side = Math.min(imgBounds.w, imgBounds.h);
@@ -728,8 +731,11 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         const cr = el.getBoundingClientRect();
         lastCanvasRect.current = { l: cr.left, t: cr.top, w: cr.width, h: cr.height };
         const imgEl = el.querySelector('img');
+        const vidEl = el.querySelector('video');
         const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
-          ? imgEl.naturalWidth / imgEl.naturalHeight : 1;
+          ? imgEl.naturalWidth / imgEl.naturalHeight
+          : (vidEl?.videoWidth && vidEl?.videoHeight)
+            ? vidEl.videoWidth / vidEl.videoHeight : 1;
         lastImageAR.current = ar;
         const imgBounds = containRect(cr.width, cr.height, ar);
         pullStartRect.current = {
@@ -2839,8 +2845,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       if (imgRect && cr && src) {
         // Compute actual image position within canvas (object-contain)
         const imgEl = canvasAreaRef.current?.querySelector('img');
+        const vidEl = canvasAreaRef.current?.querySelector('video');
         const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
-          ? imgEl.naturalWidth / imgEl.naturalHeight : lastImageAR.current;
+          ? imgEl.naturalWidth / imgEl.naturalHeight
+          : (vidEl?.videoWidth && vidEl?.videoHeight)
+            ? vidEl.videoWidth / vidEl.videoHeight : lastImageAR.current;
         const imgInCanvas = containRect(cr.w, cr.h, ar);
         const toRect = { l: cr.l + imgInCanvas.l, t: cr.t + imgInCanvas.t, w: imgInCanvas.w, h: imgInCanvas.h };
         const fromRect = { l: imgRect.left, t: imgRect.top, w: imgRect.width, h: imgRect.height };
