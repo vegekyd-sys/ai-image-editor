@@ -46,16 +46,17 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, onNavigate }: 
         onPause={() => setPlaying(false)}
         onEnded={() => { setPlaying(false); if (videoRef.current) videoRef.current.currentTime = 0; }}
       />
-      {/* @N badge + play/pause button */}
+      {/* @N badge + Play/Pause — bottom-left, matches image @N style */}
       <button
         onClick={togglePlay}
-        className="absolute bottom-2.5 left-2.5 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center gap-1.5 px-2.5"
+        className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-1 rounded-md pointer-events-auto"
+        style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
       >
         {playing
-          ? <svg width="12" height="12" viewBox="0 0 10 10" fill="white"><rect x="2" y="1.5" width="2.5" height="7" rx="0.5" /><rect x="5.5" y="1.5" width="2.5" height="7" rx="0.5" /></svg>
-          : <svg width="12" height="12" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+          ? <svg width="10" height="10" viewBox="0 0 10 10" fill="white"><rect x="2" y="1.5" width="2.5" height="7" rx="0.5" /><rect x="5.5" y="1.5" width="2.5" height="7" rx="0.5" /></svg>
+          : <svg width="10" height="10" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
         }
-        {snapIndex && <span className="text-white text-[11px] font-medium">@{snapIndex}</span>}
+        {snapIndex && <span className="text-[10px] font-medium tracking-wide" style={{ color: 'rgba(255,255,255,0.75)' }}>@{snapIndex}</span>}
       </button>
     </div>
   );
