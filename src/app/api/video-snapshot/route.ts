@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
     const creditCheck = await requireCredits(user.id, 50)
     if (!creditCheck.ok) return creditCheck.response
 
-    // Save first valid URL before auto-detect may clear them (for poster)
-    const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http')) || ''
+    // Save first valid image URL (not video) for poster
+    const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || ''
 
     // Auto-route video references: detect video snapshots in imageUrls
     const { data: dbSnaps } = await supabase
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, imageUrls)
 
     const snapshotId = crypto.randomUUID()
-    const posterUrl = filteredImages[0] || originalFirstUrl || imageUrls.find((u: string) => u?.startsWith('http')) || ''
+    const posterUrl = filteredImages.find((u: string) => u && !u.endsWith('.mp4')) || originalFirstUrl || ''
 
     const videoMeta: VideoMeta = {
       taskId,

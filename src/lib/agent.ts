@@ -148,12 +148,12 @@ async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
     if (!dbSnaps?.length) return;
     for (let i = 0; i < Math.min(dbSnaps.length, ctx.snapshotImages.length); i++) {
       const snap = dbSnaps[i];
-      // Video snapshot: use video URL
-      if (snap.type === 'video' && snap.video_meta?.videoUrl) {
-        ctx.snapshotImages[i] = snap.video_meta.videoUrl;
+      if (snap.type === 'video') {
+        if (snap.image_url && !snap.image_url.endsWith('.mp4') && !ctx.snapshotImages[i]?.startsWith('http')) {
+          ctx.snapshotImages[i] = snap.image_url;
+        }
         continue;
       }
-      // Image snapshot: upgrade base64 to Storage URL
       if (snap.image_url && !ctx.snapshotImages[i]?.startsWith('http')) {
         ctx.snapshotImages[i] = snap.image_url;
       }
@@ -374,8 +374,8 @@ Hard constraints (apply even before reading the guide):
             return { success: false as const, message: harnessError };
           }
 
-          // Save first valid URL before auto-detect may clear them (for poster)
-          const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http')) || '';
+          // Save first valid image URL (not video) for poster
+          const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || '';
 
           // Auto-route video references: query DB for snapshot types
           let autoVideoUrls: string[] = [];
@@ -428,7 +428,7 @@ Hard constraints (apply even before reading the guide):
           const { filteredImages, finalPrompt } = filterAndRemapImages(story_prompt, imageUrls);
 
           const snapshotId = crypto.randomUUID();
-          const posterUrl = filteredImages[0] || originalFirstUrl || imageUrls.find((u: string) => u?.startsWith('http')) || '';
+          const posterUrl = filteredImages.find(u => u && !u.endsWith('.mp4')) || originalFirstUrl || '';
           const videoMeta: import('@/types').VideoMeta = {
             taskId,
             videoUrl: null,
