@@ -765,27 +765,32 @@ if (command === 'login') {
       validVideoFiles.push(videoPath);
     }
 
-    // For local files: upload to Supabase Storage directly, then pass URL
+    // For local files: upload directly to Supabase Storage (same as frontend)
     const uploadedVideoUrls = [...videoUrlList];
     for (const videoPath of validVideoFiles) {
       process.stderr.write(`📹 Uploading ${path.basename(videoPath)} (${(fs.statSync(videoPath).size/1024/1024).toFixed(1)}MB)...\n`);
-      // Upload via /api/admin/upload or just pass as base64 in body — for now use the same
-      // projects/create endpoint which fetches the URL. We need to get a public URL first.
-      // Simplest: upload as form data to a generic upload endpoint, or use base64.
-      // Since videos can be large, we upload directly to Supabase using a presigned approach.
-      // For CLI simplicity: read file, send as video data URL (like images but larger).
-      // Actually, projects/create with videoUrls only handles URLs. For local files,
-      // we need to get a Storage URL first. Use admin upload as a workaround.
       const buf = fs.readFileSync(videoPath);
       const ext = path.extname(videoPath).slice(1).toLowerCase();
-      const storagePath = `uploads/cli-video-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext === 'mov' ? 'mp4' : ext}`;
-      const formData = new FormData();
-      formData.append('file', new Blob([buf], { type: ext === 'mov' ? 'video/quicktime' : 'video/mp4' }), path.basename(videoPath));
-      formData.append('path', storagePath);
-      const uploadRes = await fetch(`${baseUrl}/api/admin/upload`, { method: 'POST', headers, body: formData });
+      const fileId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const storagePath = `uploads/cli-video-${fileId}.${ext === 'mov' ? 'mp4' : ext}`;
+      const mime = ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4';
+
+      // Upload directly to Supabase Storage (same approach as frontend SDK)
+      const auth = loadAuth();
+      const token = auth?._apiKey || auth?.access_token;
+      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/images/${storagePath}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': mime,
+          'x-upsert': 'true',
+        },
+        body: buf,
+      });
       if (uploadRes.ok) {
-        const { url } = await uploadRes.json();
-        uploadedVideoUrls.push(url);
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${storagePath}`;
+        uploadedVideoUrls.push(publicUrl);
         process.stderr.write(`📹 Uploaded: ${path.basename(videoPath)}\n`);
       } else {
         process.stderr.write(`⚠️ Failed to upload ${path.basename(videoPath)}: ${await uploadRes.text()}\n`);
