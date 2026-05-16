@@ -610,6 +610,43 @@ function readImageAsDataUrl(filePath) {
   return `data:${v.mime};base64,${buf.toString('base64')}`;
 }
 
+/**
+ * Upload a local file via signed URL (works for both images and videos).
+ * 1. POST /api/storage/upload-url → get signed URL + public URL
+ * 2. PUT file directly to Supabase Storage (no Vercel body limit)
+ * Returns public URL on success, null on failure.
+ */
+async function uploadFileViaSignedUrl(baseUrl, headers, projectId, filePath, contentType) {
+  const filename = path.basename(filePath);
+  // Step 1: get signed upload URL
+  const urlRes = await fetch(`${baseUrl}/api/storage/upload-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ projectId, filename, contentType }),
+  });
+  if (!urlRes.ok) {
+    process.stderr.write(`⚠️ Failed to get upload URL: ${await urlRes.text()}\n`);
+    return null;
+  }
+  const { uploadUrl, token, publicUrl } = await urlRes.json();
+
+  // Step 2: PUT file directly to Supabase Storage
+  const buf = fs.readFileSync(filePath);
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': contentType,
+      'Authorization': `Bearer ${token}`,
+    },
+    body: buf,
+  });
+  if (!putRes.ok) {
+    process.stderr.write(`⚠️ Failed to upload file: ${await putRes.text()}\n`);
+    return null;
+  }
+  return publicUrl;
+}
+
 function imageToArg(imgPath) {
   if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) return imgPath;
   return readImageAsDataUrl(imgPath);
@@ -765,35 +802,16 @@ if (command === 'login') {
       validVideoFiles.push(videoPath);
     }
 
-    // For local files: upload directly to Supabase Storage (same as frontend)
+    // Upload local files via signed URL (no size limit, works with API key auth)
     const uploadedVideoUrls = [...videoUrlList];
     for (const videoPath of validVideoFiles) {
       process.stderr.write(`📹 Uploading ${path.basename(videoPath)} (${(fs.statSync(videoPath).size/1024/1024).toFixed(1)}MB)...\n`);
-      const buf = fs.readFileSync(videoPath);
       const ext = path.extname(videoPath).slice(1).toLowerCase();
-      const fileId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const storagePath = `uploads/cli-video-${fileId}.${ext === 'mov' ? 'mp4' : ext}`;
       const mime = ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4';
-
-      // Upload directly to Supabase Storage (same approach as frontend SDK)
-      const auth = loadAuth();
-      const token = auth?._apiKey || auth?.access_token;
-      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/images/${storagePath}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'apikey': SUPABASE_ANON_KEY,
-          'Content-Type': mime,
-          'x-upsert': 'true',
-        },
-        body: buf,
-      });
-      if (uploadRes.ok) {
-        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${storagePath}`;
-        uploadedVideoUrls.push(publicUrl);
+      const url = await uploadFileViaSignedUrl(baseUrl, headers, projectId, videoPath, mime);
+      if (url) {
+        uploadedVideoUrls.push(url);
         process.stderr.write(`📹 Uploaded: ${path.basename(videoPath)}\n`);
-      } else {
-        process.stderr.write(`⚠️ Failed to upload ${path.basename(videoPath)}: ${await uploadRes.text()}\n`);
       }
     }
 
