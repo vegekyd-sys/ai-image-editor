@@ -69,9 +69,11 @@ async function extractVideoInfo(file: File): Promise<{
   return { blobUrl, duration, width, height, poster };
 }
 
-/** Check if file is likely H.264 MP4 (can skip transcode) */
-function isLikelyH264Mp4(file: File): boolean {
-  return file.type === 'video/mp4' || file.name.toLowerCase().endsWith('.mp4');
+/** Check if file is likely H.264 (MP4 or MOV — both use H.264, skip transcode) */
+function isLikelyH264(file: File): boolean {
+  const type = file.type;
+  const name = file.name.toLowerCase();
+  return type === 'video/mp4' || type === 'video/quicktime' || name.endsWith('.mp4') || name.endsWith('.mov');
 }
 
 /** Calculate output dimensions (max ~1080p, preserve aspect ratio, even numbers) */
@@ -106,7 +108,7 @@ export async function processVideoUpload(
 
   // Fast path: H.264 MP4 under size limit AND within resolution limit → direct upload
   const needsResize = width * height > MAX_FRAME_PIXELS;
-  if (isLikelyH264Mp4(file) && file.size <= DIRECT_UPLOAD_MAX_SIZE && !needsResize) {
+  if (isLikelyH264(file) && file.size <= DIRECT_UPLOAD_MAX_SIZE && !needsResize) {
     console.log(`📹 [video-upload] direct upload (${(file.size / 1024 / 1024).toFixed(1)}MB, ${width}x${height})`);
     URL.revokeObjectURL(blobUrl);
     return { poster, videoBlob: file, duration, width, height };

@@ -70,6 +70,11 @@ Use `media_index` in `generate_image` or `analyze_image` to work with any snapsh
 
 **Default is always `generate_image`.** Only reach for `run_code` when the user's words clearly indicate video, animation, or editable template.
 
+**模糊意图 → 问用户：** 当你不确定该用 `generate_image`/`generate_animation` 还是 `run_code` 时，不要自己猜——给用户两个选项让他们选：
+- 选项 A：AI 生成（自然、整体重新生成）
+- 选项 B：代码设计（可编辑、可动画、分层叠加）
+例如："加音符到视频" → 问用户是想 AI 重新生成带音符的视频，还是在视频上叠加音符动画效果。"做个海报" → 如果不确定用户要 AI 一键生成还是可编辑模板，就问。
+
 **run_code design** — Before your first `run_code` call in the conversation:
 1. **If the user's prompt lacks `[图片分析结果]` AND you haven't analyze_image'd this photo yet → call `analyze_image` FIRST.** The design's specificity depends on what's actually in the photo. Never guess photo content.
 2. Then call `read_file('prompts/agent-coding.md')` to load the full coding rules. Skip step 2 if agent-coding.md is already in your tool-result history.
