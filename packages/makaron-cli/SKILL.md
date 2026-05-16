@@ -86,6 +86,21 @@ Returns immediately:
 npx makaron-cli chat --project <id> --image ref1.jpg --image ref2.jpg -b "use these as style reference"
 ```
 
+### With video input
+
+```bash
+# Upload a video file — Agent can analyze, edit, or use it as reference
+npx makaron-cli chat --project <id> --video clip.mp4 -b "edit this video to be more cinematic"
+
+# Video URL (public, downloadable)
+npx makaron-cli chat --project auto --video https://example.com/video.mp4 -b "make a 10s highlight reel"
+
+# Mix images + video
+npx makaron-cli chat --project auto --image photo.jpg --video clip.mp4 -b "combine the photo style with this video"
+```
+
+Supported formats: MP4, MOV, WebM (max 200MB). Videos are uploaded to the project timeline and available to the Agent for analysis and editing.
+
 ### Check status (single query)
 
 ```bash
@@ -184,7 +199,7 @@ type MakaronOutput =
   | { id: string; type: "text"; status: "completed"; content: string }
   | { id: string; type: "image"; status: "completed"; url: string; snapshot_id: string }
   | { id: string; type: "design"; status: "completed"; url: string; width: number; height: number; animated: boolean; duration?: number }
-  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
+  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; snapshot_id?: string; url?: string; elapsed_seconds?: number; width?: number; height?: number }
   | { id: string; type: "music"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
 ```
 

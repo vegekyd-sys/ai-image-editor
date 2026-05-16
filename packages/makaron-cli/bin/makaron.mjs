@@ -656,6 +656,7 @@ if (command === 'login') {
   const { headers, baseUrl } = getAuth();
   let projectId = null;
   const chatImages = [];
+  const chatVideos = [];
   const promptParts = [];
   let useStream = false;
   let background = false;
@@ -664,11 +665,12 @@ if (command === 'login') {
   let preferredModel = undefined;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--help' || args[i] === '-h') {
-      console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--stream] [--background|-b] [--json] "your message"');
+      console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--stream] [--background|-b] [--json] "your message"');
       process.exit(0);
     }
     else if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
+    else if (args[i] === '--video' && args[i + 1]) chatVideos.push(args[++i]);
     else if (args[i] === '--stream') useStream = true;
     else if (args[i] === '--background' || args[i] === '-b') background = true;
     else if (args[i] === '--json') jsonOutput = true;
@@ -678,17 +680,17 @@ if (command === 'login') {
   }
   const prompt = promptParts.join(' ');
   if (!prompt) {
-    console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--stream] [--background|-b] [--json] "your message"');
+    console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--stream] [--background|-b] [--json] "your message"');
     process.exit(1);
   }
   // Split images into URLs vs local files
   const imageUrlList = chatImages.filter(p => p.startsWith('http://') || p.startsWith('https://'));
   const imageFileList = chatImages.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
 
-  // --project auto: create a new project (with images if provided)
+  // --project auto: create a new project (with images/videos if provided)
   if (!projectId || projectId === 'auto') {
     if (chatImages.length === 0) {
-      // Create empty project
+      // Create empty project (videos will be uploaded separately after)
       process.stderr.write(`📦 Creating new project...\n`);
       const res = await fetch(`${baseUrl}/api/projects/create`, {
         method: 'POST',
@@ -746,9 +748,57 @@ if (command === 'login') {
     }
   }
 
+  // Upload videos to project timeline (creates video snapshots)
+  let finalPrompt = prompt;
+  if (chatVideos.length > 0) {
+    for (const videoPath of chatVideos) {
+      const isUrl = videoPath.startsWith('http://') || videoPath.startsWith('https://');
+      if (isUrl) {
+        process.stderr.write(`📹 Uploading video from URL...\n`);
+        const res = await fetch(`${baseUrl}/api/video-snapshot/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify({ projectId, videoUrl: videoPath }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          process.stderr.write(`📹 Video added to timeline: ${data.snapshotId}\n`);
+        } else {
+          process.stderr.write(`⚠️ Failed to upload video: ${await res.text()}\n`);
+        }
+      } else {
+        // Local file — validate and upload as multipart
+        if (!fs.existsSync(videoPath)) { process.stderr.write(`⚠️ Video file not found: ${videoPath}\n`); continue; }
+        const stat = fs.statSync(videoPath);
+        if (stat.size > 200 * 1024 * 1024) { process.stderr.write(`⚠️ Video too large: ${(stat.size/1024/1024).toFixed(1)}MB (max 200MB)\n`); continue; }
+        const ext = videoPath.split('.').pop()?.toLowerCase();
+        if (!['mp4', 'mov', 'webm'].includes(ext || '')) { process.stderr.write(`⚠️ Unsupported video format: .${ext}. Use MP4, MOV, or WebM.\n`); continue; }
+        process.stderr.write(`📹 Uploading ${path.basename(videoPath)} (${(stat.size/1024/1024).toFixed(1)}MB)...\n`);
+        const buf = fs.readFileSync(videoPath);
+        const formData = new FormData();
+        formData.append('projectId', projectId);
+        formData.append('video', new Blob([buf], { type: ext === 'mov' ? 'video/quicktime' : 'video/mp4' }), path.basename(videoPath));
+        const res = await fetch(`${baseUrl}/api/video-snapshot/upload`, {
+          method: 'POST',
+          headers: { ...headers },
+          body: formData,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          process.stderr.write(`📹 Video added to timeline: ${data.snapshotId}\n`);
+        } else {
+          process.stderr.write(`⚠️ Failed to upload video: ${await res.text()}\n`);
+        }
+      }
+    }
+    // Inject hint so Agent knows videos are available
+    const hint = `[User uploaded ${chatVideos.length === 1 ? 'a video' : `${chatVideos.length} videos`}. Use analyze_video to understand the content.]`;
+    finalPrompt = `${prompt}\n\n${hint}`;
+  }
+
   if (useStream) {
     // Legacy SSE mode
-    const { results } = await streamAgent(baseUrl, headers, projectId, prompt);
+    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt);
     process.stderr.write('\n━━━ Results ━━━\n');
     for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
     for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
@@ -757,7 +807,7 @@ if (command === 'login') {
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
     // Default: fire-and-forget + poll
-    const { runId } = await submitRun(baseUrl, headers, projectId, prompt, { videoModel, preferredModel });
+    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, preferredModel });
     if (background) {
       // Just print runId and exit
       if (jsonOutput) {
@@ -1239,6 +1289,7 @@ Commands:
   create --title "name"              Create empty project (text-to-image)
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
+  chat --project <id> --video <file> Attach video to conversation
   chat --project <id> -b "message"   Background: submit and print runId
   chat --project <id> --stream "msg" Legacy: stream SSE in real-time
   chat --project <id> --json "msg"   Output structured JSON result
