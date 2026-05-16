@@ -145,11 +145,11 @@ export default function ImageCanvas({
   // Image loading state
   const [imageLoaded, setImageLoaded] = useState(true);
 
-  // Long content: height/width > 2 — disables zoom, enables scroll
+  // Long content: height/width > 2.5 — disables zoom, enables scroll
   const isLongContent = (() => {
     const design = animatedDesigns?.get(currentIndex);
-    if (design) return design.height / design.width > 2;
-    if (naturalDims.w && naturalDims.h) return naturalDims.h / naturalDims.w > 2;
+    if (design) return design.height / design.width > 2.5;
+    if (naturalDims.w && naturalDims.h) return naturalDims.h / naturalDims.w > 2.5;
     return false;
   })();
   const longScrollRef = useRef<HTMLDivElement>(null);
