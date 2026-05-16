@@ -18,6 +18,7 @@ import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 function InlineCuiVideo({ url, aspectRatio, navId, onNavigate }: { url: string; aspectRatio: string; navId?: string; onNavigate: (e: React.MouseEvent) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [ar, setAr] = useState(aspectRatio);
   return (
     <div
       className="mt-2.5 relative overflow-hidden rounded-2xl cursor-pointer active:opacity-75 transition-opacity"
@@ -30,7 +31,8 @@ function InlineCuiVideo({ url, aspectRatio, navId, onNavigate }: { url: string; 
         muted
         playsInline
         preload="metadata"
-        style={{ width: '100%', aspectRatio, objectFit: 'cover', display: 'block' }}
+        style={{ width: '100%', aspectRatio: ar, objectFit: 'cover', display: 'block' }}
+        onLoadedMetadata={() => { const v = videoRef.current; if (v?.videoWidth && v.videoHeight) setAr(`${v.videoWidth}/${v.videoHeight}`); }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => { setPlaying(false); if (videoRef.current) videoRef.current.currentTime = 0; }}
