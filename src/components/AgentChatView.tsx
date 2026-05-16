@@ -14,6 +14,39 @@ import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 
+/** Inline video in CUI — natural aspect ratio, play button, tap elsewhere to navigate */
+function InlineCuiVideo({ url, aspectRatio, navId, onNavigate }: { url: string; aspectRatio: string; navId?: string; onNavigate: (e: React.MouseEvent) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+  return (
+    <div
+      className="mt-2.5 relative overflow-hidden rounded-2xl cursor-pointer active:opacity-75 transition-opacity"
+      style={{ maxWidth: 308, border: '1px solid rgba(255,255,255,0.08)' }}
+      onClick={(e) => { if (!playing) onNavigate(e); }}
+    >
+      <video
+        ref={videoRef}
+        src={`${url}#t=0.001`}
+        muted
+        playsInline
+        preload="metadata"
+        style={{ width: '100%', aspectRatio, objectFit: 'cover', display: 'block' }}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); if (videoRef.current) videoRef.current.currentTime = 0; }}
+      />
+      {!playing && (
+        <button
+          onClick={(e) => { e.stopPropagation(); videoRef.current?.play(); }}
+          className="absolute bottom-2.5 left-2.5 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center"
+        >
+          <svg width="13" height="13" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
   const { t } = useLocale();
@@ -1080,40 +1113,20 @@ export default function AgentChatView({
                           onNavigateToSnapshot={onNavigateToSnapshot}
                           onViewFile={setViewingFile}
                         />
-                        {/* Inline video — clickable thumbnail, jumps to GUI */}
+                        {/* Inline video — natural aspect ratio, play button, tap to navigate */}
                         {(() => {
                           if (msg.design || msg.image) return null;
-                          // Skip if content has any code fence (even unclosed during streaming)
                           if (msg.content.includes('```')) return null;
                           const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
                           if (!mp4Match) return null;
                           const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
                           const snapIdMatch = msg.content.match(/snap:([a-f0-9-]+)/);
                           const navId = snapIdMatch?.[1] || animIdMatch?.[1];
-                          return (
-                            <button
-                              onClick={(e) => handleInlineVideoClick(e, mp4Match[0], navId)}
-                              className="block w-full mt-2.5 active:opacity-75 transition-opacity"
-                            >
-                              <div style={{ borderRadius: 12, overflow: 'hidden', maxWidth: 308, background: '#000', position: 'relative' }}>
-                                <video
-                                  src={`${mp4Match[0]}#t=0.001`}
-                                  muted
-                                  playsInline
-                                  preload="metadata"
-                                  style={{ width: '100%', aspectRatio: '4/3', objectFit: 'contain', display: 'block', pointerEvents: 'none' }}
-                                />
-                                {/* Play icon — bottom-left, small */}
-                                <div className="absolute bottom-2.5 left-2.5">
-                                  <div className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
-                                    <svg width="13" height="13" viewBox="0 0 10 10" fill="white">
-                                      <polygon points="3.5,1.5 8.5,5 3.5,8.5" />
-                                    </svg>
-                                  </div>
-                                </div>
-                              </div>
-                            </button>
-                          );
+                          const videoSnap = navId ? snapshots.find(s => s.id === navId) : null;
+                          const vw = videoSnap?.videoMeta?.width || 0;
+                          const vh = videoSnap?.videoMeta?.height || 0;
+                          const videoAR = vw && vh ? `${vw}/${vh}` : '9/16';
+                          return <InlineCuiVideo url={mp4Match[0]} aspectRatio={videoAR} navId={navId} onNavigate={(e) => handleInlineVideoClick(e, mp4Match[0], navId)} />;
                         })()}
                       </div>
                     )}
