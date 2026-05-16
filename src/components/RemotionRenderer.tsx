@@ -226,9 +226,13 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     (async () => {
       try {
         await preloadBabel().catch(() => {});
-        await loadGoogleFontsFromCode(design.code);
+        // Resolve video URLs to blob (same-origin, instant playback on scene switch)
+        const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
+        if (cancelled) { videoBlobUrls.forEach(u => URL.revokeObjectURL(u)); return; }
+        blobUrlsRef.current = videoBlobUrls;
+        await loadGoogleFontsFromCode(videoResolved);
         if (cancelled) return;
-        const comp = evalRemotionJSX(design.code);
+        const comp = evalRemotionJSX(videoResolved);
         if (!comp) {
           setCompileError('Failed to compile design code');
           onError?.('Failed to compile design code');

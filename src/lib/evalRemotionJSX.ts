@@ -17,14 +17,15 @@ import * as RemotionNoise from '@remotion/noise';
 
 const { Sequence, useVideoConfig } = Remotion;
 
-// Sequence wrapper: auto-inject premountFor={fps} when not specified
+// Sequence wrapper: auto-inject premountFor={fps*3} when not specified
+// 3 seconds of premount gives video elements enough time to buffer before their scene starts
 const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   props: any,
   ref: React.Ref<HTMLDivElement>,
 ) {
   const { fps } = useVideoConfig();
-  return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps, ref });
+  return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps * 3, ref });
 });
 
 /** All Remotion APIs available to Agent's React code — open scope, no artificial limits */
