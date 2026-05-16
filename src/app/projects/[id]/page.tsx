@@ -74,7 +74,7 @@ export default function ProjectPage() {
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
-  const [pendingVideos] = useState<Array<{ poster: string; videoUrl: string; duration: number; width: number; height: number }> | null>(() => {
+  const [pendingVideos] = useState<Array<{ videoUrl: string; duration: number; width: number; height: number }> | null>(() => {
     if (typeof window === 'undefined') return null
     const raw = sessionStorage.getItem('pendingVideos')
     if (raw) { sessionStorage.removeItem('pendingVideos'); try { return JSON.parse(raw) } catch { return null } }

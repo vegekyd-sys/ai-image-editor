@@ -50,7 +50,7 @@ interface EditorProps {
   initialMessages?: Message[];
   pendingImage?: string;  // legacy single-image (unused, kept for compat)
   pendingImages?: string[];
-  pendingVideos?: Array<{ poster: string; videoUrl: string; duration: number; width: number; height: number }>;
+  pendingVideos?: Array<{ videoUrl: string; duration: number; width: number; height: number }>;
   pendingMetadata?: PhotoMetadata;
   pendingPrompt?: string;
   pendingSkill?: string;
@@ -2168,30 +2168,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     const snapId = generateId();
 
     try {
-      // Step 1: Extract poster immediately for visual feedback
-      const blobUrl = URL.createObjectURL(file);
-      const tempVideo = document.createElement('video');
-      tempVideo.muted = true;
-      tempVideo.src = blobUrl;
-      await new Promise<void>(r => { tempVideo.onloadedmetadata = () => r(); setTimeout(r, 5000); });
-      const { MAX_DURATION } = await import('@/lib/video-upload');
-      if (tempVideo.duration > MAX_DURATION) {
-        URL.revokeObjectURL(blobUrl);
-        throw new Error(`Video too long (${Math.round(tempVideo.duration)}s). Maximum ${MAX_DURATION}s.`);
-      }
-      tempVideo.currentTime = Math.min(0.5, tempVideo.duration * 0.1);
-      await new Promise<void>(r => { tempVideo.onseeked = () => r(); setTimeout(r, 3000); });
-      const c = document.createElement('canvas');
-      c.width = tempVideo.videoWidth; c.height = tempVideo.videoHeight;
-      c.getContext('2d')!.drawImage(tempVideo, 0, 0);
-      const quickPoster = c.toDataURL('image/jpeg', 0.7);
-      tempVideo.pause(); tempVideo.removeAttribute('src'); tempVideo.load();
-      URL.revokeObjectURL(blobUrl);
-
-      // Step 2: Add processing snapshot to timeline immediately
+      // Add processing snapshot to timeline immediately (poster captured by ImageCanvas onLoadedData)
       const processingSnap: Snapshot = {
         id: snapId,
-        image: quickPoster,
+        image: '',
         tips: [],
         messageId: '',
         type: 'video',
@@ -2232,10 +2212,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       // Step 5: Generate Remotion wrapper design
       const design = createVideoDesign(videoUrl, result.width, result.height, result.duration);
 
-      // Step 6: Update snapshot with completed state
+      // Step 6: Update snapshot with completed state (poster will be captured by ImageCanvas)
       const completedSnap: Snapshot = {
         ...processingSnap,
-        image: result.poster,
+        image: '',
         design,
         designPath: `code/${snapId}.json`,
         videoMeta: {
@@ -2321,10 +2301,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           const snapId = generateId();
           workSnapshots.push({
             id: snapId,
-            image: v.poster,
+            image: '',
             tips: [],
             messageId: '',
-            imageUrl: v.poster,
             type: 'video',
             design,
             designPath: `code/${snapId}.json`,

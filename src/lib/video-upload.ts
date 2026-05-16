@@ -11,20 +11,18 @@ const MAX_FRAME_PIXELS = 2_086_876; // SeeDance limit: width × height must not 
 const DIRECT_UPLOAD_MAX_SIZE = 100 * 1024 * 1024; // 100MB — skip transcode for any H.264 MP4
 
 export interface VideoUploadResult {
-  poster: string;       // base64 JPEG data URL
   videoBlob: Blob;      // H.264 MP4 blob ready for upload
   duration: number;     // seconds
   width: number;        // output dimensions
   height: number;
 }
 
-/** Extract video metadata + poster frame */
+/** Extract video metadata (no poster — poster is captured by ImageCanvas onLoadedData) */
 async function extractVideoInfo(file: File): Promise<{
   blobUrl: string;
   duration: number;
   width: number;
   height: number;
-  poster: string;
 }> {
   const blobUrl = URL.createObjectURL(file);
   const video = document.createElement('video');
@@ -48,25 +46,11 @@ async function extractVideoInfo(file: File): Promise<{
     throw new Error(`Video too long (${Math.round(duration)}s). Maximum ${MAX_DURATION}s.`);
   }
 
-  // Seek to 0.5s for poster (avoid black first frame)
-  video.currentTime = Math.min(0.5, duration * 0.1);
-  await new Promise<void>((resolve) => {
-    video.onseeked = () => resolve();
-    setTimeout(resolve, 3000);
-  });
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(video, 0, 0);
-  const poster = canvas.toDataURL('image/jpeg', 0.85);
-
   video.pause();
   video.removeAttribute('src');
   video.load();
 
-  return { blobUrl, duration, width, height, poster };
+  return { blobUrl, duration, width, height };
 }
 
 /** Check if file is likely H.264 (MP4 or MOV — both use H.264, skip transcode) */
@@ -103,7 +87,7 @@ export async function processVideoUpload(
   }
 
   const info = await extractVideoInfo(file);
-  const { blobUrl, duration, width, height, poster } = info;
+  const { blobUrl, duration, width, height } = info;
   const out = calcOutputDims(width, height);
 
   // Fast path: H.264 MP4 under size limit AND within resolution limit → direct upload
@@ -111,7 +95,7 @@ export async function processVideoUpload(
   if (isLikelyH264(file) && file.size <= DIRECT_UPLOAD_MAX_SIZE && !needsResize) {
     console.log(`📹 [video-upload] direct upload (${(file.size / 1024 / 1024).toFixed(1)}MB, ${width}x${height})`);
     URL.revokeObjectURL(blobUrl);
-    return { poster, videoBlob: file, duration, width, height };
+    return { videoBlob: file, duration, width, height };
   }
 
   // Transcode via Remotion renderMediaOnWeb
@@ -155,7 +139,7 @@ export async function processVideoUpload(
     const videoBlob = await result.getBlob();
     console.log(`📹 [video-upload] transcode done: ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB`);
 
-    return { poster, videoBlob, duration, width: out.width, height: out.height };
+    return { videoBlob, duration, width: out.width, height: out.height };
   } finally {
     URL.revokeObjectURL(blobUrl);
   }
@@ -199,7 +183,7 @@ export async function uploadVideoToStorage(
   file: File,
   projectId: string,
   onProgress?: (progress: number) => void,
-): Promise<{ poster: string; videoUrl: string; duration: number; width: number; height: number }> {
+): Promise<{ videoUrl: string; duration: number; width: number; height: number }> {
   const result = await processVideoUpload(file, onProgress);
 
   // Upload to Supabase
@@ -217,6 +201,6 @@ export async function uploadVideoToStorage(
   const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath);
   const videoUrl = urlData?.publicUrl || '';
 
-  return { poster: result.poster, videoUrl, duration: result.duration, width: result.width, height: result.height };
+  return { videoUrl, duration: result.duration, width: result.width, height: result.height };
 }
 
