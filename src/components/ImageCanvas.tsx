@@ -75,6 +75,8 @@ interface ImageCanvasProps {
   onVisibleEditableFields?: (visibleIds: string[]) => void;
   /** Timeline indices that are video snapshots (v2) — show play icon instead of dot */
   videoTimelineIndices?: Set<number>;
+  /** Called once when the video element loads data — captures a poster frame at 0.5s */
+  onVideoPosterCapture?: (dataUrl: string) => void;
 }
 
 export default function ImageCanvas({
@@ -97,6 +99,7 @@ export default function ImageCanvas({
   onStartEditEditable,
   onVisibleEditableFields,
   videoTimelineIndices,
+  onVideoPosterCapture,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -919,7 +922,26 @@ export default function ImageCanvas({
                 const v = videoRef.current;
                 if (v) setVideoCurrentTime(v.currentTime);
               }}
-              onLoadedData={() => setVideoFrameLoadedUrl(videoUrl ?? null)}
+              onLoadedData={() => {
+                setVideoFrameLoadedUrl(videoUrl ?? null);
+                const v = videoRef.current;
+                if (onVideoPosterCapture && v && v.videoWidth) {
+                  const seekTo = Math.min(0.5, (v.duration || 1) * 0.1);
+                  v.currentTime = seekTo;
+                  const handler = () => {
+                    try {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = v.videoWidth;
+                      canvas.height = v.videoHeight;
+                      canvas.getContext('2d')!.drawImage(v, 0, 0);
+                      onVideoPosterCapture(canvas.toDataURL('image/jpeg', 0.75));
+                    } catch {}
+                    v.currentTime = 0;
+                    v.removeEventListener('seeked', handler);
+                  };
+                  v.addEventListener('seeked', handler, { once: true });
+                }
+              }}
               onLoadedMetadata={() => {
                 const v = videoRef.current;
                 if (v && isFinite(v.duration)) setVideoDuration(v.duration);

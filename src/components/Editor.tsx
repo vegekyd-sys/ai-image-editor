@@ -2507,28 +2507,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 designPath: `code/${snap.id}.json`,
               } : s
             ));
-            // Front-end poster capture
-            try {
-              const { captureVideoFrame } = await import('@/lib/video-upload');
-              const poster = await captureVideoFrame(data.videoUrl);
-              if (poster) {
-                setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, image: poster } : s));
-                import('@/lib/supabase/client').then(async ({ createClient }) => {
-                  const supabase = createClient();
-                  const uid = (await supabase.auth.getUser()).data.user?.id;
-                  if (!uid || !projectId) return;
-                  const blob = await fetch(poster).then(r => r.blob());
-                  const path = `${uid}/${projectId}/posters/${snap.id}.jpg`;
-                  const { error } = await supabase.storage.from('images').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-                  if (error) return;
-                  const { data: urlData } = supabase.storage.from('images').getPublicUrl(path);
-                  if (urlData?.publicUrl) {
-                    setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: urlData.publicUrl } : s));
-                    await supabase.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snap.id);
-                  }
-                });
-              }
-            } catch { /* poster capture failed — non-fatal */ }
           } else if (data.status === 'failed') {
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const, error: data.error || undefined } } : s
@@ -3254,6 +3232,25 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   : snapshots[snapshots.length - 1]?.image}
                 videoPlayTrigger={videoPlayTrigger}
                 videoTimelineIndices={videoTimelineIndices}
+                onVideoPosterCapture={(dataUrl) => {
+                  const snap = snapshotsRef.current[viewIndex];
+                  if (!snap || snap.type !== 'video') return;
+                  if (snap.imageUrl?.includes('/posters/')) return;
+                  setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, image: dataUrl } : s));
+                  import('@/lib/supabase/client').then(async ({ createClient }) => {
+                    const supabase = createClient();
+                    const uid = (await supabase.auth.getUser()).data.user?.id;
+                    if (!uid || !projectId) return;
+                    const blob = await fetch(dataUrl).then(r => r.blob());
+                    const path = `${uid}/${projectId}/posters/${snap.id}.jpg`;
+                    await supabase.storage.from('images').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+                    const { data: urlData } = supabase.storage.from('images').getPublicUrl(path);
+                    if (urlData?.publicUrl) {
+                      setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: urlData.publicUrl } : s));
+                      await supabase.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snap.id);
+                    }
+                  });
+                }}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
