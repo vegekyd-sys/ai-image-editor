@@ -14,21 +14,30 @@ import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 
-/** Inline video in CUI — natural aspect ratio, play button, tap elsewhere to navigate */
-function InlineCuiVideo({ url, aspectRatio, navId, onNavigate }: { url: string; aspectRatio: string; navId?: string; onNavigate: (e: React.MouseEvent) => void }) {
+/** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
+function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, onNavigate }: {
+  url: string; aspectRatio: string; posterUrl?: string; snapIndex?: number;
+  onNavigate: (e: React.MouseEvent, currentTime: number) => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [ar, setAr] = useState(aspectRatio);
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    if (playing) { v.pause(); } else { v.muted = false; v.play(); }
+  };
   return (
     <div
       className="mt-2.5 relative overflow-hidden rounded-2xl cursor-pointer active:opacity-75 transition-opacity"
       style={{ maxWidth: 308, border: '1px solid rgba(255,255,255,0.08)' }}
-      onClick={(e) => { if (!playing) onNavigate(e); }}
+      onClick={(e) => onNavigate(e, videoRef.current?.currentTime || 0)}
     >
       <video
         ref={videoRef}
         src={`${url}#t=0.001`}
-        muted
+        poster={posterUrl}
         playsInline
         preload="metadata"
         style={{ width: '100%', aspectRatio: ar, objectFit: 'cover', display: 'block' }}
@@ -37,14 +46,17 @@ function InlineCuiVideo({ url, aspectRatio, navId, onNavigate }: { url: string; 
         onPause={() => setPlaying(false)}
         onEnded={() => { setPlaying(false); if (videoRef.current) videoRef.current.currentTime = 0; }}
       />
-      {!playing && (
-        <button
-          onClick={(e) => { e.stopPropagation(); videoRef.current?.play(); }}
-          className="absolute bottom-2.5 left-2.5 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center"
-        >
-          <svg width="13" height="13" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
-        </button>
-      )}
+      {/* @N badge + play/pause button */}
+      <button
+        onClick={togglePlay}
+        className="absolute bottom-2.5 left-2.5 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center gap-1.5 px-2.5"
+      >
+        {playing
+          ? <svg width="12" height="12" viewBox="0 0 10 10" fill="white"><rect x="2" y="1.5" width="2.5" height="7" rx="0.5" /><rect x="5.5" y="1.5" width="2.5" height="7" rx="0.5" /></svg>
+          : <svg width="12" height="12" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+        }
+        {snapIndex && <span className="text-white text-[11px] font-medium">@{snapIndex}</span>}
+      </button>
     </div>
   );
 }
@@ -435,7 +447,7 @@ interface AgentChatViewProps {
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
-  onVideoTap?: (rect?: DOMRect, posterSrc?: string, animId?: string) => void;
+  onVideoTap?: (rect?: DOMRect, posterSrc?: string, animId?: string, startTime?: number) => void;
   /** Design poster captured from visible Player — update snapshot.image */
   onDesignPoster?: (messageId: string, posterDataUrl: string) => void;
   /** User selected a music track from MusicCard */
@@ -833,13 +845,13 @@ export default function AgentChatView({
     onImageTap(messageId, rect ?? undefined, imgEl?.src);
   }, [onImageTap]);
 
-  const handleInlineVideoClick = useCallback((e: React.MouseEvent, videoUrl: string, animId?: string) => {
+  const handleInlineVideoClick = useCallback((e: React.MouseEvent, videoUrl: string, animId?: string, startTime?: number) => {
     if (!onVideoTap) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const lastSnap = snapshots[snapshots.length - 1];
-    const posterSrc = lastSnap?.imageUrl || lastSnap?.image;
+    const videoSnap = animId ? snapshots.find(s => s.id === animId) : null;
+    const posterSrc = videoSnap?.imageUrl || videoSnap?.image || snapshots[snapshots.length - 1]?.imageUrl || snapshots[snapshots.length - 1]?.image;
     setIsExiting(true);
-    onVideoTap(rect ?? undefined, posterSrc, animId);
+    onVideoTap(rect ?? undefined, posterSrc, animId, startTime);
   }, [onVideoTap, snapshots]);
 
 
@@ -1128,7 +1140,9 @@ export default function AgentChatView({
                           const vw = videoSnap?.videoMeta?.width || 0;
                           const vh = videoSnap?.videoMeta?.height || 0;
                           const videoAR = vw && vh ? `${vw}/${vh}` : '9/16';
-                          return <InlineCuiVideo url={mp4Match[0]} aspectRatio={videoAR} navId={navId} onNavigate={(e) => handleInlineVideoClick(e, mp4Match[0], navId)} />;
+                          const posterUrl = videoSnap?.imageUrl || videoSnap?.image || undefined;
+                          const snapIdx = videoSnap ? snapshots.indexOf(videoSnap) + 1 : undefined;
+                          return <InlineCuiVideo url={mp4Match[0]} aspectRatio={videoAR} posterUrl={posterUrl} snapIndex={snapIdx} onNavigate={(e, time) => handleInlineVideoClick(e, mp4Match[0], navId, time)} />;
                         })()}
                       </div>
                     )}

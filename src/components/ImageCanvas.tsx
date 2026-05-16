@@ -53,6 +53,8 @@ interface ImageCanvasProps {
   onPullDownEnd?: (committed: boolean) => void;
   /** Increment to trigger video playback from external source (e.g. CUI second click) */
   videoPlayTrigger?: number;
+  /** Start time (seconds) for video playback — synced from CUI inline player */
+  videoStartTime?: number;
   /** Number of reference snapshots at the start of the timeline */
   referenceCount?: number;
   /** Map of timeline index → DesignPayload for animated designs (rendered via Player) */
@@ -88,6 +90,7 @@ export default function ImageCanvas({
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
   pullDownActive, onPullDown, onPullDownEnd,
   videoPlayTrigger,
+  videoStartTime,
   referenceCount = 0,
   animatedDesigns,
   draftDesign,
@@ -626,17 +629,19 @@ export default function ImageCanvas({
 
   const videoFrameLoaded = videoFrameLoadedUrl === videoUrl;
 
-  // External trigger to start video playback (e.g. second click in CUI)
+  // External trigger to start video playback (e.g. CUI inline video tap)
   const prevPlayTrigger = useRef(videoPlayTrigger ?? 0);
   useEffect(() => {
     if (videoPlayTrigger && videoPlayTrigger !== prevPlayTrigger.current) {
       prevPlayTrigger.current = videoPlayTrigger;
       const v = videoRef.current;
       if (v && isVideoEntry && videoUrl) {
-        v.play().catch(() => {}); // onWaiting/onCanPlay handle loading state
+        if (videoStartTime) v.currentTime = videoStartTime;
+        v.muted = false;
+        v.play().catch(() => {});
       }
     }
-  }, [videoPlayTrigger, isVideoEntry, videoUrl]);
+  }, [videoPlayTrigger, isVideoEntry, videoUrl, videoStartTime]);
 
   // Remotion Player: poll current frame for custom seek bar
   // draftDesign takes priority over animatedDesigns (video wrapper etc.)

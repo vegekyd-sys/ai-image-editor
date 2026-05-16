@@ -2923,12 +2923,15 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     }
   }, [snapshots, handleDesignPoster]);
 
-  const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string) => {
+  const videoStartTimeRef = useRef<number>(0);
+  const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string, startTime?: number) => {
+    videoStartTimeRef.current = startTime || 0;
     // v2: navigate directly to snapshot by ID
     if (isV2 && animId) {
       const idx = snapshotsRef.current.findIndex(s => s.id === animId);
       if (idx >= 0) {
         setViewIndex(idx);
+        setVideoPlayTrigger(n => n + 1);
         if (!isDesktop) setViewMode('gui');
         return;
       }
@@ -3232,6 +3235,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   ? (currentSnap?.image || currentSnap?.imageUrl)
                   : snapshots[snapshots.length - 1]?.image}
                 videoPlayTrigger={videoPlayTrigger}
+                videoStartTime={videoStartTimeRef.current}
                 videoTimelineIndices={videoTimelineIndices}
                 onVideoPosterCapture={(dataUrl) => {
                   const snap = snapshotsRef.current[viewIndex];
