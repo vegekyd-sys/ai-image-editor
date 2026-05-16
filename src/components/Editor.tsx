@@ -2486,6 +2486,18 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 designPath: `code/${snap.id}.json`,
               } : s
             ));
+            // Add CUI message for completed video
+            const alreadyHasVideo = messages.some(m => m.content?.includes(data.videoUrl));
+            if (!alreadyHasVideo) {
+              const videoMsg: Message = {
+                id: generateId(),
+                role: 'assistant',
+                content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}`,
+                timestamp: Date.now(),
+              };
+              setMessages(prev => [...prev, videoMsg]);
+              onSaveMessage?.(videoMsg);
+            }
           } else if (data.status === 'failed') {
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const, error: data.error || undefined } } : s
@@ -2912,6 +2924,16 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [snapshots, handleDesignPoster]);
 
   const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string) => {
+    // v2: navigate directly to snapshot by ID
+    if (isV2 && animId) {
+      const idx = snapshotsRef.current.findIndex(s => s.id === animId);
+      if (idx >= 0) {
+        setViewIndex(idx);
+        if (!isDesktop) setViewMode('gui');
+        return;
+      }
+    }
+
     if (videoTimelineIndex < 0) return;
 
     // Desktop: if already viewing this exact video, trigger play instead of re-navigating

@@ -1074,7 +1074,7 @@ export default function AgentChatView({
                       <div className="markdown-body">
                         <MarkdownBlock
                           key={msg.id}
-                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
+                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
                           isPanel={isPanel}
                           snapshots={snapshots}
                           onNavigateToSnapshot={onNavigateToSnapshot}
@@ -1088,10 +1088,11 @@ export default function AgentChatView({
                           const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
                           if (!mp4Match) return null;
                           const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
-                          const animId = animIdMatch?.[1];
+                          const snapIdMatch = msg.content.match(/snap:([a-f0-9-]+)/);
+                          const navId = snapIdMatch?.[1] || animIdMatch?.[1];
                           return (
                             <button
-                              onClick={(e) => handleInlineVideoClick(e, mp4Match[0], animId)}
+                              onClick={(e) => handleInlineVideoClick(e, mp4Match[0], navId)}
                               className="block w-full mt-2.5 active:opacity-75 transition-opacity"
                             >
                               <div style={{ borderRadius: 12, overflow: 'hidden', maxWidth: 308, background: '#000', position: 'relative' }}>
