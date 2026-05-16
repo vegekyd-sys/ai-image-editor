@@ -140,7 +140,7 @@ export default function ImageCanvas({
   const [naturalDims, setNaturalDims] = useState({ w: 0, h: 0 });
 
   // Image loading state
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(true);
 
   // Long content: height/width > 2 — disables zoom, enables scroll
   const isLongContent = (() => {
@@ -954,10 +954,11 @@ export default function ImageCanvas({
               }}
             />
 
-            {/* Snapshot poster overlay — only for proxied videos (Supabase direct videos load fast enough) */}
-            {!videoFrameLoaded && !videoPlaying && effectiveVideoUrl !== videoUrl && (() => {
-              const prev = timeline[timeline.length - 2];
-              const posterSrc = prev && prev !== VIDEO_SENTINEL ? prev : undefined;
+            {/* Poster overlay — shown until video first frame loads (prevents black flash) */}
+            {!videoFrameLoaded && !videoPlaying && (() => {
+              const posterSrc = timeline[currentIndex] && timeline[currentIndex] !== VIDEO_SENTINEL
+                ? timeline[currentIndex]
+                : timeline.slice(0, -1).filter(t => t !== VIDEO_SENTINEL).pop();
               return posterSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
