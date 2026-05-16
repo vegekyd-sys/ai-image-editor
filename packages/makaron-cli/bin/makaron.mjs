@@ -748,49 +748,67 @@ if (command === 'login') {
     }
   }
 
-  // Upload videos to project timeline (creates video snapshots)
+  // Upload videos to project timeline (via /api/projects/create with videoUrls)
   let finalPrompt = prompt;
   if (chatVideos.length > 0) {
-    for (const videoPath of chatVideos) {
-      const isUrl = videoPath.startsWith('http://') || videoPath.startsWith('https://');
-      if (isUrl) {
-        process.stderr.write(`📹 Uploading video from URL...\n`);
-        const res = await fetch(`${baseUrl}/api/video-snapshot/upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...headers },
-          body: JSON.stringify({ projectId, videoUrl: videoPath }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          process.stderr.write(`📹 Video added to timeline: ${data.snapshotId}\n`);
-        } else {
-          process.stderr.write(`⚠️ Failed to upload video: ${await res.text()}\n`);
-        }
+    const videoUrlList = chatVideos.filter(p => p.startsWith('http://') || p.startsWith('https://'));
+    const videoFileList = chatVideos.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
+
+    // Validate local video files
+    const validVideoFiles = [];
+    for (const videoPath of videoFileList) {
+      if (!fs.existsSync(videoPath)) { process.stderr.write(`⚠️ Video file not found: ${videoPath}\n`); continue; }
+      const stat = fs.statSync(videoPath);
+      if (stat.size > 200 * 1024 * 1024) { process.stderr.write(`⚠️ Video too large: ${(stat.size/1024/1024).toFixed(1)}MB (max 200MB)\n`); continue; }
+      const ext = path.extname(videoPath).slice(1).toLowerCase();
+      if (!['mp4', 'mov', 'webm'].includes(ext)) { process.stderr.write(`⚠️ Unsupported video format: .${ext}. Use MP4, MOV, or WebM.\n`); continue; }
+      validVideoFiles.push(videoPath);
+    }
+
+    // For local files: upload to Supabase Storage directly, then pass URL
+    const uploadedVideoUrls = [...videoUrlList];
+    for (const videoPath of validVideoFiles) {
+      process.stderr.write(`📹 Uploading ${path.basename(videoPath)} (${(fs.statSync(videoPath).size/1024/1024).toFixed(1)}MB)...\n`);
+      // Upload via /api/admin/upload or just pass as base64 in body — for now use the same
+      // projects/create endpoint which fetches the URL. We need to get a public URL first.
+      // Simplest: upload as form data to a generic upload endpoint, or use base64.
+      // Since videos can be large, we upload directly to Supabase using a presigned approach.
+      // For CLI simplicity: read file, send as video data URL (like images but larger).
+      // Actually, projects/create with videoUrls only handles URLs. For local files,
+      // we need to get a Storage URL first. Use admin upload as a workaround.
+      const buf = fs.readFileSync(videoPath);
+      const ext = path.extname(videoPath).slice(1).toLowerCase();
+      const storagePath = `uploads/cli-video-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext === 'mov' ? 'mp4' : ext}`;
+      const formData = new FormData();
+      formData.append('file', new Blob([buf], { type: ext === 'mov' ? 'video/quicktime' : 'video/mp4' }), path.basename(videoPath));
+      formData.append('path', storagePath);
+      const uploadRes = await fetch(`${baseUrl}/api/admin/upload`, { method: 'POST', headers, body: formData });
+      if (uploadRes.ok) {
+        const { url } = await uploadRes.json();
+        uploadedVideoUrls.push(url);
+        process.stderr.write(`📹 Uploaded: ${path.basename(videoPath)}\n`);
       } else {
-        // Local file — validate and upload as multipart
-        if (!fs.existsSync(videoPath)) { process.stderr.write(`⚠️ Video file not found: ${videoPath}\n`); continue; }
-        const stat = fs.statSync(videoPath);
-        if (stat.size > 200 * 1024 * 1024) { process.stderr.write(`⚠️ Video too large: ${(stat.size/1024/1024).toFixed(1)}MB (max 200MB)\n`); continue; }
-        const ext = videoPath.split('.').pop()?.toLowerCase();
-        if (!['mp4', 'mov', 'webm'].includes(ext || '')) { process.stderr.write(`⚠️ Unsupported video format: .${ext}. Use MP4, MOV, or WebM.\n`); continue; }
-        process.stderr.write(`📹 Uploading ${path.basename(videoPath)} (${(stat.size/1024/1024).toFixed(1)}MB)...\n`);
-        const buf = fs.readFileSync(videoPath);
-        const formData = new FormData();
-        formData.append('projectId', projectId);
-        formData.append('video', new Blob([buf], { type: ext === 'mov' ? 'video/quicktime' : 'video/mp4' }), path.basename(videoPath));
-        const res = await fetch(`${baseUrl}/api/video-snapshot/upload`, {
-          method: 'POST',
-          headers: { ...headers },
-          body: formData,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          process.stderr.write(`📹 Video added to timeline: ${data.snapshotId}\n`);
-        } else {
-          process.stderr.write(`⚠️ Failed to upload video: ${await res.text()}\n`);
-        }
+        process.stderr.write(`⚠️ Failed to upload ${path.basename(videoPath)}: ${await uploadRes.text()}\n`);
       }
     }
+
+    // Add videos to project via projects/create (same as images)
+    if (uploadedVideoUrls.length > 0) {
+      if (videoUrlList.length) process.stderr.write(`📹 Adding ${uploadedVideoUrls.length} video(s) to timeline...\n`);
+      const res = await fetch(`${baseUrl}/api/projects/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ _addToProject: projectId, videoUrls: uploadedVideoUrls }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const videoSnaps = (data.snapshots || []).filter(s => s.type === 'video');
+        process.stderr.write(`📹 Added ${videoSnaps.length} video(s) to timeline\n`);
+      } else {
+        process.stderr.write(`⚠️ Failed to add videos: ${await res.text()}\n`);
+      }
+    }
+
     // Inject hint so Agent knows videos are available
     const hint = `[User uploaded ${chatVideos.length === 1 ? 'a video' : `${chatVideos.length} videos`}. Use analyze_video to understand the content.]`;
     finalPrompt = `${prompt}\n\n${hint}`;
