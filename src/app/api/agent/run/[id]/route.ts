@@ -3,6 +3,28 @@ import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 
+async function pollVideoProvider(taskId: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
+  const isEvolink = taskId.startsWith('task-unified-');
+  const isSeedance = taskId.startsWith('cgt-');
+  const isMotionControl = taskId.startsWith('mc-');
+  const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
+
+  if (isEvolink) {
+    const { getEvolinkTask } = await import('@/lib/evolink');
+    return getEvolinkTask(taskId);
+  } else if (isSeedance) {
+    const { getSeedanceTask } = await import('@/lib/seedance');
+    return getSeedanceTask(taskId);
+  } else if (isMotionControl) {
+    const { getKlingMotionControlTask } = await import('@/lib/kling');
+    const result = await getKlingMotionControlTask(realTaskId);
+    return { ...result, taskId };
+  } else {
+    const { getKlingTask } = await import('@/lib/kling');
+    return getKlingTask(taskId);
+  }
+}
+
 /**
  * GET /api/agent/run/[id] — Query run status and results.
  *
@@ -53,7 +75,7 @@ export async function GET(
       .from('agent_events')
       .select('type, data, seq, created_at')
       .eq('run_id', runId)
-      .in('type', ['image', 'render', 'animation_task', 'music_task', 'content', 'error'])
+      .in('type', ['image', 'render', 'animation_task', 'video_snapshot', 'music_task', 'content', 'error'])
       .order('seq');
 
     // Build output[] — unified typed artifact array
@@ -115,6 +137,17 @@ export async function GET(
           created_at: e.created_at,
         });
         legacyVideos.push({ taskId: e.data.taskId, prompt: e.data.prompt });
+      } else if (e.type === 'video_snapshot') {
+        output.push({
+          id: `out_${++outputSeq}`,
+          type: 'video',
+          status: 'queued',
+          task_id: e.data.taskId,
+          snapshot_id: e.data.snapshotId,
+          poster_url: e.data.posterUrl,
+          created_at: e.created_at,
+        });
+        legacyVideos.push({ taskId: e.data.taskId, prompt: e.data.videoMeta?.prompt });
       } else if (e.type === 'music_task') {
         output.push({
           id: `out_${++outputSeq}`,
@@ -163,37 +196,96 @@ export async function GET(
     for (const v of videoItems) {
       enrichPromises.push((async () => {
         try {
+          // v2 path: video_snapshot events have snapshot_id — query snapshots table
+          if (v.snapshot_id) {
+            const { data: snap } = await supabase
+              .from('snapshots')
+              .select('id, project_id, video_meta, image_url')
+              .eq('id', v.snapshot_id)
+              .single();
+            if (!snap?.video_meta) return;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const videoMeta = snap.video_meta as any;
+            if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
+              v.status = 'completed';
+              v.url = videoMeta.videoUrl;
+              if (videoMeta.width) v.width = videoMeta.width;
+              if (videoMeta.height) v.height = videoMeta.height;
+            } else if (videoMeta.status === 'failed') {
+              v.status = 'failed';
+              v.error = videoMeta.error;
+            } else if (videoMeta.status === 'processing' && videoMeta.taskId) {
+              // Actively poll provider API
+              try {
+                const taskId = videoMeta.taskId as string;
+                const pollResult = await pollVideoProvider(taskId);
+                if (pollResult.status === 'completed' && pollResult.videoUrl) {
+                  const admin = getSupabaseAdmin();
+                  const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl };
+                  await admin.from('snapshots')
+                    .update({ video_meta: updatedMeta })
+                    .eq('id', v.snapshot_id);
+                  v.status = 'completed';
+                  v.url = pollResult.videoUrl;
+                  // Persist to Storage in background
+                  const snapshotId = v.snapshot_id as string;
+                  const projectId = snap.project_id;
+                  after(async () => {
+                    try {
+                      const { uploadVideo } = await import('@/lib/supabase/storage');
+                      const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
+                      const res = await fetch(pollResult.videoUrl!);
+                      if (!res.ok) return;
+                      const buffer = new Uint8Array(await res.arrayBuffer());
+                      const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 };
+                      const adminClient = getSupabaseAdmin();
+                      const permanentUrl = await uploadVideo(adminClient, userId, projectId, snapshotId, buffer);
+                      if (permanentUrl) {
+                        const finalMeta = { ...updatedMeta, videoUrl: permanentUrl, videoPath: `${userId}/projects/${projectId}/animation/${snapshotId}.mp4`, width: dims.width, height: dims.height };
+                        await adminClient.from('snapshots')
+                          .update({ video_meta: finalMeta })
+                          .eq('id', snapshotId);
+                      }
+                    } catch (err) {
+                      console.error('Video snapshot persist error:', err);
+                    }
+                  });
+                } else if (pollResult.status === 'failed') {
+                  const admin = getSupabaseAdmin();
+                  await admin.from('snapshots')
+                    .update({ video_meta: { ...videoMeta, status: 'failed', error: pollResult.error } })
+                    .eq('id', v.snapshot_id);
+                  v.status = 'failed';
+                  v.error = pollResult.error;
+                } else {
+                  v.status = 'rendering';
+                  if (videoMeta.createdAt) {
+                    v.elapsed_seconds = Math.round((Date.now() - new Date(videoMeta.createdAt).getTime()) / 1000);
+                  }
+                }
+              } catch {
+                v.status = 'rendering';
+                if (videoMeta.createdAt) {
+                  v.elapsed_seconds = Math.round((Date.now() - new Date(videoMeta.createdAt).getTime()) / 1000);
+                }
+              }
+            } else {
+              v.status = videoMeta.status === 'processing' ? 'rendering' : videoMeta.status;
+            }
+            return;
+          }
+
+          // v1 path: animation_task events — query project_animations table
           const { data: anim } = await supabase
             .from('project_animations')
             .select('id, status, video_url, created_at, project_id, projects(user_id)')
             .eq('piapi_task_id', v.task_id)
             .single();
           if (anim) {
-            // If still processing, actively poll the video API (server-side polling for CLI)
             if (anim.status === 'processing') {
               try {
                 const taskId = v.task_id as string;
-                const isEvolink = taskId.startsWith('task-unified-');
-                const isSeedance = taskId.startsWith('cgt-');
-                const isMotionControl = taskId.startsWith('mc-');
-                let result: { taskId: string; status: string; videoUrl?: string; error?: string };
-                const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
-
-                if (isEvolink) {
-                  const { getEvolinkTask } = await import('@/lib/evolink');
-                  result = await getEvolinkTask(taskId);
-                } else if (isSeedance) {
-                  const { getSeedanceTask } = await import('@/lib/seedance');
-                  result = await getSeedanceTask(taskId);
-                } else if (isMotionControl) {
-                  const { getKlingMotionControlTask } = await import('@/lib/kling');
-                  result = await getKlingMotionControlTask(realTaskId);
-                  result.taskId = taskId;
-                } else {
-                  const { getKlingTask } = await import('@/lib/kling');
-                  result = await getKlingTask(taskId);
-                }
-
+                const result = await pollVideoProvider(taskId);
                 if (result.status === 'completed' && result.videoUrl) {
                   const admin = getSupabaseAdmin();
                   await admin.from('project_animations')
@@ -201,7 +293,6 @@ export async function GET(
                     .eq('piapi_task_id', taskId);
                   v.status = 'completed';
                   v.url = result.videoUrl;
-                  // Persist video to Storage in background
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   const projects = anim.projects as any;
                   const ownerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id;
@@ -242,7 +333,6 @@ export async function GET(
                   }
                 }
               } catch {
-                // Fallback: just report DB state
                 v.status = 'rendering';
                 if (anim.created_at) {
                   v.elapsed_seconds = Math.round((Date.now() - new Date(anim.created_at).getTime()) / 1000);

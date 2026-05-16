@@ -217,6 +217,11 @@ async function streamAgent(baseUrl, headers, projectId, prompt) {
           process.stderr.write(`\n🎬 Video submitted: ${event.taskId}\n`);
           break;
 
+        case 'video_snapshot':
+          results.animationTasks.push({ taskId: event.taskId, snapshotId: event.snapshotId });
+          process.stderr.write(`\n🎬 Video submitted: ${event.taskId} (snapshot: ${event.snapshotId})\n`);
+          break;
+
         case 'music_task':
           results.musicTasks.push({ taskId: event.taskId });
           process.stderr.write(`\n🎵 Music submitted: ${event.taskId}\n`);
@@ -324,6 +329,9 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
             break;
           case 'animation_task':
             process.stderr.write(`\n🎬 Video submitted: ${ev.data?.taskId}\n`);
+            break;
+          case 'video_snapshot':
+            process.stderr.write(`\n🎬 Video submitted: ${ev.data?.taskId} (snapshot: ${ev.data?.snapshotId})\n`);
             break;
           case 'music_task':
             process.stderr.write(`\n🎵 Music submitted: ${ev.data?.taskId}\n`);
@@ -444,18 +452,23 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
 
 // ─── Async Task Polling ──────────────────────────────────────────────────────
 
-async function pollVideo(baseUrl, headers, taskId) {
-  process.stderr.write(`🎬 Waiting for video ${taskId}...\n`);
+async function pollVideo(baseUrl, headers, taskId, snapshotId) {
+  const label = snapshotId ? (taskId ? `${taskId} (snapshot)` : snapshotId) : taskId;
+  process.stderr.write(`🎬 Waiting for video ${label}...\n`);
   const start = Date.now();
+  // v2: poll /api/video-snapshot/[snapshotId]; v1: poll /api/animate/[taskId]
+  const endpoint = snapshotId
+    ? `${baseUrl}/api/video-snapshot/${snapshotId}`
+    : `${baseUrl}/api/animate/${taskId}`;
   while (true) {
     await new Promise(r => setTimeout(r, 10_000));
     const elapsed = Math.round((Date.now() - start) / 1000);
     try {
-      const res = await fetch(`${baseUrl}/api/animate/${taskId}`, { headers });
+      const res = await fetch(endpoint, { headers });
       if (!res.ok) continue;
       const data = await res.json();
       if (data.videoUrl) { process.stderr.write(`\r🎬 Video done (${elapsed}s): ${data.videoUrl}\n`); return data.videoUrl; }
-      if (data.status === 'failed') { process.stderr.write(`\r🎬 Video failed (${elapsed}s)\n`); return null; }
+      if (data.status === 'failed' || data.status === 'abandoned') { process.stderr.write(`\r🎬 Video ${data.status} (${elapsed}s)\n`); return null; }
       process.stderr.write(`\r🎬 Video rendering... ${elapsed}s`);
     } catch { /* retry */ }
     if (elapsed > 600) { process.stderr.write(`\r🎬 Video timeout (${elapsed}s)\n`); return null; }
@@ -740,7 +753,7 @@ if (command === 'login') {
     for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
     for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
     process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
-    for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId);
+    for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId, task.snapshotId);
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
     // Default: fire-and-forget + poll
@@ -887,7 +900,7 @@ if (command === 'login') {
 
   } else if (sub === 'create') {
     const images = [];
-    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined;
+    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, projectId = null, wait = false;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
       else if (args[i] === '--script' && args[i + 1]) script = args[++i];
@@ -895,29 +908,83 @@ if (command === 'login') {
       else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
       else if (args[i] === '--aspect' && args[i + 1]) aspectRatio = args[++i];
       else if (args[i] === '--model' && args[i + 1]) videoModel = args[++i];
+      else if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
+      else if (args[i] === '--wait') wait = true;
     }
-    if (!images.length || !script) { console.error('Usage: makaron video create --script "..." --image <url> [--duration 10] [--aspect 9:16] [--model kling|seedance]'); process.exit(1); }
-    process.stderr.write('🎬 Submitting video...\n');
-    const vArgs = { script, images };
-    if (duration) vArgs.duration = duration;
-    if (aspectRatio) vArgs.aspectRatio = aspectRatio;
-    if (videoModel) vArgs.videoModel = videoModel;
-    const result = await callMcpTool(baseUrl, headers, 'makaron_create_video', vArgs);
-    const text = result?.content?.find(c => c.type === 'text')?.text;
-    if (text) console.log(text);
+    if (!images.length || !script) { console.error('Usage: makaron video create --script "..." --image <url> [--project <id>] [--duration 10] [--aspect 9:16] [--model kling|seedance] [--wait]'); process.exit(1); }
+
+    if (projectId) {
+      // v2: submit to /api/video-snapshot → writes into timeline
+      process.stderr.write('🎬 Submitting video to timeline...\n');
+      const body = { projectId, imageUrls: images, prompt: script };
+      if (duration) body.duration = duration;
+      if (aspectRatio) body.aspectRatio = aspectRatio;
+      if (videoModel) body.videoModel = videoModel;
+      const res = await fetch(`${baseUrl}/api/video-snapshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      const data = await res.json();
+      process.stderr.write(`✅ Video snapshot: ${data.snapshotId} (task: ${data.taskId})\n`);
+      if (wait) {
+        const url = await pollVideo(baseUrl, headers, data.taskId, data.snapshotId);
+        if (url) console.log(url);
+      } else {
+        console.log(JSON.stringify(data, null, 2));
+      }
+    } else {
+      // No project: use MCP tool (standalone, no timeline write)
+      process.stderr.write('🎬 Submitting video...\n');
+      const vArgs = { script, images };
+      if (duration) vArgs.duration = duration;
+      if (aspectRatio) vArgs.aspectRatio = aspectRatio;
+      if (videoModel) vArgs.videoModel = videoModel;
+      const result = await callMcpTool(baseUrl, headers, 'makaron_create_video', vArgs);
+      const text = result?.content?.find(c => c.type === 'text')?.text;
+      if (text) console.log(text);
+    }
 
   } else if (sub === 'status') {
-    const taskId = args[2];
-    if (!taskId) { console.error('Usage: makaron video status <taskId>'); process.exit(1); }
-    const result = await callMcpTool(baseUrl, headers, 'makaron_get_video_status', { taskId });
-    const text = result?.content?.find(c => c.type === 'text')?.text;
-    if (text) console.log(text);
+    let taskId = null, snapshotId = null, wait = false;
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--snapshot' && args[i + 1]) snapshotId = args[++i];
+      else if (args[i] === '--wait') wait = true;
+      else if (!taskId) taskId = args[i];
+    }
+    if (!taskId && !snapshotId) { console.error('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]'); process.exit(1); }
+
+    if (snapshotId || (taskId && taskId.length === 36 && taskId.includes('-'))) {
+      // v2: poll /api/video-snapshot/[snapshotId]
+      const id = snapshotId || taskId;
+      if (wait) {
+        const url = await pollVideo(baseUrl, headers, null, id);
+        if (url) console.log(url);
+      } else {
+        const res = await fetch(`${baseUrl}/api/video-snapshot/${id}`, { headers });
+        if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+        const data = await res.json();
+        console.log(JSON.stringify(data, null, 2));
+      }
+    } else {
+      // v1: MCP get_video_status
+      if (wait) {
+        const url = await pollVideo(baseUrl, headers, taskId);
+        if (url) console.log(url);
+      } else {
+        const result = await callMcpTool(baseUrl, headers, 'makaron_get_video_status', { taskId });
+        const text = result?.content?.find(c => c.type === 'text')?.text;
+        if (text) console.log(text);
+      }
+    }
 
   } else {
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --image <url> [--duration 10]  Submit video task
   video status <taskId>                                      Check video status
+  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
   }
 
@@ -1182,7 +1249,7 @@ Commands:
   abort <runId>                      Abort a running Agent
 
   edit [--image <file>] "prompt"     AI image edit / text-to-image
-  video script|create|status         Video generation
+  video script|create|status         Video generation (v2 timeline support)
   music create|status                Music generation
 
   admin                              Admin commands (skills, upload, set-admin)
