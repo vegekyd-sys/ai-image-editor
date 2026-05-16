@@ -21,6 +21,7 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [ar, setAr] = useState(aspectRatio);
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -44,7 +45,8 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
         onLoadedMetadata={() => { const v = videoRef.current; if (v?.videoWidth && v.videoHeight) setAr(`${v.videoWidth}/${v.videoHeight}`); }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onEnded={() => { setPlaying(false); if (videoRef.current) videoRef.current.currentTime = 0; }}
+        onEnded={() => { setPlaying(false); setProgress(0); if (videoRef.current) videoRef.current.currentTime = 0; }}
+        onTimeUpdate={() => { const v = videoRef.current; if (v?.duration) setProgress(v.currentTime / v.duration); }}
       />
       {/* Play/Pause button — above badge, same style as canvas (mobile only) */}
       {!isDesktop && (
@@ -64,6 +66,10 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
           @{snapIndex}
         </span>
       )}
+      {/* Progress bar — bottom edge, fuchsia like MusicCard */}
+      <div className="absolute bottom-0 left-0 right-0" style={{ height: 2, background: 'rgba(255,255,255,0.1)' }}>
+        <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.8)', transition: 'width 0.1s linear' }} />
+      </div>
     </div>
   );
 }
