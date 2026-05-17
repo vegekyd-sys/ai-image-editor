@@ -245,6 +245,22 @@ export async function GET(
                         await adminClient.from('snapshots')
                           .update({ video_meta: finalMeta })
                           .eq('id', snapshotId);
+                        // Extract poster from the persisted video
+                        try {
+                          const { extractVideoPoster } = await import('@/lib/video-poster');
+                          const posterBuffer = await extractVideoPoster(permanentUrl);
+                          const posterPath = `${userId}/${projectId}/posters/${snapshotId}.jpg`;
+                          const { error: posterErr } = await adminClient.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
+                          if (!posterErr) {
+                            const { data: urlData } = adminClient.storage.from('images').getPublicUrl(posterPath);
+                            if (urlData?.publicUrl) {
+                              await adminClient.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snapshotId);
+                              console.log(`Video poster extracted: ${snapshotId}`);
+                            }
+                          }
+                        } catch (pe) {
+                          console.warn('Video poster extraction failed (non-fatal):', pe);
+                        }
                       }
                     } catch (err) {
                       console.error('Video snapshot persist error:', err);
