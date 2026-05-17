@@ -201,14 +201,6 @@ export default function TopBar({ page }: TopBarProps) {
                     </button>
                     <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
                     <button
-                      onClick={() => { setUserMenuOpen(false); router.push('/profile') }}
-                      style={menuBtnStyle}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                    >
-                      {locale === 'zh' ? '个人资料' : 'Profile'}
-                    </button>
-                    <button
                       onClick={() => { setUserMenuOpen(false); router.push('/dashboard') }}
                       style={menuBtnStyle}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
