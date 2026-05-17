@@ -95,10 +95,10 @@ export async function buildPromptContext(
   // Photo metadata (location + time) from original snapshot
   const originalMeta = snapshots[0]?.metadata;
   const metaLines: string[] = [];
-  if (originalMeta?.takenAt) metaLines.push(`拍摄时间：${originalMeta.takenAt}`);
-  if (originalMeta?.location) metaLines.push(`拍摄地点：${originalMeta.location}`);
+  if (originalMeta?.takenAt) metaLines.push(`Time: ${originalMeta.takenAt}`);
+  if (originalMeta?.location) metaLines.push(`Location: ${originalMeta.location}`);
   const metaContext = metaLines.length > 0
-    ? `[照片元数据]\n${metaLines.join('\n')}\n\n`
+    ? `[Photo Metadata]\n${metaLines.join('\n')}\n\n`
     : '';
 
   // Description

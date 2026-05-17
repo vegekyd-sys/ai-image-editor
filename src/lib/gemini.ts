@@ -142,11 +142,11 @@ function buildTipsPrompt(
   const template = getPromptTemplate(category);
   const systemPrompt = buildCategorySystemPrompt(category, count);
   const metaLines: string[] = [];
-  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
-  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
-  else if (metadata?.raw?.lat !== undefined && metadata?.raw?.lng !== undefined) metaLines.push(`GPS：${metadata.raw.lat.toFixed(4)}, ${metadata.raw.lng.toFixed(4)}`);
+  if (metadata?.takenAt) metaLines.push(`Time: ${metadata.takenAt}`);
+  if (metadata?.location) metaLines.push(`Location: ${metadata.location}`);
+  else if (metadata?.raw?.lat !== undefined && metadata?.raw?.lng !== undefined) metaLines.push(`GPS: ${metadata.raw.lat.toFixed(4)}, ${metadata.raw.lng.toFixed(4)}`);
   const metaContext = metaLines.length > 0
-    ? `[照片元数据]\n${metaLines.join('\n')}\n（可结合地点/时间生成更贴切的建议）\n\n`
+    ? `[Photo Metadata]\n${metaLines.join('\n')}\n\n`
     : '';
   const dedupeNote = existingLabels?.length
     ? `[DEDUP — CRITICAL] The following tips already exist. You MUST NOT repeat these directions or produce similar variations:\n${existingLabels.map(l => `- ❌ "${l}"`).join('\n')}\nChoose completely different directions from the list above.\n\n`
