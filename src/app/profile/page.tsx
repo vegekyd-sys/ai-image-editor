@@ -96,6 +96,14 @@ export default function ProfilePage() {
     }
   }
 
+  const refreshSession = async () => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+    await supabase.auth.refreshSession()
+  }
+
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -107,6 +115,7 @@ export default function ProfilePage() {
     setUploadingAvatar(false)
     if (res.ok && data.avatar_url) {
       setAvatarUrl(data.avatar_url)
+      await refreshSession()
     }
   }
 
