@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import sharp from 'sharp'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -14,15 +15,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No file provided' }, { status: 400 })
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const ext = file.type === 'image/png' ? 'png' : 'jpg'
-  const storagePath = `avatars/${user.id}.${ext}`
+  const raw = Buffer.from(await file.arrayBuffer())
+  const buffer = await sharp(raw).resize(200, 200, { fit: 'cover' }).jpeg({ quality: 85 }).toBuffer()
+  const storagePath = `avatars/${user.id}.jpg`
 
   const admin = getSupabaseAdmin()
   const { error: uploadError } = await admin.storage
     .from('images')
     .upload(storagePath, buffer, {
-      contentType: file.type,
+      contentType: 'image/jpeg',
       upsert: true,
     })
   if (uploadError) {
