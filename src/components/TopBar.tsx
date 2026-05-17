@@ -148,100 +148,110 @@ export default function TopBar({ page }: TopBarProps) {
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
               </button>
-              {userMenuOpen && (
-                <div style={{
-                  position: 'absolute', top: '100%', right: 0, marginTop: 8,
-                  background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 12, padding: '4px 0', minWidth: 180,
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
-                }}>
-                  {/* Email header → links to /profile */}
-                  <button
-                    onClick={() => { setUserMenuOpen(false); router.push('/profile') }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '10px 16px', background: 'none', border: 'none',
-                      fontSize: '0.7rem',
-                      color: 'rgba(255,255,255,0.5)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    {user.email}
-                  </button>
-                  <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
-                  <button
-                    onClick={() => { setUserMenuOpen(false); router.push('/dashboard') }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '10px 16px', background: 'none', border: 'none',
-                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
-                      cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    {locale === 'zh' ? '数据面板' : 'Dashboard'}
-                  </button>
-                  <button
-                    onClick={() => { setUserMenuOpen(false); router.push('/dashboard?tab=keys') }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '10px 16px', background: 'none', border: 'none',
-                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
-                      cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    {locale === 'zh' ? '获取 API' : 'Get API'}
-                  </button>
-                  <button
-                    onClick={() => { setUserMenuOpen(false); router.push('/skills') }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '10px 16px', background: 'none', border: 'none',
-                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
-                      cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    Skills
-                  </button>
-                  <button
-                    onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '10px 16px', background: 'none', border: 'none',
-                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
-                      cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    {locale === 'zh' ? 'English' : '中文'}
-                  </button>
-                  <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
-                  <button
-                    onClick={() => { setUserMenuOpen(false); signOut() }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '10px 16px', background: 'none', border: 'none',
-                      color: 'rgba(255,255,255,0.45)', fontSize: '0.75rem',
-                      cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    {locale === 'zh' ? '退出登录' : 'Sign out'}
-                  </button>
-                </div>
-              )}
+              {userMenuOpen && (() => {
+                const avatarUrl = user.user_metadata?.avatar_url
+                const displayName = user.user_metadata?.full_name || user.user_metadata?.name
+                const initials = (displayName || user.email || '?')[0].toUpperCase()
+                const isOAuth = user.app_metadata?.provider === 'google'
+                const menuBtnStyle: React.CSSProperties = {
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '10px 16px', background: 'none', border: 'none',
+                  color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
+                  cursor: 'pointer', transition: 'background 0.15s',
+                }
+                return (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 8,
+                    background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 12, padding: '4px 0', minWidth: 200,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
+                  }}>
+                    {/* User card header */}
+                    <button
+                      onClick={() => { setUserMenuOpen(false); router.push('/profile') }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                        padding: '12px 16px', background: 'none', border: 'none',
+                        cursor: 'pointer', transition: 'background 0.15s', borderRadius: '8px 8px 0 0',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      <div style={{
+                        width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                        background: avatarUrl ? 'none' : 'linear-gradient(135deg, #a855f7, #ec4899)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 600 }}>{initials}</span>
+                        )}
+                      </div>
+                      <div style={{ overflow: 'hidden', textAlign: 'left' }}>
+                        {displayName && (
+                          <div style={{ fontSize: '0.78rem', fontWeight: 500, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {displayName}
+                          </div>
+                        )}
+                        <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {user.email}
+                        </div>
+                      </div>
+                    </button>
+                    <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
+                    <button
+                      onClick={() => { setUserMenuOpen(false); router.push('/profile') }}
+                      style={menuBtnStyle}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      {locale === 'zh' ? '个人资料' : 'Profile'}
+                    </button>
+                    <button
+                      onClick={() => { setUserMenuOpen(false); router.push('/dashboard') }}
+                      style={menuBtnStyle}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      {locale === 'zh' ? '数据面板' : 'Dashboard'}
+                    </button>
+                    <button
+                      onClick={() => { setUserMenuOpen(false); router.push('/dashboard?tab=keys') }}
+                      style={menuBtnStyle}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      {locale === 'zh' ? '获取 API' : 'Get API'}
+                    </button>
+                    <button
+                      onClick={() => { setUserMenuOpen(false); router.push('/skills') }}
+                      style={menuBtnStyle}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      Skills
+                    </button>
+                    <button
+                      onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }}
+                      style={menuBtnStyle}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      {locale === 'zh' ? 'English' : '中文'}
+                    </button>
+                    <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
+                    <button
+                      onClick={() => { setUserMenuOpen(false); signOut() }}
+                      style={{ ...menuBtnStyle, color: 'rgba(255,255,255,0.45)' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      {locale === 'zh' ? '退出登录' : 'Sign out'}
+                    </button>
+                  </div>
+                )
+              })()}
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

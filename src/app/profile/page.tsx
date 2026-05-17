@@ -24,6 +24,7 @@ export default function ProfilePage() {
   const [savingPassword, setSavingPassword] = useState(false)
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [passwordOpen, setPasswordOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isOAuth = user?.app_metadata?.provider === 'google'
@@ -200,48 +201,65 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {/* Change Password (hide for OAuth users) */}
+      {/* Change Password (hide for OAuth users, collapsible) */}
       {!isOAuth && (
         <section className="mb-8">
-          <label className="block text-white/50 text-xs uppercase tracking-wider mb-3">
-            {t ? '修改密码' : 'Change Password'}
-          </label>
-          <div className="space-y-3">
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={e => setCurrentPassword(e.target.value)}
-              style={inputStyle}
-              placeholder={t ? '当前密码' : 'Current password'}
-            />
-            <input
-              type="password"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              style={inputStyle}
-              placeholder={t ? '新密码' : 'New password'}
-            />
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              style={inputStyle}
-              placeholder={t ? '确认新密码' : 'Confirm new password'}
-            />
-          </div>
-          {passwordError && (
-            <div className="text-red-400 text-xs mt-2">{passwordError}</div>
-          )}
-          {passwordSuccess && (
-            <div className="text-green-400 text-xs mt-2">{t ? '密码已更新' : 'Password updated'}</div>
-          )}
           <button
-            onClick={handleChangePassword}
-            disabled={savingPassword || !currentPassword || !newPassword}
-            className="mt-3 px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/15 disabled:opacity-30 transition-all"
+            onClick={() => setPasswordOpen(v => !v)}
+            className="flex items-center justify-between w-full text-left"
           >
-            {savingPassword ? '...' : (t ? '更新密码' : 'Update Password')}
+            <span className="text-white/50 text-xs uppercase tracking-wider">
+              {t ? '修改密码' : 'Change Password'}
+            </span>
+            <svg
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className="text-white/30 transition-transform"
+              style={{ transform: passwordOpen ? 'rotate(180deg)' : 'none' }}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
           </button>
+          {passwordOpen && (
+            <div className="mt-3">
+              <div className="space-y-3">
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  style={inputStyle}
+                  placeholder={t ? '当前密码' : 'Current password'}
+                />
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  style={inputStyle}
+                  placeholder={t ? '新密码' : 'New password'}
+                />
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  style={inputStyle}
+                  placeholder={t ? '确认新密码' : 'Confirm new password'}
+                />
+              </div>
+              {passwordError && (
+                <div className="text-red-400 text-xs mt-2">{passwordError}</div>
+              )}
+              {passwordSuccess && (
+                <div className="text-green-400 text-xs mt-2">{t ? '密码已更新' : 'Password updated'}</div>
+              )}
+              <button
+                onClick={handleChangePassword}
+                disabled={savingPassword || !currentPassword || !newPassword}
+                className="mt-3 px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/15 disabled:opacity-30 transition-all"
+              >
+                {savingPassword ? '...' : (t ? '更新密码' : 'Update Password')}
+              </button>
+            </div>
+          )}
         </section>
       )}
 
