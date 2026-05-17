@@ -155,19 +155,24 @@ export default function TopBar({ page }: TopBarProps) {
                   borderRadius: 12, padding: '4px 0', minWidth: 180,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
                 }}>
-                  {/* Email header */}
-                  <div
+                  {/* Email header → links to /profile */}
+                  <button
+                    onClick={() => { setUserMenuOpen(false); router.push('/profile') }}
                     style={{
-                      padding: '10px 16px',
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '10px 16px', background: 'none', border: 'none',
                       fontSize: '0.7rem',
                       color: 'rgba(255,255,255,0.5)',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
+                      cursor: 'pointer', transition: 'background 0.15s',
                     }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   >
                     {user.email}
-                  </div>
+                  </button>
                   <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
                   <button
                     onClick={() => { setUserMenuOpen(false); router.push('/dashboard') }}
@@ -180,7 +185,7 @@ export default function TopBar({ page }: TopBarProps) {
                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   >
-                    Dashboard
+                    {locale === 'zh' ? '数据面板' : 'Dashboard'}
                   </button>
                   <button
                     onClick={() => { setUserMenuOpen(false); router.push('/dashboard?tab=keys') }}
