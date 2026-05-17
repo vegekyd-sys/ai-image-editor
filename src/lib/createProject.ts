@@ -2,6 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { uploadImage } from '@/lib/supabase/storage'
 import { compressImageFile } from '@/lib/image/compress'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
+import type { PhotoMetadata } from '@/types'
 
 async function compressFile(file: File): Promise<string> {
   try {
@@ -27,7 +28,8 @@ export async function createProject(
   userId: string,
   files: File[],
   options?: { prompt?: string; skill?: string },
-): Promise<{ projectId: string; metadata?: { takenAt?: string; location?: string } } | null> {
+  preExtractedMetadata?: PhotoMetadata,
+): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
   // Store pending data for editor page
   if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt);
   if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill);
@@ -43,7 +45,7 @@ export async function createProject(
   if (files.length <= 1) {
     const [base64, metadata, dbResult] = await Promise.all([
       compressFile(files[0]),
-      extractPhotoMetadata(files[0]),
+      preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : extractPhotoMetadata(files[0]),
       supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single(),
     ]);
     if (dbResult.error || !dbResult.data) throw new Error('Failed to create project');
@@ -55,7 +57,7 @@ export async function createProject(
   // Multi image: DB insert + metadata in parallel, then upload
   const [dbResult, metadata] = await Promise.all([
     supabase.from('projects').insert({ user_id: userId, title: 'Untitled' }).select('id').single(),
-    extractPhotoMetadata(files[0]),
+    preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : extractPhotoMetadata(files[0]),
   ]);
   if (dbResult.error || !dbResult.data) throw new Error('Failed to create project');
   const projectId = dbResult.data.id;
