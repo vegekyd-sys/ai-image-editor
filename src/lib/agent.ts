@@ -1695,14 +1695,22 @@ ${info.rules}
 export async function* streamTipsWithClaude(
   imageBase64: string,
   category: 'enhance' | 'creative' | 'wild' | 'captions',
-  _metadata?: { takenAt?: string; location?: string },
+  metadata?: { takenAt?: string; location?: string },
   locale?: string,
 ): AsyncGenerator<Tip> {
   const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const template = TIPS_PROMPTS[category];
   const systemPrompt = buildTipsSystemPrompt(category);
 
-  const userPrompt = `在生成建议之前，先分析这张图片：判断人脸大小；识别画面中的具体物品/食物/道具；判断照片情绪基调。
+  // Build metadata context string
+  const metaLines: string[] = [];
+  if (metadata?.takenAt) metaLines.push(`Date taken: ${metadata.takenAt}`);
+  if (metadata?.location) metaLines.push(`Location: ${metadata.location}`);
+  const metaContext = metaLines.length > 0
+    ? `[Photo Metadata]\n${metaLines.join('\n')}\n(Use for creative inspiration: local landmarks, time-of-day lighting, seasonal elements, etc.)\n\n`
+    : '';
+
+  const userPrompt = `${metaContext}在生成建议之前，先分析这张图片：判断人脸大小；识别画面中的具体物品/食物/道具；判断照片情绪基调。
 
 基于分析，给出2条${category}编辑建议。以下是详细规范（必须遵循）：
 
