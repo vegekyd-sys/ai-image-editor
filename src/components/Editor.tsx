@@ -3142,7 +3142,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             className="flex-1 relative min-h-0 overflow-hidden"
             style={heroAnim ? { opacity: 0 } : undefined}
           >
-            {timeline.length === 0 || (timeline.length === 1 && !timeline[0]) ? (
+            {timeline.length === 0 || (timeline.length === 1 && !timeline[0] && !isViewingVideoV2) ? (
               (isAgentActive || (timeline.length === 1 && !timeline[0])) ? (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3">
