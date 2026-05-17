@@ -11,8 +11,28 @@ const execFileAsync = promisify(execFile)
  * Fetches the video, extracts frame at 0.5s, returns JPEG buffer.
  * ~1-2s total (fetch + decode + encode).
  */
+async function findFfmpeg(): Promise<string> {
+  // Try system ffmpeg first (available on macOS dev, some Linux deployments)
+  try {
+    await execFileAsync('ffmpeg', ['-version'], { timeout: 2000 })
+    return 'ffmpeg'
+  } catch { /* not in PATH */ }
+
+  // Fallback: ffmpeg-static package binary
+  const possiblePaths = [
+    path.resolve(process.cwd(), 'node_modules/ffmpeg-static/ffmpeg'),
+    path.resolve(process.cwd(), 'node_modules/.pnpm/ffmpeg-static@5.2.0/node_modules/ffmpeg-static/ffmpeg'),
+  ]
+  const { existsSync } = await import('fs')
+  for (const p of possiblePaths) {
+    if (existsSync(p)) return p
+  }
+
+  throw new Error('ffmpeg not found — install ffmpeg-static or add ffmpeg to PATH')
+}
+
 export async function extractVideoPoster(videoUrl: string): Promise<Buffer> {
-  const { default: ffmpegPath } = await import('ffmpeg-static') as { default: string }
+  const ffmpegPath = await findFfmpeg()
 
   const dir = await mkdtemp(path.join(tmpdir(), 'poster-'))
   const inputPath = path.join(dir, 'input.mp4')
