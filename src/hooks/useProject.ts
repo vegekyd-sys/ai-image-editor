@@ -70,7 +70,8 @@ export function useProject(projectId: string, userId: string) {
     const firstValidImageUrl = dbSnapshots.find(s => s.image_url?.startsWith('http') && !s.image_url.endsWith('.mp4'))?.image_url || ''
 
     const snapshots: Snapshot[] = dbSnapshots.map((s) => {
-      const imageUrl = s.image_url || (s.type === 'video' ? firstValidImageUrl : '')
+      const videoUrl = (s.video_meta as VideoMeta | null)?.videoUrl || ''
+      const imageUrl = s.image_url || (s.type === 'video' ? (firstValidImageUrl || videoUrl) : '')
       return {
         id: s.id,
         image: imageUrl,
