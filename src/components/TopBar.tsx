@@ -152,9 +152,36 @@ export default function TopBar({ page }: TopBarProps) {
                 <div style={{
                   position: 'absolute', top: '100%', right: 0, marginTop: 8,
                   background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 12, padding: '4px 0', minWidth: 140,
+                  borderRadius: 12, padding: '4px 0', minWidth: 180,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
                 }}>
+                  {/* Email header */}
+                  <div
+                    style={{
+                      padding: '10px 16px',
+                      fontSize: '0.7rem',
+                      color: 'rgba(255,255,255,0.5)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {user.email}
+                  </div>
+                  <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
+                  <button
+                    onClick={() => { setUserMenuOpen(false); router.push('/dashboard') }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '10px 16px', background: 'none', border: 'none',
+                      color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
+                      cursor: 'pointer', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    Dashboard
+                  </button>
                   <button
                     onClick={() => { setUserMenuOpen(false); router.push('/dashboard?tab=keys') }}
                     style={{
