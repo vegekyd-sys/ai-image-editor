@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
 
   const { data: { publicUrl } } = admin.storage.from('images').getPublicUrl(storagePath)
 
-  const avatarUrl = publicUrl
+  // Cache-buster so browsers pick up new avatar after re-upload
+  const avatarUrl = `${publicUrl}?v=${Date.now()}`
 
   // Store in user_metadata
   const { error: updateError } = await admin.auth.admin.updateUserById(user.id, {

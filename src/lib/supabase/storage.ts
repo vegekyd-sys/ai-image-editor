@@ -154,7 +154,7 @@ export async function uploadAudio(
 
 export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
-  const base = normalizeDomain(url).replace(
+  const base = normalizeDomain(url).split('?')[0].replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
   )
