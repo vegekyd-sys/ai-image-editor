@@ -66,11 +66,11 @@ export function useProject(projectId: string, userId: string) {
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
     const dbMessages: DbMessage[] = messagesRes.data ?? []
 
+    // Fallback image_url for video snapshots with empty poster (exclude .mp4 URLs)
+    const firstValidImageUrl = dbSnapshots.find(s => s.image_url?.startsWith('http') && !s.image_url.endsWith('.mp4'))?.image_url || ''
+
     const snapshots: Snapshot[] = dbSnapshots.map((s) => {
-      const videoUrl = (s.video_meta as VideoMeta | null)?.videoUrl || ''
-      // Video snapshots: use image_url (poster) if set, otherwise videoUrl (frontend captures poster via <video>)
-      // Never use another snapshot's image as fallback — that shows wrong content
-      const imageUrl = s.image_url || (s.type === 'video' ? videoUrl : '')
+      const imageUrl = s.image_url || (s.type === 'video' ? firstValidImageUrl : '')
       return {
         id: s.id,
         image: imageUrl,
