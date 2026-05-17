@@ -1923,18 +1923,17 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       const base64 = await compressImageFile(file, 2048, 0.92);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
 
-      // Start tips generation immediately with compressed image
-      const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
+      // Await metadata (exifr local parse ~10-50ms, fast enough to not block UX)
+      const metadata = await metadataPromise;
+
+      // Start tips generation with metadata available on snapshot
+      const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '', metadata };
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
       const tipsImage = await compressBase64Image(base64, 600_000);
       fetchTipsForSnapshot(snapId, tipsImage, 'full');
 
-      // Attach metadata when available
-      const metadata = await metadataPromise;
-
-      // Update snapshot image with final base64 + metadata
-      const finalSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '', metadata };
+      const finalSnapshot = newSnapshot;
       setSnapshots([finalSnapshot]);
       snapshotsRef.current = [finalSnapshot];
       onSaveSnapshot?.(finalSnapshot, 0, (url) => {
