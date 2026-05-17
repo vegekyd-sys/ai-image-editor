@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
 import Changelog from '@/components/Changelog'
+import { getThumbnailUrl } from '@/lib/supabase/storage'
 
 interface TopBarProps {
   page: 'home' | 'projects'
@@ -183,7 +184,7 @@ export default function TopBar({ page }: TopBarProps) {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
                         {avatarUrl ? (
-                          <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img src={getThumbnailUrl(avatarUrl, 72, 80, 72, 'cover')} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
                           <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 600 }}>{initials}</span>
                         )}
