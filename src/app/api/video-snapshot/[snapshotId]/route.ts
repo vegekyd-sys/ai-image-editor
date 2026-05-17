@@ -32,6 +32,17 @@ export async function GET(
     }
 
     const videoMeta = snap.video_meta as VideoMeta
+
+    // If already completed with permanent URL, return immediately (no provider call)
+    if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
+      const isPermanent = videoMeta.videoUrl.includes('supabase.co/storage/') || videoMeta.videoUrl.includes('makaron.app/storage/')
+      if (isPermanent) {
+        return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
+      }
+      // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
+      return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
+    }
+
     if (!videoMeta.taskId) {
       return NextResponse.json({ error: 'No task ID' }, { status: 400 })
     }
@@ -117,7 +128,8 @@ export async function GET(
         }
       })
 
-      return NextResponse.json({ status: 'completed', videoUrl: result.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
+      // Don't return provider URL — after() will persist to Storage, next poll returns permanent URL
+      return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
     }
 
     if (result.status === 'failed') {

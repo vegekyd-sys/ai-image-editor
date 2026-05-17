@@ -207,10 +207,20 @@ export async function GET(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const videoMeta = snap.video_meta as any;
             if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
-              v.status = 'completed';
-              v.url = videoMeta.videoUrl;
-              if (videoMeta.width) v.width = videoMeta.width;
-              if (videoMeta.height) v.height = videoMeta.height;
+              // Only return completed if URL is our Storage (not provider URL)
+              const isPermanent = videoMeta.videoUrl.includes('supabase.co/storage/') || videoMeta.videoUrl.includes('makaron.app/storage/');
+              if (isPermanent) {
+                v.status = 'completed';
+                v.url = videoMeta.videoUrl;
+                if (videoMeta.width) v.width = videoMeta.width;
+                if (videoMeta.height) v.height = videoMeta.height;
+              } else {
+                // Still persisting to Storage — tell CLI to keep polling
+                v.status = 'rendering';
+                if (videoMeta.createdAt) {
+                  v.elapsed_seconds = Math.round((Date.now() - new Date(videoMeta.createdAt).getTime()) / 1000);
+                }
+              }
             } else if (videoMeta.status === 'failed') {
               v.status = 'failed';
               v.error = videoMeta.error;
@@ -225,8 +235,11 @@ export async function GET(
                   await admin.from('snapshots')
                     .update({ video_meta: updatedMeta })
                     .eq('id', v.snapshot_id);
-                  v.status = 'completed';
-                  v.url = pollResult.videoUrl;
+                  // Don't return provider URL — wait for Storage persist (next poll will have permanent URL)
+                  v.status = 'rendering';
+                  if (videoMeta.createdAt) {
+                    v.elapsed_seconds = Math.round((Date.now() - new Date(videoMeta.createdAt).getTime()) / 1000);
+                  }
                   // Persist to Storage in background
                   const snapshotId = v.snapshot_id as string;
                   const projectId = snap.project_id;
