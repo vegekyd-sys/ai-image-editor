@@ -1363,8 +1363,19 @@ export default function ImageCanvas({
                   {showDivider && (
                     <span className={`${isDesktop ? 'w-px h-3 mr-1.5' : 'w-px h-2 mr-[5px]'} bg-white/20`} />
                   )}
-                  {(entry === VIDEO_SENTINEL || videoTimelineIndices?.has(i)) ? (
-                    /* Video: square (unselected) → wide rect (selected) — no border-radius */
+                  {entry === VIDEO_SENTINEL ? (
+                    /* v1 sentinel: play triangle */
+                    <button
+                      onClick={() => goTo(i)}
+                      className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-5 h-5 hover:opacity-80' : 'w-3 h-3'}`}
+                      style={{ color: i === currentIndex ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
+                    >
+                      <svg width={isDesktop ? "11" : "8"} height={isDesktop ? "11" : "8"} viewBox="0 0 8 8" fill="currentColor">
+                        <polygon points="2,1 7,4 2,7" />
+                      </svg>
+                    </button>
+                  ) : videoTimelineIndices?.has(i) ? (
+                    /* v2 video: square (unselected) → wide rect (selected) — no border-radius */
                     <button
                       onClick={() => goTo(i)}
                       className={`cursor-pointer transition-all ${
