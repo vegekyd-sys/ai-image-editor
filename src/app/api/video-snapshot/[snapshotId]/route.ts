@@ -69,7 +69,7 @@ export async function GET(
         .update({ video_meta: updatedMeta })
         .eq('id', snapshotId)
 
-      // Persist video to Supabase Storage (after response)
+      // Persist video to Supabase Storage + extract poster (after response)
       const projectId = snap.project_id
       after(async () => {
         try {
@@ -94,6 +94,23 @@ export async function GET(
               .update({ video_meta: finalMeta })
               .eq('id', snapshotId)
             console.log(`Video snapshot ${snapshotId} persisted (${dims.width}x${dims.height})`)
+
+            // Extract poster frame and update image_url
+            try {
+              const { extractVideoPoster } = await import('@/lib/video-poster')
+              const posterBuffer = await extractVideoPoster(permanentUrl)
+              const posterPath = `${user.id}/${projectId}/posters/${snapshotId}.jpg`
+              const { error: posterErr } = await supabase.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true })
+              if (!posterErr) {
+                const { data: urlData } = supabase.storage.from('images').getPublicUrl(posterPath)
+                if (urlData?.publicUrl) {
+                  await supabase.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snapshotId)
+                  console.log(`Video poster extracted: ${snapshotId}`)
+                }
+              }
+            } catch (posterErr) {
+              console.warn('Video poster extraction failed (non-fatal):', posterErr)
+            }
           }
         } catch (err) {
           console.error('Video snapshot persist error:', err)

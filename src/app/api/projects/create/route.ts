@@ -96,6 +96,21 @@ export async function POST(req: NextRequest) {
           } catch { /* use original URL */ }
         }
 
+        // Extract poster frame from video
+        let posterUrl = '';
+        try {
+          const { extractVideoPoster } = await import('@/lib/video-poster');
+          const posterBuffer = await extractVideoPoster(permanentUrl);
+          const posterPath = `${userId}/${existingProjectId}/posters/${snapshotId}.jpg`;
+          const { error: posterErr } = await supabase.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
+          if (!posterErr) {
+            const { data: urlData } = supabase.storage.from('images').getPublicUrl(posterPath);
+            posterUrl = urlData?.publicUrl || '';
+          }
+        } catch (e) {
+          console.warn('Video poster extraction failed:', e);
+        }
+
         const videoMeta: VideoMeta = {
           taskId: null, videoUrl: permanentUrl, prompt: '',
           sourceSnapshotIds: [], sourceUrls: [],
@@ -103,11 +118,11 @@ export async function POST(req: NextRequest) {
           createdAt: new Date().toISOString(), width, height,
         };
         await supabase.from('snapshots').insert({
-          id: snapshotId, project_id: existingProjectId, image_url: '',
+          id: snapshotId, project_id: existingProjectId, image_url: posterUrl,
           tips: [], message_id: '', sort_order: sortOrder++,
           type: 'video', video_meta: videoMeta,
         });
-        snapshots.push({ snapshotId, imageUrl: permanentUrl, type: 'video' });
+        snapshots.push({ snapshotId, imageUrl: posterUrl || permanentUrl, type: 'video' });
       }
 
       return NextResponse.json({ projectId: existingProjectId, snapshots });
@@ -186,6 +201,21 @@ export async function POST(req: NextRequest) {
         } catch { /* use original URL */ }
       }
 
+      // Extract poster frame
+      let posterUrl = '';
+      try {
+        const { extractVideoPoster } = await import('@/lib/video-poster');
+        const posterBuffer = await extractVideoPoster(permanentUrl);
+        const posterPath = `${userId}/${projectId}/posters/${snapshotId}.jpg`;
+        const { error: posterErr } = await supabase.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
+        if (!posterErr) {
+          const { data: urlData } = supabase.storage.from('images').getPublicUrl(posterPath);
+          posterUrl = urlData?.publicUrl || '';
+        }
+      } catch (e) {
+        console.warn('Video poster extraction failed:', e);
+      }
+
       const videoMeta: VideoMeta = {
         taskId: null, videoUrl: permanentUrl, prompt: '',
         sourceSnapshotIds: [], sourceUrls: [],
@@ -193,12 +223,12 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString(), width, height,
       };
       const { error: snapError } = await supabase.from('snapshots').insert({
-        id: snapshotId, project_id: projectId, image_url: '',
+        id: snapshotId, project_id: projectId, image_url: posterUrl,
         tips: [], message_id: '', sort_order: sortOrder++,
         type: 'video', video_meta: videoMeta,
       });
       if (!snapError) {
-        snapshots.push({ snapshotId, imageUrl: permanentUrl, type: 'video' });
+        snapshots.push({ snapshotId, imageUrl: posterUrl || permanentUrl, type: 'video' });
       }
     }
 
