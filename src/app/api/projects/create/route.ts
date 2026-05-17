@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
           createdAt: new Date().toISOString(), width, height,
         };
         await supabase.from('snapshots').insert({
-          id: snapshotId, project_id: existingProjectId, image_url: permanentUrl,
+          id: snapshotId, project_id: existingProjectId, image_url: '',
           tips: [], message_id: '', sort_order: sortOrder++,
           type: 'video', video_meta: videoMeta,
         });
@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString(), width, height,
       };
       const { error: snapError } = await supabase.from('snapshots').insert({
-        id: snapshotId, project_id: projectId, image_url: permanentUrl,
+        id: snapshotId, project_id: projectId, image_url: '',
         tips: [], message_id: '', sort_order: sortOrder++,
         type: 'video', video_meta: videoMeta,
       });
