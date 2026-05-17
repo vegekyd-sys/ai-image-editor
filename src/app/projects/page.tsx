@@ -376,18 +376,16 @@ function ProjectsPageInner() {
 
         if (cancelled) return
 
-        // Fetch which projects have completed videos
+        // Fetch which projects have completed videos (v1: project_animations, v2: snapshots with type=video)
         const projectIds = projectRows.map(p => p.id)
         const videoProjectIds = new Set<string>()
         if (projectIds.length > 0) {
-          const { data: animRows } = await supabase
-            .from('project_animations')
-            .select('project_id')
-            .in('project_id', projectIds)
-            .eq('status', 'completed')
-          if (animRows) {
-            for (const row of animRows) videoProjectIds.add(row.project_id)
-          }
+          const [{ data: animRows }, { data: videoSnaps }] = await Promise.all([
+            supabase.from('project_animations').select('project_id').in('project_id', projectIds).eq('status', 'completed'),
+            supabase.from('snapshots').select('project_id').in('project_id', projectIds).eq('type', 'video'),
+          ])
+          if (animRows) for (const row of animRows) videoProjectIds.add(row.project_id)
+          if (videoSnaps) for (const row of videoSnaps) videoProjectIds.add(row.project_id)
         }
 
         if (cancelled) return
