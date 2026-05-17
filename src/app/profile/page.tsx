@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
 import { createBrowserClient } from '@supabase/ssr'
+import { getThumbnailUrl } from '@/lib/supabase/storage'
 
 export default function ProfilePage() {
   const { user, loading, signOut } = useAuth()
@@ -143,7 +144,7 @@ export default function ProfilePage() {
           className="relative w-16 h-16 rounded-full overflow-hidden shrink-0 border-2 border-white/10 hover:border-fuchsia-500/50 transition-all cursor-pointer"
         >
           {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+            <img src={getThumbnailUrl(avatarUrl, 128, 80, 128, 'cover')} alt="" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full bg-fuchsia-600 flex items-center justify-center text-xl font-bold">
               {initials}
