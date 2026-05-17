@@ -165,10 +165,10 @@
    - 旁白者 → 细白 sans-serif，克制，像电影字幕
    - 记录者 → 橙色数字胶片体 / 手写小字；⚠️ 胶片时间戳**必须包含地点**（没有地点的时间戳 = 3分）；语言统一不要中英混排；可加场景相关小图标增加个性
 
-     🚫 **METADATA 死规则（违反 = 自动失败）**：
-     - **时间**：只能用 `[照片元数据]` 里明确给出的时间。没有 metadata？→ 省略年份，只写月份或季节（"秋"/"OCT"），绝不猜年份
-     - **地点**：只能用 metadata 里的地点 OR 画面里能直接看见的标志（招牌/logo/地标）。看不出来？→ 只写大范围（"中国南方"而不是猜"桂林"），或完全省略
-     - **宁可什么都不写，也不能写错** — 用户看到自己从没去过的地点会立刻 0 分
+     🚫 **METADATA hard rules (violation = auto-fail)**:
+     - **Time**: Only use time explicitly provided in `[Photo Metadata]`. No metadata? → omit year, only write month or season ("autumn"/"OCT"), never guess the year
+     - **Location**: Only use location from metadata OR landmarks directly visible in the image (signs/logos/landmarks). Can't tell? → write broad area only ("southern China" not guessing "Guilin"), or omit entirely
+     - **Better to write nothing than write something wrong** — user sees a place they've never been = instant 0 score
    - 人物内心 → 轻盈手写，融入而非突出
    - 标题设计师 →
      - **字号用占比描述**：letters tall enough to span 18-25% of frame height（禁止说 "big" 或 "large"，没有意义）
