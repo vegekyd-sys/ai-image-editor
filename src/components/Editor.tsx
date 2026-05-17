@@ -34,7 +34,7 @@ import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
 import { containRect, coverRect } from '@/lib/image/geometry';
-import { extractPhotoMetadata } from '@/lib/image/metadata';
+import { extractPhotoMetadata, enrichMetadataLocation } from '@/lib/image/metadata';
 import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
@@ -1393,98 +1393,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     // currentMsgId and agentMsgIds are now managed by makeAgentCallbacks factory
 
-    // Include pre-computed image description only when viewing a real snapshot (not a draft/preview)
-    // Draft's image may differ significantly from the parent snapshot's description — skip to avoid mismatch
-    const isViewingDraft = contextSnapshotIndex !== viewIndexRef.current;
-    const currentDescription = isViewingDraft ? undefined : snapshotsRef.current[contextSnapshotIndex]?.description;
-    const descriptionContext = currentDescription
-      ? `[图片分析结果]\n${currentDescription}\n\n`
-      : '';
-
-    // Build multi-turn context: include both user and assistant messages for full conversation history
-    // Large context model (1M tokens) — no need to truncate aggressively
-    const recentMessages = messages
-      .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
-      .slice(-200)
-      .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 2000)}`)
-      .join('\n');
-    const historyContext = recentMessages
-      ? `[对话历史]\n${recentMessages}\n\n`
-      : '';
-
-    // Inject current tips into the prompt so agent can reference them
-    const currentTipsForPrompt = snapshotsRef.current[contextSnapshotIndex]?.tips ?? [];
-    const tipsContext = currentTipsForPrompt.length > 0
-      ? `[当前TipsBar中的编辑建议]\n${currentTipsForPrompt.map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`).join('\n')}\n\n`
-      : '';
-
-    // Warn Claude if user is editing an intermediate snapshot (not the latest)
-    const isIntermediateSnapshot = contextSnapshotIndex < snapshotsRef.current.length - 1;
-    const snapshotWarning = isIntermediateSnapshot
-      ? `[重要提示] 用户当前正在编辑的是第 ${contextSnapshotIndex + 1} 个版本（共 ${snapshotsRef.current.length} 个），不是最新版本。对话历史描述的是其他版本的状态，与当前图片无关。请完全以传入的当前图片为准，忽略对话历史中对图片内容的描述。\n\n`
-      : '';
-
-    // Inject photo metadata (location + time) for original snapshot
-    const originalMeta = snapshotsRef.current[0]?.metadata;
-    const metaLines: string[] = [];
-    if (originalMeta?.takenAt) metaLines.push(`拍摄时间：${originalMeta.takenAt}`);
-    if (originalMeta?.location) metaLines.push(`拍摄地点：${originalMeta.location}`);
-    const metaContext = metaLines.length > 0
-      ? `[照片元数据]\n${metaLines.join('\n')}\n\n`
-      : '';
-
-    const refContext = attachedImages?.length
-      ? (() => {
-          const total = snapshotsRef.current.length;
-          const startIdx = total - attachedImages.length + 1;
-          return `[User uploaded ${attachedImages.length} reference image(s) — added to Image Index as <<<image_${startIdx}>>>${attachedImages.length > 1 ? ` to <<<image_${total}>>>` : ''}. Call analyze_image to see them, then use reference_image_indices to include them in generate_image.]\n\n`;
-        })()
-      : '';
-
-    // Build image index for multi-snapshot navigation — only when >1 snapshot
-    const snapshotIndexContext = snapshotsRef.current.length > 1
-      ? `[图片索引 / Image Index — ${snapshotsRef.current.length} snapshots]\n${snapshotsRef.current.map((s, i) => {
-          const isRef = s.type === 'reference';
-          const isDesign = !!s.design;
-          const desc = isRef
-            ? (s.description || 'Skill reference image')
-            : isDesign
-              ? (s.description || '[design/video]')
-              : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
-                ? (s.description || '原图 / Original upload')
-                : (s.description || '(use analyze_image to see this snapshot)');
-          const tag = isRef ? ' (reference)' : isDesign ? ' (design)' : '';
-          const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
-          const codePath = isDesign && s.designPath ? ` [code: ${s.designPath}]` : '';
-          return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${codePath}`;
-        }).join('\n')}\n\n`
-      : '';
-
-    // When viewing a design snapshot, warn Agent not to analyze_image (it would see a poster/blank, not the actual design)
-    const currentSnapIsDesign = snapIdx !== null && !!snapshotsRef.current[snapIdx]?.design;
-    const designWarning = currentSnapIsDesign
-      ? `[DESIGN MODE] You are viewing a design/video (not a photo). The design code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this design.\n\n`
-      : '';
-
-    const annotationWarning = overrideImage
-      ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use image_index to switch to another snapshot. Call analyze_image first (without image_index) to see the annotations, then generate_image (without image_index) to edit.\n\n`
-      : '';
-
-    // When viewing a draft/preview (tip not yet committed), warn agent to edit the current image directly
+    // UI state flags — server-side buildPromptContext handles all project context
     const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
-    const draftWarning = isDraftMode
-      ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the image index. Omit image_index to edit this draft directly.\n\n`
-      : '';
-
-    // Inject current design editable state so Agent sees GUI changes
-    const ctxSnap = snapshotsRef.current[contextSnapshotIndex];
-    const designContext = ctxSnap?.design?.editables?.length
-      ? `[Design Editable State]\n${ctxSnap.design.editables.map(f =>
-          `- ${f.label} (${f.propKey}): "${(ctxSnap.design!.props as Record<string, unknown>)?.[f.propKey] ?? ''}"`
-        ).join('\n')}\nUser may have edited these values in the GUI. To modify the design, use run_code with { type: 'patch', edits: [...] }.\n\n`
-      : '';
-
-    const fullPrompt = `${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
@@ -1583,7 +1493,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
+        { prompt: text, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1593,7 +1503,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     } finally {
       setIsAgentActive(false);
     }
-  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
+  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
 
   // Abort the current agent request and discard its partial response
   const handleAgentAbort = useCallback(() => {
@@ -2033,6 +1943,16 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       cacheImage(`snap:${snapId}`, base64);
       // Auto-analyze the uploaded photo
       runAutoAnalysis(snapId, base64);
+
+      // Async: enrich metadata with location (non-blocking)
+      if (metadata?.raw?.lat !== undefined && metadata?.raw?.lng !== undefined && !metadata.location) {
+        enrichMetadataLocation(metadata).then(enriched => {
+          if (enriched.location) {
+            setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, metadata: enriched } : s));
+            snapshotsRef.current = snapshotsRef.current.map(s => s.id === snapId ? { ...s, metadata: enriched } : s);
+          }
+        });
+      }
     } catch (err) {
       console.error('Image upload error:', err);
       URL.revokeObjectURL(previewUrl);

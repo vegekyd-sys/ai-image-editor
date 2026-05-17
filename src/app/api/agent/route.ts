@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, videoModel,
-            headless, hasAnnotation, isDraft } = await req.json();
+            headless, hasAnnotation, isDraft, referenceImageCount } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
@@ -168,31 +168,26 @@ export async function POST(req: NextRequest) {
           const allSkills = await getAllSkills(supabase, userId);
           const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
 
-          // Headless mode: build context from DB instead of using frontend-provided context
-          let agentPrompt = prompt ?? '';
-          let agentImage = image;
-          let agentOriginalImage = originalImage;
-          let agentSnapshotImages = snapshotImages?.length ? snapshotImages : undefined;
-          let agentCurrentSnapshotIndex = currentSnapshotIndex;
-          let agentCurrentDesign = currentDesign || undefined;
-          let agentHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+          // Unified context: both frontend and headless use buildPromptContext
+          const { buildPromptContext } = await import('@/lib/agent-context');
+          const ctx = await buildPromptContext(projectId, supabase, userId, {
+            userMessage: prompt ?? '',
+            currentSnapshotIndex,
+            hasAnnotation,
+            isDraft,
+            referenceImageCount: referenceImageCount || undefined,
+          });
+
+          let agentPrompt = ctx.fullPrompt;
+          // Frontend may pass images directly (new uploads not yet in DB)
+          let agentImage = image || ctx.snapshotImages[ctx.currentSnapshotIndex] || '';
+          let agentOriginalImage = originalImage || ctx.originalImage;
+          let agentSnapshotImages = snapshotImages?.length ? snapshotImages : ctx.snapshotImages;
+          let agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
+          let agentCurrentDesign = currentDesign || ctx.currentDesign;
+          let agentHistory = ctx.history;
 
           if (headless) {
-            const { buildPromptContext } = await import('@/lib/agent-context');
-            const ctx = await buildPromptContext(projectId, supabase, userId, {
-              userMessage: prompt ?? '',
-              currentSnapshotIndex,
-              hasAnnotation,
-              isDraft,
-            });
-            agentPrompt = ctx.fullPrompt;
-            agentImage = ctx.snapshotImages[ctx.currentSnapshotIndex] || '';
-            agentOriginalImage = ctx.originalImage;
-            agentSnapshotImages = ctx.snapshotImages;
-            agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
-            agentCurrentDesign = ctx.currentDesign;
-            agentHistory = ctx.history;
-
             // Write user message to DB (frontend does this itself)
             await supabase.from('messages').insert({
               id: crypto.randomUUID(),
@@ -201,23 +196,6 @@ export async function POST(req: NextRequest) {
               content: prompt ?? '',
               has_image: false,
             });
-          } else if (isNormalMode) {
-            // Frontend path: fetch history from DB so Bedrock sees real multi-turn
-            // structure (previously history was stuffed into user content as a
-            // single string, which broke per-turn cachePoint).
-            const { data: msgs } = await supabase
-              .from('messages')
-              .select('role, content')
-              .eq('project_id', projectId)
-              .order('created_at', { ascending: true });
-            const hist = (msgs ?? [])
-              .filter((m: { role: string; content: string }) => m.content && (m.role === 'user' || m.role === 'assistant'))
-              .map((m: { role: 'user' | 'assistant'; content: string }) => ({ role: m.role, content: m.content }));
-            // Drop trailing user messages — the current turn's prompt may or may
-            // not already be in DB (frontend writes fire-and-forget). Keep only
-            // through the last assistant turn to avoid duplicating it.
-            while (hist.length && hist[hist.length - 1].role === 'user') hist.pop();
-            agentHistory = hist.slice(-50);
           }
 
           // Normal agent request — SSE heartbeat every 10s to prevent proxy idle timeout

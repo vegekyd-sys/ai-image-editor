@@ -3,15 +3,10 @@ import { isHeicFile } from '@/lib/image/heic';
 import { buildPhotoMetadata, extractPhotoMetadataCore } from '@/lib/image/metadataShared';
 
 /** Extract EXIF metadata (location + time) from a photo file.
- *  Returns immediately with takenAt + GPS coords.
- *  Location name is fetched async (fire-and-forget) via server-side reverse geocode. */
+ *  Returns takenAt + GPS coords immediately (non-blocking).
+ *  Location name requires a separate reverseGeocode call — see enrichMetadataLocation. */
 export async function extractPhotoMetadata(file: File): Promise<PhotoMetadata | undefined> {
   const local = await extractPhotoMetadataLocally(file);
-
-  // Fire-and-forget: reverse geocode via our API (server-side, not blocked in China)
-  if (local?.raw?.lat !== undefined && local?.raw?.lng !== undefined && !local.location) {
-    reverseGeocodeAsync(local.raw.lat, local.raw.lng);
-  }
 
   const needsServerFallback = isHeicFile(file) || !local?.takenAt;
   if (!needsServerFallback) return local;
@@ -20,20 +15,27 @@ export async function extractPhotoMetadata(file: File): Promise<PhotoMetadata | 
   return mergePhotoMetadata(local, server);
 }
 
-/** Fire-and-forget: call server API to reverse geocode, store result in sessionStorage */
-function reverseGeocodeAsync(lat: number, lng: number): void {
-  fetch('/api/reverse-geocode', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lat, lng }),
-  })
-    .then(res => res.ok ? res.json() : null)
-    .then(data => {
-      if (data?.location) {
-        sessionStorage.setItem('pendingLocation', data.location);
-      }
-    })
-    .catch(() => {});
+/** Async: fetch human-readable location name from lat/lng via server-side reverse geocode.
+ *  Returns enriched metadata with location field, or original if geocode fails. */
+export async function enrichMetadataLocation(metadata: PhotoMetadata): Promise<PhotoMetadata> {
+  if (metadata.location) return metadata;
+  const lat = metadata.raw?.lat;
+  const lng = metadata.raw?.lng;
+  if (lat === undefined || lng === undefined) return metadata;
+
+  try {
+    const res = await fetch('/api/reverse-geocode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lng }),
+    });
+    if (!res.ok) return metadata;
+    const data = await res.json();
+    if (data?.location) {
+      return { ...metadata, location: data.location };
+    }
+  } catch { /* geocode failed, return as-is */ }
+  return metadata;
 }
 
 async function extractPhotoMetadataLocally(file: File): Promise<PhotoMetadata | undefined> {

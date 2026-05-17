@@ -72,6 +72,7 @@ export function useProject(projectId: string, userId: string) {
       description: s.description ?? undefined,
       ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
       ...(s.design_path ? { designPath: s.design_path } : {}),
+      ...(s.metadata ? { metadata: s.metadata } : {}),
     }))
 
     // Load persisted designs from workspace (async, non-blocking)
@@ -232,6 +233,7 @@ export function useProject(projectId: string, userId: string) {
           ...(snapshot.description ? { description: snapshot.description } : {}),
           ...(snapshot.type ? { type: snapshot.type } : {}),
           ...(designPath ? { design_path: designPath } : {}),
+          ...(snapshot.metadata ? { metadata: snapshot.metadata } : {}),
         }, { onConflict: 'id' })
 
         if (error) console.warn('saveSnapshot error:', error)

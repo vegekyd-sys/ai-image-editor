@@ -111,6 +111,7 @@ export interface DbSnapshot {
   description?: string;
   type?: string;
   design_path?: string;
+  metadata?: PhotoMetadata;
 }
 
 export interface DbMessage {
