@@ -692,15 +692,22 @@ function ProjectsPageInner() {
                 ) : attachedFiles.length === 1 ? (
                   <>
                     {attachedPreviews[0] && attachedPreviews[0] !== 'heic-pending' ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={attachedPreviews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={attachedPreviews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {creating && attachedFiles[0]?.type.startsWith('video/') && (
+                          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
+                            <Spinner size={16} />
+                          </div>
+                        )}
+                      </>
                     ) : attachedPreviews[0] === null ? (
                       <Spinner size={16} />
                     ) : (
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.7)" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14,2 14,8 20,8" /></svg>
                     )}
-                    <div style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 2 }}
-                      onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]);  }}>✕</div>
+                    {!creating && <div style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 2 }}
+                      onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]);  }}>✕</div>}
                   </>
                 ) : (
                   /* 2+ images: Desktop = static stack, Mobile = swipeable */
@@ -974,15 +981,14 @@ function ProjectsPageInner() {
                       fontFamily: 'var(--font-geist-sans), sans-serif',
                     }}
                   >
-                    {creating ? <Spinner size={12} /> : (
-                      <>
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                          <line x1="12" y1="5" x2="12" y2="19" />
-                          <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                        Create
-                      </>
+                    {creating && <Spinner size={12} />}
+                    {!creating && (
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
                     )}
+                    Create
                   </button>
                 </div>
               </div>
