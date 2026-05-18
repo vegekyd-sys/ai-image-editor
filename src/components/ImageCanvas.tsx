@@ -685,12 +685,11 @@ export default function ImageCanvas({
 
   // Preload all images + videos in design code via browser cache, then call onReady
   const preloadDesignAssets = useCallback((code: string): Promise<void> => {
-    const videoUrls = new Set<string>();
-    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi)) videoUrls.add(m[0]);
-
+    // Video URLs are cached by RemotionRenderer's resolveVideoUrls — only preload images here
+    const videoExts = /\.(mp4|webm|mov)([^\s"'`<>)}\]]*)?$/i;
     const imageUrls = new Set<string>();
     for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi)) {
-      if (!videoUrls.has(m[0])) imageUrls.add(m[0]);
+      if (!videoExts.test(m[0])) imageUrls.add(m[0]);
     }
     for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi)) imageUrls.add(m[0]);
 
@@ -701,19 +700,8 @@ export default function ImageCanvas({
       img.src = url;
     }));
 
-    const videoPromises = [...videoUrls].map(url => new Promise<void>(resolve => {
-      const video = document.createElement('video');
-      video.preload = 'auto';
-      video.muted = true;
-      video.oncanplaythrough = () => { video.removeAttribute('src'); video.load(); resolve(); };
-      video.onerror = () => resolve();
-      video.src = url;
-      setTimeout(() => resolve(), 8000);
-    }));
-
-    const allPromises = [...imagePromises, ...videoPromises];
-    if (allPromises.length === 0) return Promise.resolve();
-    return Promise.all(allPromises).then(() => {});
+    if (imagePromises.length === 0) return Promise.resolve();
+    return Promise.all(imagePromises).then(() => {});
   }, []);
 
   // Reset + auto-play when switching to a design snapshot

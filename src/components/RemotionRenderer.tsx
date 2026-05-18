@@ -218,18 +218,14 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const durationInFrames = design.animation
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
-  const blobUrlsRef = useRef<string[]>([]);
-
   useEffect(() => {
     let cancelled = false;
     onLoading?.(true);
     (async () => {
       try {
         await preloadBabel().catch(() => {});
-        // Resolve video URLs to blob (same-origin, instant playback on scene switch)
-        const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
-        if (cancelled) { videoBlobUrls.forEach(u => URL.revokeObjectURL(u)); return; }
-        blobUrlsRef.current = videoBlobUrls;
+        const { code: videoResolved } = await resolveVideoUrls(design.code);
+        if (cancelled) return;
         await loadGoogleFontsFromCode(videoResolved);
         if (cancelled) return;
         const comp = evalRemotionJSX(videoResolved);
@@ -251,11 +247,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         onLoading?.(false);
       }
     })();
-    return () => {
-      cancelled = true;
-      blobUrlsRef.current.forEach(u => URL.revokeObjectURL(u));
-      blobUrlsRef.current = [];
-    };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
@@ -331,6 +323,9 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
 // ─── MP4 Export ──────────────────────────────────────────────────────────────
 
+// Session-level cache: video URL → blob URL (avoids re-downloading on timeline switch)
+const videoBlobCache = new Map<string, string>();
+
 /** Pre-fetch remote video URLs via server proxy → blob URLs (fixes CORS for renderMediaOnWeb) */
 async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   const videoExtPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi;
@@ -338,9 +333,13 @@ async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls:
   for (const m of code.matchAll(videoExtPattern)) urls.add(m[0]);
   if (urls.size === 0) return { code, blobUrls: [] };
   let resolved = code;
-  const blobUrls: string[] = [];
   await Promise.all([...urls].map(async (url) => {
     try {
+      const cached = videoBlobCache.get(url);
+      if (cached) {
+        while (resolved.includes(url)) resolved = resolved.replace(url, cached);
+        return;
+      }
       const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(url)}&full=1`;
       const res = await fetch(proxyUrl);
       if (!res.ok) throw new Error(`Video proxy failed: ${res.status}`);
@@ -354,13 +353,14 @@ async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls:
       }
       const videoBlob = new Blob([blob], { type: 'video/mp4' });
       const blobUrl = URL.createObjectURL(videoBlob);
-      blobUrls.push(blobUrl);
+      videoBlobCache.set(url, blobUrl);
       while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
     } catch (e) {
       console.error('[resolveVideoUrls] failed:', url, e);
     }
   }));
-  return { code: resolved, blobUrls };
+  // blobUrls empty — lifecycle managed by videoBlobCache, not caller
+  return { code: resolved, blobUrls: [] };
 }
 
 async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
