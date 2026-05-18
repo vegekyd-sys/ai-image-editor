@@ -37,7 +37,12 @@ export async function GET(
     if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
       const isPermanent = videoMeta.videoUrl.includes('supabase.co/storage/') || videoMeta.videoUrl.includes('makaron.app/storage/')
       if (isPermanent) {
-        return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
+        // Only return completed when poster is ready (after() extracts it async)
+        const hasPoster = snap.image_url?.includes('/posters/')
+        if (!hasPoster) {
+          return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
+        }
+        return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url })
       }
       // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
       return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
