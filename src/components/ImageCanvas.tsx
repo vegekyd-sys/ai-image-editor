@@ -8,6 +8,7 @@ import AnnotationCanvas from '@/components/AnnotationCanvas';
 import DesignOverlay from '@/components/DesignOverlay';
 import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
+import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
@@ -36,6 +37,7 @@ interface ImageCanvasProps {
   isVideoEntry?: boolean;
   videoUrl?: string | null;
   videoProcessing?: boolean; // true when rendering but no videoUrl yet
+  videoFailed?: boolean;
   videoPosterImage?: string; // last snapshot image to show while processing
   isDesktop?: boolean;
   annotationMode?: boolean;
@@ -84,7 +86,7 @@ interface ImageCanvasProps {
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
-  hasVideo, isVideoEntry, videoUrl, videoProcessing, videoPosterImage, isDesktop,
+  hasVideo, isVideoEntry, videoUrl, videoProcessing, videoFailed, videoPosterImage, isDesktop,
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
@@ -1064,50 +1066,65 @@ export default function ImageCanvas({
               </div>
             )}
           </div>
-        ) : isVideoEntry && !videoUrl && videoProcessing && videoPosterImage ? (
-          /* Video processing state: show last snapshot + overlay */
+        ) : isVideoEntry && !videoUrl && (videoProcessing || videoFailed) ? (
+          /* Video processing/failed state: show placeholder + overlay */
           <div className="relative w-full h-full">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={videoPosterImage}
+              src={videoPosterImage || VIDEO_PLACEHOLDER_IMAGE}
               alt="preview"
-              className="w-full h-full object-contain select-none pointer-events-none"
+              className="w-full h-full object-cover select-none pointer-events-none"
               draggable={false}
             />
-            {/* Dim overlay on the whole image */}
-            <div className="absolute inset-0 pointer-events-none" style={{ background: 'rgba(0,0,0,0.35)' }} />
             {/* Gradient + status overlay */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
               style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 45%, transparent 100%)' }}
             >
               <div className="flex flex-col items-center gap-3" style={{ marginBottom: '15%' }}>
-                {/* Spinning ring */}
-                <div className="relative w-[72px] h-[72px] flex items-center justify-center">
-                  <svg className="absolute inset-0 w-full h-full" viewBox="0 0 72 72" fill="none">
-                    <circle cx="36" cy="36" r="32" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
-                    <circle cx="36" cy="36" r="32" stroke="url(#rg)" strokeWidth="3.5"
-                      strokeLinecap="round" strokeDasharray="50 151"
-                      style={{ animation: 'renderSpin 1.4s linear infinite', transformOrigin: '36px 36px' }}
-                    />
-                    <defs>
-                      <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#d946ef" />
-                        <stop offset="100%" stopColor="#818cf8" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="2" width="20" height="20" rx="2.18" />
-                    <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" />
-                  </svg>
-                </div>
-                <div className="flex flex-col items-center gap-1.5">
-                  <span className="text-white font-semibold tracking-wide" style={{ fontSize: '1rem' }}>{t('canvas.videoRendering')}</span>
-                  <span className="text-white/40 text-[12px]">{t('canvas.usuallyTakes')}</span>
-                </div>
+                {videoFailed ? (
+                  <>
+                    {/* Red X circle */}
+                    <div className="relative w-[72px] h-[72px] flex items-center justify-center">
+                      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                        <circle cx="24" cy="24" r="22" stroke="rgba(239,68,68,0.7)" strokeWidth="3" />
+                        <path d="M16 16l16 16M32 16l-16 16" stroke="rgba(239,68,68,0.9)" strokeWidth="3" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <div className="flex flex-col items-center gap-1.5">
+                      <span className="text-white font-semibold tracking-wide" style={{ fontSize: '1rem' }}>{t('canvas.videoFailed')}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Spinning ring */}
+                    <div className="relative w-[72px] h-[72px] flex items-center justify-center">
+                      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 72 72" fill="none">
+                        <circle cx="36" cy="36" r="32" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
+                        <circle cx="36" cy="36" r="32" stroke="url(#rg)" strokeWidth="3.5"
+                          strokeLinecap="round" strokeDasharray="50 151"
+                          style={{ animation: 'renderSpin 1.4s linear infinite', transformOrigin: '36px 36px' }}
+                        />
+                        <defs>
+                          <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#d946ef" />
+                            <stop offset="100%" stopColor="#818cf8" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="2.18" />
+                        <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" />
+                      </svg>
+                    </div>
+                    <div className="flex flex-col items-center gap-1.5">
+                      <span className="text-white font-semibold tracking-wide" style={{ fontSize: '1rem' }}>{t('canvas.videoRendering')}</span>
+                      <span className="text-white/40 text-[12px]">{t('canvas.usuallyTakes')}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-            <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+            {videoProcessing && <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>}
           </div>
         ) : currentDesign && !isComparing ? (
           /* Animated design (or draft preview) — Remotion Player with custom controls (same as video) */

@@ -19,7 +19,7 @@ import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
-import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare } from '@/lib/editor/timeline-derivations';
+import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { downloadAsset } from '@/lib/editor/download';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
@@ -2349,6 +2349,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         } else if (isMulti) {
           // Multi-image: tips for all, no preview
           for (const snap of workSnapshots) {
+            if (snap.type === 'video') continue;
             tipsImage(snap.image).then(img => fetchTipsForSnapshot(snap.id, img, 'none'));
           }
         } else {
@@ -2406,6 +2407,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     if (autoFetchTriggered.current || pendingImages?.length) return;
     const lastSnap = snapshots[snapshots.length - 1];
     if (!lastSnap || lastSnap.tips.length > 0) return;
+    if (lastSnap.type === 'video') return;
     // Animated design snapshots don't need tips (still designs do)
     if (lastSnap.design?.animation) return;
     autoFetchTriggered.current = true;
@@ -2663,11 +2665,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setAnimations(prev => [newAnim, ...prev]);
       // v2: add video snapshot to snapshots array for polling
       if (isV2 && animationState.snapshotId) {
-        const posterUrl = animationState.imageUrls.find(u => u?.startsWith('http')) || '';
         const newSnap: Snapshot = {
           id: animationState.snapshotId,
-          image: posterUrl,
-          imageUrl: posterUrl || undefined,
+          image: VIDEO_PLACEHOLDER_IMAGE,
           tips: [],
           messageId: '',
           type: 'video',
@@ -3239,6 +3239,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 videoProcessing={isViewingVideoV2
                   ? (currentSnap?.videoMeta?.status === 'processing')
                   : (isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing'))}
+                videoFailed={isViewingVideoV2 ? (currentSnap?.videoMeta?.status === 'failed') : false}
                 videoPosterImage={isViewingVideoV2
                   ? (currentSnap?.image || currentSnap?.imageUrl)
                   : snapshots[snapshots.length - 1]?.image}

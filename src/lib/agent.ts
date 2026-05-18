@@ -58,7 +58,7 @@ interface AgentContext {
   animationImageUrls_?: string[];
   animationModel?: string;
   /** Video snapshot pending emit (v2) */
-  pendingVideoSnapshot?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string };
+  pendingVideoSnapshot?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta };
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<media_1>>> */
   snapshotImages: string[];
   /** 0-based index of the snapshot the user is currently viewing */
@@ -78,7 +78,7 @@ export type AgentStreamEvent =
   | { type: 'image'; image: string; usedModel?: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
   | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }
-  | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string }
+  | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta }
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'capture_frame'; frame: number; uploadPath: string; captureId: string }  // request frontend to capture a frame via renderStillOnWeb
   | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
@@ -429,7 +429,7 @@ Hard constraints (apply even before reading the guide):
           const originalUrls = imageUrls.filter((u: string) => !!u);
 
           const snapshotId = crypto.randomUUID();
-          const posterUrl = originalUrls.find(u => u && !u.endsWith('.mp4')) || originalFirstUrl || '';
+          const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
           const videoMeta: import('@/types').VideoMeta = {
             taskId,
             videoUrl: null,
@@ -447,7 +447,7 @@ Hard constraints (apply even before reading the guide):
           const { error: insertError } = await supabase.from('snapshots').insert({
             id: snapshotId,
             project_id: ctx.projectId,
-            image_url: posterUrl,
+            image_url: VIDEO_PLACEHOLDER_IMAGE,
             tips: [],
             message_id: '',
             sort_order: sortData ?? 0,
@@ -459,7 +459,7 @@ Hard constraints (apply even before reading the guide):
             throw new Error(`DB insert failed: ${insertError.message}`);
           }
 
-          ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta, posterUrl };
+          ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
 
           // Bill for video generation (per-second)
           const videoSec = duration || 10;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createVideo } from '@/lib/skills/create-video'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
+import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 30
@@ -72,7 +73,6 @@ export async function POST(req: NextRequest) {
     const taskId = skillResult.taskId
 
     const snapshotId = crypto.randomUUID()
-    const posterUrl = allSourceUrls.find((u: string) => u.startsWith('http') && !u.endsWith('.mp4')) || originalFirstUrl || ''
 
     const videoMeta: VideoMeta = {
       taskId,
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase.from('snapshots').insert({
       id: snapshotId,
       project_id: projectId,
-      image_url: posterUrl,
+      image_url: VIDEO_PLACEHOLDER_IMAGE,
       tips: [],
       message_id: '',
       sort_order: sortOrder,

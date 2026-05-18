@@ -3,6 +3,7 @@ import { getOptimizedUrl, getThumbnailUrl } from '@/lib/supabase/storage';
 import { snapFromTimeline } from './timeline-utils';
 
 export const VIDEO_TIMELINE_SENTINEL = '__VIDEO__';
+export const VIDEO_PLACEHOLDER_IMAGE = '/video-placeholder.png';
 
 export function getSnapshotTimelineImage(
   snapshot: Snapshot | undefined,

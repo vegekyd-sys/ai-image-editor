@@ -9,7 +9,7 @@ export interface AgentStreamCallbacks {
   onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onAnimationTask?: (taskId: string, prompt: string, imageUrls?: string[], model?: string) => void;
-  onVideoSnapshot?: (snapshotId: string, taskId: string, videoMeta: import('@/types').VideoMeta, posterUrl: string) => void;
+  onVideoSnapshot?: (snapshotId: string, taskId: string, videoMeta: import('@/types').VideoMeta) => void;
   onMusicTask?: (taskId: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onCaptureFrame?: (frame: number, uploadPath: string, captureId: string) => void;
@@ -117,8 +117,8 @@ export async function streamAgent(
             callbacks.onAnimationTask?.(event.taskId, event.prompt || '', event.imageUrls, event.model);
             break;
           case 'video_snapshot': {
-            const vs = event as unknown as { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta; posterUrl: string };
-            callbacks.onVideoSnapshot?.(vs.snapshotId, vs.taskId, vs.videoMeta, vs.posterUrl);
+            const vs = event as unknown as { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta };
+            callbacks.onVideoSnapshot?.(vs.snapshotId, vs.taskId, vs.videoMeta);
             break;
           }
           case 'music_task':

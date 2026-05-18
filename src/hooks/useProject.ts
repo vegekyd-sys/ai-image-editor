@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
 import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
+import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 
 interface LoadedProject {
   snapshots: Snapshot[]
@@ -66,11 +67,8 @@ export function useProject(projectId: string, userId: string) {
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
     const dbMessages: DbMessage[] = messagesRes.data ?? []
 
-    // Fallback image_url for video snapshots with empty poster (exclude .mp4 URLs)
-    const firstValidImageUrl = dbSnapshots.find(s => s.image_url?.startsWith('http') && !s.image_url.endsWith('.mp4'))?.image_url || ''
-
     const snapshots: Snapshot[] = dbSnapshots.map((s) => {
-      const imageUrl = s.image_url || (s.type === 'video' ? firstValidImageUrl : '')
+      const imageUrl = s.image_url || (s.type === 'video' ? VIDEO_PLACEHOLDER_IMAGE : '')
       return {
         id: s.id,
         image: imageUrl,
