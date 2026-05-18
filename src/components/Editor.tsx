@@ -1364,7 +1364,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[] }) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[]; uploadedVideoCount?: number }) => {
     // CUI reference images → append as new snapshots (so agent sees them in Media Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
@@ -1406,12 +1406,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         || snapshotsRef.current[draftParentIndexRef.current]?.image;
       contextSnapshotIndex = draftParentIndexRef.current;
     }
-    // Fallback to last snapshot with an actual image (design snapshots have image='')
+    // Fallback to last snapshot with an actual image (design/video snapshots have image='')
+    // Only updates currentImage for the early-return guard — contextSnapshotIndex stays
+    // faithful to viewIndex so ← YOU ARE HERE always reflects the user's actual position.
     if (!currentImage) {
       for (let i = snapshotsRef.current.length - 1; i >= 0; i--) {
         if (snapshotsRef.current[i]?.image) {
           currentImage = snapshotsRef.current[i].image;
-          contextSnapshotIndex = i;
           break;
         }
       }
@@ -1498,6 +1499,14 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         })()
       : '';
 
+    const videoUploadContext = options?.uploadedVideoCount
+      ? (() => {
+          const total = snapshotsRef.current.length;
+          const startIdx = total - options.uploadedVideoCount + 1;
+          return `[User uploaded ${options.uploadedVideoCount === 1 ? 'a video' : `${options.uploadedVideoCount} videos`} — added to Media Index as <<<media_${startIdx}>>>${options.uploadedVideoCount > 1 ? ` to <<<media_${total}>>>` : ''}]\n\n`;
+        })()
+      : '';
+
     // Build media index for multi-snapshot navigation — only when >1 snapshot
     const snapshotIndexContext = snapshotsRef.current.length > 1
       ? `[Media Index — ${snapshotsRef.current.length} items]\n${snapshotsRef.current.map((s, i) => {
@@ -1554,7 +1563,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         ).join('\n')}\nUser may have edited these values in the GUI. To modify the design, use run_code with { type: 'patch', edits: [...] }.\n\n`
       : '';
 
-    const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
+    const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${historyContext}${refContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
@@ -1805,23 +1814,17 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       });
     }
 
-    // Step 2: Build hint for agent (videos are now in snapshotsRef)
-    let finalText = text;
-    if (videos?.length) {
-      const hint = `[User uploaded ${videos.length === 1 ? 'a video' : `${videos.length} videos`}. Use analyze_video to understand the content.]`;
-      finalText = finalText ? `${finalText}\n\n${hint}` : hint;
-    }
-
-    // Step 3: Pass images + video posters for user message display
+    // Step 2: Pass images + video posters for user message display
     const displayAttachments = [
       ...(imgs || []),
       ...(videos?.map(v => v.poster) || []),
     ];
 
-    // Step 4: Only create reference snapshots from actual images (not video posters)
+    // Step 3: Only create reference snapshots from actual images (not video posters)
     // displayAttachments shown in user message bubble (includes video posters for visual)
-    handleAgentRequest(finalText, imgs?.length ? imgs : undefined, undefined, {
+    handleAgentRequest(text, imgs?.length ? imgs : undefined, undefined, {
       displayImages: displayAttachments.length > 0 ? displayAttachments : undefined,
+      uploadedVideoCount: videos?.length,
     });
   };
 
@@ -2242,7 +2245,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       });
 
       // Auto-analyze video content — use normal agent request (DB is ready by now)
-      handleAgentRequest('[System] User just uploaded a video. Use analyze_video to see what it contains, then briefly describe it to the user.', undefined, undefined, { silent: true });
+      handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount: 1 });
 
       // Return 1-based index (snapshot was appended at snapshots.length)
       return snapshots.length + 1;
@@ -2383,7 +2386,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
       // ── Step 6b: Video analysis (if videos, no prompt) ──
       if (hasVideos && !hasPrompt) {
-        handleAgentRequest('[System] User just uploaded a video. Use analyze_video to see what it contains, then briefly describe it to the user.', undefined, undefined, { silent: true });
+        handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount: pendingVideos!.length });
       }
 
       // ── Step 7: Agent request (if prompt) ──
