@@ -128,8 +128,9 @@ export async function GET(
         }
       })
 
-      // Don't return provider URL — after() will persist to Storage, next poll returns permanent URL
-      return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
+      // Return completed immediately with provider URL — frontend can play it right away
+      // after() will persist to Storage in background, subsequent loads use permanent URL
+      return NextResponse.json({ status: 'completed', videoUrl: result.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
     }
 
     if (result.status === 'failed') {
