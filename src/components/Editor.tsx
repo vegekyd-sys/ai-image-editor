@@ -468,7 +468,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const videoTimelineIndex = !isV2 && hasAnyAnimation ? timeline.length - 1 : -1;
   const currentSnapIndex = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
   const currentSnap = snapshots[currentSnapIndex];
-  const isViewingVideoV2 = isV2 && currentSnap?.type === 'video';
+  const isAtDraftSlot = isDraft && viewIndex === draftParentIndex! + 1;
+  const isViewingVideoV2 = isV2 && !isAtDraftSlot && currentSnap?.type === 'video';
   const isViewingVideoV1 = !isV2 && hasAnyAnimation && viewIndex === videoTimelineIndex;
   const isViewingVideo = isViewingVideoV1 || isViewingVideoV2;
   // Currently selected video for canvas playback (v1 only)
@@ -3552,7 +3553,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       taskId: currentSnap.videoMeta.taskId,
                       videoUrl: currentSnap.videoMeta.videoUrl,
                       prompt: currentSnap.videoMeta.prompt,
-                      snapshotUrls: [currentSnap.imageUrl || currentSnap.image],
+                      snapshotUrls: currentSnap.videoMeta.sourceUrls?.length
+                        ? currentSnap.videoMeta.sourceUrls
+                        : [currentSnap.imageUrl || currentSnap.image],
                       status: currentSnap.videoMeta.status,
                       duration: currentSnap.videoMeta.duration,
                       createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
