@@ -2,6 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { uploadImage } from '@/lib/supabase/storage'
 import { compressImageFile } from '@/lib/image/compress'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
+import type { PhotoMetadata } from '@/types'
 
 function isVideoFile(file: File): boolean {
   return file.type.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(file.name)
@@ -31,7 +32,8 @@ export async function createProject(
   userId: string,
   files: File[],
   options?: { prompt?: string; skill?: string },
-): Promise<{ projectId: string; metadata?: { takenAt?: string; location?: string } } | null> {
+  preExtractedMetadata?: PhotoMetadata,
+): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
   // Store pending data for editor page
   if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt);
   if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill);
@@ -50,7 +52,7 @@ export async function createProject(
   if (imageFiles.length <= 1 && videoFiles.length === 0) {
     const [base64, metadata, dbResult] = await Promise.all([
       compressFile(imageFiles[0]),
-      extractPhotoMetadata(imageFiles[0]),
+      preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : extractPhotoMetadata(imageFiles[0]),
       supabase.from('projects').insert({ user_id: userId, title: 'Untitled', timeline_version: 2 }).select('id').single(),
     ]);
     if (dbResult.error || !dbResult.data) throw new Error('Failed to create project');
@@ -63,7 +65,7 @@ export async function createProject(
   const firstImage = imageFiles[0] || files[0];
   const [dbResult, metadata] = await Promise.all([
     supabase.from('projects').insert({ user_id: userId, title: 'Untitled', timeline_version: 2 }).select('id').single(),
-    !isVideoFile(firstImage) ? extractPhotoMetadata(firstImage) : Promise.resolve(undefined),
+    preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : (!isVideoFile(firstImage) ? extractPhotoMetadata(firstImage) : Promise.resolve(undefined)),
   ]);
   if (dbResult.error || !dbResult.data) throw new Error('Failed to create project');
   const projectId = dbResult.data.id;

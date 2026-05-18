@@ -46,6 +46,7 @@ interface DbSnapshot {
   tips: Tip[];
   sort_order: number;
   video_meta?: Record<string, unknown>;
+  metadata?: { takenAt?: string; location?: string };
 }
 
 interface DbMessage {
@@ -65,7 +66,7 @@ export async function buildPromptContext(
   const [snapshotsRes, messagesRes] = await Promise.all([
     supabase
       .from('snapshots')
-      .select('id, image_url, description, type, design_path, tips, sort_order, video_meta')
+      .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
       .eq('project_id', projectId)
       .order('sort_order', { ascending: true }),
     supabase
@@ -93,6 +94,15 @@ export async function buildPromptContext(
   }
 
   // --- Build context blocks (same format as Editor.tsx) ---
+
+  // Photo metadata (location + time) from original snapshot
+  const originalMeta = snapshots[0]?.metadata;
+  const metaLines: string[] = [];
+  if (originalMeta?.takenAt) metaLines.push(`Time: ${originalMeta.takenAt}`);
+  if (originalMeta?.location) metaLines.push(`Location: ${originalMeta.location}`);
+  const metaContext = metaLines.length > 0
+    ? `[Photo Metadata]\n${metaLines.join('\n')}\n\n`
+    : '';
 
   // Description
   const descriptionContext = currentSnap?.description
@@ -179,7 +189,7 @@ export async function buildPromptContext(
 
   // Assemble (same order as Editor.tsx, minus historyContext — now passed
   // as structured messages[] alongside fullPrompt).
-  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map(s => s.image_url || '');
   const originalImage = snapshots[0]?.image_url || undefined;

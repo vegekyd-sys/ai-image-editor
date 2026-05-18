@@ -77,7 +77,7 @@ export function formatTakenAt(datetimeRaw?: string, lat?: number, lng?: number):
     const tzStr = utcOffset !== undefined
       ? ` (UTC${utcOffset >= 0 ? '+' : ''}${utcOffset})`
       : '';
-    return `${exifMatch[1]}年${parseInt(exifMatch[2], 10)}月${parseInt(exifMatch[3], 10)}日 ${exifMatch[4]}:${exifMatch[5]}${tzStr}`;
+    return `${exifMatch[1]}-${exifMatch[2]}-${exifMatch[3]} ${exifMatch[4]}:${exifMatch[5]}${tzStr}`;
   }
 
   const parsed = new Date(datetimeRaw);
@@ -86,7 +86,7 @@ export function formatTakenAt(datetimeRaw?: string, lat?: number, lng?: number):
   const tzStr = utcOffset !== undefined
     ? ` (UTC${utcOffset >= 0 ? '+' : ''}${utcOffset})`
     : '';
-  return `${parsed.getUTCFullYear()}年${parsed.getUTCMonth() + 1}月${parsed.getUTCDate()}日 ${`${parsed.getUTCHours()}`.padStart(2, '0')}:${`${parsed.getUTCMinutes()}`.padStart(2, '0')}${tzStr}`;
+  return `${parsed.getUTCFullYear()}-${`${parsed.getUTCMonth() + 1}`.padStart(2, '0')}-${`${parsed.getUTCDate()}`.padStart(2, '0')} ${`${parsed.getUTCHours()}`.padStart(2, '0')}:${`${parsed.getUTCMinutes()}`.padStart(2, '0')}${tzStr}`;
 }
 
 export function buildPhotoMetadata(

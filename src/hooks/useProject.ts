@@ -83,6 +83,7 @@ export function useProject(projectId: string, userId: string) {
         ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
         ...(s.design_path ? { designPath: s.design_path } : {}),
         ...(s.video_meta ? { videoMeta: s.video_meta as VideoMeta } : {}),
+        ...(s.metadata ? { metadata: s.metadata } : {}),
       }
     })
 
@@ -245,6 +246,7 @@ export function useProject(projectId: string, userId: string) {
           ...(snapshot.type ? { type: snapshot.type } : {}),
           ...(designPath ? { design_path: designPath } : {}),
           ...(snapshot.videoMeta ? { video_meta: snapshot.videoMeta } : {}),
+          ...(snapshot.metadata ? { metadata: snapshot.metadata } : {}),
         }, { onConflict: 'id' })
 
         if (error) console.warn('saveSnapshot error:', error)

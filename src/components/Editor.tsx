@@ -34,7 +34,7 @@ import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
 import { containRect, coverRect } from '@/lib/image/geometry';
-import { extractPhotoMetadata } from '@/lib/image/metadata';
+import { extractPhotoMetadata, enrichMetadataLocation } from '@/lib/image/metadata';
 import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
@@ -1662,7 +1662,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1672,7 +1672,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     } finally {
       setIsAgentActive(false);
     }
-  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, messages, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
+  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
 
   // Abort the current agent request and discard its partial response
   const handleAgentAbort = useCallback(() => {
@@ -2146,18 +2146,17 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       const base64 = await compressImageFile(file, 2048, 0.92);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
 
-      // Start tips generation immediately with compressed image
-      const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '' };
+      // Await metadata (exifr local parse ~10-50ms, fast enough to not block UX)
+      const metadata = await metadataPromise;
+
+      // Start tips generation with metadata available on snapshot
+      const newSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '', metadata };
       setSnapshots([newSnapshot]);
       snapshotsRef.current = [newSnapshot];
       const tipsImage = await compressBase64Image(base64, 600_000);
       fetchTipsForSnapshot(snapId, tipsImage, 'full');
 
-      // Attach metadata when available
-      const metadata = await metadataPromise;
-
-      // Update snapshot image with final base64 + metadata
-      const finalSnapshot: Snapshot = { id: snapId, image: base64, tips: [], messageId: '', metadata };
+      const finalSnapshot = newSnapshot;
       setSnapshots([finalSnapshot]);
       snapshotsRef.current = [finalSnapshot];
       onSaveSnapshot?.(finalSnapshot, 0, (url) => {
@@ -2166,6 +2165,16 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       cacheImage(`snap:${snapId}`, base64);
       // Auto-analyze the uploaded photo
       runAutoAnalysis(snapId, base64);
+
+      // Async: enrich metadata with location (non-blocking)
+      if (metadata?.raw?.lat !== undefined && metadata?.raw?.lng !== undefined && !metadata.location) {
+        enrichMetadataLocation(metadata).then(enriched => {
+          if (enriched.location) {
+            setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, metadata: enriched } : s));
+            snapshotsRef.current = snapshotsRef.current.map(s => s.id === snapId ? { ...s, metadata: enriched } : s);
+          }
+        });
+      }
     } catch (err) {
       console.error('Image upload error:', err);
       URL.revokeObjectURL(previewUrl);

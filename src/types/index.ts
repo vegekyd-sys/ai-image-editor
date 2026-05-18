@@ -113,6 +113,7 @@ export interface DbSnapshot {
   type?: string;
   design_path?: string;
   video_meta?: VideoMeta;
+  metadata?: PhotoMetadata;
 }
 
 export interface DbMessage {

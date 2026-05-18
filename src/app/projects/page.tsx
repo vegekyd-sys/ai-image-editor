@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cacheProjectsList } from '@/lib/imageCache'
 import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
+import { extractPhotoMetadata } from '@/lib/image/metadata'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
 import { createProject } from '@/lib/createProject'
@@ -75,6 +76,7 @@ function ProjectsPageInner() {
   const [creating, setCreating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputBoxRef = useRef<HTMLDivElement>(null)
+  const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
   const [inputText, setInputText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
@@ -179,6 +181,10 @@ function ProjectsPageInner() {
   // Shared helper: process new files and append to attached arrays
   const addFiles = useCallback(async (newFiles: File[]) => {
     if (creating || newFiles.length === 0) return
+    // Extract metadata from the first original file (before HEIC conversion loses EXIF)
+    if (newFiles[0] && !extractedMetadataRef.current) {
+      extractPhotoMetadata(newFiles[0]).then(m => { extractedMetadataRef.current = m; });
+    }
     for (const file of newFiles) {
       // Check limit using latest state
       let atLimit = false
@@ -455,7 +461,7 @@ function ProjectsPageInner() {
       const opts: { prompt?: string; skill?: string } = {}
       if (prompt) opts.prompt = prompt
       if (selectedSkill) opts.skill = selectedSkill
-      const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined)
+      const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined, extractedMetadataRef.current)
       if (!result) throw new Error('Failed to create project')
       router.push(`/projects/${result.projectId}`)
     } catch (err) {

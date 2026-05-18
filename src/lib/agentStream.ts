@@ -44,6 +44,9 @@ export async function streamAgent(
     snapshotImages?: string[];
     currentSnapshotIndex?: number;
     isNsfw?: boolean;
+    hasAnnotation?: boolean;
+    isDraft?: boolean;
+    referenceImageCount?: number;
   },
   callbacks: AgentStreamCallbacks,
   signal?: AbortSignal,

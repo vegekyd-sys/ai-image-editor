@@ -1869,10 +1869,10 @@ export async function* streamTipsWithClaude(
 
   // Build metadata context string
   const metaLines: string[] = [];
-  if (metadata?.takenAt) metaLines.push(`拍摄时间：${metadata.takenAt}`);
-  if (metadata?.location) metaLines.push(`拍摄地点：${metadata.location}`);
+  if (metadata?.takenAt) metaLines.push(`Date taken: ${metadata.takenAt}`);
+  if (metadata?.location) metaLines.push(`Location: ${metadata.location}`);
   const metaContext = metaLines.length > 0
-    ? `[照片元数据]\n${metaLines.join('\n')}\n（可用于更贴切的创意联想，例如地点特色元素、时间对应的光线氛围等）\n\n`
+    ? `[Photo Metadata]\n${metaLines.join('\n')}\n(Use for creative inspiration: local landmarks, time-of-day lighting, seasonal elements, etc.)\n\n`
     : '';
 
   const userPrompt = `${metaContext}在生成建议之前，先分析这张图片：判断人脸大小；识别画面中的具体物品/食物/道具；判断照片情绪基调。
