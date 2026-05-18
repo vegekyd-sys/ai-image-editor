@@ -81,9 +81,11 @@ export async function buildPromptContext(
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
 
-  // Load design from workspace if current snapshot has one
+  // Load design from workspace if current snapshot has one (skip for video snapshots —
+  // their design_path is only a Remotion playback wrapper, not user-editable code)
   let currentDesign: DesignPayload | undefined;
-  if (currentSnap?.design_path) {
+  const currentSnapIsVideo = currentSnap?.type === 'video';
+  if (currentSnap?.design_path && !currentSnapIsVideo) {
     try {
       const file = await workspace.readFile(currentSnap.design_path, supabase, userId);
       if (file) currentDesign = JSON.parse(file.content);
@@ -141,13 +143,17 @@ export async function buildPromptContext(
           : isRef ? 'reference' : isDesign ? 'design' : 'image';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
         const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';
-        const codePath = s.design_path ? ` [code: ${s.design_path}]` : '';
+        const codePath = s.design_path && !isVideo ? ` [code: ${s.design_path}]` : '';
         return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${codePath}`;
       }).join('\n')}\n\n`
     : '';
 
-  // Design warning
-  const designWarning = currentDesign
+  // Video/Design mode warnings (mutually exclusive)
+  const videoWarning = currentSnapIsVideo
+    ? `[VIDEO MODE] You are viewing a video. Use analyze_video to understand its content. Do NOT read or patch its design code — that is only a playback wrapper.\n\n`
+    : '';
+
+  const designWarning = !currentSnapIsVideo && currentDesign
     ? `[DESIGN MODE] You are viewing a design/video (not a photo). The design code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this design.\n\n`
     : '';
 
@@ -173,7 +179,7 @@ export async function buildPromptContext(
 
   // Assemble (same order as Editor.tsx, minus historyContext — now passed
   // as structured messages[] alongside fullPrompt).
-  const fullPrompt = `${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map(s => s.image_url || '');
   const originalImage = snapshots[0]?.image_url || undefined;

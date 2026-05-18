@@ -1518,13 +1518,20 @@ const isTipsFetchingRef = useRef(isTipsFetching);
                   : (s.description || '(use analyze_image to see this snapshot)');
           const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
           const videoTag = isVid && s.videoMeta?.videoUrl ? ` [video: ${s.videoMeta.videoUrl}]` : '';
-          const codePath = s.designPath ? ` [code: ${s.designPath}]` : '';
+          const codePath = s.designPath && !isVid ? ` [code: ${s.designPath}]` : '';
           return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${codePath}`;
         }).join('\n')}\n\n`
       : '';
 
-    // When viewing a design snapshot, warn Agent not to analyze_image (it would see a poster/blank, not the actual design)
-    const currentSnapIsDesign = snapIdx !== null && !!snapshotsRef.current[snapIdx]?.design;
+    // Video/Design mode warnings (mutually exclusive)
+    const currentSnapObj = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
+    const currentSnapIsVideo = currentSnapObj?.type === 'video';
+    const currentSnapIsDesign = !currentSnapIsVideo && !!currentSnapObj?.design;
+
+    const videoWarning = currentSnapIsVideo
+      ? `[VIDEO MODE] You are viewing a video. Use analyze_video to understand its content. Do NOT read or patch its design code — that is only a playback wrapper.\n\n`
+      : '';
+
     const designWarning = currentSnapIsDesign
       ? `[DESIGN MODE] You are viewing a design/video (not a photo). The design code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this design.\n\n`
       : '';
@@ -1539,15 +1546,15 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the media index. Omit media_index to edit this draft directly.\n\n`
       : '';
 
-    // Inject current design editable state so Agent sees GUI changes
+    // Inject current design editable state so Agent sees GUI changes (skip for video snapshots)
     const ctxSnap = snapshotsRef.current[contextSnapshotIndex];
-    const designContext = ctxSnap?.design?.editables?.length
+    const designContext = ctxSnap?.type !== 'video' && ctxSnap?.design?.editables?.length
       ? `[Design Editable State]\n${ctxSnap.design.editables.map(f =>
           `- ${f.label} (${f.propKey}): "${(ctxSnap.design!.props as Record<string, unknown>)?.[f.propKey] ?? ''}"`
         ).join('\n')}\nUser may have edited these values in the GUI. To modify the design, use run_code with { type: 'patch', edits: [...] }.\n\n`
       : '';
 
-    const fullPrompt = `${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
+    const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${historyContext}${refContext}[User request — detect language and reply in the same language]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
@@ -1646,7 +1653,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
+        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}) },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
