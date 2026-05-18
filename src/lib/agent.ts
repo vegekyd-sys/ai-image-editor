@@ -1529,6 +1529,11 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: isEnLocale
             ? (q ? `Analyzing image: ${q.slice(0, 50)}` : 'Analyzing image')
             : (q ? `分析图片：${q.slice(0, 40)}` : '分析图片') };
+        } else if (event.toolName === 'analyze_video') {
+          const q = (event.input as { question?: string }).question;
+          yield { type: 'status', text: isEnLocale
+            ? (q ? `Analyzing video: ${q.slice(0, 50)}` : 'Analyzing video')
+            : (q ? `分析视频：${q.slice(0, 40)}` : '分析视频') };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number };
           const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
@@ -1620,7 +1625,7 @@ export async function* runMakaronAgent(
         yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
 
         // Emit image_analyzed event so frontend can save the description
-        if (toolName === 'analyze_image') {
+        if (toolName === 'analyze_image' || toolName === 'analyze_video') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const analyzeInput = (event as any).input as { media_index?: number } | undefined;
           const analyzedIdx = analyzeInput?.media_index ?? (ctx.currentSnapshotIndex + 1);
