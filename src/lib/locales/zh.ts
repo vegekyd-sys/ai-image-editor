@@ -132,6 +132,7 @@ const zh = {
   'animate.aiAnalyzing': 'AI 正在分析照片...',
   'animate.storyPlaceholder': '描述你的视频故事...',
   'animate.storyLabel': '✨ 视频故事',
+  'animate.scriptLabel': '✨ 视频脚本',
   'animate.hintLabel': '脚本需求',
   'animate.hintPlaceholder': '如：电影感、慢镜头、情感向...',
   'animate.noScript': '（无脚本）',

@@ -4,7 +4,6 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ModelId } from './models/types';
-import { filterAndRemapImages } from './kling';
 import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
 import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
@@ -423,18 +422,20 @@ Hard constraints (apply even before reading the guide):
           const taskId = skillResult.taskId;
 
           // Persist to DB as video snapshot (all new videos go here)
+          // Store original prompt + full imageUrls so detail view shows correct @N indices
+          // (createVideo already handles filterAndRemapImages internally for the model)
           const { getSupabaseAdmin } = await import('@/lib/supabase/service');
           const supabase = getSupabaseAdmin();
-          const { filteredImages, finalPrompt } = filterAndRemapImages(story_prompt, imageUrls);
+          const originalUrls = imageUrls.filter((u: string) => !!u);
 
           const snapshotId = crypto.randomUUID();
-          const posterUrl = filteredImages.find(u => u && !u.endsWith('.mp4')) || originalFirstUrl || '';
+          const posterUrl = originalUrls.find(u => u && !u.endsWith('.mp4')) || originalFirstUrl || '';
           const videoMeta: import('@/types').VideoMeta = {
             taskId,
             videoUrl: null,
-            prompt: finalPrompt,
+            prompt: story_prompt,
             sourceSnapshotIds: [],
-            sourceUrls: filteredImages.length > 0 ? filteredImages : (originalFirstUrl ? [originalFirstUrl] : []),
+            sourceUrls: originalUrls.length > 0 ? originalUrls : (originalFirstUrl ? [originalFirstUrl] : []),
             status: 'processing',
             duration: duration || null,
             model: videoModel as import('@/types').VideoModel,

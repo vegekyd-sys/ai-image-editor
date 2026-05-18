@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Snapshot, ProjectAnimation } from '@/types';
 import type { AnimationState } from '@/components/Editor';
 import { useLocale } from '@/lib/i18n';
+import MediaRefText from '@/components/MediaRefText';
 
 interface AnimateSheetProps {
   snapshots: Snapshot[];
@@ -123,7 +124,10 @@ export default function AnimateSheet({
   const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1;
   const canGenerateScript = activeUrls.length >= 1 && (status === 'idle' || status === 'error' || status === 'ready');
 
-  const detailUrls = detailAnimation?.snapshotUrls ?? [];
+  // Detail filmstrip: use ALL snapshots (unfiltered) so @N matches Agent's Media Index
+  const detailUrls = snapshots.length > 0
+    ? snapshots.map(s => s.imageUrl || s.image || '')
+    : (detailAnimation?.snapshotUrls ?? []);
   const detailPrompt = detailAnimation?.prompt ?? '';
   const detailDuration = detailAnimation?.duration;
 
@@ -222,48 +226,16 @@ export default function AnimateSheet({
           {/* ─── DETAIL MODE ─── */}
           {isDetail ? (
             <>
-              {/* Filmstrip — read-only */}
+              {/* Script — read-only with clickable media refs */}
               <div style={{
-                display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16,
+                color: 'rgba(255,255,255,0.84)',
+                fontSize: isDesktop ? '17px' : '17px', lineHeight: 1.6,
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                marginBottom: 16,
               }}>
-                {detailUrls.filter(Boolean).map((url, i) => (
-                  <div key={i} className="animate-sheet-thumb" style={{
-                    flexShrink: 0, width: thumbSize, height: thumbSize, borderRadius: 10,
-                    overflow: 'hidden', background: 'rgba(255,255,255,0.04)', position: 'relative',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                  }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt={`snapshot ${i + 1}`}
-                      style={{ width: thumbSize, height: thumbSize, objectFit: 'cover', display: 'block' }} />
-                    <div style={{
-                      position: 'absolute', bottom: 2, right: 3,
-                      fontSize: '0.55rem', color: 'rgba(255,255,255,0.8)',
-                      background: 'rgba(0,0,0,0.6)', borderRadius: 3, padding: '0px 4px',
-                      fontWeight: 600, letterSpacing: '0.02em',
-                    }}>@{i + 1}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Script — read-only */}
-              <div style={{ marginBottom: 14 }}>
-                <div style={{
-                  fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)',
-                  fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em',
-                }}>
-                  {t('animate.storyLabel')}
-                </div>
-                <div style={{
-                  width: '100%', minHeight: 72,
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  borderRadius: 14, padding: '12px 14px',
-                  color: 'rgba(255,255,255,0.65)',
-                  fontSize: isDesktop ? '0.85rem' : '0.95rem', lineHeight: 1.65,
-                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                }}>
-                  {detailPrompt || t('animate.noScript')}
-                </div>
+                {detailPrompt ? (
+                  <MediaRefText text={detailPrompt} mediaUrls={detailUrls} />
+                ) : <span style={{ color: 'rgba(255,255,255,0.3)' }}>{t('animate.noScript')}</span>}
               </div>
 
               {/* Model + Duration + Status pills */}
@@ -282,7 +254,7 @@ export default function AnimateSheet({
                   borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
                   fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
                 }}>
-                  {detailDuration != null ? t('animate.seconds', detailDuration) : t('animate.smart')}
+                  {detailDuration != null ? t('animate.seconds', Math.round(detailDuration)) : t('animate.smart')}
                 </div>
                 <div style={{
                   padding: '6px 12px', borderRadius: 8,

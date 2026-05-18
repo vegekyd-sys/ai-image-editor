@@ -49,7 +49,8 @@ export default function VideoResultCard({
   const completed = animations.filter(a => a.status === 'completed' && a.videoUrl);
   const processing = animations.filter(a => a.status === 'processing');
   const failed = animations.filter(a => a.status === 'failed');
-  const all = [...processing, ...completed, ...failed];
+  const abandoned = animations.filter(a => a.status === 'abandoned');
+  const all = [...processing, ...completed, ...failed, ...abandoned];
 
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
@@ -83,9 +84,10 @@ export default function VideoResultCard({
           const title = videoTitle(anim.prompt, idx);
 
           const modelLabel = anim.videoModel === 'seedance' ? 'SD' : anim.videoModel === 'upload' ? '' : 'K3';
+          const durationLabel = anim.duration ? `${Math.round(anim.duration)}s` : null;
           let statusText: React.ReactNode;
           if (isCompleted) {
-            statusText = anim.duration ? `${Math.round(anim.duration)}s${modelLabel ? ` · ${modelLabel}` : ''}` : (modelLabel || t('video.completed'));
+            statusText = durationLabel ? `${durationLabel}${modelLabel ? ` · ${modelLabel}` : ''}` : (modelLabel || t('video.completed'));
           } else if (isProcessing) {
             statusText = <><ElapsedTimer since={anim.createdAt} />{modelLabel ? ` · ${modelLabel}` : ''}</>;
           } else if (isFailed) {
@@ -139,11 +141,11 @@ export default function VideoResultCard({
                         </svg>
                       </div>
                     )}
-                    {anim.duration && (
+                    {durationLabel && (
                       <div className="absolute bottom-0.5 right-0.5 bg-black/70 rounded text-white/85 leading-none"
                         style={{ fontSize: '0.56rem', padding: '1px 4px' }}
                       >
-                        {Math.round(anim.duration)}s
+                        {durationLabel}
                       </div>
                     )}
                   </div>

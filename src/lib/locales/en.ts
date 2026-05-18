@@ -132,6 +132,7 @@ const en = {
   'animate.aiAnalyzing': 'AI analyzing photos...',
   'animate.storyPlaceholder': 'Describe your video story...',
   'animate.storyLabel': '✨ Video story',
+  'animate.scriptLabel': '✨ Video script',
   'animate.hintLabel': 'Requirements',
   'animate.hintPlaceholder': 'e.g. cinematic, slow motion, emotional...',
   'animate.noScript': '(no script)',

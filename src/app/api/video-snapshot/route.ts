@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createVideo } from '@/lib/skills/create-video'
-import { filterAndRemapImages } from '@/lib/kling'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 import type { VideoMeta } from '@/types'
 
@@ -32,7 +31,8 @@ export async function POST(req: NextRequest) {
     const creditCheck = await requireCredits(user.id, 50)
     if (!creditCheck.ok) return creditCheck.response
 
-    // Save first valid image URL (not video) for poster
+    // Save original imageUrls before mutation (for detail view display)
+    const allSourceUrls: string[] = [...imageUrls].filter((u: string) => !!u)
     const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || ''
 
     // Auto-route video references: detect video snapshots in imageUrls
@@ -70,17 +70,16 @@ export async function POST(req: NextRequest) {
     }
 
     const taskId = skillResult.taskId
-    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, imageUrls)
 
     const snapshotId = crypto.randomUUID()
-    const posterUrl = filteredImages.find((u: string) => u && !u.endsWith('.mp4')) || originalFirstUrl || ''
+    const posterUrl = allSourceUrls.find((u: string) => u.startsWith('http') && !u.endsWith('.mp4')) || originalFirstUrl || ''
 
     const videoMeta: VideoMeta = {
       taskId,
       videoUrl: null,
-      prompt: finalPrompt,
+      prompt,
       sourceSnapshotIds: sourceSnapshotIds || [],
-      sourceUrls: filteredImages.length > 0 ? filteredImages : (originalFirstUrl ? [originalFirstUrl] : []),
+      sourceUrls: allSourceUrls.length > 0 ? allSourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
       status: 'processing',
       duration: duration || null,
       model: videoModel || 'kling',

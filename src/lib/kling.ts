@@ -344,7 +344,7 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
     })
   }
 
-  // Persist to DB
+  // Persist to DB — store original prompt/images so detail view shows full context
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
   const { data: animation, error } = await supabase
@@ -353,8 +353,8 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
       project_id: projectId,
       piapi_task_id: taskId,
       status: 'processing',
-      prompt: finalPrompt,
-      snapshot_urls: filteredImages,
+      prompt,
+      snapshot_urls: imageUrls.filter(u => !!u),
     })
     .select('id')
     .single()
