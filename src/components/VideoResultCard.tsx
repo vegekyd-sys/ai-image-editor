@@ -46,8 +46,6 @@ export default function VideoResultCard({
     return clean.length > 14 ? clean.slice(0, 13) + '…' : clean;
   }
 
-  const [confirmAbandonId, setConfirmAbandonId] = useState<string | null>(null);
-
   const completed = animations.filter(a => a.status === 'completed' && a.videoUrl);
   const processing = animations.filter(a => a.status === 'processing');
   const failed = animations.filter(a => a.status === 'failed' || a.status === 'abandoned');
@@ -159,50 +157,6 @@ export default function VideoResultCard({
                     <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
                       {statusText}
                     </div>
-                    {isProcessing && anim.taskId && (
-                      confirmAbandonId === anim.taskId ? (
-                        <span className="mt-0.5 flex gap-2" style={{ fontSize: '0.56rem' }}>
-                          <span
-                            onClick={(e) => { e.stopPropagation(); setConfirmAbandonId(null); onAbandon(anim.taskId!); }}
-                            className="text-red-400/80 cursor-pointer underline"
-                          >
-                            {t('video.confirmAbandon')}
-                          </span>
-                          <span
-                            onClick={(e) => { e.stopPropagation(); setConfirmAbandonId(null); }}
-                            className="text-white/30 cursor-pointer underline"
-                          >
-                            {t('video.cancel')}
-                          </span>
-                        </span>
-                      ) : (
-                        <span
-                          onClick={(e) => { e.stopPropagation(); setConfirmAbandonId(anim.taskId!); }}
-                          className="text-white/30 mt-0.5 cursor-pointer underline"
-                          style={{ fontSize: '0.56rem' }}
-                        >
-                          {t('video.abandon')}
-                        </span>
-                      )
-                    )}
-                    {isFailed && onRetry && (
-                      <span
-                        onClick={(e) => { e.stopPropagation(); onRetry(anim); }}
-                        className="text-fuchsia-400/80 mt-0.5 cursor-pointer underline"
-                        style={{ fontSize: '0.56rem' }}
-                      >
-                        {t('video.retry')}
-                      </span>
-                    )}
-                    {anim.status === 'abandoned' && onRetry && (
-                      <span
-                        onClick={(e) => { e.stopPropagation(); onRetry(anim); }}
-                        className="text-fuchsia-400/80 mt-0.5 cursor-pointer underline"
-                        style={{ fontSize: '0.56rem' }}
-                      >
-                        {t('video.retry')}
-                      </span>
-                    )}
                   </div>
                 </div>
               </button>
