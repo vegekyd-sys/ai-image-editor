@@ -4,6 +4,11 @@ const BUCKET = 'images'
 const LEGACY_HOST = 'https://sdyrtztrjgmmpnirswxt.supabase.co'
 const CDN_HOST = process.env.NEXT_PUBLIC_SUPABASE_URL || LEGACY_HOST
 
+/** Check if a URL is permanently stored in our Supabase Storage (not a temporary provider URL). */
+export function isPermanentUrl(url: string): boolean {
+  return url.includes('supabase.co/storage/') || url.includes('makaron.app/storage/')
+}
+
 export function normalizeDomain(url: string): string {
   if (url.startsWith(LEGACY_HOST) && CDN_HOST !== LEGACY_HOST) {
     return url.replace(LEGACY_HOST, CDN_HOST)

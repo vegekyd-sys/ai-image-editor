@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
+import { isPermanentUrl } from '@/lib/supabase/storage';
 
 async function pollVideoProvider(taskId: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
   const isEvolink = taskId.startsWith('task-unified-');
@@ -208,7 +209,7 @@ export async function GET(
             const videoMeta = snap.video_meta as any;
             if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
               // Only return completed if URL is our Storage (not provider URL)
-              const isPermanent = videoMeta.videoUrl.includes('supabase.co/storage/') || videoMeta.videoUrl.includes('makaron.app/storage/');
+              const isPermanent = isPermanentUrl(videoMeta.videoUrl);
               if (isPermanent) {
                 v.status = 'completed';
                 v.url = videoMeta.videoUrl;

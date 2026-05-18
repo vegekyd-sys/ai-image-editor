@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
-import { uploadImage, uploadVideo } from '@/lib/supabase/storage';
+import { uploadImage, uploadVideo, isPermanentUrl } from '@/lib/supabase/storage';
 import sharp from 'sharp';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta } from '@/types';
@@ -11,7 +11,7 @@ async function resolveImageUrl(
   userId: string,
   projectId: string,
 ): Promise<string> {
-  if (url.includes('makaron.app/storage/') || url.includes('supabase.co/storage/')) {
+  if (isPermanentUrl(url)) {
     return url;
   }
   const res = await fetch(url);
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
         let height: number | undefined;
 
         // Fetch + upload to our Storage if external URL
-        if (!videoUrl.includes('supabase.co/storage/')) {
+        if (!isPermanentUrl(videoUrl)) {
           try {
             const res = await fetch(videoUrl);
             if (res.ok) {
@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
       let width: number | undefined;
       let height: number | undefined;
 
-      if (!videoUrl.includes('supabase.co/storage/')) {
+      if (!isPermanentUrl(videoUrl)) {
         try {
           const res = await fetch(videoUrl);
           if (res.ok) {

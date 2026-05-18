@@ -3,7 +3,7 @@ import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
-import { uploadVideo } from '@/lib/supabase/storage'
+import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 60
@@ -35,14 +35,9 @@ export async function GET(
 
     // If already completed with permanent URL, return immediately (no provider call)
     if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
-      const isPermanent = videoMeta.videoUrl.includes('supabase.co/storage/') || videoMeta.videoUrl.includes('makaron.app/storage/')
+      const isPermanent = isPermanentUrl(videoMeta.videoUrl)
       if (isPermanent) {
-        // Only return completed when poster is ready (after() extracts it async)
-        const hasPoster = snap.image_url?.includes('/posters/')
-        if (!hasPoster) {
-          return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
-        }
-        return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url })
+        return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
       }
       // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
       return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
