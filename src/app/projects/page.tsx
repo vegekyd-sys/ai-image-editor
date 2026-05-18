@@ -670,6 +670,7 @@ function ProjectsPageInner() {
             >
               {/* Left: photo slot — square, width = container height */}
               <div
+                data-testid="photo-slot"
                 onClick={(e) => {
                   if (creating) return
                   fileInputRef.current?.click()

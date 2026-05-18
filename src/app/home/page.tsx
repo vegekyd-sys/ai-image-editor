@@ -754,6 +754,7 @@ function HomePageInner() {
       >
         {/* Left: + button / photo slot */}
         <div
+          data-testid="photo-slot"
           onClick={async () => { const u = await requireAuth(); if (!u) return; if (!creating && !collapseSlot) fileInputRef.current?.click() }}
           style={{
             width: collapseSlot ? 0 : slotWidth,
