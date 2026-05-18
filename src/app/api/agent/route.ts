@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, videoModel,
-            headless, hasAnnotation, isDraft, referenceImageCount } = await req.json();
+            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
@@ -180,6 +180,7 @@ export async function POST(req: NextRequest) {
             hasAnnotation,
             isDraft,
             referenceImageCount: referenceImageCount || undefined,
+            uploadedVideoCount: uploadedVideoCount || undefined,
           });
 
           let agentPrompt = ctx.fullPrompt;

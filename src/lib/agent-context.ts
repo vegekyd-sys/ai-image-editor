@@ -23,6 +23,8 @@ export interface PromptContextOptions {
   isDraft?: boolean;
   /** Number of attached reference images */
   referenceImageCount?: number;
+  /** Number of just-uploaded videos (for context hint with media index) */
+  uploadedVideoCount?: number;
 }
 
 export interface PromptContextResult {
@@ -60,7 +62,7 @@ export async function buildPromptContext(
   userId: string,
   options: PromptContextOptions,
 ): Promise<PromptContextResult> {
-  const { userMessage, hasAnnotation, isDraft, referenceImageCount } = options;
+  const { userMessage, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = options;
 
   // Query snapshots and messages in parallel
   const [snapshotsRes, messagesRes] = await Promise.all([
@@ -187,9 +189,16 @@ export async function buildPromptContext(
     ? `[用户上传了 ${referenceImageCount} 张参考图，已自动传给 generate_image 工具使用]\n\n`
     : '';
 
-  // Assemble (same order as Editor.tsx, minus historyContext — now passed
-  // as structured messages[] alongside fullPrompt).
-  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const videoUploadContext = uploadedVideoCount
+    ? (() => {
+        const total = snapshots.length;
+        const startIdx = total - uploadedVideoCount + 1;
+        return `[User uploaded ${uploadedVideoCount === 1 ? 'a video' : `${uploadedVideoCount} videos`} — added to Media Index as <<<media_${startIdx}>>>${uploadedVideoCount > 1 ? ` to <<<media_${total}>>>` : ''}]\n\n`;
+      })()
+    : '';
+
+  // Assemble
+  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map(s => s.image_url || '');
   const originalImage = snapshots[0]?.image_url || undefined;

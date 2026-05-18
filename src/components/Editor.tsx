@@ -1451,119 +1451,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     // currentMsgId and agentMsgIds are now managed by makeAgentCallbacks factory
 
-    // Include pre-computed image description only when viewing a real snapshot (not a draft/preview)
-    // Draft's image may differ significantly from the parent snapshot's description — skip to avoid mismatch
-    const isViewingDraft = contextSnapshotIndex !== viewIndexRef.current;
-    const currentDescription = isViewingDraft ? undefined : snapshotsRef.current[contextSnapshotIndex]?.description;
-    const descriptionContext = currentDescription
-      ? `[图片分析结果]\n${currentDescription}\n\n`
-      : '';
-
-    // Build multi-turn context: include both user and assistant messages for full conversation history
-    // Large context model (1M tokens) — no need to truncate aggressively
-    const recentMessages = messages
-      .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
-      .slice(-200)
-      .map(m => `[${m.role === 'user' ? '用户' : 'Makaron'}] ${m.content.slice(0, 2000)}`)
-      .join('\n');
-    const historyContext = recentMessages
-      ? `[对话历史]\n${recentMessages}\n\n`
-      : '';
-
-    // Inject current tips into the prompt so agent can reference them
-    const currentTipsForPrompt = snapshotsRef.current[contextSnapshotIndex]?.tips ?? [];
-    const tipsContext = currentTipsForPrompt.length > 0
-      ? `[当前TipsBar中的编辑建议]\n${currentTipsForPrompt.map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`).join('\n')}\n\n`
-      : '';
-
-    // Warn Claude if user is editing an intermediate snapshot (not the latest)
-    const isIntermediateSnapshot = contextSnapshotIndex < snapshotsRef.current.length - 1;
-    const snapshotWarning = isIntermediateSnapshot
-      ? `[重要提示] 用户当前正在编辑的是第 ${contextSnapshotIndex + 1} 个版本（共 ${snapshotsRef.current.length} 个），不是最新版本。对话历史描述的是其他版本的状态，与当前图片无关。请完全以传入的当前图片为准，忽略对话历史中对图片内容的描述。\n\n`
-      : '';
-
-    // Inject photo metadata (location + time) for original snapshot
-    const originalMeta = snapshotsRef.current[0]?.metadata;
-    const metaLines: string[] = [];
-    if (originalMeta?.takenAt) metaLines.push(`拍摄时间：${originalMeta.takenAt}`);
-    if (originalMeta?.location) metaLines.push(`拍摄地点：${originalMeta.location}`);
-    const metaContext = metaLines.length > 0
-      ? `[照片元数据]\n${metaLines.join('\n')}\n\n`
-      : '';
-
-    const refContext = attachedImages?.length
-      ? (() => {
-          const total = snapshotsRef.current.length;
-          const startIdx = total - attachedImages.length + 1;
-          return `[User uploaded ${attachedImages.length} reference image(s) — added to Media Index as <<<media_${startIdx}>>>${attachedImages.length > 1 ? ` to <<<media_${total}>>>` : ''}. Call analyze_image to see them, then use reference_media_indices to include them in generate_image.]\n\n`;
-        })()
-      : '';
-
-    const videoUploadContext = options?.uploadedVideoCount
-      ? (() => {
-          const total = snapshotsRef.current.length;
-          const startIdx = total - options.uploadedVideoCount + 1;
-          return `[User uploaded ${options.uploadedVideoCount === 1 ? 'a video' : `${options.uploadedVideoCount} videos`} — added to Media Index as <<<media_${startIdx}>>>${options.uploadedVideoCount > 1 ? ` to <<<media_${total}>>>` : ''}]\n\n`;
-        })()
-      : '';
-
-    // Build media index for multi-snapshot navigation — only when >1 snapshot
-    const snapshotIndexContext = snapshotsRef.current.length > 1
-      ? `[Media Index — ${snapshotsRef.current.length} items]\n${snapshotsRef.current.map((s, i) => {
-          const isRef = s.type === 'reference';
-          const isVid = s.type === 'video';
-          const isDesign = !!s.design && !isVid;
-          const typeLabel = isVid
-            ? (s.videoMeta?.status === 'completed' && s.videoMeta?.duration ? `video, ${s.videoMeta.duration}s` : s.videoMeta?.status === 'completed' ? 'video' : `video, ${s.videoMeta?.status || 'processing'}`)
-            : isDesign ? 'design' : isRef ? 'reference' : 'image';
-          const desc = isVid
-            ? (s.description || s.videoMeta?.prompt?.split('\n')[0]?.slice(0, 60) || '[video]')
-            : isRef
-              ? (s.description || 'Skill reference image')
-              : isDesign
-                ? (s.description || '[design/video]')
-                : i === 0 || (snapshotsRef.current.slice(0, i).every(ss => ss.type === 'reference'))
-                  ? (s.description || '原图 / Original upload')
-                  : (s.description || '(use analyze_image to see this snapshot)');
-          const marker = i === contextSnapshotIndex ? '  ← YOU ARE HERE' : '';
-          const videoTag = isVid && s.videoMeta?.videoUrl ? ` [video: ${s.videoMeta.videoUrl}]` : '';
-          const codePath = s.designPath && !isVid ? ` [code: ${s.designPath}]` : '';
-          return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${codePath}`;
-        }).join('\n')}\n\n`
-      : '';
-
-    // Video/Design mode warnings (mutually exclusive)
-    const currentSnapObj = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
-    const currentSnapIsVideo = currentSnapObj?.type === 'video';
-    const currentSnapIsDesign = !currentSnapIsVideo && !!currentSnapObj?.design;
-
-    const videoWarning = currentSnapIsVideo
-      ? `[VIDEO MODE] You are viewing a video. Use analyze_video to understand its content. Do NOT read or patch its design code — that is only a playback wrapper.\n\n`
-      : '';
-
-    const designWarning = currentSnapIsDesign
-      ? `[DESIGN MODE] You are viewing a design/video (not a photo). The design code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this design.\n\n`
-      : '';
-
-    const annotationWarning = overrideImage
-      ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use media_index to switch to another snapshot. Call analyze_image first (without media_index) to see the annotations, then generate_image (without media_index) to edit.\n\n`
-      : '';
-
-    // When viewing a draft/preview (tip not yet committed), warn agent to edit the current image directly
+    // UI state flags — server-side buildPromptContext handles all project context
     const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
-    const draftWarning = isDraftMode
-      ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the media index. Omit media_index to edit this draft directly.\n\n`
-      : '';
-
-    // Inject current design editable state so Agent sees GUI changes (skip for video snapshots)
-    const ctxSnap = snapshotsRef.current[contextSnapshotIndex];
-    const designContext = ctxSnap?.type !== 'video' && ctxSnap?.design?.editables?.length
-      ? `[Design Editable State]\n${ctxSnap.design.editables.map(f =>
-          `- ${f.label} (${f.propKey}): "${(ctxSnap.design!.props as Record<string, unknown>)?.[f.propKey] ?? ''}"`
-        ).join('\n')}\nUser may have edited these values in the GUI. To modify the design, use run_code with { type: 'patch', edits: [...] }.\n\n`
-      : '';
-
-    const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${historyContext}${refContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${text}`;
 
     // Always pass the original snapshot (index 0) as reference for face/person preservation
     const originalSnapshot = snapshotsRef.current[0];
@@ -1662,7 +1551,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: fullPrompt, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0 },
+        { prompt: text, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );

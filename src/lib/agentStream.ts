@@ -47,6 +47,7 @@ export async function streamAgent(
     hasAnnotation?: boolean;
     isDraft?: boolean;
     referenceImageCount?: number;
+    uploadedVideoCount?: number;
   },
   callbacks: AgentStreamCallbacks,
   signal?: AbortSignal,
