@@ -112,6 +112,14 @@ async function generateAzure(
   }
 
   const data = await res.json();
+
+  if (data.error) {
+    const code = data.error.code || data.error.type || 'unknown';
+    const msg = data.error.message || '';
+    console.error(`[openai/azure] Error in body: ${code} - ${msg.slice(0, 200)} (${totalMs}ms)`);
+    return { image: null };
+  }
+
   console.log(`[openai/azure] total=${(totalMs / 1000).toFixed(1)}s`);
 
   const imgData = data.data?.[0];
