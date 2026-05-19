@@ -810,7 +810,6 @@ function ProjectCard({
   return (
     <Link
       href={`/projects/${project.id}`}
-      prefetch={false}
       className="mkr-card mkr-row-enter"
       onClick={onNavigate}
       style={{
