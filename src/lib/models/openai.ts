@@ -70,70 +70,95 @@ async function generateAzure(
   const headers: Record<string, string> = { 'api-key': apiKey };
   const hasImage = !!(image || references?.length);
   const size = aspectRatioToSize(aspectRatio, !hasImage);
-  const t0 = Date.now();
 
-  let res: Response;
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const t0 = Date.now();
+    let res: Response;
 
-  if (hasImage) {
-    const form = new FormData();
-    form.append('prompt', prompt);
-    form.append('quality', 'low');
-    form.append('size', size);
-    form.append('moderation', 'low');
+    if (hasImage) {
+      const form = new FormData();
+      form.append('prompt', prompt);
+      form.append('quality', 'low');
+      form.append('size', size);
+      form.append('moderation', 'low');
 
-    if (references?.length) {
-      for (const ref of references) {
-        const blob = await imageToBlob(ref.url);
-        form.append('image[]', blob, 'ref.png');
+      if (references?.length) {
+        for (const ref of references) {
+          const blob = await imageToBlob(ref.url);
+          form.append('image[]', blob, 'ref.png');
+        }
+      } else if (image) {
+        const blob = await imageToBlob(image);
+        form.append('image[]', blob, 'input.png');
       }
-    } else if (image) {
-      const blob = await imageToBlob(image);
-      form.append('image[]', blob, 'input.png');
+
+      console.log(`[openai/azure] edits size=${size} images=${references?.length || 1}${attempt ? ` (retry ${attempt})` : ''}`);
+      res = await fetch(AZURE_EDITS_URL, { method: 'POST', headers, body: form });
+    } else {
+      const body = { prompt, quality: 'low', size, moderation: 'low' };
+      console.log(`[openai/azure] generations size=${size}${attempt ? ` (retry ${attempt})` : ''}`);
+      res = await fetch(AZURE_GENERATIONS_URL, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
     }
 
-    console.log(`[openai/azure] edits size=${size} images=${references?.length || 1}`);
-    res = await fetch(AZURE_EDITS_URL, { method: 'POST', headers, body: form });
-  } else {
-    const body = { prompt, quality: 'low', size, moderation: 'low' };
-    console.log(`[openai/azure] generations size=${size}`);
-    res = await fetch(AZURE_GENERATIONS_URL, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const totalMs = Date.now() - t0;
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.error(`[openai/azure] ${res.status} (${totalMs}ms): ${errText.slice(0, 300)}`);
+      if (res.status === 429 && attempt < MAX_RETRIES - 1) {
+        const delay = (attempt + 1) * 5000;
+        console.log(`[openai/azure] Rate limited, waiting ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return { image: null };
+    }
+
+    const data = await res.json();
+
+    if (data.error) {
+      const code = data.error.code || data.error.type || 'unknown';
+      const msg = data.error.message || '';
+      console.error(`[openai/azure] Error in body: ${code} - ${msg.slice(0, 200)} (${totalMs}ms)`);
+      if ((code === 'EngineOverloaded' || code === 'rate_limit_exceeded') && attempt < MAX_RETRIES - 1) {
+        const delay = (attempt + 1) * 5000;
+        console.log(`[openai/azure] ${code}, waiting ${delay}ms before retry...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return { image: null };
+    }
+
+    console.log(`[openai/azure] total=${(totalMs / 1000).toFixed(1)}s`);
+
+    const imgData = data.data?.[0];
+    if (!imgData) {
+      console.warn('[openai/azure] No image in response');
+      return { image: null };
+    }
+
+    let resultDataUrl: string;
+    if (imgData.b64_json) {
+      resultDataUrl = `data:image/png;base64,${imgData.b64_json}`;
+    } else if (imgData.url) {
+      const imgRes = await fetch(imgData.url);
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      resultDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+    } else {
+      console.warn('[openai/azure] No b64_json or url in response');
+      return { image: null };
+    }
+
+    const jpeg = await ensureJpeg(resultDataUrl);
+    return { image: jpeg };
   }
 
-  const totalMs = Date.now() - t0;
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    console.error(`[openai/azure] ${res.status} (${totalMs}ms): ${errText.slice(0, 300)}`);
-    return { image: null };
-  }
-
-  const data = await res.json();
-  console.log(`[openai/azure] total=${(totalMs / 1000).toFixed(1)}s`);
-
-  const imgData = data.data?.[0];
-  if (!imgData) {
-    console.warn('[openai/azure] No image in response');
-    return { image: null };
-  }
-
-  let resultDataUrl: string;
-  if (imgData.b64_json) {
-    resultDataUrl = `data:image/png;base64,${imgData.b64_json}`;
-  } else if (imgData.url) {
-    const imgRes = await fetch(imgData.url);
-    const buf = Buffer.from(await imgRes.arrayBuffer());
-    resultDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
-  } else {
-    console.warn('[openai/azure] No b64_json or url in response');
-    return { image: null };
-  }
-
-  const jpeg = await ensureJpeg(resultDataUrl);
-  return { image: jpeg };
+  return { image: null };
 }
 
 // ── PiAPI implementation ────────────────────────────────────────
