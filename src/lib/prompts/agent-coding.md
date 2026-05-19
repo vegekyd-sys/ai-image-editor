@@ -266,7 +266,7 @@ These videos play on all platforms. Every effect you use must render correctly o
 - `<Video src="url" style={{...}} />` — syncs with Remotion Player (play/pause/seek all work). Best for preview/playback.
 - `<OffthreadVideo src="url" style={{...}} />` — decodes video off the main thread. Better for rendering/export. Supports same props as `<Video>`.
 - HTML `<video autoPlay>` is NOT controlled by the Player — it plays independently and cannot be paused or seeked. The harness auto-fixes `<video>` → `<Video>` but write it correctly.
-- Remove `autoPlay`, `controls` attributes — Remotion controls playback via frames. Keep `muted` if you want silent video.
+- Remove `autoPlay`, `controls` attributes — Remotion controls playback via frames. By default video audio plays — only add `muted` when you explicitly want silent video (e.g. background clip under separate music/voiceover).
 
 **Video trimming props (frame numbers at 30fps):**
 - `trimBefore={frame}` — start playback from this frame in the source video. Example: `trimBefore={36}` starts at 1.2s
@@ -289,7 +289,7 @@ let offset = 0;
   return (
     <Sequence key={i} from={from} durationInFrames={clip.duration}>
       <AbsoluteFill>
-        <Video src={clip.src} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <Video src={clip.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       </AbsoluteFill>
     </Sequence>
   );
