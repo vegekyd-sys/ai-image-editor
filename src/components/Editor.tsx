@@ -2303,13 +2303,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           }))
         : [];
       if (hasVideos) {
+        const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
         for (const v of pendingVideos!) {
           const { createVideoDesign } = await import('@/lib/video-design');
           const design = createVideoDesign(v.videoUrl, v.width, v.height, v.duration);
           const snapId = generateId();
           workSnapshots.push({
             id: snapId,
-            image: '',
+            image: VIDEO_PLACEHOLDER_IMAGE,
             tips: [],
             messageId: '',
             type: 'video',
