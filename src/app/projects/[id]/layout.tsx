@@ -46,7 +46,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
     <>
       {/* SSR skeleton: mirrors Editor layout exactly to prevent image position jump */}
       {lcpUrl && (
-        <div id="ssr-skeleton" className="fixed inset-0 z-0 bg-black" style={{ height: '100dvh' }}>
+        <div id="ssr-skeleton" className="fixed inset-0 z-0 bg-black" style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {/* Desktop: flex-row (canvas left + CUI right). Mobile: flex-col (canvas + bottom bar) */}
           <div className="w-full h-full flex flex-col lg:flex-row">
             {/* Left: GUI panel (canvas + bottom bar) */}
