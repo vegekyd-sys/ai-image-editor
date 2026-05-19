@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import type { Metadata } from 'next'
+import { getOptimizedUrl } from '@/lib/supabase/storage'
 
 type Props = { params: Promise<{ id: string }> }
 
@@ -29,6 +30,26 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default function ProjectLayout({ children }: { children: React.ReactNode }) {
-  return children
+export default async function ProjectLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const { data } = await getSupabaseAdmin()
+    .from('snapshots')
+    .select('image_url')
+    .eq('project_id', id)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .single()
+
+  const lcpUrl = data?.image_url ? getOptimizedUrl(data.image_url) : null
+
+  return (
+    <>
+      {lcpUrl && (
+        <head>
+          <link rel="preload" as="image" href={lcpUrl} fetchPriority="high" />
+        </head>
+      )}
+      {children}
+    </>
+  )
 }

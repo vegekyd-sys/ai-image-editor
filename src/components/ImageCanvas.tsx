@@ -1309,6 +1309,7 @@ export default function ImageCanvas({
               ref={imgElRef}
               src={displayImage}
               alt="preview"
+              fetchPriority="high"
               className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
                 pullDownActive ? 'opacity-[0.15] grayscale' :
                 animDir === 'left' ? 'opacity-0 -translate-x-8' :
