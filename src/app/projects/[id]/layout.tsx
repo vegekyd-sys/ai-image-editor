@@ -51,8 +51,8 @@ export default async function ProjectLayout({ children, params }: { children: Re
           <div className="w-full h-full flex flex-col lg:flex-row">
             {/* Left: GUI panel (canvas + bottom bar) */}
             <div className="flex-1 min-w-0 flex flex-col">
-              {/* Canvas area */}
-              <div className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center">
+              {/* Canvas area — slight padding so tall images (9:16) don't touch edges, hiding sub-px height mismatch with Editor */}
+              <div className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center p-[2px]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={lcpUrl} alt="" className="w-full h-full object-contain" fetchPriority="high" />
               </div>
