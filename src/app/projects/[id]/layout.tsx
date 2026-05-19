@@ -44,11 +44,14 @@ export default async function ProjectLayout({ children, params }: { children: Re
 
   return (
     <>
-      {/* SSR skeleton: visible immediately in HTML, covered by Editor once React mounts */}
+      {/* SSR skeleton: matches Editor canvas layout (black bg + centered image + bottom space for UI) */}
       {lcpUrl && (
-        <div id="ssr-skeleton" className="fixed inset-0 z-0 bg-black flex items-center justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lcpUrl} alt="" className="w-full h-full object-contain" fetchPriority="high" />
+        <div id="ssr-skeleton" className="fixed inset-0 z-0 bg-black flex flex-col">
+          <div className="flex-1 min-h-0 flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={lcpUrl} alt="" className="w-full h-full object-contain" fetchPriority="high" />
+          </div>
+          <div className="h-[120px] flex-shrink-0" />
         </div>
       )}
       {children}
