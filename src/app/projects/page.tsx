@@ -8,13 +8,14 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cacheProjectsList } from '@/lib/imageCache'
-import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
-import { extractPhotoMetadata } from '@/lib/image/metadata'
+import { isHeicFile } from '@/lib/imageUtils'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
 import { createProject } from '@/lib/createProject'
 import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
+import { useCreateInput } from '@/hooks/useCreateInput'
+import CreateInputBox from '@/components/CreateInputBox'
 
 interface ProjectWithSnapshots {
   id: string
@@ -73,20 +74,14 @@ function ProjectsPageInner() {
     if (!userId) return true
     return getCachedProjectsListSync(userId) === null
   })
-  const [creating, setCreating] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const createInput = useCreateInput()
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
-  const [inputText, setInputText] = useState('')
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
-  const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
-  const [skillsExpanded, setSkillsExpanded] = useState(false)
   const [creditBalance, setCreditBalance] = useState<number | null>(null)
   const [showWelcome, setShowWelcome] = useState(false)
-  const [skillDragOver, setSkillDragOver] = useState(false)
   const [skillUploading, setSkillUploading] = useState(false)
   const [skillUploadError, setSkillUploadError] = useState<string | null>(null)
   const handleSkillUpload = useCallback(async (file: File) => {
@@ -138,106 +133,13 @@ function ProjectsPageInner() {
       const match = availableSkills.find(s => s.name === skillParam)
       if (match) {
         setSelectedSkill(match.name)
-        setSkillsExpanded(true)
       }
       window.history.replaceState({}, '', '/projects')
     }
   }, [searchParams, availableSkills])
 
-  const [cardIndex, setCardIndex] = useState(0) // current visible card in stack
-  const [cardDragX, setCardDragX] = useState(0) // px offset while dragging
-  const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
-  const cardSwipeRef = useRef<HTMLDivElement>(null)
+  const skillFileRef = useRef<HTMLInputElement>(null)
 
-  // Non-passive touchmove to allow preventDefault (block scroll during horizontal swipe)
-  useEffect(() => {
-    const el = cardSwipeRef.current
-    if (!el) return
-    const onMove = (e: TouchEvent) => {
-      if (!cardTouchRef.current) return
-      const dx = e.touches[0].clientX - cardTouchRef.current.startX
-      const dy = e.touches[0].clientY - cardTouchRef.current.startY
-      if (!cardTouchRef.current.locked) {
-        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
-        cardTouchRef.current.locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
-      }
-      if (cardTouchRef.current.locked !== 'x') return
-      e.preventDefault()
-      e.stopPropagation()
-      setCardDragX(prev => {
-        // Read current cardIndex + file count from DOM data attrs
-        const idx = parseInt(el.dataset.idx || '0')
-        const count = parseInt(el.dataset.count || '0')
-        const atStart = idx === 0 && dx > 0
-        const atEnd = idx >= count - 1 && dx < 0
-        return (atStart || atEnd) ? dx * 0.2 : dx
-      })
-    }
-    el.addEventListener('touchmove', onMove, { passive: false })
-    return () => el.removeEventListener('touchmove', onMove)
-  })
-  const MAX_FILES = 10
-
-  // Shared helper: process new files and append to attached arrays
-  const addFiles = useCallback(async (newFiles: File[]) => {
-    if (creating || newFiles.length === 0) return
-    // Extract metadata from the first original file (before HEIC conversion loses EXIF)
-    if (newFiles[0] && !extractedMetadataRef.current) {
-      extractPhotoMetadata(newFiles[0]).then(m => { extractedMetadataRef.current = m; });
-    }
-    for (const file of newFiles) {
-      // Check limit using latest state
-      let atLimit = false
-      setAttachedFiles(prev => {
-        if (prev.length >= MAX_FILES) { atLimit = true; return prev }
-        return prev
-      })
-      if (atLimit) break
-
-      if (file.type.startsWith('video/')) {
-        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
-        setAttachedPreviews(prev => [...prev, null].slice(0, MAX_FILES))
-        import('@/lib/video-upload').then(({ extractVideoPoster }) =>
-          extractVideoPoster(file).then(poster => {
-            setAttachedPreviews(prev => {
-              const idx = prev.lastIndexOf(null)
-              if (idx === -1) return prev
-              return prev.map((p, i) => i === idx ? poster : p)
-            })
-          }).catch(() => {})
-        )
-      } else if (isHeicFile(file)) {
-        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
-        setAttachedPreviews(prev => [...prev, null].slice(0, MAX_FILES))
-        try {
-          const decodable = await ensureDecodableFile(file)
-          const previewUrl = URL.createObjectURL(decodable)
-          setAttachedFiles(prev => {
-            const idx = prev.indexOf(file)
-            if (idx === -1) return prev
-            return prev.map((f, i) => i === idx ? decodable : f)
-          })
-          setAttachedPreviews(prev => {
-            const idx = prev.lastIndexOf(null)
-            if (idx === -1) return prev
-            return prev.map((p, i) => i === idx ? previewUrl : p)
-          })
-        } catch {
-          setAttachedPreviews(prev => {
-            const idx = prev.lastIndexOf(null)
-            if (idx === -1) return prev
-            return prev.map((p, i) => i === idx ? 'heic-pending' : p)
-          })
-        }
-      } else {
-        const previewUrl = URL.createObjectURL(file)
-        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
-        setAttachedPreviews(prev => [...prev, previewUrl].slice(0, MAX_FILES))
-      }
-    }
-    // Jump to last card (clamped in render via Math.min)
-    setCardIndex(999)
-  }, [creating])
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
@@ -454,8 +356,8 @@ function ProjectsPageInner() {
   }, [user])
 
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
-    if (!user || creating || (files.length === 0 && !prompt)) return
-    setCreating(true)
+    if (!user || createInput.creating || (files.length === 0 && !prompt)) return
+    createInput.setCreating(true)
     try {
       const supabase = createClient()
       const opts: { prompt?: string; skill?: string } = {}
@@ -471,31 +373,29 @@ function ProjectsPageInner() {
         const { MAX_DURATION } = await import('@/lib/video-upload')
         alert(t('video.tooLong').replace('{duration}', msg.match(/\((\d+)s\)/)?.[1] || '?').replace('{max}', String(MAX_DURATION)))
       }
-      setCreating(false)
+      createInput.setCreating(false)
     }
-  }, [user, creating, router, selectedSkill])
+  }, [user, createInput, router, selectedSkill, t])
 
   // Unified create: text only, image only, or both — all go through handleCreateProject
   const handleCreate = useCallback(async () => {
-    const hasText = inputText.trim()
-    const hasFiles = attachedFiles.length > 0
+    const hasText = createInput.text.trim()
+    const hasFiles = createInput.files.length > 0
     if (!hasText && !hasFiles) return
-    await handleCreateProject(hasFiles ? attachedFiles : [], hasText || undefined)
-    setInputText('')
-    setAttachedFiles([])
-    setAttachedPreviews([])
-  }, [inputText, attachedFiles, handleCreateProject])
+    await handleCreateProject(hasFiles ? createInput.files : [], hasText || undefined)
+    createInput.clear()
+  }, [createInput, handleCreateProject])
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     dragCounterRef.current = 0
     setDragOver(false)
-    if (creating) return
+    if (createInput.creating) return
     const droppedFiles = Array.from(e.dataTransfer.files ?? []).filter(
       f => f.type.startsWith('image/') || f.type.startsWith('video/') || isHeicFile(f)
     )
-    addFiles(droppedFiles)
-  }, [creating, addFiles])
+    createInput.addFiles(droppedFiles)
+  }, [createInput])
 
   if (authLoading || !user) {
     return (
@@ -595,18 +495,14 @@ function ProjectsPageInner() {
         }} />
 
         <input
-          id="new-project-file-input"
-          data-testid="photo-upload"
-          aria-label="Upload photo"
-          ref={fileInputRef}
+          ref={skillFileRef}
           type="file"
-          accept="image/*,video/*,.heic,.heif"
-          multiple
-          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+          accept=".zip"
+          style={{ display: 'none' }}
           onChange={async (e) => {
-            const files = Array.from(e.target.files ?? [])
+            const file = e.target.files?.[0]
+            if (file) await handleSkillUpload(file)
             e.target.value = ''
-            addFiles(files)
           }}
         />
 
@@ -656,474 +552,32 @@ function ProjectsPageInner() {
             <RollingTagline className="text-[1.25rem] tracking-wide" />
           </div>
 
-          {/* Create input: [photo] + [textarea] */}
+          {/* Create input: shared component */}
           <div style={{ marginTop: '32px', width: '100%', padding: '0 16px', maxWidth: '480px' }}>
-            <div
-              ref={inputBoxRef}
-              className="mkr-input-box"
+            <CreateInputBox
+              input={createInput}
+              slotWidth={photoSlotWidth}
+              isInline
+              isDesktop={isDesktop}
+              boxRef={inputBoxRef}
+              placeholder={locale === 'zh' ? '描述你想要的创意...' : "Got a pic? Let's glow it up.\nNo pic? I'll cook one up."}
+              createLabel="Create"
+              onSubmit={handleCreate}
+              skills={availableSkills}
+              selectedSkill={selectedSkill}
+              onSkillChange={setSelectedSkill}
+              onDeleteSkill={(name) => {
+                setAvailableSkills(prev => prev.filter(s => s.name !== name))
+                fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {})
+              }}
+              onUploadSkill={() => skillFileRef.current?.click()}
+              skillDirection="up"
+              dragOver={dragOver}
               onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
               onDragLeave={(e) => { e.preventDefault(); dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragOver(false) } }}
               onDrop={handleDrop}
-              style={{
-                display: 'flex', gap: 0,
-                borderRadius: 18,
-                border: dragOver ? '1px solid rgba(217,70,239,0.6)' : '1px solid rgba(255,255,255,0.1)',
-                background: dragOver ? 'rgba(217,70,239,0.08)' : 'rgba(255,255,255,0.03)',
-                overflow: 'hidden',
-                transition: 'border-color 0.2s, background 0.2s',
-              }}
-            >
-              {/* Left: photo slot — square, width = container height */}
-              <div
-                data-testid="photo-slot"
-                onClick={(e) => {
-                  if (creating) return
-                  fileInputRef.current?.click()
-                }}
-                style={{
-                  width: photoSlotWidth, flexShrink: 0, alignSelf: 'stretch',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: creating ? 'default' : 'pointer',
-                  borderRight: '1px solid rgba(255,255,255,0.08)',
-                  position: 'relative',
-                  background: attachedFiles.length > 0 ? 'transparent' : 'rgba(217,70,239,0.04)',
-                }}
-              >
-                {attachedFiles.length === 0 ? (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                    <circle cx="12" cy="13" r="4" />
-                  </svg>
-                ) : attachedFiles.length === 1 ? (
-                  <>
-                    {attachedPreviews[0] && attachedPreviews[0] !== 'heic-pending' ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={attachedPreviews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                        {creating && attachedFiles[0]?.type.startsWith('video/') && (
-                          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
-                            <Spinner size={16} />
-                          </div>
-                        )}
-                      </>
-                    ) : attachedPreviews[0] === null ? (
-                      <Spinner size={16} />
-                    ) : (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.7)" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14,2 14,8 20,8" /></svg>
-                    )}
-                    {!creating && <div style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 2 }}
-                      onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]);  }}>✕</div>}
-                  </>
-                ) : (
-                  /* 2+ images: Desktop = static stack, Mobile = swipeable */
-                  <>
-                    {isDesktop ? (
-                      /* Desktop: static stacked cards */
-                      <div style={{ position: 'absolute', inset: 6, pointerEvents: 'none' }}>
-                        {(() => {
-                          const cardStyle = (rotate: number, zIndex: number): React.CSSProperties => ({
-                            position: 'absolute', inset: 0,
-                            borderRadius: 6, overflow: 'hidden',
-                            transform: `rotate(${rotate}deg)`,
-                            border: '1.5px solid rgba(255,255,255,0.12)',
-                            background: '#1a1a1a', zIndex,
-                            boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-                          })
-                          const n = attachedFiles.length
-                          const layers: { preview: string | null; rotate: number; z: number }[] = []
-                          if (n >= 3) layers.push({ preview: attachedPreviews[0], rotate: -6, z: 1 })
-                          if (n >= 2) layers.push({ preview: attachedPreviews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2 })
-                          layers.push({ preview: attachedPreviews[n - 1], rotate: 0, z: 3 })
-                          return layers.map((layer, i) => (
-                            <div key={i} style={cardStyle(layer.rotate, layer.z)}>
-                              {layer.preview && layer.preview !== 'heic-pending' ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              ) : layer.preview === null ? (
-                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  <Spinner size={12} />
-                                </div>
-                              ) : null}
-                            </div>
-                          ))
-                        })()}
-                      </div>
-                    ) : (
-                      /* Mobile: swipeable card stack */
-                      <div
-                        ref={cardSwipeRef}
-                        data-idx={Math.min(cardIndex, attachedFiles.length - 1)}
-                        data-count={attachedFiles.length}
-                        style={{ position: 'absolute', inset: 6 }}
-                        onTouchStart={(e) => {
-                          cardTouchRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, locked: null }
-                        }}
-                        onTouchEnd={() => {
-                          const touch = cardTouchRef.current
-                          cardTouchRef.current = null
-                          if (!touch || touch.locked !== 'x') { setCardDragX(0); return }
-                          const threshold = 25
-                          const idx = Math.min(cardIndex, attachedFiles.length - 1)
-                          if (cardDragX < -threshold && idx < attachedFiles.length - 1) {
-                            setCardIndex(idx + 1)
-                          } else if (cardDragX > threshold && idx > 0) {
-                            setCardIndex(idx - 1)
-                          }
-                          setCardDragX(0)
-                        }}
-                      >
-                        {(() => {
-                          const n = attachedFiles.length
-                          const idx = Math.min(cardIndex, n - 1)
-                          const dragging = cardDragX !== 0
-                          const layers: { preview: string | null; baseRotate: number; z: number; key: number; isFront: boolean }[] = []
-                          if (idx + 1 < n) layers.push({ preview: attachedPreviews[idx + 1], baseRotate: 4, z: 1, key: idx + 1, isFront: false })
-                          if (idx > 0) layers.push({ preview: attachedPreviews[idx - 1], baseRotate: -4, z: 1, key: idx - 1, isFront: false })
-                          layers.push({ preview: attachedPreviews[idx], baseRotate: 0, z: 3, key: idx, isFront: true })
-                          return layers.map((layer) => {
-                            const tx = layer.isFront ? cardDragX : 0
-                            const rot = layer.isFront ? cardDragX * 0.15 : layer.baseRotate
-                            const opacity = layer.isFront ? Math.max(0.5, 1 - Math.abs(cardDragX) / 150) : 1
-                            return (
-                              <div key={layer.key} style={{
-                                position: 'absolute', inset: 0,
-                                borderRadius: 6, overflow: 'hidden',
-                                transform: `translateX(${tx}px) rotate(${rot}deg)`,
-                                border: '1.5px solid rgba(255,255,255,0.12)',
-                                background: '#1a1a1a', zIndex: layer.z,
-                                boxShadow: '0 1px 4px rgba(0,0,0,0.4)', opacity,
-                                transition: dragging ? 'none' : 'transform 0.25s ease, opacity 0.25s ease',
-                              }}>
-                                {layer.preview && layer.preview !== 'heic-pending' ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
-                                ) : layer.preview === null ? (
-                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Spinner size={12} />
-                                  </div>
-                                ) : null}
-                              </div>
-                            )
-                          })
-                        })()}
-                      </div>
-                    )}
-                    {/* Count/index badge */}
-                    <div style={{
-                      position: 'absolute', bottom: 4, right: 4, zIndex: 4,
-                      background: 'rgba(217,70,239,0.85)', color: '#fff',
-                      borderRadius: 8, padding: '1px 6px',
-                      fontSize: '0.6rem', fontWeight: 700,
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
-                    }}>
-                      {isDesktop ? attachedFiles.length : Math.min(cardIndex, attachedFiles.length - 1) + 1}
-                    </div>
-                    {/* Clear / delete button */}
-                    <div style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 5 }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (isDesktop) {
-                          setAttachedFiles([]); setAttachedPreviews([])
-                        } else {
-                          const idx = Math.min(cardIndex, attachedFiles.length - 1)
-                          if (attachedFiles.length <= 1) {
-                            setAttachedFiles([]); setAttachedPreviews([]); setCardIndex(0)
-                          } else {
-                            setAttachedFiles(prev => prev.filter((_, j) => j !== idx))
-                            setAttachedPreviews(prev => prev.filter((_, j) => j !== idx))
-                            if (idx >= attachedFiles.length - 1) setCardIndex(Math.max(0, idx - 1))
-                          }
-                        }
-                      }}>✕</div>
-                  </>
-                )}
-              </div>
-
-              {/* Right: textarea + bottom toolbar */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <textarea
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.code === 'Enter') && e.altKey) {
-                      e.preventDefault();
-                      const ta = e.currentTarget;
-                      const start = ta.selectionStart;
-                      const end = ta.selectionEnd;
-                      const val = ta.value;
-                      setInputText(val.substring(0, start) + '\n' + val.substring(end));
-                      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1; });
-                      return;
-                    }
-                    const isMobile = 'ontouchstart' in window;
-                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isMobile && (inputText.trim() || attachedFiles.length > 0)) {
-                      e.preventDefault();
-                      handleCreate();
-                    }
-                  }}
-                  placeholder={"Got a pic? Let's glow it up.\nNo pic? I'll cook one up."}
-                  disabled={creating}
-                  rows={3}
-                  style={{
-                    flex: 1, border: 'none', background: 'transparent',
-                    color: '#fff', fontSize: '0.95rem', lineHeight: 1.45,
-                    padding: '12px 14px 4px',
-                    outline: 'none', resize: 'none',
-                    fontFamily: 'var(--font-geist-sans), sans-serif',
-                    minHeight: 60,
-                  }}
-                />
-                {/* Bottom toolbar: [thumbnails (scrollable)] [Create (pinned)] */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 4,
-                  padding: '4px 8px 8px',
-                }}>
-                  {/* Scrollable thumbnails area */}
-                  <div
-                    className="hide-scrollbar"
-                    onWheel={(e) => {
-                      if (e.deltaY !== 0) {
-                        e.currentTarget.scrollLeft += e.deltaY
-                        e.preventDefault()
-                      }
-                    }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 4,
-                      flex: 1, minWidth: 0,
-                      overflowX: 'auto',
-                      paddingTop: 4,
-                    }}
-                  >
-                  {/* Desktop: thumbnail row for browsing/deleting; Mobile: hidden (card swipe instead) */}
-                  {isDesktop && attachedFiles.length >= 2 && attachedPreviews.map((preview, i) => (
-                    <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
-                      {preview && preview !== 'heic-pending' ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={preview} alt="" style={{
-                          width: 36, height: 36, borderRadius: 8,
-                          objectFit: 'cover', display: 'block',
-                          border: '1px solid rgba(255,255,255,0.12)',
-                        }} />
-                      ) : (
-                        <div style={{
-                          width: 36, height: 36, borderRadius: 8,
-                          background: 'rgba(255,255,255,0.06)',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          <Spinner size={10} />
-                        </div>
-                      )}
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setAttachedFiles(prev => prev.filter((_, j) => j !== i))
-                          setAttachedPreviews(prev => prev.filter((_, j) => j !== i))
-                        }}
-                        style={{
-                          position: 'absolute', top: -4, right: -4,
-                          width: 14, height: 14, borderRadius: '50%',
-                          background: 'rgba(20,20,20,0.9)',
-                          border: '1px solid rgba(255,255,255,0.18)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
-                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                      </div>
-                    </div>
-                  ))}
-
-                  </div>
-
-                  {/* Skill button — inside input bar, before Create */}
-                  <button
-                    onClick={() => setSkillsExpanded(prev => !prev)}
-                    style={{
-                      flexShrink: 0,
-                      padding: selectedSkill ? '4px 10px' : '5px 6px',
-                      borderRadius: selectedSkill ? 12 : 0,
-                      border: 'none',
-                      background: selectedSkill ? 'rgba(217,70,239,0.15)' : 'none',
-                      color: selectedSkill ? '#f0abfc' : 'rgba(255,255,255,0.45)',
-                      fontSize: '0.75rem',
-                      fontWeight: 500,
-                      letterSpacing: '0.03em',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                      fontFamily: 'var(--font-geist-sans), sans-serif',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {selectedSkill
-                      ? availableSkills.find(s => s.name === selectedSkill)?.label || 'Skill'
-                      : 'Skill'}
-                  </button>
-
-                  {/* Create button */}
-                  <button
-                    data-testid="create-project"
-                    className="mkr-create-btn"
-                    onClick={() => {
-                      if (inputText.trim() || attachedFiles.length > 0) handleCreate()
-                      else fileInputRef.current?.click()
-                    }}
-                    disabled={creating}
-                    style={{
-                      flexShrink: 0,
-                      display: 'flex', alignItems: 'center', gap: '5px',
-                      padding: '5px 10px',
-                      borderRadius: '14px',
-                      background: 'none',
-                      border: 'none',
-                      color: 'rgba(217,70,239,0.9)',
-                      fontSize: '0.75rem',
-                      fontWeight: 500,
-                      letterSpacing: '0.03em',
-                      cursor: creating ? 'default' : 'pointer',
-                      fontFamily: 'var(--font-geist-sans), sans-serif',
-                    }}
-                  >
-                    {creating && <Spinner size={12} />}
-                    {!creating && (
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                    )}
-                    Create
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Skill pills — expanded below input */}
-            {skillsExpanded && (
-            <div
-              style={{
-                display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center',
-                padding: skillDragOver ? 8 : 0,
-                borderRadius: 12,
-                border: skillDragOver ? '2px dashed rgba(217,70,239,0.5)' : '2px dashed transparent',
-                background: skillDragOver ? 'rgba(217,70,239,0.08)' : 'transparent',
-                transition: 'all 0.15s',
-              }}
-              onDragOver={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setSkillDragOver(true)
-              }}
-              onDragLeave={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setSkillDragOver(false)
-              }}
-              onDrop={async (e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setSkillDragOver(false)
-                const file = e.dataTransfer.files?.[0]
-                if (file && file.name.endsWith('.zip')) {
-                  await handleSkillUpload(file)
-                }
-              }}
-            >
-              {availableSkills.map(skill => (
-                <span key={skill.name} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-                  <button
-                    onClick={() => setSelectedSkill(selectedSkill === skill.name ? null : skill.name)}
-                    style={{
-                      padding: '5px 14px',
-                      paddingRight: !skill.builtIn ? 28 : 14,
-                      borderRadius: 20,
-                      fontSize: '0.8rem',
-                      letterSpacing: '0.01em',
-                      border: 'none',
-                      background: selectedSkill === skill.name
-                        ? 'rgba(217,70,239,0.15)'
-                        : 'rgba(255,255,255,0.06)',
-                      color: selectedSkill === skill.name
-                        ? '#f0abfc'
-                        : 'rgba(255,255,255,0.4)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                      fontFamily: 'var(--font-geist-sans), sans-serif',
-                    }}
-                  >
-                    {skill.label}
-                  </button>
-                  {/* Delete button for user-uploaded skills */}
-                  {!skill.builtIn && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (!confirm(`Delete skill "${skill.label}"?`)) return
-                        if (selectedSkill === skill.name) setSelectedSkill(null)
-                        setAvailableSkills(prev => prev.filter(s => s.name !== skill.name))
-                        fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skill.name }) })
-                          .catch(err => console.error('Delete skill error:', err))
-                      }}
-                      style={{
-                        position: 'absolute',
-                        right: 6,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: 16,
-                        height: 16,
-                        borderRadius: '50%',
-                        border: 'none',
-                        background: 'transparent',
-                        color: 'rgba(255,255,255,0.3)',
-                        fontSize: '0.65rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: 0,
-                        transition: 'color 0.15s',
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.3)')}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </span>
-              ))}
-              {/* Upload skill button */}
-              <label
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: 20,
-                  fontSize: '0.8rem',
-                  border: 'none',
-                  background: skillUploadError ? 'rgba(239,68,68,0.15)' : skillUploading ? 'rgba(217,70,239,0.12)' : 'rgba(255,255,255,0.04)',
-                  color: skillUploadError ? '#fca5a5' : skillUploading ? '#f0abfc' : 'rgba(255,255,255,0.25)',
-                  cursor: skillUploading ? 'wait' : 'pointer',
-                  transition: 'all 0.15s',
-                  fontFamily: 'var(--font-geist-sans), sans-serif',
-                  pointerEvents: skillUploading ? 'none' : 'auto',
-                }}
-              >
-                {skillUploadError ? skillUploadError : skillUploading ? 'Uploading...' : '+ Skill'}
-                <input
-                  type="file"
-                  accept=".zip"
-                  style={{ display: 'none' }}
-                  disabled={skillUploading}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (file) await handleSkillUpload(file)
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-            </div>
-            )}
-
+            />
           </div>
         </div>
 
