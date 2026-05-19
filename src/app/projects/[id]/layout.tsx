@@ -56,8 +56,8 @@ export default async function ProjectLayout({ children, params }: { children: Re
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={lcpUrl} alt="" className="w-full h-full object-contain" fetchPriority="high" />
               </div>
-              {/* Bottom bar placeholder: StatusBar (44) + TipsBar (70/78) + CategoryTabs (32) */}
-              <div className="flex-shrink-0 h-[154px] lg:h-[146px]" />
+              {/* Bottom bar: StatusBar (46) + TipsBar/VideoCard + CategoryTabs = 166px mobile, 146px desktop */}
+              <div className="flex-shrink-0 h-[166px] lg:h-[146px]" />
             </div>
             {/* Right: CUI panel placeholder (desktop only) */}
             <div className="hidden lg:block flex-shrink-0 border-l border-white/[0.08]" style={{ width: 500 }} />
