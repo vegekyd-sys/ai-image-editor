@@ -12,6 +12,7 @@ scripts/serve*
 !public/landing/*.png
 !public/skills/*.jpg
 !public/skills/*.gif
+!public/video-placeholder.png
 *.heic
 *.HEIC
 progress.md
