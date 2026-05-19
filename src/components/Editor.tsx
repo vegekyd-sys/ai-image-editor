@@ -21,6 +21,7 @@ const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), 
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
 import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
+import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
 import { downloadAsset } from '@/lib/editor/download';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
@@ -469,16 +470,33 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const currentSnapIndex = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
   const currentSnap = snapshots[currentSnapIndex];
   const isAtDraftSlot = isDraft && viewIndex === draftParentIndex! + 1;
-  const isViewingVideoV2 = isV2 && !isAtDraftSlot && currentSnap?.type === 'video';
-  const isViewingVideoV1 = !isV2 && hasAnyAnimation && viewIndex === videoTimelineIndex;
-  const isViewingVideo = isViewingVideoV1 || isViewingVideoV2;
+
+  // ── Content type resolution via renderer registry ──
+  const rendererContext: RendererContext = useMemo(() => ({
+    viewIndex,
+    draftParentIndex,
+    isAtDraftSlot,
+    timelineVersion,
+    animations,
+    selectedVideoId,
+  }), [viewIndex, draftParentIndex, isAtDraftSlot, timelineVersion, animations, selectedVideoId]);
+
+  const isV1VideoSentinel = !isV2 && hasAnyAnimation && viewIndex === videoTimelineIndex;
+  const contentType: ContentType = useMemo(
+    () => isV1VideoSentinel ? 'video' : resolveContentType(currentSnap, rendererContext),
+    [currentSnap, rendererContext, isV1VideoSentinel],
+  );
+
+  const isViewingVideo = contentType === 'video';
+  const isViewingVideoV2 = isViewingVideo && isV2;
+  const isViewingVideoV1 = isViewingVideo && !isV2;
   // Currently selected video for canvas playback (v1 only)
   const currentVideo = (selectedVideoId && animations.find(a => a.id === selectedVideoId))
     || animations.find(a => a.status === 'completed' && !!a.videoUrl);
 
   // Design editable: current snapshot has a design with editables
   const currentDesignSnap = snapshots[currentSnapIndex];
-  const isViewingDesign = !isViewingVideo && !!currentDesignSnap?.design?.editables?.length;
+  const isViewingDesign = contentType === 'design';
   const editingDesignField = editingDesignFieldId
     ? currentDesignSnap?.design?.editables?.find(f => f.id === editingDesignFieldId) ?? null
     : null;
@@ -3077,7 +3095,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             ) : (
               <ImageCanvas
                 data-testid="canvas"
-                key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
+                key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${currentSnap?.videoMeta?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
                 timeline={timeline}
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}

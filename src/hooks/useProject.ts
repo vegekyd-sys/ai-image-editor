@@ -188,30 +188,33 @@ export function useProject(projectId: string, userId: string) {
       try {
         const supabase = getSupabase()
 
-        let imageUrl: string | null
+        let imageUrl: string | null = null
 
-        // If image is already a Storage URL, skip upload
-        if (snapshot.image.startsWith('http')) {
-          imageUrl = snapshot.image
-        } else {
-          // Upload base64 image to Storage
-          const filename = `snapshot-${snapshot.id}.jpg`
-          imageUrl = await uploadImage(
-            supabase,
-            userId,
-            projectId,
-            filename,
-            snapshot.image,
-          )
-        }
+        // Video snapshots have no image to upload — poster is captured later by ImageCanvas
+        const isVideoSnapshot = snapshot.type === 'video'
 
-        if (!imageUrl) {
-          console.warn('Failed to upload snapshot image')
-          return
+        if (!isVideoSnapshot) {
+          if (snapshot.image.startsWith('http')) {
+            imageUrl = snapshot.image
+          } else {
+            const filename = `snapshot-${snapshot.id}.jpg`
+            imageUrl = await uploadImage(
+              supabase,
+              userId,
+              projectId,
+              filename,
+              snapshot.image,
+            )
+          }
+
+          if (!imageUrl) {
+            console.warn('Failed to upload snapshot image')
+            return
+          }
         }
 
         // Notify caller of the uploaded URL
-        onUploaded?.(imageUrl)
+        if (imageUrl) onUploaded?.(imageUrl)
 
         // Persist design code to workspace if present
         let designPath: string | null = null
@@ -238,7 +241,7 @@ export function useProject(projectId: string, userId: string) {
         const { error } = await supabase.from('snapshots').upsert({
           id: snapshot.id,
           project_id: projectId,
-          image_url: imageUrl,
+          image_url: imageUrl || '',
           tips: snapshot.tips,
           message_id: messageId,
           sort_order: sortOrder,

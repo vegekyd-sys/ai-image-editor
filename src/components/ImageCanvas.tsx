@@ -898,6 +898,7 @@ export default function ImageCanvas({
               key={effectiveVideoUrl}
               ref={videoRef}
               src={effectiveVideoUrl ? `${effectiveVideoUrl}#t=0.001` : undefined}
+              crossOrigin="anonymous"
               playsInline
               muted
               preload="metadata"
