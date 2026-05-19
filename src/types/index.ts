@@ -151,6 +151,7 @@ export interface ProjectAnimation {
   videoUrl: string | null;
   prompt: string;
   snapshotUrls: string[];
+  imageUrl?: string;
   status: 'processing' | 'completed' | 'failed' | 'abandoned';
   duration?: number | null;
   createdAt: string;

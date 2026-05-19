@@ -80,7 +80,7 @@ export default function VideoResultCard({
           const isCompleted = anim.status === 'completed' && !!anim.videoUrl;
           const isProcessing = anim.status === 'processing';
           const isFailed = anim.status === 'failed';
-          const thumbUrl = anim.snapshotUrls[0];
+          const thumbUrl = anim.imageUrl;
           const title = videoTitle(anim.prompt, idx);
 
           const modelLabel = anim.videoModel === 'seedance' ? 'SD' : anim.videoModel === 'upload' ? '' : 'K3';
