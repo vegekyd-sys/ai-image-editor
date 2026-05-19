@@ -3022,7 +3022,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       data-current-snapshot={viewIndex}
       data-view-mode={viewMode}
       data-preferred-model={preferredModel}
-      className={`h-dvh bg-black relative overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
+      className={`h-dvh bg-black relative z-[1] overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
     >
       <input
         ref={fileInputRef}
