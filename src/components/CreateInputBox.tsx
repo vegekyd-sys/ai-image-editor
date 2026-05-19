@@ -83,7 +83,7 @@ export default function CreateInputBox({
   const {
     files, previews, text, setText, creating,
     fileInputRef, cardIndex, setCardIndex, cardDragX, setCardDragX,
-    removeFile,
+    addFiles, removeFile,
   } = input;
 
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null);
@@ -362,6 +362,15 @@ export default function CreateInputBox({
           </button>
         </div>
       </div>
+      {/* Hidden file input for photo/video uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*,.heic,.heif"
+        multiple
+        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+        onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) addFiles(f); }}
+      />
     </div>
   );
 }
