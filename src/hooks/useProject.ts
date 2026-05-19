@@ -123,28 +123,28 @@ export function useProject(projectId: string, userId: string) {
       }
     }))
 
-    // Resolve expired audio/video URLs in design code (blocking — must complete before return)
-    for (const snap of snapshots) {
-      if (!snap.design?.code) continue
-      try {
-        let { code, changed } = await resolveAudioUrlsInCode(snap.design.code, projectId, supabase)
-        const video = await resolveVideoUrlsInCode(code, projectId, supabase)
-        if (video.changed) { code = video.code; changed = true }
-        if (!changed) continue
-        snap.design = { ...snap.design, code }
-        // Re-save to workspace (fire-and-forget)
-        const dp = snap.designPath
-        if (dp && resolvedUserId) {
-          const designJson = JSON.stringify(snap.design)
-          const storagePath = `${resolvedUserId}/workspace/${dp}`
-          supabase.storage.from('images').upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
-            .then(() => console.log(`🔗 [url-resolve] updated ${dp}`))
-            .catch(() => {})
+    // Background: resolve expired audio/video URLs in design code (non-blocking, re-save for next load)
+    Promise.resolve().then(async () => {
+      for (const snap of snapshots) {
+        if (!snap.design?.code) continue
+        try {
+          let { code, changed } = await resolveAudioUrlsInCode(snap.design.code, projectId, supabase)
+          const video = await resolveVideoUrlsInCode(code, projectId, supabase)
+          if (video.changed) { code = video.code; changed = true }
+          if (!changed) continue
+          snap.design = { ...snap.design, code }
+          const dp = snap.designPath
+          if (dp && resolvedUserId) {
+            const designJson = JSON.stringify(snap.design)
+            const storagePath = `${resolvedUserId}/workspace/${dp}`
+            await supabase.storage.from('images').upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
+            console.log(`🔗 [url-resolve] updated ${dp}`)
+          }
+        } catch (e) {
+          console.warn('[url-resolve] failed for snapshot:', snap.id, e)
         }
-      } catch (e) {
-        console.warn('[url-resolve] failed for snapshot:', snap.id, e)
       }
-    }
+    })
 
     const messages: Message[] = dbMessages.map((m) => {
       // Restore inline image + design: find the snapshot linked to this message
