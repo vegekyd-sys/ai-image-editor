@@ -5,17 +5,18 @@ import { useRequireAuth } from '@/hooks/useRequireAuth'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
-import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils'
+import { isHeicFile } from '@/lib/imageUtils'
 import { useLocale } from '@/lib/i18n'
 import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
 import RollingTagline from '@/components/RollingTagline'
-import SkillSelector from '@/components/SkillSelector'
 import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
 import AgentContent from '@/components/AgentContent'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
+import { useCreateInput } from '@/hooks/useCreateInput'
+import CreateInputBox from '@/components/CreateInputBox'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 
@@ -63,17 +64,13 @@ function HomePageInner() {
   const isDesktop = useIsDesktop()
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
-  const [creating, setCreating] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const createInput = useCreateInput()
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
   const [inputBoxHeight, setInputBoxHeight] = useState(0)
   const inputWrapperRef = useRef<HTMLDivElement>(null)
   const [inputWrapperHeight, setInputWrapperHeight] = useState(0)
-  const [inputText, setInputText] = useState('')
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
-  const [attachedPreviews, setAttachedPreviews] = useState<(string | null)[]>([])
   const [slotDragOver, setSlotDragOver] = useState(-1)
   const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
@@ -158,7 +155,7 @@ function HomePageInner() {
     }
     // Delay text restore to run after skill overlay sets its default prompt
     setTimeout(() => {
-      if (returnTextRef.current) { setInputText(returnTextRef.current); returnTextRef.current = null }
+      if (returnTextRef.current) { createInput.setText(returnTextRef.current); returnTextRef.current = null }
     }, 100)
   }, [])
 
@@ -334,7 +331,7 @@ function HomePageInner() {
     openedFromUrlRef.current = true
     setSelectedDetail(skill)
     setSelectedSkill(skill.skill_path ? skill.id : null)
-    setInputText(skill.prompt)
+    createInput.setText(skill.prompt)
     setHeroExpanded(true)
     window.history.replaceState(null, '', `/home/${skillId}`)
   }, [homeSkills]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -364,9 +361,8 @@ function HomePageInner() {
       setHeroExpanded(false)
       setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
       setSelectedSkill(null)
-      setInputText('')
-      setAttachedFiles([])
-      setAttachedPreviews([])
+      createInput.setText('')
+      createInput.clear()
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
@@ -420,7 +416,7 @@ function HomePageInner() {
     resizeTextarea()
     resizeInlineTextarea()
     userTypingRef.current = false
-  }, [inputText, resizeTextarea])
+  }, [createInput.text, resizeTextarea])
   useEffect(() => {
     if (selectedDetail) {
       const tid = setTimeout(resizeTextarea, 300)
@@ -428,106 +424,23 @@ function HomePageInner() {
     }
   }, [selectedDetail, resizeTextarea])
 
-  const [cardIndex, setCardIndex] = useState(0)
-  const [cardDragX, setCardDragX] = useState(0)
-  const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null)
   const cardSwipeRef = useRef<HTMLDivElement>(null)
   const inlineCardSwipeRef = useRef<HTMLDivElement>(null)
 
-  const registerSwipe = useCallback((el: HTMLDivElement | null) => {
-    if (!el) return () => {}
-    const onMove = (e: TouchEvent) => {
-      if (!cardTouchRef.current) return
-      const dx = e.touches[0].clientX - cardTouchRef.current.startX
-      const dy = e.touches[0].clientY - cardTouchRef.current.startY
-      if (!cardTouchRef.current.locked) {
-        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
-        cardTouchRef.current.locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
-      }
-      if (cardTouchRef.current.locked !== 'x') return
-      e.preventDefault()
-      e.stopPropagation()
-      setCardDragX(() => dx)
-    }
-    el.addEventListener('touchmove', onMove, { passive: false })
-    return () => el.removeEventListener('touchmove', onMove)
-  }, [])
-
-  useEffect(() => {
-    const cleanup1 = registerSwipe(cardSwipeRef.current)
-    const cleanup2 = registerSwipe(inlineCardSwipeRef.current)
-    return () => { cleanup1(); cleanup2() }
-  }, [attachedFiles.length, registerSwipe])
-
-  const MAX_FILES = 10
   const [dragOver, setDragOver] = useState(false)
   const dragCounterRef = useRef(0)
 
-  const addFiles = useCallback(async (newFiles: File[]) => {
-    if (creating || newFiles.length === 0) return
-    for (const file of newFiles) {
-      let atLimit = false
-      setAttachedFiles(prev => {
-        if (prev.length >= MAX_FILES) { atLimit = true; return prev }
-        return prev
-      })
-      if (atLimit) break
-
-      if (file.type.startsWith('video/')) {
-        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
-        setAttachedPreviews(prev => [...prev, null].slice(0, MAX_FILES))
-        import('@/lib/video-upload').then(({ extractVideoPoster }) =>
-          extractVideoPoster(file).then(poster => {
-            setAttachedPreviews(prev => {
-              const idx = prev.lastIndexOf(null)
-              if (idx === -1) return prev
-              return prev.map((p, i) => i === idx ? poster : p)
-            })
-          }).catch(() => {})
-        )
-      } else if (isHeicFile(file)) {
-        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
-        setAttachedPreviews(prev => [...prev, null].slice(0, MAX_FILES))
-        try {
-          const decodable = await ensureDecodableFile(file)
-          const previewUrl = URL.createObjectURL(decodable)
-          setAttachedFiles(prev => {
-            const idx = prev.indexOf(file)
-            if (idx === -1) return prev
-            return prev.map((f, i) => i === idx ? decodable : f)
-          })
-          setAttachedPreviews(prev => {
-            const idx = prev.lastIndexOf(null)
-            if (idx === -1) return prev
-            return prev.map((p, i) => i === idx ? previewUrl : p)
-          })
-        } catch {
-          setAttachedPreviews(prev => {
-            const idx = prev.lastIndexOf(null)
-            if (idx === -1) return prev
-            return prev.map((p, i) => i === idx ? 'heic-pending' : p)
-          })
-        }
-      } else {
-        const previewUrl = URL.createObjectURL(file)
-        setAttachedFiles(prev => [...prev, file].slice(0, MAX_FILES))
-        setAttachedPreviews(prev => [...prev, previewUrl].slice(0, MAX_FILES))
-      }
-    }
-    setCardIndex(999)
-  }, [creating])
-
   const saveContextBeforeLogin = useCallback(() => {
-    if (inputText.trim()) localStorage.setItem('mkr_return_text', inputText)
+    if (createInput.text.trim()) localStorage.setItem('mkr_return_text', createInput.text)
     if (selectedDetail?.id) localStorage.setItem('mkr_return_skill', selectedDetail.id)
-  }, [inputText, selectedDetail])
+  }, [createInput.text, selectedDetail])
 
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
     saveContextBeforeLogin()
     const authedUser = await requireAuth()
     if (!authedUser) return
-    if (creating || (files.length === 0 && !prompt)) return
-    setCreating(true)
+    if (createInput.creating || (files.length === 0 && !prompt)) return
+    createInput.setCreating(true)
     try {
       const supabase = createClient()
       let skillName: string | undefined
@@ -558,55 +471,48 @@ function HomePageInner() {
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('Create project error:', err)
-      setCreating(false)
+      createInput.setCreating(false)
     }
-  }, [requireAuth, saveContextBeforeLogin, creating, router, selectedDetail, selectedSkill])
+  }, [requireAuth, saveContextBeforeLogin, createInput, router, selectedDetail, selectedSkill])
 
   const handleCreate = useCallback(async () => {
-    const hasText = inputText.trim()
-    const hasFiles = attachedFiles.length > 0
+    const hasText = createInput.text.trim()
+    const hasFiles = createInput.files.length > 0
     if (!hasText && !hasFiles) return
-    await handleCreateProject(hasFiles ? attachedFiles : [], hasText || undefined)
-    setInputText('')
-    setAttachedFiles([])
-    setAttachedPreviews([])
-  }, [inputText, attachedFiles, handleCreateProject])
+    await handleCreateProject(hasFiles ? createInput.files : [], hasText || undefined)
+    createInput.clear()
+  }, [createInput, handleCreateProject])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     dragCounterRef.current = 0
     setDragOver(false)
-    if (creating) return
+    if (createInput.creating) return
     const allFiles = Array.from(e.dataTransfer.files ?? [])
     const zipFile = allFiles.find(f => f.name.endsWith('.zip'))
     if (zipFile) { handleSkillUpload(zipFile); return }
     const droppedFiles = allFiles.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || isHeicFile(f))
-    addFiles(droppedFiles)
-  }, [creating, addFiles, handleSkillUpload])
-
-  const removeFile = useCallback((index: number) => {
-    setAttachedFiles(prev => prev.filter((_, j) => j !== index))
-    setAttachedPreviews(prev => prev.filter((_, j) => j !== index))
-  }, [])
+    createInput.addFiles(droppedFiles)
+  }, [createInput, handleSkillUpload])
 
   const handleSlotDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
-    addFiles(files)
-  }, [addFiles])
+    createInput.addFiles(files)
+  }, [createInput])
 
   const renderUploadSlots = useCallback((template: { image_count?: number; before_images?: string[] }, isActive: boolean) => {
     const minSlots = template.image_count ?? 1
-    const count = Math.max(minSlots, attachedFiles.length + 1)
+    const count = Math.max(minSlots, createInput.files.length + 1)
     const befores = (template.before_images || []).slice(0, 3)
-    const showBefores = befores.length > 0 && attachedFiles.length === 0
+    const showBefores = befores.length > 0 && createInput.files.length === 0
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'visible', position: 'relative', minHeight: 64 }}>
         {Array.from({ length: count }, (_, i) => {
           const isDragTarget = slotDragOver === i
           return (
             <div key={i}
-              onClick={async () => { const u = await requireAuth(); if (!u) return; if (isActive && !attachedPreviews[i] && !creating) fileInputRef.current?.click() }}
+              onClick={async () => { const u = await requireAuth(); if (!u) return; if (isActive && !createInput.previews[i] && !createInput.creating) createInput.fileInputRef.current?.click() }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
               onDragLeave={() => setSlotDragOver(-1)}
@@ -623,12 +529,12 @@ function HomePageInner() {
                 boxShadow: isDragTarget ? '0 0 0 1px rgba(217,70,239,0.12)' : 'none',
                 transition: 'border-color 0.2s, background 0.2s, box-shadow 0.2s',
               }}>
-              {isActive && attachedPreviews[i] && attachedPreviews[i] !== 'heic-pending' ? (
+              {isActive && createInput.previews[i] && createInput.previews[i] !== 'heic-pending' ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={attachedPreviews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div onClick={(e) => { e.stopPropagation(); removeFile(i) }}
-                    style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>✕</div>
+                  <img src={createInput.previews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <div onClick={(e) => { e.stopPropagation(); createInput.removeFile(i) }}
+                    style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>&#x2715;</div>
                 </>
               ) : (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -683,7 +589,7 @@ function HomePageInner() {
         )}
       </div>
     )
-  }, [attachedFiles.length, attachedPreviews, creating, handleSlotDrop, removeFile, slotDragOver])
+  }, [createInput, handleSlotDrop, slotDragOver])
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
@@ -720,276 +626,12 @@ function HomePageInner() {
     </div>
   )
 
-  const renderInputBox = (opts: {
-    isInline: boolean
-    taRef: React.RefObject<HTMLTextAreaElement | null>
-    boxRef?: React.RefObject<HTMLDivElement | null>
-    slotWidth: number
-  }) => {
-    const { isInline, taRef, boxRef, slotWidth } = opts
-    const collapseSlot = !isInline && !!selectedDetail
-    const swipeRef = !isDesktop && !isInline ? cardSwipeRef : !isDesktop && isInline ? inlineCardSwipeRef : undefined
-    return (
-      <div
-        ref={boxRef}
-        className="mkr-input-box"
-        onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
-        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
-        onDragLeave={(e) => { e.preventDefault(); dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragOver(false) } }}
-        onDrop={handleDrop}
-        style={{
-          display: 'flex', gap: 0,
-          borderRadius: 18,
-          border: dragOver ? '1px solid rgba(217,70,239,0.6)' : `1px solid rgba(255,255,255,${isInline ? 0.1 : 0.18})`,
-          background: dragOver ? 'rgba(217,70,239,0.08)' : isInline ? 'rgba(255,255,255,0.03)' : 'rgba(15,15,15,0.65)',
-          overflow: 'hidden',
-          transition: 'border-color 0.2s, background 0.2s',
-          ...(isInline ? {} : {
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            pointerEvents: 'auto' as const,
-            boxShadow: '0 0 0 0.5px rgba(255,255,255,0.08), 0 8px 32px rgba(0,0,0,0.8), 0 0 60px 30px rgba(0,0,0,0.5)',
-          }),
-        }}
-      >
-        {/* Left: + button / photo slot */}
-        <div
-          data-testid="photo-slot"
-          onClick={async () => { const u = await requireAuth(); if (!u) return; if (!creating && !collapseSlot) fileInputRef.current?.click() }}
-          style={{
-            width: collapseSlot ? 0 : slotWidth,
-            flexShrink: 0, alignSelf: 'stretch',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: creating || collapseSlot ? 'default' : 'pointer',
-            borderRight: collapseSlot ? 'none' : '1px solid rgba(255,255,255,0.08)',
-            position: 'relative', overflow: 'hidden',
-            background: attachedFiles.length > 0 ? 'transparent' : 'rgba(217,70,239,0.04)',
-            transition: 'width 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-right 0.2s',
-          }}
-        >
-          {attachedFiles.length === 0 ? (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
-          ) : attachedFiles.length === 1 ? (
-            <>
-              {attachedPreviews[0] && attachedPreviews[0] !== 'heic-pending' ? (
-                <>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={attachedPreviews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                  {creating && attachedFiles[0]?.type.startsWith('video/') && (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
-                      <Spinner size={16} />
-                    </div>
-                  )}
-                </>
-              ) : attachedPreviews[0] === null ? (
-                <Spinner size={16} />
-              ) : (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.7)" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14,2 14,8 20,8" /></svg>
-              )}
-              {!creating && <div style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 2 }}
-                onClick={(e) => { e.stopPropagation(); setAttachedFiles([]); setAttachedPreviews([]) }}>✕</div>}
-            </>
-          ) : (
-            <>
-              {isDesktop ? (
-                <div style={{ position: 'absolute', inset: 6, pointerEvents: 'none' }}>
-                  {(() => {
-                    const cardStyle = (rotate: number, zIdx: number): React.CSSProperties => ({
-                      position: 'absolute', inset: 0, borderRadius: 6, overflow: 'hidden',
-                      transform: `rotate(${rotate}deg)`,
-                      border: '1.5px solid rgba(255,255,255,0.12)',
-                      background: '#1a1a1a', zIndex: zIdx, boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-                    })
-                    const n = attachedFiles.length
-                    const layers: { preview: string | null; rotate: number; z: number }[] = []
-                    if (n >= 3) layers.push({ preview: attachedPreviews[0], rotate: -6, z: 1 })
-                    if (n >= 2) layers.push({ preview: attachedPreviews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2 })
-                    layers.push({ preview: attachedPreviews[n - 1], rotate: 0, z: 3 })
-                    return layers.map((layer, li) => (
-                      <div key={li} style={cardStyle(layer.rotate, layer.z)}>
-                        {layer.preview && layer.preview !== 'heic-pending' ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : layer.preview === null ? (
-                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
-                        ) : null}
-                      </div>
-                    ))
-                  })()}
-                </div>
-              ) : (
-                <div
-                  ref={swipeRef}
-                  data-idx={Math.min(cardIndex, attachedFiles.length - 1)}
-                  data-count={attachedFiles.length}
-                  style={{ position: 'absolute', inset: 6 }}
-                  onTouchStart={(e) => { cardTouchRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, locked: null } }}
-                  onTouchEnd={() => {
-                    const touch = cardTouchRef.current; cardTouchRef.current = null
-                    if (!touch || touch.locked !== 'x') { setCardDragX(0); return }
-                    const idx = Math.min(cardIndex, attachedFiles.length - 1)
-                    const n = attachedFiles.length
-                    if (cardDragX < -25) setCardIndex((idx + 1) % n)
-                    else if (cardDragX > 25) setCardIndex((idx - 1 + n) % n)
-                    setCardDragX(0)
-                  }}
-                >
-                  {(() => {
-                    const n = attachedFiles.length; const idx = Math.min(cardIndex, n - 1); const dragging = cardDragX !== 0
-                    const layers: { preview: string | null; baseRotate: number; z: number; key: number; isFront: boolean }[] = []
-                    if (idx + 1 < n) layers.push({ preview: attachedPreviews[idx + 1], baseRotate: 4, z: 1, key: idx + 1, isFront: false })
-                    if (idx > 0) layers.push({ preview: attachedPreviews[idx - 1], baseRotate: -4, z: 1, key: idx - 1, isFront: false })
-                    layers.push({ preview: attachedPreviews[idx], baseRotate: 0, z: 3, key: idx, isFront: true })
-                    return layers.map((layer) => {
-                      const tx = layer.isFront ? cardDragX : 0; const rot = layer.isFront ? cardDragX * 0.15 : layer.baseRotate
-                      const opacity = layer.isFront ? Math.max(0.5, 1 - Math.abs(cardDragX) / 150) : 1
-                      return (
-                        <div key={layer.key} style={{
-                          position: 'absolute', inset: 0, borderRadius: 6, overflow: 'hidden',
-                          transform: `translateX(${tx}px) rotate(${rot}deg)`,
-                          border: '1.5px solid rgba(255,255,255,0.12)', background: '#1a1a1a', zIndex: layer.z,
-                          boxShadow: '0 1px 4px rgba(0,0,0,0.4)', opacity,
-                          transition: dragging ? 'none' : 'transform 0.25s ease, opacity 0.25s ease',
-                        }}>
-                          {layer.preview && layer.preview !== 'heic-pending' ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
-                          ) : layer.preview === null ? (
-                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
-                          ) : null}
-                        </div>
-                      )
-                    })
-                  })()}
-                </div>
-              )}
-              <div style={{ position: 'absolute', bottom: 4, right: 4, zIndex: 4, background: 'rgba(217,70,239,0.85)', color: '#fff', borderRadius: 8, padding: '1px 6px', fontSize: '0.6rem', fontWeight: 700, boxShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
-                {isDesktop ? attachedFiles.length : Math.min(cardIndex, attachedFiles.length - 1) + 1}
-              </div>
-              <div style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', cursor: 'pointer', zIndex: 5 }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (isDesktop) { setAttachedFiles([]); setAttachedPreviews([]) }
-                  else {
-                    const idx = Math.min(cardIndex, attachedFiles.length - 1)
-                    if (attachedFiles.length <= 1) { setAttachedFiles([]); setAttachedPreviews([]); setCardIndex(0) }
-                    else { removeFile(idx); if (idx >= attachedFiles.length - 1) setCardIndex(Math.max(0, idx - 1)) }
-                  }
-                }}>✕</div>
-            </>
-          )}
-        </div>
-
-        {/* Right: textarea + bottom toolbar */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <textarea
-            ref={taRef}
-            value={inputText}
-            onChange={(e) => { userTypingRef.current = true; setInputText(e.target.value) }}
-            onFocus={() => setTextareaFocused(true)}
-            onBlur={() => setTextareaFocused(false)}
-            onKeyDown={(e) => {
-              if ((e.key === 'Enter' || e.code === 'Enter') && e.altKey) {
-                e.preventDefault()
-                const ta = e.currentTarget
-                const start = ta.selectionStart
-                const end = ta.selectionEnd
-                const val = ta.value
-                setInputText(val.substring(0, start) + '\n' + val.substring(end))
-                requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1 })
-                return
-              }
-              const isMobile = 'ontouchstart' in window
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isMobile && (inputText.trim() || attachedFiles.length > 0)) {
-                e.preventDefault()
-                handleCreate()
-              }
-            }}
-            placeholder={placeholders[placeholderIdx]}
-            disabled={creating}
-            rows={2}
-            style={{
-              border: 'none', background: 'transparent',
-              color: 'rgba(255,255,255,0.88)', fontSize: '17px', lineHeight: 1.45,
-              padding: '12px 14px 4px',
-              outline: 'none', resize: 'none',
-              fontFamily: 'inherit',
-              caretColor: '#d946ef',
-              minHeight: 40,
-              maxHeight: isInline && selectedDetail ? 40 : '8rem',
-              overflowY: isInline && selectedDetail ? 'hidden' : 'auto',
-              display: 'block', width: '100%',
-              ...(isInline && selectedDetail ? { textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : {}),
-            }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
-            <div className="hide-scrollbar" onWheel={(e) => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault() } }}
-              style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 4 }}>
-              {isDesktop && attachedFiles.length >= 2 && attachedPreviews.map((preview, i) => (
-                <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
-                  {preview && preview !== 'heic-pending' ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={preview} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', display: 'block', border: '1px solid rgba(255,255,255,0.12)' }} />
-                  ) : (
-                    <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={10} /></div>
-                  )}
-                  <div onClick={(e) => { e.stopPropagation(); removeFile(i) }}
-                    style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                    <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/* Skill selector */}
-            <SkillSelector
-              skills={availableSkills}
-              selectedSkill={selectedSkill}
-              onSkillChange={setSelectedSkill}
-              onDeleteSkill={(name) => {
-                setAvailableSkills(prev => prev.filter(s => s.name !== name))
-                fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {})
-              }}
-              onUploadSkill={() => skillFileRef.current?.click()}
-              installing={installingSkill}
-              overrideLabel={selectedSkill ? (
-                availableSkills.find(s => s.name === selectedSkill)?.label
-                || homeSkills.find(s => s.id === selectedSkill)?.labels[locale]
-                || null
-              ) : null}
-              direction={isInline ? 'down' : 'up'}
-            />
-            <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSkillUpload(f); e.target.value = '' }} />
-            <button
-              className="mkr-create-btn"
-              onClick={async () => { if (inputText.trim() || attachedFiles.length > 0) { handleCreate() } else { const u = await requireAuth(); if (!u) return; fileInputRef.current?.click() } }}
-              disabled={creating}
-              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
-            >
-              {creating && <Spinner size={12} />}
-              {!creating && !user && (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
-              )}
-              {!creating && user && (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-              )}
-              {!user ? (locale === 'zh' ? '免费试用' : 'Try free') : 'Create'}
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   const handleSkillCardClick = (template: HomeSkill, e: React.MouseEvent) => {
     if (selectedDetail?.id === template.id) {
       setHeroExpanded(false)
       setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
       setSelectedSkill(null)
-      setInputText('')
+      createInput.setText('')
       window.history.pushState(null, '', '/home')
       return
     }
@@ -999,7 +641,7 @@ function HomePageInner() {
     setHeroExpanded(false)
     setSelectedDetail(template)
     setSelectedSkill(template.skill_path ? template.id : null)
-    setInputText(template.prompt)
+    createInput.setText(template.prompt)
     const idx = homeSkills.findIndex(t => t.id === template.id)
     requestAnimationFrame(() => {
       setHeroExpanded(true)
@@ -1108,19 +750,6 @@ function HomePageInner() {
           background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
         }} />
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,video/*,.heic,.heif"
-          multiple
-          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
-          onChange={async (e) => {
-            const files = Array.from(e.target.files ?? [])
-            e.target.value = ''
-            addFiles(files)
-          }}
-        />
-
         <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
           <TopBar page="home" />
         </div>
@@ -1157,7 +786,38 @@ function HomePageInner() {
           <div ref={inlineInputRef} className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
           }}>
-            {renderInputBox({ isInline: true, taRef: inlineTextareaRef, boxRef: inlineBoxRef, slotWidth: inlineBoxHeight > 0 ? inlineBoxHeight : 52 })}
+            <CreateInputBox
+              input={createInput}
+              slotWidth={inlineBoxHeight > 0 ? inlineBoxHeight : 52}
+              isInline={true}
+              collapseSlot={false}
+              isDesktop={isDesktop}
+              boxRef={inlineBoxRef}
+              textareaRef={inlineTextareaRef}
+              swipeRef={inlineCardSwipeRef}
+              placeholder={placeholders[placeholderIdx]}
+              createLabel={!user ? (locale === 'zh' ? '免费试用' : 'Try free') : 'Create'}
+              showLoginIcon={!user}
+              onSubmit={handleCreate}
+              onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
+              onTextareaFocus={() => setTextareaFocused(true)}
+              onTextareaBlur={() => setTextareaFocused(false)}
+              skills={availableSkills}
+              selectedSkill={selectedSkill}
+              onSkillChange={setSelectedSkill}
+              onDeleteSkill={(name) => { setAvailableSkills(prev => prev.filter(s => s.name !== name)); fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {}) }}
+              onUploadSkill={() => skillFileRef.current?.click()}
+              installingSkill={installingSkill}
+              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}
+              skillDirection="down"
+              skillFileRef={skillFileRef}
+              onSkillFileChange={handleSkillUpload}
+              dragOver={dragOver}
+              onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+              onDragLeave={(e) => { e.preventDefault(); dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragOver(false) } }}
+              onDrop={handleDrop}
+            />
           </div>
         </div>
 
@@ -1282,7 +942,38 @@ function HomePageInner() {
                 {renderUploadSlots(selectedDetail, true)}
               </div>
             )}
-            {renderInputBox({ isInline: false, taRef: textareaRef, boxRef: inputBoxRef, slotWidth: photoSlotWidth })}
+            <CreateInputBox
+              input={createInput}
+              slotWidth={photoSlotWidth}
+              isInline={false}
+              collapseSlot={!isDesktop && !!selectedDetail}
+              isDesktop={isDesktop}
+              boxRef={inputBoxRef}
+              textareaRef={textareaRef}
+              swipeRef={cardSwipeRef}
+              placeholder={placeholders[placeholderIdx]}
+              createLabel={!user ? (locale === 'zh' ? '免费试用' : 'Try free') : 'Create'}
+              showLoginIcon={!user}
+              onSubmit={handleCreate}
+              onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
+              onTextareaFocus={() => setTextareaFocused(true)}
+              onTextareaBlur={() => setTextareaFocused(false)}
+              skills={availableSkills}
+              selectedSkill={selectedSkill}
+              onSkillChange={setSelectedSkill}
+              onDeleteSkill={(name) => { setAvailableSkills(prev => prev.filter(s => s.name !== name)); fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {}) }}
+              onUploadSkill={() => skillFileRef.current?.click()}
+              installingSkill={installingSkill}
+              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}
+              skillDirection="up"
+              skillFileRef={skillFileRef}
+              onSkillFileChange={handleSkillUpload}
+              dragOver={dragOver}
+              onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+              onDragLeave={(e) => { e.preventDefault(); dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragOver(false) } }}
+              onDrop={handleDrop}
+            />
           </div>
         </div>
       </div>
@@ -1331,7 +1022,7 @@ function HomePageInner() {
       {/* ── Skill Detail Overlay ── */}
       {selectedDetail && (
         <div
-          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText(''); window.history.pushState(null, '', '/home') } }}
+          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); createInput.setText(''); window.history.pushState(null, '', '/home') } }}
           style={{
             position: 'fixed', inset: 0, zIndex: Z.OVERLAY,
             background: isDesktop ? 'rgba(0,0,0,0.7)' : '#000',
@@ -1392,7 +1083,7 @@ function HomePageInner() {
 
             {/* Close button — top right */}
             <button
-              onClick={() => { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); setInputText(''); setAttachedFiles([]); setAttachedPreviews([]); window.history.pushState(null, '', '/home') }}
+              onClick={() => { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); createInput.clear(); window.history.pushState(null, '', '/home') }}
               style={{
                 position: 'absolute', top: isDesktop ? 12 : 'max(12px, env(safe-area-inset-top))', right: 12,
                 width: 36, height: 36, borderRadius: '50%',
@@ -1460,9 +1151,8 @@ function HomePageInner() {
                   if (t) {
                     setSelectedDetail(t)
                     setSelectedSkill(t.skill_path ? t.id : null)
-                    setInputText(t.prompt)
-                    setAttachedFiles([])
-                    setAttachedPreviews([])
+                    createInput.clear()
+                    createInput.setText(t.prompt)
                     window.history.replaceState(null, '', `/home/${t.id}`)
                   }
                 }
@@ -1487,9 +1177,8 @@ function HomePageInner() {
                 if (t) {
                   setSelectedDetail(t)
                   setSelectedSkill(t.skill_path ? t.id : null)
-                  setInputText(t.prompt)
-                  setAttachedFiles([])
-                  setAttachedPreviews([])
+                  createInput.clear()
+                  createInput.setText(t.prompt)
                   window.history.replaceState(null, '', `/home/${t.id}`)
                 }
               }}
