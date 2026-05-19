@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
             headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
-    if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
+    if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
       return new Response(
         JSON.stringify({ error: 'projectId and (image or prompt) are required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
