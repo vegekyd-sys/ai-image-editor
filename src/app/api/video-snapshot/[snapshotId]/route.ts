@@ -73,7 +73,7 @@ export async function GET(
     }
 
     if (result.status === 'completed' && result.videoUrl) {
-      const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl }
+      const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl, providerUrl: result.videoUrl }
 
       await supabase
         .from('snapshots')

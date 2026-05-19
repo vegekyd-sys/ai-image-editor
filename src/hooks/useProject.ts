@@ -5,6 +5,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
+import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
 import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 
@@ -122,12 +123,14 @@ export function useProject(projectId: string, userId: string) {
       }
     }))
 
-    // Background: resolve expired audio URLs in design code (non-blocking)
+    // Background: resolve expired audio/video URLs in design code (non-blocking)
     Promise.resolve().then(async () => {
       for (const snap of snapshots) {
         if (!snap.design?.code) continue
         try {
-          const { code, changed } = await resolveAudioUrlsInCode(snap.design.code, projectId, supabase)
+          let { code, changed } = await resolveAudioUrlsInCode(snap.design.code, projectId, supabase)
+          const video = await resolveVideoUrlsInCode(code, projectId, supabase)
+          if (video.changed) { code = video.code; changed = true }
           if (!changed) continue
           snap.design = { ...snap.design, code }
           // Re-save to workspace
@@ -136,10 +139,10 @@ export function useProject(projectId: string, userId: string) {
             const designJson = JSON.stringify(snap.design)
             const storagePath = `${resolvedUserId}/workspace/${dp}`
             await supabase.storage.from('images').upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
-            console.log(`🎵 [audio-resolve] updated ${dp}`)
+            console.log(`🔗 [url-resolve] updated ${dp}`)
           }
         } catch (e) {
-          console.warn('[audio-resolve] failed for snapshot:', snap.id, e)
+          console.warn('[url-resolve] failed for snapshot:', snap.id, e)
         }
       }
     })

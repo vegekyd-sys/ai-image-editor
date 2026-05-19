@@ -130,6 +130,7 @@ export type VideoModel = 'kling' | 'seedance' | 'upload'
 export interface VideoMeta {
   taskId: string | null;
   videoUrl: string | null;
+  providerUrl?: string;
   videoPath?: string;
   prompt: string;
   sourceSnapshotIds: string[];
