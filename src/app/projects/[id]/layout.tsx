@@ -44,20 +44,24 @@ export default async function ProjectLayout({ children, params }: { children: Re
 
   return (
     <>
-      {/* SSR skeleton: matches Editor canvas layout exactly to avoid image position jump */}
+      {/* SSR skeleton: mirrors Editor layout exactly to prevent image position jump */}
       {lcpUrl && (
-        <div id="ssr-skeleton" className="fixed inset-0 z-0 bg-black flex flex-col" style={{ width: '100%' }}>
-          <div className="flex-1 min-h-0 flex items-center justify-center skeleton-canvas">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={lcpUrl} alt="" className="w-full h-full object-contain" fetchPriority="high" />
+        <div id="ssr-skeleton" className="fixed inset-0 z-0 bg-black">
+          {/* Desktop: flex-row (canvas left + CUI right). Mobile: flex-col (canvas + bottom bar) */}
+          <div className="w-full h-full flex flex-col lg:flex-row">
+            {/* Left: GUI panel (canvas + bottom bar) */}
+            <div className="flex-1 min-w-0 flex flex-col">
+              {/* Canvas area */}
+              <div className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={lcpUrl} alt="" className="w-full h-full object-contain" fetchPriority="high" />
+              </div>
+              {/* Bottom bar placeholder: StatusBar + TipsBar (mobile only) */}
+              <div className="flex-shrink-0 lg:hidden h-[120px]" />
+            </div>
+            {/* Right: CUI panel placeholder (desktop only) */}
+            <div className="hidden lg:block flex-shrink-0 border-l border-white/[0.08]" style={{ width: 500 }} />
           </div>
-          <div className="h-[120px] flex-shrink-0 skeleton-bottom" />
-          <style>{`
-            @media (min-width: 1024px) {
-              #ssr-skeleton { width: calc(100vw - 500px) !important; }
-              .skeleton-bottom { height: 0px !important; }
-            }
-          `}</style>
         </div>
       )}
       {children}
