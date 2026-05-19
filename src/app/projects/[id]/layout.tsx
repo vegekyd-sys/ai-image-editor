@@ -44,11 +44,6 @@ export default async function ProjectLayout({ children, params }: { children: Re
 
   return (
     <>
-      {lcpUrl && (
-        <head>
-          <link rel="preload" as="image" href={lcpUrl} fetchPriority="high" />
-        </head>
-      )}
       {/* SSR skeleton: visible immediately in HTML, covered by Editor once React mounts */}
       {lcpUrl && (
         <div id="ssr-skeleton" className="fixed inset-0 z-0 bg-black flex items-center justify-center">
