@@ -378,6 +378,7 @@ Hard constraints (apply even before reading the guide):
 
           // Auto-route video references: query DB for snapshot types
           let autoVideoUrls: string[] = [];
+          let totalVideoRefDuration = 0;
           if (ctx.supabase && ctx.projectId) {
             const { data: dbSnaps } = await ctx.supabase
               .from('snapshots')
@@ -390,15 +391,22 @@ Hard constraints (apply even before reading the guide):
               )];
               for (const ref of scriptRefs) {
                 const snap = dbSnaps[ref - 1];
-                const videoUrl = (snap?.video_meta as Record<string, unknown> | null)?.videoUrl as string | undefined;
+                const meta = snap?.video_meta as Record<string, unknown> | null;
+                const videoUrl = meta?.videoUrl as string | undefined;
                 if (snap?.type === 'video' && videoUrl) {
                   autoVideoUrls.push(videoUrl);
+                  totalVideoRefDuration += (meta?.duration as number) || 0;
                   imageUrls[ref - 1] = '';
                 }
               }
             }
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
+
+          // SeeDance constraint: total input video duration ≤ 15s
+          if (videoModel === 'seedance' && allVideoUrls.length > 0 && totalVideoRefDuration > 15) {
+            return { success: false as const, message: `SeeDance requires total reference video duration ≤ 15 seconds, but the referenced videos total ${Math.round(totalVideoRefDuration)}s. Try using fewer or shorter video references, or switch to Kling model.` };
+          }
 
           const skillResult = await createVideo({
             script: story_prompt,
