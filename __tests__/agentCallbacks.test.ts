@@ -207,7 +207,7 @@ describe('makeAgentCallbacks', () => {
   });
 
   describe('onCodeStream', () => {
-    it('wraps with code fence on first chunk', () => {
+    it('wraps with code fence and flushes on done', () => {
       ctx = createMockContext({
         setMessages: vi.fn((updater: (prev: typeof messages) => typeof messages) => {
           messages = updater(messages);
@@ -217,23 +217,11 @@ describe('makeAgentCallbacks', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.('msg-1');
       callbacks.onCodeStream?.('const x = 1;', false);
+      // Text is batched via rAF — flush by calling done
+      callbacks.onCodeStream?.('', true);
 
       expect(messages[0].content).toContain('```javascript');
       expect(messages[0].content).toContain('const x = 1;');
-    });
-
-    it('closes code fence on done', () => {
-      ctx = createMockContext({
-        setMessages: vi.fn((updater: (prev: typeof messages) => typeof messages) => {
-          messages = updater(messages);
-        }),
-      });
-
-      const { callbacks } = makeAgentCallbacks(ctx);
-      callbacks.onNewTurn?.('msg-1');
-      callbacks.onCodeStream?.('const x = 1;', false);
-      callbacks.onCodeStream?.('', true);
-
       expect(messages[0].content).toContain('```\n');
     });
   });

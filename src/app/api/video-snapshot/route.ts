@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       .select('type, video_meta, image_url')
       .eq('project_id', projectId)
       .order('sort_order')
-    let autoVideoUrls: string[] = []
+    const autoVideoUrls: string[] = []
     if (dbSnaps?.length) {
       const scriptRefs = [...new Set(
         Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))

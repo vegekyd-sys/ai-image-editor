@@ -2,11 +2,8 @@
 
 import { renderMediaOnWeb } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
-import { createVideoDesign } from '@/lib/video-design';
-
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 export const MAX_DURATION = 16; // 16 seconds
-const TARGET_SHORT_EDGE = 1080;
 const MAX_FRAME_PIXELS = 2_086_876; // SeeDance limit: width × height must not exceed this
 const DIRECT_UPLOAD_MAX_SIZE = 100 * 1024 * 1024; // 100MB — skip transcode for any H.264 MP4
 

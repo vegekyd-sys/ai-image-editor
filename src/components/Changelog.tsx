@@ -1,562 +1,423 @@
 'use client';
 
-interface ChangelogEntry {
-  date: string;
-  en: { title: string; items: string[] };
-  zh: { title: string; items: string[] };
+import { useEffect, useState, useRef } from 'react';
+
+// ─── Stats ─────────────────────────────────────────────────────────
+const STATS = [
+  { label: 'Commits', value: '182', icon: '⚡' },
+  { label: 'Files Changed', value: '79', icon: '📁' },
+  { label: 'Lines Added', value: '4,459', icon: '✨' },
+  { label: 'Agents', value: '10+', icon: '🤖' },
+];
+
+// ─── Feature Sections ──────────────────────────────────────────────
+interface FeatureSection {
+  icon: string;
+  title: string;
+  subtitle: string;
+  features: string[];
+  accent: string; // tailwind gradient class
 }
 
-const CHANGELOG: ChangelogEntry[] = [
+const SECTIONS: FeatureSection[] = [
   {
-    date: '2026-05-15',
-    en: { title: 'China Access & Cost Optimization', items: [
-      'China users can now access Makaron without VPN',
-      'Agent cost control: Anthropic context management prevents token explosion in long conversations (1.6M → 130K tokens)',
-    ]},
-    zh: { title: '中国用户开放 & 成本优化', items: [
-      '中国用户无需 VPN 即可使用 Makaron',
-      'Agent 成本控制：Anthropic context management 防止长对话 token 爆炸（160万 → 13万 tokens）',
-    ]},
+    icon: '🎬',
+    title: '视频成为时间线一等公民',
+    subtitle: 'Video as First-Class Timeline Entry',
+    features: [
+      '视频直接作为时间线 Snapshot（type=video, video_meta JSONB）',
+      '方形圆点 = 视频，圆形 = 图片，一眼区分',
+      '浏览器端视频封面提取（移除服务端 ffmpeg 依赖）',
+      'VideoResultCard 实时渲染状态、时长标签、模型名称',
+    ],
+    accent: 'from-fuchsia-500 to-purple-600',
   },
   {
-    date: '2026-05-12',
-    en: { title: 'Agent Self-Registration', items: [
-      'AI agents can now register themselves — get an API key programmatically, no human needed',
-      'Claim flow: agents generate a link for humans to link the API key to their account',
-      'New /agent page: full CLI docs optimized for LLM consumption, one-click copy',
-      'Human/Agent mode toggle at the bottom of the page',
-    ]},
-    zh: { title: 'Agent 自注册', items: [
-      'AI Agent 现在可以自注册 — 自动获取 API key，无需人类介入',
-      'Claim 流程：Agent 生成链接，人类点击即可将 API key 绑定到自己的账号',
-      '新增 /agent 页面：完整 CLI 文档，为 LLM 优化，一键复制',
-      '页面底部 Human/Agent 模式切换',
-    ]},
+    icon: '📤',
+    title: '视频上传 — 随处可传',
+    subtitle: 'Upload Video from Anywhere',
+    features: [
+      '项目页、Home 页、CUI 聊天 — 三入口上传视频',
+      '浏览器端 Remotion 转码，分辨率自动归一化',
+      '超限自动压缩（SeeDance 分辨率限制）',
+      '上传即分析：Gemini 3.0 Flash 原生视频理解',
+      'Agent 新增 analyze_video 工具',
+    ],
+    accent: 'from-cyan-400 to-blue-600',
   },
   {
-    date: '2026-05-11',
-    en: { title: 'CLI — Works with OpenClaw & Hermes', items: [
-      'CLI now fully compatible with OpenClaw & Hermes — external agents can create and edit projects with edit, video, and music commands',
-      'Real-time sync: projects created or edited via CLI appear instantly in the browser with live progress updates',
-      'Project sharing: every project has a public link — viewable without logging in',
-      'Privacy control: long-press the Share button to toggle public/private',
-    ]},
-    zh: { title: 'CLI — 完美适配 OpenClaw & Hermes', items: [
-      'CLI 完美适配 OpenClaw & Hermes — 外部 Agent 可创建和编辑项目，支持 edit、video、music 命令',
-      '实时同步：通过 CLI 创建或编辑的项目即时出现在浏览器中，进度实时更新',
-      '项目分享：每个项目都有公开链接 — 无需登录即可查看',
-      '隐私控制：长按 Share 按钮可切换项目公开/私密状态',
-    ]},
+    icon: '🔗',
+    title: '视频引用 & 多视频合成',
+    subtitle: 'Video References & Multi-Video Composition',
+    features: [
+      'Media Index 取代 Image Index（<<<media_N>>> 格式）',
+      '智能路由：Agent 引用 <<<media_4>>> → 自动检测是视频 → 注入 video_urls',
+      'SeeDance 多视频合成（最多 3 段，总长 ≤15s）',
+      '时长校验 + 清晰错误提示',
+    ],
+    accent: 'from-amber-400 to-orange-600',
   },
   {
-    date: '2026-05-08',
-    en: { title: 'Storyboard Long Video — Live on Skill Marketplace', items: [
-      'Break the 15s limit with director-grade storyboards — generate 30-60s cinematic videos with consistent characters, scenes, and style',
-      'Powered by OpenAI Image 2 + SeeDance 2 — the two strongest models, with real human face support',
-    ]},
-    zh: { title: '分镜长视频 - 已上线 Skill 集市', items: [
-      '用导演级分镜图突破 15s 限制，生成 30-60s 电影级长视频，人物/场景/风格全程一致',
-      '基于 OpenAI Image 2 + SeeDance 2 两大最强模型，支持真人脸',
-    ]},
+    icon: '🎥',
+    title: 'Remotion 视频渲染',
+    subtitle: 'Remotion Video Support',
+    features: [
+      '<Video> 和 <OffthreadVideo> 正式进入 Remotion Scope',
+      '视频 Design 直接渲染源 MP4',
+      '视频预加载 — 切换 timeline 零卡顿',
+      'Blob URL 跨切换缓存',
+      'Design Harness 自动修正：<video> → <Video>，注入 premountFor',
+    ],
+    accent: 'from-green-400 to-emerald-600',
   },
   {
-    date: '2026-05-07',
-    en: { title: 'Open Registration', items: [
-      'Google sign-in: one tap to get started — no invite code needed',
-      'Open registration: anyone can sign up with email + verification code',
-    ]},
-    zh: { title: '开放注册', items: [
-      'Google 一键登录：无需邀请码，直接开始创作',
-      '开放注册：任何人都可以用邮箱 + 验证码注册',
-    ]},
+    icon: '💬',
+    title: 'CUI 视频集成',
+    subtitle: 'Chat-First Video Experience',
+    features: [
+      '聊天内嵌视频播放器（播放/暂停、音量、poster、进度条）',
+      'CUI 消息支持视频附件',
+      '视频缩略图 @N 角标',
+      '提交后自动跳转到视频 Snapshot',
+      '视频完成消息 — 点击直达',
+    ],
+    accent: 'from-pink-400 to-rose-600',
   },
   {
-    date: '2026-05-04',
-    en: { title: 'SeeDance Real Human Faces', items: [
-      'SeeDance now supports real human faces — generate videos with portrait photos, no more face detection blocks',
-      'Model Selector: unified panel for image & video models, one-tap switch with auto mode',
-      'Skill Selector: pick skills from CUI toolbar or Home page — upload, delete, drag-drop',
-    ]},
-    zh: { title: 'SeeDance 支持真人脸', items: [
-      'SeeDance 支持真人脸了 — 用人物照片直接生成视频，不再被人脸检测拦截',
-      '模型选择器：图片和视频模型统一面板，一键切换，支持自动模式',
-      'Skill 选择器：CUI 工具栏和 Home 页均可选择 Skill — 上传、删除、拖拽安装',
-    ]},
+    icon: '⚡',
+    title: 'SSR Skeleton — 性能飞跃',
+    subtitle: 'LCP: 2105ms → 284ms (7x faster)',
+    features: [
+      '服务端渲染骨架屏精确镜像 Editor flex 布局',
+      '适配桌面/移动端、safe-area-insets、iOS Safari',
+      'LCP 从 2105ms 降至 284ms — 提速 7 倍',
+    ],
+    accent: 'from-violet-400 to-indigo-600',
   },
   {
-    date: '2026-05-01',
-    en: { title: 'SeeDance 2.0 & Reference Video', items: [
-      'SeeDance 2.0: world-class video model now available alongside Kling O3 — choose in the video panel or tell Agent in chat',
-      'Reference video: use any video as a motion template — your photo person performs the same moves, expressions, and dance',
-      'Video template skills: "Funny Face Challenge" — first skill with built-in reference video, more coming soon',
-      'Three video script styles: continuous take, shot-by-shot, and video reference — Agent picks the best one for your scene',
-    ]},
-    zh: { title: 'SeeDance 2.0 & 参考视频', items: [
-      'SeeDance 2.0：世界顶级视频模型，与 Kling O3 并列可选 — 在视频面板选择或对话中告诉 Agent',
-      '参考视频：用任意视频作为动作模板 — 让照片中的人做出同样的动作、表情和舞蹈',
-      '视频模板 Skill："搞怪表情挑战" — 首个内置参考视频的 Skill，更多即将上线',
-      '三种视频脚本风格：一镜到底、分镜叙事、参考视频 — Agent 自动选择最适合的方式',
-    ]},
+    icon: '🖥️',
+    title: 'CLI 视频支持',
+    subtitle: 'Terminal-First Video Creation',
+    features: [
+      'chat --video 命令行视频输入',
+      'v2 视频时间线轮询与创建',
+      'Signed URL 上传（图片 + 视频，无大小限制）',
+    ],
+    accent: 'from-slate-400 to-zinc-600',
   },
   {
-    date: '2026-04-29',
-    en: { title: 'Skill Marketplace', items: [
-      'New Home page: browse 30+ skill templates — anime collabs, photo effects, video styles — tap to preview, swipe to explore',
-      'One-tap create: pick a template, upload your photo, hit Create — the AI does the rest',
-      'Share skills: generate a private link for friends to add your Skill in one click',
-      'Skills page: manage all your skills — share, delete, upload custom ones',
-    ]},
-    zh: { title: 'Skill 市场', items: [
-      '全新 Home 页：浏览 30+ Skill 模板 — 动漫合影、照片特效、视频风格 — 点击预览，滑动探索',
-      '一键创作：选模板、上传照片、点 Create — AI 帮你搞定',
-      '分享 Skill：生成私密链接发给朋友，一键添加到账号',
-      'Skills 管理页：集中管理所有 Skill — 分享、删除、上传自定义 Skill',
-    ]},
-  },
-  {
-    date: '2026-04-26',
-    en: { title: 'OpenAI Image 2', items: [
-      'OpenAI Image 2: 3x faster (~60s) and 2x cheaper — best text rendering for posters, graphics, and marketing materials',
-      'Context Mode: for design tasks (e-commerce, posters, web design, anime, game UI), Agent passes your request directly to Image 2 — better results than detailed instructions',
-      'Smart aspect ratio: extreme ratios (1:3, 3:1) auto-use optimal sizes for text-heavy layouts',
-    ]},
-    zh: { title: 'OpenAI Image 2', items: [
-      'OpenAI Image 2：提速 3 倍（~60s）、降价 2 倍 — 文字渲染最强，适合海报、营销图、平面设计',
-      'Context Mode：设计类任务（电商、海报、网页、动漫、游戏 UI）Agent 直接传达需求 — 比详细指令效果更好',
-      '智能比例：极端宽高比自动使用最优尺寸，适配长图排版',
-    ]},
-  },
-  {
-    date: '2026-04-22',
-    en: { title: 'Billing & Subscriptions', items: [
-      'Credit system: all AI features now tracked with credits — transparent per-model pricing',
-      'Subscription plans: Basic / Pro / Business monthly plans with annual discount',
-      'Cost optimization: prompt caching reduces AI token usage; tips previews now load on-demand — significantly lower per-session cost',
-    ]},
-    zh: { title: '计费 & 订阅', items: [
-      'Credit 系统：所有 AI 功能按 credit 计费 — 按模型透明定价',
-      '订阅计划：Basic / Pro / Business 月付方案，年付享 8 折',
-      '成本优化：Prompt 缓存减少 AI token 消耗；Tips 预览改为按需加载，大幅降低每次使用成本',
-    ]},
-  },
-  {
-    date: '2026-04-20',
-    en: { title: 'Headless Agent & CLI', items: [
-      'Published on npm: `npx makaron-cli` — zero install, works anywhere with Node.js',
-      'Makaron CLI: create projects, chat with Agent, generate images/videos — all from terminal',
-      'Headless Agent: Agent runs without browser — results appear in project page automatically',
-      'Fire-and-forget API: POST /api/agent/run returns immediately, Agent works in background',
-      'Multi-image project creation: upload multiple photos at once via CLI or API',
-      'Text-to-image: create empty project and let Agent generate from a text prompt',
-      'Auto-naming: headless projects get named automatically after first Agent run',
-    ]},
-    zh: { title: 'Headless Agent & CLI', items: [
-      '已发布 npm：`npx makaron-cli` — 无需安装，有 Node.js 即可使用',
-      'Makaron CLI：终端创建项目、与 Agent 对话、生图/生视频，无需浏览器',
-      'Headless Agent：Agent 脱离前端运行，结果自动出现在项目页',
-      'Fire-and-forget API：POST /api/agent/run 立即返回，Agent 后台执行',
-      '多图项目创建：CLI 或 API 一次上传多张照片',
-      '文生图：创建空项目后 Agent 直接从文字 prompt 生成图片',
-      '自动命名：headless 项目在首次 Agent 运行后自动获取名称',
-    ]},
-  },
-  {
-    date: '2026-04-19',
-    en: { title: 'Preview = Export & Design Editor Polish', items: [
-      'Preview = Export guarantee: drag/scale positions now identical in preview and exported video/image',
-      'Mobile pinch-to-scale: two-finger zoom on editable elements, works anywhere on canvas',
-      'Seek bar interaction: dragging seek bar cleanly exits design editor mode',
-    ]},
-    zh: { title: '预览=导出 & Design 编辑器优化', items: [
-      '预览=导出保证：拖拽/缩放后的位置在预览和导出视频/图片中完全一致',
-      '手机双指缩放：画布任意位置双指缩放编辑元素',
-      '进度条交互：拖拽进度条自动退出编辑模式',
-    ]},
-  },
-  {
-    date: '2026-04-17',
-    en: { title: 'Design Editor & Creative Tools', items: [
-      'Design Editor: drag editable text elements to reposition — snap guidelines for precise alignment',
-      'Agent creative tools: @remotion/paths (SVG path animation) + @remotion/noise (procedural textures)',
-      'Design animations preserved: dragging no longer breaks Agent\'s rotate/scale/skew effects',
-      'Double-tap to edit text: unified interaction on desktop and mobile',
-      'Scale/resize editable elements: drag any corner handle to resize proportionally',
-    ]},
-    zh: { title: 'Design 编辑器 & 创意工具', items: [
-      'Design 编辑器：可拖拽文字元素重新定位 — 智能辅助线精确对齐',
-      'Agent 创意工具：@remotion/paths（SVG 路径动画）+ @remotion/noise（程序化纹理）',
-      '动画效果保留：拖拽后 Agent 的旋转/缩放/倾斜特效不丢失',
-      '双击编辑文字：桌面和手机统一交互',
-      '缩放编辑元素：拖拽四角手柄等比缩放',
-    ]},
-  },
-  {
-    date: '2026-04-16',
-    en: { title: 'Video Design Pro & Sandbox Rendering', items: [
-      'Smarter video creation: 4-question creative check drives the entire workflow — plan, code, verify',
-      'Rich kinetic typography: per-character animation, multi-layer text per scene, text that tells the story',
-      'Remotion Sandbox: server-side frame rendering on Vercel — Agent previews any frame without browser',
-      'CJK fonts + emoji in Sandbox: system Noto fonts + 30 pre-cached Google Fonts in Snapshot',
-      'Cross-platform safe: iOS-friendly effects, gradient backgrounds, no heavy CJK web fonts',
-      'Auto-save & publish: Agent saves code after every edit, publishes when satisfied',
-      'Abort Agent: cancel background Agent from CUI',
-    ]},
-    zh: { title: 'Video Design Pro & Sandbox 渲染', items: [
-      '更聪明的视频创作：四问创意自检驱动全流程 — 规划、编码、验证',
-      '丰富的花字动效：逐字动画、每场景多层文字、文字就是画面的一部分',
-      'Remotion Sandbox：服务端逐帧渲染 — Agent 无需浏览器即可预览任意帧',
-      'Sandbox 中日韩字体 + Emoji：系统 Noto 字体 + 30 个预缓存 Google Fonts',
-      '跨平台安全：iOS 友好特效，渐变背景代替模糊，不加载大型中文网络字体',
-      '自动保存 & 发布：Agent 每次编辑后自动存代码，满意后发布',
-      '中断 Agent：CUI 中可取消后台 Agent',
-    ]},
-  },
-  {
-    date: '2026-04-15',
-    en: { title: 'Frame Preview & Draft Timeline', items: [
-      'preview_frame: Agent captures any frame of a video design to check its own work before publishing',
-      'Draft → Publish: run_code creates drafts, write_file publishes — only final designs land on timeline',
-      'Multi-frame chat display: preview frames shown as scrollable gallery in conversation',
-      'Agent model upgraded to Opus 4.6',
-    ]},
-    zh: { title: '逐帧预览 & 草稿时间线', items: [
-      'preview_frame：Agent 可以截取视频任意帧来检查自己的作品，发布前自行校验',
-      '草稿 → 发布：run_code 生成草稿，write_file 发布 — 时间线上只出现最终稿',
-      '多帧聊天展示：截帧预览在对话中横向滚动展示',
-      'Agent 模型升级到 Opus 4.6',
-    ]},
-  },
-  {
-    date: '2026-04-13',
-    en: { title: 'Editable Text in Designs', items: [
-      'Edit text directly: click any text element in a design to select, click Edit to modify — no Agent needed',
-      'Frame-aware: video designs show only the text fields visible at the current frame',
-      'Floating editor: shared panel with annotation toolbar — draggable on desktop, fixed on mobile',
-      'Auto-persist: text edits saved to workspace automatically (debounced)',
-    ]},
-    zh: { title: 'Design 文字可编辑', items: [
-      '直接编辑文字：点击 Design 中的文字选中，点 Edit 即可修改 — 无需 Agent',
-      '帧感知：视频 Design 只显示当前帧可见的文字字段',
-      '浮动编辑器：与标注工具共享面板 — 桌面可拖拽，移动端固定底部',
-      '自动保存：文字编辑自动持久化到 workspace',
-    ]},
-  },
-  {
-    date: '2026-04-12',
-    en: { title: 'Remotion Engine, Music & Background Agent', items: [
-      'Remotion rendering: Agent generates React/CSS code → browser renders stills and animations with Remotion Player',
-      'MP4 export: animated designs export as h264/mp4 directly in the browser',
-      'Patch mode: edit existing designs incrementally (change text, colors, layout) without rewriting code',
-      'Music: Suno AI background music — generate, preview 2 tracks, select and inject into design',
-      'Background Agent: server-side persistence + automatic reconnect on page reload',
-      'Agent switched to Sonnet 4.6 for 3-4x faster code generation',
-      'Design intelligence: Agent sees design code in context, patches directly without reading files',
-      'Video Design skill: cinematic 4-question self-check + 花字 (fancy text) guidelines',
-    ]},
-    zh: { title: 'Remotion 引擎、音乐配乐 & 后台 Agent', items: [
-      'Remotion 渲染：Agent 生成 React/CSS 代码 → 浏览器渲染静态图和动画',
-      'MP4 导出：animated design 直接在浏览器导出 h264/mp4',
-      'Patch 模式：增量编辑现有 design（改文字、颜色、布局），无需重写代码',
-      '音乐：Suno AI 配乐 — 生成、试听 2 首、选择后注入 Design',
-      '后台 Agent：服务端持久化 + 刷新自动重连',
-      'Agent 切换到 Sonnet 4.6，代码生成速度提升 3-4 倍',
-      'Design 智能化：Agent 直接看到代码上下文，patch 修改无需读文件',
-      '视频设计 Skill：电影感四问自检 + 花字引导',
-    ]},
-  },
-  {
-    date: '2026-04-05',
-    en: { title: 'Workspace Agent & Code Execution', items: [
-      'Workspace file system: skills and files stored in Supabase with persistent workspace_files table',
-      'Agent run_code: execute JavaScript with sharp (image processing), satori (HTML→image), JSZip (packaging)',
-      'Agent can create skills with reference images — any great result can become a reusable skill',
-      'saveToWorkspace: upload files directly to Supabase Storage from run_code',
-      'Skill packaging: Agent builds zip files for sharing, with download links in chat',
-      'CUI improvements: clickable file chips (📄), collapsible code blocks, run_code status indicators',
-      'Built-in skills (Makaron Mascot, Photo-to-Video) seeded as global workspace files',
-      'GET/POST /api/skills unified through workspace — user_skills table replaced',
-    ]},
-    zh: { title: 'Workspace Agent & 代码执行', items: [
-      'Workspace 文件系统：skill 和文件存储到 Supabase，workspace_files 表持久化',
-      'Agent run_code：执行 JavaScript，预装 sharp（图片处理）、satori（HTML→图片）、JSZip（打包）',
-      'Agent 可以创建带参考图的 skill — 任何做得好的结果都能固化成可复用 skill',
-      'saveToWorkspace：run_code 中直接上传文件到 Supabase Storage',
-      'Skill 打包：Agent 自动打 zip 包供分享，CUI 中显示下载链接',
-      'CUI 优化：可点击文件标签（📄）、代码块折叠、run_code 状态指示',
-      '内置 skill（Makaron 吉祥物、照片变视频）作为全局 workspace 文件种子',
-      'GET/POST /api/skills 统一通过 workspace — 替换旧 user_skills 表',
-    ]},
-  },
-  {
-    date: '2026-04-02',
-    en: { title: 'Skill-Driven Tips & Video Editing', items: [
-      'Skill tips fusion: active skill injects character/IP context into tips generation',
-      'Skill reference images passed to preview generation for accurate character rendering',
-      'A/B tested: skill-only mode (no category .md templates) produces better results',
-      'Category hints (enhance/creative/wild/captions) for parallel tip generation',
-      'MCP video editing: new makaron_edit_video tool using Kling video_list API',
-      'Skill upload drag & drop on project page',
-    ]},
-    zh: { title: 'Skill 驱动 Tips & 视频编辑', items: [
-      'Skill Tips 融合：激活 skill 时将角色/IP 上下文注入 tips 生成',
-      'Skill 参考图传给 preview 生图，确保角色渲染准确',
-      'A/B 测试验证：纯 skill 模式（不用分类 .md 模板）效果更好',
-      '分类含义提示（enhance/creative/wild/captions）用于并发 tip 生成',
-      'MCP 视频编辑：新增 makaron_edit_video 工具，基于 Kling video_list API',
-      '项目页 skill 上传支持拖放 zip',
-    ]},
-  },
-  {
-    date: '2026-04-01',
-    en: { title: 'Skill System', items: [
-      'SKILL.md-driven skill framework — define workflows with YAML frontmatter + markdown templates',
-      'Built-in skills: Photo-to-Video (3-act story generation) & Makaron Mascot (Pixel Wizard character)',
-      'User custom skills: upload zip with SKILL.md + assets, stored in DB',
-      'Skill reference images as timeline snapshots for Agent context',
-      'Skill pills in Editor UI with unified highlight style',
-      'Skills API: list / create / delete with admin support',
-    ]},
-    zh: { title: 'Skill 技能系统', items: [
-      'SKILL.md 驱动的技能框架 — YAML frontmatter + Markdown 模板定义工作流',
-      '内置技能：照片变视频（3 幕故事生成）& Makaron 吉祥物（Pixel Wizard 角色）',
-      '用户自定义技能：上传 zip（SKILL.md + 素材），存入数据库',
-      '技能参考图作为时间线 snapshot 注入 Agent 上下文',
-      '编辑器 Skill 选择 pill，统一高亮样式',
-      'Skills API：列表 / 创建 / 删除，支持管理员操作',
-    ]},
-  },
-  {
-    date: '2026-03-30',
-    en: { title: 'Video & Performance', items: [
-      'Video first frame preview in canvas',
-      'Click video in chat → jump to GUI playback',
-      'Desktop: double-click video to play',
-      'Bedrock prompt caching for faster agent',
-    ]},
-    zh: { title: '视频与性能', items: [
-      '画布中展示视频真实首帧',
-      '聊天中点击视频跳转到画布播放',
-      '桌面端：双击视频直接播放',
-      'Bedrock prompt 缓存加速 Agent 响应',
-    ]},
-  },
-  {
-    date: '2026-03-28',
-    en: { title: 'Video MCP & Foldin', items: [
-      'Video generation via MCP (write script + render)',
-      'Foldin (SeeDance 2.0) video provider',
-    ]},
-    zh: { title: '视频 MCP 与 Foldin', items: [
-      '通过 MCP 生成视频（写脚本 + 渲染）',
-      'Foldin（SeeDance 2.0）视频供应商',
-    ]},
-  },
-  {
-    date: '2026-03-25',
-    en: { title: 'Safety & Editor Refactor', items: [
-      'NSFW auto-routing: Gemini blocked → Qwen fallback',
-      'Editor refactored: -312 lines, cleaner architecture',
-      'Accessibility attributes for automation testing',
-    ]},
-    zh: { title: '安全与编辑器重构', items: [
-      'NSFW 自动路由：Gemini 拒绝 → 自动切 Qwen',
-      '编辑器重构：精简 312 行，架构更清晰',
-      '自动化测试的无障碍属性',
-    ]},
-  },
-  {
-    date: '2026-03-20',
-    en: { title: 'Multi-Model Router', items: [
-      'Unified image generation with auto fallback',
-      'Gemini / Qwen / Pony / WAI model support',
-      'MCP text-to-image + model selection',
-    ]},
-    zh: { title: '多模型路由', items: [
-      '统一生图入口，自动 fallback',
-      '支持 Gemini / Qwen / Pony / WAI 模型',
-      'MCP 文生图 + 模型选择',
-    ]},
-  },
-  {
-    date: '2026-03-16',
-    en: { title: 'MCP API', items: [
-      'MCP server for external agents (edit image + rotate camera)',
-      'Bearer token authentication',
-      'stdio + HTTP dual mode',
-    ]},
-    zh: { title: 'MCP 开放接口', items: [
-      '面向外部 Agent 的 MCP 服务（编辑图片 + 旋转相机）',
-      'Bearer token 鉴权',
-      'stdio + HTTP 双模式',
-    ]},
-  },
-  {
-    date: '2026-03-14',
-    en: { title: 'Desktop & Gestures', items: [
-      'Resizable CUI panel on desktop',
-      'Pull-down gesture to enter chat (iOS Photos style)',
-      'Multi-image upload + drag-and-drop in chat',
-    ]},
-    zh: { title: '桌面端与手势', items: [
-      '桌面端可调整聊天面板宽度',
-      '下拉手势进入聊天（iOS 相册风格）',
-      '多图上传 + 拖放到聊天',
-    ]},
-  },
-  {
-    date: '2026-03-08',
-    en: { title: 'Performance', items: [
-      'Supabase Image Transformations (-94% transfer)',
-      'AI output PNG→JPEG compression',
-      'Progressive loading with draft preview',
-    ]},
-    zh: { title: '性能优化', items: [
-      'Supabase 图片变换（传输减少 94%）',
-      'AI 输出 PNG→JPEG 压缩',
-      '渐进式加载 + 草稿预览过渡',
-    ]},
-  },
-  {
-    date: '2026-03-04',
-    en: { title: 'i18n & Video Timeline', items: [
-      'English / Chinese language support',
-      'Snapshot animation with video timeline',
-      'Kling AI video generation with sound',
-      'Camera rotate (3D virtual camera control)',
-    ]},
-    zh: { title: '多语言与视频时间线', items: [
-      '中英文双语支持',
-      'Snapshot 动画与视频时间线',
-      'Kling AI 视频生成（带声音）',
-      '相机旋转（3D 虚拟相机控制）',
-    ]},
-  },
-  {
-    date: '2026-02-24',
-    en: { title: 'Agent & Chat UI', items: [
-      'Makaron Agent (Claude Sonnet) as AI brain',
-      'Full-screen chat with hero transition animations',
-      'PiP thumbnail with edge-collapse',
-      'IndexedDB local cache for instant reload',
-      'Supabase migrated to Tokyo for lower latency',
-    ]},
-    zh: { title: 'Agent 与聊天界面', items: [
-      'Makaron Agent（Claude Sonnet）作为 AI 大脑',
-      '全屏聊天 + hero 飞行过渡动画',
-      'PiP 缩略图边缘收起',
-      'IndexedDB 本地缓存，重进秒开',
-      'Supabase 迁移到东京，降低延迟',
-    ]},
-  },
-  {
-    date: '2026-02-17',
-    en: { title: 'Annotation & Captions', items: [
-      'Paintbrush annotation mode for guided editing',
-      'Captions category (text overlay on images)',
-      'Reference image upload in chat (up to 3)',
-      'Projects page gallery redesign',
-    ]},
-    zh: { title: '标注与文字', items: [
-      '画笔标注模式，引导式编辑',
-      '文字分类（图片上添加标题/文案）',
-      '聊天中上传参考图（最多 3 张）',
-      '项目页 gallery 重新设计',
-    ]},
-  },
-  {
-    date: '2026-02-10',
-    en: { title: 'Tips & Preview', items: [
-      'Category-based preview (enhance / creative / wild)',
-      'Two-click interaction: preview → commit',
-      'Before/after comparison (long press)',
-      'Tips prompt V42 architecture',
-    ]},
-    zh: { title: 'Tips 与预览', items: [
-      '按分类预览（增强 / 创意 / 狂野）',
-      '两步交互：预览 → 确认',
-      '长按对比（修改前后）',
-      'Tips prompt V42 架构',
-    ]},
-  },
-  {
-    date: '2026-02-01',
-    en: { title: 'Foundation', items: [
-      'Supabase Auth (email + password)',
-      'Cloud persistence (Storage + Database)',
-      'Project gallery with snapshot thumbnails',
-      'Image upload with client-side compression',
-      'AI image editing via Gemini',
-    ]},
-    zh: { title: '基础架构', items: [
-      'Supabase 认证（邮箱 + 密码）',
-      '云端持久化（Storage + Database）',
-      '项目列表与 snapshot 缩略图',
-      '图片上传 + 客户端压缩',
-      'Gemini AI 图片编辑',
-    ]},
+    icon: '🏗️',
+    title: '架构升级',
+    subtitle: 'Architecture Improvements',
+    features: [
+      'Renderer Registry — 声明式内容类型分发',
+      '统一服务端 Context Building（移除前端 context）',
+      '共享 CreateInputBox + useCreateInput Hook',
+      'Postgres RPC 原子 sort_order（杜绝重复排序）',
+      '统一视频占位符（processing/failed 状态）',
+    ],
+    accent: 'from-teal-400 to-cyan-600',
   },
 ];
 
-export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
-  const isZh = locale === 'zh';
+// ─── Animated Counter ──────────────────────────────────────────────
+function AnimatedNumber({ value, delay = 0 }: { value: string; delay?: number }) {
+  const [display, setDisplay] = useState('0');
+  const numericPart = value.replace(/[^0-9]/g, '');
+  const suffix = value.replace(/[0-9,]/g, '');
+
+  useEffect(() => {
+    const target = parseInt(numericPart.replace(/,/g, ''), 10);
+    const duration = 1800;
+    const startTime = Date.now() + delay;
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 0) {
+        requestAnimationFrame(animate);
+        return;
+      }
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(target * eased);
+      setDisplay(current.toLocaleString() + suffix);
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }, [numericPart, suffix, delay]);
+
+  return <span>{display}</span>;
+}
+
+// ─── Particles Background ──────────────────────────────────────────
+function Particles() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {Array.from({ length: 30 }).map((_, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full opacity-20"
+          style={{
+            width: `${2 + Math.random() * 4}px`,
+            height: `${2 + Math.random() * 4}px`,
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+            background: `hsl(${290 + Math.random() * 40}, 80%, 60%)`,
+            animation: `float ${6 + Math.random() * 8}s ease-in-out infinite`,
+            animationDelay: `${Math.random() * -10}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────
+export default function ChangelogVideoTimeline() {
+  const [visible, setVisible] = useState(false);
+  const sectionsRef = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    setVisible(true);
+
+    // Intersection observer for scroll-in animation
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('changelog-visible');
+          }
+        });
+      },
+      { threshold: 0.15 }
+    );
+
+    sectionsRef.current.forEach((el) => {
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-      onClick={onClose}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+    <div className="min-h-screen bg-black text-white overflow-x-hidden relative">
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-20px) scale(1.2); }
+        }
+        @keyframes shimmer {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        @keyframes pulse-ring {
+          0% { transform: scale(0.8); opacity: 0.8; }
+          50% { transform: scale(1.1); opacity: 0.3; }
+          100% { transform: scale(0.8); opacity: 0.8; }
+        }
+        @keyframes slide-up {
+          from { opacity: 0; transform: translateY(40px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes glow {
+          0%, 100% { box-shadow: 0 0 20px rgba(217, 70, 239, 0.3), 0 0 60px rgba(217, 70, 239, 0.1); }
+          50% { box-shadow: 0 0 30px rgba(217, 70, 239, 0.5), 0 0 80px rgba(217, 70, 239, 0.2); }
+        }
+        @keyframes timeline-draw {
+          from { height: 0; }
+          to { height: 100%; }
+        }
+        .changelog-section {
+          opacity: 0;
+          transform: translateY(30px);
+          transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+        }
+        .changelog-visible {
+          opacity: 1 !important;
+          transform: translateY(0) !important;
+        }
+        .shimmer-text {
+          background: linear-gradient(
+            90deg,
+            rgba(217, 70, 239, 1) 0%,
+            rgba(236, 72, 153, 1) 25%,
+            rgba(255, 255, 255, 1) 50%,
+            rgba(236, 72, 153, 1) 75%,
+            rgba(217, 70, 239, 1) 100%
+          );
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: shimmer 4s linear infinite;
+        }
+        .stat-card {
+          animation: glow 3s ease-in-out infinite;
+        }
+        .stat-card:nth-child(2) { animation-delay: 0.5s; }
+        .stat-card:nth-child(3) { animation-delay: 1s; }
+        .stat-card:nth-child(4) { animation-delay: 1.5s; }
+      `}</style>
 
-      {/* Modal — full screen on mobile, centered card on desktop */}
-      <div
-        className="relative w-full h-full sm:h-auto sm:max-w-xl sm:mx-4 sm:max-h-[80dvh] sm:rounded-2xl overflow-hidden flex flex-col"
-        style={{ background: 'rgba(20,20,20,0.97)', border: '1px solid rgba(255,255,255,0.08)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <h2 className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
-            {isZh ? '更新日志' : "What's New"}
-          </h2>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-full"
-            style={{ background: 'rgba(255,255,255,0.08)' }}
+      <Particles />
+
+      {/* ─── Hero Section ─────────────────────────────────────── */}
+      <section className="relative min-h-[100dvh] flex flex-col items-center justify-center px-6 py-20">
+        {/* Radial gradient backdrop */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'radial-gradient(ellipse 80% 50% at 50% 30%, rgba(168, 85, 247, 0.12) 0%, transparent 70%)',
+          }}
+        />
+
+        {/* Version badge */}
+        <div
+          className={`mb-8 px-4 py-1.5 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300 text-sm font-mono tracking-wider transition-all duration-1000 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}
+        >
+          RELEASE: VIDEO IN TIMELINE
+        </div>
+
+        {/* Title */}
+        <h1
+          className={`text-4xl sm:text-6xl md:text-7xl font-black text-center leading-tight mb-6 transition-all duration-1000 delay-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+        >
+          <span className="block text-white/90">视频，</span>
+          <span className="shimmer-text">正式进入时间线</span>
+        </h1>
+
+        {/* Subtitle */}
+        <p
+          className={`text-lg sm:text-xl text-white/50 text-center max-w-2xl mb-4 transition-all duration-1000 delay-400 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+        >
+          Makaron 有史以来最大的功能更新
+        </p>
+        <p
+          className={`text-sm text-white/30 text-center max-w-xl mb-12 transition-all duration-1000 delay-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+        >
+          10+ AI Agents 协作完成 · 182 次提交 · 从上传到渲染，从 CLI 到 CUI，视频融入每一个触点
+        </p>
+
+        {/* Stats Grid */}
+        <div
+          className={`grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 w-full max-w-3xl transition-all duration-1000 delay-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+        >
+          {STATS.map((stat, i) => (
+            <div
+              key={stat.label}
+              className="stat-card relative flex flex-col items-center p-5 rounded-2xl border border-white/[0.06] bg-white/[0.03]"
+            >
+              <span className="text-2xl mb-2">{stat.icon}</span>
+              <span className="text-2xl sm:text-3xl font-black text-white/90 tabular-nums">
+                <AnimatedNumber value={stat.value} delay={800 + i * 200} />
+              </span>
+              <span className="text-xs text-white/40 mt-1 font-medium tracking-wide">
+                {stat.label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Scroll hint */}
+        <div
+          className={`absolute bottom-10 flex flex-col items-center gap-2 transition-all duration-1000 delay-1200 ${visible ? 'opacity-100' : 'opacity-0'}`}
+        >
+          <span className="text-xs text-white/30">向下滚动</span>
+          <div className="w-5 h-8 rounded-full border border-white/20 flex items-start justify-center p-1">
+            <div
+              className="w-1.5 h-1.5 rounded-full bg-fuchsia-400"
+              style={{ animation: 'float 2s ease-in-out infinite' }}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Feature Sections ────────────────────────────────── */}
+      <section className="relative max-w-4xl mx-auto px-6 pb-32">
+        {/* Timeline line */}
+        <div className="absolute left-[27px] sm:left-[39px] top-0 bottom-0 w-px bg-gradient-to-b from-fuchsia-500/40 via-purple-500/20 to-transparent" />
+
+        {SECTIONS.map((section, i) => (
+          <div
+            key={i}
+            ref={(el) => { sectionsRef.current[i] = el; }}
+            className="changelog-section relative pl-14 sm:pl-20 mb-16 last:mb-0"
+            style={{ transitionDelay: `${i * 80}ms` }}
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round">
-              <line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Scrollable entries */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
-          {CHANGELOG.map((entry, i) => {
-            const loc = isZh ? entry.zh : entry.en;
-            return (
-              <div key={entry.date} className={i > 0 ? 'mt-5' : 'mt-3'}>
-                <div className="flex items-center gap-2.5 mb-1.5">
-                  <span className="text-[11px] font-mono tabular-nums" style={{ color: 'rgba(192,38,211,0.7)' }}>
-                    {entry.date}
-                  </span>
-                  <span className="text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                    {loc.title}
-                  </span>
-                </div>
-                <ul className="flex flex-col gap-1 pl-1">
-                  {loc.items.map((item, j) => (
-                    <li key={j} className="flex gap-2 text-[12.5px] leading-[1.5]" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                      <span style={{ color: 'rgba(255,255,255,0.15)', flexShrink: 0 }}>·</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
+            {/* Timeline dot */}
+            <div className="absolute left-4 sm:left-6 top-1 w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center">
+              <div
+                className="absolute inset-0 rounded-full opacity-40"
+                style={{ animation: 'pulse-ring 3s ease-in-out infinite', animationDelay: `${i * 0.3}s` }}
+              >
+                <div className={`w-full h-full rounded-full bg-gradient-to-br ${section.accent} opacity-50`} />
               </div>
-            );
-          })}
+              <span className="relative text-base sm:text-lg">{section.icon}</span>
+            </div>
+
+            {/* Content Card */}
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 sm:p-6 hover:bg-white/[0.04] hover:border-white/[0.1] transition-all duration-300">
+              {/* Section Header */}
+              <div className="mb-4">
+                <h3 className="text-lg sm:text-xl font-bold text-white/90 mb-1">
+                  {section.title}
+                </h3>
+                <p className="text-xs sm:text-sm text-white/30 font-mono">
+                  {section.subtitle}
+                </p>
+              </div>
+
+              {/* Feature list */}
+              <ul className="space-y-2.5">
+                {section.features.map((feature, j) => (
+                  <li key={j} className="flex items-start gap-3 group">
+                    <span
+                      className={`flex-shrink-0 w-1.5 h-1.5 mt-2 rounded-full bg-gradient-to-r ${section.accent} group-hover:scale-150 transition-transform duration-200`}
+                    />
+                    <span className="text-sm text-white/55 leading-relaxed group-hover:text-white/75 transition-colors duration-200">
+                      {feature}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {/* ─── Footer ──────────────────────────────────────────── */}
+      <footer className="relative border-t border-white/[0.06] py-16 px-6">
+        <div className="max-w-4xl mx-auto text-center">
+          {/* Credits */}
+          <div className="mb-8">
+            <p className="text-white/40 text-sm mb-2">
+              Built by <span className="text-fuchsia-400/80 font-medium">@vegekyd</span> and 10+ AI agents
+            </p>
+            <p className="text-white/25 text-xs">
+              Claude Opus 4.6 / Sonnet 4.6 / Gemini 3.1 Flash / Kling v3 / SeeDance 2.0
+            </p>
+          </div>
+
+          {/* Tagline */}
+          <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full border border-white/[0.06] bg-white/[0.02]">
+            <span className="text-xl">🍬</span>
+            <span className="text-sm font-semibold text-white/60 tracking-wide">
+              Makaron — One Man Studio
+            </span>
+          </div>
+
+          {/* Version */}
+          <p className="mt-6 text-xs text-white/15 font-mono">
+            video-in-timeline / 2026-05-21 / dev branch
+          </p>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }
