@@ -168,21 +168,36 @@ function AnimatedNumber({ value, delay = 0 }: { value: string; delay?: number })
 }
 
 // ─── Particles Background ──────────────────────────────────────────
+// Deterministic pseudo-random to avoid SSR/client hydration mismatch
+const PARTICLES = Array.from({ length: 30 }, (_, i) => {
+  const s = (i * 7919 + 1) % 997;
+  const r = (n: number) => ((s * (n + 1) * 13) % 1000) / 1000;
+  return {
+    width: 2 + r(1) * 4,
+    height: 2 + r(2) * 4,
+    left: r(3) * 100,
+    top: r(4) * 100,
+    hue: 290 + r(5) * 40,
+    dur: 6 + r(6) * 8,
+    delay: r(7) * -10,
+  };
+});
+
 function Particles() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {Array.from({ length: 30 }).map((_, i) => (
+      {PARTICLES.map((p, i) => (
         <div
           key={i}
           className="absolute rounded-full opacity-20"
           style={{
-            width: `${2 + Math.random() * 4}px`,
-            height: `${2 + Math.random() * 4}px`,
-            left: `${Math.random() * 100}%`,
-            top: `${Math.random() * 100}%`,
-            background: `hsl(${290 + Math.random() * 40}, 80%, 60%)`,
-            animation: `float ${6 + Math.random() * 8}s ease-in-out infinite`,
-            animationDelay: `${Math.random() * -10}s`,
+            width: `${p.width}px`,
+            height: `${p.height}px`,
+            left: `${p.left}%`,
+            top: `${p.top}%`,
+            background: `hsl(${p.hue}, 80%, 60%)`,
+            animation: `float ${p.dur}s ease-in-out infinite`,
+            animationDelay: `${p.delay}s`,
           }}
         />
       ))}
