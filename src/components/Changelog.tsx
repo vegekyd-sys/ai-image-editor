@@ -9,23 +9,21 @@ interface ChangelogEntry {
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-05-21',
-    en: { title: 'Video in Timeline — The Biggest Update Yet', items: [
-      'Videos are now first-class timeline entries — upload, reference, and compose videos directly in your creative flow',
-      'Multi-video composition: combine up to 3 reference videos with SeeDance AI (real human faces supported)',
-      'Upload videos from anywhere: Projects page, Home page, or drag into chat',
-      'Inline video player in CUI with play/pause, sound, and progress bar',
-      'Remotion Video support: <Video> and <OffthreadVideo> in design compositions',
+    en: { title: '15s AI Video Editing — Say It, See It', items: [
+      'Describe any idea → get a 15-second cinematic video. Unlimited imagination, zero limits.',
+      'Multi-turn conversation editing: refine, extend, continue the story across turns',
+      'Multi-video composition: combine multiple reference videos into one seamless creation (real human faces supported)',
+      'Upload your own videos as references — the AI understands motion, scene, and character',
+      'Videos are now timeline entries: swipe through your creative history like photos',
       'SSR Skeleton: project page loads 7x faster (LCP 2105ms → 284ms)',
-      '182 commits, 79 files changed — built by 10+ AI agents collaborating with the developer',
     ], link: { label: 'View full release notes →', href: '/releases/video-in-timeline' }},
-    zh: { title: '视频，正式进入时间线 — 史上最大更新', items: [
-      '视频成为时间线一等公民 — 上传、引用、合成，全部融入创作流程',
-      '多视频合成：最多 3 个参考视频 + SeeDance AI（支持真人脸）',
-      '随处上传视频：项目页、首页、或直接拖入聊天',
-      'CUI 内联视频播放器：播放/暂停、音量、进度条',
-      'Remotion Video 支持：设计作品中直接使用 <Video> 组件',
+    zh: { title: '15 秒 AI 视频编辑 — 说出来，就能看到', items: [
+      '描述任何想法 → 生成 15 秒电影级视频。天马行空，没有限制。',
+      '多轮对话编辑：不断修改、延展、续写你的故事',
+      '多视频合成：多个参考视频融合成一个完整作品（支持真人脸）',
+      '上传你自己的视频作为参考 — AI 理解动作、场景和角色',
+      '视频进入时间线：像翻照片一样滑动浏览你的创作历史',
       'SSR 骨架屏：项目页加载速度提升 7 倍（LCP 2105ms → 284ms）',
-      '182 次提交，79 个文件变更 — 10+ AI Agents 与开发者协作完成',
     ], link: { label: '查看完整发布说明 →', href: '/releases/video-in-timeline' }},
   },
   {

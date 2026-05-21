@@ -13,110 +13,127 @@ const STATS = [
 // ─── Feature Sections ──────────────────────────────────────────────
 interface FeatureSection {
   icon: string;
-  title: string;
+  zh: { title: string; features: string[] };
+  en: { title: string; features: string[] };
   subtitle: string;
-  features: string[];
   accent: string; // tailwind gradient class
 }
 
 const SECTIONS: FeatureSection[] = [
   {
-    icon: '🎬',
-    title: '视频成为时间线一等公民',
-    subtitle: 'Video as First-Class Timeline Entry',
-    features: [
-      '视频直接作为时间线 Snapshot（type=video, video_meta JSONB）',
-      '方形圆点 = 视频，圆形 = 图片，一眼区分',
-      '浏览器端视频封面提取（移除服务端 ffmpeg 依赖）',
-      'VideoResultCard 实时渲染状态、时长标签、模型名称',
-    ],
+    icon: '🧠',
+    subtitle: '15s AI Video',
+    zh: { title: '15 秒 AI 视频 — 说出来，就能看到', features: [
+      '任何天马行空的想法，用自然语言描述 → 15 秒电影级视频',
+      '多轮对话编辑：不满意？继续聊。修改、延展、重来，直到完美',
+      '续写故事：一段视频接一段，像写连续剧一样创作',
+      '支持真人脸：上传你的照片，AI 让你出演自己的故事',
+      '两大模型可选：Kling v3（快速）/ SeeDance 2.0（最强画质）',
+    ]},
+    en: { title: '15s AI Video — Say It, See It', features: [
+      'Describe any wild idea in natural language → 15-second cinematic video',
+      'Multi-turn editing: not satisfied? Keep chatting. Refine, extend, redo until perfect',
+      'Continue the story: chain videos together like writing a TV series',
+      'Real human faces: upload your photo, star in your own story',
+      'Two top models: Kling v3 (fast) / SeeDance 2.0 (best quality)',
+    ]},
     accent: 'from-fuchsia-500 to-purple-600',
   },
   {
-    icon: '📤',
-    title: '视频上传 — 随处可传',
-    subtitle: 'Upload Video from Anywhere',
-    features: [
-      '项目页、Home 页、CUI 聊天 — 三入口上传视频',
-      '浏览器端 Remotion 转码，分辨率自动归一化',
-      '超限自动压缩（SeeDance 分辨率限制）',
-      '上传即分析：Gemini 3.0 Flash 原生视频理解',
-      'Agent 新增 analyze_video 工具',
-    ],
-    accent: 'from-cyan-400 to-blue-600',
-  },
-  {
-    icon: '🔗',
-    title: '视频引用 & 多视频合成',
-    subtitle: 'Video References & Multi-Video Composition',
-    features: [
-      'Media Index 取代 Image Index（<<<media_N>>> 格式）',
-      '智能路由：Agent 引用 <<<media_4>>> → 自动检测是视频 → 注入 video_urls',
-      'SeeDance 多视频合成（最多 3 段，总长 ≤15s）',
-      '时长校验 + 清晰错误提示',
-    ],
+    icon: '🎬',
+    subtitle: 'Multi-Video Composition',
+    zh: { title: '多视频合成 — 把素材变作品', features: [
+      '上传多段视频，AI 理解每段的动作、场景、角色',
+      '用对话指挥合成："让 @4 的小朋友加入 @6 的派对"',
+      'SeeDance 最多 3 段参考视频融合（总长 ≤15s）',
+      '智能路由：Agent 自动识别哪些是视频、哪些是图片',
+    ]},
+    en: { title: 'Multi-Video Composition — Turn Clips into Cinema', features: [
+      'Upload multiple videos — AI understands motion, scene, and character in each',
+      'Direct composition via chat: "Put the kid from @4 into @6\'s birthday party"',
+      'SeeDance fuses up to 3 reference videos (total ≤15s)',
+      'Smart routing: Agent auto-detects which refs are videos vs images',
+    ]},
     accent: 'from-amber-400 to-orange-600',
   },
   {
-    icon: '🎥',
-    title: 'Remotion 视频渲染',
-    subtitle: 'Remotion Video Support',
-    features: [
-      '<Video> 和 <OffthreadVideo> 正式进入 Remotion Scope',
-      '视频 Design 直接渲染源 MP4',
-      '视频预加载 — 切换 timeline 零卡顿',
-      'Blob URL 跨切换缓存',
-      'Design Harness 自动修正：<video> → <Video>，注入 premountFor',
-    ],
-    accent: 'from-green-400 to-emerald-600',
+    icon: '📤',
+    subtitle: 'Upload',
+    zh: { title: '视频上传 — 随处可传', features: [
+      '项目页、Home 页、CUI 聊天 — 三入口上传视频',
+      '上传即分析：Gemini 3.0 Flash 原生视频理解',
+      '浏览器端自动转码，分辨率归一化',
+      '超限自动压缩（无需手动处理）',
+    ]},
+    en: { title: 'Upload Video — From Anywhere', features: [
+      'Projects page, Home page, or drag into chat — three upload paths',
+      'Instant analysis on upload: Gemini 3.0 Flash native video understanding',
+      'Browser-side auto transcode, resolution normalization',
+      'Auto-compress when exceeding limits (no manual work needed)',
+    ]},
+    accent: 'from-cyan-400 to-blue-600',
   },
   {
     icon: '💬',
-    title: 'CUI 视频集成',
-    subtitle: 'Chat-First Video Experience',
-    features: [
-      '聊天内嵌视频播放器（播放/暂停、音量、poster、进度条）',
-      'CUI 消息支持视频附件',
-      '视频缩略图 @N 角标',
-      '提交后自动跳转到视频 Snapshot',
-      '视频完成消息 — 点击直达',
-    ],
+    subtitle: 'Chat = Director',
+    zh: { title: '对话式创作 — 聊天就是导演', features: [
+      '聊天内嵌视频播放器 — 生成即预览，无需跳转',
+      '视频附件直接拖入对话',
+      '"加个字幕"、"换个风格"、"延长到 10 秒" — 一句话搞定',
+      '视频完成自动弹出 — 点击直达全屏播放',
+    ]},
+    en: { title: 'Chat-First — You Are the Director', features: [
+      'Inline video player in chat — preview instantly, no page switch',
+      'Drag video attachments directly into conversation',
+      '"Add subtitles", "change the style", "extend to 10s" — one sentence does it',
+      'Video auto-pops when done — tap to fullscreen',
+    ]},
     accent: 'from-pink-400 to-rose-600',
   },
   {
+    icon: '🎥',
+    subtitle: 'Timeline',
+    zh: { title: '视频进入时间线', features: [
+      '视频和图片并列在时间线中，像翻相册一样滑动浏览',
+      '方形圆点 = 视频，圆形 = 图片，一眼区分',
+      '每段视频的创作过程完整保留 — 随时回溯、对比',
+    ]},
+    en: { title: 'Video in Timeline', features: [
+      'Videos sit alongside photos — swipe through your creative history',
+      'Square dot = video, circle = image — instant visual distinction',
+      'Full creation history preserved — rewind and compare anytime',
+    ]},
+    accent: 'from-green-400 to-emerald-600',
+  },
+  {
     icon: '⚡',
-    title: 'SSR Skeleton — 性能飞跃',
-    subtitle: 'LCP: 2105ms → 284ms (7x faster)',
-    features: [
-      '服务端渲染骨架屏精确镜像 Editor flex 布局',
-      '适配桌面/移动端、safe-area-insets、iOS Safari',
-      'LCP 从 2105ms 降至 284ms — 提速 7 倍',
-    ],
+    subtitle: '7x Faster',
+    zh: { title: '性能飞跃 — 7 倍提速', features: [
+      'SSR 骨架屏精确镜像编辑器布局',
+      '打开项目从 2 秒等待变为瞬间可见',
+      '适配全平台：桌面、移动端、iOS Safari',
+    ]},
+    en: { title: 'Performance Leap — 7x Faster', features: [
+      'SSR skeleton precisely mirrors Editor layout',
+      'Open project: from 2s wait to instant visibility',
+      'Works everywhere: desktop, mobile, iOS Safari',
+    ]},
     accent: 'from-violet-400 to-indigo-600',
   },
   {
     icon: '🖥️',
-    title: 'CLI 视频支持',
-    subtitle: 'Terminal-First Video Creation',
-    features: [
+    subtitle: 'CLI',
+    zh: { title: 'CLI 视频支持', features: [
       'chat --video 命令行视频输入',
-      'v2 视频时间线轮询与创建',
       'Signed URL 上传（图片 + 视频，无大小限制）',
-    ],
+      '182 次提交 · 79 文件 · 10+ AI Agents 协作完成',
+    ]},
+    en: { title: 'CLI Video Support', features: [
+      'chat --video command line input',
+      'Signed URL upload (images + videos, no size limit)',
+      '182 commits · 79 files · 10+ AI Agents collaborated',
+    ]},
     accent: 'from-slate-400 to-zinc-600',
-  },
-  {
-    icon: '🏗️',
-    title: '架构升级',
-    subtitle: 'Architecture Improvements',
-    features: [
-      'Renderer Registry — 声明式内容类型分发',
-      '统一服务端 Context Building（移除前端 context）',
-      '共享 CreateInputBox + useCreateInput Hook',
-      'Postgres RPC 原子 sort_order（杜绝重复排序）',
-      '统一视频占位符（processing/failed 状态）',
-    ],
-    accent: 'from-teal-400 to-cyan-600',
   },
 ];
 
@@ -174,9 +191,21 @@ function Particles() {
 }
 
 // ─── Main Component ────────────────────────────────────────────────
+function useIsZh() {
+  const [isZh, setIsZh] = useState(true);
+  useEffect(() => {
+    const locale = typeof document !== 'undefined'
+      ? (document.cookie.match(/(?:^|; )locale=([^;]*)/)?.[1] || localStorage.getItem('locale') || navigator.language)
+      : 'zh';
+    setIsZh(locale.startsWith('zh'));
+  }, []);
+  return isZh;
+}
+
 export default function VideoInTimelineReleasePage() {
   const [visible, setVisible] = useState(false);
   const sectionsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const isZh = useIsZh();
 
   useEffect(() => {
     setVisible(true);
@@ -281,27 +310,31 @@ export default function VideoInTimelineReleasePage() {
         <div
           className={`mb-8 px-4 py-1.5 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300 text-sm font-mono tracking-wider transition-all duration-1000 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}
         >
-          RELEASE: VIDEO IN TIMELINE
+          MAKARON · 2026.05.21
         </div>
 
         {/* Title */}
         <h1
           className={`text-4xl sm:text-6xl md:text-7xl font-black text-center leading-tight mb-6 transition-all duration-1000 delay-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
         >
-          <span className="block text-white/90">视频，</span>
-          <span className="shimmer-text">正式进入时间线</span>
+          <span className="block text-white/90">{isZh ? '说出来，' : 'Say It,'}</span>
+          <span className="shimmer-text">{isZh ? '就能看到' : 'See It'}</span>
         </h1>
 
         {/* Subtitle */}
         <p
           className={`text-lg sm:text-xl text-white/50 text-center max-w-2xl mb-4 transition-all duration-1000 delay-400 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
         >
-          Makaron 有史以来最大的功能更新
+          {isZh
+            ? '15 秒 AI 视频编辑 · 天马行空 · 多轮对话 · 续写故事'
+            : '15s AI Video Editing · Unlimited Imagination · Multi-Turn · Storytelling'}
         </p>
         <p
           className={`text-sm text-white/30 text-center max-w-xl mb-12 transition-all duration-1000 delay-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
         >
-          10+ AI Agents 协作完成 · 182 次提交 · 从上传到渲染，从 CLI 到 CUI，视频融入每一个触点
+          {isZh
+            ? '任何想法，一句话变成电影。不满意就继续聊，直到完美。'
+            : 'Turn any idea into cinema with one sentence. Not perfect? Keep chatting until it is.'}
         </p>
 
         {/* Stats Grid */}
@@ -328,7 +361,7 @@ export default function VideoInTimelineReleasePage() {
         <div
           className={`absolute bottom-10 flex flex-col items-center gap-2 transition-all duration-1000 delay-1200 ${visible ? 'opacity-100' : 'opacity-0'}`}
         >
-          <span className="text-xs text-white/30">向下滚动</span>
+          <span className="text-xs text-white/30">{isZh ? '向下滚动' : 'Scroll down'}</span>
           <div className="w-5 h-8 rounded-full border border-white/20 flex items-start justify-center p-1">
             <div
               className="w-1.5 h-1.5 rounded-full bg-fuchsia-400"
@@ -366,7 +399,7 @@ export default function VideoInTimelineReleasePage() {
               {/* Section Header */}
               <div className="mb-4">
                 <h3 className="text-lg sm:text-xl font-bold text-white/90 mb-1">
-                  {section.title}
+                  {isZh ? section.zh.title : section.en.title}
                 </h3>
                 <p className="text-xs sm:text-sm text-white/30 font-mono">
                   {section.subtitle}
@@ -375,7 +408,7 @@ export default function VideoInTimelineReleasePage() {
 
               {/* Feature list */}
               <ul className="space-y-2.5">
-                {section.features.map((feature, j) => (
+                {(isZh ? section.zh.features : section.en.features).map((feature, j) => (
                   <li key={j} className="flex items-start gap-3 group">
                     <span
                       className={`flex-shrink-0 w-1.5 h-1.5 mt-2 rounded-full bg-gradient-to-r ${section.accent} group-hover:scale-150 transition-transform duration-200`}
@@ -397,10 +430,10 @@ export default function VideoInTimelineReleasePage() {
           {/* Credits */}
           <div className="mb-8">
             <p className="text-white/40 text-sm mb-2">
-              Built by <span className="text-fuchsia-400/80 font-medium">@vegekyd</span> and 10+ AI agents
+              Built by <span className="text-fuchsia-400/80 font-medium">@Tianyi</span> {isZh ? '和 10+ AI Agents 协作完成' : 'with 10+ AI Agents'}
             </p>
             <p className="text-white/25 text-xs">
-              Claude Opus 4.6 / Sonnet 4.6 / Gemini 3.1 Flash / Kling v3 / SeeDance 2.0
+              Claude Opus 4.6 · Sonnet 4.6 · Gemini 3.1 Flash · Kling v3 · SeeDance 2.0
             </p>
           </div>
 
@@ -414,7 +447,7 @@ export default function VideoInTimelineReleasePage() {
 
           {/* Version */}
           <p className="mt-6 text-xs text-white/15 font-mono">
-            video-in-timeline / 2026-05-21 / dev branch
+            video-in-timeline / 2026-05-21
           </p>
         </div>
       </footer>
