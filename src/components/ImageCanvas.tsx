@@ -1397,10 +1397,10 @@ export default function ImageCanvas({
                       onClick={() => goTo(i)}
                       className={`transition-all cursor-pointer ${
                         i === currentIndex
-                          ? isDesktop ? 'w-5 h-2 rounded-full bg-white/70 hover:bg-white/90' : 'w-3 h-1 rounded-full bg-white/70'
+                          ? isDesktop ? 'w-5 h-2 rounded-full bg-white/70 hover:bg-white/90' : 'w-3 h-[5px] rounded-full bg-white/70'
                           : isRef
-                            ? isDesktop ? 'w-2 h-2 rounded-full border border-dashed border-white/40 bg-transparent hover:border-white/60' : 'w-1.5 h-1.5 rounded-full border border-dashed border-white/40 bg-transparent'
-                            : isDesktop ? 'w-2 h-2 rounded-full bg-white/25 hover:bg-white/40' : 'w-1 h-1 rounded-full bg-white/25'
+                            ? isDesktop ? 'w-2 h-2 rounded-full border border-dashed border-white/40 bg-transparent hover:border-white/60' : 'w-[5px] h-[5px] rounded-full border border-dashed border-white/40 bg-transparent'
+                            : isDesktop ? 'w-2 h-2 rounded-full bg-white/25 hover:bg-white/40' : 'w-[5px] h-[5px] rounded-full bg-white/25'
                       }`}
                     />
                   )}
