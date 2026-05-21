@@ -76,7 +76,7 @@ export async function middleware(request: NextRequest) {
     const isProjectView = /^\/projects\/[0-9a-f-]{36}$/.test(pathname)
     if (isProjectView) return supabaseResponse
 
-    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/home' && !pathname.startsWith('/home/') && pathname !== '/agent' && pathname !== '/claim' && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/')) {
+    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/home' && !pathname.startsWith('/home/') && pathname !== '/agent' && pathname !== '/claim' && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/') && !pathname.startsWith('/releases/')) {
       const url = request.nextUrl.clone()
       url.pathname = '/home'
       return NextResponse.redirect(url)
