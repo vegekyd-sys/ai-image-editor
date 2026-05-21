@@ -5,13 +5,16 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
-import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation } from '@/types'
+import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
+import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
+import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 
 interface LoadedProject {
   snapshots: Snapshot[]
   messages: Message[]
   title: string
   animations: ProjectAnimation[]
+  timelineVersion: number
 }
 
 const MAX_UPLOAD_ATTEMPTS = 3
@@ -32,7 +35,7 @@ export function useProject(projectId: string, userId: string) {
   const loadProject = useCallback(async (): Promise<LoadedProject> => {
     const supabase = getSupabase()
 
-    const [snapshotsRes, messagesRes, projectRes, animationRes] = await Promise.all([
+    const [snapshotsRes, messagesRes, projectRes] = await Promise.all([
       supabase
         .from('snapshots')
         .select('*')
@@ -45,35 +48,45 @@ export function useProject(projectId: string, userId: string) {
         .order('created_at', { ascending: true }),
       supabase
         .from('projects')
-        .select('title')
+        .select('title, timeline_version')
         .eq('id', projectId)
         .single(),
-      supabase
-        .from('project_animations')
-        .select('id, video_url, prompt, snapshot_urls, status, piapi_task_id, created_at')
-        .eq('project_id', projectId)
-        .in('status', ['completed', 'processing'])
-        .order('created_at', { ascending: false }),
     ])
+
+    const timelineVersion: number = (projectRes.data as Record<string, unknown>)?.timeline_version as number ?? 1
+
+    // Only load project_animations for v1 projects (v2 stores videos as snapshots)
+    const animationRes = timelineVersion < 2
+      ? await supabase
+          .from('project_animations')
+          .select('id, video_url, prompt, snapshot_urls, status, piapi_task_id, created_at')
+          .eq('project_id', projectId)
+          .in('status', ['completed', 'processing'])
+          .order('created_at', { ascending: false })
+      : { data: [] }
 
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
     const dbMessages: DbMessage[] = messagesRes.data ?? []
 
-    const snapshots: Snapshot[] = dbSnapshots.map((s) => ({
-      id: s.id,
-      image: s.image_url, // Use Storage URL as the image source
-      tips: (Array.isArray(s.tips) ? s.tips : []).map(t => ({
-        ...t,
-        previewStatus: t.previewImage ? 'done' as const
-          : t.editPrompt ? 'none' as const : undefined,
-      })),
-      messageId: s.message_id || '',
-      imageUrl: s.image_url,
-      description: s.description ?? undefined,
-      ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
-      ...(s.design_path ? { designPath: s.design_path } : {}),
-      ...(s.metadata ? { metadata: s.metadata } : {}),
-    }))
+    const snapshots: Snapshot[] = dbSnapshots.map((s) => {
+      const imageUrl = s.image_url || (s.type === 'video' ? VIDEO_PLACEHOLDER_IMAGE : '')
+      return {
+        id: s.id,
+        image: imageUrl,
+        tips: (Array.isArray(s.tips) ? s.tips : []).map(t => ({
+          ...t,
+          previewStatus: t.previewImage ? 'done' as const
+            : t.editPrompt ? 'none' as const : undefined,
+        })),
+        messageId: s.message_id || '',
+        imageUrl: imageUrl || undefined,
+        description: s.description ?? undefined,
+        ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
+        ...(s.design_path ? { designPath: s.design_path } : {}),
+        ...(s.video_meta ? { videoMeta: s.video_meta as VideoMeta } : {}),
+        ...(s.metadata ? { metadata: s.metadata } : {}),
+      }
+    })
 
     // Load persisted designs from workspace (async, non-blocking)
     // Derive userId from first snapshot's image_url if userId param is empty (race condition on page load)
@@ -110,24 +123,25 @@ export function useProject(projectId: string, userId: string) {
       }
     }))
 
-    // Background: resolve expired audio URLs in design code (non-blocking)
+    // Background: resolve expired audio/video URLs in design code (non-blocking, re-save for next load)
     Promise.resolve().then(async () => {
       for (const snap of snapshots) {
         if (!snap.design?.code) continue
         try {
-          const { code, changed } = await resolveAudioUrlsInCode(snap.design.code, projectId, supabase)
+          let { code, changed } = await resolveAudioUrlsInCode(snap.design.code, projectId, supabase)
+          const video = await resolveVideoUrlsInCode(code, projectId, supabase)
+          if (video.changed) { code = video.code; changed = true }
           if (!changed) continue
           snap.design = { ...snap.design, code }
-          // Re-save to workspace
           const dp = snap.designPath
           if (dp && resolvedUserId) {
             const designJson = JSON.stringify(snap.design)
             const storagePath = `${resolvedUserId}/workspace/${dp}`
             await supabase.storage.from('images').upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
-            console.log(`🎵 [audio-resolve] updated ${dp}`)
+            console.log(`🔗 [url-resolve] updated ${dp}`)
           }
         } catch (e) {
-          console.warn('[audio-resolve] failed for snapshot:', snap.id, e)
+          console.warn('[url-resolve] failed for snapshot:', snap.id, e)
         }
       }
     })
@@ -166,7 +180,7 @@ export function useProject(projectId: string, userId: string) {
       };
     })
 
-    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations }
+    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
   }, [projectId])
 
   // --- Write (all fire-and-forget) ---
@@ -176,30 +190,33 @@ export function useProject(projectId: string, userId: string) {
       try {
         const supabase = getSupabase()
 
-        let imageUrl: string | null
+        let imageUrl: string | null = null
 
-        // If image is already a Storage URL, skip upload
-        if (snapshot.image.startsWith('http')) {
-          imageUrl = snapshot.image
-        } else {
-          // Upload base64 image to Storage
-          const filename = `snapshot-${snapshot.id}.jpg`
-          imageUrl = await uploadImage(
-            supabase,
-            userId,
-            projectId,
-            filename,
-            snapshot.image,
-          )
-        }
+        // Video snapshots have no image to upload — poster is captured later by ImageCanvas
+        const isVideoSnapshot = snapshot.type === 'video'
 
-        if (!imageUrl) {
-          console.warn('Failed to upload snapshot image')
-          return
+        if (!isVideoSnapshot) {
+          if (snapshot.image.startsWith('http')) {
+            imageUrl = snapshot.image
+          } else {
+            const filename = `snapshot-${snapshot.id}.jpg`
+            imageUrl = await uploadImage(
+              supabase,
+              userId,
+              projectId,
+              filename,
+              snapshot.image,
+            )
+          }
+
+          if (!imageUrl) {
+            console.warn('Failed to upload snapshot image')
+            return
+          }
         }
 
         // Notify caller of the uploaded URL
-        onUploaded?.(imageUrl)
+        if (imageUrl) onUploaded?.(imageUrl)
 
         // Persist design code to workspace if present
         let designPath: string | null = null
@@ -226,13 +243,14 @@ export function useProject(projectId: string, userId: string) {
         const { error } = await supabase.from('snapshots').upsert({
           id: snapshot.id,
           project_id: projectId,
-          image_url: imageUrl,
+          image_url: imageUrl || '',
           tips: snapshot.tips,
           message_id: messageId,
           sort_order: sortOrder,
           ...(snapshot.description ? { description: snapshot.description } : {}),
           ...(snapshot.type ? { type: snapshot.type } : {}),
           ...(designPath ? { design_path: designPath } : {}),
+          ...(snapshot.videoMeta ? { video_meta: snapshot.videoMeta } : {}),
           ...(snapshot.metadata ? { metadata: snapshot.metadata } : {}),
         }, { onConflict: 'id' })
 

@@ -95,20 +95,26 @@ describe('Path 1: Single image upload', () => {
     expect(ctx.fetchTipsForSnapshot).toHaveBeenCalled();
   });
 
-  it('triggers project naming on first image', () => {
+  it('triggers project naming on turn end', () => {
+    ctx.userPromptText = 'make it cinematic';
     const { callbacks } = makeAgentCallbacks(ctx);
     callbacks.onNewTurn?.('msg-1');
     callbacks.onImage?.('data:image/jpeg;base64,edited', 'gemini', 'snap-1');
+    callbacks.onDone?.();
 
     expect(ctx.triggerProjectNaming).toHaveBeenCalled();
   });
 
   it('does not trigger naming twice', () => {
+    ctx.userPromptText = 'make it cinematic';
     const { callbacks } = makeAgentCallbacks(ctx);
     callbacks.onNewTurn?.('msg-1');
     callbacks.onImage?.('data:image/jpeg;base64,img1', 'gemini', 'snap-1');
+    callbacks.onDone?.();
     ctx.snapshotsRef.current = snapshots;
+    callbacks.onNewTurn?.('msg-2');
     callbacks.onImage?.('data:image/jpeg;base64,img2', 'gemini', 'snap-2');
+    callbacks.onDone?.();
 
     expect(ctx.triggerProjectNaming).toHaveBeenCalledTimes(1);
   });
@@ -205,10 +211,12 @@ describe('Path 3: Text-to-image (empty project)', () => {
     expect(snapshots[0].messageId).toBe('msg-1');
   });
 
-  it('triggers naming and tips on first generated image', () => {
+  it('triggers naming on turn end and tips on image', () => {
+    ctx.userPromptText = 'generate a sunset photo';
     const { callbacks } = makeAgentCallbacks(ctx);
     callbacks.onNewTurn?.('msg-1');
     callbacks.onImage?.('data:image/jpeg;base64,generated', 'gemini', 'snap-0');
+    callbacks.onDone?.();
 
     expect(ctx.triggerProjectNaming).toHaveBeenCalled();
     expect(ctx.fetchTipsForSnapshot).toHaveBeenCalled();

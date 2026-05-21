@@ -27,12 +27,12 @@ export interface SeedanceTaskResult {
 }
 
 /**
- * Convert <<<image_N>>> references to [图N] format for SeeDance prompt.
+ * Convert <<<media_N>>> / <<<image_N>>> references to [图N] format for SeeDance prompt.
  * SeeDance uses "图片N" to reference images in the content array by their order
  * among image_url entries (1-indexed).
  */
 function convertImageRefs(prompt: string): string {
-  return prompt.replace(/<<<image_(\d+)>>>/g, (_, n) => `[图${n}]`)
+  return prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_, n) => `[图${n}]`)
 }
 
 /**

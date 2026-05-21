@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import type { Metadata } from 'next'
+import { getOptimizedUrl } from '@/lib/supabase/storage'
 
 type Props = { params: Promise<{ id: string }> }
 
@@ -29,6 +30,41 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default function ProjectLayout({ children }: { children: React.ReactNode }) {
-  return children
+export default async function ProjectLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const { data } = await getSupabaseAdmin()
+    .from('snapshots')
+    .select('image_url')
+    .eq('project_id', id)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .single()
+
+  const lcpUrl = data?.image_url ? getOptimizedUrl(data.image_url) : null
+
+  return (
+    <>
+      {/* SSR skeleton: mirrors Editor layout exactly to prevent image position jump */}
+      {lcpUrl && (
+        <div id="ssr-skeleton" className="fixed inset-0 z-0 bg-black" style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          {/* Desktop: flex-row (canvas left + CUI right). Mobile: flex-col (canvas + bottom bar) */}
+          <div className="w-full h-full flex flex-col lg:flex-row">
+            {/* Left: GUI panel (canvas + bottom bar) */}
+            <div className="flex-1 min-w-0 flex flex-col">
+              {/* Canvas area — slight padding so tall images (9:16) don't touch edges, hiding sub-px height mismatch with Editor */}
+              <div className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center p-[2px]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={lcpUrl} alt="" className="w-full h-full object-contain" fetchPriority="high" />
+              </div>
+              {/* Bottom bar: StatusBar (46) + TipsBar/VideoCard + CategoryTabs = 166px mobile, 146px desktop */}
+              <div className="flex-shrink-0 h-[166px] lg:h-[146px]" />
+            </div>
+            {/* Right: CUI panel placeholder (desktop only) */}
+            <div className="hidden lg:block flex-shrink-0 border-l border-white/[0.08]" style={{ width: 500 }} />
+          </div>
+        </div>
+      )}
+      {children}
+    </>
+  )
 }

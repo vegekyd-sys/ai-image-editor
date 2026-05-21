@@ -5,6 +5,7 @@ import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils';
 
 interface ImageUploaderProps {
   onImageSelect: (base64: string) => void;
+  onVideoSelect?: (file: File) => void;
   disabled?: boolean;
 }
 
@@ -36,17 +37,21 @@ function compressImage(file: File, maxWidth = 2048): Promise<string> {
   });
 }
 
-export default function ImageUploader({ onImageSelect, disabled }: ImageUploaderProps) {
+export default function ImageUploader({ onImageSelect, onVideoSelect, disabled }: ImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(
     async (file: File) => {
+      if (file.type.startsWith('video/')) {
+        onVideoSelect?.(file);
+        return;
+      }
       if (!file.type.startsWith('image/') && !isHeicFile(file)) return;
       const decodable = await ensureDecodableFile(file);
       const base64 = await compressImage(decodable);
       onImageSelect(base64);
     },
-    [onImageSelect]
+    [onImageSelect, onVideoSelect]
   );
 
   const handleDrop = useCallback(
@@ -63,7 +68,7 @@ export default function ImageUploader({ onImageSelect, disabled }: ImageUploader
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

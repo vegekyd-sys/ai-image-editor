@@ -23,6 +23,8 @@ export interface PromptContextOptions {
   isDraft?: boolean;
   /** Number of attached reference images */
   referenceImageCount?: number;
+  /** Number of just-uploaded videos (for context hint with media index) */
+  uploadedVideoCount?: number;
 }
 
 export interface PromptContextResult {
@@ -45,6 +47,7 @@ interface DbSnapshot {
   design_path?: string;
   tips: Tip[];
   sort_order: number;
+  video_meta?: Record<string, unknown>;
   metadata?: { takenAt?: string; location?: string };
 }
 
@@ -59,13 +62,13 @@ export async function buildPromptContext(
   userId: string,
   options: PromptContextOptions,
 ): Promise<PromptContextResult> {
-  const { userMessage, hasAnnotation, isDraft, referenceImageCount } = options;
+  const { userMessage, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = options;
 
   // Query snapshots and messages in parallel
   const [snapshotsRes, messagesRes] = await Promise.all([
     supabase
       .from('snapshots')
-      .select('id, image_url, description, type, design_path, tips, sort_order, metadata')
+      .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
       .eq('project_id', projectId)
       .order('sort_order', { ascending: true }),
     supabase
@@ -81,9 +84,11 @@ export async function buildPromptContext(
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
 
-  // Load design from workspace if current snapshot has one
+  // Load design from workspace if current snapshot has one (skip for video snapshots —
+  // their design_path is only a Remotion playback wrapper, not user-editable code)
   let currentDesign: DesignPayload | undefined;
-  if (currentSnap?.design_path) {
+  const currentSnapIsVideo = currentSnap?.type === 'video';
+  if (currentSnap?.design_path && !currentSnapIsVideo) {
     try {
       const file = await workspace.readFile(currentSnap.design_path, supabase, userId);
       if (file) currentDesign = JSON.parse(file.content);
@@ -131,25 +136,36 @@ export async function buildPromptContext(
   // Snapshot index — emit even for single-snapshot projects so the model always knows
   // at minimum that an image exists (prevents design-from-nothing hallucination).
   const snapshotIndexContext = snapshots.length >= 1
-    ? `[图片索引 / Image Index — ${snapshots.length} snapshots]\n${snapshots.map((s, i) => {
+    ? `[Media Index — ${snapshots.length} items]\n${snapshots.map((s, i) => {
         const isRef = s.type === 'reference';
-        const isDesign = !!s.design_path;
-        const desc = isRef
-          ? (s.description || 'Skill reference image')
-          : isDesign
-            ? (s.description || '[design/video]')
-            : i === 0 || snapshots.slice(0, i).every(ss => ss.type === 'reference')
-              ? (s.description || '原图 / Original upload')
-              : (s.description || '(use analyze_image to see this snapshot)');
-        const tag = isRef ? ' (reference)' : isDesign ? ' (design)' : '';
+        const isVideo = s.type === 'video';
+        const videoMeta = s.video_meta as Record<string, unknown> | undefined;
+        const isDesign = !!s.design_path && !isVideo;
+        const desc = isVideo
+          ? (s.description || (videoMeta?.prompt as string)?.split('\n')[0]?.slice(0, 60) || '[video]')
+          : isRef
+            ? (s.description || 'Skill reference image')
+            : isDesign
+              ? (s.description || '[design/video]')
+              : i === 0 || snapshots.slice(0, i).every(ss => ss.type === 'reference')
+                ? (s.description || '原图 / Original upload')
+                : (s.description || '(use analyze_image to see this snapshot)');
+        const typeLabel = isVideo
+          ? (videoMeta?.status === 'completed' && videoMeta?.duration ? `video, ${videoMeta.duration}s` : videoMeta?.status && videoMeta.status !== 'completed' ? `video, ${videoMeta.status}` : 'video')
+          : isRef ? 'reference' : isDesign ? 'design' : 'image';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
-        const codePath = isDesign && s.design_path ? ` [code: ${s.design_path}]` : '';
-        return `<<<image_${i + 1}>>>${tag}${marker} — ${desc}${codePath}`;
+        const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';
+        const codePath = s.design_path && !isVideo ? ` [code: ${s.design_path}]` : '';
+        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${codePath}`;
       }).join('\n')}\n\n`
     : '';
 
-  // Design warning
-  const designWarning = currentDesign
+  // Video/Design mode warnings (mutually exclusive)
+  const videoWarning = currentSnapIsVideo
+    ? `[VIDEO MODE] You are viewing a video. Use analyze_video to understand its content. Do NOT read or patch its design code — that is only a playback wrapper.\n\n`
+    : '';
+
+  const designWarning = !currentSnapIsVideo && currentDesign
     ? `[DESIGN MODE] You are viewing a design/video (not a photo). The design code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this design.\n\n`
     : '';
 
@@ -162,20 +178,27 @@ export async function buildPromptContext(
 
   // Frontend-only warnings
   const annotationWarning = hasAnnotation
-    ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use image_index to switch to another snapshot. Call analyze_image first (without image_index) to see the annotations, then generate_image (without image_index) to edit.\n\n`
+    ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use media_index to switch to another snapshot. Call analyze_image first (without media_index) to see the annotations, then generate_image (without media_index) to edit.\n\n`
     : '';
 
   const draftWarning = isDraft
-    ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the image index. Omit image_index to edit this draft directly.\n\n`
+    ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the media index. Omit media_index to edit this draft directly.\n\n`
     : '';
 
   const refContext = referenceImageCount
     ? `[用户上传了 ${referenceImageCount} 张参考图，已自动传给 generate_image 工具使用]\n\n`
     : '';
 
-  // Assemble (same order as Editor.tsx, minus historyContext — now passed
-  // as structured messages[] alongside fullPrompt).
-  const fullPrompt = `${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const videoUploadContext = uploadedVideoCount
+    ? (() => {
+        const total = snapshots.length;
+        const startIdx = total - uploadedVideoCount + 1;
+        return `[User uploaded ${uploadedVideoCount === 1 ? 'a video' : `${uploadedVideoCount} videos`} — added to Media Index as <<<media_${startIdx}>>>${uploadedVideoCount > 1 ? ` to <<<media_${total}>>>` : ''}]\n\n`;
+      })()
+    : '';
+
+  // Assemble
+  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map(s => s.image_url || '');
   const originalImage = snapshots[0]?.image_url || undefined;

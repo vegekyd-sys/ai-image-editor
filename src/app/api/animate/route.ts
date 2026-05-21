@@ -33,6 +33,27 @@ export async function POST(req: NextRequest) {
     const creditCheck = await requireCredits(user.id, 50)
     if (!creditCheck.ok) return creditCheck.response
 
+    // Auto-route video references: detect video snapshots in imageUrls
+    const { data: dbSnaps } = await supabase
+      .from('snapshots')
+      .select('type, video_meta')
+      .eq('project_id', projectId)
+      .order('sort_order')
+    let autoVideoUrls: string[] = []
+    if (dbSnaps?.length) {
+      const scriptRefs = [...new Set(
+        Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))
+      )]
+      for (const ref of scriptRefs) {
+        const snap = dbSnaps[ref - 1]
+        const videoUrl = (snap?.video_meta as Record<string, unknown> | null)?.videoUrl as string | undefined
+        if (snap?.type === 'video' && videoUrl) {
+          autoVideoUrls.push(videoUrl)
+          imageUrls[ref - 1] = ''
+        }
+      }
+    }
+
     // Call skill layer (stateless, no DB)
     const skillResult = await createVideo({
       script: prompt,
@@ -40,6 +61,7 @@ export async function POST(req: NextRequest) {
       duration,
       aspectRatio,
       videoModel,
+      videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
     })
 
     if (!skillResult.success || !skillResult.taskId) {

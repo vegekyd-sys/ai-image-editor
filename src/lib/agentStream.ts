@@ -9,6 +9,7 @@ export interface AgentStreamCallbacks {
   onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onAnimationTask?: (taskId: string, prompt: string, imageUrls?: string[], model?: string) => void;
+  onVideoSnapshot?: (snapshotId: string, taskId: string, videoMeta: import('@/types').VideoMeta) => void;
   onMusicTask?: (taskId: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onCaptureFrame?: (frame: number, uploadPath: string, captureId: string) => void;
@@ -33,7 +34,7 @@ export async function streamAgent(
     originalImage?: string;
     animationImageUrls?: string[];  // Supabase Storage URLs for animation mode
     animationImages?: string[];  // Actual image data (base64 or URL) for Agent vision in animation mode
-    analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit';
+    analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean;
     tipReaction?: boolean; committedTip?: object; currentTips?: object[];
     tipsTeaser?: boolean; tipsPayload?: object[];
     nameProject?: boolean; description?: string;
@@ -46,6 +47,7 @@ export async function streamAgent(
     hasAnnotation?: boolean;
     isDraft?: boolean;
     referenceImageCount?: number;
+    uploadedVideoCount?: number;
   },
   callbacks: AgentStreamCallbacks,
   signal?: AbortSignal,
@@ -118,6 +120,11 @@ export async function streamAgent(
           case 'animation_task':
             callbacks.onAnimationTask?.(event.taskId, event.prompt || '', event.imageUrls, event.model);
             break;
+          case 'video_snapshot': {
+            const vs = event as unknown as { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta };
+            callbacks.onVideoSnapshot?.(vs.snapshotId, vs.taskId, vs.videoMeta);
+            break;
+          }
           case 'music_task':
             callbacks.onMusicTask?.((event as { taskId: string }).taskId);
             break;

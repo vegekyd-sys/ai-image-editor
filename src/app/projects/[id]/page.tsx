@@ -38,6 +38,7 @@ export default function ProjectPage() {
     return sync ? sync.title : 'Untitled'
   })
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
+  const [timelineVersion, setTimelineVersion] = useState(2)
   const [initialMusicTaskId, setInitialMusicTaskId] = useState<string | null>(null)
   const [pendingImages] = useState<string[] | null>(() => {
     if (typeof window === 'undefined') return null
@@ -73,7 +74,13 @@ export default function ProjectPage() {
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
-  const isNewProject = !!(pendingImages || pendingPrompt)
+  const [pendingVideos] = useState<Array<{ videoUrl: string; duration: number; width: number; height: number }> | null>(() => {
+    if (typeof window === 'undefined') return null
+    const raw = sessionStorage.getItem('pendingVideos')
+    if (raw) { sessionStorage.removeItem('pendingVideos'); try { return JSON.parse(raw) } catch { return null } }
+    return null
+  })
+  const isNewProject = !!(pendingImages || pendingPrompt || pendingVideos)
   // GUI can render immediately if snapshot cache exists or this is a new project
   const [loaded, setLoaded] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -174,10 +181,11 @@ export default function ProjectPage() {
 
     let cancelled = false
     const pageT0 = performance.now()
-    loadProject().then(async ({ snapshots, messages, title, animations }) => {
+    loadProject().then(async ({ snapshots, messages, title, animations, timelineVersion: tv }) => {
       console.log(`⏱️ [page] loadProject done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       if (userId) cacheProjectData(projectId, snapshots, messages, title)
+      setTimelineVersion(tv)
 
       if (animations.length > 0) {
         setInitialAnimations(animations)
@@ -261,11 +269,8 @@ export default function ProjectPage() {
 
   if (!loaded) {
     return (
-      <div className="page-slide-in h-dvh bg-black flex items-center justify-center">
-        <svg className="animate-spin h-6 w-6 text-fuchsia-500" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+      <div className="page-slide-in h-dvh flex items-center justify-center relative z-[1]">
+        {/* Transparent — SSR skeleton image shows through from layout */}
       </div>
     )
   }
@@ -277,6 +282,7 @@ export default function ProjectPage() {
       initialSnapshots={initialSnapshots ?? []}
       initialMessages={initialMessages ?? []}
       pendingImages={!readOnly ? (pendingImages ?? undefined) : undefined}
+      pendingVideos={!readOnly ? (pendingVideos ?? undefined) : undefined}
       pendingMetadata={!readOnly ? pendingMetadata : undefined}
       pendingPrompt={!readOnly ? (pendingPrompt ?? undefined) : undefined}
       pendingSkill={!readOnly ? (pendingSkill ?? undefined) : undefined}
@@ -290,6 +296,7 @@ export default function ProjectPage() {
       onBack={() => { if (navigatingRef.current) return; navigatingRef.current = true; router.push(user ? '/projects' : '/home'); }}
       onNewProject={!readOnly ? handleNewProject : undefined}
       initialAnimations={initialAnimations}
+      timelineVersion={timelineVersion}
       initialMusicTaskId={initialMusicTaskId}
       readOnly={readOnly}
     />

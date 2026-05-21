@@ -1412,3 +1412,41 @@ async function* parseIncrementalTipsFromStream(
     }
   } catch { /* final parse failed — partial tips remain */ }
 }
+
+// ─── Video Analysis via Gemini 3.0 Flash ──────────────────────────────────────
+
+export async function analyzeVideoContent(
+  videoUrl: string,
+  question?: string,
+): Promise<string> {
+  console.log(`[analyzeVideoContent] url=${videoUrl.substring(0, 100)}`);
+  const ai = getAI();
+  const prompt = question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.';
+
+  // Default: URL mode (no download needed)
+  try {
+    const result = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: [{ role: 'user', parts: [
+        { fileData: { mimeType: 'video/mp4', fileUri: videoUrl } },
+        { text: prompt },
+      ] }],
+    });
+    return result.text || '';
+  } catch {
+    // Fallback: download → base64 (if URL mode fails)
+    const res = await fetch(videoUrl);
+    if (!res.ok) throw new Error(`Failed to fetch video: ${res.status}`);
+    const buffer = await res.arrayBuffer();
+    if (buffer.byteLength > 38_500_000) throw new Error('Video too large for analysis (>38.5MB). Use preview_frame to check specific frames instead.');
+    const base64 = Buffer.from(buffer).toString('base64');
+    const result = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: [{ role: 'user', parts: [
+        { inlineData: { mimeType: 'video/mp4', data: base64 } },
+        { text: prompt },
+      ] }],
+    });
+    return result.text || '';
+  }
+}

@@ -14,6 +14,66 @@ import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 
+/** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
+function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onNavigate }: {
+  url: string; aspectRatio: string; posterUrl?: string; snapIndex?: number; isDesktop?: boolean;
+  onNavigate: (e: React.MouseEvent, currentTime: number) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [ar, setAr] = useState(aspectRatio);
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    if (playing) { v.pause(); } else { v.muted = false; v.play(); }
+  };
+  return (
+    <div
+      className="mt-2.5 relative overflow-hidden rounded-2xl cursor-pointer active:opacity-75 transition-opacity"
+      style={{ maxWidth: 308, border: '1px solid rgba(255,255,255,0.08)' }}
+      onClick={(e) => onNavigate(e, videoRef.current?.currentTime || 0)}
+    >
+      <video
+        ref={videoRef}
+        src={`${url}#t=0.001`}
+        poster={posterUrl}
+        playsInline
+        preload="metadata"
+        style={{ width: '100%', aspectRatio: ar, objectFit: 'cover', display: 'block' }}
+        onLoadedMetadata={() => { const v = videoRef.current; if (v?.videoWidth && v.videoHeight) setAr(`${v.videoWidth}/${v.videoHeight}`); }}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setProgress(0); if (videoRef.current) videoRef.current.currentTime = 0; }}
+        onTimeUpdate={() => { const v = videoRef.current; if (v?.duration) setProgress(v.currentTime / v.duration); }}
+      />
+      {/* Play/Pause button — above badge, same style as canvas (mobile only) */}
+      {!isDesktop && (
+        <button
+          onClick={togglePlay}
+          className="absolute bottom-10 left-2 w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+        >
+          {playing
+            ? <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
+            : <svg width="14" height="14" viewBox="0 0 10 10" fill="white"><polygon points="3.5,1.5 8.5,5 3.5,8.5" /></svg>
+          }
+        </button>
+      )}
+      {/* @N badge — bottom-left, matches image style */}
+      {snapIndex && (
+        <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur text-white text-sm font-medium px-2 py-0.5 rounded-md pointer-events-none">
+          @{snapIndex}
+        </span>
+      )}
+      {/* Progress bar — bottom edge, fuchsia like MusicCard */}
+      <div className="absolute bottom-0 left-0 right-0" style={{ height: 2, background: 'rgba(255,255,255,0.1)' }}>
+        <div className="h-full" style={{ width: `${progress * 100}%`, background: 'rgba(192,38,211,0.8)', transition: 'width 0.1s linear' }} />
+      </div>
+    </div>
+  );
+}
+
 /** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
   const { t } = useLocale();
@@ -282,12 +342,12 @@ function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) 
 }
 
 /** Shared Markdown renderer to avoid duplicating component overrides.
- *  <<<image_N>>> tokens are converted to `IMG_REF_N` inline code before parsing,
+ *  <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
 function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onViewFile?: (path: string) => void }) {
-  // Replace <<<image_N>>> with inline code `IMG_REF_N` so markdown structure stays intact
+  // Replace <<<media_N>>> and <<<image_N>>> with inline code `MEDIA_REF_N` so markdown structure stays intact
   let processed = snapshots
-    ? text.replace(/<<<image_(\d+)>>>/g, '`IMG_REF_$1`')
+    ? text.replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
     : text;
   // Replace `path/to/file.md` with FILE_REF token for clickable file chips
   processed = processed.replace(/`([^`]*\.md)`/g, '`FILE_REF_$1`');
@@ -304,10 +364,10 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
     em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
     del: ({ children }: { children?: React.ReactNode }) => <del className="line-through opacity-50">{children}</del>,
     code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) => {
-      // Intercept IMG_REF_N tokens → render ImageRefChip (check regardless of inline flag)
+      // Intercept MEDIA_REF_N tokens → render ImageRefChip (check regardless of inline flag)
       if (snapshots) {
         const str = String(children);
-        const m = str.match(/^IMG_REF_(\d+)$/);
+        const m = str.match(/^MEDIA_REF_(\d+)$/);
         if (m) {
           const idx = parseInt(m[1]) - 1;
           return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
@@ -379,7 +439,7 @@ interface AgentChatViewProps {
   isAgentActive: boolean;
   agentStatus: string;
   currentImage?: string;
-  onSendMessage: (text: string, attachedImages?: string[]) => void;
+  onSendMessage: (text: string, attachedImages?: string[], attachedVideos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => void;
   onAbort?: () => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
@@ -400,7 +460,7 @@ interface AgentChatViewProps {
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
-  onVideoTap?: (rect?: DOMRect, posterSrc?: string, animId?: string) => void;
+  onVideoTap?: (rect?: DOMRect, posterSrc?: string, animId?: string, startTime?: number) => void;
   /** Design poster captured from visible Player — update snapshot.image */
   onDesignPoster?: (messageId: string, posterDataUrl: string) => void;
   /** User selected a music track from MusicCard */
@@ -409,6 +469,8 @@ interface AgentChatViewProps {
   hasBackgroundTask?: boolean;
   /** Open CreditPopup when credits are exhausted */
   onOpenCreditPopup?: () => void;
+  /** Project ID for video upload storage path */
+  projectId?: string;
   /** Skills for skill picker */
   skills?: SkillItem[];
   selectedSkill?: string | null;
@@ -448,6 +510,7 @@ export default function AgentChatView({
   onMusicSelect,
   hasBackgroundTask = false,
   onOpenCreditPopup,
+  projectId,
   skills,
   selectedSkill,
   onSkillChange,
@@ -467,11 +530,27 @@ export default function AgentChatView({
 
   const [input, setInput] = useState('');
   const [viewingFile, setViewingFile] = useState<string | null>(null);
-  const [attachedImages, setAttachedImages] = useState<string[]>([]);
+  // Unified attachment system: images + videos in one array
+  interface Attachment {
+    id: string;
+    type: 'image' | 'video';
+    thumbnail: string;
+    status: 'processing' | 'ready' | 'error';
+    data?: string; // image: base64; video: storage URL
+    duration?: number;
+    width?: number;
+    height?: number;
+  }
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Legacy compat: derive attachedImages for existing code that reads it
+  const attachedImages = attachments.filter(a => a.type === 'image' && a.status === 'ready' && a.data).map(a => a.data!);
+  const processingCount = attachments.filter(a => a.status === 'processing').length;
+  const allReady = attachments.length > 0 && attachments.every(a => a.status === 'ready' || a.status === 'error');
   const [isExiting, setIsExiting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCountRef = useRef(0);
-  const [processingImageCount, setProcessingImageCount] = useState(0);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const processingImageCount = processingCount; // legacy compat for any remaining references
   // Capture skipSlideIn at mount time — ignore prop changes after mount
   const [mountedWithSkip] = useState(skipSlideIn);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -750,14 +829,22 @@ export default function AgentChatView({
 
   const handleSubmit = useCallback(() => {
     const text = input.trim();
-    if ((!text && attachedImages.length === 0) || isAgentActive) return;
-    const fullText = selectedSkill && text ? `[Active skill: ${selectedSkill}]\n${text}` : text;
-    onSendMessage(fullText, attachedImages.length > 0 ? attachedImages : undefined);
+    const hasContent = text || attachments.some(a => a.status === 'ready');
+    const hasProcessing = attachments.some(a => a.status === 'processing');
+    if (!hasContent || isAgentActive || hasProcessing) return;
+
+    const finalText = selectedSkill && text ? `[Active skill: ${selectedSkill}]\n${text}` : text;
+    const imageData = attachments.filter(a => a.type === 'image' && a.data).map(a => a.data!);
+    const videoData = attachments.filter(a => a.type === 'video' && a.data).map(a => ({
+      url: a.data!, duration: a.duration || 0, width: a.width || 1080, height: a.height || 1920, poster: a.thumbnail,
+    }));
+
+    onSendMessage(finalText, imageData.length > 0 ? imageData : undefined, videoData.length > 0 ? videoData : undefined);
     userScrolledUp.current = false;
     setInput('');
-    setAttachedImages([]);
+    setAttachments([]);
     if (selectedSkill) onSkillChange?.(null);
-  }, [input, attachedImages, isAgentActive, onSendMessage, selectedSkill, onSkillChange]);
+  }, [input, attachments, isAgentActive, onSendMessage, selectedSkill, onSkillChange]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
@@ -771,13 +858,13 @@ export default function AgentChatView({
     onImageTap(messageId, rect ?? undefined, imgEl?.src);
   }, [onImageTap]);
 
-  const handleInlineVideoClick = useCallback((e: React.MouseEvent, videoUrl: string, animId?: string) => {
+  const handleInlineVideoClick = useCallback((e: React.MouseEvent, videoUrl: string, animId?: string, startTime?: number) => {
     if (!onVideoTap) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const lastSnap = snapshots[snapshots.length - 1];
-    const posterSrc = lastSnap?.imageUrl || lastSnap?.image;
+    const videoSnap = animId ? snapshots.find(s => s.id === animId) : null;
+    const posterSrc = videoSnap?.imageUrl || videoSnap?.image || snapshots[snapshots.length - 1]?.imageUrl || snapshots[snapshots.length - 1]?.image;
     setIsExiting(true);
-    onVideoTap(rect ?? undefined, posterSrc, animId);
+    onVideoTap(rect ?? undefined, posterSrc, animId, startTime);
   }, [onVideoTap, snapshots]);
 
 
@@ -802,19 +889,13 @@ export default function AgentChatView({
         const allFiles = Array.from(e.dataTransfer.files);
         const zipFile = allFiles.find(f => f.name.endsWith('.zip') || f.type === 'application/zip');
         if (zipFile && onDropSkillFile) { onDropSkillFile(zipFile); return; }
-        const files = allFiles.filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+        const files = allFiles.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || /\.(heic|heif)$/i.test(f.name));
         if (!files.length) return;
-        const remaining = 10 - attachedImages.length;
-        const toProcess = files.slice(0, remaining);
-        setProcessingImageCount(toProcess.length);
-        try {
-          const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
-          const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
-          if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
-        } catch (err) {
-          console.error('[CUI] image compress error:', err);
-        }
-        setProcessingImageCount(0);
+        // Trigger same logic as file input onChange — dispatch to input
+        const dt = new DataTransfer();
+        files.forEach(f => dt.items.add(f));
+        const input = imageInputRef.current;
+        if (input) { input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); }
       }}
     >
       {/* Drop zone overlay */}
@@ -884,7 +965,7 @@ export default function AgentChatView({
           {/* @N badge — only when visible */}
           {!pipHidden && (
             <div
-              className="absolute top-0 left-0 px-1.5 py-0.5 text-[10px] font-medium tracking-wide pointer-events-none"
+              className="absolute top-0 left-0 px-1.5 py-0.5 text-[12px] font-medium tracking-wide pointer-events-none"
               style={{
                 background: 'rgba(0,0,0,0.55)',
                 borderBottomRightRadius: 8,
@@ -1053,42 +1134,28 @@ export default function AgentChatView({
                       <div className="markdown-body">
                         <MarkdownBlock
                           key={msg.id}
-                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
+                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
                           isPanel={isPanel}
                           snapshots={snapshots}
                           onNavigateToSnapshot={onNavigateToSnapshot}
                           onViewFile={setViewingFile}
                         />
-                        {/* Inline video — clickable thumbnail, jumps to GUI */}
+                        {/* Inline video — natural aspect ratio, play button, tap to navigate */}
                         {(() => {
+                          if (msg.design || msg.image) return null;
+                          if (msg.content.includes('```')) return null;
                           const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
                           if (!mp4Match) return null;
                           const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
-                          const animId = animIdMatch?.[1];
-                          return (
-                            <button
-                              onClick={(e) => handleInlineVideoClick(e, mp4Match[0], animId)}
-                              className="block w-full mt-2.5 active:opacity-75 transition-opacity"
-                            >
-                              <div style={{ borderRadius: 12, overflow: 'hidden', maxWidth: 308, background: '#000', position: 'relative' }}>
-                                <video
-                                  src={`${mp4Match[0]}#t=0.001`}
-                                  muted
-                                  playsInline
-                                  preload="metadata"
-                                  style={{ width: '100%', aspectRatio: '4/3', objectFit: 'contain', display: 'block', pointerEvents: 'none' }}
-                                />
-                                {/* Play icon — bottom-left, small */}
-                                <div className="absolute bottom-2.5 left-2.5">
-                                  <div className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
-                                    <svg width="13" height="13" viewBox="0 0 10 10" fill="white">
-                                      <polygon points="3.5,1.5 8.5,5 3.5,8.5" />
-                                    </svg>
-                                  </div>
-                                </div>
-                              </div>
-                            </button>
-                          );
+                          const snapIdMatch = msg.content.match(/snap:([a-f0-9-]+)/);
+                          const navId = snapIdMatch?.[1] || animIdMatch?.[1];
+                          const videoSnap = navId ? snapshots.find(s => s.id === navId) : null;
+                          const vw = videoSnap?.videoMeta?.width || 0;
+                          const vh = videoSnap?.videoMeta?.height || 0;
+                          const videoAR = vw && vh ? `${vw}/${vh}` : '9/16';
+                          const posterUrl = videoSnap?.imageUrl || videoSnap?.image || undefined;
+                          const snapIdx = videoSnap ? snapshots.indexOf(videoSnap) + 1 : undefined;
+                          return <InlineCuiVideo url={mp4Match[0]} aspectRatio={videoAR} posterUrl={posterUrl} snapIndex={snapIdx} isDesktop={isPanel} onNavigate={(e, time) => handleInlineVideoClick(e, mp4Match[0], navId, time)} />;
                         })()}
                       </div>
                     )}
@@ -1118,7 +1185,7 @@ export default function AgentChatView({
                             style={{ border: '1px solid rgba(255,255,255,0.08)', maxWidth: 308 }}
                           />
                           {snapIdx !== null && (
-                            <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur text-white text-xs font-medium px-1.5 py-0.5 rounded-md">
+                            <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur text-white text-sm font-medium px-2 py-0.5 rounded-md">
                               @{snapIdx}
                             </span>
                           )}
@@ -1198,23 +1265,59 @@ export default function AgentChatView({
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*,video/*,.heic,.heif"
         multiple
         className="hidden"
         onChange={async (e) => {
           const files = Array.from(e.target.files ?? []);
           e.target.value = '';
-          const remaining = 10 - attachedImages.length;
-          const toProcess = files.slice(0, remaining);
-          setProcessingImageCount(toProcess.length);
-          try {
-            const results = await Promise.allSettled(toProcess.map(f => compressImageFile(f)));
-            const compressed = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map(r => r.value);
-            if (compressed.length) setAttachedImages(prev => [...prev, ...compressed].slice(0, 10));
-          } catch (err) {
-            console.error('[CUI] image compress error:', err);
+          for (const file of files) {
+            const id = (typeof crypto.randomUUID === 'function') ? crypto.randomUUID() : `${Date.now()}${Math.random().toString(36).slice(2)}`;
+            if (file.type.startsWith('video/')) {
+              // Video: extract poster immediately, process in background
+              try {
+                const url = URL.createObjectURL(file);
+                const v = document.createElement('video');
+                v.muted = true; v.src = url;
+                await new Promise<void>(r => { v.onloadedmetadata = () => r(); setTimeout(r, 5000); });
+                const videoDuration = v.duration;
+                const { MAX_DURATION } = await import('@/lib/video-upload');
+                if (videoDuration > MAX_DURATION) {
+                  v.pause(); v.removeAttribute('src'); v.load();
+                  URL.revokeObjectURL(url);
+                  setAttachments(prev => [...prev, { id, type: 'video', thumbnail: '', status: 'error' as const }]);
+                  setTimeout(() => setAttachments(prev => prev.filter(a => a.id !== id)), 3000);
+                  alert(t('video.tooLong').replace('{duration}', String(Math.round(videoDuration))).replace('{max}', String(MAX_DURATION)));
+                  continue;
+                }
+                v.currentTime = Math.min(0.5, v.duration * 0.1);
+                await new Promise<void>(r => { v.onseeked = () => r(); setTimeout(r, 3000); });
+                const c = document.createElement('canvas');
+                c.width = v.videoWidth; c.height = v.videoHeight;
+                c.getContext('2d')!.drawImage(v, 0, 0);
+                const poster = c.toDataURL('image/jpeg', 0.75);
+                v.pause(); v.removeAttribute('src'); v.load();
+                URL.revokeObjectURL(url);
+                setAttachments(prev => [...prev, { id, type: 'video', thumbnail: poster, status: 'processing' }]);
+                // Background: transcode + upload
+                import('@/lib/video-upload').then(({ uploadVideoToStorage }) =>
+                  uploadVideoToStorage(file, projectId || '').then(result => {
+                    setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'ready' as const, data: result.videoUrl, duration: result.duration, width: result.width, height: result.height } : a));
+                  }).catch(() => {
+                    setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error' as const } : a));
+                  })
+                );
+              } catch { /* skip unreadable video */ }
+            } else {
+              // Image: show placeholder, compress in background
+              setAttachments(prev => [...prev, { id, type: 'image', thumbnail: '', status: 'processing' }]);
+              compressImageFile(file).then(base64 => {
+                setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'ready' as const, thumbnail: base64, data: base64 } : a));
+              }).catch(() => {
+                setAttachments(prev => prev.filter(a => a.id !== id));
+              });
+            }
           }
-          setProcessingImageCount(0);
         }}
       />
 
@@ -1277,11 +1380,11 @@ export default function AgentChatView({
             {/* Image attach button */}
             <button
               onClick={() => imageInputRef.current?.click()}
-              disabled={isAgentActive || attachedImages.length >= 10}
+              disabled={isAgentActive || attachments.length >= 10}
               className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
               style={{
-                background: attachedImages.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
-                color: attachedImages.length > 0 ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
+                background: attachments.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
+                color: attachments.length > 0 ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
               }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1301,20 +1404,32 @@ export default function AgentChatView({
               />
             )}
 
-            {/* Attached image thumbnails — scrollable */}
-            {(attachedImages.length > 0 || processingImageCount > 0) && (
+            {/* Unified attachments — scrollable thumbnails */}
+            {attachments.length > 0 && (
               <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 2 }}>
-                {attachedImages.map((img, i) => (
-                  <div key={i} className="relative flex-shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img}
-                      alt=""
-                      className="w-9 h-9 rounded-lg object-cover"
-                      style={{ border: '1px solid rgba(255,255,255,0.12)' }}
-                    />
+                {attachments.map((att) => (
+                  <div key={att.id} className="relative flex-shrink-0">
+                    {att.thumbnail ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={att.thumbnail} alt="" className="w-9 h-9 rounded-lg object-cover" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
+                    ) : (
+                      <div className="w-9 h-9 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                    )}
+                    {/* Video play icon */}
+                    {att.type === 'video' && att.status === 'ready' && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <svg width="14" height="14" viewBox="0 0 8 8" fill="rgba(255,255,255,0.85)"><polygon points="2,1 7,4 2,7" /></svg>
+                      </div>
+                    )}
+                    {/* Processing spinner */}
+                    {att.status === 'processing' && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-lg" style={{ background: 'rgba(0,0,0,0.4)' }}>
+                        <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
+                      </div>
+                    )}
+                    {/* Remove button */}
                     <button
-                      onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
+                      onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
                       className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
                       style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
                     >
@@ -1324,16 +1439,11 @@ export default function AgentChatView({
                     </button>
                   </div>
                 ))}
-                {Array.from({ length: processingImageCount }).map((_, i) => (
-                  <div key={`proc-${i}`} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
-                  </div>
-                ))}
               </div>
             )}
 
             {/* Spacer (only when no thumbnails taking flex space) */}
-            {attachedImages.length === 0 && processingImageCount === 0 && <div className="flex-1" />}
+            {attachments.length === 0 && <div className="flex-1" />}
 
             {/* Skill selector — right side, before send */}
             {skills && skills.length > 0 && onSkillChange && (
@@ -1366,11 +1476,11 @@ export default function AgentChatView({
                 data-testid="chat-send"
                 aria-label="Send message"
                 onClick={handleSubmit}
-                disabled={!input.trim() && attachedImages.length === 0}
+                disabled={!allReady && attachments.length > 0 ? true : (!input.trim() && attachments.length === 0)}
                 className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
                 style={{
-                  background: (input.trim() || attachedImages.length > 0) ? '#c026d3' : 'rgba(255,255,255,0.08)',
-                  color: (input.trim() || attachedImages.length > 0) ? '#fff' : 'rgba(255,255,255,0.25)',
+                  background: (input.trim() || (attachments.length > 0 && allReady)) ? '#c026d3' : 'rgba(255,255,255,0.08)',
+                  color: (input.trim() || (attachments.length > 0 && allReady)) ? '#fff' : 'rgba(255,255,255,0.25)',
                 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

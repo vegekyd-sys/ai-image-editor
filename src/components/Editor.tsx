@@ -19,8 +19,9 @@ import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
-import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare } from '@/lib/editor/timeline-derivations';
+import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
+import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
 import { downloadAsset } from '@/lib/editor/download';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
@@ -50,6 +51,7 @@ interface EditorProps {
   initialMessages?: Message[];
   pendingImage?: string;  // legacy single-image (unused, kept for compat)
   pendingImages?: string[];
+  pendingVideos?: Array<{ videoUrl: string; duration: number; width: number; height: number }>;
   pendingMetadata?: PhotoMetadata;
   pendingPrompt?: string;
   pendingSkill?: string;
@@ -64,6 +66,7 @@ interface EditorProps {
   onNewProject?: (file: File) => void;
   initialAnimations?: ProjectAnimation[];
   initialMusicTaskId?: string | null;
+  timelineVersion?: number;
   readOnly?: boolean;
 }
 
@@ -73,6 +76,7 @@ export default function Editor({
   initialMessages,
   pendingImage,
   pendingImages: pendingImagesProp,
+  pendingVideos,
   pendingMetadata,
   pendingPrompt,
   pendingSkill,
@@ -87,6 +91,7 @@ export default function Editor({
   onNewProject,
   initialAnimations,
   initialMusicTaskId,
+  timelineVersion = 1,
   readOnly,
 }: EditorProps = {}) {
   // Merge legacy single + new multi into one array
@@ -179,8 +184,8 @@ export default function Editor({
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const preferredModelRef = useRef<PreferredModel>('auto');
   useEffect(() => { preferredModelRef.current = preferredModel; }, [preferredModel]);
-  const [videoModel, setVideoModel] = useState<import('@/types').VideoModel>('kling');
-  const videoModelRef = useRef<import('@/types').VideoModel>('kling');
+  const [videoModel, setVideoModel] = useState<'kling' | 'seedance'>('kling');
+  const videoModelRef = useRef<'kling' | 'seedance'>('kling');
   useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
@@ -261,19 +266,28 @@ export default function Editor({
         return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
       }
 
-      // Same IDs — merge design/props updates from Supabase into cached snapshots.
-      // This handles: cache shows stale design, then Supabase loads fresh design JSON.
+      // Same IDs — merge updates from Supabase into cached snapshots.
+      // This handles: cache shows stale data, then Supabase loads fresh values.
       const incoming = new Map(initialSnapshots.map(s => [s.id, s]));
       let changed = false;
       const merged = prev.map(s => {
         const fresh = incoming.get(s.id);
-        if (!fresh?.design) return s;
-        // If fresh has a design but prev doesn't, or fresh design has newer props
-        if (!s.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(s.design.props))) {
+        if (!fresh) return s;
+        let updated = s;
+        // Merge missing image/imageUrl (video snapshots loaded from cache before DB)
+        if (!s.image && fresh.image) {
+          updated = { ...updated, image: fresh.image, imageUrl: fresh.imageUrl };
           changed = true;
-          return { ...s, design: fresh.design };
+        } else if (!s.imageUrl && fresh.imageUrl) {
+          updated = { ...updated, imageUrl: fresh.imageUrl };
+          changed = true;
         }
-        return s;
+        // Merge design/props updates
+        if (fresh.design && (!updated.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(updated.design.props)))) {
+          updated = { ...updated, design: fresh.design };
+          changed = true;
+        }
+        return updated;
       });
       return changed ? merged : prev;
     });
@@ -405,19 +419,35 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [draftDesign]);
 
   // Timeline: committed snapshots with the virtual draft inserted right after its parent
-  // + optional video sentinel at the end (when ANY animation exists)
+  // v1: + optional video sentinel at the end (when ANY animation exists)
+  // v2: video snapshots are already in snapshots array, no sentinel needed
+  const isV2 = timelineVersion >= 2;
   const hasAnyAnimation = animations.length > 0;
   const timeline = useMemo(() => buildImageTimeline({
     snapshots,
     draftImage,
     draftParentIndex,
-    hasAnyAnimation,
+    hasAnyAnimation: !isV2 && hasAnyAnimation, // v2: no sentinel, videos are in snapshots array
     viewIndex,
-  }), [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex]);
+  }), [snapshots, draftImage, draftParentIndex, hasAnyAnimation, viewIndex, isV2]);
 
   const referenceCount = useMemo(() =>
     snapshots.filter(s => s.type === 'reference').length,
   [snapshots]);
+
+  // Timeline indices that should show play icon (video snapshots + animated designs)
+  const videoTimelineIndices = useMemo(() => {
+    const set = new Set<number>();
+    const hasDraft = draftParentIndex !== null;
+    snapshots.forEach((s, i) => {
+      const isVideo = s.type === 'video';
+      const isAnimatedDesign = !!s.design?.animation;
+      if (!isVideo && !isAnimatedDesign) return;
+      const timelineIdx = hasDraft && i > draftParentIndex! ? i + 1 : i;
+      set.add(timelineIdx);
+    });
+    return set.size > 0 ? set : undefined;
+  }, [snapshots, draftParentIndex]);
 
   // Map timeline index → DesignPayload for animated designs (rendered via Player)
   // All design snapshots (still + animated) render via Player in ImageCanvas
@@ -432,20 +462,51 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     });
   }, [viewIndex, snapshots]);
 
-  // Video entry: last item in timeline when any animation exists
+  // Video entry detection
+  // v1: last item in timeline (sentinel) when any animation exists
+  // v2: any snapshot with type='video' at current viewIndex
   const hasVideo = hasAnyAnimation;
-  const videoTimelineIndex = hasAnyAnimation ? timeline.length - 1 : -1;
-  const isViewingVideo = hasAnyAnimation && viewIndex === videoTimelineIndex;
-  // Currently selected video for canvas playback
+  const videoTimelineIndex = !isV2 && hasAnyAnimation ? timeline.length - 1 : -1;
+  const currentSnapIndex = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
+  const currentSnap = snapshots[currentSnapIndex];
+  const isAtDraftSlot = isDraft && viewIndex === draftParentIndex! + 1;
+
+  // ── Content type resolution via renderer registry ──
+  const rendererContext: RendererContext = useMemo(() => ({
+    viewIndex,
+    draftParentIndex,
+    isAtDraftSlot,
+    timelineVersion,
+    animations,
+    selectedVideoId,
+  }), [viewIndex, draftParentIndex, isAtDraftSlot, timelineVersion, animations, selectedVideoId]);
+
+  const isV1VideoSentinel = !isV2 && hasAnyAnimation && viewIndex === videoTimelineIndex;
+  const contentType: ContentType = useMemo(
+    () => isV1VideoSentinel ? 'video' : resolveContentType(currentSnap, rendererContext),
+    [currentSnap, rendererContext, isV1VideoSentinel],
+  );
+
+  const isViewingVideo = contentType === 'video';
+  const isViewingVideoV2 = isViewingVideo && isV2;
+  const isViewingVideoV1 = isViewingVideo && !isV2;
+  // Currently selected video for canvas playback (v1 only)
   const currentVideo = (selectedVideoId && animations.find(a => a.id === selectedVideoId))
     || animations.find(a => a.status === 'completed' && !!a.videoUrl);
 
   // Design editable: current snapshot has a design with editables
-  const currentDesignSnap = snapshots[snapFromTimeline(viewIndex, draftParentIndex) ?? 0];
-  const isViewingDesign = !isViewingVideo && !!currentDesignSnap?.design?.editables?.length;
+  const currentDesignSnap = snapshots[currentSnapIndex];
+  const isViewingDesign = contentType === 'design';
   const editingDesignField = editingDesignFieldId
     ? currentDesignSnap?.design?.editables?.find(f => f.id === editingDesignFieldId) ?? null
     : null;
+
+  // Unified "current display image" — poster for video, timeline image otherwise
+  const currentDisplayImage = isViewingVideo
+    ? (currentSnap?.image || currentSnap?.imageUrl || timeline[viewIndex] || '')
+    : (timeline[viewIndex] || '');
+  const currentDisplayImageRef = useRef(currentDisplayImage);
+  useEffect(() => { currentDisplayImageRef.current = currentDisplayImage; }, [currentDisplayImage]);
 
   // Clear editing state when view changes (index, mode, or design disappears)
   useEffect(() => {
@@ -597,7 +658,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Shared hero animation: fly fromRect → PiP corner, then mount CUI.
   // Used by both Chat button (openCUI) and pull-down gesture commit.
   const startHeroToCUI = useCallback((fromRect: { l: number; t: number; w: number; h: number }, fromRadius: string) => {
-    const src = timeline[viewIndex];
+    const src = currentDisplayImageRef.current;
     if (!src) { setViewMode('cui'); return; }
 
     // pushState if not already done (pull-down pushes at gesture start)
@@ -636,8 +697,11 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       const cr = el.getBoundingClientRect();
       lastCanvasRect.current = { l: cr.left, t: cr.top, w: cr.width, h: cr.height };
       const imgEl = el.querySelector('img');
+      const vidEl = el.querySelector('video');
       const ar = (imgEl && imgEl.naturalWidth && imgEl.naturalHeight)
-        ? imgEl.naturalWidth / imgEl.naturalHeight : 1;
+        ? imgEl.naturalWidth / imgEl.naturalHeight
+        : (vidEl && vidEl.videoWidth && vidEl.videoHeight)
+          ? vidEl.videoWidth / vidEl.videoHeight : 1;
       lastImageAR.current = ar;
       const imgBounds = containRect(cr.width, cr.height, ar);
       const side = Math.min(imgBounds.w, imgBounds.h);
@@ -656,7 +720,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Handle PiP tap: hero animation (PiP → canvas), then trigger GUI return
   const handlePipTap = useCallback((pipRect: DOMRect) => {
     const cr = lastCanvasRect.current;
-    const src = timeline[viewIndex];
+    const src = currentDisplayImageRef.current;
     if (cr && src) {
       const ar = lastImageAR.current;
       const fromRect = { l: pipRect.left, t: pipRect.top, w: pipRect.width, h: pipRect.height };
@@ -686,8 +750,11 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         const cr = el.getBoundingClientRect();
         lastCanvasRect.current = { l: cr.left, t: cr.top, w: cr.width, h: cr.height };
         const imgEl = el.querySelector('img');
+        const vidEl = el.querySelector('video');
         const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
-          ? imgEl.naturalWidth / imgEl.naturalHeight : 1;
+          ? imgEl.naturalWidth / imgEl.naturalHeight
+          : (vidEl?.videoWidth && vidEl?.videoHeight)
+            ? vidEl.videoWidth / vidEl.videoHeight : 1;
         lastImageAR.current = ar;
         const imgBounds = containRect(cr.width, cr.height, ar);
         pullStartRect.current = {
@@ -1220,7 +1287,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     snapshotId: string,
     imageBase64: string,
     context: 'initial' | 'post-edit' = 'initial',
-    options?: { silent?: boolean },
+    options?: { silent?: boolean; isVideo?: boolean },
   ) => {
     if (!projectId) return;
 
@@ -1247,8 +1314,15 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
 
     try {
+      // For video analysis, pass snapshotImages so agent can find the video URL
+      const snapshotImagesForAnalysis = options?.isVideo ? snapshotsRef.current.map((s) => {
+        if (s.type === 'video' && s.videoMeta?.videoUrl) return s.videoMeta.videoUrl;
+        if (s.imageUrl) return s.imageUrl;
+        return getImageForApi(s) || '';
+      }) : undefined;
+      const snapIndex = options?.isVideo ? snapshotsRef.current.findIndex(s => s.id === snapshotId) : undefined;
       await streamAgent(
-        { prompt: '', image: imageBase64, projectId, analysisOnly: true, analysisContext: context },
+        { prompt: '', image: imageBase64, projectId, analysisOnly: true, analysisContext: context, isVideoAnalysis: options?.isVideo, snapshotImages: snapshotImagesForAnalysis, currentSnapshotIndex: snapIndex !== undefined && snapIndex >= 0 ? snapIndex : undefined },
         {
           onStatus: (s) => { if (!silent) setAgentStatus(s); },
           onContent: (delta) => {
@@ -1308,8 +1382,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean }) => {
-    // CUI reference images → append as new snapshots (so agent sees them in Image Index)
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[]; uploadedVideoCount?: number }) => {
+    // CUI reference images → append as new snapshots (so agent sees them in Media Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
       for (const img of attachedImages) {
@@ -1350,12 +1424,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         || snapshotsRef.current[draftParentIndexRef.current]?.image;
       contextSnapshotIndex = draftParentIndexRef.current;
     }
-    // Fallback to last snapshot with an actual image (design snapshots have image='')
+    // Fallback to last snapshot with an actual image (design/video snapshots have image='')
+    // Only updates currentImage for the early-return guard — contextSnapshotIndex stays
+    // faithful to viewIndex so ← YOU ARE HERE always reflects the user's actual position.
     if (!currentImage) {
       for (let i = snapshotsRef.current.length - 1; i >= 0; i--) {
         if (snapshotsRef.current[i]?.image) {
           currentImage = snapshotsRef.current[i].image;
-          contextSnapshotIndex = i;
           break;
         }
       }
@@ -1375,7 +1450,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       || (rawImage.startsWith('data:') ? await compressBase64Image(rawImage, 3_000_000) : rawImage);
     // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
     if (!options?.silent) {
-      addMessage('user', text, undefined, overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
+      const msgImages = options?.displayImages || (overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
+      addMessage('user', text, undefined, msgImages);
     }
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
@@ -1411,9 +1487,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         if (hasAllUrls()) break;
       }
     }
-    // Build snapshot images: prefer Storage URLs, base64 fallback for all snapshots
-    // (Agent needs URLs for all images to reference in designs, not just current)
+    // Build snapshot media: video snapshots use video URL, image snapshots use Storage URL/base64
     const snapshotImagesForApi = snapshotsRef.current.map((s) => {
+      if (s.type === 'video' && s.videoMeta?.videoUrl) return s.videoMeta.videoUrl;
       if (s.imageUrl) return s.imageUrl;
       return getImageForApi(s) || '';
     });
@@ -1493,7 +1569,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0 },
+        { prompt: text, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1600,13 +1676,63 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   };
 
   // CUI send: if annotations exist, merge them; otherwise normal chat
-  const handleCuiSend = async (text: string, imgs?: string[]) => {
+  const handleCuiSend = async (text: string, imgs?: string[], videos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => {
     if (gateInteraction()) return;
     if (annotationMode && annotationEntries.length > 0) {
       await sendWithAnnotations(text);
-    } else {
-      handleAgentRequest(text, imgs);
+      return;
     }
+
+    // Step 1: Create video snapshots (use snapshotsRef for accurate current length)
+    if (videos?.length) {
+      const { createVideoDesign } = await import('@/lib/video-design');
+      const newVideoSnaps: Snapshot[] = [];
+      for (const v of videos) {
+        const snapId = generateId();
+        const design = createVideoDesign(v.url, v.width, v.height, v.duration);
+        newVideoSnaps.push({
+          id: snapId,
+          image: v.poster,
+          tips: [],
+          messageId: '',
+          imageUrl: v.poster,
+          type: 'video',
+          design,
+          designPath: `code/${snapId}.json`,
+          videoMeta: {
+            taskId: null, videoUrl: v.url, prompt: '', sourceSnapshotIds: [], sourceUrls: [],
+            status: 'completed', duration: v.duration, model: 'upload', createdAt: new Date().toISOString(),
+          },
+        });
+      }
+      // Add all video snapshots at once + navigate to last one
+      setSnapshots(prev => {
+        const next = [...prev, ...newVideoSnaps];
+        snapshotsRef.current = next;
+        return next;
+      });
+      // Navigate to the last video snapshot so VideoResultCard shows
+      pendingNavigateToVideoRef.current = true;
+      // Persist each with correct sort_order + update imageUrl when upload completes
+      newVideoSnaps.forEach((snap, i) => {
+        onSaveSnapshot?.(snap, snapshotsRef.current.length - newVideoSnaps.length + i, (url) => {
+          setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+        });
+      });
+    }
+
+    // Step 2: Pass images + video posters for user message display
+    const displayAttachments = [
+      ...(imgs || []),
+      ...(videos?.map(v => v.poster) || []),
+    ];
+
+    // Step 3: Only create reference snapshots from actual images (not video posters)
+    // displayAttachments shown in user message bubble (includes video posters for visual)
+    handleAgentRequest(text, imgs?.length ? imgs : undefined, undefined, {
+      displayImages: displayAttachments.length > 0 ? displayAttachments : undefined,
+      uploadedVideoCount: videos?.length,
+    });
   };
 
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
@@ -1622,20 +1748,24 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     const langInstr = locale === 'en' ? 'Write the script in English.' : '用中文写脚本。';
     const hintLine = userHint ? `\nUser requirements: ${userHint}` : '';
 
-    // Build Image Index with descriptions so Agent can pick images intelligently
-    const imageIndex = snapshotsRef.current.map((s, i) => {
-      const desc = i === 0
-        ? (s.description || 'Original upload')
-        : (s.description || '(no description)');
-      return `<<<image_${i + 1}>>> — ${desc}`;
+    // Build Media Index with descriptions so Agent can pick items intelligently
+    const mediaIndex = snapshotsRef.current.map((s, i) => {
+      const isVid = s.type === 'video';
+      const typeLabel = isVid ? 'video' : 'image';
+      const desc = isVid
+        ? (s.description || s.videoMeta?.prompt?.split('\n')[0]?.slice(0, 60) || '[video]')
+        : i === 0
+          ? (s.description || 'Original upload')
+          : (s.description || '(no description)');
+      return `<<<media_${i + 1}>>> [${typeLabel}] — ${desc}`;
     }).join('\n');
 
-    const prompt = `[视频动画模式] Create a video story script from the following ${n} snapshots. ${langInstr}${hintLine}
+    const prompt = `[视频动画模式] Create a video story script from the following ${n} items. ${langInstr}${hintLine}
 
-[Image Index — ${n} snapshots]
-${imageIndex}
+[Media Index — ${n} items]
+${mediaIndex}
 
-Select the best 3-7 images for a compelling video. You do NOT need to use all images or follow their order — pick the ones that create the strongest narrative arc. Output only the script, no confirmation needed.`;
+Select the best 3-7 items for a compelling video. You do NOT need to use all or follow their order — pick the ones that create the strongest narrative arc. Output only the script, no confirmation needed.`;
 
     const userMsg = { id: generateId(), role: 'user' as const, content: t('editor.makeVideo'), timestamp: Date.now() };
     const assistantMsgId = generateId();
@@ -1958,6 +2088,98 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
 
+  // Video upload: transcode → upload → create video snapshot. Returns 1-based image index.
+  const handleVideoUpload = useCallback(async (file: File): Promise<number | null> => {
+    const { processVideoUpload } = await import('@/lib/video-upload');
+    const { createVideoDesign } = await import('@/lib/video-design');
+    const snapId = generateId();
+
+    try {
+      // Add processing snapshot to timeline immediately (poster captured by ImageCanvas onLoadedData)
+      const processingSnap: Snapshot = {
+        id: snapId,
+        image: '',
+        tips: [],
+        messageId: '',
+        type: 'video',
+        videoMeta: {
+          taskId: null,
+          videoUrl: null,
+          prompt: '',
+          sourceSnapshotIds: [],
+          sourceUrls: [],
+          status: 'processing',
+          duration: null,
+          model: 'upload',
+          createdAt: new Date().toISOString(),
+        },
+      };
+      setSnapshots(prev => [...prev, processingSnap]);
+      // Navigate to new video snapshot
+      requestAnimationFrame(() => setViewIndex(snapshots.length));
+
+      // Step 3: Transcode + upload
+      const result = await processVideoUpload(file, (progress) => {
+        setAgentStatus(`视频转码中 ${Math.round(progress * 100)}%`);
+      });
+
+      // Step 4: Upload to Supabase
+      setAgentStatus('上传视频...');
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const uid = (await supabase.auth.getUser()).data.user?.id;
+      if (!uid) throw new Error('Not authenticated');
+      const storagePath = `${uid}/${projectId}/videos/upload-${snapId}.mp4`;
+      const { error: uploadError } = await supabase.storage.from('images')
+        .upload(storagePath, result.videoBlob, { contentType: 'video/mp4', upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath);
+      const videoUrl = urlData?.publicUrl || '';
+
+      // Step 5: Generate Remotion wrapper design
+      const design = createVideoDesign(videoUrl, result.width, result.height, result.duration);
+
+      // Step 6: Update snapshot with completed state (poster will be captured by ImageCanvas)
+      const completedSnap: Snapshot = {
+        ...processingSnap,
+        image: '',
+        design,
+        designPath: `code/${snapId}.json`,
+        videoMeta: {
+          ...processingSnap.videoMeta!,
+          status: 'completed',
+          videoUrl,
+          duration: result.duration,
+        },
+      };
+      setSnapshots(prev => {
+        const next = prev.map(s => s.id === snapId ? completedSnap : s);
+        return next;
+      });
+      onSaveSnapshot?.(completedSnap, snapshots.length, (uploadedUrl) => {
+        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: uploadedUrl } : s));
+      });
+
+      // Auto-analyze video content — use normal agent request (DB is ready by now)
+      handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount: 1 });
+
+      // Return 1-based index (snapshot was appended at snapshots.length)
+      return snapshots.length + 1;
+
+    } catch (err) {
+      console.error('Video upload error:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      const tooLongMatch = msg.match(/Video too long \((\d+)s\)/);
+      setAgentStatus(tooLongMatch
+        ? t('video.tooLong').replace('{duration}', tooLongMatch[1]).replace('{max}', msg.match(/Maximum (\d+)s/)?.[1] || '16')
+        : `视频上传失败: ${msg}`);
+      setSnapshots(prev => prev.map(s =>
+        s.id === snapId ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
+      ));
+      return null;
+    }
+  }, [snapshots.length, projectId, onSaveSnapshot, t]);
+
   // Auto-trigger upload when a pending image is passed (new project from projects page)
   // Lock body scroll while editor is mounted to prevent iOS back-navigation jump
   useEffect(() => {
@@ -1979,15 +2201,16 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
   // Unified init: handles all entry scenarios (images, text, images+text, with/without skill)
   useEffect(() => {
     const hasImages = pendingImages && pendingImages.length > 0;
+    const hasVideos = pendingVideos && pendingVideos.length > 0;
     const hasPrompt = !!pendingPrompt;
-    if (!hasImages && !hasPrompt) return;
+    if (!hasImages && !hasVideos && !hasPrompt) return;
     if (initHandled.current) return;
     initHandled.current = true;
 
     const init = async () => {
       const isMulti = hasImages && pendingImages!.length > 1;
 
-      // ── Step 1: Work snapshots ──
+      // ── Step 1: Work snapshots (images + videos) ──
       const workSnapshots: Snapshot[] = hasImages
         ? pendingImages!.map((img, i) => ({
             id: generateId(),
@@ -1998,6 +2221,27 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             ...(i === 0 && pendingMetadata ? { metadata: pendingMetadata } : {}),
           }))
         : [];
+      if (hasVideos) {
+        const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
+        for (const v of pendingVideos!) {
+          const { createVideoDesign } = await import('@/lib/video-design');
+          const design = createVideoDesign(v.videoUrl, v.width, v.height, v.duration);
+          const snapId = generateId();
+          workSnapshots.push({
+            id: snapId,
+            image: VIDEO_PLACEHOLDER_IMAGE,
+            tips: [],
+            messageId: '',
+            type: 'video',
+            design,
+            designPath: `code/${snapId}.json`,
+            videoMeta: {
+              taskId: null, videoUrl: v.videoUrl, prompt: '', sourceSnapshotIds: [], sourceUrls: [],
+              status: 'completed', duration: v.duration, model: 'upload', createdAt: new Date().toISOString(),
+            },
+          });
+        }
+      }
 
       // ── Step 2: Commit to state ──
       if (workSnapshots.length > 0) {
@@ -2025,6 +2269,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         } else if (isMulti) {
           // Multi-image: tips for all, no preview
           for (const snap of workSnapshots) {
+            if (snap.type === 'video') continue;
             tipsImage(snap.image).then(img => fetchTipsForSnapshot(snap.id, img, 'none'));
           }
         } else {
@@ -2046,7 +2291,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           ).then(() => {
             setIsAgentActive(false);
             handleAgentRequest(
-              `[System] User uploaded ${workSnapshots.length} images. All images have been analyzed (see Image Index descriptions). Briefly greet the user and mention what you see in each image in 1 sentence each.`,
+              `[System] User uploaded ${workSnapshots.length} images. All images have been analyzed (see Media Index descriptions). Briefly greet the user and mention what you see in each image in 1 sentence each.`,
               undefined, undefined, { silent: true }
             );
           });
@@ -2054,6 +2299,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           // Single image: non-silent analysis (shows in CUI)
           runAutoAnalysis(workSnapshots[0].id, workSnapshots[0].image, 'initial');
         }
+      }
+
+      // ── Step 6b: Video analysis (if videos, no prompt) ──
+      if (hasVideos && !hasPrompt) {
+        handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount: pendingVideos!.length });
       }
 
       // ── Step 7: Agent request (if prompt) ──
@@ -2077,6 +2327,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     if (autoFetchTriggered.current || pendingImages?.length) return;
     const lastSnap = snapshots[snapshots.length - 1];
     if (!lastSnap || lastSnap.tips.length > 0) return;
+    if (lastSnap.type === 'video') return;
     // Animated design snapshots don't need tips (still designs do)
     if (lastSnap.design?.animation) return;
     autoFetchTriggered.current = true;
@@ -2140,6 +2391,54 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }, 4000);
     return () => clearInterval(interval);
   }, [animations]);
+
+  // v2: Poll video snapshots with status=processing
+  useEffect(() => {
+    if (!isV2) return;
+    const processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing' && s.videoMeta.taskId);
+    if (processing.length === 0) return;
+    const interval = setInterval(async () => {
+      for (const snap of processing) {
+        try {
+          const res = await fetch(`/api/video-snapshot/${snap.id}`);
+          const data = await res.json();
+          if (data.status === 'completed' && data.videoUrl) {
+            const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design');
+            const dims = await probeVideoDimensions(data.videoUrl);
+            const design = createVideoDesign(data.videoUrl, dims.width, dims.height, snap.videoMeta?.duration || 10);
+            setSnapshots(prev => prev.map(s =>
+              s.id === snap.id ? {
+                ...s,
+                image: data.imageUrl || s.image,
+                imageUrl: data.imageUrl || s.imageUrl,
+                videoMeta: { ...s.videoMeta!, status: 'completed' as const, videoUrl: data.videoUrl },
+                design,
+                designPath: `code/${snap.id}.json`,
+              } : s
+            ));
+            // Add CUI message for completed video
+            const alreadyHasVideo = messages.some(m => m.content?.includes(data.videoUrl));
+            if (!alreadyHasVideo) {
+              const videoMsg: Message = {
+                id: generateId(),
+                role: 'assistant',
+                content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}`,
+                timestamp: Date.now(),
+              };
+              setMessages(prev => [...prev, videoMsg]);
+              onSaveMessage?.(videoMsg);
+            }
+          } else if (data.status === 'failed') {
+            setSnapshots(prev => prev.map(s =>
+              s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const, error: data.error || undefined } } : s
+            ));
+          }
+        } catch { /* ignore */ }
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [snapshots, isV2]);
+
 
   // Preload adjacent snapshots (not yet in DOM) so swipe transitions are instant
   useEffect(() => {
@@ -2272,7 +2571,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     // Submitting → polling: add a processing entry to animations array
     if (prev === 'submitting' && curr === 'polling' && animationState?.taskId) {
       const newAnim: ProjectAnimation = {
-        id: animationState.taskId,
+        id: animationState.snapshotId || animationState.taskId,
         projectId: projectId ?? '',
         taskId: animationState.taskId,
         videoUrl: null,
@@ -2284,25 +2583,53 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
         videoModel: animationState.videoModel,
       };
       setAnimations(prev => [newAnim, ...prev]);
+      // v2: add video snapshot to snapshots array for polling
+      if (isV2 && animationState.snapshotId) {
+        const newSnap: Snapshot = {
+          id: animationState.snapshotId,
+          image: VIDEO_PLACEHOLDER_IMAGE,
+          tips: [],
+          messageId: '',
+          type: 'video',
+          videoMeta: {
+            taskId: animationState.taskId,
+            videoUrl: null,
+            prompt: animationState.prompt,
+            sourceSnapshotIds: [],
+            sourceUrls: animationState.imageUrls.filter(u => u?.startsWith('http')),
+            status: 'processing',
+            duration: animationState.duration,
+            model: animationState.videoModel,
+            createdAt: new Date().toISOString(),
+          },
+        };
+        setSnapshots(prev => [...prev, newSnap]);
+      }
       // Close the creation card
       setShowAnimateSheet(false);
       setAnimationState(null);
-      setSelectedVideoId(animationState.taskId);
+      setSelectedVideoId(animationState.snapshotId || animationState.taskId);
       // Navigate to video entry on next render (timeline hasn't updated yet)
       pendingNavigateToVideoRef.current = true;
     }
   }, [animationState?.status, animationState?.taskId, animationState?.prompt, animationState?.imageUrls, projectId]);
 
   // Navigate to video entry after submitting animation (deferred to next render when timeline is updated)
-  // Only fires ONCE per flag set — resets immediately to prevent re-triggering on subsequent timeline changes
+  // v1: navigate to sentinel (videoTimelineIndex). v2: navigate to last snapshot (the new video).
   useEffect(() => {
-    if (pendingNavigateToVideoRef.current && videoTimelineIndex >= 0) {
+    if (!pendingNavigateToVideoRef.current) return;
+    if (isV2) {
+      const lastVideoIdx = snapshots.reduce((acc, s, i) => s.type === 'video' ? i : acc, -1);
+      if (lastVideoIdx >= 0) {
+        pendingNavigateToVideoRef.current = false;
+        setViewIndex(lastVideoIdx);
+      }
+    } else if (videoTimelineIndex >= 0) {
       pendingNavigateToVideoRef.current = false;
-      // Use requestAnimationFrame to ensure state has settled before navigating
-      requestAnimationFrame(() => setViewIndex(videoTimelineIndex));
+      setViewIndex(videoTimelineIndex);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [animations.length]); // Only react to animations array changes, not every timeline resize
+  }, [animations.length, snapshots.length]);
 
   // Watch for animations completing — send CUI notification + StatusBar update
   const prevCompletedIdsRef = useRef<Set<string>>(
@@ -2365,7 +2692,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       timeline,
       viewIndex,
       isViewingVideo,
-      currentVideoUrl: currentVideo?.videoUrl,
+      currentVideoUrl: currentSnap?.videoMeta?.videoUrl || currentVideo?.videoUrl,
       draftParentIndex: draftParentIndexRef.current,
       snapshotsRef,
       pendingVideoRef,
@@ -2375,7 +2702,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       t,
       projectTitle: initialTitle,
     });
-  }, [timeline, viewIndex, isViewingVideo, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
+  }, [timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
@@ -2398,8 +2725,11 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       if (imgRect && cr && src) {
         // Compute actual image position within canvas (object-contain)
         const imgEl = canvasAreaRef.current?.querySelector('img');
+        const vidEl = canvasAreaRef.current?.querySelector('video');
         const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
-          ? imgEl.naturalWidth / imgEl.naturalHeight : lastImageAR.current;
+          ? imgEl.naturalWidth / imgEl.naturalHeight
+          : (vidEl?.videoWidth && vidEl?.videoHeight)
+            ? vidEl.videoWidth / vidEl.videoHeight : lastImageAR.current;
         const imgInCanvas = containRect(cr.w, cr.h, ar);
         const toRect = { l: cr.l + imgInCanvas.l, t: cr.t + imgInCanvas.t, w: imgInCanvas.w, h: imgInCanvas.h };
         const fromRect = { l: imgRect.left, t: imgRect.top, w: imgRect.width, h: imgRect.height };
@@ -2521,7 +2851,20 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     }
   }, [snapshots, handleDesignPoster]);
 
-  const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string) => {
+  const videoStartTimeRef = useRef<number>(0);
+  const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string, startTime?: number) => {
+    videoStartTimeRef.current = startTime || 0;
+    // v2: navigate directly to snapshot by ID
+    if (isV2 && animId) {
+      const idx = snapshotsRef.current.findIndex(s => s.id === animId);
+      if (idx >= 0) {
+        setViewIndex(idx);
+        setVideoPlayTrigger(n => n + 1);
+        if (!isDesktop) setViewMode('gui');
+        return;
+      }
+    }
+
     if (videoTimelineIndex < 0) return;
 
     // Desktop: if already viewing this exact video, trigger play instead of re-navigating
@@ -2634,18 +2977,19 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     messagesLoading: messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0,
     isAgentActive,
     agentStatus,
-    currentImage: isViewingVideo ? snapshots[snapshots.length - 1]?.image : timeline[viewIndex],
+    currentImage: currentDisplayImage,
     onSendMessage: handleCuiSend,
     onAbort: handleAgentAbort,
     onInputBarHeight: (h: number) => { cuiInputBarH.current = h; },
     onImageTap: handleImageTap,
     onVideoTap: handleVideoTap,
     snapshots,
-    currentSnapshotIndex: isViewingVideo ? snapshots.length : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
+    currentSnapshotIndex: isViewingVideo ? (currentSnapIndex + 1) : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
     preferredModel: preferredModel as PreferredModel,
     onModelChange: setPreferredModel,
     videoModel,
     onVideoModelChange: (m: import('@/types').VideoModel) => {
+      if (m === 'upload') return;
       setVideoModel(m);
       setAnimationState(prev => prev ? { ...prev, videoModel: m } : prev);
     },
@@ -2664,6 +3008,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
     installingSkill,
     onDropSkillFile: handleSkillUpload,
     onOpenCreditPopup: () => setCreditPopupOpen(true),
+    projectId,
     readOnly,
   };
 
@@ -2677,18 +3022,23 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       data-current-snapshot={viewIndex}
       data-view-mode={viewMode}
       data-preferred-model={preferredModel}
-      className={`h-dvh bg-black relative overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
+      className={`h-dvh bg-black relative z-[1] overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
     >
       <input
         ref={fileInputRef}
         data-testid="editor-file-upload"
         aria-label="Upload photo to editor"
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*,video/*,.heic,.heif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) compressAndUpload(file);
+          if (!file) return;
+          if (file.type.startsWith('video/')) {
+            handleVideoUpload(file);
+          } else {
+            compressAndUpload(file);
+          }
           e.target.value = '';
         }}
       />
@@ -2696,7 +3046,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
       <input
         ref={newProjectFileInputRef}
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*,video/*,.heic,.heif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -2720,7 +3070,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             className="flex-1 relative min-h-0 overflow-hidden"
             style={heroAnim ? { opacity: 0 } : undefined}
           >
-            {timeline.length === 0 || (timeline.length === 1 && !timeline[0]) ? (
+            {timeline.length === 0 || (timeline.length === 1 && !timeline[0] && !isViewingVideoV2) ? (
               (isAgentActive || (timeline.length === 1 && !timeline[0])) ? (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3">
@@ -2746,7 +3096,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
             ) : (
               <ImageCanvas
                 data-testid="canvas"
-                key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
+                key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${currentSnap?.videoMeta?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
                 timeline={timeline}
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}
@@ -2803,10 +3153,38 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 } : undefined}
                 hasVideo={hasVideo}
                 isVideoEntry={isViewingVideo}
-                videoUrl={currentVideo?.videoUrl ?? null}
-                videoProcessing={isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing')}
-                videoPosterImage={snapshots[snapshots.length - 1]?.image}
+                videoUrl={isViewingVideoV2
+                  ? (currentSnap?.videoMeta?.videoUrl ?? null)
+                  : (currentVideo?.videoUrl ?? null)}
+                videoProcessing={isViewingVideoV2
+                  ? (currentSnap?.videoMeta?.status === 'processing')
+                  : (isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing'))}
+                videoFailed={isViewingVideoV2 ? (currentSnap?.videoMeta?.status === 'failed') : false}
+                videoPosterImage={isViewingVideoV2
+                  ? (currentSnap?.image || currentSnap?.imageUrl)
+                  : snapshots[snapshots.length - 1]?.image}
                 videoPlayTrigger={videoPlayTrigger}
+                videoStartTime={videoStartTimeRef.current}
+                videoTimelineIndices={videoTimelineIndices}
+                onVideoPosterCapture={(dataUrl) => {
+                  const snap = snapshotsRef.current[viewIndex];
+                  if (!snap || snap.type !== 'video') return;
+                  if (snap.imageUrl?.includes('/posters/')) return;
+                  setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, image: dataUrl } : s));
+                  import('@/lib/supabase/client').then(async ({ createClient }) => {
+                    const supabase = createClient();
+                    const uid = (await supabase.auth.getUser()).data.user?.id;
+                    if (!uid || !projectId) return;
+                    const blob = await fetch(dataUrl).then(r => r.blob());
+                    const path = `${uid}/${projectId}/posters/${snap.id}.jpg`;
+                    await supabase.storage.from('images').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+                    const { data: urlData } = supabase.storage.from('images').getPublicUrl(path);
+                    if (urlData?.publicUrl) {
+                      setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: urlData.publicUrl } : s));
+                      await supabase.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snap.id);
+                    }
+                  });
+                }}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
@@ -3097,9 +3475,22 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 />
                 {isViewingVideo ? (
                   <VideoResultCard
-                    animations={animations}
-                    selectedVideoId={selectedVideoId}
-                    onSelectVideo={setSelectedVideoId}
+                    animations={isViewingVideoV2 && currentSnap?.videoMeta ? [{
+                      id: currentSnap.id,
+                      projectId: projectId ?? '',
+                      taskId: currentSnap.videoMeta.taskId,
+                      videoUrl: currentSnap.videoMeta.videoUrl,
+                      prompt: currentSnap.videoMeta.prompt,
+                      snapshotUrls: currentSnap.videoMeta.sourceUrls || [],
+                      imageUrl: currentSnap.imageUrl,
+                      status: currentSnap.videoMeta.status,
+                      duration: currentSnap.videoMeta.duration,
+                      createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
+                      videoModel: currentSnap.videoMeta.model,
+                      error: currentSnap.videoMeta.error,
+                    }] : animations}
+                    selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
+                    onSelectVideo={isViewingVideoV2 ? () => {} : setSelectedVideoId}
                     onCreateNew={() => {
                       const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
                       const imageUrls = allUrls.length <= 7
@@ -3120,8 +3511,42 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                       setShowAnimateSheet(true);
                     }}
                     onAbandon={(taskId) => {
-                      setAnimations(prev => prev.filter(a => a.taskId !== taskId));
-                      fetch(`/api/animate/${taskId}`, { method: 'DELETE' }).catch(() => {});
+                      if (isViewingVideoV2 && currentSnap) {
+                        setSnapshots(prev => prev.map(s =>
+                          s.id === currentSnap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'abandoned' as const } } : s
+                        ));
+                        fetch(`/api/video-snapshot/${currentSnap.id}`, { method: 'DELETE' }).catch(() => {});
+                      } else {
+                        setAnimations(prev => prev.filter(a => a.taskId !== taskId));
+                        fetch(`/api/animate/${taskId}`, { method: 'DELETE' }).catch(() => {});
+                      }
+                    }}
+                    onRetry={async (anim) => {
+                      const images = anim.snapshotUrls?.length ? anim.snapshotUrls : snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http')).slice(0, 7);
+                      try {
+                        const res = await fetch('/api/video-snapshot', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || 'kling' }),
+                        });
+                        const json = await res.json();
+                        if (!res.ok) throw new Error(json.error || 'Retry failed');
+                        // Update frontend state
+                        setAnimations(prev => prev.map(a => a.id === anim.id ? { ...a, taskId: json.taskId, status: 'processing' as const, videoUrl: null, createdAt: new Date().toISOString() } : a));
+                        const newMeta = { taskId: json.taskId, status: 'processing' as const, videoUrl: null, error: undefined };
+                        setSnapshots(prev => prev.map(s => s.id === anim.id && s.videoMeta ? { ...s, videoMeta: { ...s.videoMeta, ...newMeta } } : s));
+                        // Persist to DB (v2: update snapshot video_meta)
+                        const { createClient } = await import('@/lib/supabase/client');
+                        const supabase = createClient();
+                        const snap = snapshots.find(s => s.id === anim.id && s.videoMeta);
+                        if (snap?.videoMeta) {
+                          await supabase.from('snapshots').update({
+                            video_meta: { ...snap.videoMeta, ...newMeta },
+                          }).eq('id', anim.id);
+                        }
+                      } catch (e) {
+                        console.error('Video retry failed:', e);
+                      }
                     }}
                     onViewDetail={(anim) => {
                       setDetailAnimation(anim);
@@ -3135,7 +3560,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                         error: null,
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
-                        videoModel: anim.videoModel || videoModel,
+                        videoModel: (anim.videoModel === 'kling' || anim.videoModel === 'seedance') ? anim.videoModel : videoModel,
                       });
                       setShowAnimateSheet(true);
                     }}
@@ -3208,6 +3633,26 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
                 if (next) animationStateRef.current = next;
                 return next;
               })}
+              onRetry={async (anim) => {
+                const images = anim.snapshotUrls?.length ? anim.snapshotUrls : snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http')).slice(0, 7);
+                try {
+                  const res = await fetch('/api/video-snapshot', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || 'kling' }),
+                  });
+                  const json = await res.json();
+                  if (!res.ok) throw new Error(json.error || 'Retry failed');
+                  // Update the same animation entry with new taskId + processing status
+                  setAnimations(prev => prev.map(a => a.id === anim.id ? { ...a, taskId: json.taskId, status: 'processing' as const, videoUrl: null, createdAt: new Date().toISOString() } : a));
+                  // v2: update snapshot videoMeta
+                  setSnapshots(prev => prev.map(s => s.id === anim.id && s.videoMeta ? { ...s, videoMeta: { ...s.videoMeta, taskId: json.taskId, status: 'processing' as const, videoUrl: null } } : s));
+                  setDetailAnimation(null);
+                  setShowAnimateSheet(false);
+                } catch (e) {
+                  console.error('Video retry failed:', e);
+                }
+              }}
             />
           )}
 
@@ -3366,7 +3811,7 @@ Select the best 3-7 images for a compelling video. You do NOT need to use all im
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={timeline[viewIndex]}
+              src={currentDisplayImage}
               draggable={false}
               alt=""
               className="w-full h-full object-cover"

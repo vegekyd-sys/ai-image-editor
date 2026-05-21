@@ -188,12 +188,12 @@ Uses Qwen Image Edit model to regenerate the image from the requested camera ang
     'makaron_write_video_script',
     `Analyze 1-7 images and write a cinematic video script optimized for Kling VIDEO 3.0 Omni.
 
-Returns a shot-by-shot script with <<<image_N>>> references, camera directions, sound cues, and timing.
+Returns a shot-by-shot script with <<<media_N>>> references, camera directions, sound cues, and timing.
 The script follows Kling prompt format and can be passed directly to makaron_create_video.
 
 Tips:
 - Provide 3-7 images for best results (more variety = better story)
-- Images are referenced as <<<image_1>>>, <<<image_2>>> etc. in order
+- Images are referenced as <<<media_1>>>, <<<media_2>>> etc. in order
 - Optional userRequest lets you guide the style/mood/story direction
 - Script generation takes ~30-60s (AI analyzes all images)
 - Images can be URLs or base64 data URLs`,
@@ -236,7 +236,7 @@ Tips:
 
 IMPORTANT:
 - images must be publicly accessible URLs (not base64). Upload to storage first.
-- script should use <<<image_N>>> format (from makaron_write_video_script output)
+- script should use <<<media_N>>> format (from makaron_write_video_script output)
 - Video rendering takes 3-5 minutes. Use makaron_get_video_status to poll.
 - Duration: omit for smart mode (AI decides 3-15s based on script).
 
@@ -245,11 +245,11 @@ Models:
 - seedance — SeeDance 2.0 via Evolink, supports real human faces, $0.161/s
 
 Example script format:
-Shot 1 (2s): Wide shot, <<<image_1>>> ...
-Shot 2 (3s): Close-up, <<<image_2>>> ...
+Shot 1 (2s): Wide shot, <<<media_1>>> ...
+Shot 2 (3s): Close-up, <<<media_2>>> ...
 Style: Cinematic, warm golden light.`,
     {
-      script: z.string().describe('Video script with <<<image_N>>> references'),
+      script: z.string().describe('Video script with <<<media_N>>> references'),
       images: z.array(z.string().url()).min(1).max(7).describe('Publicly accessible image URLs'),
       duration: z.number().optional().describe('Duration: 3, 5, 7, 10, or 15 seconds. Omit for smart mode.'),
       aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),

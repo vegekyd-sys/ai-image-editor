@@ -35,6 +35,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" className="bg-black">
+      <head>
+        <link rel="preconnect" href="https://cdn.makaron.app" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black`}
       >

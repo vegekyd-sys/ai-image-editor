@@ -8,10 +8,19 @@ import AnnotationCanvas from '@/components/AnnotationCanvas';
 import DesignOverlay from '@/components/DesignOverlay';
 import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
+import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
 const VIDEO_SENTINEL = '__VIDEO__';
+
+function isSimpleVideoWrapper(code: string): boolean {
+  if (!/<(?:Video|OffthreadVideo)\s/.test(code)) return false;
+  if (/<Img\s/.test(code) || /<Audio\s/.test(code) || /<Text[\s>]/.test(code)) return false;
+  if (/trimBefore|trimAfter|startFrom|endAt/.test(code)) return false;
+  if ((code.match(/<Sequence[\s>]/g) || []).length > 1) return false;
+  return true;
+}
 
 interface ImageCanvasProps {
   timeline: string[];
@@ -28,6 +37,7 @@ interface ImageCanvasProps {
   isVideoEntry?: boolean;
   videoUrl?: string | null;
   videoProcessing?: boolean; // true when rendering but no videoUrl yet
+  videoFailed?: boolean;
   videoPosterImage?: string; // last snapshot image to show while processing
   isDesktop?: boolean;
   annotationMode?: boolean;
@@ -45,6 +55,8 @@ interface ImageCanvasProps {
   onPullDownEnd?: (committed: boolean) => void;
   /** Increment to trigger video playback from external source (e.g. CUI second click) */
   videoPlayTrigger?: number;
+  /** Start time (seconds) for video playback — synced from CUI inline player */
+  videoStartTime?: number;
   /** Number of reference snapshots at the start of the timeline */
   referenceCount?: number;
   /** Map of timeline index → DesignPayload for animated designs (rendered via Player) */
@@ -65,17 +77,22 @@ interface ImageCanvasProps {
   onStartEditEditable?: (fieldId: string) => void;
   /** Callback with list of editable field IDs visible at the current frame */
   onVisibleEditableFields?: (visibleIds: string[]) => void;
+  /** Timeline indices that are video snapshots (v2) — show play icon instead of dot */
+  videoTimelineIndices?: Set<number>;
+  /** Called once when the video element loads data — captures a poster frame at 0.5s */
+  onVideoPosterCapture?: (dataUrl: string) => void;
 }
 
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
-  hasVideo, isVideoEntry, videoUrl, videoProcessing, videoPosterImage, isDesktop,
+  hasVideo, isVideoEntry, videoUrl, videoProcessing, videoFailed, videoPosterImage, isDesktop,
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
   pullDownActive, onPullDown, onPullDownEnd,
   videoPlayTrigger,
+  videoStartTime,
   referenceCount = 0,
   animatedDesigns,
   draftDesign,
@@ -86,6 +103,8 @@ export default function ImageCanvas({
   onUpdateProp,
   onStartEditEditable,
   onVisibleEditableFields,
+  videoTimelineIndices,
+  onVideoPosterCapture,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -126,7 +145,7 @@ export default function ImageCanvas({
   const [naturalDims, setNaturalDims] = useState({ w: 0, h: 0 });
 
   // Image loading state
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(true);
 
   // Long content: height/width > 2.5 — disables zoom, enables scroll
   const isLongContent = (() => {
@@ -270,7 +289,7 @@ export default function ImageCanvas({
       const rawDy = touch.clientY - touchStartY.current;
       const rawDx = Math.abs(touch.clientX - touchStartX.current);
       if (!isPullDown.current && !isPanning.current && !isPinching.current
-        && !isVideoEntry && !isDesktop && !annotationMode && !selectedEditableId
+        && !isDesktop && !annotationMode && !selectedEditableId
         && scale === 1 && onPullDown
         && rawDy > PULL_ACTIVATE && rawDy > rawDx * 2) {
         isPullDown.current = true;
@@ -612,22 +631,23 @@ export default function ImageCanvas({
 
   const videoFrameLoaded = videoFrameLoadedUrl === videoUrl;
 
-  // External trigger to start video playback (e.g. second click in CUI)
+  // External trigger to start video playback (e.g. CUI inline video tap)
   const prevPlayTrigger = useRef(videoPlayTrigger ?? 0);
   useEffect(() => {
     if (videoPlayTrigger && videoPlayTrigger !== prevPlayTrigger.current) {
       prevPlayTrigger.current = videoPlayTrigger;
       const v = videoRef.current;
       if (v && isVideoEntry && videoUrl) {
-        v.play().catch(() => {}); // onWaiting/onCanPlay handle loading state
+        if (videoStartTime) v.currentTime = videoStartTime;
+        v.muted = false;
+        v.play().catch(() => {});
       }
     }
-  }, [videoPlayTrigger, isVideoEntry, videoUrl]);
+  }, [videoPlayTrigger, isVideoEntry, videoUrl, videoStartTime]);
 
   // Remotion Player: poll current frame for custom seek bar
-  // draftDesign only shown when viewing the draft slot (not other snapshots)
-  const isViewingDraftSlot = isDraft && draftTimelineIndex !== undefined && currentIndex === draftTimelineIndex;
-  const currentDesign = (isViewingDraftSlot ? draftDesign : null) || animatedDesigns?.get(currentIndex);
+  // draftDesign takes priority over animatedDesigns (video wrapper etc.)
+  const currentDesign = draftDesign || animatedDesigns?.get(currentIndex) || null;
   const remotionFps = currentDesign?.animation?.fps || 30;
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
@@ -665,18 +685,25 @@ export default function ImageCanvas({
     return () => cancelAnimationFrame(raf);
   }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
-  // Preload all images in design code via browser cache, then call onReady
-  const preloadDesignImages = useCallback((code: string): Promise<void> => {
-    const urls = new Set<string>();
-    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi)) urls.add(m[0]);
-    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi)) urls.add(m[0]);
-    if (urls.size === 0) return Promise.resolve();
-    return Promise.all([...urls].map(url => new Promise<void>(resolve => {
+  // Preload all images + videos in design code via browser cache, then call onReady
+  const preloadDesignAssets = useCallback((code: string): Promise<void> => {
+    // Video URLs are cached by RemotionRenderer's resolveVideoUrls — only preload images here
+    const videoExts = /\.(mp4|webm|mov)([^\s"'`<>)}\]]*)?$/i;
+    const imageUrls = new Set<string>();
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi)) {
+      if (!videoExts.test(m[0])) imageUrls.add(m[0]);
+    }
+    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi)) imageUrls.add(m[0]);
+
+    const imagePromises = [...imageUrls].map(url => new Promise<void>(resolve => {
       const img = new Image();
       img.onload = () => resolve();
       img.onerror = () => resolve();
       img.src = url;
-    }))).then(() => {});
+    }));
+
+    if (imagePromises.length === 0) return Promise.resolve();
+    return Promise.all(imagePromises).then(() => {});
   }, []);
 
   // Reset + auto-play when switching to a design snapshot
@@ -692,7 +719,7 @@ export default function ImageCanvas({
     // Try auto-play now if ref already available — preload images first
     if (currentDesign?.animation && remotionRef.current) {
       let cancelled = false;
-      preloadDesignImages(currentDesign.code).then(() => {
+      preloadDesignAssets(currentDesign.code).then(() => {
         if (cancelled) return;
         remotionRef.current?.play();
         remotionStartedRef.current = true;
@@ -706,14 +733,16 @@ export default function ImageCanvas({
 
   // Pause on buffering, resume when assets ready — like a real video player
   // Debounce resume to avoid flicker when multiple images load in quick succession
+  // Skip for designs containing <Video> — video elements handle their own buffering,
+  // and scene cuts trigger spurious waiting events that shouldn't pause the Player.
+  const hasVideoElement = !!(currentDesign?.code?.includes('<Video') || currentDesign?.code?.includes('Video,'));
   const wasPlayingBeforeBufferRef = useRef(false);
   const [remotionBuffering, setRemotionBuffering] = useState(false);
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const player = remotionRef.current;
-    if (!player) return;
+    if (!player || hasVideoElement) return;
     const onWaiting = () => {
-      // Cancel any pending resume — still buffering
       if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
       wasPlayingBeforeBufferRef.current = wasPlayingBeforeBufferRef.current || remotionPlaying;
       setRemotionBuffering(true);
@@ -721,8 +750,6 @@ export default function ImageCanvas({
       setRemotionPlaying(false);
     };
     const onResume = () => {
-      // Debounce: wait 150ms to confirm all assets are truly ready
-      // (prevents flash when image 1 loads but image 2/3 on same frame haven't yet)
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
       resumeTimerRef.current = setTimeout(() => {
         resumeTimerRef.current = null;
@@ -751,7 +778,17 @@ export default function ImageCanvas({
       setRemotionPlaying(false);
     } else {
       if (selectedEditableId) onSelectEditable?.(null);
-      if (remotionFrameRef.current >= remotionTotalFrames - 1) p.seekTo(0);
+      // Always seek to start if at or near the end (video designs may not report exact last frame)
+      if (remotionFrameRef.current >= remotionTotalFrames - 2) {
+        p.seekTo(0);
+        // Small delay to let <Video> element reset before playing
+        requestAnimationFrame(() => {
+          p.play();
+          remotionStartedRef.current = true;
+          setRemotionPlaying(true);
+        });
+        return;
+      }
       p.play();
       remotionStartedRef.current = true;
       setRemotionPlaying(true);
@@ -773,8 +810,8 @@ export default function ImageCanvas({
     updateRemotionUI();
   }, [remotionTotalFrames, updateRemotionUI]);
 
-  // Non-Supabase video URLs (Kling CDN etc.) are proxied to avoid CORS and expiry issues
-  const effectiveVideoUrl = videoUrl && !videoUrl.includes('supabase.co')
+  // Only proxy third-party CDN URLs (Kling etc.) — Supabase URLs play directly (better audio on iOS)
+  const effectiveVideoUrl = videoUrl && !videoUrl.includes('cdn.makaron.app') && !videoUrl.includes('supabase.co')
     ? `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`
     : videoUrl;
 
@@ -785,7 +822,7 @@ export default function ImageCanvas({
     if (isDraft) return 'Draft';
     // Reference snapshot
     if (referenceCount > 0 && index < referenceCount) return `@Ref ${index + 1}`;
-    // 1-based index matching <<<image_N>>> convention
+    // 1-based index matching <<<media_N>>> convention
     const editNum = (draftTimelineIndex !== undefined && index > draftTimelineIndex)
       ? index
       : index + 1;
@@ -845,8 +882,8 @@ export default function ImageCanvas({
           </div>
         )}
 
-        {/* Video entry */}
-        {isVideoEntry && videoUrl ? (
+        {/* Video entry — use native player unless design has real edits (trim/overlay) */}
+        {isVideoEntry && videoUrl && !(currentDesign && !isSimpleVideoWrapper(currentDesign.code)) ? (
           <div
             className="relative w-full h-full flex items-center justify-center"
             onPointerMove={resetControlsTimer}
@@ -854,14 +891,16 @@ export default function ImageCanvas({
               e.stopPropagation();
               if (!showControls) { resetControlsTimer(); return; }
               if (videoPlaying) { videoRef.current?.pause(); }
-              else { setVideoLoading(true); videoRef.current?.play().catch(() => {}); }
+              else { if (videoRef.current) videoRef.current.muted = false; setVideoLoading(true); videoRef.current?.play().catch(() => {}); }
             }}
           >
             <video
               key={effectiveVideoUrl}
               ref={videoRef}
-              src={effectiveVideoUrl ?? undefined}
+              src={effectiveVideoUrl ? `${effectiveVideoUrl}#t=0.001` : undefined}
+              crossOrigin="anonymous"
               playsInline
+              muted
               preload="metadata"
               className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
                 animDir === 'left' ? 'opacity-0 -translate-x-8' :
@@ -892,7 +931,26 @@ export default function ImageCanvas({
                 const v = videoRef.current;
                 if (v) setVideoCurrentTime(v.currentTime);
               }}
-              onLoadedData={() => setVideoFrameLoadedUrl(videoUrl ?? null)}
+              onLoadedData={() => {
+                setVideoFrameLoadedUrl(videoUrl ?? null);
+                const v = videoRef.current;
+                if (onVideoPosterCapture && v && v.videoWidth) {
+                  const seekTo = Math.min(0.5, (v.duration || 1) * 0.1);
+                  v.currentTime = seekTo;
+                  const handler = () => {
+                    try {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = v.videoWidth;
+                      canvas.height = v.videoHeight;
+                      canvas.getContext('2d')!.drawImage(v, 0, 0);
+                      onVideoPosterCapture(canvas.toDataURL('image/jpeg', 0.75));
+                    } catch {}
+                    v.currentTime = 0;
+                    v.removeEventListener('seeked', handler);
+                  };
+                  v.addEventListener('seeked', handler, { once: true });
+                }
+              }}
               onLoadedMetadata={() => {
                 const v = videoRef.current;
                 if (v && isFinite(v.duration)) setVideoDuration(v.duration);
@@ -905,10 +963,11 @@ export default function ImageCanvas({
               }}
             />
 
-            {/* Snapshot poster overlay — shown until video first frame loads */}
+            {/* Poster overlay — shown until video first frame loads (prevents black flash) */}
             {!videoFrameLoaded && !videoPlaying && (() => {
-              const prev = timeline[timeline.length - 2];
-              const posterSrc = prev && prev !== VIDEO_SENTINEL ? prev : undefined;
+              const posterSrc = timeline[currentIndex] && timeline[currentIndex] !== VIDEO_SENTINEL
+                ? timeline[currentIndex]
+                : timeline.slice(0, -1).filter(t => t !== VIDEO_SENTINEL).pop();
               return posterSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -942,7 +1001,7 @@ export default function ImageCanvas({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (videoPlaying) { videoRef.current?.pause(); }
-                    else { videoRef.current?.play().catch(() => {}); }
+                    else { if (videoRef.current) videoRef.current.muted = false; videoRef.current?.play().catch(() => {}); }
                   }}
                   className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
                 >
@@ -1008,50 +1067,65 @@ export default function ImageCanvas({
               </div>
             )}
           </div>
-        ) : isVideoEntry && !videoUrl && videoProcessing && videoPosterImage ? (
-          /* Video processing state: show last snapshot + overlay */
+        ) : isVideoEntry && !videoUrl && (videoProcessing || videoFailed) ? (
+          /* Video processing/failed state: show placeholder + overlay */
           <div className="relative w-full h-full">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={videoPosterImage}
+              src={videoPosterImage || VIDEO_PLACEHOLDER_IMAGE}
               alt="preview"
-              className="w-full h-full object-contain select-none pointer-events-none"
+              className="w-full h-full object-cover select-none pointer-events-none"
               draggable={false}
             />
-            {/* Dim overlay on the whole image */}
-            <div className="absolute inset-0 pointer-events-none" style={{ background: 'rgba(0,0,0,0.35)' }} />
             {/* Gradient + status overlay */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
               style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 45%, transparent 100%)' }}
             >
               <div className="flex flex-col items-center gap-3" style={{ marginBottom: '15%' }}>
-                {/* Spinning ring */}
-                <div className="relative w-[72px] h-[72px] flex items-center justify-center">
-                  <svg className="absolute inset-0 w-full h-full" viewBox="0 0 72 72" fill="none">
-                    <circle cx="36" cy="36" r="32" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
-                    <circle cx="36" cy="36" r="32" stroke="url(#rg)" strokeWidth="3.5"
-                      strokeLinecap="round" strokeDasharray="50 151"
-                      style={{ animation: 'renderSpin 1.4s linear infinite', transformOrigin: '36px 36px' }}
-                    />
-                    <defs>
-                      <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#d946ef" />
-                        <stop offset="100%" stopColor="#818cf8" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="2" width="20" height="20" rx="2.18" />
-                    <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" />
-                  </svg>
-                </div>
-                <div className="flex flex-col items-center gap-1.5">
-                  <span className="text-white font-semibold tracking-wide" style={{ fontSize: '1rem' }}>{t('canvas.videoRendering')}</span>
-                  <span className="text-white/40 text-[12px]">{t('canvas.usuallyTakes')}</span>
-                </div>
+                {videoFailed ? (
+                  <>
+                    {/* Red X circle */}
+                    <div className="relative w-[72px] h-[72px] flex items-center justify-center">
+                      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                        <circle cx="24" cy="24" r="22" stroke="rgba(239,68,68,0.7)" strokeWidth="3" />
+                        <path d="M16 16l16 16M32 16l-16 16" stroke="rgba(239,68,68,0.9)" strokeWidth="3" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <div className="flex flex-col items-center gap-1.5">
+                      <span className="text-white font-semibold tracking-wide" style={{ fontSize: '1rem' }}>{t('canvas.videoFailed')}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Spinning ring */}
+                    <div className="relative w-[72px] h-[72px] flex items-center justify-center">
+                      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 72 72" fill="none">
+                        <circle cx="36" cy="36" r="32" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
+                        <circle cx="36" cy="36" r="32" stroke="url(#rg)" strokeWidth="3.5"
+                          strokeLinecap="round" strokeDasharray="50 151"
+                          style={{ animation: 'renderSpin 1.4s linear infinite', transformOrigin: '36px 36px' }}
+                        />
+                        <defs>
+                          <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#d946ef" />
+                            <stop offset="100%" stopColor="#818cf8" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="2.18" />
+                        <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" />
+                      </svg>
+                    </div>
+                    <div className="flex flex-col items-center gap-1.5">
+                      <span className="text-white font-semibold tracking-wide" style={{ fontSize: '1rem' }}>{t('canvas.videoRendering')}</span>
+                      <span className="text-white/40 text-[12px]">{t('canvas.usuallyTakes')}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-            <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+            {videoProcessing && <style>{`@keyframes renderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>}
           </div>
         ) : currentDesign && !isComparing ? (
           /* Animated design (or draft preview) — Remotion Player with custom controls (same as video) */
@@ -1094,7 +1168,7 @@ export default function ImageCanvas({
                 // Auto-play if pending (ref wasn't ready during useEffect)
                 if (ref && remotionAutoPlayRef.current && currentDesign) {
                   remotionAutoPlayRef.current = false;
-                  preloadDesignImages(currentDesign.code).then(() => {
+                  preloadDesignAssets(currentDesign.code).then(() => {
                     ref.play();
                     remotionStartedRef.current = true;
                     setRemotionPlaying(true);
@@ -1235,6 +1309,7 @@ export default function ImageCanvas({
               ref={imgElRef}
               src={displayImage}
               alt="preview"
+              fetchPriority="high"
               className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
                 pullDownActive ? 'opacity-[0.15] grayscale' :
                 animDir === 'left' ? 'opacity-0 -translate-x-8' :
@@ -1296,6 +1371,7 @@ export default function ImageCanvas({
                     <span className={`${isDesktop ? 'w-px h-3 mr-1.5' : 'w-px h-2 mr-[5px]'} bg-white/20`} />
                   )}
                   {entry === VIDEO_SENTINEL ? (
+                    /* v1 sentinel: play triangle */
                     <button
                       onClick={() => goTo(i)}
                       className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-5 h-5 hover:opacity-80' : 'w-3 h-3'}`}
@@ -1305,15 +1381,26 @@ export default function ImageCanvas({
                         <polygon points="2,1 7,4 2,7" />
                       </svg>
                     </button>
+                  ) : videoTimelineIndices?.has(i) ? (
+                    /* v2 video: square (unselected) → wide rect (selected) — no border-radius */
+                    <button
+                      onClick={() => goTo(i)}
+                      className={`cursor-pointer transition-all ${
+                        i === currentIndex
+                          ? isDesktop ? 'w-5 h-2 rounded-[2px] bg-white/70 hover:bg-white/90' : 'w-3 h-[5px] rounded-[1px] bg-white/70'
+                          : isDesktop ? 'w-2 h-2 rounded-[2px] bg-white/25 hover:bg-white/40' : 'w-[5px] h-[5px] rounded-[1px] bg-white/25'
+                      }`}
+                    />
                   ) : (
+                    /* Image: circle (unselected) → ellipse pill (selected) */
                     <button
                       onClick={() => goTo(i)}
                       className={`transition-all cursor-pointer ${
                         i === currentIndex
-                          ? isDesktop ? 'w-5 h-2 rounded-full bg-white/70 hover:bg-white/90' : 'w-3 h-1 rounded-full bg-white/70'
+                          ? isDesktop ? 'w-5 h-2 rounded-full bg-white/70 hover:bg-white/90' : 'w-3 h-[5px] rounded-full bg-white/70'
                           : isRef
-                            ? isDesktop ? 'w-2 h-2 rounded-full border border-dashed border-white/40 bg-transparent hover:border-white/60' : 'w-1.5 h-1.5 rounded-full border border-dashed border-white/40 bg-transparent'
-                            : isDesktop ? 'w-2 h-2 rounded-full bg-white/25 hover:bg-white/40' : 'w-1 h-1 rounded-full bg-white/25'
+                            ? isDesktop ? 'w-2 h-2 rounded-full border border-dashed border-white/40 bg-transparent hover:border-white/60' : 'w-[5px] h-[5px] rounded-full border border-dashed border-white/40 bg-transparent'
+                            : isDesktop ? 'w-2 h-2 rounded-full bg-white/25 hover:bg-white/40' : 'w-[5px] h-[5px] rounded-full bg-white/25'
                       }`}
                     />
                   )}

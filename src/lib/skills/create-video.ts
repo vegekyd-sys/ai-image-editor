@@ -8,8 +8,9 @@ export interface CreateVideoInput {
   aspectRatio?: string;      // '9:16', '16:9', '1:1'
   videoModel?: VideoModel;   // 'kling' (default) or 'seedance'
   // Video editing (Kling only)
-  videoUrl?: string;                    // Reference video URL
+  videoUrl?: string;                    // Reference video URL (explicit from agent)
   videoReferType?: 'base' | 'feature';  // default: 'base'
+  videoUrls?: string[];                 // Auto-detected video references from timeline
   keepOriginalSound?: boolean;          // default: false
   // Motion Control (Kling only)
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
@@ -23,7 +24,7 @@ export interface CreateVideoResult {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, keepOriginalSound, motionControl, characterOrientation } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, keepOriginalSound, motionControl, characterOrientation } = input;
 
   if (images.length === 0) {
     return {
@@ -32,25 +33,19 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     };
   }
 
-  // Validate images are URLs (not base64)
-  for (let i = 0; i < images.length; i++) {
-    if (!images[i].startsWith('http://') && !images[i].startsWith('https://')) {
-      return {
-        success: false,
-        message: `Image ${i + 1} must be a publicly accessible URL (not base64 or local path). Please upload images to storage first.`,
-      };
-    }
-  }
-
   try {
     // Motion Control: separate path — single image + video, no image references needed
     if (motionControl) {
       if (!videoUrl) {
         return { success: false, message: 'Motion Control requires a reference video (videoUrl).' };
       }
+      const firstImage = images[0];
+      if (!firstImage?.startsWith('http')) {
+        return { success: false, message: 'Motion Control requires the first image to be a publicly accessible URL. It may still be uploading — wait and retry.' };
+      }
       const { createKlingMotionControlTask } = await import('../kling');
       const taskId = await createKlingMotionControlTask({
-        imageUrl: images[0],
+        imageUrl: firstImage,
         videoUrl,
         prompt: script,
         keepOriginalSound: keepOriginalSound !== false,
@@ -64,15 +59,25 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       };
     }
 
-    // Filter to only referenced images and remap indices
+    // Filter to only referenced images and remap indices (preserves index alignment)
     // filterAndRemapImages will enforce the 7-image limit on the filtered result
     const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
 
-    if (filteredImages.length === 0 && images.length > 0) {
+    if (filteredImages.length === 0 && images.length > 0 && !videoUrl && !(videoUrls?.length)) {
       return {
         success: false,
-        message: `No images referenced in the script but ${images.length} images were provided. Use <<<image_1>>> etc. to reference them in your prompt.`,
+        message: `No images referenced in the script but ${images.length} images were provided. Use <<<media_1>>> etc. to reference them in your prompt.`,
       };
+    }
+
+    // Validate only referenced images are URLs (unreferenced positions may be empty/base64 — that's fine)
+    for (let i = 0; i < filteredImages.length; i++) {
+      if (!filteredImages[i]?.startsWith('http')) {
+        return {
+          success: false,
+          message: `Referenced image ${i + 1} is not a publicly accessible URL — it may still be uploading to storage. Please wait a moment and try again.`,
+        };
+      }
     }
 
     // Resolve duration: explicit > parsed from script > undefined (smart mode)
@@ -109,19 +114,20 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     if (provider === 'seedance') {
       const { createEvolinkTask } = await import('../evolink');
+      const seedanceVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
       taskId = await createEvolinkTask({
         prompt: finalPrompt,
         images: filteredImages,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
         aspectRatio: aspectRatio || 'adaptive',
         quality: '720p',
-        videoUrls: videoUrl ? [videoUrl] : undefined,
+        videoUrls: seedanceVideoUrls.length ? seedanceVideoUrls : undefined,
       });
       console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
     } else if (provider === 'piapi') {
       const { createKlingTask: createKlingTaskPiAPI } = await import('../piapi');
       taskId = await createKlingTaskPiAPI({
-        prompt: finalPrompt.replace(/<<<image_(\d+)>>>/g, '@image_$1'), // PiAPI format
+        prompt: finalPrompt.replace(/<<<(?:image|media)_(\d+)>>>/g, '@image_$1'), // PiAPI format
         images: filteredImages,
         duration: resolvedDuration ?? 10,
         aspect_ratio: aspectRatio ?? '9:16',
@@ -132,13 +138,16 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     } else {
       const { createKlingTask, detectAspectRatio } = await import('../kling');
       const resolvedRatio = aspectRatio || await detectAspectRatio(filteredImages[0] || images[0]);
+      // Auto-routed videos: use first as feature reference if no explicit videoUrl
+      const effectiveVideoUrl = videoUrl || (videoUrls?.length ? videoUrls[0] : undefined);
+      const effectiveVideoReferType = videoUrl ? videoReferType : (effectiveVideoUrl ? 'feature' : undefined);
       taskId = await createKlingTask({
         prompt: finalPrompt,
         images: filteredImages,
         duration: resolvedDuration,
         aspect_ratio: resolvedRatio,
-        videoUrl,
-        videoReferType,
+        videoUrl: effectiveVideoUrl,
+        videoReferType: effectiveVideoReferType,
         keepOriginalSound,
       });
       console.log(`✅ [create_video] Kling task created: ${taskId}`);

@@ -234,8 +234,8 @@ export async function getKlingMotionControlTask(taskId: string): Promise<KlingTa
 }
 
 /**
- * Filter images to only those referenced in the script (<<<image_N>>>),
- * and remap indices to be sequential (e.g. image_1, image_5, image_9 → image_1, image_2, image_3).
+ * Filter images to only those referenced in the script (<<<image_N>>> or <<<media_N>>>),
+ * and remap indices to be sequential (e.g. media_1, media_5, media_9 → media_1, media_2, media_3).
  * Returns the filtered image list and the remapped prompt.
  */
 export function filterAndRemapImages(
@@ -244,7 +244,7 @@ export function filterAndRemapImages(
   maxImages = 7,
 ): { filteredImages: string[]; finalPrompt: string } {
   const refs = [...new Set(
-    Array.from(prompt.matchAll(/<<<image_(\d+)>>>/g), m => Number(m[1]))
+    Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
   )].sort((a, b) => a - b)
 
   let filteredImages: string[]
@@ -254,7 +254,8 @@ export function filterAndRemapImages(
     filteredImages = refs.map(n => imageUrls[n - 1]).filter((img): img is string => !!img)
     finalPrompt = prompt
     refs.forEach((origIdx, newIdx) => {
-      finalPrompt = finalPrompt.replaceAll(`<<<image_${origIdx}>>>`, `<<<image_${newIdx + 1}>>>`)
+      finalPrompt = finalPrompt.replaceAll(`<<<image_${origIdx}>>>`, `<<<media_${newIdx + 1}>>>`)
+      finalPrompt = finalPrompt.replaceAll(`<<<media_${origIdx}>>>`, `<<<media_${newIdx + 1}>>>`)
     })
   } else {
     filteredImages = []
@@ -320,7 +321,7 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
   if (usePiAPI) {
     const { createKlingTask: createKlingTaskPiAPI } = await import('./piapi')
     taskId = await createKlingTaskPiAPI({
-      prompt: finalPrompt.replace(/<<<image_(\d+)>>>/g, '@image_$1'),
+      prompt: finalPrompt.replace(/<<<(?:image|media)_(\d+)>>>/g, '@image_$1'),
       images: filteredImages,
       duration: resolvedDuration ?? 10,
       aspect_ratio: aspectRatio ?? '9:16',
@@ -343,7 +344,7 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
     })
   }
 
-  // Persist to DB
+  // Persist to DB — store original prompt/images so detail view shows full context
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
   const { data: animation, error } = await supabase
@@ -352,8 +353,8 @@ export async function submitAnimationTask(input: SubmitAnimationInput): Promise<
       project_id: projectId,
       piapi_task_id: taskId,
       status: 'processing',
-      prompt: finalPrompt,
-      snapshot_urls: filteredImages,
+      prompt,
+      snapshot_urls: imageUrls.filter(u => !!u),
     })
     .select('id')
     .single()

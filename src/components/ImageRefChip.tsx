@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Snapshot } from '@/types';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 
@@ -17,6 +18,14 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const chipRef = useRef<HTMLSpanElement>(null);
   const isTouchDevice = useRef(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleHide = useCallback(() => {
+    hideTimer.current = setTimeout(() => setShowPreview(false), 100);
+  }, []);
+  const cancelHide = useCallback(() => {
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+  }, []);
 
   const imgSrc = snapshot?.imageUrl || snapshot?.image;
   const thumbUrl = imgSrc && imgSrc.startsWith('http')
@@ -37,21 +46,31 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
     let left = chipCenter - pw / 2;
     if (left < 8) left = 8;
     if (left + pw > window.innerWidth - 8) left = window.innerWidth - 8 - pw;
+    // Show below chip if not enough space above
+    const spaceAbove = rect.top;
+    const showBelow = spaceAbove < 200;
     setPopoverStyle({
       position: 'fixed',
-      bottom: window.innerHeight - rect.top + 4,
+      ...(showBelow
+        ? { top: rect.bottom + 4 }
+        : { bottom: window.innerHeight - rect.top + 4 }),
       left,
       width: pw,
       zIndex: 9999,
     });
   }, []);
 
+  const popoverRef = useRef<HTMLSpanElement>(null);
+
   // Close on outside tap / scroll (mobile)
   useEffect(() => {
     if (!showPreview) return;
     const close = () => setShowPreview(false);
     const onPointerDown = (e: PointerEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) close();
+      const target = e.target as Node;
+      if (wrapperRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      close();
     };
     document.addEventListener('scroll', close, true);
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -61,6 +80,40 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
     };
   }, [showPreview]);
 
+  const popover = showPreview && previewUrl ? (
+    <span
+      ref={popoverRef}
+      className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
+      style={{ ...popoverStyle, display: 'block' }}
+      onMouseEnter={() => { if (!isTouchDevice.current) cancelHide(); }}
+      onMouseLeave={() => { if (!isTouchDevice.current) scheduleHide(); }}
+    >
+      {!imgLoaded && (
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', aspectRatio: '1', background: '#111' }}>
+          <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span className="text-white/30 text-xs">@{index + 1}</span>
+            <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.5)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          </span>
+        </span>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={previewUrl}
+        alt=""
+        onLoad={() => setLoadedUrl(previewUrl ?? null)}
+        style={{ width: '100%', height: 'auto', display: imgLoaded ? 'block' : 'none' }}
+      />
+      {imgLoaded && (
+        <span
+          className="bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md"
+          style={{ position: 'absolute', bottom: 8, left: 8 }}
+        >
+          @{index + 1}
+        </span>
+      )}
+    </span>
+  ) : null;
+
   return (
     <span ref={wrapperRef} className="relative inline-flex items-center align-baseline">
       <span
@@ -69,8 +122,8 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
         tabIndex={0}
         className="inline-flex items-center gap-1 bg-white/10 hover:bg-white/20 rounded-md px-1.5 py-0.5 text-xs font-medium text-white/80 transition-colors cursor-pointer"
         onTouchStart={() => { isTouchDevice.current = true; }}
-        onMouseEnter={() => { if (!isTouchDevice.current) { updatePosition(); setShowPreview(true); } }}
-        onMouseLeave={() => { if (!isTouchDevice.current) setShowPreview(false); }}
+        onMouseEnter={() => { if (!isTouchDevice.current) { cancelHide(); updatePosition(); setShowPreview(true); } }}
+        onMouseLeave={() => { if (!isTouchDevice.current) scheduleHide(); }}
         onClick={(e) => {
           e.stopPropagation();
           if (onNavigate) { onNavigate(index); setShowPreview(false); }
@@ -83,37 +136,7 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
         )}
         @{index + 1}
       </span>
-      {showPreview && previewUrl && (
-        <span
-          className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
-          style={{ ...popoverStyle, display: 'block' }}
-        >
-          {/* Loading placeholder */}
-          {!imgLoaded && (
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', aspectRatio: '1', background: '#111' }}>
-              <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                <span className="text-white/30 text-xs">@{index + 1}</span>
-                <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.5)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              </span>
-            </span>
-          )}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={previewUrl}
-            alt=""
-            onLoad={() => setLoadedUrl(previewUrl ?? null)}
-            style={{ width: '100%', height: 'auto', display: imgLoaded ? 'block' : 'none' }}
-          />
-          {imgLoaded && (
-            <span
-              className="bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md"
-              style={{ position: 'absolute', bottom: 8, left: 8 }}
-            >
-              @{index + 1}
-            </span>
-          )}
-        </span>
-      )}
+      {popover && typeof document !== 'undefined' && createPortal(popover, document.body)}
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </span>
   );

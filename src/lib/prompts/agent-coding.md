@@ -26,6 +26,10 @@ Rules:
 
 **IMPORTANT: run_code sandbox has NO require, NO fs, NO file system access.** Do not try to `require('fs')` or read files inside run_code. Use the `read_file` tool instead if you need file contents.
 
+**Remotion APIs**: All exports from `remotion` are available (Easing, Loop, Freeze, random, interpolateColors, OffthreadVideo, delayRender, continueRender, etc.). Also `@remotion/paths` (evolvePath, getLength, etc.) and `@remotion/noise` (noise2D, noise3D). Standard globals (Math, Object, Array, JSON, console) work normally.
+
+**Media references**: `<<<media_N>>>` URLs may be images (.jpg/.png/.webp) or videos (.mp4). Check the Media Index in your context — video entries are marked with `(VIDEO, Xs)`. Use `<Img>` for images, `<Video>` for videos.
+
 ### Editable Fields (REQUIRED)
 
 Every `type: 'render'` design MUST declare editable fields. Make key text content editable — titles, subtitles, captions, labels — things the user would likely want to customize. Decorative text, icons, or structural elements don't need to be editable.
@@ -257,6 +261,41 @@ When reviewing the screenshots, focus on two things:
 #### Cross-Platform Effects (iOS / Android / Web 通用)
 
 These videos play on all platforms. Every effect you use must render correctly on iOS Safari, Android Chrome, and desktop browsers. Follow these rules to avoid platform-specific rendering failures.
+
+**Video elements — MUST use Remotion `<Video>` or `<OffthreadVideo>`, NEVER HTML `<video>`:**
+- `<Video src="url" style={{...}} />` — syncs with Remotion Player (play/pause/seek all work). Best for preview/playback.
+- `<OffthreadVideo src="url" style={{...}} />` — decodes video off the main thread. Better for rendering/export. Supports same props as `<Video>`.
+- HTML `<video autoPlay>` is NOT controlled by the Player — it plays independently and cannot be paused or seeked. The harness auto-fixes `<video>` → `<Video>` but write it correctly.
+- Remove `autoPlay`, `controls` attributes — Remotion controls playback via frames. By default video audio plays — only add `muted` when you explicitly want silent video (e.g. background clip under separate music/voiceover).
+
+**Video trimming props (frame numbers at 30fps):**
+- `trimBefore={frame}` — start playback from this frame in the source video. Example: `trimBefore={36}` starts at 1.2s
+- `trimAfter={frame}` — stop playback at this frame. Example: `trimAfter={150}` ends at 5s
+- `playbackRate={1.5}` — speed (0.25 to 4x)
+- `volume={0.5}` — audio volume (0 to 1, or function of frame for fade)
+- Do NOT use `startFrom`/`endAt` — those are for `remotion` package's Video which is not available here. Use `trimBefore`/`trimAfter` directly.
+
+**Multi-clip splice (CORRECT pattern — use `<Sequence>` per clip):**
+```jsx
+const { fps } = useVideoConfig();
+const clips = [
+  { src: url1, duration: 150 },  // 5s at 30fps
+  { src: url2, duration: 120 },  // 4s
+];
+let offset = 0;
+{clips.map((clip, i) => {
+  const from = offset;
+  offset += clip.duration;
+  return (
+    <Sequence key={i} from={from} durationInFrames={clip.duration}>
+      <AbsoluteFill>
+        <Video src={clip.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      </AbsoluteFill>
+    </Sequence>
+  );
+})}
+```
+**WRONG**: Do NOT use opacity/display toggle with all `<Video>` mounted simultaneously — causes playback sync issues and shows stale frames.
 
 **Performance budget (CRITICAL — iOS Safari will CRASH if exceeded):**
 - **MUST use `<Sequence>` for every scene** — `<Sequence from={sceneStart} durationInFrames={sceneDuration + crossfadeDuration}>` to mount/unmount scenes. Do NOT mount all scenes with `opacity: 0` — all `<Img>` tags load simultaneously and crash iOS. This is the #1 cause of iOS crashes.

@@ -1,6 +1,7 @@
 import type { AgentStreamCallbacks } from './agentStream';
 import type { Snapshot, Tip, ProjectAnimation } from '@/types';
 import type { DesignPayload } from '@/types';
+import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 
 /**
  * Context for creating unified agent callbacks.
@@ -330,6 +331,19 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         pollSeconds: 0,
         videoModel,
       });
+    },
+
+    onVideoSnapshot: (snapshotId, _taskId, videoMeta) => {
+      const newSnap: import('@/types').Snapshot = {
+        id: snapshotId,
+        image: VIDEO_PLACEHOLDER_IMAGE,
+        tips: [],
+        messageId: '',
+        type: 'video',
+        videoMeta,
+      };
+      ctx.setSnapshots(prev => [...prev, newSnap]);
+      if (ctx.pendingNavigateToVideoRef) ctx.pendingNavigateToVideoRef.current = true;
     },
 
     onMusicTask: (taskId) => {

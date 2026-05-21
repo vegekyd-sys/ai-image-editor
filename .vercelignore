@@ -12,6 +12,7 @@ scripts/serve*
 !public/landing/*.png
 !public/skills/*.jpg
 !public/skills/*.gif
+!public/video-placeholder.png
 *.heic
 *.HEIC
 progress.md
@@ -19,3 +20,4 @@ __tests__/
 vitest.config.ts
 .playwright-mcp/
 .claude/
+test-output/

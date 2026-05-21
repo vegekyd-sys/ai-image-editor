@@ -2,11 +2,30 @@
 
 interface ChangelogEntry {
   date: string;
-  en: { title: string; items: string[] };
-  zh: { title: string; items: string[] };
+  en: { title: string; items: string[]; link?: { label: string; href: string } };
+  zh: { title: string; items: string[]; link?: { label: string; href: string } };
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: '2026-05-21',
+    en: { title: 'AI Video Editing — As Easy As Chatting', items: [
+      '"Put this kid into that birthday party" — just say it, and it happens. 15-second video, any idea.',
+      'Multi-turn editing: not right? Keep chatting. Refine, extend, redo — until your imagination is satisfied.',
+      'Continue stories: one video after another, like directing a series.',
+      'Compose multiple clips: upload your videos, AI understands motion, scene, character — and fuses them.',
+      'Real human faces supported. Your photo, your story.',
+      'Videos in timeline: swipe through creative history like a photo album.',
+    ], link: { label: 'View full release notes →', href: '/releases/video-in-timeline' }},
+    zh: { title: 'AI 视频编辑 — 像聊天一样简单', items: [
+      '"让这个小朋友加入那个生日派对" — 说出来就行，15 秒视频，任何想法。',
+      '多轮编辑：不满意就继续聊。修改、延展、重来 — 直到满足你的想象。',
+      '续写故事：一段接一段，像导演连续剧一样创作。',
+      '多段素材合成：上传你的视频，AI 理解动作、场景、角色 — 融合成一个作品。',
+      '支持真人脸。你的照片，你的故事。',
+      '视频进入时间线：像翻相册一样滑动浏览创作历史。',
+    ], link: { label: '查看完整发布说明 →', href: '/releases/video-in-timeline' }},
+  },
   {
     date: '2026-05-15',
     en: { title: 'China Access & Cost Optimization', items: [
@@ -552,6 +571,15 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
                     </li>
                   ))}
                 </ul>
+                {loc.link && (
+                  <a
+                    href={loc.link.href}
+                    className="inline-block mt-2 ml-1 text-[12.5px] font-medium"
+                    style={{ color: 'rgba(192,38,211,0.9)' }}
+                  >
+                    {loc.link.label}
+                  </a>
+                )}
               </div>
             );
           })}

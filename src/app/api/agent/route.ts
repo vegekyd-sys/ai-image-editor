@@ -16,14 +16,14 @@ export async function POST(req: NextRequest) {
     const creditCheck = await requireCredits(userId, 5);
     if (!creditCheck.ok) return creditCheck.response;
 
-    const { prompt, image, originalImage, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext,
+    const { prompt, image, originalImage, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, videoModel,
-            headless, hasAnnotation, isDraft, referenceImageCount } = await req.json();
+            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = await req.json();
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
-    if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !image && !prompt)) {
+    if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
       return new Response(
         JSON.stringify({ error: 'projectId and (image or prompt) are required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
@@ -39,6 +39,10 @@ export async function POST(req: NextRequest) {
 
     // Only dual-write for normal agent flow (not lightweight teaser/name/reaction/analysis branches)
     const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly;
+
+    // Query timeline version for video-in-timeline support
+    const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
+    const timelineVersion: number = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
 
     let runId: string | null = null;
     let firstMessageId: string | null = null;
@@ -176,6 +180,7 @@ export async function POST(req: NextRequest) {
             hasAnnotation,
             isDraft,
             referenceImageCount: referenceImageCount || undefined,
+            uploadedVideoCount: uploadedVideoCount || undefined,
           });
 
           let agentPrompt = ctx.fullPrompt;
@@ -211,7 +216,7 @@ export async function POST(req: NextRequest) {
           };
 
           try {
-            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: userId, currentDesign: agentCurrentDesign, history: agentHistory })) {
+            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: userId, currentDesign: agentCurrentDesign, history: agentHistory, timelineVersion })) {
               if (event.type === 'usage') { usageEvent = event; continue; }
               if (writer) {
                 await writer.processAndEnqueue(event);

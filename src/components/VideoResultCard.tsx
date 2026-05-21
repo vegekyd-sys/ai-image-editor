@@ -6,11 +6,13 @@ import { useLocale } from '@/lib/i18n';
 import PillCarousel from '@/components/PillCarousel';
 
 function ElapsedTimer({ since }: { since: string }) {
-  const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+  const sinceMs = new Date(since || undefined as unknown as string).getTime();
+  const validSince = isNaN(sinceMs) ? Date.now() : sinceMs;
+  const [elapsed, setElapsed] = useState(() => Math.max(0, Math.floor((Date.now() - validSince) / 1000)));
 
   useEffect(() => {
     const t = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+      setElapsed(Math.max(0, Math.floor((Date.now() - validSince) / 1000)));
     }, 1000);
     return () => clearInterval(t);
   }, [since]);
@@ -26,12 +28,13 @@ interface VideoResultCardProps {
   onSelectVideo: (id: string) => void;
   onCreateNew: () => void;
   onAbandon: (taskId: string) => void;
+  onRetry?: (anim: ProjectAnimation) => void;
   onViewDetail: (anim: ProjectAnimation) => void;
   isDesktop?: boolean;
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onViewDetail, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onRetry, onViewDetail, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
@@ -45,8 +48,9 @@ export default function VideoResultCard({
 
   const completed = animations.filter(a => a.status === 'completed' && a.videoUrl);
   const processing = animations.filter(a => a.status === 'processing');
-  const failed = animations.filter(a => a.status === 'failed');
-  const all = [...processing, ...completed, ...failed];
+  const failed = animations.filter(a => a.status === 'failed' || a.status === 'abandoned');
+  const abandoned: ProjectAnimation[] = [];
+  const all = [...processing, ...completed, ...failed, ...abandoned];
 
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
@@ -76,17 +80,18 @@ export default function VideoResultCard({
           const isCompleted = anim.status === 'completed' && !!anim.videoUrl;
           const isProcessing = anim.status === 'processing';
           const isFailed = anim.status === 'failed';
-          const thumbUrl = anim.snapshotUrls[0];
+          const thumbUrl = anim.imageUrl;
           const title = videoTitle(anim.prompt, idx);
 
-          const modelLabel = anim.videoModel === 'seedance' ? 'SD' : 'K3';
+          const modelLabel = anim.videoModel === 'seedance' ? 'SD' : anim.videoModel === 'upload' ? '' : 'K3';
+          const durationLabel = anim.duration ? `${Math.round(anim.duration)}s` : null;
           let statusText: React.ReactNode;
           if (isCompleted) {
-            statusText = anim.duration ? `${anim.duration}s · ${modelLabel}` : modelLabel;
+            statusText = durationLabel ? `${durationLabel}${modelLabel ? ` · ${modelLabel}` : ''}` : (modelLabel || t('video.completed'));
           } else if (isProcessing) {
-            statusText = <><ElapsedTimer since={anim.createdAt} /> · {modelLabel}</>;
+            statusText = <><ElapsedTimer since={anim.createdAt} />{modelLabel ? ` · ${modelLabel}` : ''}</>;
           } else if (isFailed) {
-            statusText = <>{t('video.failed')} · {modelLabel}</>;
+            statusText = <>{t('video.failed')}{modelLabel ? ` · ${modelLabel}` : ''}</>;
           } else {
             statusText = t('video.abandoned');
           }
@@ -103,7 +108,7 @@ export default function VideoResultCard({
               style={{ background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)' }}
             >
               <button
-                onClick={() => { if (isCompleted) onSelectVideo(anim.id); }}
+                onClick={() => { if (isCompleted) onSelectVideo(anim.id); onViewDetail(anim); }}
                 className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
                 style={{
                   width: cardWidth,
@@ -136,11 +141,11 @@ export default function VideoResultCard({
                         </svg>
                       </div>
                     )}
-                    {anim.duration && (
+                    {durationLabel && (
                       <div className="absolute bottom-0.5 right-0.5 bg-black/70 rounded text-white/85 leading-none"
                         style={{ fontSize: '0.56rem', padding: '1px 4px' }}
                       >
-                        {anim.duration}s
+                        {durationLabel}
                       </div>
                     )}
                   </div>
@@ -152,15 +157,6 @@ export default function VideoResultCard({
                     <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
                       {statusText}
                     </div>
-                    {isProcessing && anim.taskId && (
-                      <span
-                        onClick={(e) => { e.stopPropagation(); onAbandon(anim.taskId!); }}
-                        className="text-white/30 mt-0.5 cursor-pointer underline"
-                        style={{ fontSize: '0.56rem' }}
-                      >
-                        {t('video.abandon')}
-                      </span>
-                    )}
                   </div>
                 </div>
               </button>

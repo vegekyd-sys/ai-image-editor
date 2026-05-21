@@ -14,7 +14,7 @@ export type { RenderMediaOnWebProgress };
 async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   const urlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi;
   // Match Supabase storage URLs but exclude audio files (.mp3/.wav etc) — those are handled by resolveAudioUrls
-  const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/(?![^\s"'`<>)}\]]*\.(?:mp3|wav|m4a|aac|ogg))[^\s"'`<>)}\]]*/gi;
+  const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/(?![^\s"'`<>)}\]]*\.(?:mp3|wav|m4a|aac|ogg|mp4|webm|mov))[^\s"'`<>)}\]]*/gi;
   const urls = new Set<string>();
   for (const m of code.matchAll(urlPattern)) urls.add(m[0]);
   for (const m of code.matchAll(storagePattern)) urls.add(m[0]);
@@ -79,11 +79,14 @@ async function loadGoogleFontsFromCode(code: string): Promise<void> {
  * Returns JPEG data URL, or empty string on failure.
  */
 export async function captureDesignPoster(design: DesignPayload): Promise<string> {
-  let imageBlobUrls: string[] = [];
+  let allBlobUrls: string[] = [];
   try {
     await preloadBabel().catch(() => {});
-    const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
-    imageBlobUrls = blobUrls;
+    // Resolve video URLs first (mp4/webm → blob for same-origin access)
+    const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
+    // Then resolve image URLs
+    const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
+    allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
     await loadGoogleFontsFromCode(resolvedCode);
     const comp = evalRemotionJSX(resolvedCode);
     if (!comp) return '';
@@ -105,6 +108,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
       frame: Math.min(30, durationInFrames - 1),
       imageFormat: 'jpeg',
       inputProps: (design.props || {}) as Record<string, unknown>,
+      delayRenderTimeoutInMilliseconds: 30000,
     });
 
     const dataUrl = await new Promise<string>((r) => {
@@ -118,7 +122,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
     console.warn('🎨 [design] poster capture failed:', e);
     return '';
   } finally {
-    imageBlobUrls.forEach(url => URL.revokeObjectURL(url));
+    allBlobUrls.forEach(url => URL.revokeObjectURL(url));
   }
 }
 
@@ -127,11 +131,12 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
  * Used by preview_frame tool — frontend renders, server polls for result.
  */
 export async function captureDesignFrame(design: DesignPayload, frame: number): Promise<Blob | null> {
-  let imageBlobUrls: string[] = [];
+  let allBlobUrls: string[] = [];
   try {
     await preloadBabel().catch(() => {});
-    const { code: resolvedCode, blobUrls } = await resolveCodeUrls(design.code);
-    imageBlobUrls = blobUrls;
+    const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
+    const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
+    allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
     await loadGoogleFontsFromCode(resolvedCode);
     const comp = evalRemotionJSX(resolvedCode);
     if (!comp) return null;
@@ -152,6 +157,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
       frame: Math.min(frame, durationInFrames - 1),
       imageFormat: 'jpeg',
       inputProps: (design.props || {}) as Record<string, unknown>,
+      delayRenderTimeoutInMilliseconds: 30000,
     });
 
     return result.blob;
@@ -159,7 +165,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
     console.warn('🎨 [design] frame capture failed:', e);
     return null;
   } finally {
-    imageBlobUrls.forEach(url => URL.revokeObjectURL(url));
+    allBlobUrls.forEach(url => URL.revokeObjectURL(url));
   }
 }
 
@@ -212,17 +218,17 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const durationInFrames = design.animation
     ? Math.max(1, Math.round(fps * design.animation.durationInSeconds))
     : 1;
-  const blobUrlsRef = useRef<string[]>([]);
-
   useEffect(() => {
     let cancelled = false;
     onLoading?.(true);
     (async () => {
       try {
         await preloadBabel().catch(() => {});
-        await loadGoogleFontsFromCode(design.code);
+        const { code: videoResolved } = await resolveVideoUrls(design.code);
         if (cancelled) return;
-        const comp = evalRemotionJSX(design.code);
+        await loadGoogleFontsFromCode(videoResolved);
+        if (cancelled) return;
+        const comp = evalRemotionJSX(videoResolved);
         if (!comp) {
           setCompileError('Failed to compile design code');
           onError?.('Failed to compile design code');
@@ -241,11 +247,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         onLoading?.(false);
       }
     })();
-    return () => {
-      cancelled = true;
-      blobUrlsRef.current.forEach(u => URL.revokeObjectURL(u));
-      blobUrlsRef.current = [];
-    };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design.code]);
 
@@ -321,7 +323,46 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
 // ─── MP4 Export ──────────────────────────────────────────────────────────────
 
-/** Pre-fetch remote audio URLs via server proxy → blob URLs (fixes CORS + avoids massive data URLs) */
+// Session-level cache: video URL → blob URL (avoids re-downloading on timeline switch)
+const videoBlobCache = new Map<string, string>();
+
+/** Pre-fetch remote video URLs via server proxy → blob URLs (fixes CORS for renderMediaOnWeb) */
+async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
+  const videoExtPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi;
+  const urls = new Set<string>();
+  for (const m of code.matchAll(videoExtPattern)) urls.add(m[0]);
+  if (urls.size === 0) return { code, blobUrls: [] };
+  let resolved = code;
+  await Promise.all([...urls].map(async (url) => {
+    try {
+      const cached = videoBlobCache.get(url);
+      if (cached) {
+        while (resolved.includes(url)) resolved = resolved.replace(url, cached);
+        return;
+      }
+      const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(url)}&full=1`;
+      const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error(`Video proxy failed: ${res.status}`);
+      const contentType = res.headers.get('Content-Type') || '';
+      if (!contentType.startsWith('video/') && !contentType.includes('octet-stream')) {
+        throw new Error(`Video proxy returned non-video content: ${contentType}`);
+      }
+      const blob = await res.blob();
+      if (blob.size < 1000) {
+        throw new Error(`Video blob too small (${blob.size} bytes), likely error page`);
+      }
+      const videoBlob = new Blob([blob], { type: 'video/mp4' });
+      const blobUrl = URL.createObjectURL(videoBlob);
+      videoBlobCache.set(url, blobUrl);
+      while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
+    } catch (e) {
+      console.error('[resolveVideoUrls] failed:', url, e);
+    }
+  }));
+  // blobUrls empty — lifecycle managed by videoBlobCache, not caller
+  return { code: resolved, blobUrls: [] };
+}
+
 async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   // Strip blob: audio URLs (expired after refresh) — both JSX and createElement forms
   let cleaned = code
@@ -357,14 +398,36 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
   return { code: resolved, blobUrls };
 }
 
+/** Detect pure video-wrapper design (only <Video>/<OffthreadVideo> inside <AbsoluteFill>, no overlays) */
+function extractSingleVideoUrl(code: string): string | null {
+  const videoMatch = code.match(/<(?:Video|OffthreadVideo)\s[^>]*src=["']([^"']+)["']/);
+  if (!videoMatch) return null;
+  // If code has other visual elements, it's not a simple wrapper
+  if (/<Img\s/.test(code) || /<Audio\s/.test(code) || /<Text[\s>]/.test(code)) return null;
+  // Check for text content nodes (spans, divs with text) — skip if complex
+  if (/>[^<]*[a-zA-Z一-鿿]/.test(code.replace(/<Video[^>]*>/, '').replace(/function\s+Design[^{]*\{/, ''))) return null;
+  return videoMatch[1];
+}
+
 export async function exportDesignVideo(
   design: DesignPayload,
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
+  // Pure video design → download source mp4 directly (no Remotion render needed)
+  const singleVideoUrl = extractSingleVideoUrl(design.code);
+  if (singleVideoUrl) {
+    const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(singleVideoUrl)}&full=1`;
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error(`Video download failed: ${res.status}`);
+    return res.blob();
+  }
+
   preloadBabel().catch(() => {});
 
+  // Pre-fetch remote video URLs → blob URLs (renderMediaOnWeb requires same-origin)
+  const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
   // Pre-fetch remote image URLs → blob URLs (same-origin, native browser handling)
-  const { code: imageResolved, blobUrls: imageBlobUrls } = await resolveCodeUrls(design.code);
+  const { code: imageResolved, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
   const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
   await loadGoogleFontsFromCode(resolvedCode);
@@ -396,6 +459,6 @@ export async function exportDesignVideo(
 
     return result.getBlob();
   } finally {
-    [...imageBlobUrls, ...audioBlobUrls].forEach(url => URL.revokeObjectURL(url));
+    [...videoBlobUrls, ...imageBlobUrls, ...audioBlobUrls].forEach(url => URL.revokeObjectURL(url));
   }
 }

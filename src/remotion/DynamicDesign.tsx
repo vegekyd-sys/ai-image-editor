@@ -4,45 +4,36 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import {
-  useCurrentFrame,
-  useVideoConfig,
-  interpolate,
-  spring,
-  Sequence,
-  Series,
-  Img,
-  AbsoluteFill,
-  delayRender,
-  continueRender,
-} from 'remotion';
-import { Audio } from '@remotion/media';
-import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath } from '@remotion/paths';
-import { noise2D, noise3D } from '@remotion/noise';
+import * as Remotion from 'remotion';
+import { Audio, Video } from '@remotion/media';
+import * as RemotionPaths from '@remotion/paths';
+import * as RemotionNoise from '@remotion/noise';
 import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 
+const { Sequence, useVideoConfig, delayRender, continueRender, AbsoluteFill } = Remotion;
+
+// Sequence wrapper: auto-inject premountFor={fps} for smooth video cuts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(props: any, ref: React.Ref<HTMLDivElement>) {
+  const { fps } = useVideoConfig();
+  return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps, ref });
+});
+
 const REMOTION_SCOPE: Record<string, unknown> = {
-  React,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-  useCurrentFrame,
-  useVideoConfig,
-  interpolate,
-  spring,
-  Sequence,
-  Series,
-  Img,
-  AbsoluteFill,
-  Audio,
-  // @remotion/paths
-  evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath, parsePath, resetPath, cutPath,
-  // @remotion/noise
-  noise2D, noise3D,
+  React, useState, useEffect, useCallback, useMemo, useRef,
+  ...Remotion,
+  ...RemotionPaths,
+  ...RemotionNoise,
+  // @remotion/media Video/Audio: supports web-renderer export + trimBefore/trimAfter
+  Audio, Video,
+  // OffthreadVideo not supported in web-renderer — alias to @remotion/media Video
+  OffthreadVideo: Video,
+  // Override: Sequence with auto premountFor
+  Sequence: AutoPremountSequence,
 };
+delete REMOTION_SCOPE['default'];
+delete REMOTION_SCOPE['__esModule'];
 
 function compileAndEval(code: string): React.ComponentType<Record<string, unknown>> | null {
   try {

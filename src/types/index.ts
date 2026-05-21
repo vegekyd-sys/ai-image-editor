@@ -86,9 +86,10 @@ export interface Snapshot {
   imageUrl?: string;      // Supabase Storage URL (persisted)
   description?: string;   // agent's analysis of this image (auto-generated, persisted)
   metadata?: PhotoMetadata; // EXIF metadata (location, time)
-  type?: 'original' | 'edit' | 'reference'; // snapshot kind — reference = skill asset
-  design?: DesignPayload; // live Remotion design (rendered via Player, not screenshot)
-  designPath?: string;    // workspace path to design JSON (e.g. "code/xxx.json")
+  type?: 'original' | 'edit' | 'reference' | 'video';
+  design?: DesignPayload;
+  designPath?: string;
+  videoMeta?: VideoMeta;
 }
 
 export interface Project {
@@ -111,6 +112,7 @@ export interface DbSnapshot {
   description?: string;
   type?: string;
   design_path?: string;
+  video_meta?: VideoMeta;
   metadata?: PhotoMetadata;
 }
 
@@ -123,7 +125,25 @@ export interface DbMessage {
   created_at: string;
 }
 
-export type VideoModel = 'kling' | 'seedance'
+export type VideoModel = 'kling' | 'seedance' | 'upload'
+
+export interface VideoMeta {
+  taskId: string | null;
+  videoUrl: string | null;
+  providerUrl?: string;
+  videoPath?: string;
+  prompt: string;
+  sourceSnapshotIds: string[];
+  sourceUrls: string[];
+  status: 'processing' | 'completed' | 'failed' | 'abandoned';
+  duration: number | null;
+  model: VideoModel;
+  createdAt?: string;
+  error?: string;
+  width?: number;
+  height?: number;
+}
+
 
 export interface ProjectAnimation {
   id: string;
@@ -132,8 +152,10 @@ export interface ProjectAnimation {
   videoUrl: string | null;
   prompt: string;
   snapshotUrls: string[];
+  imageUrl?: string;
   status: 'processing' | 'completed' | 'failed' | 'abandoned';
   duration?: number | null;
   createdAt: string;
-  videoModel?: 'kling' | 'seedance';
+  videoModel?: VideoModel;
+  error?: string;
 }
