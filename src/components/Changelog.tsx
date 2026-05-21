@@ -9,21 +9,21 @@ interface ChangelogEntry {
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-05-21',
-    en: { title: '15s AI Video Editing — Say It, See It', items: [
-      'Describe any idea → get a 15-second cinematic video. Unlimited imagination, zero limits.',
-      'Multi-turn conversation editing: refine, extend, continue the story across turns',
-      'Multi-video composition: combine multiple reference videos into one seamless creation (real human faces supported)',
-      'Upload your own videos as references — the AI understands motion, scene, and character',
-      'Videos are now timeline entries: swipe through your creative history like photos',
-      'SSR Skeleton: project page loads 7x faster (LCP 2105ms → 284ms)',
+    en: { title: 'AI Video Editing — As Easy As Chatting', items: [
+      '"Put this kid into that birthday party" — just say it, and it happens. 15-second video, any idea.',
+      'Multi-turn editing: not right? Keep chatting. Refine, extend, redo — until your imagination is satisfied.',
+      'Continue stories: one video after another, like directing a series.',
+      'Compose multiple clips: upload your videos, AI understands motion, scene, character — and fuses them.',
+      'Real human faces supported. Your photo, your story.',
+      'Videos in timeline: swipe through creative history like a photo album.',
     ], link: { label: 'View full release notes →', href: '/releases/video-in-timeline' }},
-    zh: { title: '15 秒 AI 视频编辑 — 说出来，就能看到', items: [
-      '描述任何想法 → 生成 15 秒电影级视频。天马行空，没有限制。',
-      '多轮对话编辑：不断修改、延展、续写你的故事',
-      '多视频合成：多个参考视频融合成一个完整作品（支持真人脸）',
-      '上传你自己的视频作为参考 — AI 理解动作、场景和角色',
-      '视频进入时间线：像翻照片一样滑动浏览你的创作历史',
-      'SSR 骨架屏：项目页加载速度提升 7 倍（LCP 2105ms → 284ms）',
+    zh: { title: 'AI 视频编辑 — 像聊天一样简单', items: [
+      '"让这个小朋友加入那个生日派对" — 说出来就行，15 秒视频，任何想法。',
+      '多轮编辑：不满意就继续聊。修改、延展、重来 — 直到满足你的想象。',
+      '续写故事：一段接一段，像导演连续剧一样创作。',
+      '多段素材合成：上传你的视频，AI 理解动作、场景、角色 — 融合成一个作品。',
+      '支持真人脸。你的照片，你的故事。',
+      '视频进入时间线：像翻相册一样滑动浏览创作历史。',
     ], link: { label: '查看完整发布说明 →', href: '/releases/video-in-timeline' }},
   },
   {

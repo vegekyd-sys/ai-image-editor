@@ -22,19 +22,19 @@ interface FeatureSection {
 const SECTIONS: FeatureSection[] = [
   {
     icon: '🧠',
-    subtitle: '15s AI Video',
-    zh: { title: '15 秒 AI 视频 — 说出来，就能看到', features: [
-      '任何天马行空的想法，用自然语言描述 → 15 秒电影级视频',
-      '多轮对话编辑：不满意？继续聊。修改、延展、重来，直到完美',
-      '续写故事：一段视频接一段，像写连续剧一样创作',
-      '支持真人脸：上传你的照片，AI 让你出演自己的故事',
-      '两大模型可选：Kling v3（快速）/ SeeDance 2.0（最强画质）',
+    subtitle: '15s AI Video Editing',
+    zh: { title: '用聊天编辑视频 — 满足你的任何想象', features: [
+      '"让这个小朋友加入生日派对" "换成赛博朋克风格" "再延长 5 秒" — 说出来就行',
+      '多轮对话：不满意就继续聊，修改、延展、重来，直到满足你的想象',
+      '续写故事：一段接一段，像导演连续剧一样创作完整叙事',
+      '支持真人脸：你的照片，你的故事，你出演',
+      '两大模型：Kling v3（快速）/ SeeDance 2.0（最强画质）',
     ]},
-    en: { title: '15s AI Video — Say It, See It', features: [
-      'Describe any wild idea in natural language → 15-second cinematic video',
-      'Multi-turn editing: not satisfied? Keep chatting. Refine, extend, redo until perfect',
-      'Continue the story: chain videos together like writing a TV series',
-      'Real human faces: upload your photo, star in your own story',
+    en: { title: 'Edit Video by Chatting — Any Imagination, Fulfilled', features: [
+      '"Put this kid in the party" "Make it cyberpunk" "Extend 5 more seconds" — just say it',
+      'Multi-turn: not right? Keep chatting. Refine, extend, redo — until your imagination is satisfied',
+      'Continue stories: chain clips into a narrative, like directing a series',
+      'Real human faces: your photo, your story, you star in it',
       'Two top models: Kling v3 (fast) / SeeDance 2.0 (best quality)',
     ]},
     accent: 'from-fuchsia-500 to-purple-600',
@@ -317,8 +317,8 @@ export default function VideoInTimelineReleasePage() {
         <h1
           className={`text-4xl sm:text-6xl md:text-7xl font-black text-center leading-tight mb-6 transition-all duration-1000 delay-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
         >
-          <span className="block text-white/90">{isZh ? '说出来，' : 'Say It,'}</span>
-          <span className="shimmer-text">{isZh ? '就能看到' : 'See It'}</span>
+          <span className="block text-white/90">{isZh ? '视频编辑，' : 'Video Editing,'}</span>
+          <span className="shimmer-text">{isZh ? '像聊天一样简单' : 'As Easy As Chatting'}</span>
         </h1>
 
         {/* Subtitle */}
@@ -326,15 +326,15 @@ export default function VideoInTimelineReleasePage() {
           className={`text-lg sm:text-xl text-white/50 text-center max-w-2xl mb-4 transition-all duration-1000 delay-400 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
         >
           {isZh
-            ? '15 秒 AI 视频编辑 · 天马行空 · 多轮对话 · 续写故事'
-            : '15s AI Video Editing · Unlimited Imagination · Multi-Turn · Storytelling'}
+            ? '"让这个小朋友加入那个生日派对" — 搞定。'
+            : '"Put this kid into that birthday party" — Done.'}
         </p>
         <p
           className={`text-sm text-white/30 text-center max-w-xl mb-12 transition-all duration-1000 delay-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
         >
           {isZh
-            ? '任何想法，一句话变成电影。不满意就继续聊，直到完美。'
-            : 'Turn any idea into cinema with one sentence. Not perfect? Keep chatting until it is.'}
+            ? '15 秒视频 · 多轮修改 · 续写故事 · 合成多段素材 · 支持真人脸'
+            : '15s video · multi-turn refinement · continue stories · compose clips · real faces'}
         </p>
 
         {/* Stats Grid */}
