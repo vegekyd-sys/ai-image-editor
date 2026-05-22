@@ -281,10 +281,8 @@ export async function GET(
                     }
                   });
                 } else if (pollResult.status === 'failed') {
-                  const admin = getSupabaseAdmin();
-                  await admin.from('snapshots')
-                    .update({ video_meta: { ...videoMeta, status: 'failed', error: pollResult.error } })
-                    .eq('id', v.snapshot_id);
+                  const { handleVideoFailure } = await import('@/lib/video-lifecycle');
+                  await handleVideoFailure(v.snapshot_id, pollResult.error);
                   v.status = 'failed';
                   v.error = pollResult.error;
                 } else {

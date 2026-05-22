@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
@@ -135,29 +134,8 @@ export async function GET(
     }
 
     if (result.status === 'failed') {
-      const admin = getSupabaseAdmin()
-      const updatedMeta: VideoMeta = { ...videoMeta, status: 'failed', error: result.error || undefined }
-      // Atomic refund: only refund if not already refunded (check DB state, not in-memory)
-      if (videoMeta.creditsCharged && !videoMeta.refunded) {
-        // Re-read from DB to get latest refunded state (prevents race with concurrent polls)
-        const { data: freshSnap } = await admin
-          .from('snapshots')
-          .select('video_meta')
-          .eq('id', snapshotId)
-          .single()
-        const freshMeta = freshSnap?.video_meta as VideoMeta | null
-        if (freshMeta && !freshMeta.refunded) {
-          updatedMeta.refunded = true
-          await admin.from('snapshots').update({ video_meta: updatedMeta }).eq('id', snapshotId)
-          const { refundCredits } = await import('@/lib/billing/credits')
-          await refundCredits(user!.id, videoMeta.creditsCharged, 'create_video')
-          console.log(`[refund] video ${snapshotId} failed, refunded ${videoMeta.creditsCharged} credits to ${user!.id}`)
-        } else {
-          await admin.from('snapshots').update({ video_meta: updatedMeta }).eq('id', snapshotId)
-        }
-      } else {
-        await admin.from('snapshots').update({ video_meta: updatedMeta }).eq('id', snapshotId)
-      }
+      const { handleVideoFailure } = await import('@/lib/video-lifecycle')
+      await handleVideoFailure(snapshotId, result.error)
     }
 
     return NextResponse.json({ status: result.status, snapshotId, imageUrl: snap.image_url || undefined, error: result.error })
