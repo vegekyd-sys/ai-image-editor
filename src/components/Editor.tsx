@@ -2417,18 +2417,18 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 designPath: `code/${snap.id}.json`,
               } : s
             ));
-            // Add CUI message for completed video
-            const alreadyHasVideo = messages.some(m => m.content?.includes(data.videoUrl));
-            if (!alreadyHasVideo) {
-              const videoMsg: Message = {
-                id: generateId(),
-                role: 'assistant',
-                content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}`,
-                timestamp: Date.now(),
-              };
-              setMessages(prev => [...prev, videoMsg]);
+            // Add CUI message for completed video (dedup against latest state)
+            const videoMsg: Message = {
+              id: generateId(),
+              role: 'assistant',
+              content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}`,
+              timestamp: Date.now(),
+            };
+            setMessages(prev => {
+              if (prev.some(m => m.content?.includes(data.videoUrl) || m.content?.includes(`snap:${snap.id}`))) return prev;
               onSaveMessage?.(videoMsg);
-            }
+              return [...prev, videoMsg];
+            });
           } else if (data.status === 'failed') {
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const, error: data.error || undefined } } : s
@@ -2669,6 +2669,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setAgentStatus(t('status.writingScript'));
     } else if (animationState?.status === 'submitting') {
       setAgentStatus(t('status.submittingVideo'));
+    } else if (animationState?.status === 'polling') {
+      setAgentStatus(t('status.videoRenderingEllipsis'));
     } else {
       const processing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
       if (processing && !isAgentActive && !musicTaskId) {
