@@ -135,17 +135,27 @@ export async function GET(
 
     if (result.status === 'failed') {
       const updatedMeta: VideoMeta = { ...videoMeta, status: 'failed', error: result.error || undefined }
-      // Refund credits if charged and not already refunded
+      // Atomic refund: use conditional update to prevent double-refund from concurrent polls
       if (videoMeta.creditsCharged && !videoMeta.refunded) {
-        const { refundCredits } = await import('@/lib/billing/credits')
-        await refundCredits(user!.id, videoMeta.creditsCharged, 'create_video')
         updatedMeta.refunded = true
-        console.log(`[refund] video ${snapshotId} failed, refunded ${videoMeta.creditsCharged} credits to ${user!.id}`)
+        const { data: updated } = await supabase
+          .from('snapshots')
+          .update({ video_meta: updatedMeta })
+          .eq('id', snapshotId)
+          .not('video_meta->>refunded', 'eq', 'true')
+          .select('id')
+        // Only refund if we won the race (row was actually updated)
+        if (updated?.length) {
+          const { refundCredits } = await import('@/lib/billing/credits')
+          await refundCredits(user!.id, videoMeta.creditsCharged, 'create_video')
+          console.log(`[refund] video ${snapshotId} failed, refunded ${videoMeta.creditsCharged} credits to ${user!.id}`)
+        }
+      } else {
+        await supabase
+          .from('snapshots')
+          .update({ video_meta: updatedMeta })
+          .eq('id', snapshotId)
       }
-      await supabase
-        .from('snapshots')
-        .update({ video_meta: updatedMeta })
-        .eq('id', snapshotId)
     }
 
     return NextResponse.json({ status: result.status, snapshotId, imageUrl: snap.image_url || undefined, error: result.error })
