@@ -2419,7 +2419,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             ));
             // Reset animationState if this was the task being polled
             setAnimationState(prev => prev?.taskId === snap.videoMeta?.taskId
-              ? { ...prev, status: 'done', videoUrl: data.videoUrl }
+              ? { ...prev!, status: 'done' as const, videoUrl: data.videoUrl }
               : prev
             );
             // Add CUI message for completed video (dedup against latest state)
