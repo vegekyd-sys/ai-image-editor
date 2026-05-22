@@ -567,7 +567,7 @@ Hard constraints (apply even before reading the guide):
 
         try {
           const { analyzeVideoContent } = await import('./gemini');
-          const analysis = await analyzeVideoContent(videoUrl, question);
+          const analysis = await analyzeVideoContent(videoUrl, question, ctx.userId);
           return { analysis, media_index, videoUrl };
         } catch (err) {
           return { error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };

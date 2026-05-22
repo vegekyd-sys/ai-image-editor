@@ -93,11 +93,11 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
 
   const hasSubscription = !!(subscription && subscription.status !== 'canceled');
 
-  const [tab, setTab] = useState<'subscribe' | 'topup'>('subscribe');
+  const [tab, setTab] = useState<'subscribe' | 'topup'>('topup');
 
   // Sync tab when subscription status changes (async fetch)
   useEffect(() => {
-    setTab(hasSubscription ? 'topup' : 'subscribe');
+    setTab('topup');
   }, [hasSubscription]);
   const currentPlanIndex = hasSubscription ? PLANS.findIndex(p => p.id === subscription!.planId) : -1;
 
@@ -358,9 +358,8 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
               </button>
             </div>
 
-            {/* Tab bar — only show if has subscription (both tabs available) */}
-            {hasSubscription && (
-              <div style={{ display: 'flex', gap: 4, margin: '16px 24px 0', padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
+            {/* Tab bar — always show (TopUp first) */}
+            <div style={{ display: 'flex', gap: 4, margin: '16px 24px 0', padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
                 <button
                   onClick={() => setTab('topup')}
                   style={{
@@ -386,7 +385,6 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                   Upgrade
                 </button>
               </div>
-            )}
 
             {/* Content */}
             <div style={{ padding: '16px 24px 24px' }}>
@@ -472,8 +470,8 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                 </>
               )}
 
-              {/* ── Top Up tab (only when subscribed) ── */}
-              {tab === 'topup' && hasSubscription && (
+              {/* ── Top Up tab ── */}
+              {tab === 'topup' && (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {CREDIT_TIERS.map(tier => (
