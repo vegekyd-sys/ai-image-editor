@@ -3714,3 +3714,80 @@ get-video-status.ts (skill)
 - Skills 预加载改用 requestIdleCallback
 - enhance 儿童脸不做美化/平滑
 - animated design 不生成 tips
+
+---
+
+## Video in Timeline — Bug Fixes & Billing (2026-05-22)
+
+### 上线前 Bug 修复
+
+**Bug 9: 视频下载跳转 URL**
+- 根因：`navigator.share` 失败（iOS gesture 过期）→ catch 里 `window.open` 直接跳转
+- 修复：share 失败单独 try/catch → fallback blob download，只有 fetch 失败才 window.open
+
+**Bug 10: CUI 出现 3 条 inline 视频**
+- 根因：v1 animations poll + v2 snapshot poll + watch effect 三条路径各自添加消息
+- 修复：v2 模式跳过 v1 poll (`if (isV2) return`)，watch effect 跳过 v2 消息创建
+
+**Bug 11: 30s design 视频导出成 15s**
+- 根因：`extractSingleVideoUrl` 只 match 第一个 `<Video>` 标签，两段 15s 拼接的 design 被误判为 simple wrapper → 直接下载第一段
+- 修复：改用 `matchAll` 计数，多个 `<Video>` 时走完整 Remotion render
+- 附带修复：`probeVideoDimensions` 同时返回 `video.duration`，design wrapper 用实际时长
+
+**Bug 13: "视频渲染中" 状态问题（改了 5 次）**
+- 症状 1：提交后不显示 → 根因：`hasBackgroundTaskRef` 缺 v2 snapshot processing 检查，`onDone` 覆盖为 greeting
+- 症状 2：完成后仍显示 → 根因：`animationState` 永远停在 'polling'，status effect 无 done 分支
+- 症状 3：CUI 不显示 → 根因：`hasBackgroundTask` prop 没传 v2 check
+- 最终修复：三处统一加 `snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing')`
+  - `hasBackgroundTaskRef.current`（line 338）— 防止 onDone 覆盖
+  - `hasBackgroundTask` prop（传给 CUI）— CUI status line 可见
+  - status effect 优先级：done > polling/processing > else(greeting)
+
+### Billing 退款系统
+
+**架构**：先扣后退模式。扣费时存 `creditsCharged` 到 videoMeta，失败时退回。
+
+**`handleVideoFailure(snapshotId, error)`**（`src/lib/video-lifecycle.ts`）：
+- 统一入口，所有检测到失败的路径共用
+- Re-read DB 获取最新 status（幂等，`status !== 'processing'` 直接 return）
+- Admin client 写 DB（绕过 RLS）
+- 退款通过 project → user_id 查找用户
+
+**三条退款路径**：
+1. 前端 poll `/api/video-snapshot/[snapshotId]` — 即时退
+2. CLI poll `/api/agent/run/[id]` — CLI 视频也退
+3. Cron `/api/cron/video-poll` — 兜底，每 5 分钟扫 >10min 的 processing 视频
+
+**防重复退款**：
+- 初版用 `.not('video_meta->>refunded', 'eq', 'true')` — Postgres NULL 处理有坑
+- 最终方案：`handleVideoFailure` 内 re-read，检查 `vm.status !== 'processing'`
+
+**`refundCredits(userId, credits, toolName)`**（`src/lib/billing/credits.ts`）：
+- 加余额 + 减 `lifetime_used` + 写 `usage_logs`（`tool_name='refund:create_video'`, `credits_charged=-110`）
+- Dashboard Usage tab 可见退款记录
+
+### GUI 清理
+
+- 移除 AgentStatusBar ▶ 按钮（`onAnimate` prop）
+- 移除 VideoResultCard "+ 新视频" 按钮
+- 保留 AnimateSheet detail mode（只读查看视频信息）
+- 所有视频创建只通过 CUI 对话
+
+### 新文件
+
+- `src/lib/video-lifecycle.ts` — `handleVideoFailure()` 共享函数
+- `src/app/api/cron/video-poll/route.ts` — Vercel cron 后台扫描
+- `vercel.json` — `*/5 * * * *` cron schedule
+- 环境变量：`CRON_SECRET`（Vercel 生产需配）
+
+### TopUp 定价调整
+
+| 档位 | 价格 | Credits | 折扣 |
+|------|------|---------|------|
+| Starter | $5 | 500 | 0% |
+| Pro | $20 | 2,200 | 10% |
+| Team | $50 | 5,750 | 15% |
+| Studio | $100 | 11,500 | 15% |
+| Enterprise | $200 | 24,000 | 20% |
+
+Stripe 用 `price_data`（动态价格），不需要预创建 Price ID。
