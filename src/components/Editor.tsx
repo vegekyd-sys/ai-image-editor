@@ -2368,8 +2368,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isViewingVideo]);
 
-  // Poll all processing animations (runs in Editor, independent of any card)
+  // Poll all processing animations (v1 only — v2 uses snapshot polling above)
   useEffect(() => {
+    if (isV2) return;
     const processing = animations.filter(a => a.status === 'processing' && a.taskId);
     if (processing.length === 0) return;
     const interval = setInterval(async () => {
@@ -2405,7 +2406,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           if (data.status === 'completed' && data.videoUrl) {
             const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design');
             const dims = await probeVideoDimensions(data.videoUrl);
-            const design = createVideoDesign(data.videoUrl, dims.width, dims.height, snap.videoMeta?.duration || 10);
+            const design = createVideoDesign(data.videoUrl, dims.width, dims.height, dims.duration);
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? {
                 ...s,
@@ -2631,7 +2632,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animations.length, snapshots.length]);
 
-  // Watch for animations completing — send CUI notification + StatusBar update
+  // Watch for animations completing — send CUI notification + StatusBar update (v1 only)
   const prevCompletedIdsRef = useRef<Set<string>>(
     new Set(animations.filter(a => a.status === 'completed').map(a => a.id))
   );
@@ -2643,22 +2644,24 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       const anim = animations.find(a => a.id === id);
       if (anim?.videoUrl) {
         setAgentStatus(t('status.videoDone'));
-        // Show "See" button to navigate to video entry (last item in timeline)
         setPendingNotification({ text: t('status.videoDone'), targetIndex: videoTimelineIndex });
-        const alreadyHasVideo = messages.some(m => m.content?.includes(anim.videoUrl!));
-        if (!alreadyHasVideo) {
-          const videoMsg: Message = {
-            id: generateId(),
-            role: 'assistant',
-            content: `🎬 ${t('status.videoDone')}！\n${anim.videoUrl}\nanim:${anim.id}`,
-            timestamp: Date.now(),
-          };
-          setMessages(prev => [...prev, videoMsg]);
-          onSaveMessage?.(videoMsg);
+        // v2 handles CUI messages in snapshot poll — skip here to avoid duplicates
+        if (!isV2) {
+          const alreadyHasVideo = messages.some(m => m.content?.includes(anim.videoUrl!));
+          if (!alreadyHasVideo) {
+            const videoMsg: Message = {
+              id: generateId(),
+              role: 'assistant',
+              content: `🎬 ${t('status.videoDone')}！\n${anim.videoUrl}\nanim:${anim.id}`,
+              timestamp: Date.now(),
+            };
+            setMessages(prev => [...prev, videoMsg]);
+            onSaveMessage?.(videoMsg);
+          }
         }
       }
     }
-  }, [animations, messages, onSaveMessage]);
+  }, [animations, messages, onSaveMessage, isV2]);
 
   // Update StatusBar with video rendering progress
   // (yields to sticky status for the else branch — active user actions like generating_prompt/submitting override)

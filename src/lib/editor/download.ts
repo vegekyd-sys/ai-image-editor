@@ -41,14 +41,18 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     try {
       const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}&download=1`;
       const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
       const blob = await res.blob();
       const file = new File([blob], filename, { type: 'video/mp4' });
-      // Try native share (iOS/Android) — check canShare first since large videos may be unsupported
+      // Try native share (iOS/Android) — wrapped in its own try/catch so share failure
+      // falls through to blob download instead of navigating away
       if (navigator.share && navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
-        await navigator.share({ files: [file] });
-        setIsSaving(false);
-        showSaveToast();
-        return;
+        try {
+          await navigator.share({ files: [file] });
+          setIsSaving(false);
+          showSaveToast();
+          return;
+        } catch { /* share failed (gesture expired, user cancelled) — fall through to blob download */ }
       }
       // Fallback: trigger download via blob URL (works on desktop + iOS when share fails)
       const url = URL.createObjectURL(blob);
@@ -61,7 +65,6 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       showSaveToast();
     } catch {
       setIsSaving(false);
-      // Last resort: open video URL directly (iOS will show video player, user can long-press to save)
       window.open(videoSrc, '_blank');
     }
     return;
