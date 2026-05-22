@@ -335,7 +335,7 @@ export default function Editor({
   const animationStateRef = useRef(animationState);
   animationStateRef.current = animationState;
   const hasBackgroundTaskRef = useRef(false);
-  hasBackgroundTaskRef.current = musicPollingRef.current || animationState?.status === 'polling' || animations.some(a => a.status === 'processing');
+  hasBackgroundTaskRef.current = musicPollingRef.current || animationState?.status === 'polling' || animations.some(a => a.status === 'processing') || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
   const viewIndexRef = useRef(viewIndex);
   viewIndexRef.current = viewIndex;
   const draftParentIndexRef = useRef(draftParentIndex);
