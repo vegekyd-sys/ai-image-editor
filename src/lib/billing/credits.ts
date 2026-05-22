@@ -289,3 +289,27 @@ export async function addCredits(userId: string, credits: number): Promise<numbe
 
   return newBalance
 }
+
+export async function refundCredits(userId: string, credits: number, toolName: string): Promise<number> {
+  const admin = getSupabaseAdmin()
+  const { data } = await admin
+    .from('credit_balances')
+    .select('balance, lifetime_used')
+    .eq('user_id', userId)
+    .single()
+
+  const newBalance = (data?.balance ?? 0) + credits
+  const newUsed = Math.max(0, (data?.lifetime_used ?? 0) - credits)
+
+  await admin
+    .from('credit_balances')
+    .update({ balance: newBalance, lifetime_used: newUsed, updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+
+  await admin.from('usage_logs').insert({
+    user_id: userId, tool_name: `refund:${toolName}`,
+    credits_charged: -credits, source: 'app',
+  })
+
+  return newBalance
+}
