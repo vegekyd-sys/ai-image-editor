@@ -2669,22 +2669,20 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [animations, messages, onSaveMessage, isV2]);
 
   // Update StatusBar with video rendering progress
+  const videoProcessing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
   useEffect(() => {
     if (animationState?.status === 'generating_prompt') {
       setAgentStatus(t('status.writingScript'));
     } else if (animationState?.status === 'submitting') {
       setAgentStatus(t('status.submittingVideo'));
-    } else if (animationState?.status === 'polling') {
-      setAgentStatus(t('status.videoRenderingEllipsis'));
     } else if (animationState?.status === 'done') {
       setAgentStatus(t('status.videoDone'));
-    } else {
-      const processing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
-      if (processing && !isAgentActive && !musicTaskId) {
+    } else if (animationState?.status === 'polling' || videoProcessing) {
+      if (!isAgentActive && !musicTaskId) {
         setAgentStatus(t('status.videoRenderingEllipsis'));
       }
     }
-  }, [animationState?.status, snapshots, isAgentActive, musicTaskId]);
+  }, [animationState?.status, videoProcessing, isAgentActive, musicTaskId]);
 
   // Update StatusBar with music generation progress (same pattern as video)
   useEffect(() => {
