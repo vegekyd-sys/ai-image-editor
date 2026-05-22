@@ -137,8 +137,8 @@ export async function GET(
       const updatedMeta: VideoMeta = { ...videoMeta, status: 'failed', error: result.error || undefined }
       // Refund credits if charged and not already refunded
       if (videoMeta.creditsCharged && !videoMeta.refunded) {
-        const { addCredits } = await import('@/lib/billing/credits')
-        await addCredits(user!.id, videoMeta.creditsCharged)
+        const { refundCredits } = await import('@/lib/billing/credits')
+        await refundCredits(user!.id, videoMeta.creditsCharged, 'create_video')
         updatedMeta.refunded = true
         console.log(`[refund] video ${snapshotId} failed, refunded ${videoMeta.creditsCharged} credits to ${user!.id}`)
       }
