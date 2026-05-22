@@ -1,0 +1,6 @@
+{
+  "crons": [{
+    "path": "/api/cron/video-poll",
+    "schedule": "*/5 * * * *"
+  }]
+}
