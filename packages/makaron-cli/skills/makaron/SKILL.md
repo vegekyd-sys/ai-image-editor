@@ -86,6 +86,24 @@ Returns immediately:
 npx makaron-cli chat --project <id> --image ref1.jpg --image ref2.jpg -b "use these as style reference"
 ```
 
+### With video input (edit, compose, extend)
+
+```bash
+# Upload a video and transform it — Agent understands video content natively
+npx makaron-cli chat --project auto --video selfie.mp4 -b "put Iron Man armor on me"
+
+# Combine a person's photo with a video scene
+npx makaron-cli chat --project <id> --video party.mp4 --image kid.jpg -b "make this kid join the party"
+
+# Multiple videos — compose or splice
+npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "combine into one seamless video"
+
+# Video URL (public, downloadable)
+npx makaron-cli chat --project auto --video https://example.com/dance.mp4 -b "extend this to 15 seconds"
+```
+
+Supported formats: MP4, MOV, WebM (max 200MB, ≤15s per video for composition). Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language.
+
 ### Check status (single query)
 
 ```bash
@@ -184,7 +202,7 @@ type MakaronOutput =
   | { id: string; type: "text"; status: "completed"; content: string }
   | { id: string; type: "image"; status: "completed"; url: string; snapshot_id: string }
   | { id: string; type: "design"; status: "completed"; url: string; width: number; height: number; animated: boolean; duration?: number }
-  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
+  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; snapshot_id?: string; url?: string; elapsed_seconds?: number; width?: number; height?: number }
   | { id: string; type: "music"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
 ```
 
