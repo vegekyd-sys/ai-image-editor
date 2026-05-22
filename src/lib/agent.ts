@@ -467,12 +467,16 @@ Hard constraints (apply even before reading the guide):
             throw new Error(`DB insert failed: ${insertError.message}`);
           }
 
+          // Bill for video generation (per-second) — store amount in videoMeta for refund on failure
+          const videoSec = duration || 10;
+          const creditsCharged = Math.ceil(videoSec * 22);
+          videoMeta.creditsCharged = creditsCharged;
+          await supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId);
+
           ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
 
-          // Bill for video generation (per-second)
-          const videoSec = duration || 10;
           import('./billing/credits').then(({ deductFixedCredits }) =>
-            deductFixedCredits(ctx.userId ?? '', Math.ceil(videoSec * 22), 'create_video', undefined, undefined)
+            deductFixedCredits(ctx.userId ?? '', creditsCharged, 'create_video', undefined, undefined)
               .catch(e => console.error('[billing] generate_animation deduct error:', e))
           );
 

@@ -135,6 +135,13 @@ export async function GET(
 
     if (result.status === 'failed') {
       const updatedMeta: VideoMeta = { ...videoMeta, status: 'failed', error: result.error || undefined }
+      // Refund credits if charged and not already refunded
+      if (videoMeta.creditsCharged && !videoMeta.refunded) {
+        const { addCredits } = await import('@/lib/billing/credits')
+        await addCredits(user!.id, videoMeta.creditsCharged)
+        updatedMeta.refunded = true
+        console.log(`[refund] video ${snapshotId} failed, refunded ${videoMeta.creditsCharged} credits to ${user!.id}`)
+      }
       await supabase
         .from('snapshots')
         .update({ video_meta: updatedMeta })
