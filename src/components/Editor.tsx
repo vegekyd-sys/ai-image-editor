@@ -27,6 +27,7 @@ import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
 import VideoResultCard from '@/components/VideoResultCard';
+import AnimateSheet from '@/components/AnimateSheet';
 import DesignEditPanel from '@/components/DesignEditPanel';
 import DesignTextEditor from '@/components/DesignTextEditor';
 import CameraPanel from '@/components/CameraPanel';
@@ -3583,6 +3584,21 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               </div>
           )}
 
+          {/* AnimateSheet — detail mode only (view video info, no creation) */}
+          {detailAnimation && projectId && animationState && (
+            <AnimateSheet
+              snapshots={snapshots.filter(s => s.imageUrl || s.image)}
+              projectId={projectId}
+              isDesktop={isDesktop}
+              desktopWidth={cuiPanelWidth}
+              mode="detail"
+              detailAnimation={detailAnimation}
+              onClose={() => { setDetailAnimation(null); setAnimationState(null); }}
+              onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
+              animationState={animationState}
+              onStateChange={(update) => setAnimationState(prev => prev ? { ...prev, ...update } : prev)}
+            />
+          )}
 
         </div>
       )}
