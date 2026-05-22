@@ -190,17 +190,6 @@ export default function VideoResultCard({
           );
         })}
 
-        <button
-          onClick={onCreateNew}
-          className={`flex-shrink-0 rounded-2xl border border-dashed border-fuchsia-500/30 flex flex-row items-center justify-center gap-1.5 active:scale-95 transition-transform cursor-pointer px-4 ${isDesktop ? 'h-[64px]' : 'h-[72px]'}`}
-          style={{ background: 'rgba(217,70,239,0.06)', minWidth: isDesktop ? 80 : 90 }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="text-fuchsia-400/60">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          <span className={`font-medium text-fuchsia-400/70 ${isDesktop ? 'text-[11px]' : 'text-[12px]'}`}>{t('video.newVideo')}</span>
-        </button>
-
         {all.length === 0 && (
           <div className={`flex-shrink-0 rounded-2xl border border-white/5 flex items-center justify-center text-white/20 ${isDesktop ? 'w-[176px] h-[64px] text-[11px]' : 'w-[200px] h-[72px] text-[12px]'}`}
             style={{ background: 'rgba(255,255,255,0.02)' }}
