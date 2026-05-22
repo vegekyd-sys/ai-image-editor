@@ -103,9 +103,13 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error
 
-    // Deduct credits (fire-and-forget)
+    // Deduct credits — store amount in videoMeta for refund on failure
     const videoSec = duration || 10
-    deductFixedCredits(user.id, Math.ceil(videoSec * 22), 'create_video', undefined, undefined)
+    const creditsCharged = Math.ceil(videoSec * 22)
+    videoMeta.creditsCharged = creditsCharged
+    supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId).then(() => {})
+
+    deductFixedCredits(user.id, creditsCharged, 'create_video', undefined, undefined)
       .catch(e => console.error('[billing] video-snapshot deduct error:', e))
 
     return NextResponse.json({ snapshotId, taskId, videoMeta })

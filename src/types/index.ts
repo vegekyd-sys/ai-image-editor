@@ -142,6 +142,8 @@ export interface VideoMeta {
   error?: string;
   width?: number;
   height?: number;
+  creditsCharged?: number;
+  refunded?: boolean;
 }
 
 
