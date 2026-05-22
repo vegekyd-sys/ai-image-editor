@@ -2681,6 +2681,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       if (!isAgentActive && !musicTaskId) {
         setAgentStatus(t('status.videoRenderingEllipsis'));
       }
+    } else if (!isAgentActive && !musicTaskId) {
+      setAgentStatus(t('editor.greeting'));
     }
   }, [animationState?.status, videoProcessing, isAgentActive, musicTaskId]);
 
