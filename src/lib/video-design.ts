@@ -1,6 +1,6 @@
 import type { DesignPayload } from '@/types';
 
-export async function probeVideoDimensions(videoUrl: string): Promise<{ width: number; height: number }> {
+export async function probeVideoDimensions(videoUrl: string): Promise<{ width: number; height: number; duration: number }> {
   const video = document.createElement('video');
   video.muted = true;
   video.preload = 'metadata';
@@ -9,12 +9,13 @@ export async function probeVideoDimensions(videoUrl: string): Promise<{ width: n
     video.onloadedmetadata = () => {
       const w = video.videoWidth || 1080;
       const h = video.videoHeight || 1920;
+      const dur = Number.isFinite(video.duration) ? video.duration : 10;
       video.removeAttribute('src');
       video.load();
-      resolve({ width: w, height: h });
+      resolve({ width: w, height: h, duration: dur });
     };
-    video.onerror = () => resolve({ width: 1080, height: 1920 });
-    setTimeout(() => resolve({ width: 1080, height: 1920 }), 5000);
+    video.onerror = () => resolve({ width: 1080, height: 1920, duration: 10 });
+    setTimeout(() => resolve({ width: 1080, height: 1920, duration: 10 }), 5000);
   });
 }
 
