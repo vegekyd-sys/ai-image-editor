@@ -2664,20 +2664,18 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [animations, messages, onSaveMessage, isV2]);
 
   // Update StatusBar with video rendering progress
-  // (yields to sticky status for the else branch — active user actions like generating_prompt/submitting override)
   useEffect(() => {
     if (animationState?.status === 'generating_prompt') {
       setAgentStatus(t('status.writingScript'));
     } else if (animationState?.status === 'submitting') {
       setAgentStatus(t('status.submittingVideo'));
     } else {
-      const v1Processing = animations.filter(a => a.status === 'processing').length;
-      const v2Processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing').length;
-      if ((v1Processing > 0 || v2Processing > 0) && !isAgentActive && !musicTaskId) {
+      const processing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
+      if (processing && !isAgentActive && !musicTaskId) {
         setAgentStatus(t('status.videoRenderingEllipsis'));
       }
     }
-  }, [animationState?.status, animations, snapshots, isAgentActive, musicTaskId]);
+  }, [animationState?.status, snapshots, isAgentActive, musicTaskId]);
 
   // Update StatusBar with music generation progress (same pattern as video)
   useEffect(() => {
