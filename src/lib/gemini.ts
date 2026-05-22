@@ -1418,20 +1418,32 @@ async function* parseIncrementalTipsFromStream(
 export async function analyzeVideoContent(
   videoUrl: string,
   question?: string,
+  userId?: string,
 ): Promise<string> {
   console.log(`[analyzeVideoContent] url=${videoUrl.substring(0, 100)}`);
   const ai = getAI();
   const prompt = question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.';
+  const model = 'gemini-3-flash-preview';
+
+  const billUsage = (inputTokens: number, outputTokens: number) => {
+    if (!userId) return;
+    import('./billing/credits').then(({ deductByTokens }) =>
+      deductByTokens(userId, 'analyze_video', model, inputTokens, outputTokens)
+        .catch(e => console.error('[billing] analyze_video deduct error:', e))
+    );
+  };
 
   // Default: URL mode (no download needed)
   try {
     const result = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model,
       contents: [{ role: 'user', parts: [
         { fileData: { mimeType: 'video/mp4', fileUri: videoUrl } },
         { text: prompt },
       ] }],
     });
+    const usage = result.usageMetadata;
+    if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
     return result.text || '';
   } catch {
     // Fallback: download → base64 (if URL mode fails)
@@ -1441,12 +1453,14 @@ export async function analyzeVideoContent(
     if (buffer.byteLength > 38_500_000) throw new Error('Video too large for analysis (>38.5MB). Use preview_frame to check specific frames instead.');
     const base64 = Buffer.from(buffer).toString('base64');
     const result = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model,
       contents: [{ role: 'user', parts: [
         { inlineData: { mimeType: 'video/mp4', data: base64 } },
         { text: prompt },
       ] }],
     });
+    const usage = result.usageMetadata;
+    if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
     return result.text || '';
   }
 }
