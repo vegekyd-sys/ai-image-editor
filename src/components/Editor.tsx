@@ -2999,7 +2999,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     },
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
-    hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling',
+    hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
     skills: availableSkills,
     selectedSkill,
     onSkillChange: setSelectedSkill,
