@@ -86,20 +86,23 @@ Returns immediately:
 npx makaron-cli chat --project <id> --image ref1.jpg --image ref2.jpg -b "use these as style reference"
 ```
 
-### With video input
+### With video input (edit, compose, extend)
 
 ```bash
-# Upload a video file — Agent can analyze, edit, or use it as reference
-npx makaron-cli chat --project <id> --video clip.mp4 -b "edit this video to be more cinematic"
+# Upload a video and transform it — Agent understands video content natively
+npx makaron-cli chat --project auto --video selfie.mp4 -b "put Iron Man armor on me"
+
+# Combine a person's photo with a video scene
+npx makaron-cli chat --project <id> --video party.mp4 --image kid.jpg -b "make this kid join the party"
+
+# Multiple videos — compose or splice
+npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "combine into one seamless video"
 
 # Video URL (public, downloadable)
-npx makaron-cli chat --project auto --video https://example.com/video.mp4 -b "make a 10s highlight reel"
-
-# Mix images + video
-npx makaron-cli chat --project auto --image photo.jpg --video clip.mp4 -b "combine the photo style with this video"
+npx makaron-cli chat --project auto --video https://example.com/dance.mp4 -b "extend this to 15 seconds"
 ```
 
-Supported formats: MP4, MOV, WebM (max 200MB). Videos are uploaded to the project timeline and available to the Agent for analysis and editing.
+Supported formats: MP4, MOV, WebM (max 200MB, ≤15s per video for composition). Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language.
 
 ### Check status (single query)
 

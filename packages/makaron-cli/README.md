@@ -97,6 +97,22 @@ Returns immediately:
 npx makaron-cli chat --project <id> --image ref1.jpg --image ref2.jpg -b "use these as style reference"
 ```
 
+### With video input (MP4/MOV/WebM)
+
+```bash
+# Upload a video and ask the agent to edit it
+npx makaron-cli chat --project auto --video clip.mp4 -b "put Iron Man armor on me in this video"
+
+# Combine video + image references
+npx makaron-cli chat --project <id> --video party.mp4 --image kid.jpg -b "make this kid appear in the party"
+
+# Multiple videos (for composition / continuation)
+npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "splice these into one seamless video"
+```
+
+Video files are uploaded via signed URL (no size limit up to 200MB). Supported formats: `.mp4`, `.mov`, `.webm`.
+The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos.
+
 ### Check status (single query)
 
 ```bash
@@ -224,6 +240,9 @@ type MakaronOutput =
 | Text-to-image | "generate a cyberpunk cityscape" |
 | Video from image | "create a 5 second video of her walking" |
 | Video with model | "use seedance model, make a 5s video" |
+| **Edit video** | **"put Iron Man armor on me in this video"** |
+| **Compose videos** | **"combine @1 and @2 into one party video"** |
+| **Extend video** | **"continue the story for 10 more seconds"** |
 | Background music | "add calm piano music" |
 | Motion design | "create an Instagram story with animated text" |
 | Multi-step | "edit the photo then make a video from it" |
