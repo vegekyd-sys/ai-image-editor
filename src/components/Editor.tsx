@@ -2417,6 +2417,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 designPath: `code/${snap.id}.json`,
               } : s
             ));
+            // Reset animationState if this was the task being polled
+            setAnimationState(prev => prev?.taskId === snap.videoMeta?.taskId
+              ? { ...prev, status: 'done', videoUrl: data.videoUrl }
+              : prev
+            );
             // Add CUI message for completed video (dedup against latest state)
             const videoMsg: Message = {
               id: generateId(),
@@ -2671,6 +2676,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setAgentStatus(t('status.submittingVideo'));
     } else if (animationState?.status === 'polling') {
       setAgentStatus(t('status.videoRenderingEllipsis'));
+    } else if (animationState?.status === 'done') {
+      setAgentStatus(t('status.videoDone'));
     } else {
       const processing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
       if (processing && !isAgentActive && !musicTaskId) {
