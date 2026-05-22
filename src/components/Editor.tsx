@@ -2671,12 +2671,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     } else if (animationState?.status === 'submitting') {
       setAgentStatus(t('status.submittingVideo'));
     } else {
-      const processingCount = animations.filter(a => a.status === 'processing').length;
-      if (processingCount > 0 && !isAgentActive && !musicTaskId) {
+      const v1Processing = animations.filter(a => a.status === 'processing').length;
+      const v2Processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing').length;
+      if ((v1Processing > 0 || v2Processing > 0) && !isAgentActive && !musicTaskId) {
         setAgentStatus(t('status.videoRenderingEllipsis'));
       }
     }
-  }, [animationState?.status, animations, isAgentActive, musicTaskId]);
+  }, [animationState?.status, animations, snapshots, isAgentActive, musicTaskId]);
 
   // Update StatusBar with music generation progress (same pattern as video)
   useEffect(() => {
