@@ -106,25 +106,6 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
         )}
 
         {/* Video button — right of Chat, lights up when snapshots > 3 or has video */}
-        {onAnimate && (
-          <button
-            onClick={e => { e.stopPropagation(); onAnimate(); }}
-            className="flex items-center justify-center px-3 h-[30px] rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
-            style={videoLit ? {
-              background: 'rgba(192,38,211,0.25)',
-              color: '#e879f9',
-              border: '1px solid rgba(192,38,211,0.4)',
-            } : {
-              background: 'rgba(255,255,255,0.08)',
-              color: 'rgba(255,255,255,0.7)',
-            }}
-          >
-            {/* Play triangle */}
-            <svg width="9" height="10" viewBox="0 0 9 10" fill="currentColor">
-              <path d="M1 1.5L8 5L1 8.5V1.5Z"/>
-            </svg>
-          </button>
-        )}
       </div>
     </>
   );

@@ -26,7 +26,6 @@ import { downloadAsset } from '@/lib/editor/download';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
-import AnimateSheet from '@/components/AnimateSheet';
 import VideoResultCard from '@/components/VideoResultCard';
 import DesignEditPanel from '@/components/DesignEditPanel';
 import DesignTextEditor from '@/components/DesignTextEditor';
@@ -135,7 +134,7 @@ export default function Editor({
   const [textEditValue, setTextEditValue] = useState('');
   const [textColor, setTextColor] = useState('#ec4899');
   const [textBgEnabled, setTextBgEnabled] = useState(true);
-  const [showAnimateSheet, setShowAnimateSheet] = useState(false);
+
   // Credit popup + status bar notification
   const [creditPopupOpen, setCreditPopupOpen] = useState(false);
   const [creditBalance, setCreditBalance] = useState<number>(0);
@@ -2612,7 +2611,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         setSnapshots(prev => [...prev, newSnap]);
       }
       // Close the creation card
-      setShowAnimateSheet(false);
+
       setAnimationState(null);
       setSelectedVideoId(animationState.snapshotId || animationState.taskId);
       // Navigate to video entry on next render (timeline hasn't updated yet)
@@ -3135,31 +3134,32 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 })()}
                 onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
                 textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
-                onAnimate={!readOnly && snapshots.length >= 1 ? () => {
-                  if (hasAnyAnimation) {
-                    // Animations exist — navigate to video entry (shows result card)
-                    setViewIndex(videoTimelineIndex);
-                    return;
-                  }
-                  // No animations yet — open creation card (exclude reference snapshots)
-                  const allUrls = snapshots.filter(s => s.type !== 'reference').map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-                  const imageUrls = allUrls.length <= 7
-                    ? allUrls
-                    : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                  setAnimationState({
-                    imageUrls,
-                    prompt: '',
-                    userHint: '',
-                    taskId: null,
-                    videoUrl: null,
-                    status: 'idle',
-                    error: null,
-                    duration: null,
-                    pollSeconds: 0,
-                    videoModel: videoModel,
-                  });
-                  setShowAnimateSheet(true);
-                } : undefined}
+                onAnimate={undefined}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 hasVideo={hasVideo}
                 isVideoEntry={isViewingVideo}
                 videoUrl={isViewingVideoV2
@@ -3468,18 +3468,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   snapshotCount={snapshots.length}
                   notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : pendingNotification}
                   onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : handleSeeNotification}
-                  onAnimate={!readOnly && snapshots.length >= 1 ? () => {
-                    if (hasAnyAnimation) {
-                      setViewIndex(videoTimelineIndex);
-                      return;
-                    }
-                    const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-                    const imageUrls = allUrls.length <= 7
-                      ? allUrls
-                      : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                    setAnimationState({ imageUrls, prompt: '', userHint: '', taskId: null, videoUrl: null, status: 'idle', error: null, duration: null, pollSeconds: 0, videoModel: videoModel });
-                    setShowAnimateSheet(true);
-                  } : undefined}
+                  onAnimate={undefined}
                   hasVideo={hasVideo}
                 />
                 {isViewingVideo ? (
@@ -3500,25 +3489,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     }] : animations}
                     selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
                     onSelectVideo={isViewingVideoV2 ? () => {} : setSelectedVideoId}
-                    onCreateNew={() => {
-                      const allUrls = snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http'));
-                      const imageUrls = allUrls.length <= 7
-                        ? allUrls
-                        : [0, 1, 2, Math.floor(allUrls.length / 2), allUrls.length - 3, allUrls.length - 2, allUrls.length - 1].map(i => allUrls[Math.min(i, allUrls.length - 1)]);
-                      setAnimationState({
-                        imageUrls,
-                        prompt: '',
-                        userHint: '',
-                        taskId: null,
-                        videoUrl: null,
-                        status: 'idle',
-                        error: null,
-                        duration: null,
-                        pollSeconds: 0,
-                        videoModel: videoModel,
-                      });
-                      setShowAnimateSheet(true);
-                    }}
+                    onCreateNew={() => { if (!isDesktop) setViewMode('cui'); }}
                     onAbandon={(taskId) => {
                       if (isViewingVideoV2 && currentSnap) {
                         setSnapshots(prev => prev.map(s =>
@@ -3571,7 +3542,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         pollSeconds: 0,
                         videoModel: (anim.videoModel === 'kling' || anim.videoModel === 'seedance') ? anim.videoModel : videoModel,
                       });
-                      setShowAnimateSheet(true);
                     }}
                     isDesktop={isDesktop}
                   />
@@ -3613,57 +3583,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               </div>
           )}
 
-          {/* Animate Sheet (Creation Card or Detail Mode) */}
-          {showAnimateSheet && projectId && animationState && (
-            <AnimateSheet
-              snapshots={snapshots.filter(s => s.imageUrl || s.image)}
-              projectId={projectId}
-              isDesktop={isDesktop}
-              desktopWidth={cuiPanelWidth}
-              mode={detailAnimation ? 'detail' : 'create'}
-              detailAnimation={detailAnimation ?? undefined}
-              onClose={() => {
-                setShowAnimateSheet(false);
-                setAnimationState(null);
-                setDetailAnimation(null);
-              }}
-              onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
-              onGeneratePrompt={generateAnimationPrompt}
-              onPreviewImage={(snapshotId) => {
-                const idx = snapshots.findIndex(s => s.id === snapshotId);
-                if (idx >= 0) {
-                  const tIdx = timelineFromSnap(idx, draftParentIndex);
-                  setViewIndex(tIdx);
-                }
-              }}
-              animationState={animationState}
-              onStateChange={(update) => setAnimationState(prev => {
-                const next = prev ? { ...prev, ...update } : prev;
-                if (next) animationStateRef.current = next;
-                return next;
-              })}
-              onRetry={async (anim) => {
-                const images = anim.snapshotUrls?.length ? anim.snapshotUrls : snapshots.map(s => s.imageUrl).filter((u): u is string => !!u && u.startsWith('http')).slice(0, 7);
-                try {
-                  const res = await fetch('/api/video-snapshot', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || 'kling' }),
-                  });
-                  const json = await res.json();
-                  if (!res.ok) throw new Error(json.error || 'Retry failed');
-                  // Update the same animation entry with new taskId + processing status
-                  setAnimations(prev => prev.map(a => a.id === anim.id ? { ...a, taskId: json.taskId, status: 'processing' as const, videoUrl: null, createdAt: new Date().toISOString() } : a));
-                  // v2: update snapshot videoMeta
-                  setSnapshots(prev => prev.map(s => s.id === anim.id && s.videoMeta ? { ...s, videoMeta: { ...s.videoMeta, taskId: json.taskId, status: 'processing' as const, videoUrl: null } } : s));
-                  setDetailAnimation(null);
-                  setShowAnimateSheet(false);
-                } catch (e) {
-                  console.error('Video retry failed:', e);
-                }
-              }}
-            />
-          )}
 
         </div>
       )}
