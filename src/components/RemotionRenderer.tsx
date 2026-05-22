@@ -400,13 +400,13 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
 
 /** Detect pure video-wrapper design (only <Video>/<OffthreadVideo> inside <AbsoluteFill>, no overlays) */
 function extractSingleVideoUrl(code: string): string | null {
-  const videoMatch = code.match(/<(?:Video|OffthreadVideo)\s[^>]*src=["']([^"']+)["']/);
-  if (!videoMatch) return null;
-  // If code has other visual elements, it's not a simple wrapper
+  const videoMatches = code.match(/<(?:Video|OffthreadVideo)\s[^>]*src=["']([^"']+)["']/g);
+  if (!videoMatches || videoMatches.length !== 1) return null;
+  const srcMatch = videoMatches[0].match(/src=["']([^"']+)["']/);
+  if (!srcMatch) return null;
   if (/<Img\s/.test(code) || /<Audio\s/.test(code) || /<Text[\s>]/.test(code)) return null;
-  // Check for text content nodes (spans, divs with text) — skip if complex
-  if (/>[^<]*[a-zA-Z一-鿿]/.test(code.replace(/<Video[^>]*>/, '').replace(/function\s+Design[^{]*\{/, ''))) return null;
-  return videoMatch[1];
+  if (/>[^<]*[a-zA-Z一-鿿]/.test(code.replace(/<(?:Video|OffthreadVideo)[^>]*\/>/, '').replace(/function\s+Design[^{]*\{/, ''))) return null;
+  return srcMatch[1];
 }
 
 export async function exportDesignVideo(

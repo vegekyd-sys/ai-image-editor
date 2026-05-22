@@ -15,6 +15,8 @@ import ModelSelector from '@/components/ModelSelector';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
+const videoArCache = new Map<string, string>();
+
 function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onNavigate }: {
   url: string; aspectRatio: string; posterUrl?: string; snapIndex?: number; isDesktop?: boolean;
   onNavigate: (e: React.MouseEvent, currentTime: number) => void;
@@ -22,7 +24,7 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [ar, setAr] = useState(aspectRatio);
+  const [ar, setAr] = useState(videoArCache.get(url) || aspectRatio);
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
     const v = videoRef.current;
@@ -42,7 +44,7 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
         playsInline
         preload="metadata"
         style={{ width: '100%', aspectRatio: ar, objectFit: 'cover', display: 'block' }}
-        onLoadedMetadata={() => { const v = videoRef.current; if (v?.videoWidth && v.videoHeight) setAr(`${v.videoWidth}/${v.videoHeight}`); }}
+        onLoadedMetadata={() => { const v = videoRef.current; if (v?.videoWidth && v.videoHeight) { const r = `${v.videoWidth}/${v.videoHeight}`; videoArCache.set(url, r); setAr(r); } }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => { setPlaying(false); setProgress(0); if (videoRef.current) videoRef.current.currentTime = 0; }}
