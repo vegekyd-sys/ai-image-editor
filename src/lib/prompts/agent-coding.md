@@ -32,11 +32,20 @@ Rules:
 
 ### Editable Fields (REQUIRED)
 
-Every `type: 'render'` design MUST declare editable fields. Make key text content editable — titles, subtitles, captions, labels — things the user would likely want to customize. Decorative text, icons, or structural elements don't need to be editable.
-- Add `data-editable="fieldId"` attribute to editable text elements
-- Editable elements MUST be `display: block` or `inline-block` (never `inline`) — the drag/resize system requires a box model
-- Put editable text in `props` so the GUI can update it
-- Declare `editables` array mapping field IDs to prop keys
+Every `type: 'render'` design MUST declare editable fields.
+
+Make these editable:
+- User-facing text: titles, subtitles, captions, labels, CTAs.
+- Primary image layers the user may reposition or resize.
+- Primary video layers the user may reposition, resize, or trim.
+
+Do not mark tiny decorative icons, static copyright text, or structural-only wrappers as editable.
+
+Rules for every editable:
+- Add `data-editable="fieldId"` to the visible editable wrapper.
+- `data-editable` must be on an element with a measurable box. Use explicit `width` + `height`, or `inset`, and `display: 'block'` / `inline-block`.
+- Put the editable content in `props`; JSX must read from `props[propKey]`.
+- Declare `editables` array mapping field IDs to prop keys.
 
 Example:
 ```js
@@ -59,11 +68,73 @@ return {
 }
 ```
 
+Image example:
+```js
+return {
+  type: 'render',
+  code: `function Design(props) {
+    return (
+      <AbsoluteFill>
+        <div
+          data-editable="cover"
+          style={{ position: 'absolute', left: 80, top: 120, width: 420, height: 520, display: 'block' }}
+        >
+          <Img src={props.coverImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+      </AbsoluteFill>
+    );
+  }`,
+  props: { coverImage: '<<<media_1>>>' },
+  editables: [
+    { id: 'cover', type: 'image', label: 'Cover image', propKey: 'coverImage' }
+  ],
+  width: 1080, height: 1350,
+}
+```
+
+Video example with editable trim:
+```js
+return {
+  type: 'render',
+  code: `function Design(props) {
+    return (
+      <AbsoluteFill>
+        <div
+          data-editable="heroVideo"
+          style={{ position: 'absolute', inset: 0, display: 'block' }}
+        >
+          <Video
+            src={props.heroVideo}
+            trimBefore={props.heroVideoStart}
+            trimAfter={props.heroVideoEnd}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </div>
+      </AbsoluteFill>
+    );
+  }`,
+  props: { heroVideo: '<<<media_2>>>', heroVideoStart: 0, heroVideoEnd: 150 },
+  editables: [
+    {
+      id: 'heroVideo',
+      type: 'video',
+      label: 'Hero video',
+      propKey: 'heroVideo',
+      trimBeforePropKey: 'heroVideoStart',
+      trimAfterPropKey: 'heroVideoEnd'
+    }
+  ],
+  animation: { fps: 30, durationInSeconds: 5 },
+  width: 1080, height: 1350,
+}
+```
+
 For **video designs** (with `animation`): apply the same rules. Each scene's title, subtitle, and captions should be editable. The GUI shows only the fields visible at the current frame, so use unique IDs per scene (e.g. `scene1Title`, `scene2Title`).
 
 Rules:
 - Component must read text from `props[propKey]`: `{props.title}`
 - `data-editable` attribute value must match the `id` in editables array
+- Image/video `data-editable` must be on the wrapper, not on `<Img>` or `<Video>` directly. Animate inner children if needed; keep the wrapper's layout box stable for Moveable.
 
 ### Draft, Save, and Publish
 
@@ -471,6 +542,11 @@ Three things must all be connected — if any one is missing, editing won't work
 2. **Code reads from props**: `{props.s1Title}` — NOT hardcoded `>太甜了！</div>`
 3. **`data-editable`** on the text div: `<div data-editable="s1Title">{props.s1Title}</div>`
 4. **`editables`** array: `[{ id: 's1Title', type: 'text', label: 'S1 主标题', propKey: 's1Title' }]`
+
+The same rule applies to image/video editables:
+- Image/video src must come from `props[propKey]`, not a hardcoded URL.
+- `data-editable` goes on a wrapper with a real box (`width+height` or `inset`), not directly on `<Img>` / `<Video>`.
+- Video trim requires both declaration and wiring: `trimBeforePropKey: 'clipStart'` plus `<Video trimBefore={props.clipStart} />`.
 
 **The most common mistake**: declaring props and editables correctly, but hardcoding the text in JSX. Self-check: search your code for Chinese/English text strings — every piece of user-visible text should be `{props.xxx}`, not a literal string.
 

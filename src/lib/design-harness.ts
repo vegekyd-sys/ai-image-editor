@@ -36,21 +36,97 @@ export function validateDesign(result: DesignResult): string | null {
   if (urlError) return urlError;
 
   // Check 4: Editables validation
-  const editablesError = validateEditables(result.editables);
+  const editablesError = validateEditables(result.editables, result.code);
   if (editablesError) return editablesError;
 
   return null;
 }
 
 /** Validate editable fields declaration. Returns error message or null. */
-export function validateEditables(editables?: EditableField[]): string | null {
+export function validateEditables(editables?: EditableField[], code = ''): string | null {
   if (!editables || editables.length === 0) return null;
   for (const field of editables) {
     if (!field.id || !field.type || !field.propKey) {
       return '⚠️ Editable field missing required properties (id, type, propKey). Each editable must have { id, type, label, propKey }.';
     }
+    if (!['text', 'image', 'video'].includes(field.type)) {
+      return `⚠️ Editable field "${field.id}" has unsupported type "${field.type}". Supported types: text, image, video.`;
+    }
+
+    const openingTag = findEditableOpeningTag(code, field.id);
+    if (!openingTag) {
+      return `⚠️ Editable field "${field.id}" is declared but no JSX element has data-editable="${field.id}". Add data-editable to the visible editable wrapper.`;
+    }
+
+    if (!codeReadsProp(code, field.propKey)) {
+      return `⚠️ Editable field "${field.id}" declares prop key "${field.propKey}", but the design code does not read props.${field.propKey}. Avoid hardcoded content; wire the editable element to props.${field.propKey}.`;
+    }
+
+    if ((field.type === 'image' || field.type === 'video') && !editableWrapperHasMeasurableBox(openingTag)) {
+      return `⚠️ Editable ${field.type} field "${field.id}" must put data-editable on a measurable wrapper with an explicit box (width+height or inset). Moveable cannot resize/move a zero-size wrapper.`;
+    }
+
+    if (field.type === 'video') {
+      const trimBeforeError = validateVideoTrimProp(code, field.id, 'trimBefore', field.trimBeforePropKey);
+      if (trimBeforeError) return trimBeforeError;
+      const trimAfterError = validateVideoTrimProp(code, field.id, 'trimAfter', field.trimAfterPropKey);
+      if (trimAfterError) return trimAfterError;
+    }
   }
   return null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findEditableOpeningTag(code: string, id: string): string | null {
+  const escaped = escapeRegExp(id);
+  const patterns = [
+    new RegExp(`<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*"${escaped}"[^>]*>`, 'm'),
+    new RegExp(`<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*'${escaped}'[^>]*>`, 'm'),
+    new RegExp(`<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*["'\`]${escaped}["'\`]\\s*\\}[^>]*>`, 'm'),
+  ];
+  for (const pattern of patterns) {
+    const match = code.match(pattern);
+    if (match) return match[0];
+  }
+  return null;
+}
+
+function codeReadsProp(code: string, propKey: string): boolean {
+  const escaped = escapeRegExp(propKey);
+  const patterns = [
+    new RegExp(`props\\.${escaped}\\b`),
+    new RegExp(`props\\s*\\[\\s*["'\`]${escaped}["'\`]\\s*\\]`),
+  ];
+  return patterns.some(pattern => pattern.test(code));
+}
+
+function editableWrapperHasMeasurableBox(openingTag: string): boolean {
+  if (!/\bstyle\s*=/.test(openingTag)) return false;
+  const hasWidthAndHeight = /\bwidth\s*:/.test(openingTag) && /\bheight\s*:/.test(openingTag);
+  const hasInset = /\binset\s*:/.test(openingTag);
+  const hasFourEdges =
+    /\bleft\s*:/.test(openingTag) &&
+    /\bright\s*:/.test(openingTag) &&
+    /\btop\s*:/.test(openingTag) &&
+    /\bbottom\s*:/.test(openingTag);
+  return hasWidthAndHeight || hasInset || hasFourEdges;
+}
+
+function validateVideoTrimProp(
+  code: string,
+  fieldId: string,
+  propName: 'trimBefore' | 'trimAfter',
+  propKey?: string,
+): string | null {
+  if (!propKey) return null;
+  const escaped = escapeRegExp(propKey);
+  const attrReadsProp = new RegExp(`${propName}\\s*=\\s*\\{\\s*(?:props\\.${escaped}\\b|props\\s*\\[\\s*["'\`]${escaped}["'\`]\\s*\\])\\s*\\}`);
+  const createElementReadsProp = new RegExp(`${propName}\\s*:\\s*(?:props\\.${escaped}\\b|props\\s*\\[\\s*["'\`]${escaped}["'\`]\\s*\\])`);
+  if (attrReadsProp.test(code) || createElementReadsProp.test(code)) return null;
+  return `⚠️ Editable video field "${fieldId}" declares ${propName}PropKey "${propKey}", but no <Video> uses ${propName}={props.${propKey}}. Wire trimBefore/trimAfter so trim editing works.`;
 }
 
 /** Replace HTML <img with Remotion <Img so renderStillOnWeb waits for image loading */
