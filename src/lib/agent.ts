@@ -904,6 +904,7 @@ Critical design rules:
 - \`render\` MUST declare \`editables\` for every user-facing text, plus primary image/video layers the user may resize or move.
 - Text: \`{ id, type:'text', label, propKey }\` and the JSX must read \`props[propKey]\`.
 - Image/Video: put \`data-editable\` on a measurable wrapper with explicit \`width+height\` or \`inset\`; read media src from \`props[propKey]\`.
+- Decorative overlays above image/video editables (gradients, glows, borders) MUST use \`pointerEvents: 'none'\` so canvas selection and dragging still work.
 - Video trim: if trim should be editable, declare \`trimBeforePropKey/trimAfterPropKey\` and wire them to \`<Video trimBefore={props.startFrame} trimAfter={props.endFrame} />\`.
 - CJK text: system fonts only (\`PingFang SC\`, \`Noto Sans SC\`) — Google CJK Fonts break on iOS.
 - iOS: keep simultaneous \`<Img>\` ≤ 3; avoid CSS \`filter: blur(...)\` on \`<Img>\` (use CSS gradient instead).

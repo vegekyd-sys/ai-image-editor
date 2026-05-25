@@ -46,6 +46,7 @@ Rules for every editable:
 - `data-editable` must be on an element with a measurable box. Use explicit `width` + `height`, or `inset`, and `display: 'block'` / `inline-block`.
 - Put the editable content in `props`; JSX must read from `props[propKey]`.
 - Declare `editables` array mapping field IDs to prop keys.
+- Decorative layers above editables (gradients, glows, borders, vignettes) MUST set `pointerEvents: 'none'` so clicking and dragging the editable still works.
 
 Example:
 ```js
@@ -135,6 +136,7 @@ Rules:
 - Component must read text from `props[propKey]`: `{props.title}`
 - `data-editable` attribute value must match the `id` in editables array
 - Image/video `data-editable` must be on the wrapper, not on `<Img>` or `<Video>` directly. Animate inner children if needed; keep the wrapper's layout box stable for Moveable.
+- Any non-editable overlay placed above an image/video editable must use `pointerEvents: 'none'`.
 
 ### Draft, Save, and Publish
 

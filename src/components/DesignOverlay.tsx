@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { EditableField } from '@/types';
+import { findEditableAtPoint } from '@/lib/editor/editable-hit-test';
 
 interface DesignOverlayProps {
   containerEl: HTMLDivElement | null;
@@ -38,6 +39,7 @@ export default function DesignOverlay({
   playerRef,
 }: DesignOverlayProps) {
   const [rects, setRects] = useState<MeasuredRect[]>([]);
+  const rectsRef = useRef<MeasuredRect[]>([]);
   const rafRef = useRef<number>(0);
   const onVisibleFieldsChangeRef = useRef(onVisibleFieldsChange);
   onVisibleFieldsChangeRef.current = onVisibleFieldsChange;
@@ -115,6 +117,7 @@ export default function DesignOverlay({
       seen.add(id);
       newRects.push({ id, left: rectLeft, top: rectTop, width: rectWidth, height: rectHeight, domEl: el as HTMLElement });
     });
+    rectsRef.current = newRects;
     setRects(newRects);
     onVisibleFieldsChangeRef.current?.(newRects.map(r => r.id));
     isMeasuringRef.current = false;
@@ -167,8 +170,15 @@ export default function DesignOverlay({
 
     const handlePointerDown = (e: PointerEvent) => {
       const target = (e.target as HTMLElement).closest?.('[data-editable]');
-      if (!target) return;
-      const id = target.getAttribute('data-editable');
+      let id = target?.getAttribute('data-editable') ?? null;
+      if (!id && overlayRef.current) {
+        const baseRect = overlayRef.current.getBoundingClientRect();
+        id = findEditableAtPoint(
+          rectsRef.current,
+          e.clientX - baseRect.left,
+          e.clientY - baseRect.top,
+        );
+      }
       if (!id || !editables.some(f => f.id === id)) return;
 
       if (e.pointerType === 'touch') activeTouches++;
@@ -308,6 +318,8 @@ export default function DesignOverlay({
           target={selectedRect.domEl}
           rootContainer={containerEl ?? undefined}
           draggable={true}
+          dragArea={true}
+          passDragArea={false}
           scalable={true}
           keepRatio={true}
           renderDirections={['nw', 'ne', 'sw', 'se']}

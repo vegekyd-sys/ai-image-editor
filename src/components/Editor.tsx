@@ -30,6 +30,7 @@ import VideoResultCard from '@/components/VideoResultCard';
 import AnimateSheet from '@/components/AnimateSheet';
 import DesignEditPanel from '@/components/DesignEditPanel';
 import DesignTextEditor from '@/components/DesignTextEditor';
+import DesignVideoTrimEditor from '@/components/DesignVideoTrimEditor';
 import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
@@ -3408,8 +3409,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           )}
 
           {/* Hidden proxy input — iOS keyboard focus anchor (must be in DOM before edit starts) */}
-          {/* Design text editor — floating panel (like AnnotationToolbar) */}
-          {editingDesignField && currentDesignSnap?.design && (
+          {/* Design text/video editor — floating panel (like AnnotationToolbar) */}
+          {editingDesignField && currentDesignSnap?.design && editingDesignField.type !== 'image' && (
             <div style={isDesktop ? {
               position: 'absolute',
               bottom: 160, left: 12,
@@ -3423,13 +3424,31 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               margin: '0 auto',
               transition: editorKbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
             }}>
-              <DesignTextEditor
-                field={editingDesignField}
-                value={String(currentDesignSnap.design.props?.[editingDesignField.propKey] ?? '')}
-                onChangeValue={(v) => handleDesignPropUpdate(editingDesignField.propKey, v)}
-                onClose={() => setEditingDesignFieldId(null)}
-                isDesktop={isDesktop}
-              />
+              {editingDesignField.type === 'video' ? (() => {
+                const fps = currentDesignSnap.design.animation?.fps || 30;
+                const durationInFrames = currentDesignSnap.design.animation
+                  ? Math.max(1, Math.round(fps * currentDesignSnap.design.animation.durationInSeconds))
+                  : 1;
+                return (
+                  <DesignVideoTrimEditor
+                    field={editingDesignField}
+                    props={(currentDesignSnap.design.props || {}) as Record<string, unknown>}
+                    fps={fps}
+                    durationInFrames={durationInFrames}
+                    onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
+                    onClose={() => setEditingDesignFieldId(null)}
+                    isDesktop={isDesktop}
+                  />
+                );
+              })() : (
+                <DesignTextEditor
+                  field={editingDesignField}
+                  value={String(currentDesignSnap.design.props?.[editingDesignField.propKey] ?? '')}
+                  onChangeValue={(v) => handleDesignPropUpdate(editingDesignField.propKey, v)}
+                  onClose={() => setEditingDesignFieldId(null)}
+                  isDesktop={isDesktop}
+                />
+              )}
             </div>
           )}
 
@@ -3554,7 +3573,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       ? currentDesignSnap!.design!.editables!.filter(f => visibleEditableIds.includes(f.id))
                       : currentDesignSnap!.design!.editables!}
                     props={(currentDesignSnap!.design!.props || {}) as Record<string, unknown>}
-                    onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}
                     onSelectField={setSelectedEditableFieldId}
                     onStartEdit={setEditingDesignFieldId}

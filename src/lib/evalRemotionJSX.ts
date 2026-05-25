@@ -174,6 +174,33 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
  */
 let _currentTransformProps: Record<string, unknown> = {};
 
+function readFrameProp(key: string): number | undefined {
+  const value = _currentTransformProps[key];
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : undefined;
+}
+
+function injectLegacyVideoTrim(node: React.ReactNode, trim: { trimBefore?: number; trimAfter?: number }): React.ReactNode {
+  if (!React.isValidElement(node)) return node;
+
+  if (node.type === Video) {
+    const currentProps = node.props as { trimBefore?: unknown; trimAfter?: unknown };
+    return React.cloneElement(node, {
+      ...(trim.trimBefore !== undefined && currentProps.trimBefore === undefined ? { trimBefore: trim.trimBefore } : {}),
+      ...(trim.trimAfter !== undefined && currentProps.trimAfter === undefined ? { trimAfter: trim.trimAfter } : {}),
+    });
+  }
+
+  const props = node.props as { children?: React.ReactNode };
+  if (!props.children) return node;
+
+  return React.cloneElement(
+    node,
+    undefined,
+    React.Children.map(props.children, child => injectLegacyVideoTrim(child, trim)),
+  );
+}
+
 /**
  * Patched createElement: intercepts [data-editable] elements and injects
  * CSS independent properties (style.translate / style.scale).
@@ -191,6 +218,8 @@ const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
     const id = elProps['data-editable'] as string;
     const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
     const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
+    const trimBefore = readFrameProp(`_trimBefore_${id}`);
+    const trimAfter = readFrameProp(`_trimAfter_${id}`);
     if (pos || sc) {
       const existingStyle = (elProps.style || {}) as Record<string, unknown>;
       elProps = { ...elProps, style: {
@@ -198,6 +227,9 @@ const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
         ...(pos ? { translate: `${pos.x}px ${pos.y}px` } : {}),
         ...(sc ? { scale: `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` } : {}),
       }};
+    }
+    if (trimBefore !== undefined || trimAfter !== undefined) {
+      children = children.map(child => injectLegacyVideoTrim(child, { trimBefore, trimAfter }));
     }
   }
   return _origCE.call(React, type, elProps, ...children);
