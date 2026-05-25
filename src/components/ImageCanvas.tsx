@@ -9,6 +9,7 @@ import DesignOverlay from '@/components/DesignOverlay';
 import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { getVideoTrimPropKeys } from '@/lib/editor/video-trim';
 
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
@@ -77,6 +78,8 @@ interface ImageCanvasProps {
   onStartEditEditable?: (fieldId: string) => void;
   /** Callback with list of editable field IDs visible at the current frame */
   onVisibleEditableFields?: (visibleIds: string[]) => void;
+  /** Video editable currently opened in the trim editor. */
+  activeTrimFieldId?: string | null;
   /** Timeline indices that are video snapshots (v2) — show play icon instead of dot */
   videoTimelineIndices?: Set<number>;
   /** Called once when the video element loads data — captures a poster frame at 0.5s */
@@ -103,6 +106,7 @@ export default function ImageCanvas({
   onUpdateProp,
   onStartEditEditable,
   onVisibleEditableFields,
+  activeTrimFieldId,
   videoTimelineIndices,
   onVideoPosterCapture,
 }: ImageCanvasProps) {
@@ -651,6 +655,28 @@ export default function ImageCanvas({
   const remotionFps = currentDesign?.animation?.fps || 30;
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
+  const getActiveTrimStartFrame = useCallback(() => {
+    if (!activeTrimFieldId || !editableFields || !designProps) return 0;
+    const field = editableFields.find(f => f.id === activeTrimFieldId && f.type === 'video');
+    if (!field) return 0;
+    const { startKey } = getVideoTrimPropKeys(field);
+    const raw = startKey ? designProps[startKey] : 0;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+  }, [activeTrimFieldId, designProps, editableFields]);
+
+  const dispatchActiveTrimPlayhead = useCallback((playing?: boolean) => {
+    if (!activeTrimFieldId) return;
+    const sourceFrame = (remotionRef.current?.getCurrentFrame() ?? remotionFrameRef.current) + getActiveTrimStartFrame();
+    window.dispatchEvent(new CustomEvent('makaron:design-trim-playhead', {
+      detail: { sourceFrame },
+    }));
+    if (playing !== undefined) {
+      window.dispatchEvent(new CustomEvent('makaron:design-trim-playback', {
+        detail: { playing },
+      }));
+    }
+  }, [activeTrimFieldId, getActiveTrimStartFrame]);
 
   // Update seek bar + time badge via DOM (no React re-render during playback)
   const updateRemotionUI = useCallback(() => {
@@ -673,17 +699,19 @@ export default function ImageCanvas({
     let raf = 0;
     const tick = () => {
       updateRemotionUI();
+      dispatchActiveTrimPlayhead(true);
       // Detect end
       if (remotionFrameRef.current >= remotionTotalFrames - 1) {
         setRemotionPlaying(false);
         remotionRef.current?.pause();
+        dispatchActiveTrimPlayhead(false);
         return;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
+  }, [dispatchActiveTrimPlayhead, remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
   // Preload all images + videos in design code via browser cache, then call onReady
   const preloadDesignAssets = useCallback((code: string): Promise<void> => {
@@ -776,8 +804,9 @@ export default function ImageCanvas({
     if (remotionPlaying) {
       p.pause();
       setRemotionPlaying(false);
+      dispatchActiveTrimPlayhead(false);
     } else {
-      if (selectedEditableId) onSelectEditable?.(null);
+      if (selectedEditableId && !activeTrimFieldId) onSelectEditable?.(null);
       // Always seek to start if at or near the end (video designs may not report exact last frame)
       if (remotionFrameRef.current >= remotionTotalFrames - 2) {
         p.seekTo(0);
@@ -786,14 +815,16 @@ export default function ImageCanvas({
           p.play();
           remotionStartedRef.current = true;
           setRemotionPlaying(true);
+          dispatchActiveTrimPlayhead(true);
         });
         return;
       }
       p.play();
       remotionStartedRef.current = true;
       setRemotionPlaying(true);
+      dispatchActiveTrimPlayhead(true);
     }
-  }, [remotionPlaying, remotionTotalFrames, selectedEditableId, onSelectEditable]);
+  }, [activeTrimFieldId, dispatchActiveTrimPlayhead, remotionPlaying, remotionTotalFrames, selectedEditableId, onSelectEditable]);
 
   const seekRemotion = useCallback((clientX: number) => {
     const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
@@ -808,7 +839,75 @@ export default function ImageCanvas({
     remotionRef.current.seekTo(frame);
     remotionFrameRef.current = frame;
     updateRemotionUI();
-  }, [remotionTotalFrames, updateRemotionUI]);
+    dispatchActiveTrimPlayhead(false);
+  }, [dispatchActiveTrimPlayhead, remotionTotalFrames, updateRemotionUI]);
+
+  useEffect(() => {
+    if (!currentDesign?.animation) return;
+    let raf = 0;
+    let stopAtFrame: number | null = null;
+    let trimStartFrame = 0;
+
+    const stopPlayback = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      stopAtFrame = null;
+      remotionRef.current?.pause();
+      setRemotionPlaying(false);
+      window.dispatchEvent(new CustomEvent('makaron:design-trim-playback', { detail: { playing: false } }));
+      updateRemotionUI();
+    };
+
+    const tickRange = () => {
+      updateRemotionUI();
+      window.dispatchEvent(new CustomEvent('makaron:design-trim-playhead', {
+        detail: { sourceFrame: remotionFrameRef.current + trimStartFrame },
+      }));
+      if (stopAtFrame !== null && remotionFrameRef.current >= stopAtFrame) {
+        stopPlayback();
+        return;
+      }
+      raf = requestAnimationFrame(tickRange);
+    };
+
+    const onTrimPreview = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        compositionFrame?: number;
+        play?: boolean;
+        startFrame?: number;
+        endFrame?: number;
+      }>).detail || {};
+      const player = remotionRef.current;
+      if (!player) return;
+      const frame = Math.max(0, Math.min(remotionTotalFrames - 1, Math.round(detail.compositionFrame ?? 0)));
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      player.pause();
+      player.seekTo(frame);
+      remotionFrameRef.current = frame;
+      updateRemotionUI();
+
+      if (detail.play) {
+        trimStartFrame = Math.max(0, Math.round(detail.startFrame ?? 0));
+        const endFrame = Math.max(frame + 1, Math.round((detail.endFrame ?? detail.startFrame ?? 0) - (detail.startFrame ?? 0)));
+        stopAtFrame = Math.min(remotionTotalFrames - 1, endFrame);
+        player.play();
+        setRemotionPlaying(true);
+        window.dispatchEvent(new CustomEvent('makaron:design-trim-playback', { detail: { playing: true } }));
+        raf = requestAnimationFrame(tickRange);
+      } else {
+        stopAtFrame = null;
+        setRemotionPlaying(false);
+        window.dispatchEvent(new CustomEvent('makaron:design-trim-playback', { detail: { playing: false } }));
+      }
+    };
+
+    window.addEventListener('makaron:design-trim-preview', onTrimPreview);
+    return () => {
+      window.removeEventListener('makaron:design-trim-preview', onTrimPreview);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [currentDesign?.animation, remotionTotalFrames, updateRemotionUI]);
 
   // Only proxy third-party CDN URLs (Kling etc.) — Supabase URLs play directly (better audio on iOS)
   const effectiveVideoUrl = videoUrl && !videoUrl.includes('cdn.makaron.app') && !videoUrl.includes('supabase.co')
@@ -1229,7 +1328,7 @@ export default function ImageCanvas({
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (selectedEditableId) onSelectEditable?.(null);
+                  if (selectedEditableId && !activeTrimFieldId) onSelectEditable?.(null);
                   if (remotionPlaying) {
                     remotionRef.current?.pause();
                     setRemotionPlaying(false);
@@ -1279,6 +1378,7 @@ export default function ImageCanvas({
                 onUpdateProp={onUpdateProp}
                 onStartEdit={onStartEditEditable}
                 onVisibleFieldsChange={onVisibleEditableFields}
+                filterVisibleFields={Boolean(currentDesign?.animation)}
                 playerRef={designPlayerRef}
               />
             )}

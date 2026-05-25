@@ -894,7 +894,7 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
 
 Return shape — exactly one of:
 - \`{ type: 'render', code, width, height, editables?: [...], props?: {...}, animation?: { fps, durationInSeconds } }\` — first time, or when overall layout changes.
-- \`{ type: 'patch', edits: [{ old, new }], props?: {...}, code_path?: '...' }\` — **default for subsequent edits**. Each \`old\` must match exactly once.
+- \`{ type: 'patch', edits: [{ old, new }], props?: {...}, editables?: [...], code_path?: '...' }\` — **default for subsequent edits**. Each \`old\` must match exactly once. If a patch adds/removes visible text/image/video editable layers, return the complete updated \`editables\` array.
 - \`{ type: 'image', data: base64, mimeType }\` — sharp output.
 - \`{ type: 'text', content }\` — computation/data result.
 - \`{ type: 'error', message }\` — failure.
@@ -902,6 +902,7 @@ Return shape — exactly one of:
 Critical design rules:
 - Use \`<Img>\` (Remotion), never plain \`<img>\` — blank screenshots on mobile otherwise.
 - \`render\` MUST declare \`editables\` for every user-facing text, plus primary image/video layers the user may resize or move.
+- Patches that add visible text MUST also add text editables: no hardcoded visible labels in arrays/JSX unless they read from \`props[propKey]\` and appear in \`editables\`.
 - Text: \`{ id, type:'text', label, propKey }\` and the JSX must read \`props[propKey]\`.
 - Image/Video: put \`data-editable\` on a measurable wrapper with explicit \`width+height\` or \`inset\`; read media src from \`props[propKey]\`.
 - Decorative overlays above image/video editables (gradients, glows, borders) MUST use \`pointerEvents: 'none'\` so canvas selection and dragging still work.
@@ -1064,7 +1065,7 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             const patched = { ...baseDesign, code, props: mergedProps };
             if (result.editables) patched.editables = result.editables;
 
-            const harnessError = validateDesign({ code: patched.code, props: patched.props });
+            const harnessError = validateDesign({ code: patched.code, props: patched.props, editables: patched.editables });
             if (harnessError) return { type: 'text' as const, content: harnessError };
 
             (ctx as any).__pendingDesign = patched;
@@ -1098,7 +1099,7 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
               };
             }
             // ── Design harness: compile + image reference checks ──
-            const harnessError = validateDesign({ code: result.code, props: result.props });
+            const harnessError = validateDesign({ code: result.code, props: result.props, editables: result.editables });
             if (harnessError) {
               return { type: 'text' as const, content: harnessError };
             }

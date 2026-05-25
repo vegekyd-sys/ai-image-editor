@@ -81,7 +81,9 @@ export default function DesignEditPanel({
             <div
               className={`flex items-stretch overflow-hidden border transition-all cursor-pointer active:scale-[0.97] ${isDesktop ? 'w-[176px]' : 'w-[200px]'} ${
                 isSelected
-                  ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50 rounded-l-2xl rounded-r-none border-r-0'
+                  ? showEditButton
+                    ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50 rounded-l-2xl rounded-r-none border-r-0'
+                    : 'border-fuchsia-500 ring-1 ring-fuchsia-500/50 rounded-2xl'
                   : 'border-white/10 hover:border-white/20 rounded-2xl'
               }`}
               style={{

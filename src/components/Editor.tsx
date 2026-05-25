@@ -29,6 +29,7 @@ import { newAnnotationId } from '@/features/annotation/annotationIds';
 import VideoResultCard from '@/components/VideoResultCard';
 import AnimateSheet from '@/components/AnimateSheet';
 import DesignEditPanel from '@/components/DesignEditPanel';
+import DesignEditorFrame from '@/components/DesignEditorFrame';
 import DesignTextEditor from '@/components/DesignTextEditor';
 import DesignVideoTrimEditor from '@/components/DesignVideoTrimEditor';
 import CameraPanel from '@/components/CameraPanel';
@@ -3208,6 +3209,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 onUpdateProp={handleDesignPropUpdate}
                 onStartEditEditable={setEditingDesignFieldId}
                 onVisibleEditableFields={handleVisibleEditableFields}
+                activeTrimFieldId={editingDesignField?.type === 'video' ? editingDesignField.id : null}
               />
             )}
 
@@ -3411,19 +3413,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           {/* Hidden proxy input — iOS keyboard focus anchor (must be in DOM before edit starts) */}
           {/* Design text/video editor — floating panel (like AnnotationToolbar) */}
           {editingDesignField && currentDesignSnap?.design && editingDesignField.type !== 'image' && (
-            <div style={isDesktop ? {
-              position: 'absolute',
-              bottom: 160, left: 12,
-              zIndex: 201,
-              width: 340,
-            } : {
-              position: 'fixed',
-              bottom: editorKbInset, left: 0, right: 0,
-              zIndex: 201,
-              maxWidth: 480,
-              margin: '0 auto',
-              transition: editorKbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
-            }}>
+            <DesignEditorFrame
+              isDesktop={isDesktop}
+              keyboardInset={editorKbInset}
+              desktopWidth={editingDesignField.type === 'video' ? 420 : 340}
+            >
               {editingDesignField.type === 'video' ? (() => {
                 const fps = currentDesignSnap.design.animation?.fps || 30;
                 const durationInFrames = currentDesignSnap.design.animation
@@ -3435,6 +3429,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     props={(currentDesignSnap.design.props || {}) as Record<string, unknown>}
                     fps={fps}
                     durationInFrames={durationInFrames}
+                    posterImage={currentDesignSnap.image || currentDesignSnap.imageUrl || currentDisplayImage}
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     onClose={() => setEditingDesignFieldId(null)}
                     isDesktop={isDesktop}
@@ -3449,7 +3444,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   isDesktop={isDesktop}
                 />
               )}
-            </div>
+            </DesignEditorFrame>
           )}
 
           {/* Camera rotation panel — centered in GUI area */}
@@ -3575,7 +3570,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     props={(currentDesignSnap!.design!.props || {}) as Record<string, unknown>}
                     selectedFieldId={selectedEditableFieldId}
                     onSelectField={setSelectedEditableFieldId}
-                    onStartEdit={setEditingDesignFieldId}
+                    onStartEdit={(fieldId) => setEditingDesignFieldId(prev => prev === fieldId ? null : fieldId)}
                     isDesktop={isDesktop}
                   />
                 ) : (

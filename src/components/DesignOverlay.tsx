@@ -14,6 +14,7 @@ interface DesignOverlayProps {
   onUpdateProp: (key: string, value: unknown) => void;
   onStartEdit?: (fieldId: string) => void;
   onVisibleFieldsChange?: (visibleIds: string[]) => void;
+  filterVisibleFields?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   playerRef?: any;
 }
@@ -27,6 +28,21 @@ interface MeasuredRect {
   domEl: HTMLElement;
 }
 
+function getScrollViewportRect(containerEl: HTMLElement, fallback: DOMRect): DOMRect {
+  return getNearestScrollParent(containerEl)?.getBoundingClientRect() ?? fallback;
+}
+
+function getNearestScrollParent(containerEl: HTMLElement): HTMLElement | null {
+  let parent = containerEl.parentElement;
+  while (parent) {
+    if (parent.scrollHeight > parent.clientHeight + 1 || parent.scrollWidth > parent.clientWidth + 1) {
+      return parent;
+    }
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
 export default function DesignOverlay({
   containerEl,
   editables,
@@ -36,9 +52,11 @@ export default function DesignOverlay({
   onUpdateProp,
   onStartEdit,
   onVisibleFieldsChange,
+  filterVisibleFields = false,
   playerRef,
 }: DesignOverlayProps) {
   const [rects, setRects] = useState<MeasuredRect[]>([]);
+  const [scrollOffset, setScrollOffset] = useState(0);
   const rectsRef = useRef<MeasuredRect[]>([]);
   const rafRef = useRef<number>(0);
   const onVisibleFieldsChangeRef = useRef(onVisibleFieldsChange);
@@ -83,7 +101,9 @@ export default function DesignOverlay({
     applyStoredOffsets(elements);
 
     const baseRect = overlayRef.current.getBoundingClientRect();
+    const viewportRect = getScrollViewportRect(containerEl, baseRect);
     const newRects: MeasuredRect[] = [];
+    const visibleIds: string[] = [];
     const seen = new Set<string>();
     elements.forEach((el) => {
       const id = el.getAttribute('data-editable');
@@ -116,12 +136,20 @@ export default function DesignOverlay({
       }
       seen.add(id);
       newRects.push({ id, left: rectLeft, top: rectTop, width: rectWidth, height: rectHeight, domEl: el as HTMLElement });
+      if (!filterVisibleFields || (
+        elRect.right > viewportRect.left + 1 &&
+        elRect.left < viewportRect.right - 1 &&
+        elRect.bottom > viewportRect.top + 1 &&
+        elRect.top < viewportRect.bottom - 1
+      )) {
+        visibleIds.push(id);
+      }
     });
     rectsRef.current = newRects;
     setRects(newRects);
-    onVisibleFieldsChangeRef.current?.(newRects.map(r => r.id));
+    onVisibleFieldsChangeRef.current?.(visibleIds);
     isMeasuringRef.current = false;
-  }, [containerEl, editables, applyStoredOffsets, props]);
+  }, [containerEl, editables, applyStoredOffsets, filterVisibleFields, props]);
 
   // Mark selected element (CSS hides hover outline when Moveable frame shows)
   useEffect(() => {
@@ -140,6 +168,33 @@ export default function DesignOverlay({
     return () => { try { playerRef.removeEventListener('frameupdate', h); } catch { /* */ } cancelAnimationFrame(rafRef.current); };
   }, [playerRef, measure]);
   useEffect(() => { const h = () => measure(); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, [measure]);
+  useEffect(() => {
+    if (!containerEl) return;
+    const h = () => {
+      const nearestScrollParent = getNearestScrollParent(containerEl);
+      setScrollOffset(nearestScrollParent?.scrollTop ?? 0);
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        measure();
+        moveableRef.current?.updateRect();
+      });
+    };
+    const scrollParents: HTMLElement[] = [];
+    let parent = containerEl.parentElement;
+    while (parent) {
+      if (parent.scrollHeight > parent.clientHeight + 1 || parent.scrollWidth > parent.clientWidth + 1) {
+        scrollParents.push(parent);
+      }
+      parent = parent.parentElement;
+    }
+    h();
+    scrollParents.forEach(el => el.addEventListener('scroll', h, { passive: true }));
+    window.addEventListener('scroll', h, true);
+    return () => {
+      scrollParents.forEach(el => el.removeEventListener('scroll', h));
+      window.removeEventListener('scroll', h, true);
+    };
+  }, [containerEl, measure]);
   useEffect(() => {
     if (!containerEl) return;
     const o = new MutationObserver(() => { if (isDraggingRef.current) return; cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(measure); });
@@ -313,83 +368,85 @@ export default function DesignOverlay({
 
       {/* Moveable: drag + desktop scale handles. Pinch handled by container touch listener above. */}
       {selectedRect && selectedFieldId && (
-        <Moveable
-          ref={moveableRef}
-          target={selectedRect.domEl}
-          rootContainer={containerEl ?? undefined}
-          draggable={true}
-          dragArea={true}
-          passDragArea={false}
-          scalable={true}
-          keepRatio={true}
-          renderDirections={['nw', 'ne', 'sw', 'se']}
-          pinchable={false}
-          rotatable={false}
-          origin={false}
-          throttleDrag={0}
-          throttleScale={0}
-          hideDefaultLines={false}
-          edge={false}
-          padding={{ left: 0, top: 0, right: 0, bottom: 0 }}
-          /* ── Snap & Guidelines ── */
-          snappable={true}
-          snapThreshold={8}
-          snapGap={true}
-          isDisplaySnapDigit={true}
-          snapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
-          elementSnapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
-          horizontalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientHeight / 2)] : []}
-          verticalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientWidth / 2)] : []}
-          elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
-          /* ── Drag ── */
-          onDragStart={({ set }) => {
-            isDraggingRef.current = true;
-            setIsDragging(true);
-            const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
-            dragBaseOffsetRef.current = { x: pos?.x ?? 0, y: pos?.y ?? 0 };
-            dragDomElRef.current = selectedRect.domEl;
-            const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
-            dragScaleRef.current = sc?.w ?? 1;
-            set([0, 0]);
-          }}
-          onDrag={({ target, beforeTranslate }) => {
-            const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
-            const s = dragScaleRef.current;
-            target.style.translate = `${baseX + beforeTranslate[0] * s}px ${baseY + beforeTranslate[1] * s}px`;
-          }}
-          onDragEnd={({ lastEvent }) => {
-            if (lastEvent) {
+        <div style={{ transform: scrollOffset ? `translateY(${scrollOffset}px)` : undefined }}>
+          <Moveable
+            ref={moveableRef}
+            target={selectedRect.domEl}
+            rootContainer={overlayRef.current ?? undefined}
+            draggable={true}
+            dragArea={true}
+            passDragArea={false}
+            scalable={true}
+            keepRatio={true}
+            renderDirections={['nw', 'ne', 'sw', 'se']}
+            pinchable={false}
+            rotatable={false}
+            origin={false}
+            throttleDrag={0}
+            throttleScale={0}
+            hideDefaultLines={false}
+            edge={false}
+            padding={{ left: 0, top: 0, right: 0, bottom: 0 }}
+            /* ── Snap & Guidelines ── */
+            snappable={true}
+            snapThreshold={8}
+            snapGap={true}
+            isDisplaySnapDigit={true}
+            snapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
+            elementSnapDirections={{ top: true, bottom: true, left: true, right: true, center: true, middle: true }}
+            horizontalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientHeight / 2)] : []}
+            verticalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientWidth / 2)] : []}
+            elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
+            /* ── Drag ── */
+            onDragStart={({ set }) => {
+              isDraggingRef.current = true;
+              setIsDragging(true);
+              const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
+              dragBaseOffsetRef.current = { x: pos?.x ?? 0, y: pos?.y ?? 0 };
+              dragDomElRef.current = selectedRect.domEl;
+              const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
+              dragScaleRef.current = sc?.w ?? 1;
+              set([0, 0]);
+            }}
+            onDrag={({ target, beforeTranslate }) => {
               const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
               const s = dragScaleRef.current;
-              onUpdateProp(`_pos_${selectedFieldId}`, {
-                x: baseX + lastEvent.beforeTranslate[0] * s,
-                y: baseY + lastEvent.beforeTranslate[1] * s,
-              });
-            }
-          }}
-          /* ── Scale (desktop handle drag only) ── */
-          onScaleStart={({ set }) => {
-            isDraggingRef.current = true;
-            setIsDragging(true);
-            dragDomElRef.current = selectedRect.domEl;
-            const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
-            dragBaseOffsetRef.current = { x: sc?.w ?? 1, y: sc?.h ?? 1 };
-            set([1, 1]);
-          }}
-          onScale={({ target, scale: scaleVec }) => {
-            const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
-            target.style.scale = `${+(baseW * scaleVec[0]).toFixed(4)} ${+(baseH * scaleVec[1]).toFixed(4)}`;
-          }}
-          onScaleEnd={({ lastEvent }) => {
-            if (lastEvent) {
+              target.style.translate = `${baseX + beforeTranslate[0] * s}px ${baseY + beforeTranslate[1] * s}px`;
+            }}
+            onDragEnd={({ lastEvent }) => {
+              if (lastEvent) {
+                const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
+                const s = dragScaleRef.current;
+                onUpdateProp(`_pos_${selectedFieldId}`, {
+                  x: baseX + lastEvent.beforeTranslate[0] * s,
+                  y: baseY + lastEvent.beforeTranslate[1] * s,
+                });
+              }
+            }}
+            /* ── Scale (desktop handle drag only) ── */
+            onScaleStart={({ set }) => {
+              isDraggingRef.current = true;
+              setIsDragging(true);
+              dragDomElRef.current = selectedRect.domEl;
+              const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
+              dragBaseOffsetRef.current = { x: sc?.w ?? 1, y: sc?.h ?? 1 };
+              set([1, 1]);
+            }}
+            onScale={({ target, scale: scaleVec }) => {
               const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
-              onUpdateProp(`_scale_${selectedFieldId}`, {
-                w: baseW * lastEvent.scale[0],
-                h: baseH * lastEvent.scale[1],
-              });
-            }
-          }}
-        />
+              target.style.scale = `${+(baseW * scaleVec[0]).toFixed(4)} ${+(baseH * scaleVec[1]).toFixed(4)}`;
+            }}
+            onScaleEnd={({ lastEvent }) => {
+              if (lastEvent) {
+                const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
+                onUpdateProp(`_scale_${selectedFieldId}`, {
+                  w: baseW * lastEvent.scale[0],
+                  h: baseH * lastEvent.scale[1],
+                });
+              }
+            }}
+          />
+        </div>
       )}
     </div>
   );

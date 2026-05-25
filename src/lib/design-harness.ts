@@ -39,6 +39,9 @@ export function validateDesign(result: DesignResult): string | null {
   const editablesError = validateEditables(result.editables, result.code);
   if (editablesError) return editablesError;
 
+  const hardcodedTextError = validateHardcodedEditableText(result.editables, result.code);
+  if (hardcodedTextError) return hardcodedTextError;
+
   return null;
 }
 
@@ -91,6 +94,15 @@ function findEditableOpeningTag(code: string, id: string): string | null {
     const match = code.match(pattern);
     if (match) return match[0];
   }
+  const dynamicPrefix = id.match(/^([A-Za-z_$][\w$-]*?)(\d+)$/)?.[1];
+  if (dynamicPrefix) {
+    const dynamicPattern = new RegExp(
+      `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*["'\`]${escapeRegExp(dynamicPrefix)}["'\`]\\s*\\+[^}]+\\}[^>]*>`,
+      'm',
+    );
+    const match = code.match(dynamicPattern);
+    if (match) return match[0];
+  }
   return null;
 }
 
@@ -101,6 +113,21 @@ function codeReadsProp(code: string, propKey: string): boolean {
     new RegExp(`props\\s*\\[\\s*["'\`]${escaped}["'\`]\\s*\\]`),
   ];
   return patterns.some(pattern => pattern.test(code));
+}
+
+function validateHardcodedEditableText(editables: EditableField[] | undefined, code: string): string | null {
+  if (!editables || editables.length === 0) return null;
+  const renderedStringArray = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\[([\s\S]*?)\]\s*;/g;
+  for (const match of code.matchAll(renderedStringArray)) {
+    const [, name, values] = match;
+    if (!new RegExp(`\\{\\s*${escapeRegExp(name)}\\s*\\[`).test(code)) continue;
+    const literals = [...values.matchAll(/["'`]([^"'`{}]{2,})["'`]/g)]
+      .map(m => m[1].trim())
+      .filter(value => /[\p{Script=Han}A-Za-z0-9]/u.test(value));
+    if (literals.length === 0) continue;
+    return `⚠️ Visible text array "${name}" is hardcoded (${literals.slice(0, 3).join(', ')}). User-facing text must be text editables: move each label into props, render props.labelKey, and include matching { type: 'text', propKey } entries in editables.`;
+  }
+  return null;
 }
 
 function editableWrapperHasMeasurableBox(openingTag: string): boolean {

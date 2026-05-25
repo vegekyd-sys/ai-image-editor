@@ -101,6 +101,33 @@ describe('editable media contract', () => {
     expect(result).toEqual(expect.stringMatching(/props\.title|prop key|hardcoded/i));
   });
 
+  it('rejects hardcoded rendered text arrays when a design has editables', () => {
+    const result = validateDesign({
+      code: `function Design(props) {
+        const names = ['Alice', 'Bob'];
+        return (
+          <AbsoluteFill>
+            <div data-editable="photo1" style={{ width: 400, height: 300 }}>
+              <Img src={props.photo1} />
+            </div>
+            <span>{names[0]}</span>
+            <div data-editable="photo2" style={{ width: 400, height: 300 }}>
+              <Img src={props.photo2} />
+            </div>
+            <span>{names[1]}</span>
+          </AbsoluteFill>
+        );
+      }`,
+      props: { photo1: 'https://example.com/a.jpg', photo2: 'https://example.com/b.jpg' },
+      editables: [
+        { id: 'photo1', type: 'image', label: 'Photo 1', propKey: 'photo1' },
+        { id: 'photo2', type: 'image', label: 'Photo 2', propKey: 'photo2' },
+      ],
+    });
+
+    expect(result).toEqual(expect.stringMatching(/hardcoded|text editables|names/i));
+  });
+
   it('rejects image editables whose wrapper cannot be measured by Moveable', () => {
     const result = validateDesign({
       code: `function Design(props) {
