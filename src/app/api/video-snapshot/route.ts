@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest } from '@/lib/api-auth'
 import { createVideo } from '@/lib/skills/create-video'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
@@ -9,10 +9,9 @@ export const maxDuration = 30
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    const user = session?.user
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authResult = await authenticateRequest(req)
+    if ('error' in authResult) return authResult.error
+    const { userId, supabase } = authResult.auth
 
     const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, sourceSnapshotIds } = await req.json()
 
@@ -22,14 +21,14 @@ export async function POST(req: NextRequest) {
 
     const { data: project } = await supabase
       .from('projects')
-      .select('id')
+      .select('id, user_id')
       .eq('id', projectId)
-      .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    if (project.user_id !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const creditCheck = await requireCredits(user.id, 50)
+    const creditCheck = await requireCredits(userId, 50)
     if (!creditCheck.ok) return creditCheck.response
 
     // Save original imageUrls before mutation (for detail view display)
@@ -109,7 +108,7 @@ export async function POST(req: NextRequest) {
     videoMeta.creditsCharged = creditsCharged
     supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId).then(() => {})
 
-    deductFixedCredits(user.id, creditsCharged, 'create_video', undefined, undefined)
+    deductFixedCredits(userId, creditsCharged, 'create_video', undefined, undefined)
       .catch(e => console.error('[billing] video-snapshot deduct error:', e))
 
     return NextResponse.json({ snapshotId, taskId, videoMeta })

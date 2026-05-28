@@ -116,6 +116,15 @@ function getAuth() {
   };
 }
 
+function normalizeRunResponse(data) {
+  const projectId = data.projectId || data.project_id;
+  if (projectId) {
+    data.projectId = projectId;
+    data.projectUrl = `${APP_URL}/projects/${projectId}`;
+  }
+  return data;
+}
+
 // ─── SSE Consumer ────────────────────────────────────────────────────────────
 
 async function abortRun(baseUrl, headers, runId) {
@@ -351,8 +360,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
 
       if (json) {
         // Structured JSON output — add projectUrl
-        data.projectUrl = `${APP_URL}/projects/${data.projectId}`;
-        console.log(JSON.stringify(data, null, 2));
+        console.log(JSON.stringify(normalizeRunResponse(data), null, 2));
       } else {
         process.stderr.write('\n━━━ Results ━━━\n');
         if (data.result) {
@@ -881,6 +889,7 @@ if (command === 'login') {
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
       if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
       const data = await res.json();
+      normalizeRunResponse(data);
       if (pick) {
         const picked = applyPick(data, pick);
         if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));

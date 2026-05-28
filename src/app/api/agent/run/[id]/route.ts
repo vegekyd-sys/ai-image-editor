@@ -4,6 +4,8 @@ import { authenticateRequest } from '@/lib/api-auth';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 import { isPermanentUrl } from '@/lib/supabase/storage';
 
+type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
+
 async function pollVideoProvider(taskId: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
   const isEvolink = taskId.startsWith('task-unified-');
   const isSeedance = taskId.startsWith('cgt-');
@@ -43,14 +45,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const authResult = await authenticateRequest(req);
-    if ('error' in authResult) return authResult.error;
-    const { userId, supabase } = authResult.auth;
-
     const { id: runId } = await params;
+    const admin = getSupabaseAdmin();
+    const authResult = await authenticateRequest(req);
+    const authUserId = 'auth' in authResult ? authResult.auth.userId : null;
+    const hasBearerAuth = req.headers.get('authorization')?.startsWith('Bearer ') ?? false;
 
-    const { data: run } = await supabase.from('agent_runs')
-      .select('id, status, prompt, started_at, ended_at, metadata, project_id, user_id')
+    const { data: run } = await admin.from('agent_runs')
+      .select('id, status, prompt, started_at, ended_at, metadata, project_id, user_id, projects(is_public)')
       .eq('id', runId)
       .single();
 
@@ -58,21 +60,26 @@ export async function GET(
       return NextResponse.json({ error: 'Run not found' }, { status: 404 });
     }
 
-    if (run.user_id !== userId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const projects = (run as { projects?: RunProject }).projects;
+    const project = Array.isArray(projects) ? projects[0] : projects;
+    const isPublic = project?.is_public === true;
+    if (!isPublic && (!authUserId || run.user_id !== authUserId)) {
+      return 'error' in authResult ? authResult.error : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+    if (hasBearerAuth && 'error' in authResult) return authResult.error;
+    const ownerUserId = run.user_id as string;
 
     const url = new URL(req.url);
     const wantEvents = url.searchParams.get('events') === 'true';
     const afterSeq = url.searchParams.has('after') ? parseInt(url.searchParams.get('after')!) : undefined;
 
-    const { count: eventCount } = await supabase
+    const { count: eventCount } = await admin
       .from('agent_events')
       .select('*', { count: 'exact', head: true })
       .eq('run_id', runId);
 
     // Always build output[] from events (not gated by isTerminal)
-    const { data: rawEvents } = await supabase
+    const { data: rawEvents } = await admin
       .from('agent_events')
       .select('type, data, seq, created_at')
       .eq('run_id', runId)
@@ -177,7 +184,7 @@ export async function GET(
     const designItems = output.filter(o => o.type === 'design' && o.snapshot_id);
     if (designItems.length > 0) {
       const ids = designItems.map(d => d.snapshot_id as string);
-      const { data: snaps } = await supabase.from('snapshots').select('id, image_url').in('id', ids);
+      const { data: snaps } = await admin.from('snapshots').select('id, image_url').in('id', ids);
       if (snaps) {
         const urlMap = Object.fromEntries(snaps.map(s => [s.id, s.image_url]));
         for (const d of designItems) {
@@ -199,7 +206,7 @@ export async function GET(
         try {
           // v2 path: video_snapshot events have snapshot_id — query snapshots table
           if (v.snapshot_id) {
-            const { data: snap } = await supabase
+            const { data: snap } = await admin
               .from('snapshots')
               .select('id, project_id, video_meta, image_url')
               .eq('id', v.snapshot_id)
@@ -231,7 +238,6 @@ export async function GET(
                 const taskId = videoMeta.taskId as string;
                 const pollResult = await pollVideoProvider(taskId);
                 if (pollResult.status === 'completed' && pollResult.videoUrl) {
-                  const admin = getSupabaseAdmin();
                   const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl };
                   await admin.from('snapshots')
                     .update({ video_meta: updatedMeta })
@@ -253,9 +259,9 @@ export async function GET(
                       const buffer = new Uint8Array(await res.arrayBuffer());
                       const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 };
                       const adminClient = getSupabaseAdmin();
-                      const permanentUrl = await uploadVideo(adminClient, userId, projectId, snapshotId, buffer);
+                      const permanentUrl = await uploadVideo(adminClient, ownerUserId, projectId, snapshotId, buffer);
                       if (permanentUrl) {
-                        const finalMeta = { ...updatedMeta, videoUrl: permanentUrl, videoPath: `${userId}/projects/${projectId}/animation/${snapshotId}.mp4`, width: dims.width, height: dims.height };
+                        const finalMeta = { ...updatedMeta, videoUrl: permanentUrl, videoPath: `${ownerUserId}/projects/${projectId}/animation/${snapshotId}.mp4`, width: dims.width, height: dims.height };
                         await adminClient.from('snapshots')
                           .update({ video_meta: finalMeta })
                           .eq('id', snapshotId);
@@ -263,7 +269,7 @@ export async function GET(
                         try {
                           const { extractVideoPoster } = await import('@/lib/video-poster');
                           const posterBuffer = await extractVideoPoster(permanentUrl);
-                          const posterPath = `${userId}/${projectId}/posters/${snapshotId}.jpg`;
+                          const posterPath = `${ownerUserId}/${projectId}/posters/${snapshotId}.jpg`;
                           const { error: posterErr } = await adminClient.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
                           if (!posterErr) {
                             const { data: urlData } = adminClient.storage.from('images').getPublicUrl(posterPath);
@@ -304,7 +310,7 @@ export async function GET(
           }
 
           // v1 path: animation_task events — query project_animations table
-          const { data: anim } = await supabase
+          const { data: anim } = await admin
             .from('project_animations')
             .select('id, status, video_url, created_at, project_id, projects(user_id)')
             .eq('piapi_task_id', v.task_id)
@@ -378,7 +384,7 @@ export async function GET(
     for (const m of musicItems) {
       enrichPromises.push((async () => {
         try {
-          const { data: track } = await supabase
+          const { data: track } = await admin
             .from('project_music')
             .select('status, audio_url, created_at')
             .eq('suno_task_id', m.task_id)
@@ -442,7 +448,7 @@ export async function GET(
     // Optionally include raw events
     let events: unknown[] | undefined;
     if (wantEvents) {
-      let query = supabase
+      let query = admin
         .from('agent_events')
         .select('type, data, seq, created_at')
         .eq('run_id', runId)
@@ -462,6 +468,7 @@ export async function GET(
       incomplete,
       project_id: run.project_id,
       project_url: `https://www.makaron.app/projects/${run.project_id}`,
+      first_message_id: (run.metadata as Record<string, unknown> | null)?.firstMessageId,
       prompt: run.prompt,
       created_at: run.started_at,
       completed_at: run.ended_at,
