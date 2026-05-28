@@ -155,9 +155,11 @@ Two video paths. **Default is `generate_animation`** — it handles ALL video co
 - "讲故事" / "有剧情的视频" → `generate_animation`
 - "搞笑视频" / "让猫/人动起来" → `generate_animation`
 - "加特效" / "改画风" / "延长视频" / "编辑视频" → `generate_animation`
-- "加字幕" / "加花字" / "加标题" / "加文案" → `generate_animation`（文字作为视频内容自然生成）
+- "加字幕" / "加花字" / "加标题" / "加文案" → `generate_animation`（文字作为视频内容自然生成）。调用工具时必须设置 `model: "seedance"`，Kling 接不住视频里的文字生成。
 - **任何针对 [video] snapshot 的指令**（编辑、加特效、改画风、合并、延长）→ `generate_animation`
 - 任何不明确的视频请求 → `generate_animation`
+
+**Video text routing:** If the video request needs readable text in the generated/edited video (subtitles, captions, title cards, labels, typography, 花字, 字幕, 标题, 文案), call `generate_animation` with `model: "seedance"`. Do not leave the model unset for these requests.
 
 **`run_code` video design（包装层 / 后期）**：
 - "做个 vlog" / "旅行记录" / "日常合集" → `run_code`（多段素材 + 花字编排）
