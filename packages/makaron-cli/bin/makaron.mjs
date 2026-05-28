@@ -660,6 +660,26 @@ function imageToArg(imgPath) {
   return readImageAsDataUrl(imgPath);
 }
 
+function isHttpUrl(value) {
+  return value?.startsWith('http://') || value?.startsWith('https://');
+}
+
+function validateVideoFile(videoPath) {
+  if (!fs.existsSync(videoPath)) {
+    return { ok: false, error: `Video file not found: ${videoPath}` };
+  }
+  const stat = fs.statSync(videoPath);
+  if (stat.size > 200 * 1024 * 1024) {
+    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max 200MB)` };
+  }
+  const ext = path.extname(videoPath).slice(1).toLowerCase();
+  if (!['mp4', 'mov', 'webm'].includes(ext)) {
+    return { ok: false, error: `Unsupported video format: .${ext}. Use MP4, MOV, or WebM.` };
+  }
+  const mime = ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4';
+  return { ok: true, mime };
+}
+
 function saveMcpImage(result, outputPath) {
   const content = result?.content || [];
   const textBlock = content.find(c => c.type === 'text');
@@ -1000,51 +1020,54 @@ if (command === 'login') {
 
   } else if (sub === 'create') {
     const images = [];
-    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, projectId = null, wait = false;
+    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, wait = false;
+    let video = null, keepOriginalSound = false;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
+      else if (args[i] === '--video' && args[i + 1]) video = args[++i];
       else if (args[i] === '--script' && args[i + 1]) script = args[++i];
       else if (args[i] === '--script-file' && args[i + 1]) script = fs.readFileSync(args[++i], 'utf-8');
       else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
       else if (args[i] === '--aspect' && args[i + 1]) aspectRatio = args[++i];
       else if (args[i] === '--model' && args[i + 1]) videoModel = args[++i];
-      else if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
+      else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
+      else if (args[i] === '--project') {
+        console.error('Usage: video create no longer supports --project. Use: makaron chat --project <id> --video <file|url> "your request"');
+        process.exit(1);
+      }
       else if (args[i] === '--wait') wait = true;
     }
-    if (!images.length || !script) { console.error('Usage: makaron video create --script "..." --image <url> [--project <id>] [--duration 10] [--aspect 9:16] [--model kling|seedance] [--wait]'); process.exit(1); }
-
-    if (projectId) {
-      // v2: submit to /api/video-snapshot → writes into timeline
-      process.stderr.write('🎬 Submitting video to timeline...\n');
-      const body = { projectId, imageUrls: images, prompt: script };
-      if (duration) body.duration = duration;
-      if (aspectRatio) body.aspectRatio = aspectRatio;
-      if (videoModel) body.videoModel = videoModel;
-      const res = await fetch(`${baseUrl}/api/video-snapshot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
-      const data = await res.json();
-      process.stderr.write(`✅ Video snapshot: ${data.snapshotId} (task: ${data.taskId})\n`);
-      if (wait) {
-        const url = await pollVideo(baseUrl, headers, data.taskId, data.snapshotId);
-        if (url) console.log(url);
-      } else {
-        console.log(JSON.stringify(data, null, 2));
-      }
-    } else {
-      // No project: use MCP tool (standalone, no timeline write)
-      process.stderr.write('🎬 Submitting video...\n');
-      const vArgs = { script, images };
-      if (duration) vArgs.duration = duration;
-      if (aspectRatio) vArgs.aspectRatio = aspectRatio;
-      if (videoModel) vArgs.videoModel = videoModel;
-      const result = await callMcpTool(baseUrl, headers, 'makaron_create_video', vArgs);
-      const text = result?.content?.find(c => c.type === 'text')?.text;
-      if (text) console.log(text);
+    if ((!images.length && !video) || !script) {
+      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model kling|seedance] [--keep-original-sound]');
+      process.exit(1);
     }
+
+    if (wait) {
+      console.error('Usage: --wait is only supported for project timeline tasks. Use chat --project for project video generation, or poll the returned taskId with video status.');
+      process.exit(1);
+    }
+
+    let videoUrl = isHttpUrl(video) ? video : null;
+    if (video && !videoUrl) {
+      const valid = validateVideoFile(video);
+      if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
+      process.stderr.write(`📹 Uploading ${path.basename(video)} (${(fs.statSync(video).size/1024/1024).toFixed(1)}MB)...\n`);
+      videoUrl = await uploadFileViaSignedUrl(baseUrl, headers, undefined, video, valid.mime);
+      if (!videoUrl) process.exit(1);
+      process.stderr.write(`📹 Uploaded: ${path.basename(video)}\n`);
+    }
+    // Standalone MCP tool (no project timeline write)
+    process.stderr.write('🎬 Submitting video...\n');
+    const vArgs = videoUrl
+      ? { videoUrl, editPrompt: script, images, referType: (videoModel || 'kling') === 'kling' ? 'base' : undefined }
+      : { script, images };
+    if (duration) vArgs.duration = duration;
+    if (aspectRatio) vArgs.aspectRatio = aspectRatio;
+    if (videoModel && !videoUrl) vArgs.videoModel = videoModel;
+    if (keepOriginalSound && videoUrl) vArgs.keepOriginalSound = true;
+    const result = await callMcpTool(baseUrl, headers, videoUrl ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    const text = result?.content?.find(c => c.type === 'text')?.text;
+    if (text) console.log(text);
 
   } else if (sub === 'status') {
     let taskId = null, snapshotId = null, wait = false;
@@ -1083,6 +1106,7 @@ if (command === 'login') {
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --image <url> [--duration 10]  Submit video task
+  video create --script "..." --video <public-url> [--model kling|seedance]  Edit a video (standalone)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);

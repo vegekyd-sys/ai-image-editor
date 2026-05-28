@@ -10,7 +10,7 @@ const BUCKET = 'images'
  * CLI/external agents call this to get a pre-signed URL, then PUT the file directly
  * to Supabase Storage (bypasses Vercel body size limit).
  *
- * Body: { projectId, filename, contentType }
+ * Body: { projectId?, filename, contentType }
  * Returns: { uploadUrl, publicUrl, path }
  */
 export async function POST(req: NextRequest) {
@@ -21,13 +21,14 @@ export async function POST(req: NextRequest) {
 
     const { projectId, filename, contentType } = await req.json()
 
-    if (!projectId || !filename) {
-      return NextResponse.json({ error: 'projectId and filename are required' }, { status: 400 })
+    if (!filename) {
+      return NextResponse.json({ error: 'filename is required' }, { status: 400 })
     }
 
     const ext = filename.split('.').pop()?.toLowerCase() || 'bin'
     const fileId = crypto.randomUUID()
-    const storagePath = `${userId}/${projectId}/uploads/${fileId}.${ext}`
+    const uploadScope = projectId ? `${projectId}/uploads` : 'standalone/uploads'
+    const storagePath = `${userId}/${uploadScope}/${fileId}.${ext}`
 
     const admin = getSupabaseAdmin()
     const { data, error } = await admin.storage

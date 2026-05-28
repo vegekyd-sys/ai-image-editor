@@ -77,13 +77,16 @@ export async function createKlingTask(input: KlingTaskInput): Promise<string> {
   // All images are references — no first_frame. Aspect ratio is always explicit.
   const body: Record<string, unknown> = {
     model_name: 'kling-v3-omni',
-    image_list: input.images.map((img) => ({
-      image_url: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
-    })),
     prompt: input.prompt,
     mode: input.mode ?? 'std',
     // When video_list is present, sound must be 'off' (keep_original_sound controls video audio)
     sound: hasVideo ? 'off' : 'on',
+  }
+
+  if (input.images.length > 0) {
+    body.image_list = input.images.map((img) => ({
+      image_url: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
+    }))
   }
 
   // Add video_list for video editing

@@ -13,9 +13,22 @@ export async function POST(req: NextRequest) {
     if ('error' in authResult) return authResult.error
     const { userId, supabase } = authResult.auth
 
-    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, sourceSnapshotIds } = await req.json()
+    const {
+      projectId,
+      imageUrls,
+      prompt,
+      duration,
+      aspectRatio,
+      videoModel,
+      sourceSnapshotIds,
+      videoUrl,
+      videoReferType,
+      keepOriginalSound,
+    } = await req.json()
+    const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
+    const inputVideoUrl = typeof videoUrl === 'string' && videoUrl.startsWith('http') ? videoUrl : undefined
 
-    if (!projectId || !imageUrls?.length || !prompt) {
+    if (!projectId || !prompt || (inputImageUrls.length === 0 && !inputVideoUrl)) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -32,8 +45,8 @@ export async function POST(req: NextRequest) {
     if (!creditCheck.ok) return creditCheck.response
 
     // Save original imageUrls before mutation (for detail view display)
-    const allSourceUrls: string[] = [...imageUrls].filter((u: string) => !!u)
-    const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || ''
+    const allSourceUrls: string[] = [...inputImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : [])].filter((u: string) => !!u)
+    const originalFirstUrl = inputImageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || ''
 
     // Auto-route video references: detect video snapshots in imageUrls
     const { data: dbSnaps } = await supabase
@@ -51,18 +64,21 @@ export async function POST(req: NextRequest) {
         const videoUrl = (snap?.video_meta as Record<string, unknown> | null)?.videoUrl as string | undefined
         if (snap?.type === 'video' && videoUrl) {
           autoVideoUrls.push(videoUrl)
-          imageUrls[ref - 1] = ''
+          inputImageUrls[ref - 1] = ''
         }
       }
     }
 
     const skillResult = await createVideo({
       script: prompt,
-      images: imageUrls,
+      images: inputImageUrls,
       duration,
       aspectRatio,
       videoModel,
+      videoUrl: inputVideoUrl,
+      videoReferType,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+      keepOriginalSound,
     })
 
     if (!skillResult.success || !skillResult.taskId) {

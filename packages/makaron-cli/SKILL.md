@@ -104,6 +104,8 @@ npx makaron-cli chat --project auto --video https://example.com/dance.mp4 -b "ex
 
 Supported formats: MP4, MOV, WebM (max 200MB, ≤15s per video for composition). Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language.
 
+Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct video commands are standalone raw-tool calls.
+
 ### Check status (single query)
 
 ```bash
@@ -160,20 +162,32 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 
 Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
 
-### `video` — Video generation (3 steps)
+### `video` — Standalone video tools (no project timeline)
 
 ```bash
 # 1. Write script from images
 npx makaron-cli video script --image img1.jpg "cinematic story"
 
-# 2. Submit rendering (images must be public URLs from step 1 or uploaded)
+# 2a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --model kling
+
+# 2b. Edit a video from a local file or public URL
+npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance
+npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance
 
 # 3. Check status
 npx makaron-cli video status <taskId>
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--duration 3|5|7|10|15`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`
+`video create` returns a provider task id and does not create or update a Makaron project timeline. For project/timeline video editing, use:
+
+```bash
+npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
+```
+
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration 3|5|7|10|15`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`
+
+Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path.
 
 ### `music` — Music generation
 

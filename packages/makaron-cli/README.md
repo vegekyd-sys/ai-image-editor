@@ -112,6 +112,7 @@ npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "spli
 
 Video files are uploaded via signed URL (no size limit up to 200MB). Supported formats: `.mp4`, `.mov`, `.webm`.
 The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos.
+Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct `video create` is standalone and does not write timeline entries.
 
 ### Check status (single query)
 
@@ -169,20 +170,32 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 
 Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
 
-### `video` — Video generation (3 steps)
+### `video` — Standalone video tools (no project timeline)
 
 ```bash
 # 1. Write script from images
 npx makaron-cli video script --image img1.jpg "cinematic story"
 
-# 2. Submit rendering (images must be public URLs from step 1 or uploaded)
+# 2a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --model kling
+
+# 2b. Edit a video from a local file or public URL
+npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance
+npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance
 
 # 3. Check status
 npx makaron-cli video status <taskId>
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--duration 3|5|7|10|15`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`
+For project/timeline video editing, use:
+
+```bash
+npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
+```
+
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration 3|5|7|10|15`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`
+
+Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path.
 
 ### `music` — Music generation
 

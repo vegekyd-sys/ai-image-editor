@@ -25,11 +25,12 @@ export interface CreateVideoResult {
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, keepOriginalSound, motionControl, characterOrientation } = input;
+  const hasVideoReference = !!videoUrl || !!videoUrls?.length;
 
-  if (images.length === 0) {
+  if (images.length === 0 && !hasVideoReference) {
     return {
       success: false,
-      message: 'No images provided.',
+      message: 'No images or video reference provided.',
     };
   }
 
@@ -63,7 +64,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     // filterAndRemapImages will enforce the 7-image limit on the filtered result
     const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
 
-    if (filteredImages.length === 0 && images.length > 0 && !videoUrl && !(videoUrls?.length)) {
+    if (filteredImages.length === 0 && images.length > 0 && !hasVideoReference) {
       return {
         success: false,
         message: `No images referenced in the script but ${images.length} images were provided. Use <<<media_1>>> etc. to reference them in your prompt.`,
@@ -93,7 +94,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       provider = process.env.ANIMATE_PROVIDER || 'kling';
     }
 
-    console.log(`\n🎬 [create_video] provider=${provider}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}${videoUrl ? `, video=${videoReferType ?? 'base'}` : ''}`);
+    const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
+    console.log(`\n🎬 [create_video] provider=${provider}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
     let taskId: string;
@@ -137,7 +139,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       console.log(`✅ [create_video] PiAPI task created: ${taskId}`);
     } else {
       const { createKlingTask, detectAspectRatio } = await import('../kling');
-      const resolvedRatio = aspectRatio || await detectAspectRatio(filteredImages[0] || images[0]);
+      const ratioSourceImage = filteredImages[0] || images[0];
+      const resolvedRatio = aspectRatio || (ratioSourceImage ? await detectAspectRatio(ratioSourceImage) : undefined);
       // Auto-routed videos: use first as feature reference if no explicit videoUrl
       const effectiveVideoUrl = videoUrl || (videoUrls?.length ? videoUrls[0] : undefined);
       const effectiveVideoReferType = videoUrl ? videoReferType : (effectiveVideoUrl ? 'feature' : undefined);
