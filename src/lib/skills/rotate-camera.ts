@@ -22,19 +22,19 @@ export async function rotateCamera(
   const elName = ELEVATION_MAP[snapToNearest(elevation, ELEVATION_STEPS)];
   const dsName = DISTANCE_MAP[snapToNearest(distance, DISTANCE_STEPS)];
 
-  // ComfyUI Qwen primary (vast.ai, ~10s)
-  if (process.env.COMFYUI_QWEN_URL) {
-    const { generateWithQwenRotate } = await import('../comfyui-qwen');
+  // Qwen primary (ComfyUI tunnel or Vast serverless)
+  const { isQwenAvailable, generateWithQwenRotate } = await import('../comfyui-qwen');
+  if (isQwenAvailable()) {
     const result = await generateWithQwenRotate(image, prompt);
     if (result) {
       return { success: true, message: `Camera rotated: ${azName}, ${elName}, ${dsName}`, image: result };
     }
-    console.log('[rotate] ComfyUI failed, falling back to fal.ai...');
+    console.log('[rotate] Qwen failed, falling back to fal.ai...');
   }
 
   // fal.ai fallback
   const hfToken = process.env.HF_TOKEN;
-  if (!hfToken) return { success: false, message: 'Neither COMFYUI_QWEN_URL nor HF_TOKEN configured' };
+  if (!hfToken) return { success: false, message: 'Neither Qwen nor HF_TOKEN configured' };
 
   try {
     let imgBytes: Uint8Array;

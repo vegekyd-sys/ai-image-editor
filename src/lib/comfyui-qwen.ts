@@ -2,7 +2,8 @@
  * ComfyUI Qwen Edit AIO — image editing via self-hosted ComfyUI on vast.ai.
  * Uses QwenImageIntegratedKSampler node for 4-step fast inference.
  *
- * Activated by COMFYUI_QWEN_URL env var. If not set, all exports are no-ops.
+ * Activated by COMFYUI_QWEN_URL, or by QWEN_PROVIDER=vast with
+ * VAST_QWEN_ENDPOINT + VAST_API_KEY.
  */
 import sharp from 'sharp';
 
@@ -12,10 +13,15 @@ const getComfyUrl = () => {
   return url.replace(/\/+$/, '');
 };
 
+const getVastEndpoint = () => process.env.VAST_QWEN_ENDPOINT?.trim() || null;
+const getVastApiKey = () => process.env.VAST_API_KEY?.trim() || null;
+const shouldUseVastQwen = () => process.env.QWEN_PROVIDER === 'vast';
 const CHECKPOINT = () => process.env.COMFYUI_CHECKPOINT || 'Qwen-Rapid-AIO-NSFW-v23.safetensors';
+const DEFAULT_NEGATIVE_PROMPT = 'low quality, blurry, distorted, watermark, text';
 
-/** Whether Qwen ComfyUI is configured and available */
+/** Whether Qwen is configured and available */
 export function isQwenAvailable(): boolean {
+  if (shouldUseVastQwen()) return !!getVastEndpoint() && !!getVastApiKey();
   return !!getComfyUrl();
 }
 
@@ -41,6 +47,88 @@ async function resolveImageToBuffer(image: string): Promise<Buffer> {
 // ---------------------------------------------------------------------------
 // ComfyUI API helpers
 // ---------------------------------------------------------------------------
+
+type VastRouteResponse = {
+  url?: string;
+  endpoint?: string;
+  request_idx?: number;
+  signature?: string;
+  cost?: number;
+  reqnum?: number;
+  status?: string;
+  [key: string]: unknown;
+};
+
+type VastGeneratePayload = {
+  prompt: string;
+  image?: string;
+  images?: Array<string | { url: string; role?: string }>;
+  rotate?: boolean;
+  width?: number;
+  height?: number;
+};
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function requestVastRoute(): Promise<VastRouteResponse> {
+  const endpoint = getVastEndpoint();
+  const apiKey = getVastApiKey();
+  if (!endpoint || !apiKey) {
+    throw new Error('Vast Qwen is not configured (VAST_QWEN_ENDPOINT/VAST_API_KEY)');
+  }
+
+  const res = await fetch('https://run.vast.ai/route/', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ endpoint, cost: 100 }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`Vast route failed: ${res.status} ${err.slice(0, 500)}`);
+  }
+
+  const route = await res.json() as VastRouteResponse;
+  return route;
+}
+
+async function routeVastQwen(maxWaitMs = Number(process.env.VAST_QWEN_ROUTE_TIMEOUT_MS || 110_000)): Promise<VastRouteResponse & { url: string }> {
+  const start = Date.now();
+  let lastRoute: VastRouteResponse | null = null;
+
+  while (Date.now() - start < maxWaitMs) {
+    const route = await requestVastRoute();
+    lastRoute = route;
+    if (route.url) return route as VastRouteResponse & { url: string };
+
+    console.log(`[vast-qwen] Waiting for worker route: ${route.status || 'no url yet'}`);
+    await sleep(5_000);
+  }
+
+  throw new Error(`Vast route timed out after ${Math.round(maxWaitMs / 1000)}s: ${JSON.stringify(lastRoute).slice(0, 500)}`);
+}
+
+async function callVastQwen(payload: VastGeneratePayload): Promise<string | null> {
+  const route = await routeVastQwen();
+  const res = await fetch(`${route.url.replace(/\/+$/, '')}/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ auth_data: route, payload }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`Vast Qwen generate failed: ${res.status} ${err.slice(0, 500)}`);
+  }
+
+  const data = await res.json() as { image?: string; elapsed_s?: number; checkpoint?: string; error?: string };
+  if (data.error) throw new Error(`Vast Qwen error: ${data.error}`);
+  if (!data.image) return null;
+  return data.image;
+}
 
 async function uploadImage(buf: Buffer, filename: string): Promise<string> {
   const url = getComfyUrl()!;
@@ -163,6 +251,41 @@ async function downloadImage(img: ComfyOutputImage): Promise<string> {
 // Workflow builder
 // ---------------------------------------------------------------------------
 
+function aspectRatioToDimensions(aspectRatio?: string): { width: number; height: number } {
+  if (!aspectRatio) return { width: 1024, height: 1024 };
+
+  const [w, h] = aspectRatio.split(':').map(Number);
+  if (!w || !h) return { width: 1024, height: 1024 };
+
+  const ratio = w / h;
+  if (ratio > 1.7) return { width: 1344, height: 768 };
+  if (ratio > 1.2) return { width: 1152, height: 864 };
+  if (1 / ratio > 1.7) return { width: 768, height: 1344 };
+  if (1 / ratio > 1.2) return { width: 864, height: 1152 };
+  return { width: 1024, height: 1024 };
+}
+
+function buildTextToImageWorkflow(prompt: string, aspectRatio?: string, seed?: number): Record<string, unknown> {
+  const actualSeed = seed ?? Math.floor(Math.random() * 999999);
+  const { width, height } = aspectRatioToDimensions(aspectRatio);
+
+  return {
+    '1': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: CHECKPOINT() } },
+    '5': {
+      class_type: 'QwenImageIntegratedKSampler',
+      inputs: {
+        model: ['1', 0], clip: ['1', 1], vae: ['1', 2],
+        positive_prompt: prompt, negative_prompt: DEFAULT_NEGATIVE_PROMPT,
+        generation_mode: '\u6587\u751f\u56fe text-to-image',
+        batch_size: 1, width, height, seed: actualSeed,
+        steps: 4, cfg: 1.0, sampler_name: 'euler', scheduler: 'simple',
+        denoise: 1.0, auraflow_shift: 3.0, cfg_norm_strength: 1.0,
+      },
+    },
+    '6': { class_type: 'SaveImage', inputs: { images: ['5', 0], filename_prefix: 'api_qwen_txt2img' } },
+  };
+}
+
 function buildWorkflow(imageName: string, prompt: string, seed?: number): Record<string, unknown> {
   const actualSeed = seed ?? Math.floor(Math.random() * 999999);
   return {
@@ -214,6 +337,51 @@ function buildRotateWorkflow(imageName: string, prompt: string, seed?: number): 
 // ---------------------------------------------------------------------------
 
 /**
+ * Text-to-image generation using ComfyUI Qwen Edit AIO.
+ * Returns base64 JPEG or null on failure.
+ */
+export async function generateWithQwenText(
+  prompt: string,
+  aspectRatio?: string,
+): Promise<string | null> {
+  if (shouldUseVastQwen()) {
+    const t0 = Date.now();
+    const { width, height } = aspectRatioToDimensions(aspectRatio);
+    console.log(`[vast-qwen] Starting txt2img (${width}x${height}), prompt: ${prompt.slice(0, 120)}...`);
+
+    try {
+      const result = await callVastQwen({ prompt, width, height });
+      console.log(`[vast-qwen] Txt2img done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+      return result;
+    } catch (e) {
+      console.error(`[vast-qwen] Txt2img error after ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e instanceof Error ? e.message : e);
+      return null;
+    }
+  }
+
+  const url = getComfyUrl();
+  if (!url) {
+    console.warn('[comfyui-qwen] Not configured (COMFYUI_QWEN_URL not set)');
+    return null;
+  }
+
+  const t0 = Date.now();
+  console.log(`[comfyui-qwen] Starting txt2img (${aspectRatio ?? '1:1'}), prompt: ${prompt.slice(0, 120)}...`);
+
+  try {
+    const workflow = buildTextToImageWorkflow(prompt, aspectRatio);
+    const outputImg = await submitAndPoll(workflow);
+    const result = await downloadImage(outputImg);
+
+    console.log(`[comfyui-qwen] Txt2img done in ${((Date.now() - t0) / 1000).toFixed(1)}s, result ${(result.length / 1024).toFixed(0)}KB`);
+    return result;
+  } catch (e) {
+    console.error(`[comfyui-qwen] Txt2img error after ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
  * Multi-image edit using QwenImageIntegratedKSampler's native image1-5 inputs.
  * Uploads up to 3 images, injects extra LoadImage nodes for image2/image3.
  * Returns base64 JPEG or null on failure.
@@ -224,6 +392,21 @@ export async function generateWithQwenMulti(
 ): Promise<string | null> {
   if (images.length === 0) return null;
   if (images.length === 1) return generateWithQwen(images[0].url, prompt);
+
+  if (shouldUseVastQwen()) {
+    const t0 = Date.now();
+    const capped = images.slice(0, 3);
+    console.log(`[vast-qwen] Starting multi-image edit (${capped.length} images), prompt: ${prompt.slice(0, 120)}...`);
+
+    try {
+      const result = await callVastQwen({ prompt, images: capped });
+      console.log(`[vast-qwen] Multi done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+      return result;
+    } catch (e) {
+      console.error(`[vast-qwen] Multi error after ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e instanceof Error ? e.message : e);
+      return null;
+    }
+  }
 
   const url = getComfyUrl();
   if (!url) {
@@ -278,6 +461,20 @@ export async function generateWithQwen(
   image: string,
   prompt: string,
 ): Promise<string | null> {
+  if (shouldUseVastQwen()) {
+    const t0 = Date.now();
+    console.log(`[vast-qwen] Starting edit, prompt: ${prompt.slice(0, 120)}...`);
+
+    try {
+      const result = await callVastQwen({ image, prompt });
+      console.log(`[vast-qwen] Done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+      return result;
+    } catch (e) {
+      console.error(`[vast-qwen] Error after ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e instanceof Error ? e.message : e);
+      return null;
+    }
+  }
+
   const url = getComfyUrl();
   if (!url) {
     console.warn('[comfyui-qwen] Not configured (COMFYUI_QWEN_URL not set)');
@@ -313,6 +510,20 @@ export async function generateWithQwenRotate(
   image: string,
   sksPrompt: string,
 ): Promise<string | null> {
+  if (shouldUseVastQwen()) {
+    const t0 = Date.now();
+    console.log(`[vast-qwen] Starting rotate, prompt: ${sksPrompt}`);
+
+    try {
+      const result = await callVastQwen({ image, prompt: sksPrompt, rotate: true });
+      console.log(`[vast-qwen] Rotate done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+      return result;
+    } catch (e) {
+      console.error(`[vast-qwen] Rotate error after ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e instanceof Error ? e.message : e);
+      return null;
+    }
+  }
+
   const url = getComfyUrl();
   if (!url) return null;
 

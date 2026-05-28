@@ -59,6 +59,7 @@ next-env.d.ts
 
 # claude code local settings
 .claude/settings.local.json
+.claude/launch.json
 
 # playwright mcp
 .playwright-mcp/
@@ -69,4 +70,10 @@ test-kling.mjs
 
 # workspace agent runtime data
 .workspace/
+.agents/
 .claude/worktrees/
+.codex/
+
+# local agent instructions and experimental infra
+AGENTS.md
+infra/
