@@ -33,7 +33,7 @@ Rules:
 - **Always set `model: 'seedance'`** when editing or referencing a video
 - **Timeline videos**: just use `<<<media_N>>>` — auto-routed to SeeDance
 - **External videos** (workspace/skill assets): pass `video_ref_url` + `video_ref_type: feature`
-- **Duration lock**: when editing an existing video, the output duration MUST match the input video duration. If the source video is 10s, write a 10s edit and set duration to 10s. Never default to a 5s script for video editing unless the user explicitly asks to shorten it.
+- **Duration lock**: when editing an existing video, the output duration should match the input video duration. If the source video is 10s, write a 10s edit and set duration to 10s. If source metadata is slightly over 15s (for example 15.1s), set duration to 15s. Never default to a 5s script for video editing unless the user explicitly asks to shorten it.
 - Can combine images + videos in the same prompt
 - Keep prompt concise (under 200 chars when referencing video for motion)
 - `keep_original_sound: true` to preserve the original audio
@@ -152,7 +152,7 @@ Shot 2 (3s): Close-up, ...
 8. **Hook**: First 1-2 seconds decide if viewer keeps watching. Open with the most striking visual — never a generic establishing shot.
 
 9. **Duration**: 5s = compact, 10s = complete detail. Recommend 10s for complex scenes.
-   - **Video editing exception**: if the prompt references an existing video, match the source video's duration exactly (e.g. a 10s source video → 10s edited video). Do not use the single-photo 5s formula for video edits.
+   - **Video editing exception**: if the prompt references an existing video, match the source video's duration (e.g. a 10s source video → 10s edited video). If metadata is slightly over 15s, use 15s. Do not use the single-photo 5s formula for video edits.
 
 10. **Select & reorder**: Pick 3-7 images from the Media Index. Skip duplicates and weak edits. Reorder freely for the strongest story — don't follow upload order.
 

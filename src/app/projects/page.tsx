@@ -371,7 +371,7 @@ function ProjectsPageInner() {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes('Video too long')) {
         const { MAX_DURATION } = await import('@/lib/video-upload')
-        alert(t('video.tooLong').replace('{duration}', msg.match(/\((\d+)s\)/)?.[1] || '?').replace('{max}', String(MAX_DURATION)))
+        alert(t('video.tooLong').replace('{duration}', msg.match(/\((\d+(?:\.\d+)?)s\)/)?.[1] || '?').replace('{max}', String(MAX_DURATION)))
       }
       createInput.setCreating(false)
     }

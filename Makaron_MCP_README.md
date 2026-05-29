@@ -149,9 +149,9 @@ const result = await client.callTool({
 
 **关键限制：**
 - `videoUrl` 必须是公开可访问 URL。
-- 推荐与前端上传流程一致：MP4/MOV/WebM，≤200MB，≤15s，≤1080p / 2,086,876 frame pixels。
+- 推荐与前端上传流程一致：MP4/MOV/WebM，≤200MB，目标 ≤15s（允许少量 metadata 误差），≤1080p / 2,086,876 frame pixels。
 - `videoModel: "kling"` 支持 `referType: "base"` 直接编辑。
-- `videoModel: "seedance"` 支持 ≤15s 视频的 reference-video 编辑，使用 `referType: "feature"`；不支持 Kling 那种 base/direct edit。
+- `videoModel: "seedance"` 支持目标 ≤15s 视频的 reference-video 编辑，使用 `referType: "feature"`；不支持 Kling 那种 base/direct edit。少量 metadata/audio padding 会被接受，输出时长仍钳到 15s。
 
 **参数：**
 

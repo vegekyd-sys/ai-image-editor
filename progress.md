@@ -3844,7 +3844,7 @@ duration ?? referenceVideoDuration ?? parseTotalDuration(finalPrompt)
 
 ### 改动
 
-- `chat --video` / `video create --video` 本地视频上传限制对齐前端流程：MP4/MOV/WebM、≤200MB、≤15s、≤1080p / 2,086,876 frame pixels
+- `chat --video` / `video create --video` 本地视频上传限制对齐前端流程：MP4/MOV/WebM、≤200MB、目标 ≤15s（0.5s metadata 容差）、≤1080p / 2,086,876 frame pixels
 - `chat --project auto --video` 先校验本地视频，再创建项目，避免无效视频生成空项目
 - CLI 上传视频到 timeline 时把 `duration/width/height` 写入 `video_meta`
 - 新增唯一视频分析命令：`makaron analyze --video input.mp4 "question"`
@@ -3866,3 +3866,10 @@ duration ?? referenceVideoDuration ?? parseTotalDuration(finalPrompt)
 - 结论：本轮失败不是 1080p 分辨率入口问题，也不是单纯音乐版权问题；是 Evolink/Seedance provider 的内容策略判断。CLI 只需正确透出 provider 原始错误。
 
 测试项目：`https://www.makaron.app/projects/fe3809ae-3368-4802-874b-230999422d3d`
+
+### Follow-up: 15s metadata tolerance (2026-05-30)
+
+- 实测 `/Users/tianyicai/Downloads/7b1560cf-06f6-463f-a464-f75117991f00.mp4`：容器 duration `15.082667s`，视频流 `14.966667s`，`1080x1920`
+- 绕过本地硬拦截直传 Seedance/Evolink，`duration: 5` 输出成功：`task-unified-1780089477-psc65jfx`
+- 结论：`duration > 15` 不能直接硬拦。前端、CUI、项目页/Home 页、CLI、projects/create、Agent duration guard 统一改成目标 15s + 0.5s metadata/audio padding 容差
+- 输出/计费 duration 仍钳到 15s；16s 继续拦截；1s 不本地拦截，但 provider 错误必须正确透出并返回非 0 exit

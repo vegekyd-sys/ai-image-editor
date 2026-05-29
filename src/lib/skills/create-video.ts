@@ -1,6 +1,9 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
 import type { VideoModel } from '@/types';
 
+const MAX_VIDEO_DURATION = 15;
+const MAX_REFERENCE_VIDEO_DURATION = 15.5;
+
 export interface CreateVideoInput {
   script: string;
   images: string[];          // public URLs only (no base64)
@@ -28,11 +31,16 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, referenceVideoDuration, keepOriginalSound, motionControl, characterOrientation } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length;
 
-  const requestedDuration = duration ?? referenceVideoDuration;
-  if (requestedDuration != null && requestedDuration > 15) {
+  if (duration != null && duration > MAX_VIDEO_DURATION) {
     return {
       success: false,
       message: 'Video duration must be 15 seconds or less.',
+    };
+  }
+  if (referenceVideoDuration != null && referenceVideoDuration > MAX_REFERENCE_VIDEO_DURATION) {
+    return {
+      success: false,
+      message: 'Reference video duration must be 15 seconds or less, with a small metadata tolerance.',
     };
   }
 
@@ -92,7 +100,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     // Resolve duration: explicit user choice > video edit source duration > parsed script > smart mode.
     // This prevents accidental 5s edits, while still allowing requests like "turn this 10s video into 8s".
-    const resolvedDuration = duration ?? referenceVideoDuration ?? parseTotalDuration(finalPrompt);
+    const resolvedDuration = duration ?? (referenceVideoDuration != null ? Math.min(MAX_VIDEO_DURATION, referenceVideoDuration) : undefined) ?? parseTotalDuration(finalPrompt);
 
     // Provider routing: explicit videoModel > env var > default kling
     let provider: string;

@@ -4,6 +4,8 @@ import { renderMediaOnWeb } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 export const MAX_DURATION = 15; // 15 seconds — matches SeeDance reference-video edit limit
+export const MAX_DURATION_TOLERANCE = 0.5; // Allow tiny container/audio metadata padding over 15s
+export const MAX_ACCEPTED_DURATION = MAX_DURATION + MAX_DURATION_TOLERANCE;
 export const MAX_FRAME_PIXELS = 2_086_876; // SeeDance limit: width × height must not exceed ~1080p
 const DIRECT_UPLOAD_MAX_SIZE = 100 * 1024 * 1024; // 100MB — skip transcode for any H.264 MP4
 
@@ -38,9 +40,9 @@ async function extractVideoInfo(file: File): Promise<{
   const width = video.videoWidth;
   const height = video.videoHeight;
 
-  if (duration > MAX_DURATION) {
+  if (duration > MAX_ACCEPTED_DURATION) {
     URL.revokeObjectURL(blobUrl);
-    throw new Error(`Video too long (${Math.round(duration)}s). Maximum ${MAX_DURATION}s.`);
+    throw new Error(`Video too long (${duration.toFixed(1).replace(/\\.0$/, '')}s). Maximum ${MAX_DURATION}s, with ${MAX_DURATION_TOLERANCE}s metadata tolerance.`);
   }
 
   video.pause();

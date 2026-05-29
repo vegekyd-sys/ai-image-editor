@@ -53,13 +53,16 @@ export async function POST(req: NextRequest) {
           autoVideoUrls.push(videoUrl)
           const sourceDuration = Number(meta?.duration)
           if (Number.isFinite(sourceDuration) && sourceDuration > 0) {
-            referenceVideoDuration = Math.round((referenceVideoDuration ?? 0) + sourceDuration)
+            referenceVideoDuration = (referenceVideoDuration ?? 0) + sourceDuration
           }
           imageUrls[ref - 1] = ''
         }
       }
     }
-    const effectiveDuration = duration ?? referenceVideoDuration
+    if (referenceVideoDuration != null && referenceVideoDuration > 15.5) {
+      return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum 15s with small metadata tolerance.` }, { status: 400 })
+    }
+    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(15, Math.round(referenceVideoDuration)) : undefined)
 
     // Call skill layer (stateless, no DB)
     const skillResult = await createVideo({

@@ -326,7 +326,7 @@ Hard constraints (apply even before reading the guide):
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. Works for both Kling and SeeDance.
 - Total duration: 5-15 seconds.
-- Video edit duration lock: when editing a timeline video, output duration must equal that source video's duration from Media Index. Example: a 10s video edit must set \`duration: 10\`; never fall back to 5s unless the user explicitly asks to shorten it.
+- Video edit duration lock: when editing a timeline video, output duration should match that source video's duration from Media Index. If metadata is slightly over 15s (for example 15.1s), set \`duration: 15\`; never fall back to 5s unless the user explicitly asks to shorten it.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
@@ -403,12 +403,13 @@ Hard constraints (apply even before reading the guide):
             }
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
-          const referenceVideoDuration = totalVideoRefDuration > 0 ? Math.round(totalVideoRefDuration) : undefined;
-          const effectiveDuration = duration ?? referenceVideoDuration;
+          const referenceVideoDuration = totalVideoRefDuration > 0 ? Math.min(15, Math.round(totalVideoRefDuration)) : undefined;
+          const clampedDuration = duration != null && allVideoUrls.length > 0 && duration > 15 && duration <= 15.5 ? 15 : duration;
+          const effectiveDuration = clampedDuration ?? referenceVideoDuration;
 
-          // SeeDance constraint: total input video duration ≤ 15s
-          if (videoModel === 'seedance' && allVideoUrls.length > 0 && totalVideoRefDuration > 15) {
-            return { success: false as const, message: `SeeDance requires total reference video duration ≤ 15 seconds, but the referenced videos total ${Math.round(totalVideoRefDuration)}s. Try using fewer or shorter video references, or switch to Kling model.` };
+          // SeeDance accepts tiny metadata/audio padding over 15s; output duration stays clamped to 15s.
+          if (videoModel === 'seedance' && allVideoUrls.length > 0 && totalVideoRefDuration > 15.5) {
+            return { success: false as const, message: `SeeDance requires total reference video duration around 15 seconds or less, but the referenced videos total ${totalVideoRefDuration.toFixed(1).replace(/\\.0$/, '')}s. Try using fewer or shorter video references, or switch to Kling model.` };
           }
 
           const skillResult = await createVideo({

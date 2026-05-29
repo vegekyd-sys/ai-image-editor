@@ -1283,13 +1283,13 @@ export default function AgentChatView({
                 v.muted = true; v.src = url;
                 await new Promise<void>(r => { v.onloadedmetadata = () => r(); setTimeout(r, 5000); });
                 const videoDuration = v.duration;
-                const { MAX_DURATION } = await import('@/lib/video-upload');
-                if (videoDuration > MAX_DURATION) {
+                const { MAX_DURATION, MAX_ACCEPTED_DURATION } = await import('@/lib/video-upload');
+                if (videoDuration > MAX_ACCEPTED_DURATION) {
                   v.pause(); v.removeAttribute('src'); v.load();
                   URL.revokeObjectURL(url);
                   setAttachments(prev => [...prev, { id, type: 'video', thumbnail: '', status: 'error' as const }]);
                   setTimeout(() => setAttachments(prev => prev.filter(a => a.id !== id)), 3000);
-                  alert(t('video.tooLong').replace('{duration}', String(Math.round(videoDuration))).replace('{max}', String(MAX_DURATION)));
+                  alert(t('video.tooLong').replace('{duration}', videoDuration.toFixed(1).replace(/\.0$/, '')).replace('{max}', String(MAX_DURATION)));
                   continue;
                 }
                 v.currentTime = Math.min(0.5, v.duration * 0.1);

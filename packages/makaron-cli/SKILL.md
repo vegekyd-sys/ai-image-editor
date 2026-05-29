@@ -102,7 +102,7 @@ npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "comb
 npx makaron-cli chat --project auto --video https://example.com/dance.mp4 -b "extend this to 15 seconds"
 ```
 
-Supported formats: MP4, MOV, WebM. CLI local video uploads follow the same compatibility contract as the normal frontend flow: max 200MB, max 15s, and <=1080p / 2,086,876 frame pixels. The frontend can transcode oversized videos; the CLI rejects them so later Seedance editing does not fail. Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language. Seedance video-reference editing is supported for <=15s videos that meet these upload limits; Kling remains the base/direct edit path.
+Supported formats: MP4, MOV, WebM. CLI local video uploads follow the same compatibility contract as the normal frontend flow: max 200MB, target max 15s with 0.5s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode oversized videos; the CLI rejects them so later Seedance editing does not fail. Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language. Seedance video-reference editing is supported for ~15s videos that meet these upload limits; Kling remains the base/direct edit path.
 
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct video commands are standalone raw-tool calls.
 
@@ -190,7 +190,7 @@ npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 
 Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration 3|5|7|10|15`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`
 
-Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path and requires <=15s, <=1080p input.
+Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=1080p input. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s.
 
 ### `music` — Music generation
 

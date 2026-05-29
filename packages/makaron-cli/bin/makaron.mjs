@@ -29,6 +29,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_FJFN2YYaWaQjABUKLqxQcA_fhxPLFDY';
 
 const MAX_VIDEO_FILE_SIZE = 200 * 1024 * 1024;
 const MAX_VIDEO_DURATION = 15;
+const MAX_VIDEO_DURATION_TOLERANCE = 0.5;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
 
 function formatSeconds(seconds) {
@@ -740,8 +741,8 @@ function validateVideoFile(videoPath) {
   if (!meta) {
     return { ok: false, error: 'Cannot read video duration/resolution. Install ffmpeg/ffprobe or use the normal frontend upload flow.' };
   }
-  if (meta.duration > MAX_VIDEO_DURATION) {
-    return { ok: false, error: `Video too long: ${formatSeconds(meta.duration)}s (max ${MAX_VIDEO_DURATION}s)` };
+  if (meta.duration > MAX_VIDEO_DURATION + MAX_VIDEO_DURATION_TOLERANCE) {
+    return { ok: false, error: `Video too long: ${formatSeconds(meta.duration)}s (max ${MAX_VIDEO_DURATION}s, with ${MAX_VIDEO_DURATION_TOLERANCE}s metadata tolerance)` };
   }
   if (meta.width * meta.height > MAX_VIDEO_FRAME_PIXELS) {
     return { ok: false, error: `Video resolution too high: ${meta.width}x${meta.height} (${meta.width * meta.height} px). Max is <=1080p (${MAX_VIDEO_FRAME_PIXELS} px). Re-upload through the frontend to transcode, or export a smaller video.` };
@@ -1195,7 +1196,7 @@ if (command === 'login') {
     const vArgs = videoUrl
       ? { videoUrl, editPrompt: script, images, videoModel: videoModel || 'kling', referType: (videoModel || 'kling') === 'seedance' ? 'feature' : 'base' }
       : { script, images };
-    const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.round(inputVideoMeta.duration) : undefined);
+    const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (videoModel && !videoUrl) vArgs.videoModel = videoModel;

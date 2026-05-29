@@ -2169,10 +2169,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     } catch (err) {
       console.error('Video upload error:', err);
       const msg = err instanceof Error ? err.message : String(err);
-      const tooLongMatch = msg.match(/Video too long \((\d+)s\)/);
-      setAgentStatus(tooLongMatch
-        ? t('video.tooLong').replace('{duration}', tooLongMatch[1]).replace('{max}', msg.match(/Maximum (\d+)s/)?.[1] || '16')
-        : `视频上传失败: ${msg}`);
+      const tooLongMatch = msg.match(/Video too long \((\d+(?:\.\d+)?)s\)/);
+      if (tooLongMatch) {
+        alert(t('video.tooLong').replace('{duration}', tooLongMatch[1]).replace('{max}', msg.match(/Maximum (\d+)s/)?.[1] || '15'));
+        setAgentStatus(t('editor.greeting'));
+        setSnapshots(prev => prev.filter(s => s.id !== snapId));
+        return null;
+      }
+      setAgentStatus(`视频上传失败: ${msg}`);
       setSnapshots(prev => prev.map(s =>
         s.id === snapId ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
       ));

@@ -471,9 +471,14 @@ function HomePageInner() {
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('Create project error:', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('Video too long')) {
+        const { MAX_DURATION } = await import('@/lib/video-upload')
+        alert(t('video.tooLong').replace('{duration}', msg.match(/\((\d+(?:\.\d+)?)s\)/)?.[1] || '?').replace('{max}', String(MAX_DURATION)))
+      }
       createInput.setCreating(false)
     }
-  }, [requireAuth, saveContextBeforeLogin, createInput, router, selectedDetail, selectedSkill])
+  }, [requireAuth, saveContextBeforeLogin, createInput, router, selectedDetail, selectedSkill, t])
 
   const handleCreate = useCallback(async () => {
     const hasText = createInput.text.trim()

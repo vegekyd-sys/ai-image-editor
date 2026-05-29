@@ -291,8 +291,8 @@ Style: Cinematic, warm golden light.`,
 Kling supports base/direct video editing. SeeDance supports video-reference editing for short clips.
 
 IMPORTANT:
-- videoUrl must be a publicly accessible URL (MP4/MOV/WebM, ≤15s, ≤200MB, ≤1080p / 2,086,876 pixels)
-- SeeDance video editing requires ≤15s and ≤1080p input video, matching the normal frontend upload flow.
+- videoUrl must be a publicly accessible URL (MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤200MB, ≤1080p / 2,086,876 pixels)
+- SeeDance video editing requires target ≤15s and ≤1080p input video, matching the normal frontend upload flow.
 - When referType is "base": the video is the starting point for editing. Images serve as additional references only (no first_frame).
 - When referType is "feature": the video provides style/motion reference. Images define the actual content.
 - For videoModel "seedance", use referType "feature" (default for Seedance). Base/direct edit is Kling-only.
@@ -302,12 +302,12 @@ IMPORTANT:
 Example: Edit a video to add cinematic color grading:
   videoUrl: "https://...", editPrompt: "Apply warm cinematic color grading with film grain", videoModel: "seedance"`,
     {
-      videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV/WebM, ≤15s, ≤1080p, ≤200MB)'),
+      videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤1080p, ≤200MB)'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration: 3, 5, 7, 10, or 15 seconds. Omit for smart mode.'),
       aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
-      videoModel: z.enum(['kling', 'seedance']).optional().describe('Video model: kling (base/direct edit) or seedance (reference-video edit for ≤15s clips)'),
+      videoModel: z.enum(['kling', 'seedance']).optional().describe('Video model: kling (base/direct edit) or seedance (reference-video edit for target ≤15s clips)'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
     },
@@ -353,7 +353,7 @@ Use this as the standalone equivalent of the Agent's analyze_video tool.
 
 IMPORTANT:
 - videoUrl must be publicly accessible and downloadable.
-- For best compatibility with later SeeDance editing, use the normal Makaron upload constraints: MP4/MOV/WebM, ≤15s, ≤200MB, ≤1080p / 2,086,876 pixels.
+- For best compatibility with later SeeDance editing, use the normal Makaron upload constraints: MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤200MB, ≤1080p / 2,086,876 pixels.
 - This tool only analyzes; it does not create or update a project timeline.`,
     {
       videoUrl: z.string().url().describe('Publicly accessible video URL to analyze'),

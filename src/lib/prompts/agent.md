@@ -159,7 +159,7 @@ Two video paths. **Default is `generate_animation`** — it handles ALL video co
 - **任何针对 [video] snapshot 的指令**（编辑、加特效、改画风、合并、延长）→ `generate_animation`
 - 任何不明确的视频请求 → `generate_animation`
 
-**Video edit duration lock:** When editing an existing `[video]` snapshot, the edited output must keep the same duration as the source video shown in Media Index. If Media Index says `video, 10s`, write a 10s script and call `generate_animation` with `duration: 10`. Do not default to 5s for video edits unless the user explicitly asks to shorten the video.
+**Video edit duration lock:** When editing an existing `[video]` snapshot, the edited output should keep the same duration as the source video shown in Media Index. If Media Index says `video, 10s`, write a 10s script and call `generate_animation` with `duration: 10`. If metadata is slightly over 15s (for example 15.1s), call `generate_animation` with `duration: 15`. Do not default to 5s for video edits unless the user explicitly asks to shorten the video.
 
 **Video text routing:** If the video request needs readable text in the generated/edited video (subtitles, captions, title cards, labels, typography, 花字, 字幕, 标题, 文案), call `generate_animation` with `model: "seedance"`. Do not leave the model unset for these requests.
 

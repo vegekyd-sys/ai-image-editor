@@ -116,8 +116,8 @@ const zh = {
   'video.confirmAbandon': '确认放弃',
   'video.cancel': '取消',
   'video.retry': '重试',
-  'video.invalidParamsHint': '可能原因：参考视频分辨率过高（最大 1080p）或时长过长（最大 15s）。请重新上传较小的视频。',
-  'video.tooLong': '视频过长（{duration}s），最长 {max}s',
+  'video.invalidParamsHint': '可能原因：参考视频分辨率过高（最大 1080p）或时长过长（目标最长 15s，允许少量 metadata 误差）。请重新上传较小的视频。',
+  'video.tooLong': '视频过长（{duration}s），最长 {max}s，允许少量 metadata 误差',
   'video.detail': '详情',
   'video.count': (n: number) => `视频 · ${n} 个`,
 
