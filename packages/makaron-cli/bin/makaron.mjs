@@ -31,6 +31,11 @@ const MAX_VIDEO_FILE_SIZE = 200 * 1024 * 1024;
 const MAX_VIDEO_DURATION = 15;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
 
+function formatSeconds(seconds) {
+  if (!Number.isFinite(seconds)) return String(seconds);
+  return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 function loadAuth() {
@@ -736,7 +741,7 @@ function validateVideoFile(videoPath) {
     return { ok: false, error: 'Cannot read video duration/resolution. Install ffmpeg/ffprobe or use the normal frontend upload flow.' };
   }
   if (meta.duration > MAX_VIDEO_DURATION) {
-    return { ok: false, error: `Video too long: ${Math.round(meta.duration)}s (max ${MAX_VIDEO_DURATION}s)` };
+    return { ok: false, error: `Video too long: ${formatSeconds(meta.duration)}s (max ${MAX_VIDEO_DURATION}s)` };
   }
   if (meta.width * meta.height > MAX_VIDEO_FRAME_PIXELS) {
     return { ok: false, error: `Video resolution too high: ${meta.width}x${meta.height} (${meta.width * meta.height} px). Max is <=1080p (${MAX_VIDEO_FRAME_PIXELS} px). Re-upload through the frontend to transcode, or export a smaller video.` };
@@ -1197,7 +1202,10 @@ if (command === 'login') {
     if (keepOriginalSound && videoUrl) vArgs.keepOriginalSound = true;
     const result = await callMcpTool(baseUrl, headers, videoUrl ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
-    if (text) console.log(text);
+    if (text) {
+      console.log(text);
+      if (!text.includes('Task ID:')) process.exit(1);
+    }
 
   } else if (sub === 'status') {
     let taskId = null, snapshotId = null, wait = false;
