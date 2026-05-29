@@ -110,8 +110,8 @@ npx makaron-cli chat --project <id> --video party.mp4 --image kid.jpg -b "make t
 npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "splice these into one seamless video"
 ```
 
-Video files are uploaded via signed URL (no size limit up to 200MB). Supported formats: `.mp4`, `.mov`, `.webm`.
-The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos.
+Video files are uploaded via signed URL. CLI local video uploads follow the same compatibility contract as the normal frontend flow: `.mp4`, `.mov`, or `.webm`, max 200MB, max 15s, and <=1080p / 2,086,876 frame pixels. The frontend can transcode oversized videos; the CLI rejects them so later Seedance editing does not fail.
+The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos. Seedance video-reference editing is supported for <=15s videos that meet the same upload limits; Kling remains the base/direct edit path.
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct `video create` is standalone and does not write timeline entries.
 
 ### Check status (single query)
@@ -176,14 +176,17 @@ Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--skill enhance|crea
 # 1. Write script from images
 npx makaron-cli video script --image img1.jpg "cinematic story"
 
-# 2a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
+# 2. Analyze a video (standalone, no timeline write)
+npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
+
+# 3a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --model kling
 
-# 2b. Edit a video from a local file or public URL
+# 3b. Edit a video from a local file or public URL
 npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance
 npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance
 
-# 3. Check status
+# 4. Check status
 npx makaron-cli video status <taskId>
 ```
 
@@ -195,7 +198,7 @@ npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 
 Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration 3|5|7|10|15`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`
 
-Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path.
+Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path and requires <=15s, <=1080p input.
 
 ### `music` — Music generation
 

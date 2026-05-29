@@ -5,6 +5,9 @@ import sharp from 'sharp';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta } from '@/types';
 
+const MAX_VIDEO_DURATION = 15;
+const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
+
 async function resolveImageUrl(
   url: string,
   supabase: SupabaseClient,
@@ -39,13 +42,14 @@ export async function POST(req: NextRequest) {
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
 
-    const { imageUrl, imageBase64, imageUrls, imageBase64s, videoUrls, title, _addToProject } = await req.json();
+    const { imageUrl, imageBase64, imageUrls, imageBase64s, videoUrls, videoMetas, title, _addToProject } = await req.json();
 
     // Support single or multiple images
     const urls: (string | undefined)[] = imageUrls || (imageUrl ? [imageUrl] : []);
     const base64s: (string | undefined)[] = imageBase64s || (imageBase64 ? [imageBase64] : []);
     const imageCount = Math.max(urls.length, base64s.length);
     const videos: string[] = videoUrls || [];
+    const providedVideoMetas: Array<{ duration?: number; width?: number; height?: number } | null> = Array.isArray(videoMetas) ? videoMetas : [];
 
     // Add images/videos to existing project (used by CLI chat --image / --video)
     if (_addToProject && (imageCount > 0 || videos.length > 0)) {
@@ -73,11 +77,19 @@ export async function POST(req: NextRequest) {
       }
 
       // Add video snapshots
-      for (const videoUrl of videos) {
+      for (let videoIndex = 0; videoIndex < videos.length; videoIndex++) {
+        const videoUrl = videos[videoIndex];
+        const providedMeta = providedVideoMetas[videoIndex] || null;
+        if (providedMeta?.duration && providedMeta.duration > MAX_VIDEO_DURATION) {
+          return NextResponse.json({ error: `Video too long (${Math.round(providedMeta.duration)}s). Maximum ${MAX_VIDEO_DURATION}s.` }, { status: 400 });
+        }
+        if (providedMeta?.width && providedMeta?.height && providedMeta.width * providedMeta.height > MAX_VIDEO_FRAME_PIXELS) {
+          return NextResponse.json({ error: `Video resolution too high (${providedMeta.width}x${providedMeta.height}). Maximum is <=1080p.` }, { status: 400 });
+        }
         const snapshotId = crypto.randomUUID();
         let permanentUrl = videoUrl;
-        let width: number | undefined;
-        let height: number | undefined;
+        let width: number | undefined = providedMeta?.width;
+        let height: number | undefined = providedMeta?.height;
 
         // Fetch + upload to our Storage if external URL
         if (!isPermanentUrl(videoUrl)) {
@@ -114,7 +126,7 @@ export async function POST(req: NextRequest) {
         const videoMeta: VideoMeta = {
           taskId: null, videoUrl: permanentUrl, prompt: '',
           sourceSnapshotIds: [], sourceUrls: [],
-          status: 'completed', duration: null, model: 'upload',
+          status: 'completed', duration: providedMeta?.duration ?? null, model: 'upload',
           createdAt: new Date().toISOString(), width, height,
         };
         await supabase.from('snapshots').insert({
@@ -179,11 +191,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Create video snapshots
-    for (const videoUrl of videos) {
+    for (let videoIndex = 0; videoIndex < videos.length; videoIndex++) {
+      const videoUrl = videos[videoIndex];
+      const providedMeta = providedVideoMetas[videoIndex] || null;
+      if (providedMeta?.duration && providedMeta.duration > MAX_VIDEO_DURATION) {
+        return NextResponse.json({ error: `Video too long (${Math.round(providedMeta.duration)}s). Maximum ${MAX_VIDEO_DURATION}s.` }, { status: 400 });
+      }
+      if (providedMeta?.width && providedMeta?.height && providedMeta.width * providedMeta.height > MAX_VIDEO_FRAME_PIXELS) {
+        return NextResponse.json({ error: `Video resolution too high (${providedMeta.width}x${providedMeta.height}). Maximum is <=1080p.` }, { status: 400 });
+      }
       const snapshotId = crypto.randomUUID();
       let permanentUrl = videoUrl;
-      let width: number | undefined;
-      let height: number | undefined;
+      let width: number | undefined = providedMeta?.width;
+      let height: number | undefined = providedMeta?.height;
 
       if (!isPermanentUrl(videoUrl)) {
         try {
@@ -219,7 +239,7 @@ export async function POST(req: NextRequest) {
       const videoMeta: VideoMeta = {
         taskId: null, videoUrl: permanentUrl, prompt: '',
         sourceSnapshotIds: [], sourceUrls: [],
-        status: 'completed', duration: null, model: 'upload',
+        status: 'completed', duration: providedMeta?.duration ?? null, model: 'upload',
         createdAt: new Date().toISOString(), width, height,
       };
       const { error: snapError } = await supabase.from('snapshots').insert({

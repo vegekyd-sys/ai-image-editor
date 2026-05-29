@@ -1,10 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { editImage } from '../lib/skills/edit-image';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo } from '../lib/skills/create-video';
 import { getVideoStatus } from '../lib/skills/get-video-status';
+import { analyzeVideo } from '../lib/skills/analyze-video';
 import { createMusic } from '../lib/skills/create-music';
 import { getMusicStatus } from '../lib/skills/get-music-status';
 
@@ -13,7 +16,6 @@ function resolveImage(input: string): string {
   if (input.startsWith('data:') || input.startsWith('http')) return input;
   // Local file path — only works in stdio mode (not serverless)
   try {
-    const { readFileSync, existsSync } = require('fs');
     const filePath = input.startsWith('file://') ? input.slice(7) : input;
     if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
     const buf = readFileSync(filePath);
@@ -29,8 +31,6 @@ function resolveImage(input: string): string {
 function formatResult(image: string, message: string, prefix: string) {
   // Try to save to disk (stdio mode). If fs is unavailable or cwd is read-only (serverless), return base64.
   try {
-    const { writeFileSync, existsSync, mkdirSync } = require('fs');
-    const { join } = require('path');
     const outDir = join(process.cwd(), 'mcp-output');
     if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
     const raw = image.replace(/^data:image\/\w+;base64,/, '');
@@ -286,26 +286,28 @@ Style: Cinematic, warm golden light.`,
 
   server.tool(
     'makaron_edit_video',
-    `Edit an existing video using Kling AI video-to-video. Returns a taskId for polling.
+    `Edit an existing video using AI video-to-video/reference-video generation. Returns a taskId for polling.
 
-Uses the video as a base (default) to apply edits described in the script/prompt,
-or as a feature reference to transfer style/motion to new content.
+Kling supports base/direct video editing. SeeDance supports video-reference editing for short clips.
 
 IMPORTANT:
-- videoUrl must be a publicly accessible URL (MP4/MOV, ≥3s, 720-2160px, 24-60fps, ≤200MB)
+- videoUrl must be a publicly accessible URL (MP4/MOV/WebM, ≤15s, ≤200MB, ≤1080p / 2,086,876 pixels)
+- SeeDance video editing requires ≤15s and ≤1080p input video, matching the normal frontend upload flow.
 - When referType is "base": the video is the starting point for editing. Images serve as additional references only (no first_frame).
 - When referType is "feature": the video provides style/motion reference. Images define the actual content.
+- For videoModel "seedance", use referType "feature" (default for Seedance). Base/direct edit is Kling-only.
 - images (if any) must be publicly accessible URLs
 - Video rendering takes 3-5 minutes. Use makaron_get_video_status to poll.
 
 Example: Edit a video to add cinematic color grading:
-  videoUrl: "https://...", editPrompt: "Apply warm cinematic color grading with film grain", referType: "base"`,
+  videoUrl: "https://...", editPrompt: "Apply warm cinematic color grading with film grain", videoModel: "seedance"`,
     {
-      videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV, ≥3s, 720-2160px, ≤200MB)'),
+      videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV/WebM, ≤15s, ≤1080p, ≤200MB)'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration: 3, 5, 7, 10, or 15 seconds. Omit for smart mode.'),
       aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
+      videoModel: z.enum(['kling', 'seedance']).optional().describe('Video model: kling (base/direct edit) or seedance (reference-video edit for ≤15s clips)'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
     },
@@ -316,13 +318,16 @@ Example: Edit a video to add cinematic color grading:
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
+        const resolvedModel = params.videoModel ?? 'kling';
+        const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' ? 'feature' : 'base');
         const result = await createVideo({
           script: params.editPrompt,
           images: params.images ?? [],
           duration: params.duration,
           aspectRatio: params.aspectRatio,
+          videoModel: resolvedModel,
           videoUrl: params.videoUrl,
-          videoReferType: params.referType ?? 'base',
+          videoReferType: resolvedReferType,
           keepOriginalSound: params.keepOriginalSound ?? false,
         });
 
@@ -335,6 +340,46 @@ Example: Edit a video to add cinematic color grading:
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP edit_video error]', msg);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  server.tool(
+    'makaron_analyze_video',
+    `Analyze a video and return scene/action/pacing/audio observations.
+
+Use this as the standalone equivalent of the Agent's analyze_video tool.
+
+IMPORTANT:
+- videoUrl must be publicly accessible and downloadable.
+- For best compatibility with later SeeDance editing, use the normal Makaron upload constraints: MP4/MOV/WebM, ≤15s, ≤200MB, ≤1080p / 2,086,876 pixels.
+- This tool only analyzes; it does not create or update a project timeline.`,
+    {
+      videoUrl: z.string().url().describe('Publicly accessible video URL to analyze'),
+      question: z.string().optional().describe('Optional focus question, e.g. "describe pacing" or "what happens at 5s?"'),
+    },
+    async (params) => {
+      try {
+        if (options?.onToolStart) {
+          const check = await options.onToolStart('makaron_analyze_video');
+          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+        }
+        const t0 = Date.now();
+        const result = await analyzeVideo({
+          videoUrl: params.videoUrl,
+          question: params.question,
+        });
+
+        if (result.success) {
+          await options?.onToolComplete?.('makaron_analyze_video', undefined, Date.now() - t0);
+        }
+        return { content: [{ type: 'text' as const, text: result.success
+          ? `${result.message}\n\n${result.analysis}`
+          : result.message }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[MCP analyze_video error]', msg);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
       }
     },
@@ -362,7 +407,7 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
         if (result.status === 'completed' && result.videoUrl) {
           response += `\n\nVideo URL: ${result.videoUrl}`;
         }
-        if (result.status === 'failed' && result.error) {
+        if (result.status === 'failed' && result.error && !response.includes(result.error)) {
           response += `\n\nError: ${result.error}`;
         }
 

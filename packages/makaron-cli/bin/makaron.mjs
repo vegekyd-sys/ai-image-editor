@@ -14,6 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createInterface } from 'readline';
+import { execFileSync } from 'child_process';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,10 @@ const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJFN2YYaWaQjABUKLqxQcA_fhxPLFDY';
+
+const MAX_VIDEO_FILE_SIZE = 200 * 1024 * 1024;
+const MAX_VIDEO_DURATION = 15;
+const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -368,6 +373,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
           for (const d of data.result.designs || []) process.stderr.write(`🎨  Design (${d.width}x${d.height})\n`);
           for (const v of data.result.videos || []) {
             if (v.videoUrl) process.stderr.write(`🎬  Video: ${v.videoUrl}\n`);
+            else if (v.status === 'failed') process.stderr.write(`🎬  Video ${v.taskId}: failed${v.error ? ` — ${v.error}` : ''}\n`);
             else process.stderr.write(`🎬  Video ${v.taskId}: ${v.status || 'submitted'}\n`);
           }
           for (const m of data.result.music || []) {
@@ -440,7 +446,7 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
       } else if (JSON.stringify(prev) !== JSON.stringify(item)) {
         // Updated item (e.g. video status changed)
         if (jsonl) console.log(JSON.stringify({ event: 'output.updated', item }));
-        else process.stderr.write(`~ [${item.type}] ${item.status} ${item.url || ''}\n`);
+        else process.stderr.write(`~ [${item.type}] ${item.status} ${item.url || item.error || ''}\n`);
       }
     }
 
@@ -476,7 +482,7 @@ async function pollVideo(baseUrl, headers, taskId, snapshotId) {
       if (!res.ok) continue;
       const data = await res.json();
       if (data.videoUrl) { process.stderr.write(`\r🎬 Video done (${elapsed}s): ${data.videoUrl}\n`); return data.videoUrl; }
-      if (data.status === 'failed' || data.status === 'abandoned') { process.stderr.write(`\r🎬 Video ${data.status} (${elapsed}s)\n`); return null; }
+      if (data.status === 'failed' || data.status === 'abandoned') { process.stderr.write(`\r🎬 Video ${data.status} (${elapsed}s)${data.error ? `: ${data.error}` : ''}\n`); return null; }
       process.stderr.write(`\r🎬 Video rendering... ${elapsed}s`);
     } catch { /* retry */ }
     if (elapsed > 600) { process.stderr.write(`\r🎬 Video timeout (${elapsed}s)\n`); return null; }
@@ -664,12 +670,90 @@ function isHttpUrl(value) {
   return value?.startsWith('http://') || value?.startsWith('https://');
 }
 
+function probeVideoWithFfprobe(videoPath) {
+  try {
+    const out = execFileSync('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=width,height:format=duration',
+      '-of', 'json',
+      videoPath,
+    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const data = JSON.parse(out);
+    const stream = data.streams?.[0] || {};
+    const duration = Number(data.format?.duration);
+    const width = Number(stream.width);
+    const height = Number(stream.height);
+    if (Number.isFinite(duration) && width > 0 && height > 0) {
+      return { duration, width, height };
+    }
+  } catch { /* ffprobe unavailable or file unsupported */ }
+  return null;
+}
+
+function probeVideoWithFfmpeg(videoPath) {
+  try {
+    const out = execFileSync('ffmpeg', ['-i', videoPath], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return parseFfmpegProbe(out);
+  } catch (e) {
+    const text = `${e.stdout || ''}\n${e.stderr || ''}`;
+    return parseFfmpegProbe(text);
+  }
+}
+
+function parseFfmpegProbe(text) {
+  const durationMatch = text.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+  const sizeMatch = text.match(/Video:.*?(\d{2,5})x(\d{2,5})/);
+  if (!durationMatch || !sizeMatch) return null;
+  const duration = Number(durationMatch[1]) * 3600 + Number(durationMatch[2]) * 60 + Number(durationMatch[3]);
+  const width = Number(sizeMatch[1]);
+  const height = Number(sizeMatch[2]);
+  if (!Number.isFinite(duration) || width <= 0 || height <= 0) return null;
+  return { duration, width, height };
+}
+
+function probeLocalVideo(videoPath) {
+  return probeVideoWithFfprobe(videoPath) || probeVideoWithFfmpeg(videoPath);
+}
+
 function validateVideoFile(videoPath) {
   if (!fs.existsSync(videoPath)) {
     return { ok: false, error: `Video file not found: ${videoPath}` };
   }
   const stat = fs.statSync(videoPath);
-  if (stat.size > 200 * 1024 * 1024) {
+  if (stat.size > MAX_VIDEO_FILE_SIZE) {
+    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max 200MB)` };
+  }
+  const ext = path.extname(videoPath).slice(1).toLowerCase();
+  if (!['mp4', 'mov', 'webm'].includes(ext)) {
+    return { ok: false, error: `Unsupported video format: .${ext}. Use MP4, MOV, or WebM.` };
+  }
+  const meta = probeLocalVideo(videoPath);
+  if (!meta) {
+    return { ok: false, error: 'Cannot read video duration/resolution. Install ffmpeg/ffprobe or use the normal frontend upload flow.' };
+  }
+  if (meta.duration > MAX_VIDEO_DURATION) {
+    return { ok: false, error: `Video too long: ${Math.round(meta.duration)}s (max ${MAX_VIDEO_DURATION}s)` };
+  }
+  if (meta.width * meta.height > MAX_VIDEO_FRAME_PIXELS) {
+    return { ok: false, error: `Video resolution too high: ${meta.width}x${meta.height} (${meta.width * meta.height} px). Max is <=1080p (${MAX_VIDEO_FRAME_PIXELS} px). Re-upload through the frontend to transcode, or export a smaller video.` };
+  }
+  const mime = ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4';
+  return { ok: true, mime, meta };
+}
+
+function validateVideoFileForAnalysis(videoPath) {
+  if (!fs.existsSync(videoPath)) {
+    return { ok: false, error: `Video file not found: ${videoPath}` };
+  }
+  const stat = fs.statSync(videoPath);
+  if (stat.size === 0) {
+    return { ok: false, error: `Video file is empty: ${videoPath}` };
+  }
+  if (stat.size > MAX_VIDEO_FILE_SIZE) {
     return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max 200MB)` };
   }
   const ext = path.extname(videoPath).slice(1).toLowerCase();
@@ -693,6 +777,29 @@ function saveMcpImage(result, outputPath) {
   }
   if (textBlock) console.log(textBlock.text);
   return null;
+}
+
+async function analyzeVideoCli(baseUrl, headers, rawVideo, questionParts) {
+  if (!rawVideo) {
+    console.error('Usage: makaron analyze --video <file|url> ["question"]');
+    process.exit(1);
+  }
+  let videoUrl = isHttpUrl(rawVideo) ? rawVideo : null;
+  if (videoUrl) {
+    process.stderr.write('📹 Using public video URL for analysis; provider limits apply.\n');
+  } else {
+    const valid = validateVideoFileForAnalysis(rawVideo);
+    if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
+    process.stderr.write(`📹 Uploading ${path.basename(rawVideo)} (${(fs.statSync(rawVideo).size/1024/1024).toFixed(1)}MB)...\n`);
+    videoUrl = await uploadFileViaSignedUrl(baseUrl, headers, undefined, rawVideo, valid.mime);
+    if (!videoUrl) process.exit(1);
+    process.stderr.write(`📹 Uploaded: ${path.basename(rawVideo)}\n`);
+  }
+  process.stderr.write('🔎 Analyzing video...\n');
+  const question = questionParts.join(' ').trim() || undefined;
+  const result = await callMcpTool(baseUrl, headers, 'makaron_analyze_video', { videoUrl, question });
+  const text = result?.content?.find(c => c.type === 'text')?.text;
+  if (text) console.log(text);
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -751,6 +858,17 @@ if (command === 'login') {
   // Split images into URLs vs local files
   const imageUrlList = chatImages.filter(p => p.startsWith('http://') || p.startsWith('https://'));
   const imageFileList = chatImages.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
+  const prevalidatedVideoUrlList = chatVideos.filter(p => p.startsWith('http://') || p.startsWith('https://'));
+  const prevalidatedVideoFileList = chatVideos.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
+  const prevalidatedVideoMetas = new Map();
+  for (const videoPath of prevalidatedVideoFileList) {
+    const valid = validateVideoFile(videoPath);
+    if (!valid.ok) {
+      process.stderr.write(`❌ ${valid.error}\n`);
+      process.exit(1);
+    }
+    prevalidatedVideoMetas.set(videoPath, valid.meta);
+  }
 
   // --project auto: create a new project (with images/videos if provided)
   if (!projectId || projectId === 'auto') {
@@ -816,40 +934,36 @@ if (command === 'login') {
   // Upload videos to project timeline (via /api/projects/create with videoUrls)
   let finalPrompt = prompt;
   if (chatVideos.length > 0) {
-    const videoUrlList = chatVideos.filter(p => p.startsWith('http://') || p.startsWith('https://'));
-    const videoFileList = chatVideos.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
-
-    // Validate local video files
-    const validVideoFiles = [];
-    for (const videoPath of videoFileList) {
-      if (!fs.existsSync(videoPath)) { process.stderr.write(`⚠️ Video file not found: ${videoPath}\n`); continue; }
-      const stat = fs.statSync(videoPath);
-      if (stat.size > 200 * 1024 * 1024) { process.stderr.write(`⚠️ Video too large: ${(stat.size/1024/1024).toFixed(1)}MB (max 200MB)\n`); continue; }
-      const ext = path.extname(videoPath).slice(1).toLowerCase();
-      if (!['mp4', 'mov', 'webm'].includes(ext)) { process.stderr.write(`⚠️ Unsupported video format: .${ext}. Use MP4, MOV, or WebM.\n`); continue; }
-      validVideoFiles.push(videoPath);
-    }
-
     // Upload local files via signed URL (no size limit, works with API key auth)
-    const uploadedVideoUrls = [...videoUrlList];
-    for (const videoPath of validVideoFiles) {
+    const uploadedVideoUrls = [...prevalidatedVideoUrlList];
+    const uploadedVideoMetas = prevalidatedVideoUrlList.map(() => null);
+    if (prevalidatedVideoUrlList.length) {
+      process.stderr.write(`📹 Assuming public video URL(s) already match Makaron upload limits: ≤${MAX_VIDEO_DURATION}s, ≤200MB, ≤1080p.\n`);
+    }
+    for (const videoPath of prevalidatedVideoFileList) {
       process.stderr.write(`📹 Uploading ${path.basename(videoPath)} (${(fs.statSync(videoPath).size/1024/1024).toFixed(1)}MB)...\n`);
       const ext = path.extname(videoPath).slice(1).toLowerCase();
       const mime = ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4';
       const url = await uploadFileViaSignedUrl(baseUrl, headers, projectId, videoPath, mime);
       if (url) {
         uploadedVideoUrls.push(url);
+        uploadedVideoMetas.push(prevalidatedVideoMetas.get(videoPath) || null);
         process.stderr.write(`📹 Uploaded: ${path.basename(videoPath)}\n`);
       }
     }
 
     // Add videos to project via projects/create (same as images)
+    if (uploadedVideoUrls.length === 0) {
+      process.stderr.write(`❌ No valid videos were uploaded. Local videos must be MP4/MOV/WebM, ≤${MAX_VIDEO_DURATION}s, ≤200MB, and ≤1080p.\n`);
+      process.exit(1);
+    }
+
     if (uploadedVideoUrls.length > 0) {
-      if (videoUrlList.length) process.stderr.write(`📹 Adding ${uploadedVideoUrls.length} video(s) to timeline...\n`);
+      if (prevalidatedVideoUrlList.length) process.stderr.write(`📹 Adding ${uploadedVideoUrls.length} video(s) to timeline...\n`);
       const res = await fetch(`${baseUrl}/api/projects/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ _addToProject: projectId, videoUrls: uploadedVideoUrls }),
+        body: JSON.stringify({ _addToProject: projectId, videoUrls: uploadedVideoUrls, videoMetas: uploadedVideoMetas }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -999,6 +1113,16 @@ if (command === 'login') {
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
 
+} else if (command === 'analyze') {
+  const { headers, baseUrl } = getAuth();
+  let video = null;
+  const questionParts = [];
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--video' && args[i + 1]) video = args[++i];
+    else questionParts.push(args[i]);
+  }
+  await analyzeVideoCli(baseUrl, headers, video, questionParts);
+
 } else if (command === 'video') {
   const { headers, baseUrl } = getAuth();
   const sub = args[1];
@@ -1048,9 +1172,14 @@ if (command === 'login') {
     }
 
     let videoUrl = isHttpUrl(video) ? video : null;
+    let inputVideoMeta = null;
+    if (videoUrl) {
+      process.stderr.write(`📹 Assuming public video URL already matches Makaron upload limits: ≤${MAX_VIDEO_DURATION}s, ≤200MB, ≤1080p.\n`);
+    }
     if (video && !videoUrl) {
       const valid = validateVideoFile(video);
       if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
+      inputVideoMeta = valid.meta;
       process.stderr.write(`📹 Uploading ${path.basename(video)} (${(fs.statSync(video).size/1024/1024).toFixed(1)}MB)...\n`);
       videoUrl = await uploadFileViaSignedUrl(baseUrl, headers, undefined, video, valid.mime);
       if (!videoUrl) process.exit(1);
@@ -1059,9 +1188,10 @@ if (command === 'login') {
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
     const vArgs = videoUrl
-      ? { videoUrl, editPrompt: script, images, referType: (videoModel || 'kling') === 'kling' ? 'base' : undefined }
+      ? { videoUrl, editPrompt: script, images, videoModel: videoModel || 'kling', referType: (videoModel || 'kling') === 'seedance' ? 'feature' : 'base' }
       : { script, images };
-    if (duration) vArgs.duration = duration;
+    const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.round(inputVideoMeta.duration) : undefined);
+    if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (videoModel && !videoUrl) vArgs.videoModel = videoModel;
     if (keepOriginalSound && videoUrl) vArgs.keepOriginalSound = true;
@@ -1374,7 +1504,8 @@ Commands:
   abort <runId>                      Abort a running Agent
 
   edit [--image <file>] "prompt"     AI image edit / text-to-image
-  video script|create|status         Video generation (v2 timeline support)
+  analyze --video <file|url>         Analyze video content
+  video script|create|status         Video generation
   music create|status                Music generation
 
   admin                              Admin commands (skills, upload, set-admin)

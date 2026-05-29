@@ -3,8 +3,8 @@
 import { renderMediaOnWeb } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
-export const MAX_DURATION = 16; // 16 seconds
-const MAX_FRAME_PIXELS = 2_086_876; // SeeDance limit: width × height must not exceed this
+export const MAX_DURATION = 15; // 15 seconds — matches SeeDance reference-video edit limit
+export const MAX_FRAME_PIXELS = 2_086_876; // SeeDance limit: width × height must not exceed ~1080p
 const DIRECT_UPLOAD_MAX_SIZE = 100 * 1024 * 1024; // 100MB — skip transcode for any H.264 MP4
 
 export interface VideoUploadResult {
@@ -200,4 +200,3 @@ export async function uploadVideoToStorage(
 
   return { videoUrl, duration: result.duration, width: result.width, height: result.height };
 }
-
