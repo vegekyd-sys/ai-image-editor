@@ -3840,7 +3840,7 @@ duration ?? referenceVideoDuration ?? parseTotalDuration(finalPrompt)
 
 ### CLI 版本
 
-`makaron-cli` 升级到 `0.7.5`。
+`makaron-cli` 升级到 `0.7.5`，已发布到 npm latest。
 
 ### 改动
 
