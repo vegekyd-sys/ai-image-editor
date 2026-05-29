@@ -326,11 +326,12 @@ Hard constraints (apply even before reading the guide):
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. Works for both Kling and SeeDance.
 - Total duration: 5-15 seconds.
+- Video edit duration lock: when editing a timeline video, output duration must equal that source video's duration from Media Index. Example: a 10s video edit must set \`duration: 10\`; never fall back to 5s unless the user explicitly asks to shorten it.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos.'),
-        duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. Omit for smart mode (API decides).'),
+        duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. For timeline video edits, set this to the source video duration from Media Index. Omit for smart mode only when generating from photos.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
         model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: kling.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
@@ -377,7 +378,7 @@ Hard constraints (apply even before reading the guide):
           const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || '';
 
           // Auto-route video references: query DB for snapshot types
-          let autoVideoUrls: string[] = [];
+          const autoVideoUrls: string[] = [];
           let totalVideoRefDuration = 0;
           if (ctx.supabase && ctx.projectId) {
             const { data: dbSnaps } = await ctx.supabase
@@ -402,6 +403,8 @@ Hard constraints (apply even before reading the guide):
             }
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
+          const referenceVideoDuration = totalVideoRefDuration > 0 ? Math.round(totalVideoRefDuration) : undefined;
+          const effectiveDuration = duration ?? referenceVideoDuration;
 
           // SeeDance constraint: total input video duration ≤ 15s
           if (videoModel === 'seedance' && allVideoUrls.length > 0 && totalVideoRefDuration > 15) {
@@ -411,12 +414,13 @@ Hard constraints (apply even before reading the guide):
           const skillResult = await createVideo({
             script: story_prompt,
             images: imageUrls,
-            duration,
+            duration: effectiveDuration,
             aspectRatio: aspect_ratio,
             videoModel,
             videoUrl: video_ref_url,
             videoReferType: video_ref_type,
             videoUrls: allVideoUrls.length ? allVideoUrls : undefined,
+            referenceVideoDuration,
             keepOriginalSound: keep_original_sound,
             motionControl: motion_control,
             characterOrientation: character_orientation,
@@ -445,7 +449,7 @@ Hard constraints (apply even before reading the guide):
             sourceSnapshotIds: [],
             sourceUrls: originalUrls.length > 0 ? originalUrls : (originalFirstUrl ? [originalFirstUrl] : []),
             status: 'processing',
-            duration: duration || null,
+            duration: effectiveDuration || null,
             model: videoModel as import('@/types').VideoModel,
             createdAt: new Date().toISOString(),
           };
@@ -468,7 +472,7 @@ Hard constraints (apply even before reading the guide):
           }
 
           // Bill for video generation (per-second) — store amount in videoMeta for refund on failure
-          const videoSec = duration || 10;
+          const videoSec = effectiveDuration || 10;
           const creditsCharged = Math.ceil(videoSec * 22);
           videoMeta.creditsCharged = creditsCharged;
           await supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId);

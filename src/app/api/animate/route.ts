@@ -39,29 +39,37 @@ export async function POST(req: NextRequest) {
       .select('type, video_meta')
       .eq('project_id', projectId)
       .order('sort_order')
-    let autoVideoUrls: string[] = []
+    const autoVideoUrls: string[] = []
+    let referenceVideoDuration: number | undefined
     if (dbSnaps?.length) {
       const scriptRefs = [...new Set(
         Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))
       )]
       for (const ref of scriptRefs) {
         const snap = dbSnaps[ref - 1]
-        const videoUrl = (snap?.video_meta as Record<string, unknown> | null)?.videoUrl as string | undefined
+        const meta = snap?.video_meta as Record<string, unknown> | null
+        const videoUrl = meta?.videoUrl as string | undefined
         if (snap?.type === 'video' && videoUrl) {
           autoVideoUrls.push(videoUrl)
+          const sourceDuration = Number(meta?.duration)
+          if (Number.isFinite(sourceDuration) && sourceDuration > 0) {
+            referenceVideoDuration = Math.round((referenceVideoDuration ?? 0) + sourceDuration)
+          }
           imageUrls[ref - 1] = ''
         }
       }
     }
+    const effectiveDuration = duration ?? referenceVideoDuration
 
     // Call skill layer (stateless, no DB)
     const skillResult = await createVideo({
       script: prompt,
       images: imageUrls,
-      duration,
+      duration: effectiveDuration,
       aspectRatio,
       videoModel,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+      referenceVideoDuration,
     })
 
     if (!skillResult.success || !skillResult.taskId) {
@@ -88,7 +96,7 @@ export async function POST(req: NextRequest) {
 
     // Deduct credits for video generation (fire-and-forget)
     // Per-second billing: 22 credits/s ($0.11/s × 2x markup), default 10s if smart mode
-    const videoSec = duration || 10
+    const videoSec = effectiveDuration || 10
     const toolName = videoModel === 'seedance' ? 'create_video_seedance' : 'create_video_kling'
     const { getToolPrice } = await import('@/lib/billing/pricing')
     const price = await getToolPrice(toolName)

@@ -55,29 +55,37 @@ export async function POST(req: NextRequest) {
       .eq('project_id', projectId)
       .order('sort_order')
     const autoVideoUrls: string[] = []
+    let referenceVideoDuration: number | undefined
     if (dbSnaps?.length) {
       const scriptRefs = [...new Set(
         Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))
       )]
       for (const ref of scriptRefs) {
         const snap = dbSnaps[ref - 1]
-        const videoUrl = (snap?.video_meta as Record<string, unknown> | null)?.videoUrl as string | undefined
+        const meta = snap?.video_meta as Record<string, unknown> | null
+        const videoUrl = meta?.videoUrl as string | undefined
         if (snap?.type === 'video' && videoUrl) {
           autoVideoUrls.push(videoUrl)
+          const sourceDuration = Number(meta?.duration)
+          if (Number.isFinite(sourceDuration) && sourceDuration > 0) {
+            referenceVideoDuration = Math.round((referenceVideoDuration ?? 0) + sourceDuration)
+          }
           inputImageUrls[ref - 1] = ''
         }
       }
     }
+    const effectiveDuration = duration ?? referenceVideoDuration
 
     const skillResult = await createVideo({
       script: prompt,
       images: inputImageUrls,
-      duration,
+      duration: effectiveDuration,
       aspectRatio,
       videoModel,
       videoUrl: inputVideoUrl,
       videoReferType,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+      referenceVideoDuration,
       keepOriginalSound,
     })
 
@@ -96,7 +104,7 @@ export async function POST(req: NextRequest) {
       sourceSnapshotIds: sourceSnapshotIds || [],
       sourceUrls: allSourceUrls.length > 0 ? allSourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
       status: 'processing',
-      duration: duration || null,
+      duration: effectiveDuration || null,
       model: videoModel || 'kling',
       createdAt: new Date().toISOString(),
     }
@@ -119,7 +127,7 @@ export async function POST(req: NextRequest) {
     if (error) throw error
 
     // Deduct credits — store amount in videoMeta for refund on failure
-    const videoSec = duration || 10
+    const videoSec = effectiveDuration || 10
     const creditsCharged = Math.ceil(videoSec * 22)
     videoMeta.creditsCharged = creditsCharged
     supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId).then(() => {})

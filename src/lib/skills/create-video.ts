@@ -11,6 +11,7 @@ export interface CreateVideoInput {
   videoUrl?: string;                    // Reference video URL (explicit from agent)
   videoReferType?: 'base' | 'feature';  // default: 'base'
   videoUrls?: string[];                 // Auto-detected video references from timeline
+  referenceVideoDuration?: number;       // Timeline video duration; output should match when editing video
   keepOriginalSound?: boolean;          // default: false
   // Motion Control (Kling only)
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
@@ -24,8 +25,16 @@ export interface CreateVideoResult {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, keepOriginalSound, motionControl, characterOrientation } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, referenceVideoDuration, keepOriginalSound, motionControl, characterOrientation } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length;
+
+  const requestedDuration = duration ?? referenceVideoDuration;
+  if (requestedDuration != null && requestedDuration > 15) {
+    return {
+      success: false,
+      message: 'Video duration must be 15 seconds or less.',
+    };
+  }
 
   if (images.length === 0 && !hasVideoReference) {
     return {
@@ -81,8 +90,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       }
     }
 
-    // Resolve duration: explicit > parsed from script > undefined (smart mode)
-    const resolvedDuration = duration ?? parseTotalDuration(finalPrompt);
+    // Resolve duration: explicit user choice > video edit source duration > parsed script > smart mode.
+    // This prevents accidental 5s edits, while still allowing requests like "turn this 10s video into 8s".
+    const resolvedDuration = duration ?? referenceVideoDuration ?? parseTotalDuration(finalPrompt);
 
     // Provider routing: explicit videoModel > env var > default kling
     let provider: string;
