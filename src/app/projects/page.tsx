@@ -192,7 +192,7 @@ function ProjectsPageInner() {
     window.history.replaceState({ makaronProjectOverlay: true, projectId }, '', `/projects/${projectId}`)
   }, [clearIOSProjectCloseTimer])
 
-  const closeIOSProject = useCallback((historyMode: 'back' | 'none' = 'back') => {
+  const closeIOSProject = useCallback((historyMode: 'replace' | 'none' = 'replace') => {
     if (!activeIOSProjectIdRef.current || typeof window === 'undefined') return
     clearIOSProjectCloseTimer()
     setIosProjectSettling(true)
@@ -204,8 +204,8 @@ function ProjectsPageInner() {
       setActiveIOSProjectId(null)
       setIosProjectX(0)
       setIosProjectSettling(false)
-      if (historyMode === 'back') {
-        window.history.back()
+      if (historyMode === 'replace') {
+        window.history.replaceState(null, '', '/projects')
       }
     }, IOS_PROJECT_OVERLAY_CLOSE_MS)
   }, [clearIOSProjectCloseTimer])
@@ -572,7 +572,7 @@ function ProjectsPageInner() {
     setIosProjectSettling(true)
     if (shouldClose) {
       setIosProjectPanActive(true)
-      closeIOSProject('back')
+      closeIOSProject('replace')
       return
     }
 
@@ -934,7 +934,7 @@ function ProjectsPageInner() {
             projectId={activeIOSProjectId}
             className=""
             loadingClassName="h-dvh bg-black"
-            onBack={() => closeIOSProject('back')}
+            onBack={() => closeIOSProject('replace')}
             onProjectCreated={replaceIOSProject}
           />
         </div>
