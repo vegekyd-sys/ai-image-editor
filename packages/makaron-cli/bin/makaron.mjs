@@ -32,6 +32,15 @@ const MAX_VIDEO_DURATION = 15;
 const MAX_VIDEO_DURATION_TOLERANCE = 0.5;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
 
+function getCliVersion() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
+    return pkg.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 function formatSeconds(seconds) {
   if (!Number.isFinite(seconds)) return String(seconds);
   return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
@@ -409,7 +418,7 @@ function applyPick(data, field) {
     case 'design_urls': return (data.output || []).filter(o => o.type === 'design' && o.url).map(o => o.url);
     case 'first_music_url': return data.output?.find(o => o.type === 'music' && o.url)?.url || null;
     case 'music_urls': return (data.output || []).filter(o => o.type === 'music' && o.url).map(o => o.url);
-    case 'project_url': return data.project_url || null;
+    case 'project_url': return data.project_url || data.projectUrl || null;
     case 'output': return data.output || [];
     case 'text': return data.output?.find(o => o.type === 'text')?.content || null;
     case 'status': return data.status;
@@ -813,7 +822,9 @@ async function analyzeVideoCli(baseUrl, headers, rawVideo, questionParts) {
 const args = process.argv.slice(2);
 const command = args[0];
 
-if (command === 'login') {
+if (command === '--version' || command === '-v' || command === 'version') {
+  console.log(getCliVersion());
+} else if (command === 'login') {
   await login();
 } else if (command === 'create') {
   const { headers, baseUrl } = getAuth();

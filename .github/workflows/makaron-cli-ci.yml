@@ -1,0 +1,54 @@
+name: Makaron CLI CI
+
+on:
+  pull_request:
+    paths:
+      - 'packages/makaron-cli/**'
+      - 'scripts/lint-customer-docs.mjs'
+      - '__tests__/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vitest.config.ts'
+      - '.github/workflows/makaron-cli-ci.yml'
+  workflow_dispatch:
+    inputs:
+      run_live:
+        description: 'Run isolated live Makaron CLI smoke'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  mock-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:cli
+      - run: npm run lint:agent-docs
+      - run: npm run lint:customer-docs
+
+  live-smoke:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix packages/makaron-cli run test:live
+        env:
+          MAKARON_LIVE: '1'
+          MAKARON_API_KEY: ${{ secrets.MAKARON_LIVE_API_KEY }}
+          MAKARON_URL: ${{ secrets.MAKARON_LIVE_URL }}
