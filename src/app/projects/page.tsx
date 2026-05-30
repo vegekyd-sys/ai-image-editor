@@ -177,7 +177,7 @@ function ProjectsPageInner() {
     setIosProjectSettling(true)
     setIosProjectPanActive(false)
     setIosProjectX(window.innerWidth)
-    window.history.pushState({ makaronProjectOverlay: true, projectId }, '', `/projects/${projectId}`)
+    window.history.pushState({ makaronProjectOverlay: true, projectId }, '', '/projects')
     window.requestAnimationFrame(() => setIosProjectX(0))
   }, [clearIOSProjectCloseTimer])
 
@@ -189,10 +189,10 @@ function ProjectsPageInner() {
     setIosProjectSettling(false)
     setIosProjectPanActive(false)
     setIosProjectX(0)
-    window.history.replaceState({ makaronProjectOverlay: true, projectId }, '', `/projects/${projectId}`)
+    window.history.replaceState({ makaronProjectOverlay: true, projectId }, '', '/projects')
   }, [clearIOSProjectCloseTimer])
 
-  const closeIOSProject = useCallback((historyMode: 'replace' | 'none' = 'replace') => {
+  const closeIOSProject = useCallback((historyMode: 'back' | 'none' = 'back') => {
     if (!activeIOSProjectIdRef.current || typeof window === 'undefined') return
     clearIOSProjectCloseTimer()
     setIosProjectSettling(true)
@@ -204,8 +204,8 @@ function ProjectsPageInner() {
       setActiveIOSProjectId(null)
       setIosProjectX(0)
       setIosProjectSettling(false)
-      if (historyMode === 'replace') {
-        window.history.replaceState(null, '', '/projects')
+      if (historyMode === 'back') {
+        window.history.back()
       }
     }, IOS_PROJECT_OVERLAY_CLOSE_MS)
   }, [clearIOSProjectCloseTimer])
@@ -572,7 +572,7 @@ function ProjectsPageInner() {
     setIosProjectSettling(true)
     if (shouldClose) {
       setIosProjectPanActive(true)
-      closeIOSProject('replace')
+      closeIOSProject('back')
       return
     }
 
@@ -934,7 +934,7 @@ function ProjectsPageInner() {
             projectId={activeIOSProjectId}
             className=""
             loadingClassName="h-dvh bg-black"
-            onBack={() => closeIOSProject('replace')}
+            onBack={() => closeIOSProject('back')}
             onProjectCreated={replaceIOSProject}
           />
         </div>

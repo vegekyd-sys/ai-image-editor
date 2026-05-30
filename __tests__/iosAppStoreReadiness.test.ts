@@ -123,8 +123,12 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('isMakaronIOSAppShell');
     expect(projectsPage).toContain('isCuiOpen');
     expect(projectsPage).toContain('window.history.pushState');
-    expect(projectsPage).toContain("window.history.replaceState(null, '', '/projects')");
-    expect(projectsPage).not.toContain('window.history.back()');
+    expect(projectsPage).toContain("window.history.pushState({ makaronProjectOverlay: true, projectId }, '', '/projects')");
+    expect(projectsPage).toContain("window.history.replaceState({ makaronProjectOverlay: true, projectId }, '', '/projects')");
+    expect(projectsPage).toContain('window.history.back()');
+    expect(projectsPage).not.toContain('`/projects/${projectId}`');
+    expect(projectsPage).not.toContain("router.push('/projects')");
+    expect(projectsPage).not.toContain("router.replace('/projects')");
     expect(projectsPage).toContain("window.addEventListener('popstate'");
     expect(projectsPage).toContain('event.state?.makaronProjectOverlay');
     expect(projectsPage).toContain('ProjectEditorContainer');
