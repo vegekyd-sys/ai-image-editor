@@ -102,6 +102,8 @@ return { type: 'files', outputs };
 
 After a split run, treat the returned files as a manifest. Do not run the same split again unless the source video, model limit, or requested cut points changed.
 
+For direct split/trim/export requests, `type: "files"` is the final answer. The returned workspace URLs are the MP4 deliverables. Do not call `write_file` for each returned file, and do not start a second `run_code` just to re-open a file from the previous temp directory.
+
 ## Assembly pattern
 
 ```js
@@ -189,3 +191,5 @@ Use this checklist to avoid repeated splitting and wasted tokens:
 Never publish source chunks as timeline snapshots unless the user explicitly asks to see the chunks as separate videos.
 
 Never split a generated chunk again unless a tool error says the generated chunk is still too long for the next step.
+
+If the user asks for two separate deliverable videos, return both URLs from the first `type: "files"` run and stop. If the user asks for one final edited video, return one `type: "video"` from the concat/final run and publish that single final MP4 with `write_file`.

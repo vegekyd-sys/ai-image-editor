@@ -66,7 +66,7 @@ Use for editable templates, Remotion designs, animated design systems, vlog pack
 
 Design runtime outputs are drafts until `write_file({ fromLastRunCode: true, name: "..." })` publishes them.
 
-Node media runtime outputs are workspace media results. Intermediate chunks should be saved but not published. Publish only the final MP4 with `write_file` when the result is ready.
+Node media runtime outputs are workspace media results. When `run_code` returns `type: "files"`, the returned storage URLs are already the deliverable files. Do not call `write_file` for those outputs. When `run_code` returns a single `type: "video"` final MP4, publish it with `write_file` if it should become a timeline snapshot.
 
 ### Music
 

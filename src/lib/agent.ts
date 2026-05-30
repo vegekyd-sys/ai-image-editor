@@ -815,7 +815,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
 Set fromLastRunCode=true to save the last run_code output.
 Design runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
-Node media runtime: intermediate files and chunks should use publish=false or continue to the next step; publish only the final user-facing MP4.
+Node media runtime: \`type: "files"\` outputs are already saved workspace files; do not call write_file for those links. \`type: "video"\` is a single final MP4 and can be published with write_file.
 Path is auto-generated from the current project and output type. Just provide a short name.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
@@ -838,6 +838,12 @@ Path is auto-generated from the current project and output type. Just provide a 
           fileContent = lastCode;
           const draftsForPath = (ctx as any).__runCodeDrafts || [];
           const lastDraftForPath = draftsForPath[draftsForPath.length - 1];
+          if (savePath && /\.(mp4|mov|webm|m4v|jpg|jpeg|png|webp|gif|mp3|wav|m4a|aac)$/i.test(savePath)) {
+            return {
+              success: false,
+              message: 'write_file({ fromLastRunCode: true }) saves the run_code source/publishable draft, not individual binary outputs from type:"files". Use the storageUrl links returned by run_code, or return a single type:"video" final MP4 and publish that.',
+            };
+          }
           // Auto-generate path. Node/FFmpeg runs save the executable JS; design runs save JSON payload.
           if (!savePath) {
             const snapshotIdx = ctx.snapshotImages.length;
@@ -1058,7 +1064,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobeP
 
           return {
             type: 'text' as const,
-            content: mediaResult.content || `Node media run complete. Outputs:\n${mediaResult.outputs.map((o, i) => `${i + 1}. ${o.storageUrl || o.workspacePath || o.path || '(no path)'}`).join('\n') || '(none)'}`,
+            content: mediaResult.content || `Node media run complete. Workspace outputs are ready; do not call write_file for type:"files" outputs. Use these MP4/file links directly, or continue to the next step such as generate_animation/concat.\n${mediaResult.outputs.map((o, i) => `${i + 1}. ${o.description ? `${o.description}: ` : ''}${o.storageUrl || o.workspacePath || o.path || '(no path)'}`).join('\n') || '(none)'}`,
           };
         }
 

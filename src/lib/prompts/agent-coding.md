@@ -190,9 +190,10 @@ Design workflow:
 
 - `type: "video"` returns a real MP4 output saved through the backend media runtime.
 - `type: "files"` returns real workspace files, often intermediate chunks.
-- Intermediate chunks for long-video workflows should be saved and described, but not published to the timeline.
+- For direct file tasks like "split this video into two videos", `type: "files"` is the final answer. Return the workspace URLs to the user and stop.
+- Intermediate chunks for long-video generation workflows should be saved and described, but not published to the timeline.
 - Publish only the final user-facing MP4 with `write_file({ fromLastRunCode: true, name: "slug" })`.
-- If the node run only produced chunks or analysis files, call `write_file({ fromLastRunCode: true, name: "slug", publish: false })` or continue with the next tool step instead of publishing.
+- If the node run produced `type: "files"`, do not call `write_file({ fromLastRunCode: true })` for those individual file links. Use the returned URLs directly, or continue with the next tool step such as `generate_animation` or concat.
 
 Note: `generate_image` is the exception. It publishes directly to the timeline.
 
