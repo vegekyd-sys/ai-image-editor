@@ -111,20 +111,46 @@ function installIOSBackSwipe() {
   let startY = 0;
   let lastX = 0;
   let startTime = 0;
+  let overlay: HTMLDivElement | null = null;
+  let navigatedBack = false;
 
-  const resetBodyTransform = () => {
-    document.body.style.transition = '';
-    document.body.style.transform = '';
-    document.body.style.willChange = '';
+  const removeOverlay = () => {
+    overlay?.remove();
+    overlay = null;
   };
 
-  const beginBodyTransform = () => {
-    document.body.style.transition = 'none';
-    document.body.style.willChange = 'transform';
+  const createOverlay = () => {
+    if (overlay) return overlay;
+
+    const wrapper = document.createElement('div');
+    const bodyClone = document.body.cloneNode(true) as HTMLElement;
+
+    wrapper.dataset.makaronIosBackOverlay = 'true';
+    wrapper.style.position = 'fixed';
+    wrapper.style.inset = '0';
+    wrapper.style.zIndex = '2147483647';
+    wrapper.style.overflow = 'hidden';
+    wrapper.style.background = '#000';
+    wrapper.style.pointerEvents = 'none';
+    wrapper.style.transform = 'translate3d(0, 0, 0)';
+    wrapper.style.transition = 'none';
+    wrapper.style.willChange = 'transform';
+
+    bodyClone.style.margin = '0';
+    bodyClone.style.width = '100vw';
+    bodyClone.style.minHeight = '100vh';
+    bodyClone.style.transform = 'none';
+    bodyClone.style.transition = 'none';
+    bodyClone.style.pointerEvents = 'none';
+    wrapper.appendChild(bodyClone);
+    document.body.appendChild(wrapper);
+    overlay = wrapper;
+    return wrapper;
   };
 
-  const setBodyProgress = (distance: number) => {
-    document.body.style.transform = `translate3d(${Math.max(0, distance)}px, 0, 0)`;
+  const setOverlayProgress = (distance: number) => {
+    const activeOverlay = overlay ?? createOverlay();
+    activeOverlay.style.transform = `translate3d(${Math.max(0, distance)}px, 0, 0)`;
   };
 
   const isEditableTarget = (target: EventTarget | null) => {
@@ -139,6 +165,7 @@ function installIOSBackSwipe() {
 
     tracking = true;
     committed = false;
+    navigatedBack = false;
     startX = touch.clientX;
     startY = touch.clientY;
     lastX = touch.clientX;
@@ -163,8 +190,12 @@ function installIOSBackSwipe() {
     event.preventDefault();
     event.stopPropagation();
 
-    beginBodyTransform();
-    setBodyProgress(Math.min(dx, window.innerWidth) * 0.55);
+    if (!overlay) {
+      createOverlay();
+      window.history.back();
+      navigatedBack = true;
+    }
+    setOverlayProgress(Math.min(dx, window.innerWidth));
   };
 
   const finish = () => {
@@ -179,26 +210,32 @@ function installIOSBackSwipe() {
 
     if (shouldGoBack) {
       committed = true;
-      document.body.style.transition = 'transform 160ms ease-out';
-      document.body.style.transform = `translate3d(${window.innerWidth}px, 0, 0)`;
+      const activeOverlay = overlay;
+      if (!navigatedBack) window.history.back();
+      if (!activeOverlay) return;
+      activeOverlay.style.transition = 'transform 160ms ease-out';
+      activeOverlay.style.transform = `translate3d(${window.innerWidth}px, 0, 0)`;
       window.setTimeout(() => {
-        resetBodyTransform();
-        window.history.back();
+        removeOverlay();
       }, 120);
       return;
     }
 
-    document.body.style.transition = 'transform 180ms ease-out';
-    document.body.style.transform = 'translate3d(0, 0, 0)';
-    window.setTimeout(resetBodyTransform, 190);
+    if (navigatedBack) window.history.forward();
+    if (!overlay) return;
+    overlay.style.transition = 'transform 180ms ease-out';
+    overlay.style.transform = 'translate3d(0, 0, 0)';
+    window.setTimeout(removeOverlay, 190);
   };
 
   const cancel = () => {
     if (!tracking) return;
     tracking = false;
-    document.body.style.transition = 'transform 160ms ease-out';
-    document.body.style.transform = 'translate3d(0, 0, 0)';
-    window.setTimeout(resetBodyTransform, 170);
+    if (navigatedBack) window.history.forward();
+    if (!overlay) return;
+    overlay.style.transition = 'transform 160ms ease-out';
+    overlay.style.transform = 'translate3d(0, 0, 0)';
+    window.setTimeout(removeOverlay, 170);
   };
 
   document.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
@@ -211,6 +248,6 @@ function installIOSBackSwipe() {
     document.removeEventListener('touchmove', onTouchMove, { capture: true });
     document.removeEventListener('touchend', finish, { capture: true });
     document.removeEventListener('touchcancel', cancel, { capture: true });
-    resetBodyTransform();
+    removeOverlay();
   };
 }
