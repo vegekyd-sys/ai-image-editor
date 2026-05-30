@@ -254,6 +254,8 @@ const zh = {
   'billing.subscribeTo': '订阅',
   'billing.upgradeTo': '升级到',
   'billing.current': '当前',
+  'billing.iosUnavailableTitle': 'iOS 内购买稍后开放',
+  'billing.iosUnavailableDesc': '为了符合 App Store 审核要求，iOS App 暂不通过网页出售点数或订阅。你可以继续使用当前余额创作。',
 
   // Misc
   // Skills

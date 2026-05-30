@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
+import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
 import RollingTagline from '@/components/RollingTagline'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
@@ -12,7 +13,8 @@ type OtpPurpose = 'signup' | 'recovery'
 function isInAppBrowser(): boolean {
   if (typeof navigator === 'undefined') return false
   const ua = navigator.userAgent || ''
-  return /MicroMessenger|WeChat|QQ|DingTalk|Douyin|BytedanceWebview|FBAN|FBAV|Instagram|Line|Twitter/i.test(ua)
+  return userAgentHasMakaronIOSToken(ua)
+    || /MicroMessenger|WeChat|QQ|DingTalk|Douyin|BytedanceWebview|FBAN|FBAV|Instagram|Line|Twitter/i.test(ua)
 }
 
 export default function LoginPage() {

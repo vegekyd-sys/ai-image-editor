@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import AuthProvider from "@/components/AuthProvider";
+import NativeAppBootstrap from "@/components/NativeAppBootstrap";
 import { LocaleProvider } from "@/lib/i18n";
 import "./globals.css";
 
@@ -41,7 +42,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black`}
       >
-        <LocaleProvider><AuthProvider>{children}</AuthProvider></LocaleProvider>
+        <LocaleProvider><AuthProvider><NativeAppBootstrap />{children}</AuthProvider></LocaleProvider>
       </body>
     </html>
   );

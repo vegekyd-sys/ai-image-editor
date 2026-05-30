@@ -254,6 +254,8 @@ const en = {
   'billing.subscribeTo': 'Subscribe to',
   'billing.upgradeTo': 'Upgrade to',
   'billing.current': 'Current',
+  'billing.iosUnavailableTitle': 'Purchases are coming to iOS',
+  'billing.iosUnavailableDesc': 'For App Store compliance, credits and subscriptions are not sold in the iOS app until Apple in-app purchase is ready. You can keep creating with your current balance.',
 
   // Skills
   'skills.title': 'Skill Market',

@@ -3037,7 +3037,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       data-current-snapshot={viewIndex}
       data-view-mode={viewMode}
       data-preferred-model={preferredModel}
-      className={`h-dvh bg-black relative z-[1] overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
+      className={`makaron-editor-shell h-dvh bg-black relative z-[1] overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
     >
       <input
         ref={fileInputRef}
@@ -3218,7 +3218,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
             {/* Top toolbar — hidden in design editor mode */}
             {snapshots.length > 0 && !selectedEditableFieldId && (
-              <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
+              <div className="makaron-editor-topbar absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
                 <div className="flex items-center gap-1">
                   {onBack && (
                     <button
@@ -3465,7 +3465,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
           {/* Bottom bar: tips or video results */}
           {snapshots.length > 0 && (
-              <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
+              <div className="makaron-editor-bottom-bar flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
                 <AgentStatusBar
                   statusText={agentStatus}
                   isActive={isAgentActive}

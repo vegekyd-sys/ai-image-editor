@@ -4,8 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:ios": "MOCK_AI=true next dev -H 0.0.0.0 -p 3001",
     "build": "next build",
     "start": "next start",
+    "test": "vitest run",
+    "test:ios": "vitest run __tests__/ios*.test.ts",
+    "ios:local": "node tools/ios-local-config.mjs",
+    "ios:prod": "node tools/ios-local-config.mjs --reset",
     "lint": "eslint",
     "postinstall": "npx patch-package --patch-dir patches",
     "mcp": "npx tsx --require ./md-loader.cjs mcp-server.ts --stdio",
@@ -14,6 +19,12 @@
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "4.0.96",
     "@babel/standalone": "^7.29.2",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
+    "@capacitor/keyboard": "^8.0.3",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@fal-ai/client": "^1.9.5",
     "@google/genai": "^1.40.0",
     "@huggingface/inference": "^4.13.14",
@@ -58,6 +69,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.3.4",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.2",
     "@types/jsonwebtoken": "^9.0.10",

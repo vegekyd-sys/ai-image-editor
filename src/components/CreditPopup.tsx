@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { CREDIT_TIERS } from '@/lib/billing/tiers';
 import { useLocale } from '@/lib/i18n';
+import { shouldSuppressWebBilling } from '@/lib/native-app';
 
 const PLANS = [
   { id: 'basic', name: 'Basic', monthlyPrice: 990, credits: 1200 },
@@ -47,6 +48,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   const success = autoSuccess || (externalSuccess ?? false);
   const balance = autoSuccess ? autoBalance : externalBalance;
   const subscription = autoSubscription || externalSubscription;
+  const suppressWebBilling = shouldSuppressWebBilling();
 
   const onClose = () => {
     setAutoOpen(false);
@@ -328,6 +330,47 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
               }}
             >
               {t('billing.continueCreating')}
+            </button>
+          </div>
+        ) : suppressWebBilling ? (
+          <div data-testid="ios-billing-unavailable" style={{ padding: '32px 24px 28px', textAlign: 'center' }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 18, margin: '0 auto 18px',
+              background: 'rgba(192,38,211,0.12)',
+              border: '1px solid rgba(192,38,211,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#e879f9" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v20" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.02em' }}>
+              {t('billing.iosUnavailableTitle')}
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.42)', marginTop: 8, lineHeight: 1.55 }}>
+              {t('billing.iosUnavailableDesc')}
+            </div>
+            <div style={{
+              marginTop: 18, padding: '14px 16px', borderRadius: 14,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: 'rgba(255,255,255,0.72)',
+              fontSize: 13,
+            }}>
+              Balance: <span style={{ color: balance === 0 ? '#fbbf24' : 'rgba(255,255,255,0.9)', fontWeight: 700 }}>{balance}</span> credits
+              {needed ? <> &middot; ~{needed} needed</> : null}
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                width: '100%', marginTop: 20,
+                padding: 14, borderRadius: 14, border: 'none',
+                background: 'rgba(255,255,255,0.1)',
+                color: '#fff', fontSize: 15, fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {t('billing.close')}
             </button>
           </div>
         ) : (

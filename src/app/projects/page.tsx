@@ -485,7 +485,7 @@ function ProjectsPageInner() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className={`mkr-page${navigating ? ' page-slide-out' : ''}`} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden' }}>
+      <div className={`mkr-page makaron-projects-page${navigating ? ' page-slide-out' : ''}`} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden' }}>
 
         {/* Ambient glow — center at 40% so top is black, fades to purple below */}
         <div style={{
@@ -511,7 +511,7 @@ function ProjectsPageInner() {
         {/* ═══════════════════════════════
             HERO — ~45dvh, fully centered
         ════════════════════════════════ */}
-        <div style={{
+        <div className="makaron-projects-hero" style={{
           paddingTop: '20vh', paddingBottom: '40px',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', gap: '0px',

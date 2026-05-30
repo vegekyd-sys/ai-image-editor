@@ -9,6 +9,7 @@
   --surface-secondary: #141414;
   --border: #1f1f1f;
   --text-secondary: #a1a1aa;
+  --makaron-native-keyboard-inset: 0px;
 }
 
 @theme inline {
@@ -42,9 +43,43 @@ html, body {
 
 body {
   padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: max(env(safe-area-inset-bottom), var(--makaron-native-keyboard-inset));
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+}
+
+.makaron-ios-app {
+  color-scheme: dark;
+}
+
+.makaron-ios-app body {
+  padding: 0;
+}
+
+.makaron-ios-app .makaron-editor-shell {
+  box-sizing: border-box;
+  padding: 0;
+  --makaron-ios-top-control-inset: max(0.75rem, env(safe-area-inset-top));
+  --makaron-ios-bottom-control-inset: max(14px, env(safe-area-inset-bottom));
+  --makaron-cui-header-top: max(0.5rem, env(safe-area-inset-top));
+  --makaron-cui-messages-top: calc(max(0.5rem, env(safe-area-inset-top)) + 2.25rem);
+  --makaron-cui-input-safe-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.makaron-ios-app .makaron-editor-topbar {
+  padding-top: var(--makaron-ios-top-control-inset);
+}
+
+.makaron-ios-app .makaron-editor-bottom-bar {
+  padding-bottom: var(--makaron-ios-bottom-control-inset);
+}
+
+.makaron-ios-app .makaron-topbar {
+  padding-top: max(64px, calc(env(safe-area-inset-top) + 12px)) !important;
+}
+
+.makaron-ios-app .makaron-projects-hero {
+  padding-top: calc(20vh - 44px) !important;
 }
 
 /* Hide scrollbar for chat */

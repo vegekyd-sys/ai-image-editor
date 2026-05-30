@@ -567,6 +567,7 @@ export default function AgentChatView({
   const [inputBarH, setInputBarH] = useState(96);
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
   const [kbInset, setKbInset] = useState(0);
+  const [nativeKbInset, setNativeKbInset] = useState(0);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
@@ -578,13 +579,34 @@ export default function AgentChatView({
     vv.addEventListener('scroll', update);
     return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
   }, []);
+  useEffect(() => {
+    const readNativeInset = () => {
+      const raw = getComputedStyle(document.documentElement)
+        .getPropertyValue('--makaron-native-keyboard-inset')
+        .trim();
+      const next = Number.parseFloat(raw);
+      setNativeKbInset(Number.isFinite(next) ? Math.max(0, Math.round(next)) : 0);
+    };
+    const onNativeInset = (event: Event) => {
+      const inset = (event as CustomEvent<{ inset?: number }>).detail?.inset;
+      if (typeof inset === 'number') {
+        setNativeKbInset(Math.max(0, Math.round(inset)));
+      } else {
+        readNativeInset();
+      }
+    };
+    readNativeInset();
+    window.addEventListener('makaron-keyboard-inset-change', onNativeInset);
+    return () => window.removeEventListener('makaron-keyboard-inset-change', onNativeInset);
+  }, []);
+  const effectiveKbInset = Math.max(kbInset, nativeKbInset);
 
   // ── PiP drag state ──────────────────────────────────────────────
   type PipCorner = 'tl' | 'tr' | 'ml' | 'mr' | 'bl' | 'br';
   const PIP_SIZES = [116, 200] as const; // md / lg (small removed)
   const PIP_M = 14;
   const INPUT_GRADIENT_TOP = 32; // paddingTop on input bar wrapper (gradient zone)
-  const PIP_BOTTOM_OFFSET = inputBarH - INPUT_GRADIENT_TOP + 4; // just above actual input box
+  const PIP_BOTTOM_OFFSET = inputBarH - INPUT_GRADIENT_TOP + 4 + effectiveKbInset; // just above actual input box
   const PIP_PEEK = 28;        // px visible when hidden at right edge
   const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 
@@ -704,9 +726,9 @@ export default function AgentChatView({
       pipStartedAtLeftEdge.current = false;
       // Tap PiP body → hero animation + return to GUI
       const pipEl = _e.currentTarget as HTMLElement;
-      const kbOpen = window.visualViewport
+      const kbOpen = effectiveKbInset > 50 || (window.visualViewport
         ? window.innerHeight - window.visualViewport.height > 50
-        : false;
+        : false);
       if (kbOpen) {
         // Dismiss keyboard first; re-measure PiP rect after it closes, then animate
         inputRef.current?.blur();
@@ -721,7 +743,7 @@ export default function AgentChatView({
         handleBack();
       }
     }
-  }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL, handleBack, onPipTap]);
+  }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL, effectiveKbInset, handleBack, onPipTap]);
   // ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -912,7 +934,7 @@ export default function AgentChatView({
         <div
           ref={headerRef}
           className="absolute top-0 left-0 z-50 px-3"
-          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+          style={{ paddingTop: 'var(--makaron-cui-header-top, max(0.75rem, env(safe-area-inset-top)))' }}
         >
           <button
             onClick={handleBack}
@@ -1030,7 +1052,7 @@ export default function AgentChatView({
       )}
 
       {/* ── Messages ── */}
-      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: isPanel ? '16px' : 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: isPanel ? '0' : `${inputBarH}px` }}>
+      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: isPanel ? '16px' : 'var(--makaron-cui-messages-top, calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem))', paddingBottom: isPanel ? '0' : `${inputBarH + effectiveKbInset}px` }}>
         {/* Empty state or loading */}
         {messages.length === 0 && (
           messagesLoading ? (
@@ -1332,8 +1354,8 @@ export default function AgentChatView({
           borderTop: '1px solid rgba(255,255,255,0.06)',
           zIndex: 20,
         } : {
-          bottom: kbInset > 0 ? `${kbInset}px` : 0,
-          paddingBottom: kbInset > 0 ? '8px' : 'max(0.75rem, env(safe-area-inset-bottom))',
+          bottom: effectiveKbInset > 0 ? `${effectiveKbInset}px` : 0,
+          paddingBottom: effectiveKbInset > 0 ? '8px' : 'var(--makaron-cui-input-safe-bottom, max(0.75rem, env(safe-area-inset-bottom)))',
           paddingTop: '32px',
           background: 'linear-gradient(to bottom, transparent 0%, #0a0a0a 32px)',
           zIndex: 20,
