@@ -124,6 +124,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain("overscrollBehaviorX: 'contain'");
     expect(projectsPage).toContain('isMakaronIOSAppShell');
     expect(projectsPage).toContain('.Capacitor');
+    expect(projectsPage).toContain('useState(() => isMakaronIOSAppShell())');
+    expect(projectsPage).toContain('useIOSInlineProjectNavigation');
     expect(projectsPage).toContain('useInlineNavigation');
     expect(projectsPage).toContain('role="link"');
     expect(projectsPage).toContain('isCuiOpen');

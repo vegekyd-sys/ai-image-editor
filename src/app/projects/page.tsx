@@ -161,7 +161,7 @@ function ProjectsPageInner() {
 
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
-  const [iosAppShell, setIosAppShell] = useState(false)
+  const [iosAppShell, setIosAppShell] = useState(() => isMakaronIOSAppShell())
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
   const [activeIOSProjectId, setActiveIOSProjectId] = useState<string | null>(null)
   const activeIOSProjectIdRef = useRef<string | null>(null)
@@ -230,6 +230,7 @@ function ProjectsPageInner() {
     }
     setNavigating(true)
   }, [iosAppShell, openIOSProject])
+  const useIOSInlineProjectNavigation = iosAppShell || isMakaronIOSAppShell()
 
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
@@ -816,7 +817,7 @@ function ProjectsPageInner() {
                   key={project.id}
                   project={project}
                   index={i}
-                  useInlineNavigation={iosAppShell}
+                  useInlineNavigation={useIOSInlineProjectNavigation}
                   onMore={(e) => openActionSheet(e, project)}
                   onNavigate={handleProjectNavigate}
                 />
