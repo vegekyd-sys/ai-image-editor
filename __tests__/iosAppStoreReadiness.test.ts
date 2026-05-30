@@ -99,10 +99,12 @@ describe('iOS App Store readiness guardrails', () => {
     expect(chat).toContain('inputBarH + effectiveKbInset');
   });
 
-  it('uses the simple black-background iOS project back gesture while preserving CUI pan close', () => {
+  it('keeps iOS project navigation inside a live projects-page overlay while preserving CUI pan close', () => {
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
     const bootstrap = fs.readFileSync(path.join(root, 'src/components/NativeAppBootstrap.tsx'), 'utf8');
+    const projectsPage = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const projectPage = fs.readFileSync(path.join(root, 'src/app/projects/[id]/page.tsx'), 'utf8');
+    const projectContainer = fs.readFileSync(path.join(root, 'src/components/ProjectEditorContainer.tsx'), 'utf8');
     const bridge = fs.readFileSync(path.join(root, 'ios/App/App/MakaronBridgeViewController.swift'), 'utf8');
     const storyboard = fs.readFileSync(path.join(root, 'ios/App/App/Base.lproj/Main.storyboard'), 'utf8');
     const project = fs.readFileSync(path.join(root, 'ios/App/App.xcodeproj/project.pbxproj'), 'utf8');
@@ -112,24 +114,33 @@ describe('iOS App Store readiness guardrails', () => {
     expect(editor).toContain("viewMode === 'cui'");
     expect(editor).not.toContain('edgeSwipeBackRef');
     expect(editor).not.toContain('makaron-native-back');
-    expect(bootstrap).toContain('installIOSBackSwipe');
-    expect(bootstrap).toContain('IOS_BACK_SWIPE_EDGE_PX');
-    expect(bootstrap).toContain("document.addEventListener('touchstart'");
-    expect(bootstrap).toContain("document.addEventListener('touchmove'");
-    expect(bootstrap).toContain('isProjectDetailRoute');
-    expect(bootstrap).toContain('document.body.style.transform');
-    expect(bootstrap).toContain('isCuiOpen');
+    expect(bootstrap).not.toContain('installIOSBackSwipe');
+    expect(bootstrap).not.toContain('IOS_BACK_SWIPE_EDGE_PX');
+    expect(bootstrap).not.toContain('document.body.style.transform');
+    expect(projectsPage).toContain('data-makaron-ios-project-overlay');
+    expect(projectsPage).toContain('makaronProjectOverlay');
+    expect(projectsPage).toContain('activeIOSProjectId');
+    expect(projectsPage).toContain('isMakaronIOSAppShell');
+    expect(projectsPage).toContain('isCuiOpen');
+    expect(projectsPage).toContain('window.history.pushState');
+    expect(projectsPage).toContain("window.addEventListener('popstate'");
+    expect(projectsPage).toContain('event.state?.makaronProjectOverlay');
+    expect(projectsPage).toContain('ProjectEditorContainer');
     expect(bootstrap).not.toContain('makaron-ios-projects-snapshot-html');
+    expect(projectsPage).not.toContain('makaron-ios-projects-snapshot-html');
     expect(bootstrap).not.toContain('data-makaron-ios-back-overlay');
+    expect(projectsPage).not.toContain('data-makaron-ios-back-overlay');
     expect(bootstrap).not.toContain('cloneNode');
-    expect(bootstrap).toContain('makaron-ios-project-back');
-    expect(bootstrap).toContain('dispatchEvent(new CustomEvent(IOS_PROJECT_BACK_EVENT');
+    expect(projectsPage).not.toContain('cloneNode');
+    expect(bootstrap).not.toContain('makaron-ios-project-back');
     expect(editor).toContain('data-makaron-cui-pan');
     expect(editor).toContain('IOS_CUI_PAN_COMMIT_PX');
     expect(editor).not.toContain('shouldPlayIOSProjectPush');
     expect(editor).not.toContain('data-makaron-ios-projects-backdrop');
-    expect(projectPage).toContain('IOS_PROJECT_BACK_EVENT');
-    expect(projectPage).toContain("router.replace(user ? '/projects' : '/home')");
+    expect(projectPage).toContain('ProjectEditorContainer');
+    expect(projectPage).not.toContain('IOS_PROJECT_BACK_EVENT');
+    expect(projectContainer).toContain('getCachedProjectDataSync');
+    expect(projectContainer).toContain('onProjectCreated');
     expect(fs.existsSync(projectLoading)).toBe(false);
     expect(bridge).not.toContain('interactiveBackEdgeView');
     expect(bridge).not.toContain('UIPanGestureRecognizer');

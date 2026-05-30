@@ -4,11 +4,6 @@ import { useEffect } from 'react';
 import { calculateVisualViewportKeyboardInset } from '@/lib/ios-keyboard';
 import { MAKARON_IOS_USER_AGENT_TOKEN } from '@/lib/native-app';
 
-const IOS_BACK_SWIPE_EDGE_PX = 48;
-const IOS_BACK_SWIPE_COMMIT_PX = 72;
-const IOS_BACK_SWIPE_MIN_DX = 10;
-const IOS_PROJECT_BACK_EVENT = 'makaron-ios-project-back';
-
 export default function NativeAppBootstrap() {
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -77,7 +72,6 @@ export default function NativeAppBootstrap() {
       window.visualViewport?.addEventListener('resize', updateFromViewport);
       window.visualViewport?.addEventListener('scroll', updateFromViewport);
       updateFromViewport();
-      const cleanupBackSwipe = installIOSBackSwipe();
 
       try {
         await SplashScreen.hide();
@@ -90,7 +84,6 @@ export default function NativeAppBootstrap() {
         keyboardHide.remove();
         window.visualViewport?.removeEventListener('resize', updateFromViewport);
         window.visualViewport?.removeEventListener('scroll', updateFromViewport);
-        cleanupBackSwipe();
         setInset(0);
       };
     }
@@ -103,131 +96,4 @@ export default function NativeAppBootstrap() {
   }, []);
 
   return null;
-}
-
-function installIOSBackSwipe() {
-  let tracking = false;
-  let committed = false;
-  let startX = 0;
-  let startY = 0;
-  let lastX = 0;
-  let startTime = 0;
-
-  const resetBodyTransform = () => {
-    document.body.style.transition = '';
-    document.body.style.transform = '';
-    document.body.style.willChange = '';
-  };
-
-  const beginBodyTransform = () => {
-    document.body.style.transition = 'none';
-    document.body.style.willChange = 'transform';
-  };
-
-  const setBodyProgress = (distance: number) => {
-    document.body.style.transform = `translate3d(${Math.max(0, distance)}px, 0, 0)`;
-  };
-
-  const isEditableTarget = (target: EventTarget | null) => {
-    if (!(target instanceof Element)) return false;
-    return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
-  };
-
-  const isCuiOpen = () => {
-    const editor = document.querySelector('[data-testid="editor"]');
-    return editor?.getAttribute('data-view-mode') === 'cui';
-  };
-
-  const isProjectDetailRoute = () => /^\/projects\/[^/]+/.test(window.location.pathname);
-
-  const navigateBack = () => {
-    const handledByRoute = !window.dispatchEvent(new CustomEvent(IOS_PROJECT_BACK_EVENT, { cancelable: true }));
-    if (!handledByRoute) {
-      window.history.back();
-    }
-  };
-
-  const onTouchStart = (event: TouchEvent) => {
-    if (event.touches.length !== 1 || isEditableTarget(event.target)) return;
-    if (isCuiOpen()) return;
-    if (!isProjectDetailRoute()) return;
-    const touch = event.touches[0];
-    if (touch.clientX > IOS_BACK_SWIPE_EDGE_PX) return;
-
-    tracking = true;
-    committed = false;
-    startX = touch.clientX;
-    startY = touch.clientY;
-    lastX = touch.clientX;
-    startTime = performance.now();
-  };
-
-  const onTouchMove = (event: TouchEvent) => {
-    if (!tracking || committed || event.touches.length !== 1) return;
-
-    const touch = event.touches[0];
-    const dx = touch.clientX - startX;
-    const dy = touch.clientY - startY;
-    lastX = touch.clientX;
-
-    if (dx <= IOS_BACK_SWIPE_MIN_DX || dx < Math.abs(dy) * 1.15) {
-      if (Math.abs(dy) > IOS_BACK_SWIPE_MIN_DX && Math.abs(dy) > dx) {
-        tracking = false;
-      }
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    beginBodyTransform();
-    setBodyProgress(Math.min(dx, window.innerWidth) * 0.55);
-  };
-
-  const finish = () => {
-    if (!tracking) return;
-
-    const dx = Math.max(0, lastX - startX);
-    const elapsed = Math.max(1, performance.now() - startTime);
-    const velocity = dx / elapsed;
-    const shouldGoBack = dx >= IOS_BACK_SWIPE_COMMIT_PX || velocity > 0.42;
-
-    tracking = false;
-
-    if (shouldGoBack) {
-      committed = true;
-      document.body.style.transition = 'transform 160ms ease-out';
-      document.body.style.transform = `translate3d(${window.innerWidth}px, 0, 0)`;
-      window.setTimeout(() => {
-        resetBodyTransform();
-        navigateBack();
-      }, 120);
-      return;
-    }
-
-    document.body.style.transition = 'transform 180ms ease-out';
-    document.body.style.transform = 'translate3d(0, 0, 0)';
-    window.setTimeout(resetBodyTransform, 190);
-  };
-
-  const cancel = () => {
-    if (!tracking) return;
-    tracking = false;
-    document.body.style.transition = 'transform 160ms ease-out';
-    document.body.style.transform = 'translate3d(0, 0, 0)';
-    window.setTimeout(resetBodyTransform, 170);
-  };
-
-  document.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
-  document.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
-  document.addEventListener('touchend', finish, { capture: true, passive: true });
-  document.addEventListener('touchcancel', cancel, { capture: true, passive: true });
-
-  return () => {
-    document.removeEventListener('touchstart', onTouchStart, { capture: true });
-    document.removeEventListener('touchmove', onTouchMove, { capture: true });
-    document.removeEventListener('touchend', finish, { capture: true });
-    document.removeEventListener('touchcancel', cancel, { capture: true });
-    resetBodyTransform();
-  };
 }

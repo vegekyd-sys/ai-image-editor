@@ -17,6 +17,7 @@ import TopBar from '@/components/TopBar'
 import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import { MakaronSpark } from '@/components/MakaronLogo'
+import ProjectEditorContainer from '@/components/ProjectEditorContainer'
 
 interface ProjectWithSnapshots {
   id: string
@@ -35,6 +36,16 @@ interface SkillItem {
   icon: string;
   color: string;
   builtIn: boolean;
+}
+
+const IOS_PROJECT_PAN_EDGE_PX = 36
+const IOS_PROJECT_PAN_COMMIT_PX = 86
+const IOS_PROJECT_PAN_MIN_DX = 10
+const IOS_PROJECT_OVERLAY_CLOSE_MS = 190
+
+function isMakaronIOSAppShell() {
+  if (typeof document === 'undefined' || typeof navigator === 'undefined') return false
+  return document.documentElement.classList.contains('makaron-ios-app') || navigator.userAgent.includes('MakaronIOS')
 }
 
 function timeAgo(dateStr: string): string {
@@ -144,10 +155,70 @@ function ProjectsPageInner() {
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
+  const [activeIOSProjectId, setActiveIOSProjectId] = useState<string | null>(null)
+  const activeIOSProjectIdRef = useRef<string | null>(null)
+  const [iosProjectX, setIosProjectX] = useState(0)
+  const [iosProjectSettling, setIosProjectSettling] = useState(false)
+  const [iosProjectPanActive, setIosProjectPanActive] = useState(false)
+  const iosProjectPanRef = useRef({ tracking: false, startX: 0, startY: 0, lastX: 0, startTime: 0, locked: false })
+  const iosProjectCloseTimerRef = useRef<number | null>(null)
 
-  const handleProjectNavigate = useCallback(() => {
-    setNavigating(true)
+  const clearIOSProjectCloseTimer = useCallback(() => {
+    if (iosProjectCloseTimerRef.current === null) return
+    window.clearTimeout(iosProjectCloseTimerRef.current)
+    iosProjectCloseTimerRef.current = null
   }, [])
+
+  const openIOSProject = useCallback((projectId: string) => {
+    if (typeof window === 'undefined') return
+    clearIOSProjectCloseTimer()
+    activeIOSProjectIdRef.current = projectId
+    setActiveIOSProjectId(projectId)
+    setIosProjectSettling(true)
+    setIosProjectPanActive(false)
+    setIosProjectX(window.innerWidth)
+    window.history.pushState({ makaronProjectOverlay: true, projectId }, '', `/projects/${projectId}`)
+    window.requestAnimationFrame(() => setIosProjectX(0))
+  }, [clearIOSProjectCloseTimer])
+
+  const replaceIOSProject = useCallback((projectId: string) => {
+    if (typeof window === 'undefined') return
+    clearIOSProjectCloseTimer()
+    activeIOSProjectIdRef.current = projectId
+    setActiveIOSProjectId(projectId)
+    setIosProjectSettling(false)
+    setIosProjectPanActive(false)
+    setIosProjectX(0)
+    window.history.replaceState({ makaronProjectOverlay: true, projectId }, '', `/projects/${projectId}`)
+  }, [clearIOSProjectCloseTimer])
+
+  const closeIOSProject = useCallback((historyMode: 'back' | 'none' = 'back') => {
+    if (!activeIOSProjectIdRef.current || typeof window === 'undefined') return
+    clearIOSProjectCloseTimer()
+    setIosProjectSettling(true)
+    setIosProjectPanActive(false)
+    setIosProjectX(window.innerWidth)
+    iosProjectCloseTimerRef.current = window.setTimeout(() => {
+      iosProjectCloseTimerRef.current = null
+      activeIOSProjectIdRef.current = null
+      setActiveIOSProjectId(null)
+      setIosProjectX(0)
+      setIosProjectSettling(false)
+      if (historyMode === 'back') {
+        window.history.back()
+      }
+    }, IOS_PROJECT_OVERLAY_CLOSE_MS)
+  }, [clearIOSProjectCloseTimer])
+
+  const handleProjectNavigate = useCallback((event: React.MouseEvent<HTMLAnchorElement>, project: ProjectWithSnapshots) => {
+    if (isMakaronIOSAppShell()) {
+      event.preventDefault()
+      setNavigating(false)
+      openIOSProject(project.id)
+      return
+    }
+    setNavigating(true)
+  }, [openIOSProject])
 
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
@@ -194,6 +265,31 @@ function ProjectsPageInner() {
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login')
   }, [user, authLoading, router])
+
+  useEffect(() => {
+    activeIOSProjectIdRef.current = activeIOSProjectId
+  }, [activeIOSProjectId])
+
+  useEffect(() => () => clearIOSProjectCloseTimer(), [clearIOSProjectCloseTimer])
+
+  useEffect(() => {
+    if (!activeIOSProjectId) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [activeIOSProjectId])
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (activeIOSProjectIdRef.current && !event.state?.makaronProjectOverlay) {
+        closeIOSProject('none')
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [closeIOSProject])
 
   // Measure input box height → set photo slot width = height (square)
   useEffect(() => {
@@ -401,6 +497,88 @@ function ProjectsPageInner() {
     )
     createInput.addFiles(droppedFiles)
   }, [createInput])
+
+  const resetIOSProjectPan = useCallback(() => {
+    iosProjectPanRef.current.tracking = false
+    iosProjectPanRef.current.locked = false
+    setIosProjectX(0)
+    setIosProjectPanActive(false)
+    setIosProjectSettling(false)
+  }, [])
+
+  const isIOSProjectPanEditableTarget = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false
+    return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+  }
+
+  const isCuiOpen = () => {
+    const editor = document.querySelector('[data-testid="editor"]')
+    return editor?.getAttribute('data-view-mode') === 'cui'
+  }
+
+  const handleIOSProjectPanStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!activeIOSProjectId || event.touches.length !== 1 || isIOSProjectPanEditableTarget(event.target)) return
+    if (isCuiOpen()) return
+    const touch = event.touches[0]
+    if (touch.clientX > IOS_PROJECT_PAN_EDGE_PX) return
+
+    clearIOSProjectCloseTimer()
+    iosProjectPanRef.current = {
+      tracking: true,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      startTime: performance.now(),
+      locked: false,
+    }
+    setIosProjectSettling(false)
+  }, [activeIOSProjectId, clearIOSProjectCloseTimer])
+
+  const handleIOSProjectPanMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    const pan = iosProjectPanRef.current
+    if (!pan.tracking || event.touches.length !== 1) return
+
+    const touch = event.touches[0]
+    const dx = touch.clientX - pan.startX
+    const dy = touch.clientY - pan.startY
+    pan.lastX = touch.clientX
+
+    if (!pan.locked) {
+      if (dx <= IOS_PROJECT_PAN_MIN_DX || dx < Math.abs(dy) * 1.15) {
+        if (Math.abs(dy) > IOS_PROJECT_PAN_MIN_DX && Math.abs(dy) > dx) {
+          resetIOSProjectPan()
+        }
+        return
+      }
+      pan.locked = true
+      setIosProjectPanActive(true)
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    setIosProjectX(Math.max(0, Math.min(dx, window.innerWidth)))
+  }, [resetIOSProjectPan])
+
+  const handleIOSProjectPanEnd = useCallback(() => {
+    const pan = iosProjectPanRef.current
+    if (!pan.tracking) return
+
+    const dx = Math.max(0, pan.lastX - pan.startX)
+    const elapsed = Math.max(1, performance.now() - pan.startTime)
+    const velocity = dx / elapsed
+    const shouldClose = dx >= IOS_PROJECT_PAN_COMMIT_PX || velocity > 0.42
+    pan.tracking = false
+
+    setIosProjectSettling(true)
+    if (shouldClose) {
+      setIosProjectPanActive(true)
+      closeIOSProject('back')
+      return
+    }
+
+    setIosProjectX(0)
+    window.setTimeout(resetIOSProjectPan, 180)
+  }, [closeIOSProject, resetIOSProjectPan])
 
   if (authLoading || !user) {
     return (
@@ -736,6 +914,32 @@ function ProjectsPageInner() {
         </div>
       )}
 
+      {activeIOSProjectId && (
+        <div
+          data-makaron-ios-project-overlay="true"
+          className="fixed inset-0 z-[240] bg-black"
+          style={{
+            transform: `translate3d(${iosProjectX}px, 0, 0)`,
+            transition: iosProjectSettling ? `transform ${IOS_PROJECT_OVERLAY_CLOSE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none',
+            willChange: iosProjectPanActive || iosProjectSettling ? 'transform' : undefined,
+            touchAction: 'pan-y',
+          }}
+          onTouchStart={handleIOSProjectPanStart}
+          onTouchMove={handleIOSProjectPanMove}
+          onTouchEnd={handleIOSProjectPanEnd}
+          onTouchCancel={handleIOSProjectPanEnd}
+        >
+          <ProjectEditorContainer
+            key={activeIOSProjectId}
+            projectId={activeIOSProjectId}
+            className=""
+            loadingClassName="h-dvh bg-black"
+            onBack={() => closeIOSProject('back')}
+            onProjectCreated={replaceIOSProject}
+          />
+        </div>
+      )}
+
       {/* Welcome credits popup */}
       {showWelcome && creditBalance !== null && creditBalance > 0 && (
         <>
@@ -794,7 +998,7 @@ function ProjectCard({
   project: ProjectWithSnapshots
   index: number
   onMore: (e: React.MouseEvent) => void
-  onNavigate: () => void
+  onNavigate: (e: React.MouseEvent<HTMLAnchorElement>, project: ProjectWithSnapshots) => void
 }) {
   // Use last snapshot with an actual image URL (skip design snapshots with empty image_url)
   const lastSnap = project.snapshots.filter(s => s.image_url).pop() ?? project.snapshots[project.snapshots.length - 1]
@@ -804,7 +1008,7 @@ function ProjectCard({
     <Link
       href={`/projects/${project.id}`}
       className="mkr-card mkr-row-enter"
-      onClick={onNavigate}
+      onClick={(e) => onNavigate(e, project)}
       style={{
         display: 'block',
         position: 'relative',
