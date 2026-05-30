@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
+import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
 
 export const maxDuration = 30
 
@@ -14,6 +15,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel } = await req.json()
+    const selectedVideoModel = normalizeVideoModelId(videoModel)
 
     if (!projectId || !imageUrls?.length || !prompt) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
       images: imageUrls,
       duration: effectiveDuration,
       aspectRatio,
-      videoModel,
+      videoModel: selectedVideoModel,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
       referenceVideoDuration,
     })
@@ -100,11 +102,11 @@ export async function POST(req: NextRequest) {
     // Deduct credits for video generation (fire-and-forget)
     // Per-second billing: 22 credits/s ($0.11/s × 2x markup), default 10s if smart mode
     const videoSec = effectiveDuration || 10
-    const toolName = videoModel === 'seedance' ? 'create_video_seedance' : 'create_video_kling'
+    const toolName = selectedVideoModel === 'seedance' ? 'create_video_seedance' : 'create_video_kling'
     const { getToolPrice } = await import('@/lib/billing/pricing')
     const price = await getToolPrice(toolName)
     const creditsPerSec = price?.credits ?? 22
-    deductFixedCredits(user.id, Math.ceil(videoSec * creditsPerSec), toolName, videoModel || 'kling', undefined)
+    deductFixedCredits(user.id, Math.ceil(videoSec * creditsPerSec), toolName, selectedVideoModel, undefined)
       .catch(e => console.error('[billing] animate deduct error:', e))
 
     return NextResponse.json({ animationId: animation.id, taskId })

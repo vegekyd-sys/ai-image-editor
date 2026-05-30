@@ -9,6 +9,7 @@ import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
+import { normalizeVideoModelId, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
 import { createMusic } from './skills/create-music';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
@@ -17,7 +18,7 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import animatePrompt from './prompts/animate.md';
-import type { Tip } from '@/types';
+import type { Tip, VideoMeta } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 
 // ---------------------------------------------------------------------------
@@ -324,16 +325,17 @@ function createTools(ctx: AgentContext) {
 Hard constraints (apply even before reading the guide):
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
-- To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. Works for both Kling and SeeDance.
-- Total duration: 5-15 seconds.
-- Video edit duration lock: when editing a timeline video, output duration should match that source video's duration from Media Index. If metadata is slightly over 15s (for example 15.1s), set \`duration: 15\`; never fall back to 5s unless the user explicitly asks to shorten it.
+- To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
+- If the source video may exceed the selected model's reference limit, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it with \`run_code({ runtime: "node" })\` before submitting generation.
+- Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
+- Video edit duration lock: when editing a timeline video, output duration should match the source chunk's duration. For long-video pipelines, duration lock applies per FFmpeg chunk.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. For timeline video edits, set this to the source video duration from Media Index. Omit for smart mode only when generating from photos.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
-        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: kling.'),
+        model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance). Use exact ids from the video model selector or skill instructions.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
@@ -356,7 +358,7 @@ Hard constraints (apply even before reading the guide):
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
-          const videoModel = model || (ctx as any).videoModel || 'kling';
+          const videoModel = normalizeVideoModelId(model || (ctx as any).videoModel);
 
           // Video harness: validate before calling API
           const { validateVideoScript } = await import('./video-harness');
@@ -403,14 +405,24 @@ Hard constraints (apply even before reading the guide):
             }
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
-          const referenceVideoDuration = totalVideoRefDuration > 0 ? Math.min(15, Math.round(totalVideoRefDuration)) : undefined;
-          const clampedDuration = duration != null && allVideoUrls.length > 0 && duration > 15 && duration <= 15.5 ? 15 : duration;
-          const effectiveDuration = clampedDuration ?? referenceVideoDuration;
-
-          // SeeDance accepts tiny metadata/audio padding over 15s; output duration stays clamped to 15s.
-          if (videoModel === 'seedance' && allVideoUrls.length > 0 && totalVideoRefDuration > 15.5) {
-            return { success: false as const, message: `SeeDance requires total reference video duration around 15 seconds or less, but the referenced videos total ${totalVideoRefDuration.toFixed(1).replace(/\\.0$/, '')}s. Try using fewer or shorter video references, or switch to Kling model.` };
+          const referenceVideoDuration = totalVideoRefDuration > 0 ? totalVideoRefDuration : undefined;
+          const modelError = validateVideoModelRequest({
+            model: videoModel,
+            outputDuration: duration,
+            referenceVideoDuration,
+            hasVideoReference: allVideoUrls.length > 0,
+          });
+          if (modelError) {
+            return {
+              success: false as const,
+              message: modelError,
+            };
           }
+          const effectiveDuration = resolveVideoOutputDuration({
+            requestedDuration: duration,
+            referenceVideoDuration,
+            model: videoModel,
+          });
 
           const skillResult = await createVideo({
             script: story_prompt,
@@ -819,11 +831,16 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
             return { success: false, message: 'No run_code output to save. Call run_code first.' };
           }
           fileContent = lastCode;
-          // Auto-generate path: {projectId}/code/snapshot-{N}-{name}.json
+          const draftsForPath = (ctx as any).__runCodeDrafts || [];
+          const lastDraftForPath = draftsForPath[draftsForPath.length - 1];
+          // Auto-generate path. Node/FFmpeg runs save the executable JS; design runs save JSON payload.
           if (!savePath) {
             const snapshotIdx = ctx.snapshotImages.length;
             const slug = (name || 'design').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
-            savePath = `${ctx.projectId}/code/snapshot-${snapshotIdx}-${slug}.json`;
+            const isVideoCode = lastDraftForPath?.type === 'video';
+            savePath = isVideoCode
+              ? `${ctx.projectId}/media-code/snapshot-${snapshotIdx}-${slug}.js`
+              : `${ctx.projectId}/code/snapshot-${snapshotIdx}-${slug}.json`;
           }
         }
         if (!savePath) {
@@ -865,6 +882,53 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
             ctx.generatedImages.push(imageData);
 
             console.log(`📌 [agent] image published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
+          } else if (lastDraft?.type === 'video') {
+            const videoUrl = lastDraft.videoUrl as string | undefined;
+            if (!videoUrl) {
+              return { success: false, message: 'Video draft has no videoUrl. Re-run node media code and return a video output.' };
+            }
+
+            const { getSupabaseAdmin } = await import('@/lib/supabase/service');
+            const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
+            const admin = getSupabaseAdmin();
+            const snapshotId = crypto.randomUUID();
+            const taskId = `ffmpeg-${snapshotId}`;
+            const videoMeta: VideoMeta = {
+              taskId,
+              videoUrl,
+              providerUrl: videoUrl,
+              videoPath: lastDraft.workspacePath,
+              prompt: lastDraft.description || name || 'FFmpeg video',
+              sourceSnapshotIds: [],
+              sourceUrls: [videoUrl],
+              status: 'completed',
+              duration: typeof lastDraft.duration === 'number' ? lastDraft.duration : null,
+              model: 'upload',
+              createdAt: new Date().toISOString(),
+              width: typeof lastDraft.width === 'number' ? lastDraft.width : undefined,
+              height: typeof lastDraft.height === 'number' ? lastDraft.height : undefined,
+            };
+            const { data: sortData } = await admin.rpc('next_sort_order', { p_project_id: ctx.projectId });
+            const { error: insertError } = await admin.from('snapshots').insert({
+              id: snapshotId,
+              project_id: ctx.projectId,
+              image_url: VIDEO_PLACEHOLDER_IMAGE,
+              tips: [],
+              message_id: '',
+              sort_order: sortData ?? 0,
+              type: 'video',
+              video_meta: videoMeta,
+              description: lastDraft.description || name || 'FFmpeg video',
+            });
+            if (insertError) {
+              return { success: false, message: `Video publish failed: ${insertError.message}` };
+            }
+
+            ctx.snapshotImages.push(videoUrl);
+            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+            ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
+
+            console.log(`📌 [agent] video published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
           }
         }
 
@@ -891,7 +955,7 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
     }),
 
     run_code: tool({
-      description: `Execute JavaScript for design output (React/Remotion) or image utilities (sharp). Used for video/animation, editable templates, or image processing.
+      description: `Execute JavaScript for design output (React/Remotion), image utilities (sharp), or open backend media work (Node/FFmpeg). Used for video/animation, editable templates, image processing, and real MP4 editing.
 
 **BEFORE YOUR FIRST run_code CALL in a conversation**: call \`read_file('prompts/agent-coding.md')\` to load the full coding guide (render vs patch, editable fields, video workflow, composition patterns, cross-platform effects). The guide already includes \`[Current design code]\` injected into your prompt when patching — no need to re-read it. **Do not re-read agent-coding.md if it already appears in this conversation's tool-result history.**
 
@@ -901,6 +965,8 @@ Return shape — exactly one of:
 - \`{ type: 'render', code, width, height, editables?: [...], props?: {...}, animation?: { fps, durationInSeconds } }\` — first time, or when overall layout changes.
 - \`{ type: 'patch', edits: [{ old, new }], props?: {...}, code_path?: '...' }\` — **default for subsequent edits**. Each \`old\` must match exactly once.
 - \`{ type: 'image', data: base64, mimeType }\` — sharp output.
+- \`{ type: 'video', path, contentType?: 'video/mp4', description?, duration?, width?, height? }\` — Node/FFmpeg output written to the provided \`outputDir\`.
+- \`{ type: 'files', outputs: [{ path, contentType, description? }] }\` — Node/FFmpeg can return multiple output files.
 - \`{ type: 'text', content }\` — computation/data result.
 - \`{ type: 'error', message }\` — failure.
 
@@ -914,7 +980,9 @@ Critical design rules:
 
 React scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio, evolvePath/getLength/getPointAtLength/interpolatePath/parsePath/resetPath/cutPath (@remotion/paths), noise2D/noise3D (@remotion/noise).
 
-Node scope: \`sharp\`, \`JSZip\`, \`saveToWorkspace(path, content, contentType?)\` → { success, storageUrl }, \`fetch\`, Buffer/JSON/Math/Date.
+Default runtime (\`runtime: "design"\`) Node scope: \`sharp\`, \`JSZip\`, \`saveToWorkspace(path, content, contentType?)\` → { success, storageUrl }, \`fetch\`, Buffer/JSON/Math/Date.
+
+Open media runtime (\`runtime: "node"\`): full backend Node execution for real video editing. You may use \`require('fs')\`, \`require('child_process')\`, \`process\`, temp files, \`ffmpegPath\`, \`ffprobePath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Use this for FFmpeg tasks: split long videos, concat MP4s, extract frames, transcode to H.264/AAC, preserve/mux audio, or prepare clips for Seedance/Kling.
 
 Context:
 - \`images\` — Buffers pre-fetched from the \`media_refs\` input (sharp ops only, never base64 into design props).
@@ -926,8 +994,9 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For designs/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         media_refs: z.array(z.number()).optional().describe('1-based snapshot indices to pre-fetch as Buffers (e.g. [2, 3] for <<<media_2>>> and <<<media_3>>>). Available in code as images[0], images[1], ... (Buffer order matches this array).'),
+        runtime: z.enum(['design', 'node']).optional().describe('design = existing safe Remotion/sharp runtime (default). node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }),
-      execute: async ({ code, description: desc, media_refs }) => {
+      execute: async ({ code, description: desc, media_refs, runtime }) => {
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         // Store raw code for write_file({ fromLastRunCode: true })
@@ -940,6 +1009,67 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
           } catch (e) {
             console.warn('⚠️ [run_code] failed to refresh snapshot URLs:', e);
           }
+        }
+
+        if (runtime === 'node') {
+          if (!ctx.supabase || !ctx.userId) {
+            return { type: 'text' as const, content: 'Node media runtime requires workspace access. Please try again after the project finishes loading.' };
+          }
+          const { buildMediaItems, runNodeMediaCode } = await import('./media-sandbox');
+          const mediaItems = await buildMediaItems({
+            snapshotImages: ctx.snapshotImages,
+            projectId: ctx.projectId,
+            supabase: ctx.supabase,
+          });
+          const mediaResult = await runNodeMediaCode({
+            code,
+            description: desc,
+            mediaRefs: media_refs,
+            mediaItems,
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            supabase: ctx.supabase,
+          });
+
+          if (mediaResult.type === 'error') {
+            return { type: 'text' as const, content: `Node media runtime error: ${mediaResult.content || 'unknown error'}` };
+          }
+
+          const primary = mediaResult.primaryOutput;
+          if (primary?.contentType?.startsWith('video/') && primary.storageUrl) {
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+            (ctx as any).__runCodeDrafts.push({
+              type: 'video',
+              videoUrl: primary.storageUrl,
+              workspacePath: primary.workspacePath,
+              description: primary.description || desc || 'FFmpeg video',
+              duration: primary.duration ?? primary.probe?.duration ?? null,
+              width: primary.width ?? primary.probe?.width,
+              height: primary.height ?? primary.probe?.height,
+              outputs: mediaResult.outputs,
+            });
+            const draftIdx = (ctx as any).__runCodeDrafts.length;
+            const dur = typeof primary.duration === 'number' ? `, ${primary.duration.toFixed(1)}s` : '';
+            return {
+              type: 'text' as const,
+              content: `Node media run complete — video draft ${draftIdx} saved to workspace${dur}: ${primary.storageUrl}\nPublish it with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).`,
+            };
+          }
+
+          if (primary?.contentType?.startsWith('image/') && primary.storageUrl) {
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+            (ctx as any).__runCodeDrafts.push({
+              type: 'image',
+              imageBase64: primary.storageUrl,
+              previewUrl: primary.storageUrl,
+              outputs: mediaResult.outputs,
+            });
+          }
+
+          return {
+            type: 'text' as const,
+            content: mediaResult.content || `Node media run complete. Outputs:\n${mediaResult.outputs.map((o, i) => `${i + 1}. ${o.storageUrl || o.workspacePath || o.path || '(no path)'}`).join('\n') || '(none)'}`,
+          };
         }
 
         // Debug: log snapshot image URLs available to run_code

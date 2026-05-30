@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { Message } from '@/types';
 import { compressImageFile } from '@/lib/imageUtils';
 import { useLocale } from '@/lib/i18n';
+import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
@@ -504,7 +505,7 @@ export default function AgentChatView({
   currentSnapshotIndex,
   preferredModel = 'auto',
   onModelChange,
-  videoModel = 'kling',
+  videoModel = getDefaultVideoModelId(),
   onVideoModelChange,
   onNavigateToSnapshot,
   onVideoTap,
@@ -915,6 +916,7 @@ export default function AgentChatView({
           style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
         >
           <button
+            data-testid="chat-back"
             onClick={handleBack}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm hover:bg-white/10 active:bg-white/15 transition-colors"
           >
@@ -928,6 +930,7 @@ export default function AgentChatView({
       {/* ── Floating PiP (overlay mode only) ── */}
       {!isPanel && currentImage && (
         <div
+          data-testid="cui-pip"
           className="absolute z-50 rounded-2xl overflow-hidden select-none"
           style={{
             width: PIP,

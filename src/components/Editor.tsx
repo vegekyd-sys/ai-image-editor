@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -41,6 +41,7 @@ import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
+import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 
 export type { AnimationState } from '@/lib/editor/types';
 
@@ -184,8 +185,8 @@ export default function Editor({
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const preferredModelRef = useRef<PreferredModel>('auto');
   useEffect(() => { preferredModelRef.current = preferredModel; }, [preferredModel]);
-  const [videoModel, setVideoModel] = useState<'kling' | 'seedance'>('kling');
-  const videoModelRef = useRef<'kling' | 'seedance'>('kling');
+  const [videoModel, setVideoModel] = useState<VideoModel>(() => getDefaultVideoModelId());
+  const videoModelRef = useRef<VideoModel>(getDefaultVideoModelId());
   useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
@@ -3514,7 +3515,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         const res = await fetch('/api/video-snapshot', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || 'kling' }),
+                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId() }),
                         });
                         const json = await res.json();
                         if (!res.ok) throw new Error(json.error || 'Retry failed');
@@ -3547,7 +3548,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         error: null,
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
-                        videoModel: (anim.videoModel === 'kling' || anim.videoModel === 'seedance') ? anim.videoModel : videoModel,
+                        videoModel: anim.videoModel && anim.videoModel !== 'upload' ? anim.videoModel : videoModel,
                       });
                     }}
                     isDesktop={isDesktop}

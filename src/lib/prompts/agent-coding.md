@@ -24,9 +24,111 @@ Rules:
 - Optionally include `props: { key: value }` to merge prop updates alongside code changes.
 - Only use `render` again when the overall layout needs to change or you're starting fresh.
 
-**IMPORTANT: run_code sandbox has NO require, NO fs, NO file system access.** Do not try to `require('fs')` or read files inside run_code. Use the `read_file` tool instead if you need file contents.
+**Default design runtime:** `run_code` without `runtime` (or with `runtime: "design"`) has NO require, NO fs, NO file system access. Use it for Remotion designs, editable layouts, and sharp image operations.
+
+**Open Node media runtime:** `run_code({ runtime: "node", ... })` is a fully open backend Node environment for real media work. Use it when you need FFmpeg/FFprobe, local temp files, `child_process`, MP4 split/concat/transcode, frame extraction, muxing audio, or preparing long videos for Seedance/Kling. Security restrictions are intentionally not applied in this runtime yet.
 
 **Remotion APIs**: All exports from `remotion` are available (Easing, Loop, Freeze, random, interpolateColors, OffthreadVideo, delayRender, continueRender, etc.). Also `@remotion/paths` (evolvePath, getLength, etc.) and `@remotion/noise` (noise2D, noise3D). Standard globals (Math, Object, Array, JSON, console) work normally.
+
+### FFmpeg Video Lab (`runtime: "node"`)
+
+Use this for actual MP4 editing, not visual preview code. The runtime gives you:
+
+- `require`, `process`, `Buffer`, `fetch`, and normal Node built-ins.
+- `ffmpegPath` and `ffprobePath`.
+- `workDir`, `inputDir`, `outputDir`.
+- `inputFiles`: downloaded files from `media_refs`, each with `{ index, kind, url, inputPath, contentType, duration, width, height }`.
+- `ctx.media`: full Media Index with real video URLs for video snapshots.
+- `saveOutput(localPath, workspacePath?, contentType?)`: upload a generated file to workspace.
+- `probeVideo(path)`: ffprobe helper returning duration, width, height, fps, codecs.
+
+Return a video like:
+
+```js
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const path = require('path');
+const exec = promisify(execFile);
+
+const input = inputFiles[0].inputPath;
+const out = path.join(outputDir, 'clip.mp4');
+await exec(ffmpegPath, ['-i', input, '-t', '15', '-c', 'copy', out]);
+
+return {
+  type: 'video',
+  path: out,
+  contentType: 'video/mp4',
+  description: 'First 15s clip'
+};
+```
+
+Think in FFmpeg primitives, not one-off tools:
+- Inspect: `probeVideo(input)` before editing.
+- Select time: trim, split equally, split by max duration, or cut around highlights.
+- Transform image: scale, crop, pad, rotate, color, overlay, extract frames.
+- Transform sound: keep, mute, normalize, replace BGM, fade, mux.
+- Assemble: concat clips, stitch model outputs, export mobile MP4.
+- Verify: probe generated MP4s and describe what each output contains.
+
+Segment planner pattern. Use this for "split into two", "make <=15s chunks", "cut first 5s", or "prepare for Seedance" by changing only `segments`:
+
+```js
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const path = require('path');
+const exec = promisify(execFile);
+
+const input = inputFiles[0].inputPath;
+const info = await probeVideo(input);
+const duration = info.duration || 0;
+if (!duration) throw new Error('Could not read video duration');
+
+const segments = [
+  // Example A: exactly two videos
+  { start: 0, len: duration / 2, label: 'Part 1' },
+  { start: duration / 2, len: duration / 2, label: 'Part 2' },
+
+  // Example B: <=15s chunks
+  // ...Array.from({ length: Math.ceil(duration / 15) }, (_, i) => ({
+  //   start: i * 15,
+  //   len: Math.min(15, duration - i * 15),
+  //   label: `Part ${i + 1}`,
+  // })),
+];
+
+const outputs = [];
+for (const [index, segment] of segments.entries()) {
+  const out = path.join(outputDir, `part-${String(index + 1).padStart(2, '0')}.mp4`);
+  await exec(ffmpegPath, [
+    '-ss', String(segment.start), '-i', input, '-t', String(segment.len),
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-movflags', '+faststart',
+    out,
+  ]);
+  const probe = await probeVideo(out);
+  outputs.push({ path: out, contentType: 'video/mp4', description: `${segment.label}: ${probe.duration?.toFixed(2)}s` });
+}
+
+return { type: 'files', outputs };
+```
+
+Long-video style transfer recipe:
+1. `runtime: "node"` + `probeVideo` source duration.
+2. Use the segment planner to create model-sized MP4 chunks: Kling `<=10s`, SeeDance `<=15s`.
+3. Call `generate_animation` for each chunk with the user's requested model and matching style prompt.
+4. Use `runtime: "node"` concat to stitch generated chunks into one H.264/AAC MP4.
+5. `write_file({ fromLastRunCode: true, name: "final-style-transfer" })` to publish the final MP4 as a video snapshot.
+
+For mobile-compatible final MP4, prefer H.264/AAC/yuv420p:
+
+```js
+await exec(ffmpegPath, [
+  '-i', input,
+  '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+  '-c:a', 'aac', '-movflags', '+faststart',
+  out
+]);
+```
 
 **Media references**: `<<<media_N>>>` URLs may be images (.jpg/.png/.webp) or videos (.mp4). Check the Media Index in your context — video entries are marked with `(VIDEO, Xs)`. Use `<Img>` for images, `<Video>` for videos.
 

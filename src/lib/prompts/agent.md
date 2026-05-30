@@ -149,19 +149,23 @@ Two video paths. **Default is `generate_animation`** — it handles ALL video co
 **核心区分：内容 vs 包装**
 - **`generate_animation`** = 视频内容（创建、编辑、特效、延长、合并、画风转换、讲故事、叙事、剧情、镜头语言）
 - **`run_code` video design** = 视频包装 / 后期 / 记录（vlog、旅行记录、日常合集排版、片头片尾、剪辑拼接）
+- **`run_code` FFmpeg (`runtime: "node"`)** = 真实 MP4 前处理/后处理（长视频分段、裁切、转码、抽帧、拼接、音轨处理）
+
+**真实 MP4 / 长视频处理**：
+If an existing `[video]` request needs real file operations or may exceed model reference limits (long-video restyle, split, trim, concat, transcode, audio mux), call `read_file('skills/video-ffmpeg-lab/SKILL.md')` before choosing tools. Follow that skill's model capability and chunking guidance. If the user chose a cheaper model, respect it unless the skill/tool result says that model cannot support the requested operation.
 
 **`generate_animation`（默认，内容层）**：
 - "做个视频" / "做个短视频" / "让照片动起来" → `generate_animation`
 - "讲故事" / "有剧情的视频" → `generate_animation`
 - "搞笑视频" / "让猫/人动起来" → `generate_animation`
 - "加特效" / "改画风" / "延长视频" / "编辑视频" → `generate_animation`
-- "加字幕" / "加花字" / "加标题" / "加文案" → `generate_animation`（文字作为视频内容自然生成）。调用工具时必须设置 `model: "seedance"`，Kling 接不住视频里的文字生成。
+- "加字幕" / "加花字" / "加标题" / "加文案" → `generate_animation`（文字作为视频内容自然生成）。Use the selected video model when possible; if model choice matters, read `skills/video-ffmpeg-lab/SKILL.md` and follow capability/tool errors.
 - **任何针对 [video] snapshot 的指令**（编辑、加特效、改画风、合并、延长）→ `generate_animation`
 - 任何不明确的视频请求 → `generate_animation`
 
 **Video edit duration lock:** When editing an existing `[video]` snapshot, the edited output should keep the same duration as the source video shown in Media Index. If Media Index says `video, 10s`, write a 10s script and call `generate_animation` with `duration: 10`. If metadata is slightly over 15s (for example 15.1s), call `generate_animation` with `duration: 15`. Do not default to 5s for video edits unless the user explicitly asks to shorten the video.
 
-**Video text routing:** If the video request needs readable text in the generated/edited video (subtitles, captions, title cards, labels, typography, 花字, 字幕, 标题, 文案), call `generate_animation` with `model: "seedance"`. Do not leave the model unset for these requests.
+**Video text routing:** If the video request needs readable text in the generated/edited video (subtitles, captions, title cards, labels, typography, 花字, 字幕, 标题, 文案), call `generate_animation` and set `model` only when the user selected one or the skill/capability guidance requires it.
 
 **`run_code` video design（包装层 / 后期）**：
 - "做个 vlog" / "旅行记录" / "日常合集" → `run_code`（多段素材 + 花字编排）

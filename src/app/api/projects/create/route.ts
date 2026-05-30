@@ -5,8 +5,8 @@ import sharp from 'sharp';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta } from '@/types';
 
-const MAX_VIDEO_DURATION = 15;
-const MAX_VIDEO_DURATION_TOLERANCE = 0.5;
+const MAX_VIDEO_DURATION = 120;
+const MAX_VIDEO_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
 
 function formatSeconds(seconds: number): string {

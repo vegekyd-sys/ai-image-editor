@@ -1,7 +1,8 @@
 import type { AgentStreamCallbacks } from './agentStream';
-import type { Snapshot, Tip, ProjectAnimation } from '@/types';
+import type { Snapshot, Tip, ProjectAnimation, VideoModel } from '@/types';
 import type { DesignPayload } from '@/types';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 
 /**
  * Context for creating unified agent callbacks.
@@ -304,7 +305,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const urls = imageUrls?.length
         ? imageUrls
         : ctx.snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
-      const videoModel = (model as 'kling' | 'seedance') || 'kling';
+      const videoModel = (model as VideoModel) || getDefaultVideoModelId();
       const newAnim: ProjectAnimation = {
         id: taskId,
         projectId: ctx.projectId,

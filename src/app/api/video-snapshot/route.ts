@@ -3,6 +3,7 @@ import { authenticateRequest } from '@/lib/api-auth'
 import { createVideo } from '@/lib/skills/create-video'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
+import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 30
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
       videoReferType,
       keepOriginalSound,
     } = await req.json()
+    const selectedVideoModel = normalizeVideoModelId(videoModel)
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
     const inputVideoUrl = typeof videoUrl === 'string' && videoUrl.startsWith('http') ? videoUrl : undefined
 
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest) {
       images: inputImageUrls,
       duration: effectiveDuration,
       aspectRatio,
-      videoModel,
+      videoModel: selectedVideoModel,
       videoUrl: inputVideoUrl,
       videoReferType,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
@@ -108,7 +110,7 @@ export async function POST(req: NextRequest) {
       sourceUrls: allSourceUrls.length > 0 ? allSourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
       status: 'processing',
       duration: effectiveDuration || null,
-      model: videoModel || 'kling',
+      model: selectedVideoModel,
       createdAt: new Date().toISOString(),
     }
 

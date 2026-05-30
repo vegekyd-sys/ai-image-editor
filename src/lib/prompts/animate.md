@@ -21,8 +21,8 @@ Images serve as visual references. Prompt uses `<<<media_N>>>` to reference them
 - Requires `aspect_ratio` (or omit to auto-detect)
 - Max 7 images
 
-### Video Editing Mode (SeeDance only)
-Edit, remix, or build upon an existing video. Use `<<<media_N>>>` to reference timeline videos — the system auto-routes them. **This mode requires SeeDance** (`model: 'seedance'`). Kling does not support video editing well.
+### Video Editing Mode
+Edit, remix, or build upon an existing video. Use `<<<media_N>>>` to reference timeline videos — the system auto-routes them. If the source video may exceed the selected model's reference/output limit, read `skills/video-ffmpeg-lab/SKILL.md` first and split the MP4 before generation.
 
 Use cases:
 - **Edit video content**: add effects, characters, or elements to an existing video
@@ -30,8 +30,8 @@ Use cases:
 - **Remix**: combine photos + video into something new
 
 Rules:
-- **Always set `model: 'seedance'`** when editing or referencing a video
-- **Timeline videos**: just use `<<<media_N>>>` — auto-routed to SeeDance
+- Respect the user's selected/requested model unless capability/tool errors say it cannot support the operation.
+- **Timeline videos**: use `<<<media_N>>>` and let the tool route media refs.
 - **External videos** (workspace/skill assets): pass `video_ref_url` + `video_ref_type: feature`
 - **Duration lock**: when editing an existing video, the output duration should match the input video duration. If the source video is 10s, write a 10s edit and set duration to 10s. If source metadata is slightly over 15s (for example 15.1s), set duration to 15s. Never default to a 5s script for video editing unless the user explicitly asks to shorten it.
 - Can combine images + videos in the same prompt

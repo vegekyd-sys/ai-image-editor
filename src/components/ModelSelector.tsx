@@ -5,6 +5,7 @@ import type { PreferredModel } from './AgentChatView';
 import type { VideoModel } from '@/types';
 import { getImageModels, getVideoModels, getModelInfo, type ModelInfo } from '@/lib/model-registry';
 import { useLocale } from '@/lib/i18n';
+import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 
 interface ModelSelectorProps {
   preferredModel: PreferredModel;
@@ -180,7 +181,7 @@ function ModelRow({
 export default function ModelSelector({
   preferredModel,
   onModelChange,
-  videoModel = 'kling',
+  videoModel = getDefaultVideoModelId(),
   onVideoModelChange,
   onOpenChange,
 }: ModelSelectorProps) {

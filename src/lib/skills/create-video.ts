@@ -1,15 +1,12 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
-import type { VideoModel } from '@/types';
-
-const MAX_VIDEO_DURATION = 15;
-const MAX_REFERENCE_VIDEO_DURATION = 15.5;
+import { getVideoModelCapability, normalizeVideoModelId, resolveVideoOutputDuration, validateVideoModelRequest } from '@/lib/video-model-capabilities';
 
 export interface CreateVideoInput {
   script: string;
   images: string[];          // public URLs only (no base64)
   duration?: number;         // 3, 5, 7, 10, or 15 seconds. Omit for smart mode
   aspectRatio?: string;      // '9:16', '16:9', '1:1'
-  videoModel?: VideoModel;   // 'kling' (default) or 'seedance'
+  videoModel?: string;       // video provider/model id, e.g. 'kling' or 'seedance'
   // Video editing (Kling only)
   videoUrl?: string;                    // Reference video URL (explicit from agent)
   videoReferType?: 'base' | 'feature';  // default: 'base'
@@ -30,19 +27,16 @@ export interface CreateVideoResult {
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, referenceVideoDuration, keepOriginalSound, motionControl, characterOrientation } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length;
+  const provider = normalizeVideoModelId(videoModel);
+  const capability = getVideoModelCapability(provider);
+  const modelError = validateVideoModelRequest({
+    model: provider,
+    outputDuration: duration,
+    referenceVideoDuration,
+    hasVideoReference,
+  });
 
-  if (duration != null && duration > MAX_VIDEO_DURATION) {
-    return {
-      success: false,
-      message: 'Video duration must be 15 seconds or less.',
-    };
-  }
-  if (referenceVideoDuration != null && referenceVideoDuration > MAX_REFERENCE_VIDEO_DURATION) {
-    return {
-      success: false,
-      message: 'Reference video duration must be 15 seconds or less, with a small metadata tolerance.',
-    };
-  }
+  if (modelError) return { success: false, message: modelError };
 
   if (images.length === 0 && !hasVideoReference) {
     return {
@@ -100,17 +94,11 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     // Resolve duration: explicit user choice > video edit source duration > parsed script > smart mode.
     // This prevents accidental 5s edits, while still allowing requests like "turn this 10s video into 8s".
-    const resolvedDuration = duration ?? (referenceVideoDuration != null ? Math.min(MAX_VIDEO_DURATION, referenceVideoDuration) : undefined) ?? parseTotalDuration(finalPrompt);
-
-    // Provider routing: explicit videoModel > env var > default kling
-    let provider: string;
-    if (videoModel === 'seedance') {
-      provider = 'seedance';
-    } else if (videoModel === 'kling') {
-      provider = 'kling';
-    } else {
-      provider = process.env.ANIMATE_PROVIDER || 'kling';
-    }
+    const resolvedDuration = resolveVideoOutputDuration({
+      requestedDuration: duration,
+      referenceVideoDuration,
+      model: provider,
+    }) ?? parseTotalDuration(finalPrompt);
 
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
     console.log(`\n🎬 [create_video] provider=${provider}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}`);
@@ -118,11 +106,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     let taskId: string;
 
-    // Video editing (base mode) only supported by Kling
-    if (videoUrl && videoReferType === 'base' && provider !== 'kling') {
+    if (videoUrl && videoReferType === 'base' && !capability.supportsBaseVideoEdit) {
       return {
         success: false,
-        message: `Video editing (base mode) is only supported by Kling. Current model: ${provider}`,
+        message: `Video editing (base mode) is not supported by ${capability.label}. Use video_ref_type="feature" or choose a model that supports base video editing.`,
       };
     }
     if (videoUrl && provider === 'piapi') {
@@ -155,7 +142,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         version: '3.0',
       });
       console.log(`✅ [create_video] PiAPI task created: ${taskId}`);
-    } else {
+    } else if (provider === 'kling') {
       const { createKlingTask, detectAspectRatio } = await import('../kling');
       const ratioSourceImage = filteredImages[0] || images[0];
       const resolvedRatio = aspectRatio || (ratioSourceImage ? await detectAspectRatio(ratioSourceImage) : undefined);
@@ -172,6 +159,11 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         keepOriginalSound,
       });
       console.log(`✅ [create_video] Kling task created: ${taskId}`);
+    } else {
+      return {
+        success: false,
+        message: `No video provider adapter is registered for "${provider}". Add its API adapter and model capability before using this model.`,
+      };
     }
 
     return {
