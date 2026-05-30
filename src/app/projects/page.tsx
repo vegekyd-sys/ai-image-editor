@@ -160,6 +160,7 @@ function ProjectsPageInner() {
   const [iosProjectX, setIosProjectX] = useState(0)
   const [iosProjectSettling, setIosProjectSettling] = useState(false)
   const [iosProjectPanActive, setIosProjectPanActive] = useState(false)
+  const iosProjectOverlayRef = useRef<HTMLDivElement | null>(null)
   const iosProjectPanRef = useRef({ tracking: false, startX: 0, startY: 0, lastX: 0, startTime: 0, locked: false })
   const iosProjectCloseTimerRef = useRef<number | null>(null)
 
@@ -290,6 +291,23 @@ function ProjectsPageInner() {
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [closeIOSProject])
+
+  useEffect(() => {
+    const overlay = iosProjectOverlayRef.current
+    if (!overlay || !activeIOSProjectId) return
+
+    const blockNativeBackSwipe = (event: TouchEvent) => {
+      if (!activeIOSProjectIdRef.current || event.touches.length !== 1) return
+      if (isCuiOpen()) return
+      if (isIOSProjectPanEditableTarget(event.target)) return
+      if (event.touches[0].clientX > IOS_PROJECT_PAN_EDGE_PX) return
+
+      event.preventDefault()
+    }
+
+    overlay.addEventListener('touchstart', blockNativeBackSwipe, { capture: true, passive: false })
+    return () => overlay.removeEventListener('touchstart', blockNativeBackSwipe, { capture: true })
+  }, [activeIOSProjectId])
 
   // Measure input box height → set photo slot width = height (square)
   useEffect(() => {
@@ -916,6 +934,7 @@ function ProjectsPageInner() {
 
       {activeIOSProjectId && (
         <div
+          ref={iosProjectOverlayRef}
           data-makaron-ios-project-overlay="true"
           className="fixed inset-0 z-[240] bg-black"
           style={{
@@ -923,6 +942,7 @@ function ProjectsPageInner() {
             transition: iosProjectSettling ? `transform ${IOS_PROJECT_OVERLAY_CLOSE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none',
             willChange: iosProjectPanActive || iosProjectSettling ? 'transform' : undefined,
             touchAction: 'pan-y',
+            overscrollBehaviorX: 'contain',
           }}
           onTouchStart={handleIOSProjectPanStart}
           onTouchMove={handleIOSProjectPanMove}

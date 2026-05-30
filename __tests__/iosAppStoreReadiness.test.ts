@@ -120,6 +120,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('data-makaron-ios-project-overlay');
     expect(projectsPage).toContain('makaronProjectOverlay');
     expect(projectsPage).toContain('activeIOSProjectId');
+    expect(projectsPage).toContain('blockNativeBackSwipe');
+    expect(projectsPage).toContain('passive: false');
+    expect(projectsPage).toContain("overscrollBehaviorX: 'contain'");
     expect(projectsPage).toContain('isMakaronIOSAppShell');
     expect(projectsPage).toContain('isCuiOpen');
     expect(projectsPage).toContain('window.history.pushState');
