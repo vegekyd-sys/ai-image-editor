@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
+import { Suspense, type CSSProperties } from 'react'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
@@ -44,8 +44,15 @@ const IOS_PROJECT_PAN_MIN_DX = 10
 const IOS_PROJECT_OVERLAY_CLOSE_MS = 190
 
 function isMakaronIOSAppShell() {
-  if (typeof document === 'undefined' || typeof navigator === 'undefined') return false
-  return document.documentElement.classList.contains('makaron-ios-app') || navigator.userAgent.includes('MakaronIOS')
+  if (typeof window === 'undefined' || typeof document === 'undefined' || typeof navigator === 'undefined') return false
+  const capacitor = (window as typeof window & {
+    Capacitor?: { getPlatform?: () => string; isNativePlatform?: () => boolean }
+  }).Capacitor
+  const isCapacitorIOS = Boolean(capacitor?.isNativePlatform?.() && capacitor.getPlatform?.() === 'ios')
+  return isCapacitorIOS
+    || document.documentElement.dataset.nativePlatform === 'ios'
+    || document.documentElement.classList.contains('makaron-ios-app')
+    || navigator.userAgent.includes('MakaronIOS')
 }
 
 function timeAgo(dateStr: string): string {
@@ -154,6 +161,7 @@ function ProjectsPageInner() {
 
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
+  const [iosAppShell, setIosAppShell] = useState(false)
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
   const [activeIOSProjectId, setActiveIOSProjectId] = useState<string | null>(null)
   const activeIOSProjectIdRef = useRef<string | null>(null)
@@ -178,7 +186,6 @@ function ProjectsPageInner() {
     setIosProjectSettling(true)
     setIosProjectPanActive(false)
     setIosProjectX(window.innerWidth)
-    window.history.pushState({ makaronProjectOverlay: true, projectId }, '', '/projects')
     window.requestAnimationFrame(() => setIosProjectX(0))
   }, [clearIOSProjectCloseTimer])
 
@@ -190,10 +197,9 @@ function ProjectsPageInner() {
     setIosProjectSettling(false)
     setIosProjectPanActive(false)
     setIosProjectX(0)
-    window.history.replaceState({ makaronProjectOverlay: true, projectId }, '', '/projects')
   }, [clearIOSProjectCloseTimer])
 
-  const closeIOSProject = useCallback((historyMode: 'back' | 'none' = 'back') => {
+  const closeIOSProject = useCallback(() => {
     if (!activeIOSProjectIdRef.current || typeof window === 'undefined') return
     clearIOSProjectCloseTimer()
     setIosProjectSettling(true)
@@ -205,21 +211,25 @@ function ProjectsPageInner() {
       setActiveIOSProjectId(null)
       setIosProjectX(0)
       setIosProjectSettling(false)
-      if (historyMode === 'back') {
-        window.history.back()
-      }
     }, IOS_PROJECT_OVERLAY_CLOSE_MS)
   }, [clearIOSProjectCloseTimer])
 
-  const handleProjectNavigate = useCallback((event: React.MouseEvent<HTMLAnchorElement>, project: ProjectWithSnapshots) => {
-    if (isMakaronIOSAppShell()) {
+  useEffect(() => {
+    const detect = () => setIosAppShell(isMakaronIOSAppShell())
+    detect()
+    const timer = window.setTimeout(detect, 250)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  const handleProjectNavigate = useCallback((event: React.MouseEvent<HTMLElement>, project: ProjectWithSnapshots) => {
+    if (iosAppShell || isMakaronIOSAppShell()) {
       event.preventDefault()
       setNavigating(false)
       openIOSProject(project.id)
       return
     }
     setNavigating(true)
-  }, [openIOSProject])
+  }, [iosAppShell, openIOSProject])
 
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
@@ -281,16 +291,6 @@ function ProjectsPageInner() {
       document.body.style.overflow = previousOverflow
     }
   }, [activeIOSProjectId])
-
-  useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      if (activeIOSProjectIdRef.current && !event.state?.makaronProjectOverlay) {
-        closeIOSProject('none')
-      }
-    }
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [closeIOSProject])
 
   useEffect(() => {
     const overlay = iosProjectOverlayRef.current
@@ -590,7 +590,7 @@ function ProjectsPageInner() {
     setIosProjectSettling(true)
     if (shouldClose) {
       setIosProjectPanActive(true)
-      closeIOSProject('back')
+      closeIOSProject()
       return
     }
 
@@ -816,6 +816,7 @@ function ProjectsPageInner() {
                   key={project.id}
                   project={project}
                   index={i}
+                  useInlineNavigation={iosAppShell}
                   onMore={(e) => openActionSheet(e, project)}
                   onNavigate={handleProjectNavigate}
                 />
@@ -954,7 +955,7 @@ function ProjectsPageInner() {
             projectId={activeIOSProjectId}
             className=""
             loadingClassName="h-dvh bg-black"
-            onBack={() => closeIOSProject('back')}
+            onBack={closeIOSProject}
             onProjectCreated={replaceIOSProject}
           />
         </div>
@@ -1012,34 +1013,37 @@ function ProjectsPageInner() {
 function ProjectCard({
   project,
   index,
+  useInlineNavigation,
   onMore,
   onNavigate,
 }: {
   project: ProjectWithSnapshots
   index: number
+  useInlineNavigation: boolean
   onMore: (e: React.MouseEvent) => void
-  onNavigate: (e: React.MouseEvent<HTMLAnchorElement>, project: ProjectWithSnapshots) => void
+  onNavigate: (e: React.MouseEvent<HTMLElement>, project: ProjectWithSnapshots) => void
 }) {
   // Use last snapshot with an actual image URL (skip design snapshots with empty image_url)
   const lastSnap = project.snapshots.filter(s => s.image_url).pop() ?? project.snapshots[project.snapshots.length - 1]
   const [loaded, setLoaded] = useState(false)
 
-  return (
-    <Link
-      href={`/projects/${project.id}`}
-      className="mkr-card mkr-row-enter"
-      onClick={(e) => onNavigate(e, project)}
-      style={{
-        display: 'block',
-        position: 'relative',
-        aspectRatio: '1 / 1',
-        borderRadius: '16px',
-        overflow: 'hidden',
-        background: '#120d1a',
-        animationDelay: `${index * 0.06}s`,
-        textDecoration: 'none',
-      }}
-    >
+  const cardStyle: CSSProperties = {
+    display: 'block',
+    position: 'relative',
+    aspectRatio: '1 / 1',
+    borderRadius: '16px',
+    overflow: 'hidden',
+    background: '#120d1a',
+    animationDelay: `${index * 0.06}s`,
+    textDecoration: 'none',
+    border: 'none',
+    padding: 0,
+    width: '100%',
+    color: 'inherit',
+  }
+
+  const cardContent = (
+    <>
       {/* Placeholder shimmer while image loads */}
       {!loaded && (
         <div style={{
@@ -1161,6 +1165,34 @@ function ProjectCard({
       >
         ···
       </button>
+    </>
+  )
+
+  if (useInlineNavigation) {
+    return (
+      <div
+        role="link"
+        tabIndex={0}
+        className="mkr-card mkr-row-enter"
+        onClick={(e) => onNavigate(e, project)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') onNavigate(e as unknown as React.MouseEvent<HTMLElement>, project)
+        }}
+        style={cardStyle}
+      >
+        {cardContent}
+      </div>
+    )
+  }
+
+  return (
+    <Link
+      href={`/projects/${project.id}`}
+      className="mkr-card mkr-row-enter"
+      onClick={(e) => onNavigate(e, project)}
+      style={cardStyle}
+    >
+      {cardContent}
     </Link>
   )
 }
