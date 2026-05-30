@@ -12,6 +12,10 @@
     "ios:local": "node tools/ios-local-config.mjs",
     "ios:prod": "node tools/ios-local-config.mjs --reset",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:cli": "npm --prefix packages/makaron-cli test",
+    "lint:agent-docs": "node scripts/lint-makaron-cli-agent-docs.mjs",
+    "lint:customer-docs": "node scripts/lint-customer-docs.mjs",
     "postinstall": "npx patch-package --patch-dir patches",
     "mcp": "npx tsx --require ./md-loader.cjs mcp-server.ts --stdio",
     "mcp:http": "npx tsx --require ./md-loader.cjs mcp-server.ts"

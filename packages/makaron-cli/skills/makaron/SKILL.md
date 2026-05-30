@@ -50,14 +50,14 @@ Verify: `npx makaron-cli list` should show projects.
 # One-shot: create project + upload image + submit prompt — all in one command
 RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video")
 
-# Watch until all artifacts are ready
-npx makaron-cli responses watch $RUN_ID --jsonl
+# Wait for the final customer-ready result
+npx makaron-cli responses get $RUN_ID --wait --json
 ```
 
 Or with an existing project:
 ```bash
 RUN_ID=$(npx makaron-cli chat --project $PROJECT_ID -b "make a 5s video")
-npx makaron-cli responses watch $RUN_ID --jsonl
+npx makaron-cli responses get $RUN_ID --wait --json
 ```
 
 ## Primary: `chat` (Agent-driven creative work)
@@ -112,7 +112,7 @@ Use `chat --project <id|auto> --video ...` for any project/timeline video work. 
 npx makaron-cli responses get <runId> --json
 ```
 
-### Watch until done (streaming events)
+### Advanced: stream incremental events
 
 ```bash
 npx makaron-cli responses watch <runId> --jsonl
@@ -267,38 +267,33 @@ RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinem
 PROJECT_URL=$(npx makaron-cli responses get $RUN_ID --pick project_url)
 send_message "Project created: $PROJECT_URL"
 
-# 4. Watch and send each artifact as it appears
-npx makaron-cli responses watch $RUN_ID --jsonl | while read -r line; do
-  EVENT=$(echo "$line" | jq -r '.event')
-  TYPE=$(echo "$line" | jq -r '.item.type // empty')
-  URL=$(echo "$line" | jq -r '.item.url // empty')
-  STATUS=$(echo "$line" | jq -r '.item.status // empty')
+# 4. Wait for the final customer-ready result
+RESULT=$(npx makaron-cli responses get $RUN_ID --wait --json)
+IMAGE_URLS=$(echo "$RESULT" | jq -r '[.result.images[]?.imageUrl, .output[]? | select(.type == "image") | .url] | map(select(. != null)) | unique | .[]')
+VIDEO_URLS=$(echo "$RESULT" | jq -r '[.result.videos[]?.videoUrl, .output[]? | select(.type == "video") | .url] | map(select(. != null)) | unique | .[]')
 
-  if [ "$EVENT" = "output.added" ] && [ "$TYPE" = "image" ]; then
-    # Send image immediately as media (not just link)
-    send_image "$URL"
-  elif [ "$EVENT" = "output.updated" ] && [ "$TYPE" = "video" ] && [ "$STATUS" = "completed" ]; then
-    # Video ready — send as media
-    send_video "$URL"
-  elif [ "$EVENT" = "done" ]; then
-    send_message "All done!"
-  fi
+for URL in $IMAGE_URLS; do
+  send_image "$URL"
 done
+for URL in $VIDEO_URLS; do
+  send_video "$URL"
+done
+send_message "All done!"
 ```
 
 **Key principles for service agents:**
-- **Proactive, not reactive**: Don't wait for the full run to finish. Send progress messages and artifacts as they appear.
+- **Proactive, not silent**: Acknowledge immediately, send the project link early, then send the final customer-ready media when the run completes.
 - **Media over links**: When possible, send images/videos as native media in the chat (download URL and upload as attachment), not just paste the URL.
 - **Immediate acknowledgment**: Reply within 1 second of receiving user request. Don't make users wait for project creation.
 - **Project link early**: Send the project URL right after creation so users can check anytime.
-- **Stream artifacts**: Use `watch --jsonl` to push each artifact the moment it's ready. An image at 15s should reach the user at 15s, not after the video finishes at 5 minutes.
+- **Use `get --wait --json` as the default service path**: reserve `watch --jsonl` for advanced streaming or debugging integrations that explicitly need incremental events.
 
 ## Important Notes
 
 - One project = one conversation thread. All history is preserved.
 - One run at a time per project. New message interrupts previous run.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Videos take 2-5 minutes to render. Use `watch` to get URL when ready.
+- Videos take 2-5 minutes to render. Use `responses get <runId> --wait --json` for the default customer-service path.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.

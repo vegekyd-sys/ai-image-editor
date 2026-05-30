@@ -1,8 +1,13 @@
 {
   "name": "makaron-cli",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "description": "Talk to Makaron Agent from the terminal — create projects, edit images, generate videos",
   "type": "module",
+  "scripts": {
+    "test": "node test/smoke.mjs",
+    "test:smoke": "node test/smoke.mjs",
+    "test:live": "MAKARON_LIVE=1 node test/live-smoke.mjs"
+  },
   "bin": {
     "makaron": "./bin/makaron.mjs"
   },
