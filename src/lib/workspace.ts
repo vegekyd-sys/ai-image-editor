@@ -504,39 +504,66 @@ const LEGACY_PROMPTS = new Set(['enhance', 'creative', 'wild', 'captions']);
 
 /** Get all skills (built-in SKILL.md + user). Excludes legacy prompt templates. */
 export async function getAllSkills(supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill[]> {
+  const cacheKey = `skills:all:${userId || 'anonymous'}`;
+  const cached = getCached<ParsedSkill[]>(cacheKey);
+  if (cached) return cached;
+
   const builtIn = loadBuiltInSkills();
   // Filter out legacy prompts — they're for tips pipeline, not user-selectable skills
   const skills = [...builtIn.values()].filter(s => !LEGACY_PROMPTS.has(s.name));
 
   if (supabase && userId) {
     const userFiles = await dbListFiles(supabase, userId, 'skills/%/SKILL.md');
-    for (const file of userFiles) {
-      if (!file.storageUrl) continue;
+    const parsedUserSkills = await Promise.all(userFiles.map(async (file) => {
+      if (!file.storageUrl) return null;
       const result = await fetchFileContent(file.storageUrl, file.contentType);
-      if (result) {
-        const parsed = parseSkillMd(result.content);
-        if (parsed && !builtIn.has(parsed.name)) {
-          skills.push(parsed);
-        }
+      if (!result) return null;
+      const parsed = parseSkillMd(result.content);
+      return parsed && !builtIn.has(parsed.name) ? parsed : null;
+    }));
+    for (const parsed of parsedUserSkills) {
+      if (parsed) {
+        skills.push(parsed);
       }
     }
   }
 
+  setCache(cacheKey, skills);
   return skills;
 }
 
 /** Build lightweight skill manifest for Agent system prompt. */
 export async function getSkillManifest(supabase?: SupabaseClient, userId?: string): Promise<string> {
-  const skills = await getAllSkills(supabase, userId);
-  if (skills.length === 0) return '';
+  const cacheKey = `skills:manifest:${userId || 'anonymous'}`;
+  const cached = getCached<string>(cacheKey);
+  if (cached !== undefined) return cached;
 
-  const lines = skills.map(s => {
+  const builtIn = [...loadBuiltInSkills().values()].filter(s => !LEGACY_PROMPTS.has(s.name));
+  const lines: string[] = builtIn.map(s => {
     const extras: string[] = [];
     if (s.makaron?.referenceImages?.length) extras.push('has reference images');
     if (s.makaron?.modelPreference?.length) extras.push(`prefers: ${s.makaron.modelPreference.join('/')}`);
     const suffix = extras.length ? ` [${extras.join(', ')}]` : '';
     return `- **${s.name}**: ${s.description.trim().split('\n')[0]}${suffix}`;
   });
+  const builtInNames = new Set(builtIn.map(s => s.name));
 
-  return `\n## Available Skills\n\n${lines.join('\n')}\n`;
+  if (supabase && userId) {
+    const userFiles = await dbListFiles(supabase, userId, 'skills/%/SKILL.md');
+    for (const file of userFiles) {
+      const match = file.path.match(/^skills\/([^/]+)\/SKILL\.md$/);
+      const name = match?.[1];
+      if (!name || builtInNames.has(name) || LEGACY_PROMPTS.has(name)) continue;
+      lines.push(`- **${name}**: user skill at \`${file.path}\` (read this file before using the skill)`);
+    }
+  }
+
+  if (lines.length === 0) {
+    setCache(cacheKey, '');
+    return '';
+  }
+
+  const manifest = `\n## Available Skills\n\nThis is an index only. Do not assume user skill details from the manifest; read \`skills/{name}/SKILL.md\` before using a user skill.\n\n${lines.join('\n')}\n`;
+  setCache(cacheKey, manifest);
+  return manifest;
 }
