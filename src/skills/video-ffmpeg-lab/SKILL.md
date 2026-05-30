@@ -44,10 +44,12 @@ Current known defaults:
 
 | Model | Chunk target | Reference limit | Notes |
 | --- | ---: | ---: | --- |
-| Kling | 10s | 10.5s | Cheaper/default, supports base video edit. |
-| SeeDance | 15s | 15.5s | Higher quality, feature/reference mode preferred. |
+| SeeDance | 15s | 15.5s | Default video model, higher quality, feature/reference mode preferred. |
+| Kling | 10s | 10.5s | Cheaper option, supports base video edit when capability allows it. |
 
 If a new model appears, follow its capability/tool error messages instead of inventing a new case. The workflow stays the same: probe → segment to accepted duration → generate per segment → concat.
+
+When the user asks to make the run cheaper, prefer Kling only when the requested source duration, reference-video mode, text/audio needs, and tool errors indicate Kling can support it. If Kling cannot handle the requested operation, say so briefly and continue with SeeDance.
 
 ## Segment planner pattern
 
@@ -97,6 +99,8 @@ for (const [i, part] of parts.entries()) {
 
 return { type: 'files', outputs };
 ```
+
+After a split run, treat the returned files as a manifest. Do not run the same split again unless the source video, model limit, or requested cut points changed.
 
 ## Assembly pattern
 
@@ -164,8 +168,24 @@ Use these as building blocks inside the segment planner or assembly pattern:
 ## Long-video style transfer through video models
 
 1. Analyze/probe the source video.
-2. Use the segment planner to create model-sized chunks: Kling `<=10s`, SeeDance `<=15s`.
-3. Save chunks to workspace.
-4. Call `generate_animation` for each chunk with the user's requested model and the same style direction.
-5. Use the assembly pattern to stitch generated chunks.
-6. Publish the final MP4 with `write_file({ fromLastRunCode: true, name: "..." })`.
+2. Choose model capability: SeeDance is default; Kling is cheaper when it supports the request.
+3. Use the segment planner once to create model-sized chunks: Kling `<=10s`, SeeDance `<=15s`.
+4. Save chunks to workspace and keep the returned manifest in the conversation.
+5. Call `generate_animation` for each chunk with the user's requested model and the same style direction.
+6. Use the assembly pattern to stitch generated chunks.
+7. Publish only the final MP4 with `write_file({ fromLastRunCode: true, name: "..." })`.
+
+## Long-video state machine
+
+Use this checklist to avoid repeated splitting and wasted tokens:
+
+1. `probe_source`: inspect the original MP4 once.
+2. `split_source`: create chunks once and return `type: "files"` with descriptions like `Chunk 1/2, 14.98s`.
+3. `generate_chunks`: submit each manifest chunk to `generate_animation`.
+4. `collect_outputs`: wait for all generated chunk URLs.
+5. `concat_outputs`: run `runtime: "node"` once to stitch generated chunks.
+6. `publish_final`: call `write_file` once for the final MP4.
+
+Never publish source chunks as timeline snapshots unless the user explicitly asks to see the chunks as separate videos.
+
+Never split a generated chunk again unless a tool error says the generated chunk is still too long for the next step.

@@ -1,107 +1,26 @@
-Edit the current photo OR generate a new image from text.
-editPrompt format depends on the mode — see CONTEXT MODE vs Edit Mode sections below.
-When no photo exists (text-to-image mode), write the editPrompt describing the scene.
+Edit the current photo or generate a new image from text.
 
---- MEDIA INDEX (MULTI-SNAPSHOT) ---
-Use `media_index` (1-based) to select which snapshot to edit.
-The `[Media Index]` in the prompt lists all snapshots with their edit history and content descriptions.
-When omitted, no photo is sent — the model generates purely from text (text-to-image mode).
-When editing a photo, you MUST pass media_index. The user's current photo is marked with ← YOU ARE HERE in the Media Index.
-After generation, the result is appended as <<<media_N+1>>> and immediately available.
+For the full image workflow, call `read_file('prompts/image.md')` before complex image work, multi-image composition, skill routing, red annotations, restoration, model selection, captions, design/layout images, or any first non-trivial image edit in a conversation. Do not re-read it if it already appears in tool-result history.
 
-CRITICAL: Use `reference_media_indices` whenever your editPrompt mentions multiple images (Image 1, Image 2, etc.).
-Without this parameter, only ONE image is sent to the AI model — references in the prompt like "Image 2" will be ignored.
+Core contract:
 
-`media_index` selects the edit base (Image 1). `reference_media_indices` adds extra images (Image 2, Image 3, ...).
+- `media_index` selects the timeline snapshot to edit. When editing a photo, pass it explicitly.
+- `reference_media_indices` sends extra timeline snapshots. Use it whenever the `editPrompt` mentions Image 2, Image 3, another `<<<media_N>>>`, a source background, a source person, or a style reference from the timeline.
+- Omit `media_index` for pure text-to-image generation.
+- `image_refs` is only for external workspace URLs, not timeline snapshots.
+- `skill` may be `enhance`, `creative`, `wild`, `captions`, or a user skill. Use it for general style intent; omit it for precise manual instructions.
+- `useOriginalAsReference=true` adds the original photo as Image 2 when restoring identity, color, background, or composition drift.
+- `model` is optional. Use `qwen` for NSFW-risk requests. Use `openai` for accurate text rendering, face identity complaints, and design/layout images.
 
-Example: user says "use the background from media_2 and the person from media_3"
-→ `media_index: 2` (edit base = background = Image 1), `reference_media_indices: [3]` (person = Image 2)
-→ editPrompt: "Place the person from Image 2 into the beach background scene of Image 1. Preserve..."
+Edit Mode prompt shape:
 
-RULE: If your editPrompt says "Image 2" but you didn't set reference_media_indices → the model only sees 1 image and will hallucinate Image 2. Always pass the actual images.
+1. Face rule when people are present.
+2. Exact edit instruction in detailed English.
+3. Preservation line: preserve exact composition, positions, poses, actions, and scene layout.
+4. End line: "Do NOT add any text, watermarks, or borders." Omit this if the user explicitly requested text or captions.
 
---- SKILL PARAMETER ---
-Use `skill` to auto-inject a proven quality template into the prompt. When skill is set,
-write only the specific creative direction in editPrompt — the template rules are injected automatically.
+Context Mode for `model='openai'`:
 
-When to use each skill:
-- skill='creative' → user wants something fun/interesting added: "好玩点", "有趣",
-                     "加个什么", "创意", "搞笑", general "p一下" requests
-- skill='wild'     → user wants exaggerated/crazy transformation of existing elements:
-                     "疯狂一下", "脑洞", "夸张", "wild", "变形"
-- skill='captions' → user wants text/captions added to the image
-- (no skill)       → explicit specific requests ("把背景换成XX"), follow-up tweaks,
-                     or any request that doesn't fit the above categories
-
-
---- DEFAULT: SINGLE IMAGE MODE ---
-By default (useOriginalAsReference=false), only the current photo is sent to Gemini.
-This is the correct mode for all standard edits — Gemini will edit the image in-place.
-
---- WHEN TO USE useOriginalAsReference=true ---
-Set this to true when you judge that having the original photo as a reference would produce a better result. Use your judgment — if the current image has drifted from what the user wants, or if the user wants to restore any aspect from the original, set this to true.
-
-Common triggers:
-- User says "人脸变了" / "脸不对" / "跟原图不一样" / "恢复人脸" → face needs restoring
-- User says "颜色偏了" / "背景变了" / "恢复原来的XX" → some element has drifted
-- User says "重新做" / "从原图开始" / "参考原图" → user wants to reference original
-- After many edits, composition or identity has significantly drifted from original
-- Any time you think: "the original had better [X], I should reference it"
-
-When useOriginalAsReference=true, Gemini receives:
-  Image 1 = current version (edit base — use this for composition, layout, recent changes)
-  Image 2 = original photo (reference — use to restore any elements that have drifted: face, colors, background, etc.)
-
---- RED ANNOTATIONS ---
-The user can draw red marks (freehand lines or rectangles) on the image to point out specific areas.
-When the input image has visible red annotations, the editPrompt MUST reference those marked regions.
-- "Here"/"这里" in the user's message = the red-marked areas
-- Describe the target area by its visual content (e.g. "the building on the left that is circled in red"), not by coordinates
-- The red marks are temporary guides — the output image should NOT contain the red annotations
-- **Always call analyze_image first** when annotations are present — this lets you see exactly what the marks are pointing at before generating
-
---- MODEL SELECTION ---
-`model` is optional — omit it for normal edits (auto-router handles).
-Set `model: 'openai'` when the edit requires accurate text rendering, face identity preservation, or design/layout tasks.
-OpenAI takes ~2-3 minutes per generation — tell the user it will take a couple of minutes.
-
---- CONTEXT MODE (model='openai') ---
-For design/layout tasks (电商详情页, infographics, posters, marketing, anime, game/app UI, web design),
-set model='openai'. In this mode your job is to INSPIRE Image 2's judgment, not to make judgments for it.
-
-Context Mode 三个原则：
-1. editPrompt = 用户原话。不改写、不翻译、不压缩、不展开
-2. 启发模型判断，而不是替代模型判断。你描述风格/配色/排版 = 替代它判断 = 更差的结果
-3. 总结上下文，给 Image 2 更好的 context。多轮对话时把之前轮次用户说过的关键反馈带上
-
-示例 — 单轮：
-  用户: "给这个键盘设计一个高级的信息丰富的电商详情页"
-  editPrompt: "给这个键盘设计一个高级的信息丰富的电商详情页"
-  ❌ 错误: "Create a premium e-commerce page with hero shot, feature highlights, spec table..."（替代了模型的判断）
-
-示例 — 多图：
-  用户: "图1是我们的宣传物料ref，图2是主要内容，做个类似图1的物料"
-  editPrompt: "图1是我们的宣传物料ref，图2是主要内容，做个类似图1的物料"
-
-示例 — 多轮（用上下文启发模型）：
-  用户第一轮: "做个电商详情页"
-  用户第二轮: "文字太小了，内容不够详细，图2里的信息要更完整体现"
-  editPrompt: "文字太小了，内容不够详细，图2里的信息要更完整体现"
-
-  用户第三轮: "配色太暗了，整体亮一些，标题换成星擎传媒"
-  editPrompt: "配色太暗了，整体亮一些，标题换成星擎传媒。之前用户还反馈过文字太小、内容要更详细"
-  （把之前的反馈带上，帮助模型理解完整上下文 ✅）
-  ❌ 错误: 写颜色代码、CSS 属性、排版细节（替代了模型的判断）
-
---- WRITING THE EDITPROMPT (Edit Mode) ---
-
-FACE (when people are present — always include):
-  Large (>10% of frame): "Keep every person's appearance pixel-identical to the original photo — no reshaping, smoothing, or altering."
-  Small (<10% of frame): "People are small in this frame. Apply all edits only to background, environment, and overall color grading."
-  Restoring (useOriginalAsReference=true): "Restore each person's appearance to exactly match Image 2 (original). Copy all details from Image 2."
-
-EDIT: What to actually change, in specific detail. When useOriginalAsReference=true, describe explicitly which elements should reference Image 2.
-
-PRESERVE: "Preserve the exact composition, all people's positions, poses, actions, and scene layout. Only apply the changes described above."
-
-END: "Do NOT add any text, watermarks, or borders." — **omit this line if the user explicitly requested text or captions**
+- Use the user's original request as `editPrompt`.
+- Do not rewrite, translate, compress, expand, or replace the model's judgment with layout/color details.
+- In multi-turn design tasks, include concise prior user feedback as context.

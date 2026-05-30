@@ -114,10 +114,11 @@ return { type: 'files', outputs };
 
 Long-video style transfer recipe:
 1. `runtime: "node"` + `probeVideo` source duration.
-2. Use the segment planner to create model-sized MP4 chunks: Kling `<=10s`, SeeDance `<=15s`.
-3. Call `generate_animation` for each chunk with the user's requested model and matching style prompt.
-4. Use `runtime: "node"` concat to stitch generated chunks into one H.264/AAC MP4.
-5. `write_file({ fromLastRunCode: true, name: "final-style-transfer" })` to publish the final MP4 as a video snapshot.
+2. Use the segment planner once to create model-sized MP4 chunks: Kling `<=10s`, SeeDance `<=15s`.
+3. Return a chunk manifest with stable descriptions and workspace URLs. Do not split the same source again unless the user changes the source, model, or duration target.
+4. Call `generate_animation` for each chunk with the user's requested model and matching style prompt.
+5. Use `runtime: "node"` concat to stitch generated chunks into one H.264/AAC MP4.
+6. `write_file({ fromLastRunCode: true, name: "final-style-transfer" })` to publish only the final MP4 as a video snapshot.
 
 For mobile-compatible final MP4, prefer H.264/AAC/yuv420p:
 
@@ -169,18 +170,31 @@ Rules:
 
 ### Draft, Save, and Publish
 
-**ALL** `run_code` output — designs (render/patch) AND images (sharp/Buffer) — creates a **draft**. Drafts are previewed but do NOT appear on the timeline.
+`run_code` has two different runtimes. Do not mix their output semantics.
 
-**Two ways to save:**
-- `write_file({ fromLastRunCode: true, name: "slug", publish: false })` → **save only** — persists code to workspace (survives page refresh), does NOT create a timeline Snapshot. Use while iterating.
-- `write_file({ fromLastRunCode: true, name: "slug" })` → **save + publish** — persists code AND creates a real Snapshot on the user's timeline. Use when the result is ready.
+**Design runtime (`runtime: "design"` or omitted):**
 
-**Workflow**:
-1. `run_code` (render) → draft preview → `write_file({ ..., publish: false })` to save
-2. `run_code` (patch) → iterate → `write_file({ ..., publish: false })` to save
-3. When satisfied → `write_file({ fromLastRunCode: true, name: "slug" })` to publish
+- `type: "render"` and `type: "patch"` create a design draft. Drafts are previewed but do not appear on the timeline.
+- `write_file({ fromLastRunCode: true, name: "slug", publish: false })` saves the current design code to workspace without creating a timeline Snapshot. Use while iterating.
+- `write_file({ fromLastRunCode: true, name: "slug" })` saves the design and publishes a real Snapshot on the user's timeline. Use when the result is ready.
 
-Note: `generate_image` is the exception — it publishes directly to the timeline.
+Design workflow:
+
+1. `run_code` render creates a draft preview.
+2. `write_file({ fromLastRunCode: true, name: "slug", publish: false })` saves the draft code.
+3. `run_code` patch iterates on the draft.
+4. `write_file({ fromLastRunCode: true, name: "slug", publish: false })` saves each meaningful iteration.
+5. `write_file({ fromLastRunCode: true, name: "slug" })` publishes when ready.
+
+**Node media runtime (`runtime: "node"`):**
+
+- `type: "video"` returns a real MP4 output saved through the backend media runtime.
+- `type: "files"` returns real workspace files, often intermediate chunks.
+- Intermediate chunks for long-video workflows should be saved and described, but not published to the timeline.
+- Publish only the final user-facing MP4 with `write_file({ fromLastRunCode: true, name: "slug" })`.
+- If the node run only produced chunks or analysis files, call `write_file({ fromLastRunCode: true, name: "slug", publish: false })` or continue with the next tool step instead of publishing.
+
+Note: `generate_image` is the exception. It publishes directly to the timeline.
 
 ### Verifying your work
 

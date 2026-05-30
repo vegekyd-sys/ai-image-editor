@@ -202,8 +202,10 @@ Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_cod
 - **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
 
 ### run_code
-Execute JavaScript with design mode (React/CSS) and image utilities (sharp).
-Use ONLY for video/animation or when user explicitly requests an editable template. For all image tasks (posters, e-commerce, infographics, marketing) use \`generate_image\` instead.
+Execute JavaScript in two modes:
+- \`runtime: "design"\` for Remotion/editable design drafts, animated templates, overlays, and sharp utilities.
+- \`runtime: "node"\` for real MP4 work with FFmpeg/FFprobe: split, trim, concat, transcode, extract frames, mux audio, and long-video preparation.
+For finished single images, posters, infographics, and marketing graphics, use \`generate_image\` instead unless the user asks for editable or animated code.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills
@@ -320,15 +322,16 @@ function createTools(ctx: AgentContext) {
     generate_animation: tool({
       description: `Submit a video script for rendering.
 
-**BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
+Before writing a video script, call \`read_file('prompts/animate.md')\`. Do not re-read if already in this conversation's tool-result history.
 
-Hard constraints (apply even before reading the guide):
+Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
-- If the source video may exceed the selected model's reference limit, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it with \`run_code({ runtime: "node" })\` before submitting generation.
+- If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
 - Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
 - Video edit duration lock: when editing a timeline video, output duration should match the source chunk's duration. For long-video pipelines, duration lock applies per FFmpeg chunk.
+- Default model follows app selection, usually SeeDance. If the user asks for cheaper, prefer Kling only when capability and duration allow it.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - Write script in chat first, then call this tool to submit`,
       inputSchema: z.object({
@@ -810,14 +813,16 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-Set fromLastRunCode=true to save the last run_code output. By default this also PUBLISHES to the timeline. Set publish=false to save code to workspace WITHOUT publishing — useful for saving work-in-progress before you're ready to show the user.
-Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.`,
+Set fromLastRunCode=true to save the last run_code output.
+Design runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
+Node media runtime: intermediate files and chunks should use publish=false or continue to the next step; publish only the final user-facing MP4.
+Path is auto-generated from the current project and output type. Just provide a short name.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output (design or image). By default also publishes to timeline. Set publish=false to save only.'),
-        publish: z.boolean().optional().describe('Whether to publish to timeline. Default true. Set false to save code to workspace without creating a Snapshot.'),
+        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Design drafts can publish to timeline; node media chunks should usually be save-only until the final MP4.'),
+        publish: z.boolean().optional().describe('Whether to publish to timeline. Default true. Set false to save workspace output without creating a Snapshot.'),
       }),
       execute: async ({ path: filePath, name, content, fromLastRunCode, publish: shouldPublish }) => {
         if (!ctx.supabase || !ctx.userId) {
@@ -955,41 +960,26 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
     }),
 
     run_code: tool({
-      description: `Execute JavaScript for design output (React/Remotion), image utilities (sharp), or open backend media work (Node/FFmpeg). Used for video/animation, editable templates, image processing, and real MP4 editing.
+      description: `Execute JavaScript.
 
-**BEFORE YOUR FIRST run_code CALL in a conversation**: call \`read_file('prompts/agent-coding.md')\` to load the full coding guide (render vs patch, editable fields, video workflow, composition patterns, cross-platform effects). The guide already includes \`[Current design code]\` injected into your prompt when patching — no need to re-read it. **Do not re-read agent-coding.md if it already appears in this conversation's tool-result history.**
+Before first use, read \`prompts/agent-coding.md\`. For real MP4 splitting, trimming, concat, transcode, frames, or audio muxing, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
 
-## Hard constraints (apply even before reading the guide)
+Runtimes:
+- \`runtime: "design"\` or omitted: Remotion/editable design draft, animated template, overlay, sharp utility.
+- \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real media files.
 
-Return shape — exactly one of:
-- \`{ type: 'render', code, width, height, editables?: [...], props?: {...}, animation?: { fps, durationInSeconds } }\` — first time, or when overall layout changes.
-- \`{ type: 'patch', edits: [{ old, new }], props?: {...}, code_path?: '...' }\` — **default for subsequent edits**. Each \`old\` must match exactly once.
-- \`{ type: 'image', data: base64, mimeType }\` — sharp output.
-- \`{ type: 'video', path, contentType?: 'video/mp4', description?, duration?, width?, height? }\` — Node/FFmpeg output written to the provided \`outputDir\`.
-- \`{ type: 'files', outputs: [{ path, contentType, description? }] }\` — Node/FFmpeg can return multiple output files.
-- \`{ type: 'text', content }\` — computation/data result.
-- \`{ type: 'error', message }\` — failure.
+Return exactly one supported shape:
+- \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
+- \`{ type: 'patch', edits, props?, code_path? }\`
+- \`{ type: 'image', data, mimeType }\`
+- \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
+- \`{ type: 'files', outputs: [{ path, contentType, description? }] }\`
+- \`{ type: 'text', content }\`
+- \`{ type: 'error', message }\`
 
-Critical design rules:
-- Use \`<Img>\` (Remotion), never plain \`<img>\` — blank screenshots on mobile otherwise.
-- \`render\` MUST declare \`editables: [{ id, type:'text', label, propKey }]\` for every user-facing text (titles, captions). Editable elements need \`display: block | inline-block\`.
-- CJK text: system fonts only (\`PingFang SC\`, \`Noto Sans SC\`) — Google CJK Fonts break on iOS.
-- iOS: keep simultaneous \`<Img>\` ≤ 3; avoid CSS \`filter: blur(...)\` on \`<Img>\` (use CSS gradient instead).
+Design hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light.
 
-## Available in your code
-
-React scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio, evolvePath/getLength/getPointAtLength/interpolatePath/parsePath/resetPath/cutPath (@remotion/paths), noise2D/noise3D (@remotion/noise).
-
-Default runtime (\`runtime: "design"\`) Node scope: \`sharp\`, \`JSZip\`, \`saveToWorkspace(path, content, contentType?)\` → { success, storageUrl }, \`fetch\`, Buffer/JSON/Math/Date.
-
-Open media runtime (\`runtime: "node"\`): full backend Node execution for real video editing. You may use \`require('fs')\`, \`require('child_process')\`, \`process\`, temp files, \`ffmpegPath\`, \`ffprobePath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Use this for FFmpeg tasks: split long videos, concat MP4s, extract frames, transcode to H.264/AAC, preserve/mux audio, or prepare clips for Seedance/Kling.
-
-Context:
-- \`images\` — Buffers pre-fetched from the \`media_refs\` input (sharp ops only, never base64 into design props).
-- \`ctx.snapshotImages\` — array of snapshot URLs (index 0 = <<<media_1>>>). Embed directly via template literal \`\${ctx.snapshotImages[0]}\` inside design \`code\`.
-- \`ctx.projectId\`, \`ctx.userId\`.
-
-Before jumping into code, check if visual assets (stickers, illustrations, objects) would be better generated with \`generate_image\` (sticker-maker skill for transparent PNGs) than drawn with CSS.`,
+Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobePath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For designs/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
@@ -1036,7 +1026,7 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
           }
 
           const primary = mediaResult.primaryOutput;
-          if (primary?.contentType?.startsWith('video/') && primary.storageUrl) {
+          if (mediaResult.type === 'video' && primary?.contentType?.startsWith('video/') && primary.storageUrl) {
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
             (ctx as any).__runCodeDrafts.push({
               type: 'video',
@@ -1052,7 +1042,7 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             const dur = typeof primary.duration === 'number' ? `, ${primary.duration.toFixed(1)}s` : '';
             return {
               type: 'text' as const,
-              content: `Node media run complete — video draft ${draftIdx} saved to workspace${dur}: ${primary.storageUrl}\nPublish it with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).`,
+              content: `Node media run complete — final video output ${draftIdx} saved to workspace${dur}: ${primary.storageUrl}\nPublish it with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).`,
             };
           }
 

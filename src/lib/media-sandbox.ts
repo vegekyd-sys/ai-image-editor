@@ -338,15 +338,18 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
     const resultType = typeof result === 'object' && result && 'type' in result
       ? String((result as Record<string, unknown>).type)
       : undefined
-    const type = primaryOutput?.contentType?.startsWith('video/')
-      ? 'video'
-      : primaryOutput?.contentType?.startsWith('image/')
-        ? 'image'
-        : resultType === 'text'
-          ? 'text'
+    const explicitType = ['video', 'image', 'files', 'text'].includes(resultType || '')
+      ? resultType
+      : undefined
+    const type = explicitType || (
+      primaryOutput?.contentType?.startsWith('video/')
+        ? 'video'
+        : primaryOutput?.contentType?.startsWith('image/')
+          ? 'image'
           : outputs.length > 0
             ? 'files'
             : 'text'
+    )
 
     return {
       type: type as MediaSandboxResult['type'],

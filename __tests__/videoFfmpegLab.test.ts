@@ -192,7 +192,7 @@ describe('Agent FFmpeg video lab', () => {
       timeoutMs: 20_000,
     })
 
-    expect(result.type).toBe('video')
+    expect(result.type).toBe('files')
     expect(result.outputs).toHaveLength(6)
 
     const [trimmed, part1, part2, stitched, squareMuted, frame] = result.outputs
