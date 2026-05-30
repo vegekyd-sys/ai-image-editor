@@ -1,0 +1,497 @@
+[
+  {
+    "kind": "ad",
+    "item": {
+      "id": "861620969768701",
+      "pageName": "Glam AI: AI Content Maker",
+      "text": "{{product.brand}}",
+      "cta": "Download",
+      "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Glam%20AI%20K-pop%20idol&search_type=keyword_unordered",
+      "videoUrl": "https://video-ord5-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQOGYUo825RFYxGIaRPb5ejbT_OZ8nw3tFET0XuDfuDZbBNiDSGy_qPpXlx5sj9L9Yg0197wYpXYQ2LiTrAjFEwmtcpvlqtFdvasVEgTERITJQ.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-ord5-3.xx.fbcdn.net&_nc_ohc=UP9PpzA88YgQ7kNvwFdwp2I&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjgzODg5MTAyNTUxMzA1OCwiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=52500cd927b42473&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9CMzRGRkEyOUU5M0EwODYwRDVEMjE5OUQ1REU4NjNCRl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzMwNDE4QkQwNTI1MUY5Njk1RUJEOUZDM0ZDRDk1QzgwX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbE6aWZ8b39AhUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=DHR0YHbHrtrbXzSzBavgPw&_nc_ss=72289&_nc_zt=28&oh=00_Af7iMtpNqx7ovpd1T9Ai7wLGXgVf40Vte0vohVm0ANdxCA&oe=6A1EC783",
+      "priority": 0
+    },
+    "analysis": {
+      "one_line_summary": "The ad showcases a viral AI transformation trend that turns ordinary selfies into high-quality K-pop idol stage performances.",
+      "target_viewer": "Gen Z and Millennial women interested in K-pop culture, social media trends, and AI-powered photo/video editing.",
+      "first_2_seconds": "A dramatic transition from a static selfie of a blonde woman to a high-energy video of her performing on a K-pop stage.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "A blonde woman's selfie transitions into a professional-looking video of her as a K-pop idol on a stadium screen.",
+          "motion": "Fast-paced transition from static image to dynamic video.",
+          "text_or_ui": "Text overlay: 'Turn your selfie into a kpop idol ❤️'",
+          "why_it_hooks": "The 'Before vs. After' contrast is visually stunning and taps into the popular K-pop aesthetic."
+        },
+        {
+          "time": "2-5s",
+          "visual": "A second example featuring a brunette woman's selfie transforming into a K-pop idol video.",
+          "motion": "Smooth transition following the same pattern as the first shot.",
+          "text_or_ui": "Text overlay: 'this trend is going viral right now'",
+          "why_it_hooks": "Social proof ('going viral') encourages viewers to participate in the trend."
+        },
+        {
+          "time": "5-7s",
+          "visual": "Screen recording of the Glam AI app interface showing a photo being selected.",
+          "motion": "UI interaction (tapping a photo).",
+          "text_or_ui": "Glam AI App UI",
+          "why_it_hooks": "Demonstrates ease of use, showing that the complex transformation is just a few taps away."
+        },
+        {
+          "time": "7-10s",
+          "visual": "A third example with a Black woman's selfie transforming into a K-pop idol video.",
+          "motion": "Final transition reveal.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Shows diversity and proves the AI works well across different ethnicities and hair types."
+        },
+        {
+          "time": "10-13s",
+          "visual": "Glam AI logo animation with App Store and Google Play badges.",
+          "motion": "Logo pulse animation.",
+          "text_or_ui": "Glam AI Photo & Video Editor, Download on the App Store/Google Play",
+          "why_it_hooks": "Clear call to action and brand reinforcement."
+        }
+      ],
+      "creative_mechanic": "before_after",
+      "visual_style": [
+        "Vibrant",
+        "High-energy",
+        "Social media aesthetic",
+        "Professional stage lighting"
+      ],
+      "hook_strength_1_to_10": 9,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "AI Video Templates / Face Swap",
+      "what_to_copy_as_pattern_not_asset": "The rapid 'Selfie -> Professional Video' transition pattern and the use of 'viral trend' messaging to drive FOMO.",
+      "what_to_change_for_makaron": "Replace Glam AI UI with Makaron's UI; use Makaron's specific K-pop or 'Idol' templates to showcase the output quality.",
+      "recommended_ad_hook": "Stop posting boring selfies. Become a K-pop idol in 1 tap! ✨",
+      "recommended_first_2s_remake": "Start with a split-screen: Left side is a 'boring' selfie with a 'Before' label, right side is the high-energy K-pop stage video with an 'After' label, then have the 'After' side expand to fill the screen."
+    }
+  },
+  {
+    "kind": "ad",
+    "item": {
+      "id": "1919603845414979",
+      "pageName": "Glam AI: AI Content Maker",
+      "text": "{{product.brand}}",
+      "cta": "Download",
+      "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Glam%20AI%20K-pop%20idol&search_type=keyword_unordered",
+      "videoUrl": "https://video-ord5-2.xx.fbcdn.net/o1/v/t2/f2/m366/AQPFMAj9_qrHd8zXR7HTCP5kcZuXGoHzVRVVP0EeBrONFBeRQ5lOoG3IwyOd8cZtcbhG8qBbt_TXtIVYX_vxFJAo1FUD22v7nFVp_hiPy1Ad7Q.mp4?_nc_cat=103&_nc_sid=5e9851&_nc_ht=video-ord5-2.xx.fbcdn.net&_nc_ohc=OBKW7ajrD9MQ7kNvwEfFeYj&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjEzOTcxMzIzNjU1NjE3MTEsImFzc2V0X2FnZV9kYXlzIjo0LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6MTMsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=df51876b5c9fc329&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8zMzRDNkUwMTM3MDYwM0YxNzhCQkFFMDE5RkQyRUM4QV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzI3NEM0RUU5NEMxQ0ZEMjM5OEVCQUNGNkNDNkQxQjgxX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbe_dOl56v7BBUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=DHR0YHbHrtrbXzSzBavgPw&_nc_ss=72289&_nc_zt=28&oh=00_Af7b9G8r0p9W5NHj9Y52TQbvZPWyofNxKTX9hKEpFxlsYA&oe=6A1EF8F9",
+      "priority": 0
+    },
+    "analysis": {
+      "one_line_summary": "A high-energy ad showcasing an AI transformation from everyday selfies to professional-looking K-pop idol stage performances.",
+      "target_viewer": "Gen Z and Millennial women, K-pop fans, and social media enthusiasts who enjoy AI filters and trends.",
+      "first_2_seconds": "A blonde woman's selfie instantly transforms into a high-quality video of her performing on a K-pop stage with a headset.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "A blonde woman in a grey top holding a phone (selfie) transitions into a video of her as a K-pop idol on stage.",
+          "motion": "Quick cut transition from static photo to dynamic video.",
+          "text_or_ui": "Turn your selfie into a kpop idol ❤️",
+          "why_it_hooks": "Instant visual gratification and high-quality AI generation that looks realistic."
+        },
+        {
+          "time": "2-5s",
+          "visual": "A second woman (blonde with bangs) in a blue shirt transitions to her K-pop idol version.",
+          "motion": "Smooth transition; the AI version mimics her facial features accurately.",
+          "text_or_ui": "this trend is going viral right now / make your own version too",
+          "why_it_hooks": "Social proof ('going viral') and inclusivity by showing different body types/faces."
+        },
+        {
+          "time": "5-10s",
+          "visual": "A third woman (brunette) transitions. Brief UI overlay shows the app interface (Pick a Video/Camera).",
+          "motion": "UI demonstration showing how easy it is to upload a photo.",
+          "text_or_ui": "Simply go to the Glam AI app / upload your selfie and turn it into the trend. Try it now!",
+          "why_it_hooks": "Lowers the barrier to entry by showing a simple 1-2 step process."
+        },
+        {
+          "time": "10-13s",
+          "visual": "Glam AI logo animation with App Store and Google Play badges.",
+          "motion": "Pulsing logo animation.",
+          "text_or_ui": "Glam AI PHOTO & VIDEO EDITOR",
+          "why_it_hooks": "Clear branding and call to action."
+        }
+      ],
+      "creative_mechanic": "before_after",
+      "visual_style": [
+        "Vibrant",
+        "High-quality AI",
+        "UGC-style",
+        "Pop-culture focused"
+      ],
+      "hook_strength_1_to_10": 9,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "AI Video Transformation / Style Transfer",
+      "what_to_copy_as_pattern_not_asset": "The 'Before/After' hook using a specific, trending niche (K-pop) rather than a generic 'AI filter' label. The fast pacing and clear UI demonstration.",
+      "what_to_change_for_makaron": "Replace the K-pop theme with other trending styles like '90s Yearbook', 'Cyberpunk', or 'Disney Pixar' to show versatility. Use Makaron's specific UI elements.",
+      "recommended_ad_hook": "Stop scrolling! See yourself as a K-pop star in 5 seconds. 🎤✨",
+      "recommended_first_2s_remake": "Start with a split screen: Left side is a 'boring' morning selfie, right side is the high-glam AI K-pop performance video, syncing the head movement between both."
+    }
+  },
+  {
+    "kind": "ad",
+    "item": {
+      "id": "735647729608298",
+      "pageName": "Glam AI: Photo & Video Studio",
+      "text": "Here is your tutorial on how to create this trending baseball stadium camera kiss cam video with yourself in it like seen by the amazing @killoler 🎥😍 I saw that @glam_app has the perfect preset for this already ✨🙌🏼 no prompt needed!! Have fun creating 🫶🏼",
+      "cta": "Download",
+      "linkUrl": "http://itunes.apple.com/app/id1545593132",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=AI%20kiss%20cam&search_type=keyword_unordered",
+      "videoUrl": "https://video-phx1-1.xx.fbcdn.net/o1/v/t2/f2/m367/AQOZCmO1ZsQDGbl4cnkuQWHlNESD4uLfxZBe3-i_dEve5GhysnA3Dt5Q5eB6KAxFyCsK6hKe4rXN7-orszbOUGeXL5dhIWqGphvRRQqQSw.mp4?_nc_cat=109&_nc_sid=8bf8fe&_nc_ht=video-phx1-1.xx.fbcdn.net&_nc_ohc=Wpwl0p3wA2gQ7kNvwFHWh15&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLnByb2dyZXNzaXZlX2gyNjQtYmFzaWMtZ2VuMl83MjBwIiwieHB2X2Fzc2V0X2lkIjoxMDE5ODU3OTIwMzY2MDE3LCJhc3NldF9hZ2VfZGF5cyI6MTcsInZpX3VzZWNhc2VfaWQiOjEwMDk5LCJkdXJhdGlvbl9zIjozMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=p7Pcjqd8dGu-HV08dAIMig&_nc_ss=72289&_nc_zt=28&oh=00_Af5Cy_iLAh_MWN_NuIXNMbREY__EerrOWhcqymgVsoepzA&oe=6A1EDC8D",
+      "priority": 0
+    },
+    "analysis": {
+      "one_line_summary": "A tutorial-style UGC ad demonstrating how to use the Glam AI app to insert oneself into a trending 'stadium kiss cam' video style.",
+      "target_viewer": "Social media enthusiasts, trend-followers, and content creators looking for easy ways to create viral-style AI videos.",
+      "first_2_seconds": "A split-screen showing a viral video of a woman at a baseball game and the creator asking 'HOW TO MAKE THIS...'",
+      "shot_breakdown": [
+        {
+          "time": "0-7s",
+          "visual": "Split screen: Top is the creator's face, bottom is a viral clip of a woman at a stadium. Text overlay: 'HOW TO MAKE THIS...'",
+          "motion": "Creator speaks to camera; viral clip plays.",
+          "text_or_ui": "HOW TO MAKE THIS...",
+          "why_it_hooks": "Leverages a recognizable viral trend and promises a 'how-to' secret."
+        },
+        {
+          "time": "7-9s",
+          "visual": "Creator takes a selfie wearing sunglasses and a baseball cap.",
+          "motion": "Quick cut to camera app shutter.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Shows the first simple step of the process, making it look easy."
+        },
+        {
+          "time": "9-15s",
+          "visual": "Screen recording of the Glam AI app interface.",
+          "motion": "Scrolling through presets, selecting the 'stadium camera' effect.",
+          "text_or_ui": "Glam AI app UI, 'Try Effect' button.",
+          "why_it_hooks": "Demonstrates the app's ease of use and specific feature availability."
+        },
+        {
+          "time": "15-22s",
+          "visual": "Screen recording showing the photo selection and ratio adjustment.",
+          "motion": "Tapping through the UI to upload the selfie.",
+          "text_or_ui": "App UI: 'Pick a Photo', 'Ratio', 'Continue'.",
+          "why_it_hooks": "Provides a clear, step-by-step tutorial that viewers can follow."
+        },
+        {
+          "time": "22-26s",
+          "visual": "App loading screen with a progress bar and 'Uploading...' text.",
+          "motion": "Progress bar fills up quickly.",
+          "text_or_ui": "99% Uploading..., 3:27 Pro Speed.",
+          "why_it_hooks": "Builds anticipation for the final result."
+        },
+        {
+          "time": "26-34s",
+          "visual": "The final AI-generated video showing the creator in the stadium, looking like he's on the big screen.",
+          "motion": "Creator in the video looks around, adjusts glasses, holding a beer.",
+          "text_or_ui": "Stadium scoreboard graphics (LG vs. Doosan).",
+          "why_it_hooks": "The 'wow' factor of the high-quality AI output proves the app's value."
+        }
+      ],
+      "creative_mechanic": "tutorial",
+      "visual_style": [
+        "UGC",
+        "Split-screen",
+        "Screen recording",
+        "Viral trend recreation"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 9,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "AI Video Generation / Face Swap",
+      "what_to_copy_as_pattern_not_asset": "The 'How to make this' hook using a trending video, followed by a rapid-fire UI walkthrough and a high-quality reveal.",
+      "what_to_change_for_makaron": "Replace the Glam AI UI with Makaron's interface. Use a different trending video style (e.g., a movie scene or a high-fashion runway) to differentiate.",
+      "recommended_ad_hook": "Stop wondering how they do it. Here's the AI secret to going viral.",
+      "recommended_first_2s_remake": "Show a side-by-side of a famous movie scene and the user perfectly edited into it with the text 'BE THE MAIN CHARACTER'."
+    }
+  },
+  {
+    "kind": "ad",
+    "item": {
+      "id": "825872753569623",
+      "pageName": "Glam AI: Photo & Video Studio",
+      "text": "Here is your tutorial on how to create this trending baseball stadium camera kiss cam video with yourself in it like seen by the amazing @killoler 🎥😍 I saw that @glam_app has the perfect preset for this already ✨🙌🏼 no prompt needed!! Have fun creating 🫶🏼",
+      "cta": "Download",
+      "linkUrl": "http://itunes.apple.com/app/id1545593132",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=AI%20kiss%20cam&search_type=keyword_unordered",
+      "videoUrl": "https://video-phx1-1.xx.fbcdn.net/o1/v/t2/f2/m367/AQOZCmO1ZsQDGbl4cnkuQWHlNESD4uLfxZBe3-i_dEve5GhysnA3Dt5Q5eB6KAxFyCsK6hKe4rXN7-orszbOUGeXL5dhIWqGphvRRQqQSw.mp4?_nc_cat=109&_nc_sid=8bf8fe&_nc_ht=video-phx1-1.xx.fbcdn.net&_nc_ohc=Wpwl0p3wA2gQ7kNvwFHWh15&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLnByb2dyZXNzaXZlX2gyNjQtYmFzaWMtZ2VuMl83MjBwIiwieHB2X2Fzc2V0X2lkIjoxMDE5ODU3OTIwMzY2MDE3LCJhc3NldF9hZ2VfZGF5cyI6MTcsInZpX3VzZWNhc2VfaWQiOjEwMDk5LCJkdXJhdGlvbl9zIjozMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=p7Pcjqd8dGu-HV08dAIMig&_nc_ss=72289&_nc_zt=28&oh=00_Af5Cy_iLAh_MWN_NuIXNMbREY__EerrOWhcqymgVsoepzA&oe=6A1EDC8D",
+      "priority": 0
+    },
+    "analysis": {
+      "one_line_summary": "A tutorial-style UGC ad demonstrating how to use the Glam AI app to insert yourself into a viral 'stadium camera' video trend.",
+      "target_viewer": "Social media enthusiasts and content creators looking for easy ways to participate in viral AI-driven video trends.",
+      "first_2_seconds": "A split-screen showing a viral video of a woman at a baseball game and the creator asking 'HOW TO MAKE THIS...'",
+      "shot_breakdown": [
+        {
+          "time": "0-7s",
+          "visual": "Split screen: Top is the creator, bottom is a viral clip of a woman on a stadium 'kiss cam'.",
+          "motion": "Creator looks at the camera and points down; the viral clip plays.",
+          "text_or_ui": "Text overlay: 'HOW TO MAKE THIS...'",
+          "why_it_hooks": "Leverages a highly recognizable viral trend to pique curiosity about how to replicate it."
+        },
+        {
+          "time": "7-9s",
+          "visual": "Creator takes a selfie with sunglasses on.",
+          "motion": "Quick cut to a phone camera interface taking a photo.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Shows the first simple step, making the process seem accessible."
+        },
+        {
+          "time": "9-15s",
+          "visual": "Screen recording of the Glam app interface.",
+          "motion": "Scrolling through the app to find the specific 'stadium camera' preset.",
+          "text_or_ui": "App UI: Glam AI. Visual cues (arrows/circles) highlighting the 'Try Effect' button.",
+          "why_it_hooks": "Demonstrates the app's ease of use and that the specific trend is already a built-in preset."
+        },
+        {
+          "time": "15-22s",
+          "visual": "Screen recording of the photo selection and adjustment process.",
+          "motion": "Selecting the selfie, adjusting the crop ratio, and clicking 'Continue'.",
+          "text_or_ui": "App UI showing 'Pick a Photo' and 'Ratio' settings.",
+          "why_it_hooks": "Provides a clear, step-by-step walkthrough of the app's functionality."
+        },
+        {
+          "time": "22-26s",
+          "visual": "App processing screen with a progress bar.",
+          "motion": "Progress bar filling up to 99% then showing a 3-minute timer.",
+          "text_or_ui": "Text: 'Uploading...', 'Pro Speed', '3:27'.",
+          "why_it_hooks": "Builds anticipation for the final result."
+        },
+        {
+          "time": "26-34s",
+          "visual": "The final AI-generated video of the creator in the stadium setting.",
+          "motion": "The creator is seamlessly integrated into the stadium footage, looking around and adjusting his glasses.",
+          "text_or_ui": "Stadium broadcast graphics (LG vs. Doosan, SPOTV LIVE).",
+          "why_it_hooks": "The 'big reveal' shows the high quality and realism of the AI effect, proving the app's value."
+        }
+      ],
+      "creative_mechanic": "tutorial",
+      "visual_style": [
+        "UGC",
+        "Screen Recording",
+        "Split-screen",
+        "Fast-paced editing"
+      ],
+      "hook_strength_1_to_10": 9,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "AI Video Generation / Face Swap",
+      "what_to_copy_as_pattern_not_asset": "The 'How to make this' hook using a viral video, followed by a rapid-fire UI walkthrough that shows exactly which buttons to press.",
+      "what_to_change_for_makaron": "Replace Glam AI UI with Makaron UI; use Makaron's specific 'AI Video' or 'Style Transfer' presets to achieve a similar viral effect.",
+      "recommended_ad_hook": "Stop scrolling! Here's the secret to that viral stadium camera trend. 🏟️✨",
+      "recommended_first_2s_remake": "Start with the final AI-generated result for 1 second, then snap back to the creator saying 'Want to know how I did this?' while showing the original viral clip."
+    }
+  },
+  {
+    "kind": "ad",
+    "item": {
+      "id": "1513172887150517",
+      "pageName": "Remini - AI Photo Enhancer",
+      "text": "Side by side, picture perfect! Try the new Remini AI Photobooth",
+      "cta": "Install app",
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_08s_EN_JoHoGF_v01.mov",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+      "videoUrl": "https://video-mia3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQOLJrNO3aCGFzKxju-q-Ih6l502HdGIeChoDTzCW98lxBLvjVHgpJdsagPuCN5MPuRRKoMcDXmzh9Xe6FNznYYXK6MKIt0NoXugPXNBcZAZFQ.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-mia3-3.xx.fbcdn.net&_nc_ohc=5FsdfRcD_-YQ7kNvwEjIAb8&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjEzNTMwNzQ4NjI4NzgxMjksImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=e5cd7ef79ba1c088&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8xNDQ2RjlEMTIyOTdDREMyM0JBN0EyNkQ3NkY4Q0I4Q19tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzdBNDEwMDI3NDA0NEYxQjJGODVCRkYxNkE3ODhGMzk4X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbitvOoqafnBBUCKAJDMywXQCAzMzMzMzMYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=c7DD9bDQXhPhO8ekkCiyDQ&_nc_ss=72289&_nc_zt=28&oh=00_Af5kQVdcMve7uDxEL86SeNs-btCvEnZTcmS7H05n7-aDoQ&oe=6A1EC65B",
+      "priority": 1
+    },
+    "analysis": {
+      "one_line_summary": "A UGC-style ad demonstrating how Remini's AI Photobooth creates realistic couple photos for users who lack high-quality pictures together.",
+      "target_viewer": "Couples, social media users, and individuals in long-distance or new relationships who want high-quality 'couple goals' content.",
+      "first_2_seconds": "A man smiles at the camera with a relatable POV text overlay about having no cute photos with his girlfriend.",
+      "shot_breakdown": [
+        {
+          "time": "0-3s",
+          "visual": "Close-up of a man smiling and gesturing thoughtfully to his head. Background shows a typical home interior.",
+          "motion": "Subtle head movements and a finger-to-temple 'idea' gesture.",
+          "text_or_ui": "POV: you and your girlfriend have no cute photos together so you use ai 😁",
+          "why_it_hooks": "Uses a relatable 'POV' hook that addresses a common social media pain point (lack of good photos)."
+        },
+        {
+          "time": "3-8s",
+          "visual": "A montage of AI-generated photobooth-style photos featuring the man and a woman in various poses.",
+          "motion": "Slideshow transition between three different AI-generated images.",
+          "text_or_ui": "Remini Generated with AI logo at the bottom.",
+          "why_it_hooks": "The 'reveal' shows high-quality, realistic results that look like authentic physical photobooth prints, proving the app's value."
+        }
+      ],
+      "creative_mechanic": "template_reveal",
+      "visual_style": [
+        "UGC",
+        "Photobooth Aesthetic",
+        "Realistic AI"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 9,
+      "best_makaron_skill_match": "AI Photo Generation / AI Face Swap",
+      "what_to_copy_as_pattern_not_asset": "The 'Problem/Solution' structure using a POV text overlay to frame a social insecurity (no cute photos) followed by a high-quality visual payoff.",
+      "what_to_change_for_makaron": "Replace the Remini branding with Makaron's UI. Instead of just a slideshow, show the user selecting the 'AI Photobooth' or 'Couple' template within the Makaron app to demonstrate ease of use.",
+      "recommended_ad_hook": "POV: You're in a long-distance relationship but your Instagram says otherwise. ✈️❤️",
+      "recommended_first_2s_remake": "Show a split screen: on the left, a blurry, bad selfie of a couple; on the right, the man looking at his phone with a 'lightbulb' moment."
+    }
+  },
+  {
+    "kind": "ad",
+    "item": {
+      "id": "1345478744120335",
+      "pageName": "Remini - AI Photo Enhancer",
+      "text": "Side by side, picture perfect! Try the new Remini AI Photobooth",
+      "cta": "Install app",
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_08s_EN_JoHoGF_v01.mov",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+      "videoUrl": "https://video-mia3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQOLJrNO3aCGFzKxju-q-Ih6l502HdGIeChoDTzCW98lxBLvjVHgpJdsagPuCN5MPuRRKoMcDXmzh9Xe6FNznYYXK6MKIt0NoXugPXNBcZAZFQ.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-mia3-3.xx.fbcdn.net&_nc_ohc=5FsdfRcD_-YQ7kNvwEjIAb8&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjEzNTMwNzQ4NjI4NzgxMjksImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=e5cd7ef79ba1c088&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8xNDQ2RjlEMTIyOTdDREMyM0JBN0EyNkQ3NkY4Q0I4Q19tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzdBNDEwMDI3NDA0NEYxQjJGODVCRkYxNkE3ODhGMzk4X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbitvOoqafnBBUCKAJDMywXQCAzMzMzMzMYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=c7DD9bDQXhPhO8ekkCiyDQ&_nc_ss=72289&_nc_zt=28&oh=00_Af5kQVdcMve7uDxEL86SeNs-btCvEnZTcmS7H05n7-aDoQ&oe=6A1EC65B",
+      "priority": 1
+    },
+    "analysis": {
+      "one_line_summary": "A UGC-style ad demonstrating how Remini's AI can generate realistic couple photos for people who lack high-quality pictures together.",
+      "target_viewer": "Couples, people in long-distance relationships, or social media users who want high-quality 'aesthetic' photos without a professional shoot.",
+      "first_2_seconds": "A man looks thoughtfully at the camera with a relatable 'POV' text overlay about having no cute photos with his girlfriend.",
+      "shot_breakdown": [
+        {
+          "time": "0-3s",
+          "visual": "Close-up of a man (UGC style) smiling and gesturing 'thinking' in a home setting.",
+          "motion": "Subtle head tilt and finger to temple.",
+          "text_or_ui": "POV: you and your girlfriend have no cute photos together so you use ai 😁",
+          "why_it_hooks": "Uses a relatable 'POV' format and addresses a common social media pain point (lack of good content with a partner)."
+        },
+        {
+          "time": "3-8s",
+          "visual": "A rapid slideshow of AI-generated Polaroid-style photos showing the man and a woman in various romantic poses.",
+          "motion": "Quick cuts between different generated images.",
+          "text_or_ui": "Remini Generated with AI watermark at the bottom.",
+          "why_it_hooks": "The 'reveal' of the high-quality, realistic results proves the app's value and satisfies the curiosity established in the hook."
+        }
+      ],
+      "creative_mechanic": "ugc_reaction",
+      "visual_style": [
+        "UGC",
+        "Polaroid aesthetic",
+        "Home-video style",
+        "AI-generated realism"
+      ],
+      "hook_strength_1_to_10": 7,
+      "clarity_1_to_10": 9,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "AI Photo Generation / Face Swap / Background Replacement",
+      "what_to_copy_as_pattern_not_asset": "The 'Problem -> Solution' structure using a relatable POV hook followed by a montage of high-quality AI results that look indistinguishable from real photos.",
+      "what_to_change_for_makaron": "Replace the Remini branding with Makaron's UI. Instead of just showing the final result, show a 1-second screen recording of the user selecting two separate photos of themselves and their partner before the AI merges them.",
+      "recommended_ad_hook": "POV: You're in a long-distance relationship but want cute date photos for the 'gram.",
+      "recommended_first_2s_remake": "Show two separate, low-quality selfies of a guy and a girl, then a 'magic wand' transition to a high-quality, AI-generated photo of them together in a scenic location."
+    }
+  },
+  {
+    "kind": "ad",
+    "item": {
+      "id": "1333709091976378",
+      "pageName": "Remini - AI Photo Enhancer",
+      "text": "Side by side, picture perfect! Try the new Remini AI Photobooth",
+      "cta": "Install app",
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_08s_EN_JoHoGF_v01.mov",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+      "videoUrl": "https://video-mia3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQOLJrNO3aCGFzKxju-q-Ih6l502HdGIeChoDTzCW98lxBLvjVHgpJdsagPuCN5MPuRRKoMcDXmzh9Xe6FNznYYXK6MKIt0NoXugPXNBcZAZFQ.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-mia3-3.xx.fbcdn.net&_nc_ohc=5FsdfRcD_-YQ7kNvwEjIAb8&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjEzNTMwNzQ4NjI4NzgxMjksImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=e5cd7ef79ba1c088&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8xNDQ2RjlEMTIyOTdDREMyM0JBN0EyNkQ3NkY4Q0I4Q19tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzdBNDEwMDI3NDA0NEYxQjJGODVCRkYxNkE3ODhGMzk4X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbitvOoqafnBBUCKAJDMywXQCAzMzMzMzMYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=c7DD9bDQXhPhO8ekkCiyDQ&_nc_ss=72289&_nc_zt=28&oh=00_Af5kQVdcMve7uDxEL86SeNs-btCvEnZTcmS7H05n7-aDoQ&oe=6A1EC65B",
+      "priority": 1
+    },
+    "analysis": {
+      "one_line_summary": "A UGC-style ad showing a man using Remini's AI to generate 'cute' couple photos that he and his girlfriend lack in real life.",
+      "target_viewer": "Couples, Gen Z/Millennials, and people who feel they lack high-quality photos with their partners.",
+      "first_2_seconds": "A close-up of a smiling man with a relatable POV text overlay about lacking cute couple photos.",
+      "shot_breakdown": [
+        {
+          "time": "0-3s",
+          "visual": "A young man in a baseball cap smiles and looks thoughtfully at the camera in a home setting.",
+          "motion": "Subtle head movements and facial expressions (smiling, thinking).",
+          "text_or_ui": "POV: you and your girlfriend have no cute photos together so you use ai 😁",
+          "why_it_hooks": "Uses a relatable 'POV' hook that addresses a common pain point (lack of good photos) with a curious solution (AI)."
+        },
+        {
+          "time": "3-8s",
+          "visual": "A series of AI-generated polaroid-style photos showing the man and a woman in various affectionate poses.",
+          "motion": "Rapid slideshow transition between three different AI-generated images.",
+          "text_or_ui": "Remini Generated with AI watermark; Ad disclaimer at the bottom.",
+          "why_it_hooks": "The 'reveal' shows high-quality, believable results that look like professional photobooth shots, proving the app's value."
+        }
+      ],
+      "creative_mechanic": "ugc_reaction",
+      "visual_style": [
+        "UGC",
+        "Polaroid Aesthetic",
+        "Home Video"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 9,
+      "best_makaron_skill_match": "AI Photo Generation / Style Transfer",
+      "what_to_copy_as_pattern_not_asset": "The 'Problem -> AI Solution -> Result Reveal' structure. Using a relatable POV text overlay to frame the utility of the AI tool.",
+      "what_to_change_for_makaron": "Instead of just 'couple photos,' show Makaron's specific strengths like 'AI Expand' for photos that were cropped too tight, or 'Object Removal' to fix a photo where a stranger is in the background.",
+      "recommended_ad_hook": "POV: You finally have professional photos with your partner without a photoshoot.",
+      "recommended_first_2s_remake": "Show a 'bad' or 'boring' selfie of a couple first, then quickly transition to the man's smiling face with the text: 'How I turned our boring selfies into this...'"
+    }
+  },
+  {
+    "kind": "ad",
+    "item": {
+      "id": "1484892836770301",
+      "pageName": "Remini - AI Photo Enhancer",
+      "text": "Side by side, picture perfect! Try the new Remini AI Photobooth",
+      "cta": "Install app",
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_09s_EN_DaniCouple_v01.mov",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+      "videoUrl": "https://video-mia3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQNrOIr2pF7jTM_VR_mUl9B9_jhz95CJ0hWHrR3P69dM0iznPJ47M51-z5104O6rJ6kjrSLXnPSvJ81OZD9zXz7P489a7z-U1JnRZ65oSS9dIA.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-mia3-3.xx.fbcdn.net&_nc_ohc=qNbvM1MLmIoQ7kNvwFj0QhK&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjE0Nzg5MDAxMDk4OTA5NTQsImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=93217ef56fff10d5&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9DQjQwNThBRkJDNzFCOUU4QTJCNjM0NDFGQUNEQkZBNF9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzE4NDRBMDVDMEMyMEU4NTFERUE3RkMzOTg5Rjc0MDkyX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaU1qq7qMOgBRUCKAJDMywXQCF3S8an754YGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=c7DD9bDQXhPhO8ekkCiyDQ&_nc_ss=72289&_nc_zt=28&oh=00_Af6Lx6ZaHFQNTvBIAJ-7qCZTJ22a5imdUYSjcjiytj7dhw&oe=6A1EF8D3",
+      "priority": 1
+    },
+    "analysis": {
+      "one_line_summary": "A UGC-style ad demonstrating how Remini's AI Photobooth creates professional-looking couple photos from individual selfies for special occasions.",
+      "target_viewer": "Couples and social media users who lack high-quality photos together or want to celebrate an anniversary with a 'perfect' shot.",
+      "first_2_seconds": "A woman smiling at the camera with a relatable text overlay about not having cute photos with her boyfriend for their anniversary.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Close-up selfie video of a woman smiling and touching her face.",
+          "motion": "Subtle head tilt and smile, handheld camera movement.",
+          "text_or_ui": "My bf and I don't have any cute photos to post for our anniversary so I made some 🥹🥹",
+          "why_it_hooks": "Relatable social media 'pain point' (lack of good photos) and a friendly, authentic UGC face."
+        },
+        {
+          "time": "2-4s",
+          "visual": "A clear, well-lit selfie of the boyfriend.",
+          "motion": "Static photo transition.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Establishes the 'input' data for the AI, showing the real people involved."
+        },
+        {
+          "time": "4-6s",
+          "visual": "A clear, well-lit selfie of the woman.",
+          "motion": "Static photo transition.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Completes the 'before' sequence, building anticipation for the result."
+        },
+        {
+          "time": "6-9s",
+          "visual": "The final AI-generated photo of the couple hugging in a vintage photobooth style.",
+          "motion": "Slow zoom-in on the generated photo.",
+          "text_or_ui": "Remini Generated with AI",
+          "why_it_hooks": "The 'big reveal' shows the high quality and convincing nature of the AI generation."
+        }
+      ],
+      "creative_mechanic": "template_reveal",
+      "visual_style": [
+        "UGC",
+        "Selfie-style",
+        "Authentic",
+        "Minimalist"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 9,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "AI Photo Generation / Face Swap / Background Replacement",
+      "what_to_copy_as_pattern_not_asset": "The narrative structure: Identify a common social media struggle (no good photos), show the 'raw' inputs, and reveal the 'perfect' AI-generated output.",
+      "what_to_change_for_makaron": "Replace the Remini branding with Makaron's UI. Use Makaron's specific 'AI Couple' or 'Style Transfer' features to show a variety of outputs (e.g., 90s yearbook, wedding, or travel styles).",
+      "recommended_ad_hook": "POV: You finally have the perfect anniversary photo without even leaving the house.",
+      "recommended_first_2s_remake": "Show a split screen of two separate, mediocre selfies with text: 'We have 0 photos together... so I used Makaron to fix that.'"
+    }
+  }
+]

@@ -2,6 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { uploadImage } from '@/lib/supabase/storage'
 import { compressImageFile } from '@/lib/image/compress'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
+import { getMarketingAttribution } from '@/lib/marketing/attribution'
+import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 import type { PhotoMetadata } from '@/types'
 
 function isVideoFile(file: File): boolean {
@@ -20,6 +22,18 @@ async function compressFile(file: File): Promise<string> {
     const { image } = await res.json()
     return image as string
   }
+}
+
+function trackProjectCreated(projectId: string, options?: { prompt?: string; skill?: string }) {
+  const attribution = getMarketingAttribution()
+  const skillId = options?.skill || attribution.skill_id
+  trackMetaEvent('CustomizeProduct', {
+    content_type: 'project',
+    content_name: skillId || 'custom_project',
+    project_id: projectId,
+    skill_id: skillId,
+    has_prompt: Boolean(options?.prompt),
+  }, createMetaEventId('project.create'))
 }
 
 /**
@@ -42,6 +56,7 @@ export async function createProject(
     // Text-only: DB insert only (no compression), then navigate
     const { data, error } = await supabase.from('projects').insert({ user_id: userId, title: 'Untitled', timeline_version: 2 }).select('id').single();
     if (error || !data) throw new Error('Failed to create project');
+    trackProjectCreated(data.id, options);
     return { projectId: data.id };
   }
 
@@ -58,6 +73,7 @@ export async function createProject(
     if (dbResult.error || !dbResult.data) throw new Error('Failed to create project');
     if (base64) sessionStorage.setItem('pendingImages', JSON.stringify([base64]));
     if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
+    trackProjectCreated(dbResult.data.id, options);
     return { projectId: dbResult.data.id, metadata };
   }
 
@@ -88,5 +104,6 @@ export async function createProject(
 
   if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
 
+  trackProjectCreated(projectId, options);
   return { projectId, metadata };
 }

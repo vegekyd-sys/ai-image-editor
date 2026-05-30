@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import RollingTagline from '@/components/RollingTagline'
+import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
@@ -16,7 +18,7 @@ function isInAppBrowser(): boolean {
 }
 
 export default function LoginPage() {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const [view, setView] = useState<View>('form')
   const [inApp] = useState(isInAppBrowser)
 
@@ -189,6 +191,7 @@ export default function LoginPage() {
 
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
+        trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
         let returnUrl = localStorage.getItem('mkr_return_url') || ''
         localStorage.removeItem('mkr_return_url')
         // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
@@ -400,9 +403,9 @@ export default function LoginPage() {
               </button>
             </p>
             <p className="mt-6 text-center">
-              <a href="/home" className="text-white/25 hover:text-white/50 text-xs transition-colors">
+              <Link href="/home" className="text-white/25 hover:text-white/50 text-xs transition-colors">
                 ← {t('auth.back')}
-              </a>
+              </Link>
             </p>
           </>
         )}

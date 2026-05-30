@@ -1,0 +1,1070 @@
+[
+  {
+    "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+    "pageInfo": {
+      "adLibrarySystemStatus": {
+        "systemStatus": {
+          "status": "NO_KNOWN_ISSUES",
+          "activeIssues": [
+            {
+              "product": "Ad Library",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library Report",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library API",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Branded Content",
+              "status": "NO_KNOWN_ISSUES"
+            }
+          ]
+        }
+      },
+      "xfbAdLibraryIsCaptchaRequired": false,
+      "page": null,
+      "adLibraryUser": null
+    },
+    "pageID": "105387374172299",
+    "adArchiveID": "1513172887150517",
+    "startDateFormatted": "2026-04-27T07:00:00.000Z",
+    "endDateFormatted": "2026-05-28T07:00:00.000Z",
+    "adArchiveId": "1513172887150517",
+    "collationCount": 3,
+    "collationId": "3925137087725513",
+    "pageId": "105387374172299",
+    "snapshot": {
+      "brandedContent": null,
+      "pageId": "105387374172299",
+      "pageIsDeleted": false,
+      "pageProfileUri": "https://www.facebook.com/ReminiApp/",
+      "rootResharedPost": null,
+      "byline": null,
+      "disclaimerLabel": null,
+      "pageName": "Remini - AI Photo Enhancer",
+      "pageProfilePictureUrl": "https://scontent-atl3-3.xx.fbcdn.net/v/t39.35426-6/683154648_2376037912901470_3123184272185269118_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=111&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=cbWebolnSlUQ7kNvwEdAaOB&_nc_oc=AdpRqlgXp5b-_lyUO5KDQ9R_L04yw23J0XJWi6xBfaOZojmNm0pq693W48qRv70rjIE&_nc_zt=14&_nc_ht=scontent-atl3-3.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af6npQHNCCVb37boOIL9Oz5ImOBlm-3gcrN6VKsfE-Lz5g&oe=6A1EE4E8",
+      "event": null,
+      "caption": "apps.apple.com",
+      "ctaText": "Install app",
+      "cards": [],
+      "body": {
+        "text": "Side by side, picture perfect! Try the new Remini AI Photobooth"
+      },
+      "ctaType": "INSTALL_APP",
+      "displayFormat": "VIDEO",
+      "linkDescription": null,
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_08s_EN_JoHoGF_v01.mov",
+      "images": [],
+      "pageCategories": [
+        "Interest"
+      ],
+      "pageLikeCount": 412131,
+      "title": "Try it now!",
+      "videos": [
+        {
+          "videoHdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQOLJrNO3aCGFzKxju-q-Ih6l502HdGIeChoDTzCW98lxBLvjVHgpJdsagPuCN5MPuRRKoMcDXmzh9Xe6FNznYYXK6MKIt0NoXugPXNBcZAZFQ.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=5FsdfRcD_-YQ7kNvwGtYR6-&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjEzNTMwNzQ4NjI4NzgxMjksImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=e5cd7ef79ba1c088&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8xNDQ2RjlEMTIyOTdDREMyM0JBN0EyNkQ3NkY4Q0I4Q19tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzdBNDEwMDI3NDA0NEYxQjJGODVCRkYxNkE3ODhGMzk4X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbitvOoqafnBBUCKAJDMywXQCAzMzMzMzMYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4AD7LkCPUwXLXX_pPfrDw895e2GPH_lBXmVJ-Ivmfvhw&oe=6A1EFE9B",
+          "videoPreviewImageUrl": "https://scontent-atl3-2.xx.fbcdn.net/v/t39.35426-6/684665967_2612506199188287_3418770368523758771_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=x2Y0LEeplAQQ7kNvwGiXD51&_nc_oc=AdrdT63yxv4KMISS0UB5CdZ2ZZGZRIHY3P_zT27ATxRR2UL3r6nw4JbUEVok3LAUAws&_nc_zt=14&_nc_ht=scontent-atl3-2.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af4WHQvnAsQGHGuZHd5iOe1ssHgot2wZ7MEttWVxpz6ekQ&oe=6A1F0412",
+          "videoSdUrl": "https://video-atl3-2.xx.fbcdn.net/o1/v/t2/f2/m412/AQNK4qIDJFD97KZVX1Qy7cTDs0rg8usNUo5_IIlVFSEx9K3KLlm-2CxL6WYkKqQIOxtGPbvNhsHtc2naWSeNrCx2cnrbb5bGpj0KkU-ycg.mp4?_nc_cat=104&_nc_sid=8bf8fe&_nc_ht=video-atl3-2.xx.fbcdn.net&_nc_ohc=pnn1IjYQy0sQ7kNvwF1ucDJ&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTM1MzA3NDg2Mjg3ODEyOSwiYXNzZXRfYWdlX2RheXMiOjIyNSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4a2UsTJD2JTAc8EhD_yLi8cUEsHXjuWnmmq6jhEUOk2A&oe=6A1EDFBE",
+          "watermarkedVideoHdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQMO2hHV-hwoskRy2oJqmP1kk2ctvoG1Qw_2-nRWsLbIpKNDtv3xKoh0WzcKjbdIDDxqh_TwREh2vDqI4Y7Fc1OAaXBfYZRfziIhB1sEKw-6yw.mp4?_nc_cat=108&_nc_sid=5e9851&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=H3b3Qf-kiusQ7kNvwERYFSu&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjE1MjYwMjk5MDU2MDgwNjcsImFzc2V0X2FnZV9kYXlzIjozMSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=22aacd550661344&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9FRjQyQ0U5MTVBMDEwMUZBMjVCNEI1NUE1RkU2MjFBRl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzAwNEUyQzM1M0Q4NTJCMUU5QjFCNDY5Mzc0NjU5NThBX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaG9oXn0Pq1BRUCKAJDMywXQCAzMzMzMzMYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4jLIiMUywfzzVatiwmHsfdM-XlkYgUFMxMUwXUzE7qgA&oe=6A1EEBA8&bitrate=704216&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-atl3-2.xx.fbcdn.net/o1/v/t2/f2/m412/AQOzNycJ-Pv249_G4ZKhspUZAwaG6okNzpAZ8vG-tf9XpsjaonV4TROueka7NefgOj97bvQWoVjvci4lsIBOAXdigxsWXkgubYnjE02qRQ.mp4?_nc_cat=101&_nc_sid=8bf8fe&_nc_ht=video-atl3-2.xx.fbcdn.net&_nc_ohc=h3byiLNrBaYQ7kNvwHgOcss&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTUyNjAyOTkwNTYwODA2NywiYXNzZXRfYWdlX2RheXMiOjMxLCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6OCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af7i6k_2oBcLN4yfl1r52pN7esf3YqvgQ7d0-02KX_ZYtg&oe=6A1EE295&bitrate=235649&tag=sve_sd"
+        }
+      ],
+      "isReshared": false,
+      "extraLinks": [],
+      "extraTexts": [],
+      "extraImages": [],
+      "extraVideos": [],
+      "countryIsoCode": null,
+      "brazilTaxId": null,
+      "additionalInfo": null,
+      "ecCertificates": []
+    },
+    "isActive": true,
+    "hasUserReported": false,
+    "reportCount": null,
+    "menuItems": [],
+    "stateMediaRunLabel": null,
+    "pageIsDeleted": false,
+    "pageName": "Remini - AI Photo Enhancer",
+    "impressionsWithIndex": {
+      "impressionsText": null,
+      "impressionsIndex": -1
+    },
+    "gatedType": "ELIGIBLE",
+    "categories": [
+      "UNKNOWN"
+    ],
+    "isAaaEligible": false,
+    "containsDigitalCreatedMedia": false,
+    "reachEstimate": null,
+    "currency": "",
+    "spend": null,
+    "endDate": 1779951600,
+    "publisherPlatform": [
+      "FACEBOOK",
+      "INSTAGRAM"
+    ],
+    "startDate": 1777273200,
+    "containsSensitiveContent": false,
+    "totalActiveTime": null,
+    "regionalRegulationData": {
+      "finserv": {
+        "isDeemedFinserv": false,
+        "isLimitedDelivery": false
+      },
+      "twAntiScam": {
+        "isLimitedDelivery": false
+      }
+    },
+    "hideDataStatus": "NONE",
+    "fevInfo": null,
+    "adId": null,
+    "targetedOrReachedCountries": []
+  },
+  {
+    "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+    "pageInfo": {
+      "adLibrarySystemStatus": {
+        "systemStatus": {
+          "status": "NO_KNOWN_ISSUES",
+          "activeIssues": [
+            {
+              "product": "Ad Library",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library Report",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library API",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Branded Content",
+              "status": "NO_KNOWN_ISSUES"
+            }
+          ]
+        }
+      },
+      "xfbAdLibraryIsCaptchaRequired": false,
+      "page": null,
+      "adLibraryUser": null
+    },
+    "pageID": "105387374172299",
+    "adArchiveID": "1345478744120335",
+    "startDateFormatted": "2026-05-28T07:00:00.000Z",
+    "endDateFormatted": "2026-05-28T07:00:00.000Z",
+    "adArchiveId": "1345478744120335",
+    "collationCount": null,
+    "collationId": "3925137087725513",
+    "pageId": "105387374172299",
+    "snapshot": {
+      "brandedContent": null,
+      "pageId": "105387374172299",
+      "pageIsDeleted": false,
+      "pageProfileUri": "https://www.facebook.com/ReminiApp/",
+      "rootResharedPost": null,
+      "byline": null,
+      "disclaimerLabel": null,
+      "pageName": "Remini - AI Photo Enhancer",
+      "pageProfilePictureUrl": "https://scontent-atl3-3.xx.fbcdn.net/v/t39.35426-6/683154648_2376037912901470_3123184272185269118_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=111&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=cbWebolnSlUQ7kNvwEdAaOB&_nc_oc=AdpRqlgXp5b-_lyUO5KDQ9R_L04yw23J0XJWi6xBfaOZojmNm0pq693W48qRv70rjIE&_nc_zt=14&_nc_ht=scontent-atl3-3.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af6npQHNCCVb37boOIL9Oz5ImOBlm-3gcrN6VKsfE-Lz5g&oe=6A1EE4E8",
+      "event": null,
+      "caption": "apps.apple.com",
+      "ctaText": "Install app",
+      "cards": [],
+      "body": {
+        "text": "Side by side, picture perfect! Try the new Remini AI Photobooth"
+      },
+      "ctaType": "INSTALL_APP",
+      "displayFormat": "VIDEO",
+      "linkDescription": null,
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_08s_EN_JoHoGF_v01.mov",
+      "images": [],
+      "pageCategories": [
+        "Interest"
+      ],
+      "pageLikeCount": 412131,
+      "title": "Try it now!",
+      "videos": [
+        {
+          "videoHdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQOLJrNO3aCGFzKxju-q-Ih6l502HdGIeChoDTzCW98lxBLvjVHgpJdsagPuCN5MPuRRKoMcDXmzh9Xe6FNznYYXK6MKIt0NoXugPXNBcZAZFQ.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=5FsdfRcD_-YQ7kNvwGtYR6-&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjEzNTMwNzQ4NjI4NzgxMjksImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=e5cd7ef79ba1c088&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8xNDQ2RjlEMTIyOTdDREMyM0JBN0EyNkQ3NkY4Q0I4Q19tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzdBNDEwMDI3NDA0NEYxQjJGODVCRkYxNkE3ODhGMzk4X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbitvOoqafnBBUCKAJDMywXQCAzMzMzMzMYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4AD7LkCPUwXLXX_pPfrDw895e2GPH_lBXmVJ-Ivmfvhw&oe=6A1EFE9B",
+          "videoPreviewImageUrl": "https://scontent-atl3-2.xx.fbcdn.net/v/t39.35426-6/684665967_2612506199188287_3418770368523758771_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=x2Y0LEeplAQQ7kNvwGiXD51&_nc_oc=AdrdT63yxv4KMISS0UB5CdZ2ZZGZRIHY3P_zT27ATxRR2UL3r6nw4JbUEVok3LAUAws&_nc_zt=14&_nc_ht=scontent-atl3-2.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af4WHQvnAsQGHGuZHd5iOe1ssHgot2wZ7MEttWVxpz6ekQ&oe=6A1F0412",
+          "videoSdUrl": "https://video-atl3-2.xx.fbcdn.net/o1/v/t2/f2/m412/AQNK4qIDJFD97KZVX1Qy7cTDs0rg8usNUo5_IIlVFSEx9K3KLlm-2CxL6WYkKqQIOxtGPbvNhsHtc2naWSeNrCx2cnrbb5bGpj0KkU-ycg.mp4?_nc_cat=104&_nc_sid=8bf8fe&_nc_ht=video-atl3-2.xx.fbcdn.net&_nc_ohc=pnn1IjYQy0sQ7kNvwF1ucDJ&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTM1MzA3NDg2Mjg3ODEyOSwiYXNzZXRfYWdlX2RheXMiOjIyNSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4a2UsTJD2JTAc8EhD_yLi8cUEsHXjuWnmmq6jhEUOk2A&oe=6A1EDFBE",
+          "watermarkedVideoHdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQMO2hHV-hwoskRy2oJqmP1kk2ctvoG1Qw_2-nRWsLbIpKNDtv3xKoh0WzcKjbdIDDxqh_TwREh2vDqI4Y7Fc1OAaXBfYZRfziIhB1sEKw-6yw.mp4?_nc_cat=108&_nc_sid=5e9851&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=H3b3Qf-kiusQ7kNvwERYFSu&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjE1MjYwMjk5MDU2MDgwNjcsImFzc2V0X2FnZV9kYXlzIjozMSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=22aacd550661344&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9FRjQyQ0U5MTVBMDEwMUZBMjVCNEI1NUE1RkU2MjFBRl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzAwNEUyQzM1M0Q4NTJCMUU5QjFCNDY5Mzc0NjU5NThBX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaG9oXn0Pq1BRUCKAJDMywXQCAzMzMzMzMYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4jLIiMUywfzzVatiwmHsfdM-XlkYgUFMxMUwXUzE7qgA&oe=6A1EEBA8&bitrate=704216&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-atl3-2.xx.fbcdn.net/o1/v/t2/f2/m412/AQOzNycJ-Pv249_G4ZKhspUZAwaG6okNzpAZ8vG-tf9XpsjaonV4TROueka7NefgOj97bvQWoVjvci4lsIBOAXdigxsWXkgubYnjE02qRQ.mp4?_nc_cat=101&_nc_sid=8bf8fe&_nc_ht=video-atl3-2.xx.fbcdn.net&_nc_ohc=h3byiLNrBaYQ7kNvwHgOcss&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTUyNjAyOTkwNTYwODA2NywiYXNzZXRfYWdlX2RheXMiOjMxLCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6OCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af7i6k_2oBcLN4yfl1r52pN7esf3YqvgQ7d0-02KX_ZYtg&oe=6A1EE295&bitrate=235649&tag=sve_sd"
+        }
+      ],
+      "isReshared": false,
+      "extraLinks": [],
+      "extraTexts": [],
+      "extraImages": [],
+      "extraVideos": [],
+      "countryIsoCode": null,
+      "brazilTaxId": null,
+      "additionalInfo": null,
+      "ecCertificates": []
+    },
+    "isActive": true,
+    "hasUserReported": false,
+    "reportCount": null,
+    "menuItems": [],
+    "stateMediaRunLabel": null,
+    "pageIsDeleted": false,
+    "pageName": "Remini - AI Photo Enhancer",
+    "impressionsWithIndex": {
+      "impressionsText": null,
+      "impressionsIndex": -1
+    },
+    "gatedType": "ELIGIBLE",
+    "categories": [
+      "UNKNOWN"
+    ],
+    "isAaaEligible": false,
+    "containsDigitalCreatedMedia": false,
+    "reachEstimate": null,
+    "currency": "",
+    "spend": null,
+    "endDate": 1779951600,
+    "publisherPlatform": [
+      "FACEBOOK",
+      "INSTAGRAM"
+    ],
+    "startDate": 1779951600,
+    "containsSensitiveContent": false,
+    "totalActiveTime": 37418,
+    "regionalRegulationData": {
+      "finserv": {
+        "isDeemedFinserv": false,
+        "isLimitedDelivery": false
+      },
+      "twAntiScam": {
+        "isLimitedDelivery": false
+      }
+    },
+    "hideDataStatus": "NONE",
+    "fevInfo": null,
+    "adId": null,
+    "targetedOrReachedCountries": []
+  },
+  {
+    "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+    "pageInfo": {
+      "adLibrarySystemStatus": {
+        "systemStatus": {
+          "status": "NO_KNOWN_ISSUES",
+          "activeIssues": [
+            {
+              "product": "Ad Library",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library Report",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library API",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Branded Content",
+              "status": "NO_KNOWN_ISSUES"
+            }
+          ]
+        }
+      },
+      "xfbAdLibraryIsCaptchaRequired": false,
+      "page": null,
+      "adLibraryUser": null
+    },
+    "pageID": "105387374172299",
+    "adArchiveID": "1333709091976378",
+    "startDateFormatted": "2026-05-28T07:00:00.000Z",
+    "endDateFormatted": "2026-05-28T07:00:00.000Z",
+    "adArchiveId": "1333709091976378",
+    "collationCount": null,
+    "collationId": "3925137087725513",
+    "pageId": "105387374172299",
+    "snapshot": {
+      "brandedContent": null,
+      "pageId": "105387374172299",
+      "pageIsDeleted": false,
+      "pageProfileUri": "https://www.facebook.com/ReminiApp/",
+      "rootResharedPost": null,
+      "byline": null,
+      "disclaimerLabel": null,
+      "pageName": "Remini - AI Photo Enhancer",
+      "pageProfilePictureUrl": "https://scontent-atl3-3.xx.fbcdn.net/v/t39.35426-6/683154648_2376037912901470_3123184272185269118_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=111&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=cbWebolnSlUQ7kNvwEdAaOB&_nc_oc=AdpRqlgXp5b-_lyUO5KDQ9R_L04yw23J0XJWi6xBfaOZojmNm0pq693W48qRv70rjIE&_nc_zt=14&_nc_ht=scontent-atl3-3.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af6npQHNCCVb37boOIL9Oz5ImOBlm-3gcrN6VKsfE-Lz5g&oe=6A1EE4E8",
+      "event": null,
+      "caption": "apps.apple.com",
+      "ctaText": "Install app",
+      "cards": [],
+      "body": {
+        "text": "Side by side, picture perfect! Try the new Remini AI Photobooth"
+      },
+      "ctaType": "INSTALL_APP",
+      "displayFormat": "VIDEO",
+      "linkDescription": null,
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_08s_EN_JoHoGF_v01.mov",
+      "images": [],
+      "pageCategories": [
+        "Interest"
+      ],
+      "pageLikeCount": 412131,
+      "title": "Try it now!",
+      "videos": [
+        {
+          "videoHdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQOLJrNO3aCGFzKxju-q-Ih6l502HdGIeChoDTzCW98lxBLvjVHgpJdsagPuCN5MPuRRKoMcDXmzh9Xe6FNznYYXK6MKIt0NoXugPXNBcZAZFQ.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=5FsdfRcD_-YQ7kNvwGtYR6-&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjEzNTMwNzQ4NjI4NzgxMjksImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=e5cd7ef79ba1c088&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8xNDQ2RjlEMTIyOTdDREMyM0JBN0EyNkQ3NkY4Q0I4Q19tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzdBNDEwMDI3NDA0NEYxQjJGODVCRkYxNkE3ODhGMzk4X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbitvOoqafnBBUCKAJDMywXQCAzMzMzMzMYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4AD7LkCPUwXLXX_pPfrDw895e2GPH_lBXmVJ-Ivmfvhw&oe=6A1EFE9B",
+          "videoPreviewImageUrl": "https://scontent-atl3-2.xx.fbcdn.net/v/t39.35426-6/684665967_2612506199188287_3418770368523758771_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=x2Y0LEeplAQQ7kNvwGiXD51&_nc_oc=AdrdT63yxv4KMISS0UB5CdZ2ZZGZRIHY3P_zT27ATxRR2UL3r6nw4JbUEVok3LAUAws&_nc_zt=14&_nc_ht=scontent-atl3-2.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af4WHQvnAsQGHGuZHd5iOe1ssHgot2wZ7MEttWVxpz6ekQ&oe=6A1F0412",
+          "videoSdUrl": "https://video-atl3-2.xx.fbcdn.net/o1/v/t2/f2/m412/AQNK4qIDJFD97KZVX1Qy7cTDs0rg8usNUo5_IIlVFSEx9K3KLlm-2CxL6WYkKqQIOxtGPbvNhsHtc2naWSeNrCx2cnrbb5bGpj0KkU-ycg.mp4?_nc_cat=104&_nc_sid=8bf8fe&_nc_ht=video-atl3-2.xx.fbcdn.net&_nc_ohc=pnn1IjYQy0sQ7kNvwF1ucDJ&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTM1MzA3NDg2Mjg3ODEyOSwiYXNzZXRfYWdlX2RheXMiOjIyNSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4a2UsTJD2JTAc8EhD_yLi8cUEsHXjuWnmmq6jhEUOk2A&oe=6A1EDFBE",
+          "watermarkedVideoHdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQMO2hHV-hwoskRy2oJqmP1kk2ctvoG1Qw_2-nRWsLbIpKNDtv3xKoh0WzcKjbdIDDxqh_TwREh2vDqI4Y7Fc1OAaXBfYZRfziIhB1sEKw-6yw.mp4?_nc_cat=108&_nc_sid=5e9851&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=H3b3Qf-kiusQ7kNvwERYFSu&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjE1MjYwMjk5MDU2MDgwNjcsImFzc2V0X2FnZV9kYXlzIjozMSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=22aacd550661344&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9FRjQyQ0U5MTVBMDEwMUZBMjVCNEI1NUE1RkU2MjFBRl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzAwNEUyQzM1M0Q4NTJCMUU5QjFCNDY5Mzc0NjU5NThBX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaG9oXn0Pq1BRUCKAJDMywXQCAzMzMzMzMYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4jLIiMUywfzzVatiwmHsfdM-XlkYgUFMxMUwXUzE7qgA&oe=6A1EEBA8&bitrate=704216&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-atl3-2.xx.fbcdn.net/o1/v/t2/f2/m412/AQOzNycJ-Pv249_G4ZKhspUZAwaG6okNzpAZ8vG-tf9XpsjaonV4TROueka7NefgOj97bvQWoVjvci4lsIBOAXdigxsWXkgubYnjE02qRQ.mp4?_nc_cat=101&_nc_sid=8bf8fe&_nc_ht=video-atl3-2.xx.fbcdn.net&_nc_ohc=h3byiLNrBaYQ7kNvwHgOcss&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTUyNjAyOTkwNTYwODA2NywiYXNzZXRfYWdlX2RheXMiOjMxLCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6OCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af7i6k_2oBcLN4yfl1r52pN7esf3YqvgQ7d0-02KX_ZYtg&oe=6A1EE295&bitrate=235649&tag=sve_sd"
+        }
+      ],
+      "isReshared": false,
+      "extraLinks": [],
+      "extraTexts": [],
+      "extraImages": [],
+      "extraVideos": [],
+      "countryIsoCode": null,
+      "brazilTaxId": null,
+      "additionalInfo": null,
+      "ecCertificates": []
+    },
+    "isActive": true,
+    "hasUserReported": false,
+    "reportCount": null,
+    "menuItems": [],
+    "stateMediaRunLabel": null,
+    "pageIsDeleted": false,
+    "pageName": "Remini - AI Photo Enhancer",
+    "impressionsWithIndex": {
+      "impressionsText": null,
+      "impressionsIndex": -1
+    },
+    "gatedType": "ELIGIBLE",
+    "categories": [
+      "UNKNOWN"
+    ],
+    "isAaaEligible": false,
+    "containsDigitalCreatedMedia": false,
+    "reachEstimate": null,
+    "currency": "",
+    "spend": null,
+    "endDate": 1779951600,
+    "publisherPlatform": [
+      "FACEBOOK",
+      "INSTAGRAM"
+    ],
+    "startDate": 1779951600,
+    "containsSensitiveContent": false,
+    "totalActiveTime": 65026,
+    "regionalRegulationData": {
+      "finserv": {
+        "isDeemedFinserv": false,
+        "isLimitedDelivery": false
+      },
+      "twAntiScam": {
+        "isLimitedDelivery": false
+      }
+    },
+    "hideDataStatus": "NONE",
+    "fevInfo": null,
+    "adId": null,
+    "targetedOrReachedCountries": []
+  },
+  {
+    "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+    "pageInfo": {
+      "adLibrarySystemStatus": {
+        "systemStatus": {
+          "status": "NO_KNOWN_ISSUES",
+          "activeIssues": [
+            {
+              "product": "Ad Library",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library Report",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library API",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Branded Content",
+              "status": "NO_KNOWN_ISSUES"
+            }
+          ]
+        }
+      },
+      "xfbAdLibraryIsCaptchaRequired": false,
+      "page": null,
+      "adLibraryUser": null
+    },
+    "pageID": "105387374172299",
+    "adArchiveID": "1484892836770301",
+    "startDateFormatted": "2026-04-27T07:00:00.000Z",
+    "endDateFormatted": "2026-05-27T07:00:00.000Z",
+    "adArchiveId": "1484892836770301",
+    "collationCount": 3,
+    "collationId": "831474559419694",
+    "pageId": "105387374172299",
+    "snapshot": {
+      "brandedContent": null,
+      "pageId": "105387374172299",
+      "pageIsDeleted": false,
+      "pageProfileUri": "https://www.facebook.com/ReminiApp/",
+      "rootResharedPost": null,
+      "byline": null,
+      "disclaimerLabel": null,
+      "pageName": "Remini - AI Photo Enhancer",
+      "pageProfilePictureUrl": "https://scontent-atl3-2.xx.fbcdn.net/v/t39.35426-6/683666762_972740385404365_6969868940204902332_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=100&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=X4CV2mThbKUQ7kNvwEM28vF&_nc_oc=AdqZDXPspOtuQExCC2mjIC7vCn23FbOzrL8X-kAW5ConAhuYIAY6zLZfJYAvMHYTzkI&_nc_zt=14&_nc_ht=scontent-atl3-2.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af59i-7JendUb6n2ASF4dA-5TXnrNk9zebOGXyYXXXHl3Q&oe=6A1EDAC0",
+      "event": null,
+      "caption": "apps.apple.com",
+      "ctaText": "Install app",
+      "cards": [],
+      "body": {
+        "text": "Side by side, picture perfect! Try the new Remini AI Photobooth"
+      },
+      "ctaType": "INSTALL_APP",
+      "displayFormat": "VIDEO",
+      "linkDescription": null,
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_09s_EN_DaniCouple_v01.mov",
+      "images": [],
+      "pageCategories": [
+        "Interest"
+      ],
+      "pageLikeCount": 412131,
+      "title": "Try it now!",
+      "videos": [
+        {
+          "videoHdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQNrOIr2pF7jTM_VR_mUl9B9_jhz95CJ0hWHrR3P69dM0iznPJ47M51-z5104O6rJ6kjrSLXnPSvJ81OZD9zXz7P489a7z-U1JnRZ65oSS9dIA.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=qNbvM1MLmIoQ7kNvwGdDPrn&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjE0Nzg5MDAxMDk4OTA5NTQsImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=93217ef56fff10d5&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9DQjQwNThBRkJDNzFCOUU4QTJCNjM0NDFGQUNEQkZBNF9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzE4NDRBMDVDMEMyMEU4NTFERUE3RkMzOTg5Rjc0MDkyX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaU1qq7qMOgBRUCKAJDMywXQCF3S8an754YGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4wq3igT6BNQlCFs9xwP08Cn7-ATtb3B8l6iF5Nl3eSvg&oe=6A1EF8D3",
+          "videoPreviewImageUrl": "https://scontent-atl3-1.xx.fbcdn.net/v/t39.35426-6/683993739_1200650403120607_7772246927045331248_n.jpg?_nc_cat=105&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=X9QR_TMuzg4Q7kNvwHGzQzk&_nc_oc=AdqPekpjB5IgRC5HegEwK4aeFl5SxvXJra1W0m1ITX3lXwHZuVa1pQQQiZluUw_tRCA&_nc_zt=14&_nc_ht=scontent-atl3-1.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af5o22vi120gi5mlWFnj3hGZGSbyo8Z4j9YP4xT8zN77hA&oe=6A1F0446",
+          "videoSdUrl": "https://video-atl3-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQMn-7mwrrpPdMRyACl-CvNg1i3XnH8aEEQ8yrW_7yhFWSHa8zUVrKJV6uwyNDwfJC7E0rR5tagBcUyXIXxFSNrluW3TdvsZMV7eR5Yz1g.mp4?_nc_cat=103&_nc_sid=8bf8fe&_nc_ht=video-atl3-1.xx.fbcdn.net&_nc_ohc=pvNn1bizmnoQ7kNvwHDi8w0&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTQ3ODkwMDEwOTg5MDk1NCwiYXNzZXRfYWdlX2RheXMiOjIyNSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af7NX6JUY7U3zYkk3SDRmRmYpWGaDD6F5rSAoAWUHByvdQ&oe=6A1EF37F",
+          "watermarkedVideoHdUrl": "https://video-atl3-2.xx.fbcdn.net/o1/v/t2/f2/m366/AQMR_a4LHezyqazy5ge-0PIgy4wRE4hCWJoYplk6ilnQMnVliKUYqMT9FopBhfGOiMMwDltSA8-NPGHCh2kqXY-HQiDvPhNbKI5cBD9BMZweWQ.mp4?_nc_cat=100&_nc_sid=5e9851&_nc_ht=video-atl3-2.xx.fbcdn.net&_nc_ohc=j-TH1vvvZFAQ7kNvwGXiB5g&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjI0NDQ5MDc3NjI2ODMwNzUsImFzc2V0X2FnZV9kYXlzIjoyOSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=49963eed40d34adf&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8wMTQwODkzNjg1Njg4MzU1RjMwQ0Y4NDZFM0Y1NzM4NV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzkxNDhCRUMwMTM3NUVDMjlBREU3RjRDMjRBQTQyN0JFX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaGs6CrrujXCBUCKAJDMywXQCF3S8an754YGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af5q-ZVGY9Bo0sR353DGiOHFfbGNBbWWVtiOtlYVXz44Gw&oe=6A1EE280&bitrate=855675&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m412/AQM-kP4nHYoZRJZyHTIXA2da6TCx5G2U5H6S1cTVBPzHXWj-9Vmso4AjAUx4J6BjwsqW9U3eAVE4PNU0CBvfI6PqnpNtKzHaYhISvTKoVg.mp4?_nc_cat=108&_nc_sid=8bf8fe&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=4h8knn-ed-cQ7kNvwFhzvxU&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MjQ0NDkwNzc2MjY4MzA3NSwiYXNzZXRfYWdlX2RheXMiOjI5LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6OCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af7_1X42N0lbvWKXLfFMdGIKA3V9eOdrf212Eb81agRuSg&oe=6A1EE55A&bitrate=257841&tag=sve_sd"
+        }
+      ],
+      "isReshared": false,
+      "extraLinks": [],
+      "extraTexts": [],
+      "extraImages": [],
+      "extraVideos": [],
+      "countryIsoCode": null,
+      "brazilTaxId": null,
+      "additionalInfo": null,
+      "ecCertificates": []
+    },
+    "isActive": true,
+    "hasUserReported": false,
+    "reportCount": null,
+    "menuItems": [],
+    "stateMediaRunLabel": null,
+    "pageIsDeleted": false,
+    "pageName": "Remini - AI Photo Enhancer",
+    "impressionsWithIndex": {
+      "impressionsText": null,
+      "impressionsIndex": -1
+    },
+    "gatedType": "ELIGIBLE",
+    "categories": [
+      "UNKNOWN"
+    ],
+    "isAaaEligible": false,
+    "containsDigitalCreatedMedia": false,
+    "reachEstimate": null,
+    "currency": "",
+    "spend": null,
+    "endDate": 1779865200,
+    "publisherPlatform": [
+      "FACEBOOK",
+      "INSTAGRAM"
+    ],
+    "startDate": 1777273200,
+    "containsSensitiveContent": false,
+    "totalActiveTime": null,
+    "regionalRegulationData": {
+      "finserv": {
+        "isDeemedFinserv": false,
+        "isLimitedDelivery": false
+      },
+      "twAntiScam": {
+        "isLimitedDelivery": false
+      }
+    },
+    "hideDataStatus": "NONE",
+    "fevInfo": null,
+    "adId": null,
+    "targetedOrReachedCountries": []
+  },
+  {
+    "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+    "pageInfo": {
+      "adLibrarySystemStatus": {
+        "systemStatus": {
+          "status": "NO_KNOWN_ISSUES",
+          "activeIssues": [
+            {
+              "product": "Ad Library",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library Report",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library API",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Branded Content",
+              "status": "NO_KNOWN_ISSUES"
+            }
+          ]
+        }
+      },
+      "xfbAdLibraryIsCaptchaRequired": false,
+      "page": null,
+      "adLibraryUser": null
+    },
+    "pageID": "105387374172299",
+    "adArchiveID": "1926191204731323",
+    "startDateFormatted": "2026-05-28T07:00:00.000Z",
+    "endDateFormatted": "2026-05-28T07:00:00.000Z",
+    "adArchiveId": "1926191204731323",
+    "collationCount": null,
+    "collationId": "831474559419694",
+    "pageId": "105387374172299",
+    "snapshot": {
+      "brandedContent": null,
+      "pageId": "105387374172299",
+      "pageIsDeleted": false,
+      "pageProfileUri": "https://www.facebook.com/ReminiApp/",
+      "rootResharedPost": null,
+      "byline": null,
+      "disclaimerLabel": null,
+      "pageName": "Remini - AI Photo Enhancer",
+      "pageProfilePictureUrl": "https://scontent-atl3-2.xx.fbcdn.net/v/t39.35426-6/683666762_972740385404365_6969868940204902332_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=100&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=X4CV2mThbKUQ7kNvwEM28vF&_nc_oc=AdqZDXPspOtuQExCC2mjIC7vCn23FbOzrL8X-kAW5ConAhuYIAY6zLZfJYAvMHYTzkI&_nc_zt=14&_nc_ht=scontent-atl3-2.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af59i-7JendUb6n2ASF4dA-5TXnrNk9zebOGXyYXXXHl3Q&oe=6A1EDAC0",
+      "event": null,
+      "caption": "apps.apple.com",
+      "ctaText": "Install app",
+      "cards": [],
+      "body": {
+        "text": "Side by side, picture perfect! Try the new Remini AI Photobooth"
+      },
+      "ctaType": "INSTALL_APP",
+      "displayFormat": "VIDEO",
+      "linkDescription": null,
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_09s_EN_DaniCouple_v01.mov",
+      "images": [],
+      "pageCategories": [
+        "Interest"
+      ],
+      "pageLikeCount": 412131,
+      "title": "Try it now!",
+      "videos": [
+        {
+          "videoHdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQNrOIr2pF7jTM_VR_mUl9B9_jhz95CJ0hWHrR3P69dM0iznPJ47M51-z5104O6rJ6kjrSLXnPSvJ81OZD9zXz7P489a7z-U1JnRZ65oSS9dIA.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=qNbvM1MLmIoQ7kNvwGdDPrn&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjE0Nzg5MDAxMDk4OTA5NTQsImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=93217ef56fff10d5&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9DQjQwNThBRkJDNzFCOUU4QTJCNjM0NDFGQUNEQkZBNF9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzE4NDRBMDVDMEMyMEU4NTFERUE3RkMzOTg5Rjc0MDkyX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaU1qq7qMOgBRUCKAJDMywXQCF3S8an754YGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4wq3igT6BNQlCFs9xwP08Cn7-ATtb3B8l6iF5Nl3eSvg&oe=6A1EF8D3",
+          "videoPreviewImageUrl": "https://scontent-atl3-1.xx.fbcdn.net/v/t39.35426-6/683993739_1200650403120607_7772246927045331248_n.jpg?_nc_cat=105&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=X9QR_TMuzg4Q7kNvwHGzQzk&_nc_oc=AdqPekpjB5IgRC5HegEwK4aeFl5SxvXJra1W0m1ITX3lXwHZuVa1pQQQiZluUw_tRCA&_nc_zt=14&_nc_ht=scontent-atl3-1.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af5o22vi120gi5mlWFnj3hGZGSbyo8Z4j9YP4xT8zN77hA&oe=6A1F0446",
+          "videoSdUrl": "https://video-atl3-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQMn-7mwrrpPdMRyACl-CvNg1i3XnH8aEEQ8yrW_7yhFWSHa8zUVrKJV6uwyNDwfJC7E0rR5tagBcUyXIXxFSNrluW3TdvsZMV7eR5Yz1g.mp4?_nc_cat=103&_nc_sid=8bf8fe&_nc_ht=video-atl3-1.xx.fbcdn.net&_nc_ohc=pvNn1bizmnoQ7kNvwHDi8w0&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTQ3ODkwMDEwOTg5MDk1NCwiYXNzZXRfYWdlX2RheXMiOjIyNSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af7NX6JUY7U3zYkk3SDRmRmYpWGaDD6F5rSAoAWUHByvdQ&oe=6A1EF37F",
+          "watermarkedVideoHdUrl": "https://video-atl3-2.xx.fbcdn.net/o1/v/t2/f2/m366/AQMR_a4LHezyqazy5ge-0PIgy4wRE4hCWJoYplk6ilnQMnVliKUYqMT9FopBhfGOiMMwDltSA8-NPGHCh2kqXY-HQiDvPhNbKI5cBD9BMZweWQ.mp4?_nc_cat=100&_nc_sid=5e9851&_nc_ht=video-atl3-2.xx.fbcdn.net&_nc_ohc=j-TH1vvvZFAQ7kNvwGXiB5g&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjI0NDQ5MDc3NjI2ODMwNzUsImFzc2V0X2FnZV9kYXlzIjoyOSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=49963eed40d34adf&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8wMTQwODkzNjg1Njg4MzU1RjMwQ0Y4NDZFM0Y1NzM4NV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzkxNDhCRUMwMTM3NUVDMjlBREU3RjRDMjRBQTQyN0JFX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaGs6CrrujXCBUCKAJDMywXQCF3S8an754YGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af5q-ZVGY9Bo0sR353DGiOHFfbGNBbWWVtiOtlYVXz44Gw&oe=6A1EE280&bitrate=855675&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m412/AQM-kP4nHYoZRJZyHTIXA2da6TCx5G2U5H6S1cTVBPzHXWj-9Vmso4AjAUx4J6BjwsqW9U3eAVE4PNU0CBvfI6PqnpNtKzHaYhISvTKoVg.mp4?_nc_cat=108&_nc_sid=8bf8fe&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=4h8knn-ed-cQ7kNvwFhzvxU&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MjQ0NDkwNzc2MjY4MzA3NSwiYXNzZXRfYWdlX2RheXMiOjI5LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6OCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af7_1X42N0lbvWKXLfFMdGIKA3V9eOdrf212Eb81agRuSg&oe=6A1EE55A&bitrate=257841&tag=sve_sd"
+        }
+      ],
+      "isReshared": false,
+      "extraLinks": [],
+      "extraTexts": [],
+      "extraImages": [],
+      "extraVideos": [],
+      "countryIsoCode": null,
+      "brazilTaxId": null,
+      "additionalInfo": null,
+      "ecCertificates": []
+    },
+    "isActive": true,
+    "hasUserReported": false,
+    "reportCount": null,
+    "menuItems": [],
+    "stateMediaRunLabel": null,
+    "pageIsDeleted": false,
+    "pageName": "Remini - AI Photo Enhancer",
+    "impressionsWithIndex": {
+      "impressionsText": "<100",
+      "impressionsIndex": 0
+    },
+    "gatedType": "ELIGIBLE",
+    "categories": [
+      "UNKNOWN"
+    ],
+    "isAaaEligible": false,
+    "containsDigitalCreatedMedia": false,
+    "reachEstimate": null,
+    "currency": "",
+    "spend": null,
+    "endDate": 1779951600,
+    "publisherPlatform": [
+      "FACEBOOK",
+      "INSTAGRAM"
+    ],
+    "startDate": 1779951600,
+    "containsSensitiveContent": false,
+    "totalActiveTime": 37545,
+    "regionalRegulationData": {
+      "finserv": {
+        "isDeemedFinserv": false,
+        "isLimitedDelivery": false
+      },
+      "twAntiScam": {
+        "isLimitedDelivery": false
+      }
+    },
+    "hideDataStatus": "NONE",
+    "fevInfo": null,
+    "adId": null,
+    "targetedOrReachedCountries": []
+  },
+  {
+    "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered",
+    "pageInfo": {
+      "adLibrarySystemStatus": {
+        "systemStatus": {
+          "status": "NO_KNOWN_ISSUES",
+          "activeIssues": [
+            {
+              "product": "Ad Library",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library Report",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library API",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Branded Content",
+              "status": "NO_KNOWN_ISSUES"
+            }
+          ]
+        }
+      },
+      "xfbAdLibraryIsCaptchaRequired": false,
+      "page": null,
+      "adLibraryUser": null
+    },
+    "pageID": "105387374172299",
+    "adArchiveID": "1544098707231882",
+    "startDateFormatted": "2026-05-28T07:00:00.000Z",
+    "endDateFormatted": "2026-05-28T07:00:00.000Z",
+    "adArchiveId": "1544098707231882",
+    "collationCount": null,
+    "collationId": "831474559419694",
+    "pageId": "105387374172299",
+    "snapshot": {
+      "brandedContent": null,
+      "pageId": "105387374172299",
+      "pageIsDeleted": false,
+      "pageProfileUri": "https://www.facebook.com/ReminiApp/",
+      "rootResharedPost": null,
+      "byline": null,
+      "disclaimerLabel": null,
+      "pageName": "Remini - AI Photo Enhancer",
+      "pageProfilePictureUrl": "https://scontent-atl3-2.xx.fbcdn.net/v/t39.35426-6/683666762_972740385404365_6969868940204902332_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=100&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=X4CV2mThbKUQ7kNvwEM28vF&_nc_oc=AdqZDXPspOtuQExCC2mjIC7vCn23FbOzrL8X-kAW5ConAhuYIAY6zLZfJYAvMHYTzkI&_nc_zt=14&_nc_ht=scontent-atl3-2.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af59i-7JendUb6n2ASF4dA-5TXnrNk9zebOGXyYXXXHl3Q&oe=6A1EDAC0",
+      "event": null,
+      "caption": "apps.apple.com",
+      "ctaText": "Install app",
+      "cards": [],
+      "body": {
+        "text": "Side by side, picture perfect! Try the new Remini AI Photobooth"
+      },
+      "ctaType": "INSTALL_APP",
+      "displayFormat": "VIDEO",
+      "linkDescription": null,
+      "linkUrl": "https://x.bndspn.com/v1/fb-lw2th3?t_s=facebook%2Binstagram&t_cid={{campaign.id}}&t_cname={{campaign.name}}&t_agid={{adset.id}}&t_agname={{adset.name}}&t_crid={{ad.id}}&t_crname={{ad.name}}&rdr_from_js=true&rdr=https%3A%2F%2Fitunes.apple.com%2Fapp%2Fid1470373330%3Futm_source%3Dfacebook%2Binstagram%26utm_medium%3DFBIG%26utm_campaign%3DAuto_Product-Remini_AI-AIPhotos-US_Template-iOS-WebToApp_AutoBids%26utm_term%3DAuto_AI-AIPhotos-US_SideshiftPolaroid_34%26utm_content%3DAuto_RMN_SideshiftPolaroid_916_09s_EN_DaniCouple_v01.mov",
+      "images": [],
+      "pageCategories": [
+        "Interest"
+      ],
+      "pageLikeCount": 412131,
+      "title": "Try it now!",
+      "videos": [
+        {
+          "videoHdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m366/AQNrOIr2pF7jTM_VR_mUl9B9_jhz95CJ0hWHrR3P69dM0iznPJ47M51-z5104O6rJ6kjrSLXnPSvJ81OZD9zXz7P489a7z-U1JnRZ65oSS9dIA.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=qNbvM1MLmIoQ7kNvwGdDPrn&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjE0Nzg5MDAxMDk4OTA5NTQsImFzc2V0X2FnZV9kYXlzIjoyMjUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=93217ef56fff10d5&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9DQjQwNThBRkJDNzFCOUU4QTJCNjM0NDFGQUNEQkZBNF9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzE4NDRBMDVDMEMyMEU4NTFERUE3RkMzOTg5Rjc0MDkyX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaU1qq7qMOgBRUCKAJDMywXQCF3S8an754YGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af4wq3igT6BNQlCFs9xwP08Cn7-ATtb3B8l6iF5Nl3eSvg&oe=6A1EF8D3",
+          "videoPreviewImageUrl": "https://scontent-atl3-1.xx.fbcdn.net/v/t39.35426-6/683993739_1200650403120607_7772246927045331248_n.jpg?_nc_cat=105&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=X9QR_TMuzg4Q7kNvwHGzQzk&_nc_oc=AdqPekpjB5IgRC5HegEwK4aeFl5SxvXJra1W0m1ITX3lXwHZuVa1pQQQiZluUw_tRCA&_nc_zt=14&_nc_ht=scontent-atl3-1.xx&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&oh=00_Af5o22vi120gi5mlWFnj3hGZGSbyo8Z4j9YP4xT8zN77hA&oe=6A1F0446",
+          "videoSdUrl": "https://video-atl3-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQMn-7mwrrpPdMRyACl-CvNg1i3XnH8aEEQ8yrW_7yhFWSHa8zUVrKJV6uwyNDwfJC7E0rR5tagBcUyXIXxFSNrluW3TdvsZMV7eR5Yz1g.mp4?_nc_cat=103&_nc_sid=8bf8fe&_nc_ht=video-atl3-1.xx.fbcdn.net&_nc_ohc=pvNn1bizmnoQ7kNvwHDi8w0&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTQ3ODkwMDEwOTg5MDk1NCwiYXNzZXRfYWdlX2RheXMiOjIyNSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af7NX6JUY7U3zYkk3SDRmRmYpWGaDD6F5rSAoAWUHByvdQ&oe=6A1EF37F",
+          "watermarkedVideoHdUrl": "https://video-atl3-2.xx.fbcdn.net/o1/v/t2/f2/m366/AQMR_a4LHezyqazy5ge-0PIgy4wRE4hCWJoYplk6ilnQMnVliKUYqMT9FopBhfGOiMMwDltSA8-NPGHCh2kqXY-HQiDvPhNbKI5cBD9BMZweWQ.mp4?_nc_cat=100&_nc_sid=5e9851&_nc_ht=video-atl3-2.xx.fbcdn.net&_nc_ohc=j-TH1vvvZFAQ7kNvwGXiB5g&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjI0NDQ5MDc3NjI2ODMwNzUsImFzc2V0X2FnZV9kYXlzIjoyOSwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjgsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=49963eed40d34adf&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8wMTQwODkzNjg1Njg4MzU1RjMwQ0Y4NDZFM0Y1NzM4NV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzkxNDhCRUMwMTM3NUVDMjlBREU3RjRDMjRBQTQyN0JFX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaGs6CrrujXCBUCKAJDMywXQCF3S8an754YGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af5q-ZVGY9Bo0sR353DGiOHFfbGNBbWWVtiOtlYVXz44Gw&oe=6A1EE280&bitrate=855675&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-atl3-3.xx.fbcdn.net/o1/v/t2/f2/m412/AQM-kP4nHYoZRJZyHTIXA2da6TCx5G2U5H6S1cTVBPzHXWj-9Vmso4AjAUx4J6BjwsqW9U3eAVE4PNU0CBvfI6PqnpNtKzHaYhISvTKoVg.mp4?_nc_cat=108&_nc_sid=8bf8fe&_nc_ht=video-atl3-3.xx.fbcdn.net&_nc_ohc=4h8knn-ed-cQ7kNvwFhzvxU&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MjQ0NDkwNzc2MjY4MzA3NSwiYXNzZXRfYWdlX2RheXMiOjI5LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6OCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=xwpIBlMrQUR_1TLqg-kK5Q&_nc_ss=72289&_nc_zt=28&oh=00_Af7_1X42N0lbvWKXLfFMdGIKA3V9eOdrf212Eb81agRuSg&oe=6A1EE55A&bitrate=257841&tag=sve_sd"
+        }
+      ],
+      "isReshared": false,
+      "extraLinks": [],
+      "extraTexts": [],
+      "extraImages": [],
+      "extraVideos": [],
+      "countryIsoCode": null,
+      "brazilTaxId": null,
+      "additionalInfo": null,
+      "ecCertificates": []
+    },
+    "isActive": true,
+    "hasUserReported": false,
+    "reportCount": null,
+    "menuItems": [],
+    "stateMediaRunLabel": null,
+    "pageIsDeleted": false,
+    "pageName": "Remini - AI Photo Enhancer",
+    "impressionsWithIndex": {
+      "impressionsText": "<100",
+      "impressionsIndex": 0
+    },
+    "gatedType": "ELIGIBLE",
+    "categories": [
+      "UNKNOWN"
+    ],
+    "isAaaEligible": false,
+    "containsDigitalCreatedMedia": false,
+    "reachEstimate": null,
+    "currency": "",
+    "spend": null,
+    "endDate": 1779951600,
+    "publisherPlatform": [
+      "FACEBOOK",
+      "INSTAGRAM"
+    ],
+    "startDate": 1779951600,
+    "containsSensitiveContent": false,
+    "totalActiveTime": 65001,
+    "regionalRegulationData": {
+      "finserv": {
+        "isDeemedFinserv": false,
+        "isLimitedDelivery": false
+      },
+      "twAntiScam": {
+        "isLimitedDelivery": false
+      }
+    },
+    "hideDataStatus": "NONE",
+    "fevInfo": null,
+    "adId": null,
+    "targetedOrReachedCountries": []
+  },
+  {
+    "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Glam%20AI%20K-pop%20idol&search_type=keyword_unordered",
+    "pageInfo": {
+      "adLibrarySystemStatus": {
+        "systemStatus": {
+          "status": "NO_KNOWN_ISSUES",
+          "activeIssues": [
+            {
+              "product": "Ad Library",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library Report",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library API",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Branded Content",
+              "status": "NO_KNOWN_ISSUES"
+            }
+          ]
+        }
+      },
+      "xfbAdLibraryIsCaptchaRequired": false,
+      "page": null,
+      "adLibraryUser": null
+    },
+    "pageID": "745273362008695",
+    "adArchiveID": "861620969768701",
+    "startDateFormatted": "2026-05-24T07:00:00.000Z",
+    "endDateFormatted": "2026-05-28T07:00:00.000Z",
+    "adArchiveId": "861620969768701",
+    "collationCount": null,
+    "collationId": null,
+    "pageId": "745273362008695",
+    "snapshot": {
+      "brandedContent": null,
+      "pageId": "745273362008695",
+      "pageIsDeleted": false,
+      "pageProfileUri": "https://www.facebook.com/61579875924753/",
+      "rootResharedPost": null,
+      "byline": null,
+      "disclaimerLabel": null,
+      "pageName": "Glam AI: AI Content Maker",
+      "pageProfilePictureUrl": "https://scontent-sjc6-1.xx.fbcdn.net/v/t39.35426-6/704752053_1567290751255631_1125186288978802482_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=100&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=5Zux57cU1vcQ7kNvwFdsrUy&_nc_oc=AdoHX6coCD1xkixZvCZ71AGDB5rGcUiGrNPdQyC42MlttFhF9GYW5o-DJ2HLfUw1u3U&_nc_zt=14&_nc_ht=scontent-sjc6-1.xx&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&oh=00_Af7D95HlYFaIDEnmqnu9Gf2Stz548R20sqkKiQ9J-zvU2Q&oe=6A1ED88E",
+      "event": null,
+      "caption": "glam.ai",
+      "ctaText": "Download",
+      "cards": [
+        {
+          "body": "💗 POV: you uploaded one selfie and now you're performing in front of a sold out arena 🎤 One photo and Glam AI makes it happen. Download and try yours!",
+          "ctaType": "DOWNLOAD",
+          "caption": "glam.ai",
+          "linkDescription": " ",
+          "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+          "title": "Your K-pop idol era just dropped 🎤",
+          "ctaText": "Download",
+          "videoHdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQOGYUo825RFYxGIaRPb5ejbT_OZ8nw3tFET0XuDfuDZbBNiDSGy_qPpXlx5sj9L9Yg0197wYpXYQ2LiTrAjFEwmtcpvlqtFdvasVEgTERITJQ.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=UP9PpzA88YgQ7kNvwHpeNB1&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjgzODg5MTAyNTUxMzA1OCwiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=52500cd927b42473&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9CMzRGRkEyOUU5M0EwODYwRDVEMjE5OUQ1REU4NjNCRl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzMwNDE4QkQwNTI1MUY5Njk1RUJEOUZDM0ZDRDk1QzgwX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbE6aWZ8b39AhUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af5-Kxg8RmxPTZc-d0DR9QejsP9w7BjL2im2f7FTtil5uA&oe=6A1EFFC3",
+          "videoPreviewImageUrl": "https://scontent-sjc6-1.xx.fbcdn.net/v/t39.35426-6/705939204_1491054969146472_7696826388029997856_n.jpg?_nc_cat=109&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=epv9yIObGXsQ7kNvwHTQgyd&_nc_oc=AdqRnyw8Z-K8gqQW_gha-ZBcUyYQFUGf8k004zaGJOK_CY7AqsjngzUflgYFZcLsf5o&_nc_zt=14&_nc_ht=scontent-sjc6-1.xx&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&oh=00_Af5Q11_s30OwFH5m__ggfbe0pGmfT93lJ4Ao9l8JuzoqWQ&oe=6A1EDEA4",
+          "videoSdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQON7e_tPO4wb50-9o1nC_WztAmiWsKXh6J4iIW_lrTpPF1La-8jfxGbSbB8J3HT1LfG1d14AnG7_5jBGJpXq-NwZdG9dplETbwkkHFruw.mp4?_nc_cat=104&_nc_sid=8bf8fe&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=4o_JIsAUS7sQ7kNvwHAd8-2&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6ODM4ODkxMDI1NTEzMDU4LCJhc3NldF9hZ2VfZGF5cyI6NCwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjEzLCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af6XfjrDjEBLJ-ddaAVZbxQcx10seQQJbdWO3fgGSOfdrw&oe=6A1F05E6",
+          "watermarkedVideoHdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQOOywcLqMd2DgDY6U9WcNQM2GT8nXb8mCd63GW0XRdqGT9CfvbujGvz6HO3rW8RDY3dwnbab0J67u4mPNooVjh3y-xYRrrlbMP7fnvPNQWpKw.mp4?_nc_cat=102&_nc_sid=5e9851&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=-IFQhXBgRPEQ7kNvwFv9Wek&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjE0NjIwMzc2MjU2NzI2MzQsImFzc2V0X2FnZV9kYXlzIjo0LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6MTMsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=5603d023de2416b9&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8xNDRGMTlCMUM2NTBEQ0IxMDgyNTNDM0EyRkNEODZBMV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzYxNDc4QTk0Q0Y2NTQwMDYyNTY5ODhFNEVDRjUyNjk5X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACb0zpyV5e2YBRUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af6aeFgB3FLSn8lFbUysYqb6EpBWeoLwYf-vA6VTQnYq-g&oe=6A1EE59A&bitrate=1651954&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQO44BTUfKb5XwJv0k15cTC5WxQAqKAStSfeWoxwtIxSyLqr5FeKsqZeZ6Fnf5bwsTXy4RyK2zsDcf6bPGXLyRfpr730c4368aHQMuRkng.mp4?_nc_cat=102&_nc_sid=8bf8fe&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=0oLmAKOxiOQQ7kNvwEgYc0b&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTQ2MjAzNzYyNTY3MjYzNCwiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af5B6xHvKj1x6X6RIUSv3vFVFLeqruxX_6oE-DJeXK8JIw&oe=6A1EF9AC&bitrate=416662&tag=sve_sd",
+          "imageCrops": [],
+          "originalImageUrl": null,
+          "resizedImageUrl": null,
+          "watermarkedResizedImageUrl": null
+        },
+        {
+          "body": "💗 POV: you uploaded one selfie and now you're performing in front of a sold out arena 🎤 One photo and Glam AI makes it happen. Download and try yours!",
+          "ctaType": "DOWNLOAD",
+          "caption": "glam.ai",
+          "linkDescription": " ",
+          "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+          "title": "Your K-pop idol era just dropped 🎤",
+          "ctaText": "Download",
+          "videoHdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQMnMhPtI6bKsoQ_pw5LMbpsvFu9gzPhw1gDks_ZV86pEx7_OtfDnJzKE3atBpD5KghBXNtxEACUenAcm3qovNZbbYWHF3fTTcwwBv_Nqa2LOA.mp4?_nc_cat=111&_nc_sid=5e9851&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=jvxiUinXzHEQ7kNvwGYdfU-&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjIxMzg0MzQ2NDAwNjM0ODYsImFzc2V0X2FnZV9kYXlzIjo0LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6MTMsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=c7e16fa05e000b03&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9BQzQ3MzI2QTIxQTQ3RTM5MTcxMTE3QjJCOTcxMEFBNl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzAwNDNCQTE0ODlFQUM5REFDMzFEOUI3OTFERTU0MDkyX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACb8r8XRo7nMBxUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af7q4rHv9GxraKAXD8c17dZnDY2qeYKAAZOuPia1d3tgPw&oe=6A1ED585",
+          "videoPreviewImageUrl": "https://scontent-sjc6-1.xx.fbcdn.net/v/t39.35426-6/705031857_2225478234872659_121761560671704925_n.jpg?_nc_cat=111&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=1Qw4oXgB5J8Q7kNvwEl05ks&_nc_oc=AdoZcIj5LIcgTIPOU5oXYEEupffMQ0-WZCt-RfRMW42QBP77mcfqpx9hOZD1P7y74SY&_nc_zt=14&_nc_ht=scontent-sjc6-1.xx&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&oh=00_Af4_OBiaSC_l4YzN7rPMMtJTlU3vM_GMI692KH-vmF3ztg&oe=6A1EFBF6",
+          "videoSdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQPgFJ3yhJ3Ap-J_Wi9neuu4mXpgpxr2qNxnBnMfAvtzYvWTKr33WvSfpxQJu9y5oDFH27ldMRJrRZBOUwrRqdiE_Q8sJyy79exmgYYFrQ.mp4?_nc_cat=102&_nc_sid=8bf8fe&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=DbFNrGqNezgQ7kNvwGVsN3K&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MjEzODQzNDY0MDA2MzQ4NiwiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af50CvCupQIS3WCteI3qdq9oWCXXFRj2rMCA-z18WPANwA&oe=6A1F0574",
+          "watermarkedVideoHdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQNNy0uQIwuFh5OirkUFoeSK5E50tm98IGEOZ5zWx8twBHSwmTr8ZZCGD6ytgNXLoftIsOl9360fs9rmQHQBvzwyW3XHXMd8bZshHyj841K93g.mp4?_nc_cat=104&_nc_sid=5e9851&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=U70IeW8Ws6cQ7kNvwGrqcfg&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjgzMzU3OTgwNjA2OTMzMywiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=cbfca1208638f0e3&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9CQzRBNEM4QjVGNjk5QjM5QUQ5ODQ4NENBMkQ0QjM4OV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzRFNDZEN0IxOEE0QTU3NTY5QTJBMkIzNzcwMTY2OUE5X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaqydzD3Yj7AhUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af7Jiq532u0gAYsYU-dOpSnMdQef_-DiWpN_PFdGRVutWA&oe=6A1EE4FC&bitrate=1101285&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-sjc3-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQMwqMqBsKkehSsQgmSIJ_dWWkQuuO0Bv38cXaKu1n91R7zrgkSRoaDkN_gBf__vGcgWS__jV-EL_8HOcWxw-vijZszhZ8CMsGksoe0oCg.mp4?_nc_cat=106&_nc_sid=8bf8fe&_nc_ht=video-sjc3-1.xx.fbcdn.net&_nc_ohc=0SbQdfDd0NsQ7kNvwH_t6EJ&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6ODMzNTc5ODA2MDY5MzMzLCJhc3NldF9hZ2VfZGF5cyI6NCwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjEzLCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af68aHfOnq9IcLCM4PNYoH77ZYs4oZZrnS1NuRuYTruLVw&oe=6A1F09B8&bitrate=296583&tag=sve_sd",
+          "imageCrops": [],
+          "originalImageUrl": null,
+          "resizedImageUrl": null,
+          "watermarkedResizedImageUrl": null
+        }
+      ],
+      "body": {
+        "text": "{{product.brand}}"
+      },
+      "ctaType": "DOWNLOAD",
+      "displayFormat": "DCO",
+      "linkDescription": "{{product.description}}",
+      "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+      "images": [],
+      "pageCategories": [
+        "Photo & Video"
+      ],
+      "pageLikeCount": 1826,
+      "title": "{{product.name}}",
+      "videos": [],
+      "isReshared": false,
+      "extraLinks": [],
+      "extraTexts": [],
+      "extraImages": [],
+      "extraVideos": [],
+      "countryIsoCode": null,
+      "brazilTaxId": null,
+      "additionalInfo": null,
+      "ecCertificates": []
+    },
+    "isActive": true,
+    "hasUserReported": false,
+    "reportCount": null,
+    "menuItems": [],
+    "stateMediaRunLabel": null,
+    "pageIsDeleted": false,
+    "pageName": "Glam AI: AI Content Maker",
+    "impressionsWithIndex": {
+      "impressionsText": null,
+      "impressionsIndex": -1
+    },
+    "gatedType": "ELIGIBLE",
+    "categories": [
+      "UNKNOWN"
+    ],
+    "isAaaEligible": true,
+    "containsDigitalCreatedMedia": false,
+    "reachEstimate": null,
+    "currency": "",
+    "spend": null,
+    "endDate": 1779951600,
+    "publisherPlatform": [
+      "FACEBOOK",
+      "INSTAGRAM",
+      "THREADS"
+    ],
+    "startDate": 1779606000,
+    "containsSensitiveContent": false,
+    "totalActiveTime": null,
+    "regionalRegulationData": {
+      "finserv": {
+        "isDeemedFinserv": false,
+        "isLimitedDelivery": false
+      },
+      "twAntiScam": {
+        "isLimitedDelivery": false
+      }
+    },
+    "hideDataStatus": "NONE",
+    "fevInfo": null,
+    "adId": null,
+    "targetedOrReachedCountries": []
+  },
+  {
+    "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Glam%20AI%20K-pop%20idol&search_type=keyword_unordered",
+    "pageInfo": {
+      "adLibrarySystemStatus": {
+        "systemStatus": {
+          "status": "NO_KNOWN_ISSUES",
+          "activeIssues": [
+            {
+              "product": "Ad Library",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library Report",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Ad Library API",
+              "status": "NO_KNOWN_ISSUES"
+            },
+            {
+              "product": "Branded Content",
+              "status": "NO_KNOWN_ISSUES"
+            }
+          ]
+        }
+      },
+      "xfbAdLibraryIsCaptchaRequired": false,
+      "page": null,
+      "adLibraryUser": null
+    },
+    "pageID": "745273362008695",
+    "adArchiveID": "1919603845414979",
+    "startDateFormatted": "2026-05-24T07:00:00.000Z",
+    "endDateFormatted": "2026-05-28T07:00:00.000Z",
+    "adArchiveId": "1919603845414979",
+    "collationCount": null,
+    "collationId": null,
+    "pageId": "745273362008695",
+    "snapshot": {
+      "brandedContent": null,
+      "pageId": "745273362008695",
+      "pageIsDeleted": false,
+      "pageProfileUri": "https://www.facebook.com/61579875924753/",
+      "rootResharedPost": null,
+      "byline": null,
+      "disclaimerLabel": null,
+      "pageName": "Glam AI: AI Content Maker",
+      "pageProfilePictureUrl": "https://scontent-sjc3-1.xx.fbcdn.net/v/t39.35426-6/706829924_2249966442200910_1756532186736143068_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=103&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=Mp9F-7fNV9MQ7kNvwHtoboR&_nc_oc=AdqdZCx4735vtbkhnsOg35y6H-dPqnd-FgZinZz7WiDm0MBTBHuhVP1pstyKf7S4GGg&_nc_zt=14&_nc_ht=scontent-sjc3-1.xx&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&oh=00_Af64sjeJcI86bsb3z0rT7RrQtmnosclWVDrFuas2bnseWg&oe=6A1EF9A6",
+      "event": null,
+      "caption": "glam.ai",
+      "ctaText": "Download",
+      "cards": [
+        {
+          "body": "💗 POV: you uploaded one selfie and now you're performing in front of a sold out arena 🎤 One photo and Glam AI makes it happen. Download and try yours!",
+          "ctaType": "DOWNLOAD",
+          "caption": "glam.ai",
+          "linkDescription": " ",
+          "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+          "title": "Your K-pop idol era just dropped 🎤",
+          "ctaText": "Download",
+          "videoHdUrl": "https://video-sjc3-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQPFMAj9_qrHd8zXR7HTCP5kcZuXGoHzVRVVP0EeBrONFBeRQ5lOoG3IwyOd8cZtcbhG8qBbt_TXtIVYX_vxFJAo1FUD22v7nFVp_hiPy1Ad7Q.mp4?_nc_cat=103&_nc_sid=5e9851&_nc_ht=video-sjc3-1.xx.fbcdn.net&_nc_ohc=OBKW7ajrD9MQ7kNvwGiaxRf&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjEzOTcxMzIzNjU1NjE3MTEsImFzc2V0X2FnZV9kYXlzIjo0LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6MTMsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=df51876b5c9fc329&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8zMzRDNkUwMTM3MDYwM0YxNzhCQkFFMDE5RkQyRUM4QV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzI3NEM0RUU5NEMxQ0ZEMjM5OEVCQUNGNkNDNkQxQjgxX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbe_dOl56v7BBUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af4pkw0iZaR5STcU_agk6hSJGlIabcmtGvyxda2m_qaRdQ&oe=6A1EF8F9",
+          "videoPreviewImageUrl": "https://scontent-sjc6-1.xx.fbcdn.net/v/t39.35426-6/707030551_3454956977986250_267833859172685608_n.jpg?_nc_cat=107&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=TIVY1AT2RwYQ7kNvwHgQG1Z&_nc_oc=AdonfsZ2usNm42xjMiB-A7KPk0dyiPG_jIW5RFJdjRPzQmKy83WtGFGMfXpkAtKGljY&_nc_zt=14&_nc_ht=scontent-sjc6-1.xx&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&oh=00_Af4KEax3v1eiA1DJZjrkwj-8F7NfsweMGIRaSiPBpOEVOQ&oe=6A1F06D5",
+          "videoSdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQMt2MCHi7fotH5Pt8VF6muVHK5rvfhxqJIY0cWJmIoxtlX6Iofwe-L4kU5-Jc3SrFjdbZWTYZD9QPV77l1LcFLZ8-7VCUWYK4NkRmmHng.mp4?_nc_cat=108&_nc_sid=8bf8fe&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=NcH-jFtgpxMQ7kNvwEWWm2n&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTM5NzEzMjM2NTU2MTcxMSwiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af5FQQmTHp806miSydPNgJoDWWbayrjGc1mX24_mQZ1CtA&oe=6A1F049E",
+          "watermarkedVideoHdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQNZ37cc-aRxIAqQ-ivbUxNSZxQKh4UCpJdMM9mTHjFZC6331ilYg_GqJQ-QztyvHT3dsXjoSqxqY2EV72P1uoG5jw5cg6QtzlV8CwO9YONRkg.mp4?_nc_cat=111&_nc_sid=5e9851&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=Ev1vTnI3zaoQ7kNvwF3be3B&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjk2OTIxNzM0NTk5ODc4NiwiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=1807956b248b288a&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8xNDQ0QTVENDczODlBMTU0N0UxMjI3QjI4QzUzOUZBNF9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50L0U1NEUxMTU0RTc2NUM2OTM1RkEwQjMyREE1RkJDQ0EyX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaEv_L579-4AxUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af7EZ1Xc1L14UcJ5qHjziLN0E0QQgJm3aY6JUfgu1i7PSQ&oe=6A1F05FD&bitrate=1579079&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQOnKENEUoc_J3dxq4etvD_a3-LbEBqREq9kbQ4ayTwH_NmnXjSZPcEMx_GEeGL8o4_PTMGeXLcqbtAy4LZJlCDJgTGcClaa34k_fVOnpA.mp4?_nc_cat=107&_nc_sid=8bf8fe&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=Z7mk-NlgI28Q7kNvwEldWrj&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6OTY5MjE3MzQ1OTk4Nzg2LCJhc3NldF9hZ2VfZGF5cyI6NCwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjEzLCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af5tNyDgQ6nRqGPAUudVP1_q8dPwWE5y7SsHzR7csQo06w&oe=6A1ED47B&bitrate=402931&tag=sve_sd",
+          "imageCrops": [],
+          "originalImageUrl": null,
+          "resizedImageUrl": null,
+          "watermarkedResizedImageUrl": null
+        },
+        {
+          "body": "💗 POV: you uploaded one selfie and now you're performing in front of a sold out arena 🎤 One photo and Glam AI makes it happen. Download and try yours!",
+          "ctaType": "DOWNLOAD",
+          "caption": "glam.ai",
+          "linkDescription": " ",
+          "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+          "title": "Your K-pop idol era just dropped 🎤",
+          "ctaText": "Download",
+          "videoHdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQN0n_uA8a0Uwj3upEUIlHtEAr7mF-2fbRTlflQIY9oj4jWTZWPVpZxgSyoY_Bpml6Q1LcViRuO9Ff7XwfaV4UsoldIp5yf0dIjT5J57Jrue-g.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=Hl5miKrTuGwQ7kNvwFFw-Ip&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjE5ODAxODMyNzkzNzA5NzUsImFzc2V0X2FnZV9kYXlzIjo0LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6MTMsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=393b89fd26c2ecc4&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC85RTRFNEMzNTA4MDU5RDQ3REE2ODMzRkIwOTIzMDJBMl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50L0E4NDQ2NDM0QTM0OTU2QjM3M0M4OTE2NTdEQkVDMTg5X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACa-i6iP672EBxUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af7qh6Y_XDTXy8Pjz_so8TtQXkl0ELPNiZUlqRxfviE4Qg&oe=6A1F091F",
+          "videoPreviewImageUrl": "https://scontent-sjc3-1.xx.fbcdn.net/v/t39.35426-6/706947614_2199119977586841_7608400636453069466_n.jpg?_nc_cat=105&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=dmFnHaZo0XIQ7kNvwFnL56L&_nc_oc=AdpdS22ETj6VKxneAfEbwJTixC5Vpm-3JJbhxVEVO5JHHKAP1WOKE4iCHdBwUEATF-g&_nc_zt=14&_nc_ht=scontent-sjc3-1.xx&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&oh=00_Af62AZ1laoSACGmuw_E2AaiQWMGhDnxrhb-34rrEJYrtfA&oe=6A1ED46C",
+          "videoSdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQOzFnmnO7wQkAyF1lZEB1AojNQQUbhvV0D52R365eTu0E2XAZohwmoHZ8XbtpowPQFXT27WzanPwyab7o-jAUgsG6oF65uEi6mR9_MNFQ.mp4?_nc_cat=101&_nc_sid=8bf8fe&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=6RXzgDyinN0Q7kNvwF_8m30&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTk4MDE4MzI3OTM3MDk3NSwiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af6x1h_z_doKe0NG4D987Qxc_b-a8ThKEz5SbdAR1SGOTQ&oe=6A1EE3DD",
+          "watermarkedVideoHdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQOP79N2DuJGOCCL_O17V9jwL7pcBVVyeX-AtNYvJqqVD1q681ABZQHKwHfS2ZCvzxuvzA3YS-Z_-B5nZdyAuMzCTkPz1UQ7wjmw1IaH44d-rQ.mp4?_nc_cat=111&_nc_sid=5e9851&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=tzPNbBKWij0Q7kNvwEuVkpP&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjk5OTcyMDg1NTk0NjgwMiwiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=d05e10c03018ca9c&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC83RjQ4N0YzRjdGMUZCMkU1RjFGNTgzMTA1Qjc5Njc5Nl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzdENDg1N0FFQTA0MkQxNzlDRjgwNjU2NDhBMUE1REE0X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbkmPLntM_GAxUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af6KP-z7DOV6W9wEybrs_T6zS1o_Qo5sQ34RD9ZETjroog&oe=6A1EE79D&bitrate=1061137&tag=dash_h264-basic-gen2_720p",
+          "watermarkedVideoSdUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m412/AQPl2eBCMUt_eves2C-apMtDozgaXiz3eXN9VJOO2efB3hOsIqlK5YQn4m72XyMyPdqJMRv2Kgd1fLwqcSumsv-1b-wILHNpFvSpfUzfOw.mp4?_nc_cat=107&_nc_sid=8bf8fe&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=QHyjpY5wvK8Q7kNvwEdMUQD&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6OTk5NzIwODU1OTQ2ODAyLCJhc3NldF9hZ2VfZGF5cyI6NCwidmlfdXNlY2FzZV9pZCI6MTAxMzksImR1cmF0aW9uX3MiOjEzLCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af4641GMzn2vMSw1JSldKueMKlfBrpdxpxUP0lw0ZqyCwg&oe=6A1EF8FB&bitrate=282578&tag=sve_sd",
+          "imageCrops": [],
+          "originalImageUrl": null,
+          "resizedImageUrl": null,
+          "watermarkedResizedImageUrl": null
+        }
+      ],
+      "body": {
+        "text": "{{product.brand}}"
+      },
+      "ctaType": "DOWNLOAD",
+      "displayFormat": "DCO",
+      "linkDescription": "{{product.description}}",
+      "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+      "images": [],
+      "pageCategories": [
+        "Photo & Video"
+      ],
+      "pageLikeCount": 1826,
+      "title": "{{product.name}}",
+      "videos": [],
+      "isReshared": false,
+      "extraLinks": [],
+      "extraTexts": [],
+      "extraImages": [],
+      "extraVideos": [],
+      "countryIsoCode": null,
+      "brazilTaxId": null,
+      "additionalInfo": null,
+      "ecCertificates": []
+    },
+    "isActive": true,
+    "hasUserReported": false,
+    "reportCount": null,
+    "menuItems": [],
+    "stateMediaRunLabel": null,
+    "pageIsDeleted": false,
+    "pageName": "Glam AI: AI Content Maker",
+    "impressionsWithIndex": {
+      "impressionsText": null,
+      "impressionsIndex": -1
+    },
+    "gatedType": "ELIGIBLE",
+    "categories": [
+      "UNKNOWN"
+    ],
+    "isAaaEligible": true,
+    "containsDigitalCreatedMedia": false,
+    "reachEstimate": null,
+    "currency": "",
+    "spend": null,
+    "endDate": 1779951600,
+    "publisherPlatform": [
+      "FACEBOOK",
+      "INSTAGRAM",
+      "THREADS"
+    ],
+    "startDate": 1779606000,
+    "containsSensitiveContent": false,
+    "totalActiveTime": null,
+    "regionalRegulationData": {
+      "finserv": {
+        "isDeemedFinserv": false,
+        "isLimitedDelivery": false
+      },
+      "twAntiScam": {
+        "isLimitedDelivery": false
+      }
+    },
+    "hideDataStatus": "NONE",
+    "fevInfo": null,
+    "adId": null,
+    "targetedOrReachedCountries": []
+  }
+]

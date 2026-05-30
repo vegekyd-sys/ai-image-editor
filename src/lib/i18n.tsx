@@ -27,6 +27,11 @@ const translations: Record<Locale, Translations> = { zh, en: en as unknown as Tr
 
 function detectLocale(): Locale {
   if (typeof window === 'undefined') return 'zh';
+  const fromUrl = new URLSearchParams(window.location.search).get('locale') as Locale | null;
+  if (fromUrl === 'zh' || fromUrl === 'en') {
+    localStorage.setItem('locale', fromUrl);
+    return fromUrl;
+  }
   const stored = localStorage.getItem('locale') as Locale | null;
   if (stored === 'zh' || stored === 'en') return stored;
   const lang = navigator.language || '';
@@ -43,7 +48,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Hydrate from localStorage / navigator on client, then sync to cookie
     const detected = detectLocale();
-    setLocaleState(detected);
+    queueMicrotask(() => setLocaleState(detected));
     setCookieLocale(detected);
   }, []);
 

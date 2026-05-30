@@ -9,6 +9,7 @@ import { isHeicFile } from '@/lib/imageUtils'
 import { useLocale } from '@/lib/i18n'
 import { createProject } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
+import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
@@ -140,7 +141,9 @@ function HomePageInner() {
         fetch('/api/auth/activate', { method: 'POST' })
           .then(r => r.json())
           .then(d => {
+            if (d.isNew) trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
             if (d.credits > 0) {
+              trackMetaEvent('StartTrial', { credits: d.credits }, createMetaEventId('starttrial'))
               setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
             } else if (d.isNew === false) {
@@ -219,6 +222,7 @@ function HomePageInner() {
 
 
   const handleSkillUpload = useCallback(async (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.zip')) return
     setSkillUploading(true)
     setInstallingSkill(true)
     const form = new FormData()
@@ -742,6 +746,17 @@ function HomePageInner() {
       `}</style>
 
       <div className="mkr-page" style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <input
+          ref={skillFileRef}
+          type="file"
+          accept=".zip,application/zip,application/x-zip-compressed"
+          style={{ display: 'none' }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0]
+            if (file) await handleSkillUpload(file)
+            e.target.value = ''
+          }}
+        />
 
         {/* Ambient glow */}
         <div style={{
@@ -810,8 +825,6 @@ function HomePageInner() {
               installingSkill={installingSkill}
               overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}
               skillDirection="down"
-              skillFileRef={skillFileRef}
-              onSkillFileChange={handleSkillUpload}
               dragOver={dragOver}
               onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
@@ -966,8 +979,6 @@ function HomePageInner() {
               installingSkill={installingSkill}
               overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}
               skillDirection="up"
-              skillFileRef={skillFileRef}
-              onSkillFileChange={handleSkillUpload}
               dragOver={dragOver}
               onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
