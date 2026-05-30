@@ -94,8 +94,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(chat).toContain('inputBarH + effectiveKbInset');
   });
 
-  it('uses a native interactive edge gesture to drive SPA history', () => {
+  it('uses an iOS-only WebView edge gesture to drive SPA history without blocking touches', () => {
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
+    const bootstrap = fs.readFileSync(path.join(root, 'src/components/NativeAppBootstrap.tsx'), 'utf8');
     const bridge = fs.readFileSync(path.join(root, 'ios/App/App/MakaronBridgeViewController.swift'), 'utf8');
     const storyboard = fs.readFileSync(path.join(root, 'ios/App/App/Base.lproj/Main.storyboard'), 'utf8');
     const project = fs.readFileSync(path.join(root, 'ios/App/App.xcodeproj/project.pbxproj'), 'utf8');
@@ -104,15 +105,13 @@ describe('iOS App Store readiness guardrails', () => {
     expect(editor).toContain("viewMode === 'cui'");
     expect(editor).not.toContain('edgeSwipeBackRef');
     expect(editor).not.toContain('makaron-native-back');
-    expect(bridge).toContain('UIPanGestureRecognizer');
-    expect(bridge).toContain('interactiveBackEdgeWidth');
-    expect(bridge).toContain('interactiveBackEdgeView');
-    expect(bridge).toContain('cancelsTouchesInView = true');
-    expect(bridge).toContain('snapshotView(afterScreenUpdates: false)');
-    expect(bridge).toContain('window.history.back();');
-    expect(bridge).toContain('window.history.forward();');
-    expect(bridge).toContain('finishInteractiveBack');
-    expect(bridge).toContain('cancelInteractiveBack');
+    expect(bootstrap).toContain('installIOSBackSwipe');
+    expect(bootstrap).toContain('IOS_BACK_SWIPE_EDGE_PX');
+    expect(bootstrap).toContain("document.addEventListener('touchstart'");
+    expect(bootstrap).toContain("document.addEventListener('touchmove'");
+    expect(bootstrap).toContain('window.history.back()');
+    expect(bridge).not.toContain('interactiveBackEdgeView');
+    expect(bridge).not.toContain('UIPanGestureRecognizer');
     expect(bridge).toContain('allowsBackForwardNavigationGestures = false');
     expect(bridge).toContain('contentInsetAdjustmentBehavior = .never');
     expect(bridge).not.toContain('dispatchNativeBackEvent');
