@@ -48,7 +48,6 @@ import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEP
 
 export type { AnimationState } from '@/lib/editor/types';
 
-
 interface EditorProps {
   projectId?: string;
   initialSnapshots?: Snapshot[];
@@ -131,6 +130,7 @@ export default function Editor({
   const [cuiPanActive, setCuiPanActive] = useState(false);
   const [cuiPanSettling, setCuiPanSettling] = useState(false);
   const cuiPanRef = useRef({ tracking: false, startX: 0, startY: 0, lastX: 0, startTime: 0, locked: false });
+
   // Annotation (paintbrush) mode
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationTool, setAnnotationTool] = useState<'brush' | 'rect' | 'text'>('brush');

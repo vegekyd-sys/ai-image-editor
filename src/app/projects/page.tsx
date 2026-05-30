@@ -145,6 +145,10 @@ function ProjectsPageInner() {
   const [navigating, setNavigating] = useState(false)
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
 
+  const handleProjectNavigate = useCallback(() => {
+    setNavigating(true)
+  }, [])
+
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -617,7 +621,7 @@ function ProjectsPageInner() {
                   project={project}
                   index={i}
                   onMore={(e) => openActionSheet(e, project)}
-                  onNavigate={() => setNavigating(true)}
+                  onNavigate={handleProjectNavigate}
                 />
               ))}
             </div>

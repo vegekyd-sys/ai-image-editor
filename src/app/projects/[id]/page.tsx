@@ -10,6 +10,8 @@ import { createClient } from '@/lib/supabase/client'
 import { createProject } from '@/lib/createProject'
 import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
 
+const IOS_PROJECT_BACK_EVENT = 'makaron-ios-project-back'
+
 export default function ProjectPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
@@ -89,6 +91,18 @@ export default function ProjectPage() {
     return sync !== null && (sync.snapshots as Snapshot[]).length > 0
   })
   const shownRef = useRef(loaded)
+
+  useEffect(() => {
+    const handleIOSProjectBack = (event: Event) => {
+      event.preventDefault()
+      if (navigatingRef.current) return
+      navigatingRef.current = true
+      router.replace(user ? '/projects' : '/home')
+    }
+
+    window.addEventListener(IOS_PROJECT_BACK_EVENT, handleIOSProjectBack)
+    return () => window.removeEventListener(IOS_PROJECT_BACK_EVENT, handleIOSProjectBack)
+  }, [router, user])
 
   // Check project visibility (works for both authenticated and unauthenticated users)
   useEffect(() => {

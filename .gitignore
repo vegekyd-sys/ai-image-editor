@@ -52,6 +52,7 @@ next-env.d.ts
 !src/**/*.png
 !public/**/*.jpg
 !public/**/*.png
+!ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
 
 # dev scripts
 /scripts/

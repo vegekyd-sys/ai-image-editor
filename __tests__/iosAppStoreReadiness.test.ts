@@ -70,6 +70,7 @@ describe('iOS App Store readiness guardrails', () => {
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const topBar = fs.readFileSync(path.join(root, 'src/components/TopBar.tsx'), 'utf8');
+    const changelog = fs.readFileSync(path.join(root, 'src/components/Changelog.tsx'), 'utf8');
     expect(globals).toContain('.makaron-ios-app body');
     expect(globals).toContain('padding: 0');
     expect(globals).toContain('.makaron-ios-app .makaron-editor-shell');
@@ -82,7 +83,11 @@ describe('iOS App Store readiness guardrails', () => {
     expect(editor).toContain('makaron-editor-bottom-bar');
     expect(projects).toContain('makaron-projects-page');
     expect(projects).toContain('makaron-projects-hero');
+    expect(projects).not.toContain('makaron-ios-projects-snapshot-html');
     expect(topBar).toContain('makaron-topbar');
+    expect(changelog).toContain('makaron-ios-app');
+    expect(changelog).toContain('max-h-[82dvh]');
+    expect(changelog).toContain('w-full h-full sm:h-auto');
   });
 
   it('routes native keyboard height into the CUI input bar', () => {
@@ -94,12 +99,14 @@ describe('iOS App Store readiness guardrails', () => {
     expect(chat).toContain('inputBarH + effectiveKbInset');
   });
 
-  it('uses an iOS-only WebView edge gesture to drive SPA history without blocking touches', () => {
+  it('uses the simple black-background iOS project back gesture while preserving CUI pan close', () => {
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
     const bootstrap = fs.readFileSync(path.join(root, 'src/components/NativeAppBootstrap.tsx'), 'utf8');
+    const projectPage = fs.readFileSync(path.join(root, 'src/app/projects/[id]/page.tsx'), 'utf8');
     const bridge = fs.readFileSync(path.join(root, 'ios/App/App/MakaronBridgeViewController.swift'), 'utf8');
     const storyboard = fs.readFileSync(path.join(root, 'ios/App/App/Base.lproj/Main.storyboard'), 'utf8');
     const project = fs.readFileSync(path.join(root, 'ios/App/App.xcodeproj/project.pbxproj'), 'utf8');
+    const projectLoading = path.join(root, 'src/app/projects/[id]/loading.tsx');
     expect(editor).toContain('hasCuiHistoryState');
     expect(editor).toContain("window.addEventListener('popstate', handlePop)");
     expect(editor).toContain("viewMode === 'cui'");
@@ -109,11 +116,21 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bootstrap).toContain('IOS_BACK_SWIPE_EDGE_PX');
     expect(bootstrap).toContain("document.addEventListener('touchstart'");
     expect(bootstrap).toContain("document.addEventListener('touchmove'");
-    expect(bootstrap).toContain('window.history.back()');
-    expect(bootstrap).toContain('data-view-mode');
-    expect(bootstrap).not.toContain('document.body.style.transform');
+    expect(bootstrap).toContain('isProjectDetailRoute');
+    expect(bootstrap).toContain('document.body.style.transform');
+    expect(bootstrap).toContain('isCuiOpen');
+    expect(bootstrap).not.toContain('makaron-ios-projects-snapshot-html');
+    expect(bootstrap).not.toContain('data-makaron-ios-back-overlay');
+    expect(bootstrap).not.toContain('cloneNode');
+    expect(bootstrap).toContain('makaron-ios-project-back');
+    expect(bootstrap).toContain('dispatchEvent(new CustomEvent(IOS_PROJECT_BACK_EVENT');
     expect(editor).toContain('data-makaron-cui-pan');
     expect(editor).toContain('IOS_CUI_PAN_COMMIT_PX');
+    expect(editor).not.toContain('shouldPlayIOSProjectPush');
+    expect(editor).not.toContain('data-makaron-ios-projects-backdrop');
+    expect(projectPage).toContain('IOS_PROJECT_BACK_EVENT');
+    expect(projectPage).toContain("router.replace(user ? '/projects' : '/home')");
+    expect(fs.existsSync(projectLoading)).toBe(false);
     expect(bridge).not.toContain('interactiveBackEdgeView');
     expect(bridge).not.toContain('UIPanGestureRecognizer');
     expect(bridge).toContain('allowsBackForwardNavigationGestures = false');
