@@ -113,6 +113,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bootstrap).toContain('cloneNode(true)');
     expect(bootstrap).toContain('makaronIosBackOverlay');
     expect(bootstrap).toContain('window.history.forward()');
+    expect(bootstrap).toContain("window.addEventListener('touchend'");
+    expect(bootstrap).toContain('scheduleGestureWatchdog');
     expect(bootstrap).not.toContain('document.body.style.transform');
     expect(bridge).not.toContain('interactiveBackEdgeView');
     expect(bridge).not.toContain('UIPanGestureRecognizer');

@@ -113,10 +113,38 @@ function installIOSBackSwipe() {
   let startTime = 0;
   let overlay: HTMLDivElement | null = null;
   let navigatedBack = false;
+  let overlayTimer: number | undefined;
+  let gestureWatchdogTimer: number | undefined;
+
+  const clearOverlayTimer = () => {
+    if (overlayTimer === undefined) return;
+    window.clearTimeout(overlayTimer);
+    overlayTimer = undefined;
+  };
+
+  const clearGestureWatchdog = () => {
+    if (gestureWatchdogTimer === undefined) return;
+    window.clearTimeout(gestureWatchdogTimer);
+    gestureWatchdogTimer = undefined;
+  };
 
   const removeOverlay = () => {
+    clearOverlayTimer();
     overlay?.remove();
     overlay = null;
+  };
+
+  const scheduleOverlayRemoval = (delay: number) => {
+    clearOverlayTimer();
+    overlayTimer = window.setTimeout(removeOverlay, delay);
+  };
+
+  const scheduleGestureWatchdog = () => {
+    clearGestureWatchdog();
+    gestureWatchdogTimer = window.setTimeout(() => {
+      if (!tracking || !overlay) return;
+      finish();
+    }, 520);
   };
 
   const createOverlay = () => {
@@ -174,6 +202,7 @@ function installIOSBackSwipe() {
 
   const onTouchMove = (event: TouchEvent) => {
     if (!tracking || committed || event.touches.length !== 1) return;
+    clearGestureWatchdog();
 
     const touch = event.touches[0];
     const dx = touch.clientX - startX;
@@ -196,10 +225,12 @@ function installIOSBackSwipe() {
       navigatedBack = true;
     }
     setOverlayProgress(Math.min(dx, window.innerWidth));
+    scheduleGestureWatchdog();
   };
 
   const finish = () => {
     if (!tracking) return;
+    clearGestureWatchdog();
 
     const dx = Math.max(0, lastX - startX);
     const elapsed = Math.max(1, performance.now() - startTime);
@@ -215,9 +246,7 @@ function installIOSBackSwipe() {
       if (!activeOverlay) return;
       activeOverlay.style.transition = 'transform 160ms ease-out';
       activeOverlay.style.transform = `translate3d(${window.innerWidth}px, 0, 0)`;
-      window.setTimeout(() => {
-        removeOverlay();
-      }, 120);
+      scheduleOverlayRemoval(180);
       return;
     }
 
@@ -225,29 +254,39 @@ function installIOSBackSwipe() {
     if (!overlay) return;
     overlay.style.transition = 'transform 180ms ease-out';
     overlay.style.transform = 'translate3d(0, 0, 0)';
-    window.setTimeout(removeOverlay, 190);
+    scheduleOverlayRemoval(220);
   };
 
   const cancel = () => {
     if (!tracking) return;
+    clearGestureWatchdog();
     tracking = false;
     if (navigatedBack) window.history.forward();
     if (!overlay) return;
     overlay.style.transition = 'transform 160ms ease-out';
     overlay.style.transform = 'translate3d(0, 0, 0)';
-    window.setTimeout(removeOverlay, 170);
+    scheduleOverlayRemoval(200);
   };
 
   document.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
   document.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
   document.addEventListener('touchend', finish, { capture: true, passive: true });
   document.addEventListener('touchcancel', cancel, { capture: true, passive: true });
+  window.addEventListener('touchend', finish, { capture: true, passive: true });
+  window.addEventListener('touchcancel', cancel, { capture: true, passive: true });
+  window.addEventListener('blur', cancel, { capture: true });
+  window.addEventListener('pagehide', cancel, { capture: true });
 
   return () => {
     document.removeEventListener('touchstart', onTouchStart, { capture: true });
     document.removeEventListener('touchmove', onTouchMove, { capture: true });
     document.removeEventListener('touchend', finish, { capture: true });
     document.removeEventListener('touchcancel', cancel, { capture: true });
+    window.removeEventListener('touchend', finish, { capture: true });
+    window.removeEventListener('touchcancel', cancel, { capture: true });
+    window.removeEventListener('blur', cancel, { capture: true });
+    window.removeEventListener('pagehide', cancel, { capture: true });
+    clearGestureWatchdog();
     removeOverlay();
   };
 }
