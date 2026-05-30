@@ -78,6 +78,8 @@ interface ImageCanvasProps {
   onStartEditEditable?: (fieldId: string) => void;
   /** Callback with list of editable field IDs visible at the current frame */
   onVisibleEditableFields?: (visibleIds: string[]) => void;
+  /** Browser-measured rendered design size, used to expand under-sized static designs */
+  onDesignContentSize?: (size: { width: number; height: number; source: 'editables' | 'scroll' }) => void;
   /** Video editable currently opened in the trim editor. */
   activeTrimFieldId?: string | null;
   /** Timeline indices that are video snapshots (v2) — show play icon instead of dot */
@@ -106,6 +108,7 @@ export default function ImageCanvas({
   onUpdateProp,
   onStartEditEditable,
   onVisibleEditableFields,
+  onDesignContentSize,
   activeTrimFieldId,
   videoTimelineIndices,
   onVideoPosterCapture,
@@ -1261,6 +1264,7 @@ export default function ImageCanvas({
               onLoading={setRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={setDesignContainerEl}
+              onContentSize={onDesignContentSize}
               onPlayerRef={(ref) => {
                 remotionRef.current = ref;
                 if (editableFields?.length) setDesignPlayerRef(ref);

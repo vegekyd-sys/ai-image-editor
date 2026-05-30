@@ -204,9 +204,10 @@ interface RemotionRendererProps {
   onLoading?: (loading: boolean) => void;
   onContainerRef?: (el: HTMLDivElement | null) => void;
   onPlayerRef?: (ref: PlayerRef | null) => void;
+  onContentSize?: (size: { width: number; height: number; source: 'editables' | 'scroll' }) => void;
 }
 
-export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, posterImage, onLoading, onContainerRef, onPlayerRef }: RemotionRendererProps) {
+export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, posterImage, onLoading, onContainerRef, onPlayerRef, onContentSize }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -261,6 +262,61 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     onPlayerRef?.(playerRef.current);
     return () => onPlayerRef?.(null);
   }, [onPlayerRef, Component]);
+
+  // Static long designs are easy for the Agent to under-size. Measure the
+  // rendered editable layer in the browser and let the parent expand height.
+  useEffect(() => {
+    if (!Component || design.animation || !onContentSize) return;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let raf1 = 0;
+    let raf2 = 0;
+
+    const measure = () => {
+      if (cancelled) return;
+      const wrapper = wrapperRef.current;
+      if (!wrapper) return;
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const scale = wrapperRect.width > 0 ? wrapperRect.width / design.width : 1;
+      if (!Number.isFinite(scale) || scale <= 0) return;
+
+      let maxBottom = 0;
+      let maxRight = 0;
+      const editables = wrapper.querySelectorAll<HTMLElement>('[data-editable]');
+      editables.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 && rect.height <= 0) return;
+        maxBottom = Math.max(maxBottom, (rect.bottom - wrapperRect.top) / scale);
+        maxRight = Math.max(maxRight, (rect.right - wrapperRect.left) / scale);
+      });
+
+      const scrollHeight = wrapper.scrollHeight / scale;
+      const scrollWidth = wrapper.scrollWidth / scale;
+      const measuredHeight = Math.ceil(Math.max(maxBottom, scrollHeight, design.height));
+      const measuredWidth = Math.ceil(Math.max(maxRight, scrollWidth, design.width));
+      const source = maxBottom > scrollHeight ? 'editables' : 'scroll';
+      onContentSize({ width: measuredWidth, height: measuredHeight, source });
+    };
+
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(measure);
+    });
+    timeoutId = setTimeout(measure, 300);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && wrapperRef.current) {
+      observer = new ResizeObserver(measure);
+      observer.observe(wrapperRef.current);
+    }
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      if (timeoutId) clearTimeout(timeoutId);
+      observer?.disconnect();
+    };
+  }, [Component, design.animation, design.code, design.height, design.props, design.width, onContentSize]);
 
   // Pause Remotion Player when a MusicCard starts playing
   useEffect(() => {

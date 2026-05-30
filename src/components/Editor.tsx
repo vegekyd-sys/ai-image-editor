@@ -2848,6 +2848,49 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     });
   }, [viewIndex, draftParentIndex, onSaveDesignProps]);
 
+  const designSizeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleDesignContentSize = useCallback((size: { width: number; height: number; source: 'editables' | 'scroll' }) => {
+    const measuredHeight = Math.ceil(size.height);
+    if (!Number.isFinite(measuredHeight) || measuredHeight <= 0) return;
+
+    const expandHeight = (design: DesignPayload): DesignPayload | null => {
+      if (design.animation) return null;
+      const nextHeight = Math.min(measuredHeight, 20000);
+      if (nextHeight <= design.height + 12) return null;
+      return { ...design, height: nextHeight };
+    };
+
+    const viewingDraftDesign = draftParentIndex !== null && viewIndex === draftParentIndex + 1;
+    if (viewingDraftDesign) {
+      setDraftDesign(prev => {
+        if (!prev) return prev;
+        const expanded = expandHeight(prev);
+        return expanded || prev;
+      });
+      return;
+    }
+
+    setSnapshots(prev => {
+      const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
+      if (snapIdx == null) return prev;
+      const snap = prev[snapIdx];
+      if (!snap?.design) return prev;
+      const expanded = expandHeight(snap.design);
+      if (!expanded) return prev;
+
+      const updated = prev.map((s, i) => i === snapIdx ? { ...s, design: expanded } : s);
+      if (onSaveDesignProps) {
+        if (designSizeSaveTimer.current) clearTimeout(designSizeSaveTimer.current);
+        const snapId = snap.id;
+        designSizeSaveTimer.current = setTimeout(() => {
+          console.log('[design] auto-expanded height', snap.design?.height, '→', expanded.height, `(${size.source})`);
+          onSaveDesignProps(snapId, expanded);
+        }, 500);
+      }
+      return updated;
+    });
+  }, [viewIndex, draftParentIndex, onSaveDesignProps]);
+
 
   // Auto-capture poster for design snapshots loaded from Supabase without a poster image
   const posterCapturedRef = useRef<Set<string>>(new Set());
@@ -3209,6 +3252,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 onUpdateProp={handleDesignPropUpdate}
                 onStartEditEditable={setEditingDesignFieldId}
                 onVisibleEditableFields={handleVisibleEditableFields}
+                onDesignContentSize={handleDesignContentSize}
                 activeTrimFieldId={editingDesignField?.type === 'video' ? editingDesignField.id : null}
               />
             )}
