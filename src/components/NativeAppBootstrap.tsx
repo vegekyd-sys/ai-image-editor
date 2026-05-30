@@ -106,94 +106,28 @@ export default function NativeAppBootstrap() {
 
 function installIOSBackSwipe() {
   let tracking = false;
-  let committed = false;
   let startX = 0;
   let startY = 0;
   let lastX = 0;
   let startTime = 0;
-  let overlay: HTMLDivElement | null = null;
-  let navigatedBack = false;
-  let overlayTimer: number | undefined;
-  let gestureWatchdogTimer: number | undefined;
-
-  const clearOverlayTimer = () => {
-    if (overlayTimer === undefined) return;
-    window.clearTimeout(overlayTimer);
-    overlayTimer = undefined;
-  };
-
-  const clearGestureWatchdog = () => {
-    if (gestureWatchdogTimer === undefined) return;
-    window.clearTimeout(gestureWatchdogTimer);
-    gestureWatchdogTimer = undefined;
-  };
-
-  const removeOverlay = () => {
-    clearOverlayTimer();
-    overlay?.remove();
-    overlay = null;
-  };
-
-  const scheduleOverlayRemoval = (delay: number) => {
-    clearOverlayTimer();
-    overlayTimer = window.setTimeout(removeOverlay, delay);
-  };
-
-  const scheduleGestureWatchdog = () => {
-    clearGestureWatchdog();
-    gestureWatchdogTimer = window.setTimeout(() => {
-      if (!tracking || !overlay) return;
-      finish();
-    }, 520);
-  };
-
-  const createOverlay = () => {
-    if (overlay) return overlay;
-
-    const wrapper = document.createElement('div');
-    const bodyClone = document.body.cloneNode(true) as HTMLElement;
-
-    wrapper.dataset.makaronIosBackOverlay = 'true';
-    wrapper.style.position = 'fixed';
-    wrapper.style.inset = '0';
-    wrapper.style.zIndex = '2147483647';
-    wrapper.style.overflow = 'hidden';
-    wrapper.style.background = '#000';
-    wrapper.style.pointerEvents = 'none';
-    wrapper.style.transform = 'translate3d(0, 0, 0)';
-    wrapper.style.transition = 'none';
-    wrapper.style.willChange = 'transform';
-
-    bodyClone.style.margin = '0';
-    bodyClone.style.width = '100vw';
-    bodyClone.style.minHeight = '100vh';
-    bodyClone.style.transform = 'none';
-    bodyClone.style.transition = 'none';
-    bodyClone.style.pointerEvents = 'none';
-    wrapper.appendChild(bodyClone);
-    document.body.appendChild(wrapper);
-    overlay = wrapper;
-    return wrapper;
-  };
-
-  const setOverlayProgress = (distance: number) => {
-    const activeOverlay = overlay ?? createOverlay();
-    activeOverlay.style.transform = `translate3d(${Math.max(0, distance)}px, 0, 0)`;
-  };
 
   const isEditableTarget = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return false;
     return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
   };
 
+  const isCuiOpen = () => {
+    const editor = document.querySelector('[data-testid="editor"]');
+    return editor?.getAttribute('data-view-mode') === 'cui';
+  };
+
   const onTouchStart = (event: TouchEvent) => {
     if (event.touches.length !== 1 || isEditableTarget(event.target)) return;
+    if (isCuiOpen()) return;
     const touch = event.touches[0];
     if (touch.clientX > IOS_BACK_SWIPE_EDGE_PX) return;
 
     tracking = true;
-    committed = false;
-    navigatedBack = false;
     startX = touch.clientX;
     startY = touch.clientY;
     lastX = touch.clientX;
@@ -201,8 +135,7 @@ function installIOSBackSwipe() {
   };
 
   const onTouchMove = (event: TouchEvent) => {
-    if (!tracking || committed || event.touches.length !== 1) return;
-    clearGestureWatchdog();
+    if (!tracking || event.touches.length !== 1) return;
 
     const touch = event.touches[0];
     const dx = touch.clientX - startX;
@@ -218,19 +151,10 @@ function installIOSBackSwipe() {
 
     event.preventDefault();
     event.stopPropagation();
-
-    if (!overlay) {
-      createOverlay();
-      window.history.back();
-      navigatedBack = true;
-    }
-    setOverlayProgress(Math.min(dx, window.innerWidth));
-    scheduleGestureWatchdog();
   };
 
   const finish = () => {
     if (!tracking) return;
-    clearGestureWatchdog();
 
     const dx = Math.max(0, lastX - startX);
     const elapsed = Math.max(1, performance.now() - startTime);
@@ -240,53 +164,25 @@ function installIOSBackSwipe() {
     tracking = false;
 
     if (shouldGoBack) {
-      committed = true;
-      const activeOverlay = overlay;
-      if (!navigatedBack) window.history.back();
-      if (!activeOverlay) return;
-      activeOverlay.style.transition = 'transform 160ms ease-out';
-      activeOverlay.style.transform = `translate3d(${window.innerWidth}px, 0, 0)`;
-      scheduleOverlayRemoval(180);
+      window.history.back();
       return;
     }
-
-    if (navigatedBack) window.history.forward();
-    if (!overlay) return;
-    overlay.style.transition = 'transform 180ms ease-out';
-    overlay.style.transform = 'translate3d(0, 0, 0)';
-    scheduleOverlayRemoval(220);
   };
 
   const cancel = () => {
     if (!tracking) return;
-    clearGestureWatchdog();
     tracking = false;
-    if (navigatedBack) window.history.forward();
-    if (!overlay) return;
-    overlay.style.transition = 'transform 160ms ease-out';
-    overlay.style.transform = 'translate3d(0, 0, 0)';
-    scheduleOverlayRemoval(200);
   };
 
   document.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
   document.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
   document.addEventListener('touchend', finish, { capture: true, passive: true });
   document.addEventListener('touchcancel', cancel, { capture: true, passive: true });
-  window.addEventListener('touchend', finish, { capture: true, passive: true });
-  window.addEventListener('touchcancel', cancel, { capture: true, passive: true });
-  window.addEventListener('blur', cancel, { capture: true });
-  window.addEventListener('pagehide', cancel, { capture: true });
 
   return () => {
     document.removeEventListener('touchstart', onTouchStart, { capture: true });
     document.removeEventListener('touchmove', onTouchMove, { capture: true });
     document.removeEventListener('touchend', finish, { capture: true });
     document.removeEventListener('touchcancel', cancel, { capture: true });
-    window.removeEventListener('touchend', finish, { capture: true });
-    window.removeEventListener('touchcancel', cancel, { capture: true });
-    window.removeEventListener('blur', cancel, { capture: true });
-    window.removeEventListener('pagehide', cancel, { capture: true });
-    clearGestureWatchdog();
-    removeOverlay();
   };
 }

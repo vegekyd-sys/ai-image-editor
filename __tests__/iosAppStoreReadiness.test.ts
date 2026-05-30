@@ -110,12 +110,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bootstrap).toContain("document.addEventListener('touchstart'");
     expect(bootstrap).toContain("document.addEventListener('touchmove'");
     expect(bootstrap).toContain('window.history.back()');
-    expect(bootstrap).toContain('cloneNode(true)');
-    expect(bootstrap).toContain('makaronIosBackOverlay');
-    expect(bootstrap).toContain('window.history.forward()');
-    expect(bootstrap).toContain("window.addEventListener('touchend'");
-    expect(bootstrap).toContain('scheduleGestureWatchdog');
+    expect(bootstrap).toContain('data-view-mode');
     expect(bootstrap).not.toContain('document.body.style.transform');
+    expect(editor).toContain('data-makaron-cui-pan');
+    expect(editor).toContain('IOS_CUI_PAN_COMMIT_PX');
     expect(bridge).not.toContain('interactiveBackEdgeView');
     expect(bridge).not.toContain('UIPanGestureRecognizer');
     expect(bridge).toContain('allowsBackForwardNavigationGestures = false');

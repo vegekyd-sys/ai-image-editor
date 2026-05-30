@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties, type TouchEvent as ReactTouchEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload } from '@/types';
@@ -22,6 +22,10 @@ import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelin
 import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
+
+const IOS_CUI_PAN_EDGE_PX = 36;
+const IOS_CUI_PAN_COMMIT_PX = 86;
+const IOS_CUI_PAN_MIN_DX = 10;
 import { downloadAsset } from '@/lib/editor/download';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
@@ -123,6 +127,10 @@ export default function Editor({
   const [failedCategories, setFailedCategories] = useState<Set<Tip['category']>>(new Set());
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
+  const [cuiPanX, setCuiPanX] = useState(0);
+  const [cuiPanActive, setCuiPanActive] = useState(false);
+  const [cuiPanSettling, setCuiPanSettling] = useState(false);
+  const cuiPanRef = useRef({ tracking: false, startX: 0, startY: 0, lastX: 0, startTime: 0, locked: false });
   // Annotation (paintbrush) mode
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationTool, setAnnotationTool] = useState<'brush' | 'rect' | 'text'>('brush');
@@ -2984,6 +2992,85 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     }
   }, [viewMode, isDesktop]);
 
+  const resetCuiPan = useCallback(() => {
+    cuiPanRef.current.tracking = false;
+    cuiPanRef.current.locked = false;
+    setCuiPanX(0);
+    setCuiPanActive(false);
+    setCuiPanSettling(false);
+  }, []);
+
+  const isCuiPanEditableTarget = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+  };
+
+  const handleCuiPanStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    if (isDesktop || event.touches.length !== 1 || isCuiPanEditableTarget(event.target)) return;
+    const touch = event.touches[0];
+    if (touch.clientX > IOS_CUI_PAN_EDGE_PX) return;
+
+    cuiPanRef.current = {
+      tracking: true,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      startTime: performance.now(),
+      locked: false,
+    };
+    setCuiPanSettling(false);
+  }, [isDesktop]);
+
+  const handleCuiPanMove = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    const pan = cuiPanRef.current;
+    if (!pan.tracking || event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    const dx = touch.clientX - pan.startX;
+    const dy = touch.clientY - pan.startY;
+    pan.lastX = touch.clientX;
+
+    if (!pan.locked) {
+      if (dx <= IOS_CUI_PAN_MIN_DX || dx < Math.abs(dy) * 1.15) {
+        if (Math.abs(dy) > IOS_CUI_PAN_MIN_DX && Math.abs(dy) > dx) {
+          resetCuiPan();
+        }
+        return;
+      }
+      pan.locked = true;
+      setCuiPanActive(true);
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setCuiPanX(Math.max(0, Math.min(dx, window.innerWidth)));
+  }, [resetCuiPan]);
+
+  const handleCuiPanEnd = useCallback(() => {
+    const pan = cuiPanRef.current;
+    if (!pan.tracking) return;
+
+    const dx = Math.max(0, pan.lastX - pan.startX);
+    const elapsed = Math.max(1, performance.now() - pan.startTime);
+    const velocity = dx / elapsed;
+    const shouldClose = dx >= IOS_CUI_PAN_COMMIT_PX || velocity > 0.42;
+    pan.tracking = false;
+
+    setCuiPanSettling(true);
+    if (shouldClose) {
+      setCuiPanActive(true);
+      setCuiPanX(window.innerWidth);
+      window.setTimeout(() => {
+        window.history.back();
+        resetCuiPan();
+      }, 150);
+      return;
+    }
+
+    setCuiPanX(0);
+    window.setTimeout(resetCuiPan, 180);
+  }, [resetCuiPan]);
+
   // ── Shared props for AgentChatView — single source of truth ──
   // Both desktop panel and mobile overlay use these. Add new props HERE
   // to avoid desktop/mobile divergence bugs (e.g. missing onMusicSelect).
@@ -3071,7 +3158,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       />
 
       {/* GUI mode — always visible on desktop, toggled on mobile (also during pull-down for gesture tracking) */}
-      {(isDesktop || viewMode === 'gui' || pullProgress !== null) && (
+      {(isDesktop || viewMode === 'gui' || pullProgress !== null || cuiPanActive) && (
         <div className={isDesktop ? 'flex-1 min-w-0 flex flex-col relative' : 'contents'}>
           {/* Canvas area (fills remaining space) */}
           <div
@@ -3669,20 +3756,35 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           />
         </div>
       </>) : viewMode === 'cui' ? (
-        <AgentChatView
-          {...cuiSharedProps}
-          onBack={() => {
-            if (snapshots.length === 0 && onBack) {
-              onBack();
-            } else {
-              window.history.back();
-            }
+        <div
+          data-makaron-cui-pan="true"
+          className="fixed inset-0 z-40"
+          style={{
+            transform: `translate3d(${cuiPanX}px, 0, 0)`,
+            transition: cuiPanSettling ? 'transform 170ms ease-out' : 'none',
+            willChange: cuiPanActive ? 'transform' : undefined,
+            touchAction: 'pan-y',
           }}
-          onPipTap={handlePipTap}
-          hidePip={heroAnim !== null || pullProgress !== null}
-          focusOnOpen={isViewingDraft}
-          onNavigateToSnapshot={undefined}
-        />
+          onTouchStart={handleCuiPanStart}
+          onTouchMove={handleCuiPanMove}
+          onTouchEnd={handleCuiPanEnd}
+          onTouchCancel={handleCuiPanEnd}
+        >
+          <AgentChatView
+            {...cuiSharedProps}
+            onBack={() => {
+              if (snapshots.length === 0 && onBack) {
+                onBack();
+              } else {
+                window.history.back();
+              }
+            }}
+            onPipTap={handlePipTap}
+            hidePip={heroAnim !== null || pullProgress !== null}
+            focusOnOpen={isViewingDraft}
+            onNavigateToSnapshot={undefined}
+          />
+        </div>
       ) : null}
 
       {/* Pull-down dim overlay + "Entering Chat" hint */}
