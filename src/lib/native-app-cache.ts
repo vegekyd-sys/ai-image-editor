@@ -37,6 +37,15 @@ export function writeNativeJSONCache<T>(path: string, data: T): void {
   }
 }
 
+export function removeNativeJSONCache(path: string): void {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    sessionStorage.removeItem(keyFor(path));
+  } catch {
+    // Cache removal is best-effort.
+  }
+}
+
 export async function warmNativeJSONCache(path: string): Promise<void> {
   try {
     const res = await fetch(path, { credentials: 'include' });

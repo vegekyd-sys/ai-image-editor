@@ -108,6 +108,7 @@ describe('iOS App Store readiness guardrails', () => {
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
     const topBar = fs.readFileSync(path.join(root, 'src/components/TopBar.tsx'), 'utf8');
     const creditPopup = fs.readFileSync(path.join(root, 'src/components/CreditPopup.tsx'), 'utf8');
+    const authProvider = fs.readFileSync(path.join(root, 'src/components/AuthProvider.tsx'), 'utf8');
     const nativeCache = fs.readFileSync(path.join(root, 'src/lib/native-app-cache.ts'), 'utf8');
     const projectsListWarm = fs.readFileSync(path.join(root, 'src/lib/projects-list-warm.ts'), 'utf8');
     const projectEditorCache = fs.readFileSync(path.join(root, 'src/lib/project-editor-cache.ts'), 'utf8');
@@ -136,6 +137,11 @@ describe('iOS App Store readiness guardrails', () => {
     expect(skills).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(skills).toContain("writeNativeJSONCache('/api/skills', data)");
     expect(nativeCache).toContain('sessionStorage.setItem');
+    expect(nativeCache).toContain('removeNativeJSONCache');
+    expect(authProvider).toContain("const AUTH_USER_CACHE_KEY = '/auth/user'");
+    expect(authProvider).toContain('readNativeJSONCache<User>(AUTH_USER_CACHE_KEY)');
+    expect(authProvider).toContain('writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)');
+    expect(authProvider).toContain('removeNativeJSONCache(AUTH_USER_CACHE_KEY)');
     expect(topBar).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(topBar).toContain("writeNativeJSONCache('/api/billing/credits', d)");
     expect(topBar).toContain('TOPBAR_ROUTE_WARM_APIS');

@@ -4,6 +4,9 @@ import { createContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User, SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { clearUserCache } from '@/lib/imageCache'
+import { readNativeJSONCache, writeNativeJSONCache, removeNativeJSONCache } from '@/lib/native-app-cache'
+
+const AUTH_USER_CACHE_KEY = '/auth/user'
 
 export interface AuthContextType {
   user: User | null
@@ -18,8 +21,9 @@ export const AuthContext = createContext<AuthContextType>({
 })
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [cachedUser] = useState<User | null>(() => readNativeJSONCache<User>(AUTH_USER_CACHE_KEY))
+  const [user, setUser] = useState<User | null>(cachedUser)
+  const [loading, setLoading] = useState(() => !cachedUser)
   const supabaseRef = useRef<SupabaseClient | null>(null)
 
   function getSupabase() {
@@ -36,6 +40,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
+      if (session?.user) writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)
+      else removeNativeJSONCache(AUTH_USER_CACHE_KEY)
 
       // Background validation: verify JWT is still valid (non-blocking, never forces logout)
       if (session?.user) {
@@ -49,6 +55,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      if (session?.user) writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)
+      else removeNativeJSONCache(AUTH_USER_CACHE_KEY)
     })
 
     return () => subscription.unsubscribe()
@@ -56,6 +64,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   const signOut = useCallback(async () => {
     clearUserCache()
+    removeNativeJSONCache(AUTH_USER_CACHE_KEY)
     document.cookie = 'mkr_activated=; path=/; max-age=0'
     await getSupabase().auth.signOut()
     window.location.href = '/login'
