@@ -14,6 +14,14 @@ Core contract:
 - `useOriginalAsReference=true` adds the original photo as Image 2 when restoring identity, color, background, or composition drift.
 - `model` is optional. Use `qwen` for NSFW-risk requests. Use `openai` for accurate text rendering, face identity complaints, and design/layout images.
 
+Built-in skill routing:
+
+- "美颜", "修图", "好看点", "enhance", general beautification/enhancement → read `prompts/enhance.md`, then call `generate_image` with `skill: "enhance"`.
+- "好玩点", "有趣", "创意", "加个什么", "搞笑" → read `prompts/creative.md`, then call `generate_image` with `skill: "creative"`.
+- "疯狂", "脑洞", "夸张", "wild", "变形" → read `prompts/wild.md`, then call `generate_image` with `skill: "wild"`.
+- "加文字", "字幕", "标题", "文案", "caption" → read `prompts/captions.md`, then call `generate_image` with `skill: "captions"`.
+- For explicit specific requests like "change the background to the beach", omit `skill` and write the full editPrompt yourself.
+
 Edit Mode prompt shape:
 
 1. Face rule when people are present.

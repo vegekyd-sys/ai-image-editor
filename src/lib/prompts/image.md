@@ -42,7 +42,7 @@ Rule: if your editPrompt says "Image 2" but you did not set `reference_media_ind
 
 ### Skill Parameter
 
-Use `skill` to auto-inject a proven quality template into the prompt. When skill is set, write only the specific creative direction in `editPrompt`; the template rules are injected automatically.
+Use `skill` to label the intended built-in editing mode for routing and consistency. The backend no longer injects the full template automatically. You must read the relevant `prompts/{skill}.md` file, internalize its rules, and write an `editPrompt` that follows them.
 
 When to use each skill:
 

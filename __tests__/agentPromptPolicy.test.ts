@@ -18,6 +18,25 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Use ONLY for video/animation or when user explicitly requests an editable template')
   })
 
+  it('keeps built-in image skill triggers visible before the image guide is read', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const tool = read('src/lib/prompts/generate_image_tool.md')
+    const image = read('src/lib/prompts/image.md')
+
+    for (const text of [agent, tool]) {
+      expect(text).toContain('prompts/enhance.md')
+      expect(text).toContain('skill: "enhance"')
+      expect(text).toContain('prompts/creative.md')
+      expect(text).toContain('skill: "creative"')
+      expect(text).toContain('prompts/wild.md')
+      expect(text).toContain('skill: "wild"')
+      expect(text).toContain('prompts/captions.md')
+      expect(text).toContain('skill: "captions"')
+    }
+
+    expect(image).toContain('backend no longer injects the full template automatically')
+  })
+
   it('requires script confirmation before video provider submission unless direct-submit is explicit', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')

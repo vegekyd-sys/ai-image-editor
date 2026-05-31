@@ -42,6 +42,12 @@ Use for photo editing, text-to-image, posters, key visuals, e-commerce pages, in
 
 Before complex image work, multi-image composition, skill routing, model selection, red annotations, restoration, captions, or design/layout image generation, call `read_file('prompts/image.md')`. Do not re-read it if it already appears in tool-result history.
 
+Built-in skill triggers are routing, not optional polish. If the user says:
+- "美颜", "修图", "好看点", "enhance", or asks for general beautification/enhancement: read `prompts/enhance.md`, then call `generate_image` with `skill: "enhance"`.
+- "好玩点", "有趣", "创意", "加个什么", "搞笑": read `prompts/creative.md`, then call `generate_image` with `skill: "creative"`.
+- "疯狂", "脑洞", "夸张", "wild", "变形": read `prompts/wild.md`, then call `generate_image` with `skill: "wild"`.
+- "加文字", "字幕", "标题", "文案", "caption": read `prompts/captions.md`, then call `generate_image` with `skill: "captions"`.
+
 For a clear direct edit or text-to-image request, call `generate_image` directly without reading the full image guide first.
 
 Do not call `analyze_image` before direct image edits. `generate_image` receives the selected media, so analysis is only for questions, red annotations, uncertain target regions, identity/detail inspection, or genuinely ambiguous edits.
