@@ -149,9 +149,13 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     private func handleSaveToPhotos(id: String, body: [String: Any]) {
         let mediaType = body["mediaType"] as? String ?? "image"
         let filename = body["filename"] as? String ?? defaultFilename(for: mediaType)
+        let hasDataURL = body["dataUrl"] is String
+        let hasURL = body["url"] is String
+        NSLog("[Makaron] native save request id=%@ type=%@ filename=%@ hasDataURL=%@ hasURL=%@", id, mediaType, filename, String(hasDataURL), String(hasURL))
 
         if let dataUrl = body["dataUrl"] as? String {
             guard let data = dataFromDataURL(dataUrl) else {
+                NSLog("[Makaron] native save decode failed id=%@", id)
                 sendNativeResponse(id: id, ok: false, error: "Could not decode media")
                 return
             }
@@ -160,6 +164,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         }
 
         guard let urlString = body["url"] as? String, let url = URL(string: urlString) else {
+            NSLog("[Makaron] native save missing URL id=%@", id)
             sendNativeResponse(id: id, ok: false, error: "Missing media URL")
             return
         }
@@ -167,17 +172,21 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
             guard let self else { return }
             if let error {
+                NSLog("[Makaron] native save download failed id=%@ error=%@", id, error.localizedDescription)
                 self.sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
                 return
             }
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
+                NSLog("[Makaron] native save download status id=%@ status=%ld", id, httpResponse.statusCode)
                 self.sendNativeResponse(id: id, ok: false, error: "Download failed with status \(httpResponse.statusCode)")
                 return
             }
             guard let data, !data.isEmpty else {
+                NSLog("[Makaron] native save downloaded empty media id=%@", id)
                 self.sendNativeResponse(id: id, ok: false, error: "Downloaded media is empty")
                 return
             }
+            NSLog("[Makaron] native save downloaded id=%@ bytes=%ld", id, data.count)
             self.saveMediaData(data, id: id, filename: filename, mediaType: mediaType)
         }.resume()
     }
@@ -186,10 +195,12 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         requestPhotoAddPermission { [weak self] allowed in
             guard let self else { return }
             guard allowed else {
+                NSLog("[Makaron] native save denied id=%@ type=%@", id, mediaType)
                 self.sendNativeResponse(id: id, ok: false, error: "Photo Library permission denied")
                 return
             }
 
+            NSLog("[Makaron] native save permission ok id=%@ type=%@ bytes=%ld", id, mediaType, data.count)
             if mediaType == "video" {
                 self.saveVideoData(data, id: id, filename: filename)
             } else {
@@ -218,6 +229,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             request.addResource(with: .photo, data: photoData, options: options)
             localIdentifier = request.placeholderForCreatedAsset?.localIdentifier
         }) { [weak self] success, error in
+            NSLog("[Makaron] native save image result id=%@ success=%@ asset=%@ error=%@", id, String(success), localIdentifier ?? "", error?.localizedDescription ?? "")
             self?.sendNativeResponse(id: id, ok: success, error: error?.localizedDescription, extra: [
                 "localIdentifier": localIdentifier ?? "",
                 "mediaType": "image"
@@ -232,6 +244,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         do {
             try data.write(to: tempURL, options: .atomic)
         } catch {
+            NSLog("[Makaron] native save video temp write failed id=%@ error=%@", id, error.localizedDescription)
             sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
             return
         }
@@ -246,6 +259,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             localIdentifier = request.placeholderForCreatedAsset?.localIdentifier
         }) { [weak self] success, error in
             try? FileManager.default.removeItem(at: tempURL)
+            NSLog("[Makaron] native save video result id=%@ success=%@ asset=%@ error=%@", id, String(success), localIdentifier ?? "", error?.localizedDescription ?? "")
             self?.sendNativeResponse(id: id, ok: success, error: error?.localizedDescription, extra: [
                 "localIdentifier": localIdentifier ?? "",
                 "mediaType": "video"
@@ -308,6 +322,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             if let error, !error.isEmpty {
                 detail["error"] = error
             }
+            NSLog("[Makaron] native response id=%@ ok=%@ mediaType=%@ error=%@", id, String(ok), detail["mediaType"] as? String ?? "", error ?? "")
             guard let jsonData = try? JSONSerialization.data(withJSONObject: detail),
                   let json = String(data: jsonData, encoding: .utf8) else {
                 return

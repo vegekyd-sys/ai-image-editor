@@ -188,6 +188,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bridge).toContain('jpegData(compressionQuality: 0.95)');
     expect(bridge).toContain('jpegFilename(for: filename)');
     expect(bridge).toContain('placeholderForCreatedAsset?.localIdentifier');
+    expect(bridge).toContain('[Makaron] native save request');
+    expect(bridge).toContain('[Makaron] native save image result');
+    expect(bridge).toContain('[Makaron] native response');
     expect(bridge).toContain("window.dispatchEvent(new CustomEvent('makaron-native-response'");
     expect(nativeMedia).toContain('isNativePhotoLibrarySaveAvailable');
     expect(nativeMedia).toContain('isNativePhotoLibraryPickerAvailable');
