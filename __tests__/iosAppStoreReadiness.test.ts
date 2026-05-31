@@ -111,6 +111,7 @@ describe('iOS App Store readiness guardrails', () => {
     const authProvider = fs.readFileSync(path.join(root, 'src/components/AuthProvider.tsx'), 'utf8');
     const nativeCache = fs.readFileSync(path.join(root, 'src/lib/native-app-cache.ts'), 'utf8');
     const nativeNavigation = fs.readFileSync(path.join(root, 'src/lib/native-navigation.ts'), 'utf8');
+    const nativePhotoPicker = fs.readFileSync(path.join(root, 'src/lib/native-photo-picker.ts'), 'utf8');
     const projectsListWarm = fs.readFileSync(path.join(root, 'src/lib/projects-list-warm.ts'), 'utf8');
     const projectEditorCache = fs.readFileSync(path.join(root, 'src/lib/project-editor-cache.ts'), 'utf8');
 
@@ -175,6 +176,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projects).toContain('onPointerEnter={onWarm}');
     expect(bootstrap).toContain('pickMediaFromNativePhotoLibrary');
     expect(bootstrap).toContain('acceptsNativePhotoPicker');
+    expect(bootstrap).toContain('acceptsNativeMediaPickerAccept(input.accept)');
+    expect(bootstrap).toContain('nativePickerAllowsVideo(input.accept)');
+    expect(nativePhotoPicker).toContain("normalized.includes('video/')");
+    expect(nativePhotoPicker).toContain("normalized.includes('.heic')");
     expect(bootstrap).toContain("input.dispatchEvent(new Event('change'");
     expect(bootstrap).not.toContain('document.body.style.transform');
     expect(bootstrap).not.toContain('cloneNode');
