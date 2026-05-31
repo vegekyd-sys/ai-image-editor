@@ -123,6 +123,30 @@ async function checkComfyUI(
   }, 3000)
 }
 
+async function checkQwen(): Promise<ServiceResult> {
+  if (process.env.QWEN_PROVIDER === 'vast') {
+    const endpoint = process.env.VAST_QWEN_ENDPOINT
+    const apiKey = process.env.VAST_API_KEY
+    if (!endpoint || !apiKey) return unavailable('Vast Qwen env not set')
+
+    return checkWithTimeout('comfyui_qwen', async () => {
+      const res = await fetch('https://run.vast.ai/route/', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ endpoint, cost: 1 }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      if (!data?.url) throw new Error(data?.status || data?.error_msg || 'Vast worker not ready')
+    }, 5000)
+  }
+
+  return checkComfyUI('comfyui_qwen', 'COMFYUI_QWEN_URL')
+}
+
 async function checkComfyUIDiffusersModel(
   name: string,
   envVar: string,
@@ -235,7 +259,7 @@ export async function GET() {
     checkGemini(),
     checkOpenRouter(),
     checkBedrock(),
-    checkComfyUI('comfyui_qwen', 'COMFYUI_QWEN_URL'),
+    checkQwen(),
     checkComfyUIDiffusersModel(
       'comfyui_pony',
       'COMFYUI_PONY_URL',
