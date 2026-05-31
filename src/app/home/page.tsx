@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRequireAuth } from '@/hooks/useRequireAuth'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile } from '@/lib/imageUtils'
@@ -15,11 +15,21 @@ import ModeToggle from '@/components/ModeToggle'
 import AgentContent from '@/components/AgentContent'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
+import { isMakaronIOSApp } from '@/lib/native-app'
 import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import MakaronLogo from '@/components/MakaronLogo'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
+const IOS_SKILL_BACK_EDGE_PX = 36
+const IOS_SKILL_BACK_LOCK_PX = 10
+const IOS_SKILL_BACK_COMMIT_PX = 88
+const IOS_SKILL_BACK_CLOSE_MS = 180
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return Boolean(target.closest('input, textarea, select, button, [contenteditable="true"]'))
+}
 
 function LazyVideo({ src, style }: { src: string; style: React.CSSProperties }) {
   const ref = useRef<HTMLVideoElement>(null)
@@ -61,8 +71,10 @@ function HomePageInner() {
   const requireAuth = useRequireAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
+  const [isIOSAppShell] = useState(() => isMakaronIOSApp())
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()
@@ -99,10 +111,116 @@ function HomePageInner() {
   const [showFixedInput, setShowFixedInput] = useState(false)
   const [shareToast, setShareToast] = useState(false)
   const openedFromUrlRef = useRef(false)
+  const detailPathActiveRef = useRef(false)
+  const hasSelectedDetail = Boolean(selectedDetail)
+  const [skillBackPanX, setSkillBackPanX] = useState(0)
+  const [skillBackPanActive, setSkillBackPanActive] = useState(false)
+  const [skillBackPanSettling, setSkillBackPanSettling] = useState(false)
+  const skillBackPanRef = useRef<{
+    tracking: boolean
+    locked: boolean
+    startX: number
+    startY: number
+    lastX: number
+    startTime: number
+  }>({ tracking: false, locked: false, startX: 0, startY: 0, lastX: 0, startTime: 0 })
   const selectedDetailRef = useRef(selectedDetail)
   selectedDetailRef.current = selectedDetail
   const homeSkillsRef = useRef(homeSkills)
   homeSkillsRef.current = homeSkills
+
+  const resetSkillBackPan = useCallback(() => {
+    skillBackPanRef.current = { tracking: false, locked: false, startX: 0, startY: 0, lastX: 0, startTime: 0 }
+    setSkillBackPanX(0)
+    setSkillBackPanActive(false)
+    setSkillBackPanSettling(false)
+  }, [])
+
+  const closeSkillDetail = useCallback((historyMode: 'none' | 'pushHome' = 'none', options?: { preservePan?: boolean; skipHeroCollapse?: boolean }) => {
+    if (options?.skipHeroCollapse) {
+      setSelectedDetail(null)
+      setHeroRect(null)
+      resetSkillBackPan()
+    } else {
+      setHeroExpanded(false)
+      setTimeout(() => {
+        setSelectedDetail(null)
+        setHeroRect(null)
+        resetSkillBackPan()
+      }, 350)
+    }
+    setSelectedSkill(null)
+    createInput.clear()
+    if (!options?.preservePan) resetSkillBackPan()
+    detailPathActiveRef.current = false
+    if (historyMode === 'pushHome') window.history.pushState(null, '', '/home')
+  }, [createInput, resetSkillBackPan])
+
+  const handleSkillBackPanStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!selectedDetailRef.current || isDesktop || !isIOSAppShell || e.touches.length !== 1) return
+    const touch = e.touches[0]
+    if (!touch || touch.clientX > IOS_SKILL_BACK_EDGE_PX || isEditableTarget(e.target)) return
+    skillBackPanRef.current = {
+      tracking: true,
+      locked: false,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      startTime: performance.now(),
+    }
+  }, [isDesktop, isIOSAppShell])
+
+  const handleSkillBackPanMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    const pan = skillBackPanRef.current
+    if (!pan.tracking) return
+    const touch = e.touches[0]
+    if (!touch) return
+    const dx = touch.clientX - pan.startX
+    const dy = touch.clientY - pan.startY
+
+    if (!pan.locked) {
+      if (dx < -IOS_SKILL_BACK_LOCK_PX || (Math.abs(dy) > IOS_SKILL_BACK_LOCK_PX && Math.abs(dy) > dx)) {
+        resetSkillBackPan()
+        return
+      }
+      if (dx < IOS_SKILL_BACK_LOCK_PX || dx < Math.abs(dy) * 1.15) return
+      pan.locked = true
+      setSkillBackPanActive(true)
+      detailSwipeRef.current = null
+    }
+
+    e.preventDefault()
+    e.stopPropagation()
+    pan.lastX = touch.clientX
+    setSkillBackPanX(Math.max(0, Math.min(dx, window.innerWidth)))
+  }, [resetSkillBackPan])
+
+  const handleSkillBackPanEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    const pan = skillBackPanRef.current
+    if (!pan.tracking) return
+    if (!pan.locked) {
+      resetSkillBackPan()
+      return
+    }
+
+    const touch = e.changedTouches[0]
+    const endX = touch?.clientX ?? pan.lastX
+    const dx = Math.max(0, endX - pan.startX)
+    const elapsed = Math.max(1, performance.now() - pan.startTime)
+    const velocity = dx / elapsed
+    const shouldClose = dx >= IOS_SKILL_BACK_COMMIT_PX || velocity > 0.55
+
+    e.preventDefault()
+    e.stopPropagation()
+    setSkillBackPanSettling(true)
+    if (shouldClose) {
+      setSkillBackPanX(window.innerWidth)
+      window.setTimeout(() => closeSkillDetail('pushHome', { preservePan: true, skipHeroCollapse: true }), IOS_SKILL_BACK_CLOSE_MS)
+    } else {
+      setSkillBackPanX(0)
+      window.setTimeout(resetSkillBackPan, IOS_SKILL_BACK_CLOSE_MS)
+    }
+  }, [closeSkillDetail, resetSkillBackPan])
 
   const placeholders = locale === 'zh' ? [
     '把这些图片做个 vlog',
@@ -334,6 +452,7 @@ function HomePageInner() {
     setSelectedSkill(skill.skill_path ? skill.id : null)
     createInput.setText(skill.prompt)
     setHeroExpanded(true)
+    detailPathActiveRef.current = true
     window.history.replaceState(null, '', `/home/${skillId}`)
   }, [homeSkills]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -353,21 +472,20 @@ function HomePageInner() {
       }
       openedFromUrlRef.current = false
     })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   // Handle browser back button
   useEffect(() => {
-    if (!selectedDetail) return
-    const onPop = () => {
-      setHeroExpanded(false)
-      setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
-      setSelectedSkill(null)
-      createInput.setText('')
-      createInput.clear()
-    }
+    if (!hasSelectedDetail) return
+    const onPop = () => closeSkillDetail('none')
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
-  }, [!!selectedDetail]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasSelectedDetail, closeSkillDetail])
+
+  useEffect(() => {
+    if (!hasSelectedDetail || !detailPathActiveRef.current || pathname !== '/home') return
+    closeSkillDetail('none')
+  }, [closeSkillDetail, hasSelectedDetail, pathname])
 
   useEffect(() => {
     const el = inlineInputRef.current
@@ -634,11 +752,7 @@ function HomePageInner() {
 
   const handleSkillCardClick = (template: HomeSkill, e: React.MouseEvent) => {
     if (selectedDetail?.id === template.id) {
-      setHeroExpanded(false)
-      setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350)
-      setSelectedSkill(null)
-      createInput.setText('')
-      window.history.pushState(null, '', '/home')
+      closeSkillDetail('pushHome')
       return
     }
     openedFromUrlRef.current = false
@@ -657,6 +771,7 @@ function HomePageInner() {
         detailInnerRef.current.style.transition = 'none'
         detailInnerRef.current.style.transform = `translateY(${-idx * slideH}px)`
       }
+      detailPathActiveRef.current = true
       window.history.pushState(null, '', `/home/${template.id}`)
     })
   }
@@ -1025,13 +1140,22 @@ function HomePageInner() {
       {/* ── Skill Detail Overlay ── */}
       {selectedDetail && (
         <div
-          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); createInput.setText(''); window.history.pushState(null, '', '/home') } }}
+          onTouchStartCapture={handleSkillBackPanStart}
+          onTouchMoveCapture={handleSkillBackPanMove}
+          onTouchEndCapture={handleSkillBackPanEnd}
+          onTouchCancelCapture={resetSkillBackPan}
+          onClick={(e) => { if (isDesktop && e.target === e.currentTarget) closeSkillDetail('pushHome') }}
           style={{
             position: 'fixed', inset: 0, zIndex: Z.OVERLAY,
             background: isDesktop ? 'rgba(0,0,0,0.7)' : '#000',
             opacity: heroExpanded ? 1 : 0,
             pointerEvents: heroExpanded ? 'auto' : 'none',
-            transition: 'opacity 0.3s ease 0.1s',
+            transform: isDesktop ? undefined : `translate3d(${skillBackPanX}px, 0, 0)`,
+            transition: skillBackPanSettling
+              ? 'opacity 0.3s ease 0.1s, transform 180ms ease-out'
+              : 'opacity 0.3s ease 0.1s',
+            willChange: skillBackPanActive || skillBackPanSettling ? 'transform, opacity' : 'opacity',
+            touchAction: isDesktop ? undefined : 'pan-y',
             ...(isDesktop ? {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               paddingBottom: inputWrapperHeight + 16,
@@ -1086,7 +1210,7 @@ function HomePageInner() {
 
             {/* Close button — top right */}
             <button
-              onClick={() => { setHeroExpanded(false); setTimeout(() => { setSelectedDetail(null); setHeroRect(null) }, 350); setSelectedSkill(null); createInput.clear(); window.history.pushState(null, '', '/home') }}
+              onClick={() => closeSkillDetail('pushHome')}
               style={{
                 position: 'absolute', top: isDesktop ? 12 : 'max(12px, env(safe-area-inset-top))', right: 12,
                 width: 36, height: 36, borderRadius: '50%',
@@ -1156,6 +1280,7 @@ function HomePageInner() {
                     setSelectedSkill(t.skill_path ? t.id : null)
                     createInput.clear()
                     createInput.setText(t.prompt)
+                    detailPathActiveRef.current = true
                     window.history.replaceState(null, '', `/home/${t.id}`)
                   }
                 }
@@ -1182,6 +1307,7 @@ function HomePageInner() {
                   setSelectedSkill(t.skill_path ? t.id : null)
                   createInput.clear()
                   createInput.setText(t.prompt)
+                  detailPathActiveRef.current = true
                   window.history.replaceState(null, '', `/home/${t.id}`)
                 }
               }}

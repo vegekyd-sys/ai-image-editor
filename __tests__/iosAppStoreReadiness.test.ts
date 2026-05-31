@@ -104,6 +104,29 @@ describe('iOS App Store readiness guardrails', () => {
     expect(chat).toContain('calc(${inputBarH}px + ${keyboardInsetCss})');
   });
 
+  it('keeps iOS home skill detail back swipe scoped to the skill overlay', () => {
+    const homePage = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
+    expect(homePage).toContain('isMakaronIOSApp');
+    expect(homePage).toContain('usePathname');
+    expect(homePage).toContain('const [isIOSAppShell] = useState(() => isMakaronIOSApp())');
+    expect(homePage).toContain('detailPathActiveRef');
+    expect(homePage).toContain('IOS_SKILL_BACK_EDGE_PX');
+    expect(homePage).toContain('IOS_SKILL_BACK_COMMIT_PX');
+    expect(homePage).toContain('closeSkillDetail');
+    expect(homePage).toContain('handleSkillBackPanStart');
+    expect(homePage).toContain('handleSkillBackPanMove');
+    expect(homePage).toContain('handleSkillBackPanEnd');
+    expect(homePage).toContain('onTouchStartCapture={handleSkillBackPanStart}');
+    expect(homePage).toContain('onTouchMoveCapture={handleSkillBackPanMove}');
+    expect(homePage).toContain('onTouchEndCapture={handleSkillBackPanEnd}');
+    expect(homePage).toContain("window.addEventListener('popstate', onPop)");
+    expect(homePage).toContain("window.history.pushState(null, '', `/home/${template.id}`)");
+    expect(homePage).toContain("window.history.replaceState(null, '', `/home/${t.id}`)");
+    expect(homePage).not.toContain('document.body.style.transform');
+    expect(homePage).not.toContain('cloneNode');
+    expect(homePage).not.toContain('makaron-ios-project');
+  });
+
   it('keeps iOS project navigation inside a live projects-page overlay while preserving CUI pan close', () => {
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
     const bootstrap = fs.readFileSync(path.join(root, 'src/components/NativeAppBootstrap.tsx'), 'utf8');
