@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { CREDIT_TIERS } from '@/lib/billing/tiers'
 import CreditPopup from '@/components/CreditPopup'
+import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 
 interface ApiKey {
   id: string
@@ -41,6 +42,11 @@ interface Balance {
   subscription: SubscriptionInfo | null
 }
 
+interface DashboardPayload extends Balance {
+  keys?: ApiKey[]
+  usage?: UsageLog[]
+}
+
 const PLANS = [
   { id: 'basic', name: 'Basic', monthlyPrice: 990, annualPrice: 9500, credits: 1200 },
   { id: 'pro', name: 'Pro', monthlyPrice: 1990, annualPrice: 19100, credits: 3000 },
@@ -56,6 +62,7 @@ const VALID_TABS: TabType[] = ['subscribe', 'topup', 'keys', 'usage']
 
 function DashboardInner() {
   const searchParams = useSearchParams()
+  const [cachedDashboard] = useState<DashboardPayload | null>(() => readNativeJSONCache<DashboardPayload>('/api/billing/dashboard'))
   const [tab, setTab] = useState<TabType>(() => {
     const t = searchParams.get('tab')
     return VALID_TABS.includes(t as TabType) ? (t as TabType) : 'subscribe'
@@ -65,10 +72,10 @@ function DashboardInner() {
     const t = searchParams.get('tab')
     if (VALID_TABS.includes(t as TabType)) setTab(t as TabType)
   }, [searchParams])
-  const [balance, setBalance] = useState<Balance | null>(null)
-  const [keys, setKeys] = useState<ApiKey[]>([])
-  const [usage, setUsage] = useState<UsageLog[]>([])
-  const [loading, setLoading] = useState(true)
+  const [balance, setBalance] = useState<Balance | null>(() => cachedDashboard)
+  const [keys, setKeys] = useState<ApiKey[]>(() => cachedDashboard?.keys || [])
+  const [usage, setUsage] = useState<UsageLog[]>(() => cachedDashboard?.usage || [])
+  const [loading, setLoading] = useState(() => !cachedDashboard)
   const [newKeyName, setNewKeyName] = useState('')
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -80,7 +87,8 @@ function DashboardInner() {
   const fetchDashboard = useCallback(async () => {
     const res = await fetch('/api/billing/dashboard')
     if (res.ok) {
-      const data = await res.json()
+      const data = await res.json() as DashboardPayload
+      writeNativeJSONCache('/api/billing/dashboard', data)
       setBalance(data)
       setKeys(data.keys || [])
       setUsage(data.usage || [])

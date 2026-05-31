@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale } from '@/lib/i18n';
+import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache';
 
 interface SkillItem {
   name: string;
@@ -13,11 +14,16 @@ interface SkillItem {
   description: string;
 }
 
+interface SkillsPayload {
+  skills?: SkillItem[];
+}
+
 export default function SkillsPage() {
   const router = useRouter();
   const { locale } = useLocale();
-  const [skills, setSkills] = useState<SkillItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [cachedSkills] = useState<SkillsPayload | null>(() => readNativeJSONCache<SkillsPayload>('/api/skills'));
+  const [skills, setSkills] = useState<SkillItem[]>(() => cachedSkills?.skills || []);
+  const [loading, setLoading] = useState(() => !cachedSkills);
   const [sharing, setSharing] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
@@ -29,6 +35,7 @@ export default function SkillsPage() {
     try {
       const res = await fetch('/api/skills');
       const data = await res.json();
+      writeNativeJSONCache('/api/skills', data);
       if (data.skills) setSkills(data.skills);
     } catch {}
     setLoading(false);

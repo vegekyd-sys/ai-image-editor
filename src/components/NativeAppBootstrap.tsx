@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { calculateVisualViewportKeyboardInset } from '@/lib/ios-keyboard';
 import { MAKARON_IOS_USER_AGENT_TOKEN } from '@/lib/native-app';
+import { warmNativeJSONCache } from '@/lib/native-app-cache';
 import { isNativePhotoLibraryPickerAvailable, pickMediaFromNativePhotoLibrary } from '@/lib/native-media';
 
 const NATIVE_BOOT_LOG_SESSION_KEY = 'makaron:ios-native-boot-log';
@@ -11,7 +12,7 @@ const IOS_PAGE_BACK_EDGE_PX = 32;
 const IOS_PAGE_BACK_LOCK_PX = 12;
 const IOS_PAGE_BACK_COMMIT_PX = 92;
 const NATIVE_APP_PREFETCH_ROUTES = ['/home', '/projects', '/dashboard', '/profile', '/skills'];
-const NATIVE_APP_WARM_API_PATHS = ['/api/home-skills', '/api/skills', '/api/billing/credits'];
+const NATIVE_APP_WARM_API_PATHS = ['/api/home-skills', '/api/skills', '/api/billing/credits', '/api/billing/dashboard'];
 
 let hasWarmedNativeAppShell = false;
 
@@ -44,7 +45,7 @@ function warmNativeAppShell(router: ReturnType<typeof useRouter>) {
       }
     });
     NATIVE_APP_WARM_API_PATHS.forEach((path) => {
-      fetch(path, { credentials: 'include' }).catch(() => undefined);
+      warmNativeJSONCache(path);
     });
   };
 

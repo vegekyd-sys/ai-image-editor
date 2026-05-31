@@ -97,6 +97,7 @@ describe('iOS App Store readiness guardrails', () => {
     const skills = fs.readFileSync(path.join(root, 'src/app/skills/page.tsx'), 'utf8');
     const profile = fs.readFileSync(path.join(root, 'src/app/profile/page.tsx'), 'utf8');
     const admin = fs.readFileSync(path.join(root, 'src/app/admin/page.tsx'), 'utf8');
+    const nativeCache = fs.readFileSync(path.join(root, 'src/lib/native-app-cache.ts'), 'utf8');
 
     expect(bootstrap).toContain('IOS_PAGE_BACK_EDGE_PX');
     expect(bootstrap).toContain('IOS_PAGE_BACK_COMMIT_PX');
@@ -112,6 +113,13 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bootstrap).toContain("'/skills'");
     expect(bootstrap).toContain('router.prefetch(route)');
     expect(bootstrap).toContain('NATIVE_APP_WARM_API_PATHS');
+    expect(bootstrap).toContain("'/api/billing/dashboard'");
+    expect(bootstrap).toContain('warmNativeJSONCache(path)');
+    expect(dashboard).toContain("readNativeJSONCache<DashboardPayload>('/api/billing/dashboard')");
+    expect(dashboard).toContain("writeNativeJSONCache('/api/billing/dashboard', data)");
+    expect(skills).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
+    expect(skills).toContain("writeNativeJSONCache('/api/skills', data)");
+    expect(nativeCache).toContain('sessionStorage.setItem');
     expect(bootstrap).toContain('pickMediaFromNativePhotoLibrary');
     expect(bootstrap).toContain('acceptsNativePhotoPicker');
     expect(bootstrap).toContain("input.dispatchEvent(new Event('change'");
