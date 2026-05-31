@@ -45,6 +45,7 @@ import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
+import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache';
 
 export type { AnimationState } from '@/lib/editor/types';
 
@@ -74,6 +75,15 @@ interface EditorProps {
   disableAgentLiveReload?: boolean;
   disableBodyScrollLock?: boolean;
   inactive?: boolean;
+}
+
+interface CreditsPayload {
+  balance?: number;
+  subscription?: { planId: string; status: string } | null;
+}
+
+interface SkillsPayload {
+  skills?: { name: string; label: string; icon: string; builtIn?: boolean }[];
 }
 
 export default function Editor({
@@ -152,8 +162,9 @@ export default function Editor({
 
   // Credit popup + status bar notification
   const [creditPopupOpen, setCreditPopupOpen] = useState(false);
-  const [creditBalance, setCreditBalance] = useState<number>(0);
-  const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(null);
+  const [cachedCredits] = useState<CreditsPayload | null>(() => readNativeJSONCache<CreditsPayload>('/api/billing/credits'));
+  const [creditBalance, setCreditBalance] = useState<number>(() => cachedCredits?.balance ?? 0);
+  const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(() => cachedCredits?.subscription ?? null);
   const [creditExhausted, setCreditExhausted] = useState(false);
   const [creditSuccess, setCreditSuccess] = useState(false);
   const [creditWaiting, setCreditWaiting] = useState(false);
@@ -161,6 +172,7 @@ export default function Editor({
   // Fetch credit balance + subscription info on mount
   useEffect(() => {
     fetch('/api/billing/credits').then(r => r.json()).then(data => {
+      writeNativeJSONCache('/api/billing/credits', data);
       setCreditBalance(data.balance ?? 0);
       setCreditSubscription(data.subscription ?? null);
     }).catch(() => {});
@@ -201,11 +213,16 @@ export default function Editor({
   const [videoModel, setVideoModel] = useState<'kling' | 'seedance'>('kling');
   const videoModelRef = useRef<'kling' | 'seedance'>('kling');
   useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
-  const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>(() => (
+    readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
+  ));
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const skillFileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    fetch('/api/skills').then(r => r.json()).then(d => { if (d.skills) setAvailableSkills(d.skills); }).catch(() => {});
+    fetch('/api/skills').then(r => r.json()).then(d => {
+      writeNativeJSONCache('/api/skills', d);
+      if (d.skills) setAvailableSkills(d.skills);
+    }).catch(() => {});
   }, []);
   const [installingSkill, setInstallingSkill] = useState(false);
   const handleSkillUpload = useCallback(async (file: File) => {
@@ -218,6 +235,7 @@ export default function Editor({
       if (data.success) {
         const r = await fetch('/api/skills');
         const d = await r.json();
+        writeNativeJSONCache('/api/skills', d);
         if (d.skills) setAvailableSkills(d.skills);
         if (data.skillName) setSelectedSkill(data.skillName);
       }
@@ -3134,7 +3152,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     selectedSkill,
     onSkillChange: setSelectedSkill,
     onDeleteSkill: (name: string) => {
-      setAvailableSkills(prev => prev.filter(s => s.name !== name));
+      setAvailableSkills(prev => {
+        const next = prev.filter(s => s.name !== name);
+        writeNativeJSONCache('/api/skills', { skills: next });
+        return next;
+      });
       if (selectedSkill === name) setSelectedSkill(null);
       fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {});
     },

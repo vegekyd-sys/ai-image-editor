@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { CREDIT_TIERS } from '@/lib/billing/tiers';
 import { useLocale } from '@/lib/i18n';
 import { shouldSuppressWebBilling } from '@/lib/native-app';
+import { writeNativeJSONCache } from '@/lib/native-app-cache';
 
 const PLANS = [
   { id: 'basic', name: 'Basic', monthlyPrice: 990, credits: 1200 },
@@ -74,6 +75,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     const poll = () => {
       attempts++;
       fetch('/api/billing/credits').then(r => r.json()).then(data => {
+        writeNativeJSONCache('/api/billing/credits', data);
         const bal = data.balance ?? 0;
         if (data.subscription) setAutoSubscription(data.subscription);
         if (bal > preBalance) {

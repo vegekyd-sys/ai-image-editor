@@ -13,6 +13,7 @@ import { useLocale } from '@/lib/i18n'
 import { getOriginFormatThumbnailUrl, getThumbnailUrl } from '@/lib/supabase/storage'
 import { createProject } from '@/lib/createProject'
 import { warmProjectEditorCache, warmProjectEditorCaches } from '@/lib/project-editor-cache'
+import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
 import { useCreateInput } from '@/hooks/useCreateInput'
@@ -37,6 +38,14 @@ interface SkillItem {
   icon: string;
   color: string;
   builtIn: boolean;
+}
+
+interface SkillsPayload {
+  skills?: SkillItem[]
+}
+
+interface CreditsPayload {
+  balance?: number
 }
 
 const IOS_PROJECT_PAN_EDGE_PX = 36
@@ -136,8 +145,12 @@ function ProjectsPageInner() {
   const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
-  const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
-  const [creditBalance, setCreditBalance] = useState<number | null>(null)
+  const [availableSkills, setAvailableSkills] = useState<SkillItem[]>(() => (
+    readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
+  ))
+  const [creditBalance, setCreditBalance] = useState<number | null>(() => (
+    readNativeJSONCache<CreditsPayload>('/api/billing/credits')?.balance ?? null
+  ))
   const [showWelcome, setShowWelcome] = useState(false)
   const [, setSkillUploading] = useState(false)
   const [, setSkillUploadError] = useState<string | null>(null)
@@ -152,6 +165,7 @@ function ProjectsPageInner() {
       if (data.success) {
         const r = await fetch('/api/skills')
         const d = await r.json()
+        writeNativeJSONCache('/api/skills', d)
         if (d.skills) setAvailableSkills(d.skills)
       } else {
         setSkillUploadError(data.error || 'Upload failed')
@@ -172,6 +186,7 @@ function ProjectsPageInner() {
     const load = () => {
       skillsFetchedRef.current = true
       fetch('/api/skills').then(r => r.json()).then(d => {
+        writeNativeJSONCache('/api/skills', d)
         if (d.skills) setAvailableSkills(d.skills)
       }).catch(() => {})
     }
@@ -760,6 +775,7 @@ function ProjectsPageInner() {
   useEffect(() => {
     if (!user) return
     fetch('/api/billing/credits').then(r => r.json()).then(d => {
+      writeNativeJSONCache('/api/billing/credits', d)
       setCreditBalance(d.balance ?? 0)
     }).catch(() => {})
     // Detect ?welcome=1
@@ -1215,7 +1231,11 @@ function ProjectsPageInner() {
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
               onDeleteSkill={(name) => {
-                setAvailableSkills(prev => prev.filter(s => s.name !== name))
+                setAvailableSkills(prev => {
+                  const next = prev.filter(s => s.name !== name)
+                  writeNativeJSONCache('/api/skills', { skills: next })
+                  return next
+                })
                 fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {})
               }}
               onUploadSkill={() => skillFileRef.current?.click()}

@@ -98,6 +98,10 @@ describe('iOS App Store readiness guardrails', () => {
     const profile = fs.readFileSync(path.join(root, 'src/app/profile/page.tsx'), 'utf8');
     const admin = fs.readFileSync(path.join(root, 'src/app/admin/page.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
+    const home = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
+    const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
+    const topBar = fs.readFileSync(path.join(root, 'src/components/TopBar.tsx'), 'utf8');
+    const creditPopup = fs.readFileSync(path.join(root, 'src/components/CreditPopup.tsx'), 'utf8');
     const nativeCache = fs.readFileSync(path.join(root, 'src/lib/native-app-cache.ts'), 'utf8');
     const projectEditorCache = fs.readFileSync(path.join(root, 'src/lib/project-editor-cache.ts'), 'utf8');
 
@@ -122,6 +126,17 @@ describe('iOS App Store readiness guardrails', () => {
     expect(skills).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(skills).toContain("writeNativeJSONCache('/api/skills', data)");
     expect(nativeCache).toContain('sessionStorage.setItem');
+    expect(topBar).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
+    expect(topBar).toContain("writeNativeJSONCache('/api/billing/credits', d)");
+    expect(editor).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
+    expect(editor).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
+    expect(editor).toContain("writeNativeJSONCache('/api/skills', d)");
+    expect(home).toContain("readNativeJSONCache<HomeSkill[]>('/api/home-skills')");
+    expect(home).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
+    expect(home).toContain("writeNativeJSONCache('/api/home-skills', data)");
+    expect(projects).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
+    expect(projects).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
+    expect(creditPopup).toContain("writeNativeJSONCache('/api/billing/credits', data)");
     expect(projectEditorCache).toContain('warmProjectEditorCache');
     expect(projectEditorCache).toContain('cacheProjectData');
     expect(projects).toContain('warmProjectEditorCaches(projects.map((project) => project.id), userId, 6)');

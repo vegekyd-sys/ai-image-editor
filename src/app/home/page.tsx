@@ -16,6 +16,7 @@ import AgentContent from '@/components/AgentContent'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 import { isMakaronIOSApp } from '@/lib/native-app'
+import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import MakaronLogo from '@/components/MakaronLogo'
@@ -25,6 +26,10 @@ const IOS_SKILL_BACK_EDGE_PX = 36
 const IOS_SKILL_BACK_LOCK_PX = 10
 const IOS_SKILL_BACK_COMMIT_PX = 88
 const IOS_SKILL_BACK_CLOSE_MS = 180
+
+interface SkillsPayload {
+  skills?: { name: string; label: string; icon: string; color: string; builtIn: boolean }[]
+}
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -85,9 +90,14 @@ function HomePageInner() {
   const inputWrapperRef = useRef<HTMLDivElement>(null)
   const [inputWrapperHeight, setInputWrapperHeight] = useState(0)
   const [slotDragOver, setSlotDragOver] = useState(-1)
-  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
+  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>(() => {
+    const nativeCached = readNativeJSONCache<HomeSkill[]>('/api/home-skills')
+    return nativeCached?.length ? nativeCached : getCachedHomeSkills()
+  })
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
-  const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
+  const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>(() => (
+    readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
+  ))
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
   const [skillMenuPos, setSkillMenuPos] = useState<{ bottom: number; left: number } | null>(null)
   const [skillUploading, setSkillUploading] = useState(false)
@@ -265,6 +275,7 @@ function HomePageInner() {
             } else if (d.isNew === false) {
               // Already activated user revisiting with ?welcome=1 — just refresh credits
               fetch('/api/billing/credits').then(r => r.json()).then(b => {
+                writeNativeJSONCache('/api/billing/credits', b)
                 if (b.balance > 0) { setWelcomeCredits(b.balance); setShowWelcome(true); window.dispatchEvent(new Event('credits-updated')) }
               })
             }
@@ -280,12 +291,13 @@ function HomePageInner() {
 
   useEffect(() => {
     // Hydrate from sessionStorage first (instant, avoids skeleton flash on same-session)
-    const cached = getCachedHomeSkills()
+    const cached = readNativeJSONCache<HomeSkill[]>('/api/home-skills') ?? getCachedHomeSkills()
     if (cached.length > 0) setHomeSkills(cached)
 
     // Then fetch fresh data in background
     fetch('/api/home-skills').then(r => r.json()).then(data => {
       if (!Array.isArray(data) || data.length === 0) return
+      writeNativeJSONCache('/api/home-skills', data)
       setHomeSkills(prev => {
         if (prev.length === 0) { setCachedHomeSkills(data); return data }
         const newMap = new Map(data.map((s: HomeSkill) => [s.id, s]))
@@ -310,6 +322,7 @@ function HomePageInner() {
     const load = () => {
       skillsFetchedRef.current = true
       fetch('/api/skills').then(r => r.json()).then(d => {
+        writeNativeJSONCache('/api/skills', d)
         if (d.skills) setAvailableSkills(d.skills)
       }).catch(() => {})
     }
@@ -348,6 +361,7 @@ function HomePageInner() {
       if (data.success) {
         const r = await fetch('/api/skills')
         const d = await r.json()
+        writeNativeJSONCache('/api/skills', d)
         if (d.skills) setAvailableSkills(d.skills)
         if (data.skillName) setSelectedSkill(data.skillName)
         setSkillMenuOpen(false)
@@ -575,6 +589,10 @@ function HomePageInner() {
           if (installData.skillName) {
             skillName = installData.skillName
             setSelectedSkill(installData.skillName)
+            fetch('/api/skills').then(r => r.json()).then(d => {
+              writeNativeJSONCache('/api/skills', d)
+              if (d.skills) setAvailableSkills(d.skills)
+            }).catch(() => {})
           }
         } finally {
           setInstallingSkill(false)
@@ -929,7 +947,14 @@ function HomePageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
-              onDeleteSkill={(name) => { setAvailableSkills(prev => prev.filter(s => s.name !== name)); fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {}) }}
+              onDeleteSkill={(name) => {
+                setAvailableSkills(prev => {
+                  const next = prev.filter(s => s.name !== name)
+                  writeNativeJSONCache('/api/skills', { skills: next })
+                  return next
+                })
+                fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {})
+              }}
               onUploadSkill={() => skillFileRef.current?.click()}
               installingSkill={installingSkill}
               overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}
@@ -1085,7 +1110,14 @@ function HomePageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
-              onDeleteSkill={(name) => { setAvailableSkills(prev => prev.filter(s => s.name !== name)); fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {}) }}
+              onDeleteSkill={(name) => {
+                setAvailableSkills(prev => {
+                  const next = prev.filter(s => s.name !== name)
+                  writeNativeJSONCache('/api/skills', { skills: next })
+                  return next
+                })
+                fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {})
+              }}
               onUploadSkill={() => skillFileRef.current?.click()}
               installingSkill={installingSkill}
               overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}

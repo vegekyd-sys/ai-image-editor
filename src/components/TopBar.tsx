@@ -7,9 +7,14 @@ import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
 import Changelog from '@/components/Changelog'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
+import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 
 interface TopBarProps {
   page: 'home' | 'projects'
+}
+
+interface CreditsPayload {
+  balance?: number
 }
 
 export default function TopBar({ page }: TopBarProps) {
@@ -19,12 +24,16 @@ export default function TopBar({ page }: TopBarProps) {
 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
-  const [creditBalance, setCreditBalance] = useState<number | null>(null)
+  const [creditBalance, setCreditBalance] = useState<number | null>(() => {
+    const cached = readNativeJSONCache<CreditsPayload>('/api/billing/credits')
+    return cached?.balance ?? null
+  })
   const [showChangelog, setShowChangelog] = useState(false)
 
   useEffect(() => {
     if (!user) return
     const refresh = () => fetch('/api/billing/credits').then(r => r.json()).then(d => {
+      writeNativeJSONCache('/api/billing/credits', d)
       setCreditBalance(d.balance ?? 0)
     }).catch(() => {})
     refresh()
