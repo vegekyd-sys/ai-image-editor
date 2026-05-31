@@ -99,7 +99,7 @@ function sendNativeMessage<T>(message: NativeMessage, timeoutMs: number): Promis
 }
 
 function sendNativeSaveMessage(payload: Omit<Extract<NativePayload, { action: 'saveToPhotos' }>, 'id' | 'action'>): Promise<void> {
-  return sendNativeMessage<void>({ action: 'saveToPhotos', ...payload }, 120000);
+  return sendNativeMessage<NativeResponseDetail>({ action: 'saveToPhotos', ...payload }, 120000).then(() => undefined);
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
