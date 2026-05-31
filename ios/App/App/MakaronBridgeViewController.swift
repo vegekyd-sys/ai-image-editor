@@ -199,12 +199,22 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     }
 
     private func saveImageData(_ data: Data, id: String, filename: String) {
+        let photoData: Data
+        let photoFilename: String
+        if let image = UIImage(data: data), let jpegData = image.jpegData(compressionQuality: 0.95) {
+            photoData = jpegData
+            photoFilename = jpegFilename(for: filename)
+        } else {
+            photoData = data
+            photoFilename = filename
+        }
+
         let options = PHAssetResourceCreationOptions()
-        options.originalFilename = filename
+        options.originalFilename = photoFilename
 
         PHPhotoLibrary.shared().performChanges({
             let request = PHAssetCreationRequest.forAsset()
-            request.addResource(with: .photo, data: data, options: options)
+            request.addResource(with: .photo, data: photoData, options: options)
         }) { [weak self] success, error in
             self?.sendNativeResponse(id: id, ok: success, error: error?.localizedDescription)
         }
@@ -255,6 +265,14 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
 
     private func defaultFilename(for mediaType: String) -> String {
         mediaType == "video" ? "makaron-video.mp4" : "makaron-image.jpg"
+    }
+
+    private func jpegFilename(for filename: String) -> String {
+        let trimmed = filename.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "makaron-image.jpg" }
+        let ns = trimmed as NSString
+        let base = ns.deletingPathExtension
+        return "\(base.isEmpty ? "makaron-image" : base).jpg"
     }
 
     private func filename(for provider: NSItemProvider, typeIdentifier: String, fallback: String) -> String {
