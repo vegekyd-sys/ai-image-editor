@@ -19,7 +19,7 @@ import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
-import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
 import { downloadAsset } from '@/lib/editor/download';
@@ -505,6 +505,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const currentDisplayImage = isViewingVideo
     ? (currentSnap?.image || currentSnap?.imageUrl || timeline[viewIndex] || '')
     : (timeline[viewIndex] || '');
+  const hasRenderableCurrentDesign = !!(draftDesign || designsMap.get(viewIndex));
+  const showCanvasPlaceholder = shouldShowCanvasPlaceholder({
+    timeline,
+    viewIndex,
+    isViewingVideoV2,
+    hasRenderableDesign: hasRenderableCurrentDesign,
+  });
   const currentDisplayImageRef = useRef(currentDisplayImage);
   useEffect(() => { currentDisplayImageRef.current = currentDisplayImage; }, [currentDisplayImage]);
 
@@ -3085,7 +3092,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             className="flex-1 relative min-h-0 overflow-hidden"
             style={heroAnim ? { opacity: 0 } : undefined}
           >
-            {timeline.length === 0 || (timeline.length === 1 && !timeline[0] && !isViewingVideoV2) ? (
+            {showCanvasPlaceholder ? (
               (isAgentActive || (timeline.length === 1 && !timeline[0])) ? (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3">

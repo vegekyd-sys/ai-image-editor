@@ -320,11 +320,11 @@ try {
     '用 Kling 把这张图生成 5 秒竖版视频：镜头缓慢推进，主体微微发光，背景有干净的科技感光线流动。直接提交渲染，不要问我确认。',
     { body: { videoModel: 'kling' } },
   ))
-  const videoSummary = summarizeAgent('video_script_confirmation_gate', videoProjectUrl, videoAgent, parseSse(videoAgent.text))
+  const videoSummary = summarizeAgent('video_direct_submit_kling', videoProjectUrl, videoAgent, parseSse(videoAgent.text))
   videoSummary.ok = videoSummary.ok
-    && !videoSummary.toolNames.includes('generate_animation')
-    && !videoSummary.eventTypes.includes('video_snapshot')
-    && /确认|confirm|提交|开始生成|script|脚本/i.test(videoSummary.content)
+    && videoSummary.toolNames.includes('generate_animation')
+    && videoSummary.eventTypes.includes('video_snapshot')
+    && /Kling|kling|渲染|生成|提交/i.test(videoSummary.content)
   summaries.push(videoSummary)
 
   await page.goto(videoProjectUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})

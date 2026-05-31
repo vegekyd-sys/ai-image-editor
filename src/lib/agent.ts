@@ -341,7 +341,7 @@ function createTools(ctx: AgentContext) {
     generate_animation: tool({
       description: `Submit a video script for rendering.
 
-Use this tool only after the user has confirmed a video script that is already visible in the conversation. Never call it in the same turn where you first write the script.
+Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation".
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
@@ -352,7 +352,7 @@ Hard constraints (apply even before reading the guide):
 - Total duration: 5-15 seconds.
 - Video edit duration lock: when editing a timeline video, output duration should match that source video's duration from Media Index; never fall back to 5s unless the user explicitly asks to shorten it.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
-- The script must have been shown to the user and confirmed before this tool is called.`,
+- The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. For timeline video edits, set this to the source video duration from Media Index. Omit for smart mode only when generating from photos.'),
