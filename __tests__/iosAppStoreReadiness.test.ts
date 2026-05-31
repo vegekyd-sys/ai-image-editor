@@ -98,6 +98,8 @@ describe('iOS App Store readiness guardrails', () => {
     const profile = fs.readFileSync(path.join(root, 'src/app/profile/page.tsx'), 'utf8');
     const admin = fs.readFileSync(path.join(root, 'src/app/admin/page.tsx'), 'utf8');
     const adminStatus = fs.readFileSync(path.join(root, 'src/app/admin/status/page.tsx'), 'utf8');
+    const demo3d = fs.readFileSync(path.join(root, 'src/app/demo-3d/page.tsx'), 'utf8');
+    const videoRelease = fs.readFileSync(path.join(root, 'src/app/releases/video-in-timeline/page.tsx'), 'utf8');
     const agentContent = fs.readFileSync(path.join(root, 'src/components/AgentContent.tsx'), 'utf8');
     const claim = fs.readFileSync(path.join(root, 'src/app/claim/page.tsx'), 'utf8');
     const mcp = fs.readFileSync(path.join(root, 'src/app/mcp/page.tsx'), 'utf8');
@@ -195,11 +197,15 @@ describe('iOS App Store readiness guardrails', () => {
     expect(dashboard).toContain('handleBackToApp');
     expect(skills).toContain('handleBackToApp');
     expect(profile).toContain('handleBackToApp');
+    expect(admin).toContain('navigateBackInIOSApp');
+    expect(admin).toContain('handleBackToApp');
     expect(dashboard).toContain('makaron-ios-page');
     expect(skills).toContain('makaron-ios-page');
     expect(profile).toContain('makaron-ios-page');
     expect(admin).toContain('makaron-ios-page');
     expect(adminStatus).toContain('makaron-ios-page');
+    expect(demo3d).toContain('makaron-ios-page');
+    expect(videoRelease).toContain('makaron-ios-page');
     expect(agentContent).toContain('makaron-ios-page');
     expect(claim).toContain('makaron-ios-page');
     expect(mcp).toContain('makaron-ios-page');
@@ -213,8 +219,10 @@ describe('iOS App Store readiness guardrails', () => {
       { route: '/dashboard', file: 'src/app/dashboard/page.tsx', required: ['makaron-ios-page', 'navigateBackInIOSApp', "readNativeJSONCache<DashboardPayload>('/api/billing/dashboard')"] },
       { route: '/profile', file: 'src/app/profile/page.tsx', required: ['makaron-ios-page', 'navigateBackInIOSApp'] },
       { route: '/skills', file: 'src/app/skills/page.tsx', required: ['makaron-ios-page', 'navigateBackInIOSApp', "readNativeJSONCache<SkillsPayload>('/api/skills')"] },
-      { route: '/admin', file: 'src/app/admin/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/admin', file: 'src/app/admin/page.tsx', required: ['makaron-ios-page', 'navigateBackInIOSApp'] },
       { route: '/admin/status', file: 'src/app/admin/status/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/demo-3d', file: 'src/app/demo-3d/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/releases/video-in-timeline', file: 'src/app/releases/video-in-timeline/page.tsx', required: ['makaron-ios-page'] },
       { route: '/claim', file: 'src/app/claim/page.tsx', required: ['makaron-ios-page'] },
       { route: '/mcp', file: 'src/app/mcp/page.tsx', required: ['makaron-ios-page'] },
       { route: '/s/[code]', file: 'src/app/s/[code]/page.tsx', required: ['makaron-ios-page'] },

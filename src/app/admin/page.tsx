@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { navigateBackInIOSApp } from '@/lib/native-navigation'
 
 interface InviteCode {
   id: string
@@ -37,6 +39,7 @@ interface TokenRateEntry {
 }
 
 export default function AdminPage() {
+  const router = useRouter()
   const [tab, setTab] = useState<'codes' | 'waitlist' | 'billing' | 'skills'>('codes')
   const [codes, setCodes] = useState<InviteCode[]>([])
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
@@ -140,6 +143,11 @@ export default function AdminPage() {
     }
   }
 
+  const handleBackToApp = () => {
+    if (navigateBackInIOSApp('/projects')) return
+    router.push('/projects')
+  }
+
   if (error) {
     return (
       <div className="makaron-ios-page min-h-dvh bg-black flex items-center justify-center text-red-400 text-lg">
@@ -163,7 +171,9 @@ export default function AdminPage() {
     <div className="makaron-ios-page min-h-dvh bg-black text-white p-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Admin</h1>
-        <a href="/projects" className="text-white/40 text-sm hover:text-white/60">← Back to app</a>
+        <button type="button" onClick={handleBackToApp} className="text-white/40 text-sm hover:text-white/60">
+          ← Back to app
+        </button>
       </div>
 
       {/* Tabs */}
