@@ -56,6 +56,16 @@ body {
   padding: 0;
 }
 
+.makaron-ios-app .makaron-ios-page {
+  box-sizing: border-box;
+  padding-top: max(24px, calc(env(safe-area-inset-top) + 16px)) !important;
+}
+
+.makaron-ios-app .makaron-ios-page-x {
+  padding-left: max(20px, env(safe-area-inset-left)) !important;
+  padding-right: max(20px, env(safe-area-inset-right)) !important;
+}
+
 .makaron-ios-app .makaron-editor-shell {
   box-sizing: border-box;
   padding: 0;

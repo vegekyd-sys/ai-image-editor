@@ -1,5 +1,6 @@
 import type { Snapshot } from '@/types';
 import type { LocaleContextValue } from '@/lib/i18n';
+import { isNativePhotoLibrarySaveAvailable, saveBlobToNativePhotoLibrary, saveUrlToNativePhotoLibrary } from '@/lib/native-media';
 import { snapFromTimeline } from './timeline-utils';
 
 export interface DownloadAssetParams {
@@ -39,6 +40,18 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     const filename = `makaron-video-${Date.now()}.mp4`;
     setIsSaving(true);
     try {
+      if (isNativePhotoLibrarySaveAvailable()) {
+        try {
+          await saveUrlToNativePhotoLibrary(videoSrc, filename, 'video');
+          setIsSaving(false);
+          setAgentStatus(t('editor.done'));
+          showSaveToast();
+          return;
+        } catch (error) {
+          console.warn('Native video save failed, falling back to web save:', error);
+        }
+      }
+
       const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}&download=1`;
       const res = await fetch(proxyUrl);
       if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
@@ -80,6 +93,17 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     if (isMobile && pendingVideoRef.current) {
       const { blob, filename } = pendingVideoRef.current;
       pendingVideoRef.current = null;
+      if (isNativePhotoLibrarySaveAvailable()) {
+        try {
+          await saveBlobToNativePhotoLibrary(blob, filename, 'video');
+          setAgentStatus(t('editor.done'));
+          showSaveToast();
+          return;
+        } catch (error) {
+          console.warn('Native pending video save failed, falling back to share:', error);
+        }
+      }
+
       const file = new File([blob], filename, { type: 'video/mp4' });
       try {
         if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
@@ -109,6 +133,18 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
 
       if (isMobile) {
         const filename = `makaron-design-${Date.now()}.mp4`;
+        if (isNativePhotoLibrarySaveAvailable()) {
+          try {
+            await saveBlobToNativePhotoLibrary(blob, filename, 'video');
+            setIsSaving(false);
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+            return;
+          } catch (error) {
+            console.warn('Native design video save failed, falling back to web save:', error);
+          }
+        }
+
         const file = new File([blob], filename, { type: 'video/mp4' });
         if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
           // Mobile + share available: store blob, prompt user to tap Share
@@ -174,6 +210,17 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     const slug = (projectTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
     const idx = (snapIdxForSave ?? viewIndex) + 1;
     const filename = `makaron-${slug}-${idx}.${ext}`;
+
+    if (isNativePhotoLibrarySaveAvailable()) {
+      try {
+        await saveBlobToNativePhotoLibrary(blob, filename, 'image');
+        setIsSaving(false);
+        showSaveToast();
+        return;
+      } catch (error) {
+        console.warn('Native image save failed, falling back to web save:', error);
+      }
+    }
 
     if (navigator.share && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
       const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });

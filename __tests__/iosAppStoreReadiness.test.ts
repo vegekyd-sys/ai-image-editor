@@ -73,6 +73,7 @@ describe('iOS App Store readiness guardrails', () => {
     const changelog = fs.readFileSync(path.join(root, 'src/components/Changelog.tsx'), 'utf8');
     expect(globals).toContain('.makaron-ios-app body');
     expect(globals).toContain('padding: 0');
+    expect(globals).toContain('.makaron-ios-app .makaron-ios-page');
     expect(globals).toContain('.makaron-ios-app .makaron-editor-shell');
     expect(globals).toContain('--makaron-ios-bottom-control-inset');
     expect(globals).toContain('.makaron-ios-app .makaron-editor-bottom-bar');
@@ -88,6 +89,63 @@ describe('iOS App Store readiness guardrails', () => {
     expect(changelog).toContain('makaron-ios-app');
     expect(changelog).toContain('max-h-[82dvh]');
     expect(changelog).toContain('w-full h-full sm:h-auto');
+  });
+
+  it('gives secondary iOS app pages safe top space and a normal edge-back gesture', () => {
+    const bootstrap = fs.readFileSync(path.join(root, 'src/components/NativeAppBootstrap.tsx'), 'utf8');
+    const dashboard = fs.readFileSync(path.join(root, 'src/app/dashboard/page.tsx'), 'utf8');
+    const skills = fs.readFileSync(path.join(root, 'src/app/skills/page.tsx'), 'utf8');
+    const profile = fs.readFileSync(path.join(root, 'src/app/profile/page.tsx'), 'utf8');
+    const admin = fs.readFileSync(path.join(root, 'src/app/admin/page.tsx'), 'utf8');
+
+    expect(bootstrap).toContain('IOS_PAGE_BACK_EDGE_PX');
+    expect(bootstrap).toContain('IOS_PAGE_BACK_COMMIT_PX');
+    expect(bootstrap).toContain('shouldUsePageBackGesture');
+    expect(bootstrap).toContain("path === '/projects'");
+    expect(bootstrap).toContain("path === '/home'");
+    expect(bootstrap).toContain("document.querySelector('.makaron-editor-shell')");
+    expect(bootstrap).toContain("document.querySelector('[data-makaron-ios-project-overlay]')");
+    expect(bootstrap).toContain("document.querySelector('[data-makaron-cui-pan]')");
+    expect(bootstrap).toContain('window.history.back()');
+    expect(bootstrap).toContain('NATIVE_APP_PREFETCH_ROUTES');
+    expect(bootstrap).toContain("'/dashboard'");
+    expect(bootstrap).toContain("'/skills'");
+    expect(bootstrap).toContain('router.prefetch(route)');
+    expect(bootstrap).toContain('NATIVE_APP_WARM_API_PATHS');
+    expect(bootstrap).toContain('pickMediaFromNativePhotoLibrary');
+    expect(bootstrap).toContain('acceptsNativePhotoPicker');
+    expect(bootstrap).toContain("input.dispatchEvent(new Event('change'");
+    expect(bootstrap).not.toContain('document.body.style.transform');
+    expect(bootstrap).not.toContain('cloneNode');
+    expect(dashboard).toContain('makaron-ios-page');
+    expect(skills).toContain('makaron-ios-page');
+    expect(profile).toContain('makaron-ios-page');
+    expect(admin).toContain('makaron-ios-page');
+  });
+
+  it('saves editor images and videos through native Photos on iOS before web fallbacks', () => {
+    const bridge = fs.readFileSync(path.join(root, 'ios/App/App/MakaronBridgeViewController.swift'), 'utf8');
+    const nativeMedia = fs.readFileSync(path.join(root, 'src/lib/native-media.ts'), 'utf8');
+    const download = fs.readFileSync(path.join(root, 'src/lib/editor/download.ts'), 'utf8');
+
+    expect(bridge).toContain('WKScriptMessageHandler');
+    expect(bridge).toContain('PHPickerViewControllerDelegate');
+    expect(bridge).toContain('PHPhotoLibrary');
+    expect(bridge).toContain('PHPickerViewController');
+    expect(bridge).toContain('makaronNative');
+    expect(bridge).toContain('saveToPhotos');
+    expect(bridge).toContain('pickMedia');
+    expect(bridge).toContain('PHAssetCreationRequest.forAsset()');
+    expect(bridge).toContain("window.dispatchEvent(new CustomEvent('makaron-native-response'");
+    expect(nativeMedia).toContain('isNativePhotoLibrarySaveAvailable');
+    expect(nativeMedia).toContain('isNativePhotoLibraryPickerAvailable');
+    expect(nativeMedia).toContain('saveBlobToNativePhotoLibrary');
+    expect(nativeMedia).toContain('saveUrlToNativePhotoLibrary');
+    expect(nativeMedia).toContain('pickMediaFromNativePhotoLibrary');
+    expect(nativeMedia).toContain('webkit?.messageHandlers?.makaronNative');
+    expect(download).toContain('isNativePhotoLibrarySaveAvailable');
+    expect(download).toContain('saveBlobToNativePhotoLibrary');
+    expect(download).toContain('saveUrlToNativePhotoLibrary');
   });
 
   it('routes native keyboard height into the CUI input bar', () => {

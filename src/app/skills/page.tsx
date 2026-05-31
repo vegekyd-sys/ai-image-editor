@@ -88,7 +88,7 @@ export default function SkillsPage() {
   const builtInSkills = skills.filter(s => s.builtIn);
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#000', color: '#fff', padding: '0 20px 40px' }}>
+    <div className="makaron-ios-page makaron-ios-page-x" style={{ minHeight: '100dvh', background: '#000', color: '#fff', padding: '0 20px 40px' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       {/* Header */}
       <div style={{ padding: '20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
