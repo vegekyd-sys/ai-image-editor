@@ -5,6 +5,9 @@ import {
   saveUrlToNativePhotoLibrary,
 } from '@/lib/native-media';
 
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+
 vi.mock('@/lib/native-media', () => ({
   isNativePhotoLibrarySaveAvailable: vi.fn(() => true),
   saveBlobToNativePhotoLibrary: vi.fn(() => Promise.resolve()),
@@ -37,6 +40,14 @@ describe('iOS editor image save flow', () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: originalCreateObjectURL,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: originalRevokeObjectURL,
+    });
     vi.unstubAllGlobals();
   });
 
@@ -78,6 +89,59 @@ describe('iOS editor image save flow', () => {
     );
     expect(params.setAgentStatus).toHaveBeenCalledWith('Native save failed, trying fallback...');
     expect(params.setAgentStatus).toHaveBeenCalledWith('editor.done');
+    expect(params.showSaveToast).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves remote videos through native Photos URL save before proxying downloads', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const params = makeParams({
+      isViewingVideo: true,
+      currentVideoUrl: 'https://cdn.makaron.app/video.mp4',
+    });
+
+    await downloadAsset(params);
+
+    expect(saveUrlToNativePhotoLibrary).toHaveBeenCalledWith(
+      'https://cdn.makaron.app/video.mp4',
+      expect.stringMatching(/^makaron-video-\d+\.mp4$/),
+      'video',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(saveBlobToNativePhotoLibrary).not.toHaveBeenCalled();
+    expect(params.setAgentStatus).toHaveBeenCalledWith('Saving to Photos...');
+    expect(params.setAgentStatus).toHaveBeenCalledWith('editor.done');
+    expect(params.showSaveToast).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the video proxy when native video URL save fails', async () => {
+    vi.mocked(saveUrlToNativePhotoLibrary).mockRejectedValueOnce(new Error('video url save failed'));
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      blob: async () => new Blob(['mp4'], { type: 'video/mp4' }),
+    })));
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:video'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const params = makeParams({
+      isViewingVideo: true,
+      currentVideoUrl: 'https://cdn.makaron.app/video.mp4',
+    });
+
+    await downloadAsset(params);
+
+    expect(saveUrlToNativePhotoLibrary).toHaveBeenCalledWith(
+      'https://cdn.makaron.app/video.mp4',
+      expect.stringMatching(/^makaron-video-\d+\.mp4$/),
+      'video',
+    );
+    expect(fetch).toHaveBeenCalledWith('/api/proxy-video?url=https%3A%2F%2Fcdn.makaron.app%2Fvideo.mp4&download=1');
+    expect(params.setAgentStatus).toHaveBeenCalledWith('Native save failed, trying fallback...');
     expect(params.showSaveToast).toHaveBeenCalledTimes(1);
   });
 });
