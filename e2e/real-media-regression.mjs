@@ -218,11 +218,27 @@ async function callTips(imageBase64, category, existingLabels = []) {
 
 const summaries = []
 
+async function retry(label, fn, attempts = 3) {
+  let lastError
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error
+      if (i < attempts) {
+        await page.waitForTimeout(1500 * i).catch(() => {})
+        await page.goto(`${baseUrl}/projects`, { waitUntil: 'domcontentloaded' }).catch(() => {})
+      }
+    }
+  }
+  throw new Error(`${label} failed after ${attempts} attempts: ${lastError?.message || lastError}`)
+}
+
 try {
   await login()
   const imageBase64 = await sampleImageBase64()
 
-  const imageProject = await createProject({ title: 'Codex real image regression', imageBase64 })
+  const imageProject = await retry('image project create', () => createProject({ title: 'Codex real image regression', imageBase64 }))
   if (imageProject.status !== 200) throw new Error(`Image project create failed: ${JSON.stringify(imageProject)}`)
   const imageProjectId = imageProject.json.projectId
   const imageProjectUrl = `${baseUrl}/projects/${imageProjectId}`
@@ -237,7 +253,7 @@ try {
   const tipsResults = []
   const existingLabels = []
   for (const category of tipsCategories) {
-    const tipsResult = await callTips(imageBase64, category, existingLabels)
+    const tipsResult = await retry(`tips ${category}`, () => callTips(imageBase64, category, existingLabels))
     const labels = Array.from(tipsResult.text.matchAll(/"label"\s*:\s*"([^"]+)"/g), (match) => match[1])
     existingLabels.push(...labels)
     tipsResults.push({
@@ -255,55 +271,55 @@ try {
     categories: tipsResults,
   })
 
-  const imageAgent = await runAgent(
+  const imageAgent = await retry('image edit agent', () => runAgent(
     imageProjectId,
     '把这张图片变成更高级的夜晚霓虹产品海报，保留主体构图，直接生成，不要问我确认。',
-  )
+  ))
   const imageEditSummary = summarizeAgent('image_generate_edit', imageProjectUrl, imageAgent, parseSse(imageAgent.text))
   imageEditSummary.ok = imageEditSummary.ok
     && imageEditSummary.toolNames.includes('generate_image')
     && !imageEditSummary.toolNames.includes('run_code')
   summaries.push(imageEditSummary)
 
-  const imageLayoutAgent = await runAgent(
+  const imageLayoutAgent = await retry('image layout agent', () => runAgent(
     imageProjectId,
     '基于当前图做一张高级信息丰富的电商海报，突出主体卖点和视觉层级，直接生成图片，不要做可编辑模板。',
-  )
+  ))
   const imageLayoutSummary = summarizeAgent('image_layout_should_not_run_code', imageProjectUrl, imageLayoutAgent, parseSse(imageLayoutAgent.text))
   imageLayoutSummary.ok = imageLayoutSummary.ok
     && imageLayoutSummary.toolNames.includes('generate_image')
     && !imageLayoutSummary.toolNames.includes('run_code')
   summaries.push(imageLayoutSummary)
 
-  const designProject = await createProject({ title: 'Codex real design regression' })
+  const designProject = await retry('design project create', () => createProject({ title: 'Codex real design regression' }))
   if (designProject.status !== 200) throw new Error(`Design project create failed: ${JSON.stringify(designProject)}`)
   const designProjectId = designProject.json.projectId
   const designProjectUrl = `${baseUrl}/projects/${designProjectId}`
-  const designAgent = await runAgent(
+  const designAgent = await retry('run_code design agent', () => runAgent(
     designProjectId,
     '用 run_code 做一个 5 秒竖版可编辑 motion design：主题是 Makaron Video Lab，包含标题、三段节奏卡点文字、动态色块和轻微镜头推进。直接发布到时间线。',
-  )
+  ))
   const designSummary = summarizeAgent('run_code_design_publish', designProjectUrl, designAgent, parseSse(designAgent.text))
   designSummary.ok = designSummary.ok && designSummary.toolNames.includes('run_code')
   summaries.push(designSummary)
 
-  const musicAgent = await runAgent(
+  const musicAgent = await retry('music agent', () => runAgent(
     designProjectId,
     '给这个 motion design 生成一段适合科技产品 demo 的背景音乐，轻快、有推进感、纯音乐，直接生成。',
-  )
+  ))
   const musicSummary = summarizeAgent('music_generate_suno', designProjectUrl, musicAgent, parseSse(musicAgent.text))
   musicSummary.ok = musicSummary.ok && musicSummary.toolNames.includes('generate_music')
   summaries.push(musicSummary)
 
-  const videoProject = await createProject({ title: 'Codex video script confirmation regression', imageBase64 })
+  const videoProject = await retry('video project create', () => createProject({ title: 'Codex video script confirmation regression', imageBase64 }))
   if (videoProject.status !== 200) throw new Error(`Video project create failed: ${JSON.stringify(videoProject)}`)
   const videoProjectId = videoProject.json.projectId
   const videoProjectUrl = `${baseUrl}/projects/${videoProjectId}`
-  const videoAgent = await runAgent(
+  const videoAgent = await retry('video script agent', () => runAgent(
     videoProjectId,
     '用 Kling 把这张图生成 5 秒竖版视频：镜头缓慢推进，主体微微发光，背景有干净的科技感光线流动。直接提交渲染，不要问我确认。',
     { body: { videoModel: 'kling' } },
-  )
+  ))
   const videoSummary = summarizeAgent('video_script_confirmation_gate', videoProjectUrl, videoAgent, parseSse(videoAgent.text))
   videoSummary.ok = videoSummary.ok
     && !videoSummary.toolNames.includes('generate_animation')
@@ -318,6 +334,21 @@ try {
   await writeFile(reportPath, JSON.stringify({ ok: summaries.every((item) => item.ok), baseUrl, summaries }, null, 2))
   console.log(JSON.stringify({ ok: summaries.every((item) => item.ok), reportPath, summaries }, null, 2))
   if (!summaries.every((item) => item.ok)) process.exitCode = 1
+} catch (error) {
+  const reportPath = path.join(outputDir, 'summary.json')
+  await writeFile(reportPath, JSON.stringify({
+    ok: false,
+    baseUrl,
+    error: error instanceof Error ? error.message : String(error),
+    summaries,
+  }, null, 2))
+  console.log(JSON.stringify({
+    ok: false,
+    reportPath,
+    error: error instanceof Error ? error.message : String(error),
+    summaries,
+  }, null, 2))
+  process.exitCode = 1
 } finally {
   await context.close()
   await browser.close()
