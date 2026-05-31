@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
@@ -19,7 +20,7 @@ function isInAppBrowser(): boolean {
 }
 
 export default function LoginPage() {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const [view, setView] = useState<View>('form')
   const [inApp] = useState(isInAppBrowser)
 
@@ -323,7 +324,7 @@ export default function LoginPage() {
       @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
       .mkr-handwrite { font-family: 'Caveat', cursive; }
     `}</style>
-    <div className="min-h-dvh bg-black flex items-center justify-center px-6 relative overflow-hidden">
+    <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black flex items-center justify-center px-6 relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none" style={{
         background: 'radial-gradient(ellipse 60% 40% at 50% 60%, rgba(217,70,239,0.06) 0%, transparent 70%)',
       }} />
@@ -400,9 +401,9 @@ export default function LoginPage() {
               </button>
             </p>
             <p className="mt-6 text-center">
-              <a href="/home" className="text-white/25 hover:text-white/50 text-xs transition-colors">
+              <Link href="/home" className="text-white/25 hover:text-white/50 text-xs transition-colors">
                 ← {t('auth.back')}
-              </a>
+              </Link>
             </p>
           </>
         )}

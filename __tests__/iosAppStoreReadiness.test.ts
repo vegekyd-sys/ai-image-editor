@@ -101,6 +101,8 @@ describe('iOS App Store readiness guardrails', () => {
     const agentContent = fs.readFileSync(path.join(root, 'src/components/AgentContent.tsx'), 'utf8');
     const claim = fs.readFileSync(path.join(root, 'src/app/claim/page.tsx'), 'utf8');
     const mcp = fs.readFileSync(path.join(root, 'src/app/mcp/page.tsx'), 'utf8');
+    const login = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
+    const activate = fs.readFileSync(path.join(root, 'src/app/activate/page.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const home = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
@@ -169,6 +171,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(agentContent).toContain('makaron-ios-page');
     expect(claim).toContain('makaron-ios-page');
     expect(mcp).toContain('makaron-ios-page');
+    expect(login).toContain('makaron-ios-page');
+    expect(activate).toContain('makaron-ios-page');
   });
 
   it('saves editor images and videos through native Photos on iOS before web fallbacks', () => {
