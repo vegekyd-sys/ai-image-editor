@@ -1,6 +1,8 @@
 Edit the current photo or generate a new image from text.
 
-For the full image workflow, call `read_file('prompts/image.md')` before complex image work, multi-image composition, skill routing, red annotations, restoration, model selection, captions, design/layout images, or any first non-trivial image edit in a conversation. Do not re-read it if it already appears in tool-result history.
+For the full image workflow, call `read_file('prompts/image.md')` before complex image work, multi-image composition, skill routing, red annotations, restoration, model selection, captions, or design/layout images. Do not re-read it if it already appears in tool-result history.
+
+For a clear direct edit such as "make this a neon poster" or "change the background to a beach", do not read the full guide first; call `generate_image` directly.
 
 Core contract:
 
@@ -11,6 +13,8 @@ Core contract:
 - `skill` may be `enhance`, `creative`, `wild`, `captions`, or a user skill. Use it for general style intent; omit it for precise manual instructions.
 - `useOriginalAsReference=true` adds the original photo as Image 2 when restoring identity, color, background, or composition drift.
 - `model` is optional. Use `qwen` for NSFW-risk requests. Use `openai` for accurate text rendering, face identity complaints, and design/layout images.
+
+Built-in skill fast-path routing is summarized in `agent.md`. If that fast path selects a built-in skill, read only that one skill prompt file once, unless it already appears in tool-result history. Do not read `prompts/image.md` just to route the skill. For precise manual instructions, omit `skill` and write the full editPrompt yourself.
 
 Edit Mode prompt shape:
 

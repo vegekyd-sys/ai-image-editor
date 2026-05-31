@@ -17,6 +17,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Makaron - one man creative studio",
   description: "AI-powered image editor - chat to edit your photos",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/brand/makaron-favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/makaron-favicon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/makaron-apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {

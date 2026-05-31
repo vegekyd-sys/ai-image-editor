@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import RollingTagline from '@/components/RollingTagline'
+import { MakaronSpark } from '@/components/MakaronLogo'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
@@ -331,10 +332,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm relative z-10">
         {/* Wordmark */}
         <div className="flex items-center justify-center gap-3 mb-1">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(217,70,239)" strokeWidth="1.8" strokeLinecap="round">
-            <line x1="12" y1="2" x2="12" y2="22" /><line x1="2" y1="12" x2="22" y2="12" />
-            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /><line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
-          </svg>
+          <MakaronSpark size={30} />
           <div style={{ fontWeight: 800, fontSize: 'clamp(2.2rem, 10vw, 3.2rem)', letterSpacing: '-0.04em', color: '#fff', lineHeight: 1 }}>
             Makaron
           </div>

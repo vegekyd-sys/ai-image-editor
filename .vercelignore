@@ -10,6 +10,7 @@ scripts/serve*
 !public/landing/*.jpg
 !public/landing/*.jpeg
 !public/landing/*.png
+!public/brand/*.png
 !public/skills/*.jpg
 !public/skills/*.gif
 !public/video-placeholder.png

@@ -42,7 +42,7 @@ async function extractVideoInfo(file: File): Promise<{
 
   if (duration > MAX_ACCEPTED_DURATION) {
     URL.revokeObjectURL(blobUrl);
-    throw new Error(`Video too long (${duration.toFixed(1).replace(/\\.0$/, '')}s). Maximum ${MAX_DURATION}s, with ${MAX_DURATION_TOLERANCE}s metadata tolerance.`);
+    throw new Error(`Video too long (${duration.toFixed(1).replace(/\\.0$/, '')}s). Maximum ${MAX_DURATION}s.`);
   }
 
   video.pause();

@@ -17,6 +17,7 @@ import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
+import MakaronLogo from '@/components/MakaronLogo'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 
@@ -495,16 +496,22 @@ function HomePageInner() {
     if (createInput.creating) return
     const allFiles = Array.from(e.dataTransfer.files ?? [])
     const zipFile = allFiles.find(f => f.name.endsWith('.zip'))
-    if (zipFile) { handleSkillUpload(zipFile); return }
     const droppedFiles = allFiles.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || isHeicFile(f))
+    if (!zipFile && droppedFiles.length === 0) return
+    const authedUser = await requireAuth()
+    if (!authedUser) return
+    if (zipFile) { handleSkillUpload(zipFile); return }
     createInput.addFiles(droppedFiles)
-  }, [createInput, handleSkillUpload])
+  }, [createInput, handleSkillUpload, requireAuth])
 
-  const handleSlotDrop = useCallback((e: React.DragEvent) => {
+  const handleSlotDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
+    if (files.length === 0) return
+    const authedUser = await requireAuth()
+    if (!authedUser) return
     createInput.addFiles(files)
-  }, [createInput])
+  }, [createInput, requireAuth])
 
   const renderUploadSlots = useCallback((template: { image_count?: number; before_images?: string[] }, isActive: boolean) => {
     const minSlots = template.image_count ?? 1
@@ -771,14 +778,11 @@ function HomePageInner() {
           <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
 
           <div className="relative z-10 flex flex-col items-center text-center pt-10 lg:pt-16 px-6 max-w-[660px]">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-              {[[14,1,14,27],[1,14,27,14],[5,5,23,23],[23,5,5,23]].map(([x1,y1,x2,y2], i) => (
-                <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#d946ef" strokeWidth={1.8} strokeLinecap="round" />
-              ))}
-            </svg>
-            <h1 className="mt-4 text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]">
-              Makaron
-            </h1>
+            <MakaronLogo
+              markSize="clamp(34px, 6vw, 52px)"
+              className="mt-4"
+              textClassName="text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]"
+            />
             <p className="mt-3 leading-tight">
               <RollingTagline className="text-2xl lg:text-[32px]" />
             </p>
