@@ -12,6 +12,7 @@ import { isHeicFile } from '@/lib/imageUtils'
 import { useLocale } from '@/lib/i18n'
 import { getOriginFormatThumbnailUrl, getThumbnailUrl } from '@/lib/supabase/storage'
 import { createProject } from '@/lib/createProject'
+import { warmProjectEditorCache, warmProjectEditorCaches } from '@/lib/project-editor-cache'
 import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
 import { useCreateInput } from '@/hooks/useCreateInput'
@@ -300,6 +301,7 @@ function ProjectsPageInner() {
 
   const openIOSProject = useCallback((projectId: string) => {
     if (typeof window === 'undefined') return
+    void warmProjectEditorCache(projectId, userId)
     clearIOSProjectCloseTimer()
     clearPendingIOSProjectsRefreshTimer()
     iosProjectClosingRef.current = false
@@ -315,7 +317,7 @@ function ProjectsPageInner() {
     setIosProjectPanActive(false)
     setIosProjectX(window.innerWidth)
     window.requestAnimationFrame(() => setIosProjectX(0))
-  }, [clearIOSProjectCloseTimer, clearPendingIOSProjectsRefreshTimer])
+  }, [clearIOSProjectCloseTimer, clearPendingIOSProjectsRefreshTimer, userId])
 
   const replaceIOSProject = useCallback((projectId: string) => {
     if (typeof window === 'undefined') return
@@ -440,12 +442,24 @@ function ProjectsPageInner() {
     if (iosAppShell || isMakaronIOSAppShell()) {
       event.preventDefault()
       setNavigating(false)
+      void warmProjectEditorCache(project.id, userId)
       openIOSProject(project.id)
       return
     }
     setNavigating(true)
-  }, [iosAppShell, openIOSProject])
+  }, [iosAppShell, openIOSProject, userId])
   const useIOSInlineProjectNavigation = iosAppShell || isMakaronIOSAppShell()
+
+  useEffect(() => {
+    if (!useIOSInlineProjectNavigation || !userId || projects.length === 0) return
+    const warm = () => warmProjectEditorCaches(projects.map((project) => project.id), userId, 6)
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(warm, { timeout: 2200 })
+      return () => cancelIdleCallback(id)
+    }
+    const timer = window.setTimeout(warm, 800)
+    return () => window.clearTimeout(timer)
+  }, [useIOSInlineProjectNavigation, projects, userId])
 
   const [renameValue, setRenameValue] = useState('')
   const [renameMode, setRenameMode] = useState(false)
@@ -740,7 +754,6 @@ function ProjectsPageInner() {
 
     fetchProjects()
     return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, projectsRefreshNonce, applyProjectsRefresh])
 
   // Fetch credit balance + detect welcome
@@ -1266,6 +1279,9 @@ function ProjectsPageInner() {
                   useIOSSafeImageUrls={useIOSInlineProjectNavigation}
                   onMore={(e) => openActionSheet(e, project)}
                   onNavigate={handleProjectNavigate}
+                  onWarm={() => {
+                    if (useIOSInlineProjectNavigation) void warmProjectEditorCache(project.id, userId)
+                  }}
                 />
               ))}
             </div>
@@ -1473,6 +1489,7 @@ function ProjectCard({
   useIOSSafeImageUrls,
   onMore,
   onNavigate,
+  onWarm,
 }: {
   project: ProjectWithSnapshots
   index: number
@@ -1480,6 +1497,7 @@ function ProjectCard({
   useIOSSafeImageUrls: boolean
   onMore: (e: React.MouseEvent) => void
   onNavigate: (e: React.MouseEvent<HTMLElement>, project: ProjectWithSnapshots) => void
+  onWarm?: () => void
 }) {
   // Use last snapshot with an actual image URL (skip design snapshots with empty image_url)
   const lastSnap = project.snapshots.filter(s => s.image_url).pop() ?? project.snapshots[project.snapshots.length - 1]
@@ -1641,6 +1659,8 @@ function ProjectCard({
         className="mkr-card"
         data-project-id={project.id}
         data-snapshot-count={project.snapshots.length}
+        onTouchStart={onWarm}
+        onPointerEnter={onWarm}
         onClick={(e) => onNavigate(e, project)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') onNavigate(e as unknown as React.MouseEvent<HTMLElement>, project)
@@ -1658,6 +1678,8 @@ function ProjectCard({
       className="mkr-card mkr-row-enter"
       data-project-id={project.id}
       data-snapshot-count={project.snapshots.length}
+      onTouchStart={onWarm}
+      onPointerEnter={onWarm}
       onClick={(e) => onNavigate(e, project)}
       style={cardStyle}
     >

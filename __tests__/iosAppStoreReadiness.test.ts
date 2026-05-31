@@ -97,7 +97,9 @@ describe('iOS App Store readiness guardrails', () => {
     const skills = fs.readFileSync(path.join(root, 'src/app/skills/page.tsx'), 'utf8');
     const profile = fs.readFileSync(path.join(root, 'src/app/profile/page.tsx'), 'utf8');
     const admin = fs.readFileSync(path.join(root, 'src/app/admin/page.tsx'), 'utf8');
+    const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const nativeCache = fs.readFileSync(path.join(root, 'src/lib/native-app-cache.ts'), 'utf8');
+    const projectEditorCache = fs.readFileSync(path.join(root, 'src/lib/project-editor-cache.ts'), 'utf8');
 
     expect(bootstrap).toContain('IOS_PAGE_BACK_EDGE_PX');
     expect(bootstrap).toContain('IOS_PAGE_BACK_COMMIT_PX');
@@ -120,6 +122,11 @@ describe('iOS App Store readiness guardrails', () => {
     expect(skills).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(skills).toContain("writeNativeJSONCache('/api/skills', data)");
     expect(nativeCache).toContain('sessionStorage.setItem');
+    expect(projectEditorCache).toContain('warmProjectEditorCache');
+    expect(projectEditorCache).toContain('cacheProjectData');
+    expect(projects).toContain('warmProjectEditorCaches(projects.map((project) => project.id), userId, 6)');
+    expect(projects).toContain('onTouchStart={onWarm}');
+    expect(projects).toContain('onPointerEnter={onWarm}');
     expect(bootstrap).toContain('pickMediaFromNativePhotoLibrary');
     expect(bootstrap).toContain('acceptsNativePhotoPicker');
     expect(bootstrap).toContain("input.dispatchEvent(new Event('change'");
