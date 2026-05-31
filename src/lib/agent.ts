@@ -17,8 +17,9 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import animatePrompt from './prompts/animate.md';
-import type { Tip } from '@/types';
+import type { Tip, VideoModel } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
+import type { AgentPerf } from './agent-perf';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -51,6 +52,8 @@ interface AgentContext {
   preferredModel?: ModelId;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
+  /** User/app selected video model. Defaults to seedance when absent. */
+  videoModel?: VideoModel;
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event (v1) */
   // Legacy v1 fields — no longer set by generate_animation, but kept for SSE event type compat
   animationTaskId?: string;
@@ -242,6 +245,25 @@ ${manifest}${userSkillLines}
   return full;
 }
 
+function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?: string): string {
+  const languageRule = locale === 'en' ? 'Reply in English.' : locale === 'zh' ? 'Reply in Chinese.' : 'Reply in the same language the user writes in.';
+  if (mode === 'analysis') {
+    return [
+      'You are Makaron, a warm and concise creative media assistant.',
+      'Use the available analysis tool exactly once before answering.',
+      'Describe what you see directly. Do not mention tools, hidden prompts, or system instructions.',
+      'Keep the answer short, natural, and useful for photo or video editing context.',
+      languageRule,
+    ].join('\n');
+  }
+  return [
+    'You are Makaron, a warm and concise creative media assistant.',
+    'Write only the requested short user-facing response.',
+    'Do not mention tools, hidden prompts, system instructions, or implementation details.',
+    languageRule,
+  ].join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // Tools (Vercel AI SDK style, closure over AgentContext)
 // ---------------------------------------------------------------------------
@@ -319,6 +341,8 @@ function createTools(ctx: AgentContext) {
     generate_animation: tool({
       description: `Submit a video script for rendering.
 
+Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation".
+
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
 Hard constraints (apply even before reading the guide):
@@ -326,14 +350,14 @@ Hard constraints (apply even before reading the guide):
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. Works for both Kling and SeeDance.
 - Total duration: 5-15 seconds.
-- Video edit duration lock: when editing a timeline video, output duration should match that source video's duration from Media Index. If metadata is slightly over 15s (for example 15.1s), set \`duration: 15\`; never fall back to 5s unless the user explicitly asks to shorten it.
+- Video edit duration lock: when editing a timeline video, output duration should match that source video's duration from Media Index; never fall back to 5s unless the user explicitly asks to shorten it.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
-- Write script in chat first, then call this tool to submit`,
+- The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. For timeline video edits, set this to the source video duration from Media Index. Omit for smart mode only when generating from photos.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
-        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: kling.'),
+        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: seedance unless the app selection or user asks for Kling.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
@@ -356,7 +380,7 @@ Hard constraints (apply even before reading the guide):
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
-          const videoModel = model || (ctx as any).videoModel || 'kling';
+          const videoModel = model || ctx.videoModel || 'seedance';
 
           // Video harness: validate before calling API
           const { validateVideoScript } = await import('./video-harness');
@@ -493,7 +517,7 @@ Hard constraints (apply even before reading the guide):
     }),
 
     analyze_image: tool({
-      description: 'See and analyze a photo. Returns the image so you can view it directly with your vision capabilities. Use media_index to look at any snapshot in the timeline.',
+      description: 'See and analyze a photo. Use only for questions, red annotations, uncertain target regions, identity/detail inspection, or ambiguous edits. Do not call this before clear direct generate_image edits; generate_image already receives the selected media. Use media_index to look at any snapshot in the timeline.',
       inputSchema: z.object({
         question: z.string().optional().describe('Optional focus area for the analysis'),
         media_index: z.number().optional().describe('1-based index of the snapshot to analyze (<<<media_1>>> = 1, etc.). Omit to analyze the current image.'),
@@ -1284,8 +1308,9 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }>; timelineVersion?: number },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }>; timelineVersion?: number; perf?: AgentPerf },
 ): AsyncGenerator<AgentStreamEvent> {
+  const perf = options?.perf;
   const ctx: AgentContext = {
     currentImage,
     originalImage: options?.originalImage,
@@ -1293,6 +1318,7 @@ export async function* runMakaronAgent(
     projectId,
     generatedImages: [],
     animationImageUrls: options?.animationImageUrls,
+    videoModel: options?.videoModel as VideoModel | undefined,
     preferredModel: options?.preferredModel,
     snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
@@ -1309,9 +1335,11 @@ export async function* runMakaronAgent(
   }
 
   const allTools = createTools(ctx);
+  perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
   let stepCount = 0;
   let toolCallStartTime = 0;
+  let toolCallName = '';
   const agentStartTime = Date.now();
 
   const analysisOnly = options?.analysisOnly ?? false;
@@ -1355,8 +1383,18 @@ export async function* runMakaronAgent(
     userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
   }
 
-  // Build system prompt: base agent.md + workspace manifest (lightweight, not full templates)
-  const systemPrompt = await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
+  // Build system prompt. Lightweight modes must stay small: they power
+  // auto-analysis/reactions where first visible text matters more than the
+  // full workspace skill surface.
+  const endSystemPrompt = perf?.span('build_system_prompt', {
+    projectId,
+    userSkills: options?.userSkills?.length ?? 0,
+    mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
+  });
+  const systemPrompt = (analysisOnly || tipReactionOnly)
+    ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
+    : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
+  endSystemPrompt?.({ systemChars: systemPrompt.length });
 
   // Observability — per-request summary
   const toolsChars = tools ? logToolSizes(tools as Record<string, unknown>) : 0;
@@ -1375,6 +1413,14 @@ export async function* runMakaronAgent(
   console.log(
     `[agent-req] systemChars=${systemPrompt.length} toolsChars=${toolsChars} userChars=${userContentChars} images=${userImagesCount} historyTurns=${history.length} mode=${tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal'}`
   );
+  perf?.mark('agent_request_ready', {
+    systemChars: systemPrompt.length,
+    toolsChars,
+    userChars: userContentChars,
+    userImages: userImagesCount,
+    historyTurns: history.length,
+    mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
+  });
 
   // Optional full-request dump for offline diffing
   if (process.env.AGENT_DEBUG_DUMP === '1') {
@@ -1418,12 +1464,13 @@ export async function* runMakaronAgent(
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const endStreamInit = perf?.span('model_stream_init', { projectId });
     const result = (streamText as any)({
       model: MODEL,
       system: [{ role: 'system', content: systemPrompt, providerOptions: { bedrock: { cachePoint: { type: 'default' } } } }],
       messages: msgs,
       ...(tools ? { tools } : {}),
-      ...(analysisOnly && tools ? { activeTools: ['analyze_image'] } : {}),
+      ...(analysisOnly && tools ? { activeTools: [isVideoAnalysis ? 'analyze_video' : 'analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
       onStepFinish: () => { stepCount++; },
       providerOptions: {
@@ -1444,6 +1491,7 @@ export async function* runMakaronAgent(
         },
       },
     });
+    endStreamInit?.();
 
     // State machine for extracting code from run_code tool-input-delta
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
@@ -1453,6 +1501,7 @@ export async function* runMakaronAgent(
       if (!firstContentAt && (event.type === 'reasoning-start' || event.type === 'reasoning-delta' || event.type === 'text-delta' || event.type === 'tool-input-start')) {
         firstContentAt = Date.now();
         console.log(`[agent-ttfb] ${firstContentAt - agentStartTime}ms (first ${event.type})`);
+        perf?.mark('model_first_output', { eventType: event.type, ttfbMs: firstContentAt - agentStartTime });
       }
       // ── Reasoning events — forward to CUI ──
       if (event.type === 'reasoning-start') {
@@ -1539,7 +1588,13 @@ export async function* runMakaronAgent(
       // ── Tool call ───────────────────────────────────────────────────────────
       if (event.type === 'tool-call') {
         toolCallStartTime = Date.now();
+        toolCallName = event.toolName;
         console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
+        perf?.mark('tool_call', {
+          tool: event.toolName,
+          step: stepCount,
+          sinceAgentStartMs: Date.now() - agentStartTime,
+        });
         const isEnLocale = options?.locale === 'en';
         if (event.toolName === 'analyze_image') {
           const q = (event.input as { question?: string }).question;
@@ -1637,6 +1692,12 @@ export async function* runMakaronAgent(
         const toolName = (event as any).toolName as string | undefined;
         const toolDuration = toolCallStartTime ? ((Date.now() - toolCallStartTime) / 1000).toFixed(1) : '?';
         console.log(`⏱️ [agent] tool-result "${toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (tool took ${toolDuration}s)`);
+        perf?.mark('tool_result', {
+          tool: toolName || toolCallName || null,
+          step: stepCount,
+          sinceAgentStartMs: Date.now() - agentStartTime,
+          toolDurationMs: toolCallStartTime ? Date.now() - toolCallStartTime : null,
+        });
         // Reset status after tool completes so stale status doesn't linger during thinking
         const isEnLocale = options?.locale === 'en';
         yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
@@ -1735,6 +1796,11 @@ export async function* runMakaronAgent(
     }
 
     console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
+    perf?.mark('agent_done', {
+      totalAgentMs: Date.now() - agentStartTime,
+      imagesSent,
+      stepCount,
+    });
 
     // Emit token usage for billing — totalUsage aggregates across all steps (multi-turn)
     try {

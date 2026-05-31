@@ -6,6 +6,7 @@ import {
   getNearbyOptimizedPreloadUrls,
   getPreviousImageForCompare,
   getSnapshotTimelineImage,
+  shouldShowCanvasPlaceholder,
 } from '@/lib/editor/timeline-derivations';
 import type { DesignPayload, Snapshot } from '@/types';
 
@@ -63,6 +64,22 @@ describe('editor timeline derivations', () => {
     expect(map.get(0)).toBe(firstDesign);
     expect(map.get(3)).toBe(secondDesign);
     expect(map.has(2)).toBe(false);
+  });
+
+  it('does not show the converting placeholder for a renderable design without a poster', () => {
+    expect(shouldShowCanvasPlaceholder({
+      timeline: [''],
+      viewIndex: 0,
+      isViewingVideoV2: false,
+      hasRenderableDesign: true,
+    })).toBe(false);
+
+    expect(shouldShowCanvasPlaceholder({
+      timeline: [''],
+      viewIndex: 0,
+      isViewingVideoV2: false,
+      hasRenderableDesign: false,
+    })).toBe(true);
   });
 
   it('returns nearby optimized preload URLs while skipping cached/base64 snapshots', () => {

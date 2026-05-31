@@ -48,7 +48,7 @@ export function useProject(projectId: string, userId: string) {
         .order('created_at', { ascending: true }),
       supabase
         .from('projects')
-        .select('title, timeline_version')
+        .select('title, timeline_version, user_id')
         .eq('id', projectId)
         .single(),
     ])
@@ -90,7 +90,8 @@ export function useProject(projectId: string, userId: string) {
 
     // Load persisted designs from workspace (async, non-blocking)
     // Derive userId from first snapshot's image_url if userId param is empty (race condition on page load)
-    const resolvedUserId = userId || (() => {
+    const projectOwnerId = (projectRes.data as Record<string, unknown>)?.user_id as string | undefined
+    const resolvedUserId = userId || projectOwnerId || (() => {
       // Extract userId (UUID) from any snapshot's image_url — skip non-user paths like /images/skills/
       const uuidRe = /\/images\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//
       for (const s of dbSnapshots) {

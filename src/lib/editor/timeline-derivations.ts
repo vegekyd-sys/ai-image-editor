@@ -64,6 +64,22 @@ export function buildDesignsMap(
   return map;
 }
 
+export function shouldShowCanvasPlaceholder({
+  timeline,
+  viewIndex,
+  isViewingVideoV2,
+  hasRenderableDesign,
+}: {
+  timeline: string[];
+  viewIndex: number;
+  isViewingVideoV2: boolean;
+  hasRenderableDesign: boolean;
+}): boolean {
+  const currentEntry = timeline[viewIndex] ?? timeline[0] ?? '';
+  return timeline.length === 0
+    || (timeline.length === 1 && !currentEntry && !isViewingVideoV2 && !hasRenderableDesign);
+}
+
 export function getNearbyOptimizedPreloadUrls(
   snapshots: Snapshot[],
   viewIndex: number,

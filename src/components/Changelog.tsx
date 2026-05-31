@@ -8,6 +8,23 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-05-31',
+    en: { title: 'Agent Prompt Rebuild', items: [
+      'Much faster first response: Agent now starts from a compact router prompt instead of eagerly loading every skill file.',
+      'Cleaner media modes: image, video, design, music, and run_code have clearer routing instead of one long patched prompt.',
+      'Smarter image editing: direct edits go straight to generation; image analysis is only used when it changes the decision.',
+      'Skills stay powerful but lighter: Agent discovers skills first, then reads the full SKILL.md only when needed.',
+      'Video intent respected: scripts still have a review gate by default, but explicit "submit now" requests can render immediately.',
+    ]},
+    zh: { title: 'Agent Prompt 重构', items: [
+      '首字更快：Agent 现在从简洁 router prompt 启动，不再提前加载所有 skill 文件。',
+      '模式更清晰：图片、视频、Design、音乐、run_code 各自分流，不再像在长 prompt 上打补丁。',
+      '图片编辑更直接：明确修图会直接生成，只有真正需要判断时才分析图片。',
+      'Skill 更轻但能力保留：Agent 先发现 skill，只有要用时才读取完整 SKILL.md。',
+      '视频更懂意图：默认仍先确认脚本，但用户明确说“直接提交渲染”时可以立即生成。',
+    ]},
+  },
+  {
     date: '2026-05-21',
     en: { title: 'AI Video Editing — As Easy As Chatting', items: [
       '"Put this kid into that birthday party" — just say it, and it happens. 15-second video, any idea.',
