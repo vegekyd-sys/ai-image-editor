@@ -63,6 +63,10 @@ async function normalizeImageBlobForNativeSave(blob: Blob): Promise<{ blob: Blob
   }
 }
 
+function isRemoteHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
 export async function downloadAsset(params: DownloadAssetParams): Promise<void> {
   const {
     timeline,
@@ -249,11 +253,23 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       }
     }
 
+    const slug = (projectTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+    const idx = (snapIdxForSave ?? viewIndex) + 1;
+
+    if (isNativePhotoLibrarySaveAvailable() && isRemoteHttpUrl(img)) {
+      try {
+        await saveUrlToNativePhotoLibrary(img, `makaron-${slug}-${idx}.jpg`, 'image');
+        setIsSaving(false);
+        showSaveToast();
+        return;
+      } catch (error) {
+        console.warn('Native image URL save failed, falling back to web fetch save:', error);
+      }
+    }
+
     const res = await fetch(img);
     const blob = await res.blob();
     const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
-    const slug = (projectTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
-    const idx = (snapIdxForSave ?? viewIndex) + 1;
     const filename = `makaron-${slug}-${idx}.${ext}`;
 
     if (isNativePhotoLibrarySaveAvailable()) {

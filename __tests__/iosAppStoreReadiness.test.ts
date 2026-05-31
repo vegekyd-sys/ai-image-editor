@@ -198,6 +198,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeMedia).toContain('webkit?.messageHandlers?.makaronNative');
     expect(download).toContain('isNativePhotoLibrarySaveAvailable');
     expect(download).toContain('normalizeImageBlobForNativeSave');
+    expect(download).toContain('isRemoteHttpUrl(img)');
+    expect(download).toContain('saveUrlToNativePhotoLibrary(img');
     expect(download).toContain("canvas.toBlob((result) =>");
     expect(download).toContain("'image/jpeg', 0.95");
     expect(download).toContain('saveBlobToNativePhotoLibrary');
