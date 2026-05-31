@@ -257,13 +257,22 @@ describe('iOS App Store readiness guardrails', () => {
 
   it('saves editor images and videos through native Photos on iOS before web fallbacks', () => {
     const bridge = fs.readFileSync(path.join(root, 'ios/App/App/MakaronBridgeViewController.swift'), 'utf8');
+    const plist = fs.readFileSync(path.join(root, 'ios/App/App/Info.plist'), 'utf8');
     const nativeMedia = fs.readFileSync(path.join(root, 'src/lib/native-media.ts'), 'utf8');
     const download = fs.readFileSync(path.join(root, 'src/lib/editor/download.ts'), 'utf8');
 
+    expect(plist).toContain('NSPhotoLibraryAddUsageDescription');
+    expect(plist).toContain('NSPhotoLibraryUsageDescription');
+    expect(plist).toContain('NSCameraUsageDescription');
+    expect(plist).toContain('NSMicrophoneUsageDescription');
+    expect(plist).toContain('NSAllowsLocalNetworking');
     expect(bridge).toContain('WKScriptMessageHandler');
     expect(bridge).toContain('PHPickerViewControllerDelegate');
     expect(bridge).toContain('PHPhotoLibrary');
     expect(bridge).toContain('PHPickerViewController');
+    expect(bridge).toContain('PHPhotoLibrary.authorizationStatus(for: .addOnly)');
+    expect(bridge).toContain('PHPhotoLibrary.requestAuthorization(for: .addOnly)');
+    expect(bridge).toContain('PHPickerConfiguration(photoLibrary: .shared())');
     expect(bridge).toContain('makaronNative');
     expect(bridge).toContain('saveToPhotos');
     expect(bridge).toContain('pickMedia');
