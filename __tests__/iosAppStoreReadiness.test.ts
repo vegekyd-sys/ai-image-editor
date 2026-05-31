@@ -206,6 +206,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(download).toContain('normalizeImageBlobForNativeSave');
     expect(download).toContain('isRemoteHttpUrl(img)');
     expect(download).toContain('saveUrlToNativePhotoLibrary(img');
+    expect(download).toContain("setAgentStatus('Saving to Photos...')");
+    expect(download).toContain("setAgentStatus('Native save failed, trying fallback...')");
+    expect(download).toContain('Save failed:');
     expect(download).toContain("canvas.toBlob((result) =>");
     expect(download).toContain("'image/jpeg', 0.95");
     expect(download).toContain('saveBlobToNativePhotoLibrary');

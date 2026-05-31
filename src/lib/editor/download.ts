@@ -67,6 +67,10 @@ function isRemoteHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
 }
 
+function shortErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function downloadAsset(params: DownloadAssetParams): Promise<void> {
   const {
     timeline,
@@ -88,6 +92,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     const videoSrc = currentVideoUrl;
     const filename = `makaron-video-${Date.now()}.mp4`;
     setIsSaving(true);
+    setAgentStatus('Saving to Photos...');
     try {
       if (isNativePhotoLibrarySaveAvailable()) {
         try {
@@ -98,6 +103,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
           return;
         } catch (error) {
           console.warn('Native video save failed, falling back to web save:', error);
+          setAgentStatus('Native save failed, trying fallback...');
         }
       }
 
@@ -127,6 +133,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       showSaveToast();
     } catch {
       setIsSaving(false);
+      setAgentStatus('Save failed. Try again.');
       window.open(videoSrc, '_blank');
     }
     return;
@@ -172,6 +179,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     }
 
     setIsSaving(true);
+    setAgentStatus('Exporting video...');
     // Pause Remotion Player during export to avoid competing for resources
     document.dispatchEvent(new Event('music-play'));
     try {
@@ -191,6 +199,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
             return;
           } catch (error) {
             console.warn('Native design video save failed, falling back to web save:', error);
+            setAgentStatus('Native save failed, trying fallback...');
           }
         }
 
@@ -240,6 +249,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
   let img = timeline[viewIndex];
   if (!img) return;
   setIsSaving(true);
+  setAgentStatus('Saving to Photos...');
 
   try {
     // Re-capture poster for static designs (includes drag/scale transforms via HOC)
@@ -260,10 +270,12 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       try {
         await saveUrlToNativePhotoLibrary(img, `makaron-${slug}-${idx}.jpg`, 'image');
         setIsSaving(false);
+        setAgentStatus(t('editor.done'));
         showSaveToast();
         return;
       } catch (error) {
         console.warn('Native image URL save failed, falling back to web fetch save:', error);
+        setAgentStatus('Native save failed, trying fallback...');
       }
     }
 
@@ -278,10 +290,12 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
         const nativeFilename = `makaron-${slug}-${idx}.${nativeImage.filenameExt}`;
         await saveBlobToNativePhotoLibrary(nativeImage.blob, nativeFilename, 'image');
         setIsSaving(false);
+        setAgentStatus(t('editor.done'));
         showSaveToast();
         return;
       } catch (error) {
         console.warn('Native image save failed, falling back to web save:', error);
+        setAgentStatus('Native save failed, trying fallback...');
       }
     }
 
@@ -289,6 +303,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
       await navigator.share({ files: [file] });
       setIsSaving(false);
+      setAgentStatus(t('editor.done'));
       showSaveToast();
       return;
     }
@@ -300,9 +315,11 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     link.click();
     URL.revokeObjectURL(url);
     setIsSaving(false);
+    setAgentStatus(t('editor.done'));
     showSaveToast();
-  } catch {
+  } catch (error) {
     setIsSaving(false);
+    setAgentStatus(`Save failed: ${shortErrorMessage(error).slice(0, 80)}`);
     const link = document.createElement('a');
     link.href = img;
     link.download = `ai-edited-${Date.now()}.jpg`;
