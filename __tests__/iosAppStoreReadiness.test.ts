@@ -155,6 +155,14 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('pendingIOSProjectsRefreshRef');
     expect(projectsPage).toContain('iosProjectNavGenerationRef');
     expect(projectsPage).toContain('projects-fetch-discarded-nav-generation-changed');
+    expect(projectsPage).toContain('refreshIOSProjectCard');
+    expect(projectsPage).toContain('project-card-refreshed-after-return');
+    expect(projectsPage).toContain('projects-background-refresh-requested');
+    expect(projectsPage).toContain('projects-stashed-refresh-applied');
+    expect(projectsPage).toContain('projectsRefreshNonce');
+    expect(projectsPage).toContain('iosProjectRefreshSelfTest');
+    expect(projectsPage).toContain('refresh-self-test-pass');
+    expect(projectsPage).toContain('data-snapshot-count');
     expect(projectsPage).toContain('iosReturnSelfTest');
     expect(projectsPage).toContain('return-self-test-pass');
     expect(projectsPage).toContain('iosProjectClosingRef');

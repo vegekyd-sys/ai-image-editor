@@ -18,6 +18,10 @@ const authState = vi.hoisted(() => ({
 
 const supabaseState = vi.hoisted(() => ({
   projectRowsPromise: null as Promise<{ data: Array<{ id: string; title: string; cover_url: string | null; updated_at: string; created_at: string }> | null; error: unknown }> | null,
+  cardProject: null as { id: string; title: string; cover_url: string | null; updated_at: string; created_at: string } | null,
+  snapshotRows: [] as Array<{ id: string; project_id: string; image_url: string; sort_order: number }>,
+  videoSnapshotRows: [] as Array<{ project_id: string }>,
+  animationRows: [] as Array<{ project_id: string }>,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -41,9 +45,27 @@ vi.mock('@/hooks/useAuth', () => ({
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
     from: (table: string) => {
-      const query = {
+      const filters: Array<[string, unknown]> = [];
+      const query: {
+        select: ReturnType<typeof vi.fn>;
+        eq: ReturnType<typeof vi.fn>;
+        maybeSingle: ReturnType<typeof vi.fn>;
+        in: ReturnType<typeof vi.fn>;
+        order: ReturnType<typeof vi.fn>;
+        limit: ReturnType<typeof vi.fn>;
+        delete: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+        then: (
+          resolve: (value: { data: unknown[] | null; error: unknown }) => void,
+          reject: (reason?: unknown) => void,
+        ) => Promise<void>;
+      } = {
         select: vi.fn(() => query),
-        eq: vi.fn(() => query),
+        eq: vi.fn((column: string, value: unknown) => {
+          filters.push([column, value]);
+          return query;
+        }),
+        maybeSingle: vi.fn(() => Promise.resolve({ data: supabaseState.cardProject, error: null })),
         in: vi.fn(() => query),
         order: vi.fn(() => query),
         limit: vi.fn(() => query),
@@ -55,7 +77,16 @@ vi.mock('@/lib/supabase/client', () => ({
         ) => {
           const result = table === 'projects'
             ? (supabaseState.projectRowsPromise ?? Promise.resolve({ data: [], error: null }))
-            : Promise.resolve({ data: [], error: null });
+            : table === 'snapshots'
+              ? Promise.resolve({
+                  data: filters.some(([column, value]) => column === 'type' && value === 'video')
+                    ? supabaseState.videoSnapshotRows
+                    : supabaseState.snapshotRows,
+                  error: null,
+                })
+              : table === 'project_animations'
+                ? Promise.resolve({ data: supabaseState.animationRows, error: null })
+                : Promise.resolve({ data: [], error: null });
           return result.then(resolve, reject);
         },
       };
@@ -113,6 +144,10 @@ describe('iOS projects page cache fallback', () => {
     })));
     clearUserCache();
     supabaseState.projectRowsPromise = null;
+    supabaseState.cardProject = null;
+    supabaseState.snapshotRows = [];
+    supabaseState.videoSnapshotRows = [];
+    supabaseState.animationRows = [];
     cacheProjectsList('user-1', [{
       id: 'project-1',
       title: 'Cached Project',
@@ -242,6 +277,43 @@ describe('iOS projects page cache fallback', () => {
     expect(screen.getByTestId('project-editor')).toBeTruthy();
   });
 
+  it('updates the returned project card data without remounting the projects page', async () => {
+    supabaseState.projectRowsPromise = new Promise(() => {});
+    supabaseState.cardProject = {
+      id: 'project-1',
+      title: 'Cached Project',
+      cover_url: null,
+      updated_at: '2026-05-31T00:02:00.000Z',
+      created_at: '2026-05-31T00:00:00.000Z',
+    };
+    supabaseState.snapshotRows = [
+      { id: 'snap-1', project_id: 'project-1', image_url: 'https://cdn.makaron.app/snap.jpg', sort_order: 0 },
+      { id: 'snap-2', project_id: 'project-1', image_url: 'https://cdn.makaron.app/snap-2.jpg', sort_order: 1 },
+    ];
+    authState.current = { user: { id: 'user-1' }, loading: false };
+
+    render(<ProjectsPage />);
+
+    const title = await screen.findByText('Cached Project');
+    const page = document.querySelector('.makaron-projects-page') as HTMLElement | null;
+    const pageInstance = page?.dataset.pageInstance;
+    const card = title.closest('[role="link"]') as HTMLElement | null;
+    expect(card?.dataset.snapshotCount).toBe('1');
+
+    fireEvent.click(card!);
+    expect(await screen.findByTestId('project-editor')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('project-editor-back'));
+
+    await waitFor(() => {
+      const updatedCard = document.querySelector('[data-project-id="project-1"]') as HTMLElement | null;
+      expect(updatedCard?.dataset.snapshotCount).toBe('2');
+      expect(screen.getByText('2 snaps')).toBeTruthy();
+    });
+
+    const samePage = document.querySelector('.makaron-projects-page') as HTMLElement | null;
+    expect(samePage?.dataset.pageInstance).toBe(pageInstance);
+  });
+
   it('keeps the cached projects page visible during a brief iOS auth gap after returning from editor', async () => {
     const { rerender } = render(<ProjectsPage />);
 
@@ -284,6 +356,16 @@ describe('iOS projects page cache fallback', () => {
     supabaseState.projectRowsPromise = new Promise((resolve) => {
       resolveProjects = resolve;
     });
+    supabaseState.cardProject = {
+      id: 'project-1',
+      title: 'Cached Project',
+      cover_url: null,
+      updated_at: '2026-05-31T00:00:00.000Z',
+      created_at: '2026-05-31T00:00:00.000Z',
+    };
+    supabaseState.snapshotRows = [
+      { id: 'snap-1', project_id: 'project-1', image_url: 'https://cdn.makaron.app/snap.jpg', sort_order: 0 },
+    ];
     authState.current = { user: { id: 'user-1' }, loading: false };
 
     render(<ProjectsPage />);
