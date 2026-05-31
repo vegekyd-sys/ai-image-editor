@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
-import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { CREDIT_TIERS } from '@/lib/billing/tiers'
 import CreditPopup from '@/components/CreditPopup'
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
+import { navigateBackInIOSApp } from '@/lib/native-navigation'
 
 interface ApiKey {
   id: string
@@ -61,6 +61,7 @@ type TabType = 'subscribe' | 'topup' | 'keys' | 'usage'
 const VALID_TABS: TabType[] = ['subscribe', 'topup', 'keys', 'usage']
 
 function DashboardInner() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const [cachedDashboard] = useState<DashboardPayload | null>(() => readNativeJSONCache<DashboardPayload>('/api/billing/dashboard'))
   const [tab, setTab] = useState<TabType>(() => {
@@ -169,6 +170,11 @@ function DashboardInner() {
     }
   }
 
+  const handleBackToApp = () => {
+    if (navigateBackInIOSApp('/projects')) return
+    router.push('/projects')
+  }
+
   const sub = balance?.subscription
 
   if (loading) {
@@ -186,7 +192,9 @@ function DashboardInner() {
     <div className="makaron-ios-page min-h-dvh bg-black text-white p-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <Link href="/projects" className="text-white/40 text-sm hover:text-white/60">&larr; Back to app</Link>
+        <button onClick={handleBackToApp} className="text-white/40 text-sm hover:text-white/60">
+          &larr; Back to app
+        </button>
       </div>
 
       {/* Balance card */}

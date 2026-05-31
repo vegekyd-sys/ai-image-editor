@@ -110,6 +110,7 @@ describe('iOS App Store readiness guardrails', () => {
     const creditPopup = fs.readFileSync(path.join(root, 'src/components/CreditPopup.tsx'), 'utf8');
     const authProvider = fs.readFileSync(path.join(root, 'src/components/AuthProvider.tsx'), 'utf8');
     const nativeCache = fs.readFileSync(path.join(root, 'src/lib/native-app-cache.ts'), 'utf8');
+    const nativeNavigation = fs.readFileSync(path.join(root, 'src/lib/native-navigation.ts'), 'utf8');
     const projectsListWarm = fs.readFileSync(path.join(root, 'src/lib/projects-list-warm.ts'), 'utf8');
     const projectEditorCache = fs.readFileSync(path.join(root, 'src/lib/project-editor-cache.ts'), 'utf8');
 
@@ -177,6 +178,16 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bootstrap).toContain("input.dispatchEvent(new Event('change'");
     expect(bootstrap).not.toContain('document.body.style.transform');
     expect(bootstrap).not.toContain('cloneNode');
+    expect(nativeNavigation).toContain('navigateBackInIOSApp');
+    expect(nativeNavigation).toContain('isMakaronIOSApp');
+    expect(nativeNavigation).toContain('window.history.back()');
+    expect(nativeNavigation).toContain("window.location.assign(fallbackPath)");
+    expect(dashboard).toContain('navigateBackInIOSApp');
+    expect(skills).toContain('navigateBackInIOSApp');
+    expect(profile).toContain('navigateBackInIOSApp');
+    expect(dashboard).toContain('handleBackToApp');
+    expect(skills).toContain('handleBackToApp');
+    expect(profile).toContain('handleBackToApp');
     expect(dashboard).toContain('makaron-ios-page');
     expect(skills).toContain('makaron-ios-page');
     expect(profile).toContain('makaron-ios-page');

@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
 import { createBrowserClient } from '@supabase/ssr'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
+import { navigateBackInIOSApp } from '@/lib/native-navigation'
 
 export default function ProfilePage() {
+  const router = useRouter()
   const { user, loading, signOut } = useAuth()
   const { locale } = useLocale()
   const t = locale === 'zh'
@@ -126,14 +128,19 @@ export default function ProfilePage() {
     color: 'white', fontSize: '0.85rem', outline: 'none',
   }
 
+  const handleBackToApp = () => {
+    if (navigateBackInIOSApp('/projects')) return
+    router.push('/projects')
+  }
+
   return (
     <div className="makaron-ios-page min-h-dvh bg-black text-white p-6 max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">{t ? '账户' : 'Account'}</h1>
-        <Link href="/projects" className="text-white/40 text-sm hover:text-white/60">
+        <button onClick={handleBackToApp} className="text-white/40 text-sm hover:text-white/60">
           &larr; {t ? '返回' : 'Back'}
-        </Link>
+        </button>
       </div>
 
       {/* Avatar + Name */}
