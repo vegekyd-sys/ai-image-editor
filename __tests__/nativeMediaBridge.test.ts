@@ -66,6 +66,11 @@ describe('native media bridge', () => {
       filename: 'out.jpg',
       mediaType: 'image',
     });
+    expect(JSON.parse(sessionStorage.getItem('makaron:native-media:last-result') || '{}')).toMatchObject({
+      ok: null,
+      phase: 'sent',
+      mediaType: 'image',
+    });
 
     respond(messages[0], { localIdentifier: 'asset-id-1', mediaType: 'image' });
     await expect(savePromise).resolves.toBeUndefined();

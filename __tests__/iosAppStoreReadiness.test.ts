@@ -195,6 +195,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeMedia).toContain('saveUrlToNativePhotoLibrary');
     expect(nativeMedia).toContain('pickMediaFromNativePhotoLibrary');
     expect(nativeMedia).toContain('makaron:native-media:last-result');
+    expect(nativeMedia).toContain("phase: 'sent'");
+    expect(nativeMedia).toContain("phase: 'timeout'");
+    expect(nativeMedia).toContain('IMAGE_SAVE_TIMEOUT_MS');
     expect(nativeMedia).toContain('webkit?.messageHandlers?.makaronNative');
     expect(download).toContain('isNativePhotoLibrarySaveAvailable');
     expect(download).toContain('normalizeImageBlobForNativeSave');

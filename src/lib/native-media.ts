@@ -14,6 +14,8 @@ interface NativeResponseDetail {
 }
 
 const LAST_NATIVE_MEDIA_RESULT_KEY = 'makaron:native-media:last-result';
+const IMAGE_SAVE_TIMEOUT_MS = 45000;
+const VIDEO_SAVE_TIMEOUT_MS = 120000;
 
 type NativePayload = {
   id: string;
@@ -72,11 +74,24 @@ function sendNativeMessage<T>(message: NativeMessage, timeoutMs: number): Promis
   const id = `native-${Date.now().toString(36)}-${(nativeMessageId += 1).toString(36)}`;
   const nativeMessage: NativePayload = { ...message, id } as NativePayload;
 
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener('makaron-native-response', onResponse);
-      reject(new Error('Native media request timed out'));
-    }, timeoutMs);
+	  return new Promise((resolve, reject) => {
+	    const timeout = window.setTimeout(() => {
+	      window.removeEventListener('makaron-native-response', onResponse);
+	      try {
+	        sessionStorage.setItem(LAST_NATIVE_MEDIA_RESULT_KEY, JSON.stringify({
+	          id,
+	          action: nativeMessage.action,
+	          mediaType: 'mediaType' in nativeMessage ? nativeMessage.mediaType : undefined,
+	          ok: false,
+	          error: 'Native media request timed out',
+	          phase: 'timeout',
+	          t: Date.now(),
+	        }));
+	      } catch {
+	        // Diagnostics are best-effort only.
+	      }
+	      reject(new Error('Native media request timed out'));
+	    }, timeoutMs);
 
     function onResponse(event: Event) {
       const detail = (event as CustomEvent<NativeResponseDetail>).detail;
@@ -100,19 +115,45 @@ function sendNativeMessage<T>(message: NativeMessage, timeoutMs: number): Promis
       }
     }
 
-    window.addEventListener('makaron-native-response', onResponse);
-    try {
-      window.webkit?.messageHandlers?.makaronNative?.postMessage(nativeMessage);
-    } catch (error) {
-      window.clearTimeout(timeout);
-      window.removeEventListener('makaron-native-response', onResponse);
-      reject(error);
-    }
-  });
+	    window.addEventListener('makaron-native-response', onResponse);
+	    try {
+	      try {
+	        sessionStorage.setItem(LAST_NATIVE_MEDIA_RESULT_KEY, JSON.stringify({
+	          id,
+	          action: nativeMessage.action,
+	          mediaType: 'mediaType' in nativeMessage ? nativeMessage.mediaType : undefined,
+	          ok: null,
+	          phase: 'sent',
+	          t: Date.now(),
+	        }));
+	      } catch {
+	        // Diagnostics are best-effort only.
+	      }
+	      window.webkit?.messageHandlers?.makaronNative?.postMessage(nativeMessage);
+	    } catch (error) {
+	      window.clearTimeout(timeout);
+	      window.removeEventListener('makaron-native-response', onResponse);
+	      try {
+	        sessionStorage.setItem(LAST_NATIVE_MEDIA_RESULT_KEY, JSON.stringify({
+	          id,
+	          action: nativeMessage.action,
+	          mediaType: 'mediaType' in nativeMessage ? nativeMessage.mediaType : undefined,
+	          ok: false,
+	          error: error instanceof Error ? error.message : String(error),
+	          phase: 'postMessage-error',
+	          t: Date.now(),
+	        }));
+	      } catch {
+	        // Diagnostics are best-effort only.
+	      }
+	      reject(error);
+	    }
+	  });
 }
 
 function sendNativeSaveMessage(payload: Omit<Extract<NativePayload, { action: 'saveToPhotos' }>, 'id' | 'action'>): Promise<void> {
-  return sendNativeMessage<NativeResponseDetail>({ action: 'saveToPhotos', ...payload }, 120000).then(() => undefined);
+  const timeoutMs = payload.mediaType === 'video' ? VIDEO_SAVE_TIMEOUT_MS : IMAGE_SAVE_TIMEOUT_MS;
+  return sendNativeMessage<NativeResponseDetail>({ action: 'saveToPhotos', ...payload }, timeoutMs).then(() => undefined);
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
