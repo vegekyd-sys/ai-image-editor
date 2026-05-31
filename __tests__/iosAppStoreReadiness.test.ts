@@ -139,6 +139,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeCache).toContain('sessionStorage.setItem');
     expect(nativeCache).toContain('removeNativeJSONCache');
     expect(authProvider).toContain("const AUTH_USER_CACHE_KEY = '/auth/user'");
+    expect(authProvider).toContain('isMakaronIOSApp');
+    expect(authProvider).toContain('const [useNativeAuthCache] = useState(() => isMakaronIOSApp())');
+    expect(authProvider).toContain('useNativeAuthCache ? readNativeJSONCache<User>(AUTH_USER_CACHE_KEY) : null');
     expect(authProvider).toContain('readNativeJSONCache<User>(AUTH_USER_CACHE_KEY)');
     expect(authProvider).toContain('writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)');
     expect(authProvider).toContain('removeNativeJSONCache(AUTH_USER_CACHE_KEY)');
