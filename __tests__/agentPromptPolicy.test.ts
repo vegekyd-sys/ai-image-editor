@@ -23,17 +23,18 @@ describe('agent prompt policy guards', () => {
     const tool = read('src/lib/prompts/generate_image_tool.md')
     const image = read('src/lib/prompts/image.md')
 
-    for (const text of [agent, tool]) {
-      expect(text).toContain('prompts/enhance.md')
-      expect(text).toContain('skill: "enhance"')
-      expect(text).toContain('prompts/creative.md')
-      expect(text).toContain('skill: "creative"')
-      expect(text).toContain('prompts/wild.md')
-      expect(text).toContain('skill: "wild"')
-      expect(text).toContain('prompts/captions.md')
-      expect(text).toContain('skill: "captions"')
-    }
+    expect(agent).toContain('prompts/enhance.md')
+    expect(agent).toContain('skill: "enhance"')
+    expect(agent).toContain('prompts/creative.md')
+    expect(agent).toContain('skill: "creative"')
+    expect(agent).toContain('prompts/wild.md')
+    expect(agent).toContain('skill: "wild"')
+    expect(agent).toContain('prompts/captions.md')
+    expect(agent).toContain('skill: "captions"')
 
+    expect(tool).toContain('read only that one skill prompt file once')
+    expect(tool).toContain('Do not read `prompts/image.md` just to route the skill')
+    expect(tool).not.toContain('prompts/enhance.md')
     expect(image).toContain('backend no longer injects the full template automatically')
   })
 
