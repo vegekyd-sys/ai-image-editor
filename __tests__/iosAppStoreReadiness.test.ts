@@ -177,12 +177,14 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bridge).toContain('UIImage(data: data)');
     expect(bridge).toContain('jpegData(compressionQuality: 0.95)');
     expect(bridge).toContain('jpegFilename(for: filename)');
+    expect(bridge).toContain('placeholderForCreatedAsset?.localIdentifier');
     expect(bridge).toContain("window.dispatchEvent(new CustomEvent('makaron-native-response'");
     expect(nativeMedia).toContain('isNativePhotoLibrarySaveAvailable');
     expect(nativeMedia).toContain('isNativePhotoLibraryPickerAvailable');
     expect(nativeMedia).toContain('saveBlobToNativePhotoLibrary');
     expect(nativeMedia).toContain('saveUrlToNativePhotoLibrary');
     expect(nativeMedia).toContain('pickMediaFromNativePhotoLibrary');
+    expect(nativeMedia).toContain('makaron:native-media:last-result');
     expect(nativeMedia).toContain('webkit?.messageHandlers?.makaronNative');
     expect(download).toContain('isNativePhotoLibrarySaveAvailable');
     expect(download).toContain('saveBlobToNativePhotoLibrary');

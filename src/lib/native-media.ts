@@ -6,11 +6,14 @@ interface NativeResponseDetail {
   id?: string;
   ok?: boolean;
   error?: string;
+  localIdentifier?: string;
   dataUrl?: string;
   filename?: string;
   mimeType?: string;
   mediaType?: NativeMediaType;
 }
+
+const LAST_NATIVE_MEDIA_RESULT_KEY = 'makaron:native-media:last-result';
 
 type NativePayload = {
   id: string;
@@ -81,8 +84,18 @@ function sendNativeMessage<T>(message: NativeMessage, timeoutMs: number): Promis
       window.clearTimeout(timeout);
       window.removeEventListener('makaron-native-response', onResponse);
       if (detail.ok) {
+        try {
+          sessionStorage.setItem(LAST_NATIVE_MEDIA_RESULT_KEY, JSON.stringify({ ...detail, t: Date.now() }));
+        } catch {
+          // Diagnostics are best-effort only.
+        }
         resolve(detail as T);
       } else {
+        try {
+          sessionStorage.setItem(LAST_NATIVE_MEDIA_RESULT_KEY, JSON.stringify({ ...detail, t: Date.now() }));
+        } catch {
+          // Diagnostics are best-effort only.
+        }
         reject(new Error(detail?.error || 'Native media request failed'));
       }
     }

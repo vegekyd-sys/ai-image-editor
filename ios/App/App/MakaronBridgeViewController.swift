@@ -211,12 +211,17 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
 
         let options = PHAssetResourceCreationOptions()
         options.originalFilename = photoFilename
+        var localIdentifier: String?
 
         PHPhotoLibrary.shared().performChanges({
             let request = PHAssetCreationRequest.forAsset()
             request.addResource(with: .photo, data: photoData, options: options)
+            localIdentifier = request.placeholderForCreatedAsset?.localIdentifier
         }) { [weak self] success, error in
-            self?.sendNativeResponse(id: id, ok: success, error: error?.localizedDescription)
+            self?.sendNativeResponse(id: id, ok: success, error: error?.localizedDescription, extra: [
+                "localIdentifier": localIdentifier ?? "",
+                "mediaType": "image"
+            ])
         }
     }
 
@@ -233,13 +238,18 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
 
         let options = PHAssetResourceCreationOptions()
         options.originalFilename = filename
+        var localIdentifier: String?
 
         PHPhotoLibrary.shared().performChanges({
             let request = PHAssetCreationRequest.forAsset()
             request.addResource(with: .video, fileURL: tempURL, options: options)
+            localIdentifier = request.placeholderForCreatedAsset?.localIdentifier
         }) { [weak self] success, error in
             try? FileManager.default.removeItem(at: tempURL)
-            self?.sendNativeResponse(id: id, ok: success, error: error?.localizedDescription)
+            self?.sendNativeResponse(id: id, ok: success, error: error?.localizedDescription, extra: [
+                "localIdentifier": localIdentifier ?? "",
+                "mediaType": "video"
+            ])
         }
     }
 

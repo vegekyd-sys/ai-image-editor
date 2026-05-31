@@ -50,6 +50,7 @@ function respond(message: NativeMessage, detail: Record<string, unknown> = {}) {
 describe('native media bridge', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    sessionStorage.clear();
     delete window.webkit;
   });
 
@@ -66,8 +67,13 @@ describe('native media bridge', () => {
       mediaType: 'image',
     });
 
-    respond(messages[0]);
+    respond(messages[0], { localIdentifier: 'asset-id-1', mediaType: 'image' });
     await expect(savePromise).resolves.toBeUndefined();
+    expect(JSON.parse(sessionStorage.getItem('makaron:native-media:last-result') || '{}')).toMatchObject({
+      ok: true,
+      localIdentifier: 'asset-id-1',
+      mediaType: 'image',
+    });
   });
 
   it('resolves native picker responses into selected media data', async () => {
