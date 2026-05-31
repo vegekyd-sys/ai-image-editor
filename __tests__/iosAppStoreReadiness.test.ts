@@ -139,6 +139,11 @@ describe('iOS App Store readiness guardrails', () => {
     expect(topBar).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(topBar).toContain("writeNativeJSONCache('/api/billing/credits', d)");
     expect(topBar).toContain('TOPBAR_ROUTE_WARM_APIS');
+    expect(topBar).toContain('warmTopBarMenuRoutes');
+    expect(topBar).toContain("['/profile', '/dashboard', '/dashboard?tab=keys', '/skills'].forEach(warmTopBarRoute)");
+    expect(topBar).toContain('onPointerDown={warmTopBarMenuRoutes}');
+    expect(topBar).toContain("aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}");
+    expect(topBar).toContain("onClick={() => navigateTopBar('/dashboard')}");
     expect(topBar).toContain("onPointerDown={() => warmTopBarRoute('/dashboard')}");
     expect(topBar).toContain("onPointerDown={() => warmTopBarRoute('/skills')}");
     expect(editor).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");

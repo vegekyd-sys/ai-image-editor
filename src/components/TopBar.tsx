@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState, useRef } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
@@ -61,6 +60,10 @@ export default function TopBar({ page }: TopBarProps) {
     warmTopBarRoute(path)
     router.push(path)
   }, [router, warmTopBarRoute])
+
+  const warmTopBarMenuRoutes = useCallback(() => {
+    ['/profile', '/dashboard', '/dashboard?tab=keys', '/skills'].forEach(warmTopBarRoute)
+  }, [warmTopBarRoute])
 
   useEffect(() => {
     if (!isMakaronIOSApp()) return
@@ -162,12 +165,12 @@ export default function TopBar({ page }: TopBarProps) {
         {/* Right side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {user && creditBalance !== null && (
-            <Link
-              href="/dashboard"
-              prefetch
+            <button
+              type="button"
+              aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}
               onPointerDown={() => warmTopBarRoute('/dashboard')}
               onFocus={() => warmTopBarRoute('/dashboard')}
-              onClick={() => warmTopBarRoute('/dashboard')}
+              onClick={() => navigateTopBar('/dashboard')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 padding: '4px 10px', borderRadius: 8,
@@ -187,11 +190,13 @@ export default function TopBar({ page }: TopBarProps) {
               }}>
                 {creditBalance.toLocaleString()}
               </span>
-            </Link>
+            </button>
           )}
           {user ? (
             <div ref={userMenuRef} style={{ position: 'relative' }}>
               <button
+                onPointerDown={warmTopBarMenuRoutes}
+                onFocus={warmTopBarMenuRoutes}
                 onClick={() => setUserMenuOpen(v => !v)}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
