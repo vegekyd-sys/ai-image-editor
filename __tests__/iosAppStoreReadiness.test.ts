@@ -101,6 +101,7 @@ describe('iOS App Store readiness guardrails', () => {
     const agentContent = fs.readFileSync(path.join(root, 'src/components/AgentContent.tsx'), 'utf8');
     const claim = fs.readFileSync(path.join(root, 'src/app/claim/page.tsx'), 'utf8');
     const mcp = fs.readFileSync(path.join(root, 'src/app/mcp/page.tsx'), 'utf8');
+    const skillShare = fs.readFileSync(path.join(root, 'src/app/s/[code]/page.tsx'), 'utf8');
     const login = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
     const activate = fs.readFileSync(path.join(root, 'src/app/activate/page.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
@@ -202,6 +203,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(agentContent).toContain('makaron-ios-page');
     expect(claim).toContain('makaron-ios-page');
     expect(mcp).toContain('makaron-ios-page');
+    expect(skillShare).toContain('makaron-ios-page');
     expect(login).toContain('makaron-ios-page');
     expect(activate).toContain('makaron-ios-page');
   });
@@ -215,6 +217,7 @@ describe('iOS App Store readiness guardrails', () => {
       { route: '/admin/status', file: 'src/app/admin/status/page.tsx', required: ['makaron-ios-page'] },
       { route: '/claim', file: 'src/app/claim/page.tsx', required: ['makaron-ios-page'] },
       { route: '/mcp', file: 'src/app/mcp/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/s/[code]', file: 'src/app/s/[code]/page.tsx', required: ['makaron-ios-page'] },
       { route: '/login', file: 'src/app/login/page.tsx', required: ['makaron-ios-page', 'userAgentHasMakaronIOSToken'] },
       { route: '/activate', file: 'src/app/activate/page.tsx', required: ['makaron-ios-page'] },
     ];
