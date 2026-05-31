@@ -97,6 +97,10 @@ describe('iOS App Store readiness guardrails', () => {
     const skills = fs.readFileSync(path.join(root, 'src/app/skills/page.tsx'), 'utf8');
     const profile = fs.readFileSync(path.join(root, 'src/app/profile/page.tsx'), 'utf8');
     const admin = fs.readFileSync(path.join(root, 'src/app/admin/page.tsx'), 'utf8');
+    const adminStatus = fs.readFileSync(path.join(root, 'src/app/admin/status/page.tsx'), 'utf8');
+    const agentContent = fs.readFileSync(path.join(root, 'src/components/AgentContent.tsx'), 'utf8');
+    const claim = fs.readFileSync(path.join(root, 'src/app/claim/page.tsx'), 'utf8');
+    const mcp = fs.readFileSync(path.join(root, 'src/app/mcp/page.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const home = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
@@ -151,6 +155,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(skills).toContain('makaron-ios-page');
     expect(profile).toContain('makaron-ios-page');
     expect(admin).toContain('makaron-ios-page');
+    expect(adminStatus).toContain('makaron-ios-page');
+    expect(agentContent).toContain('makaron-ios-page');
+    expect(claim).toContain('makaron-ios-page');
+    expect(mcp).toContain('makaron-ios-page');
   });
 
   it('saves editor images and videos through native Photos on iOS before web fallbacks', () => {
