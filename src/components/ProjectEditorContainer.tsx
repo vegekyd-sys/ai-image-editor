@@ -16,6 +16,9 @@ interface ProjectEditorContainerProps {
   loadingClassName?: string
   onBack?: () => void
   onProjectCreated?: (projectId: string) => void
+  disableAgentLiveReload?: boolean
+  disableBodyScrollLock?: boolean
+  isInlineActive?: boolean
 }
 
 export default function ProjectEditorContainer({
@@ -24,12 +27,22 @@ export default function ProjectEditorContainer({
   loadingClassName = 'page-slide-in h-dvh flex items-center justify-center relative z-[1]',
   onBack,
   onProjectCreated,
+  disableAgentLiveReload = false,
+  disableBodyScrollLock = false,
+  isInlineActive = true,
 }: ProjectEditorContainerProps) {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const navigatingRef = useRef(false)
+  const leaveEditor = useCallback((path: '/projects' | '/login') => {
+    if (onBack) {
+      onBack()
+      return
+    }
+    router.replace(path)
+  }, [onBack, router])
 
-  const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateCover, updateTitle, saveDesignProps } =
+  const { loadProject, saveSnapshot, saveMessage, updateTips, updateDescription, updateTitle, saveDesignProps } =
     useProject(projectId, user?.id ?? '')
 
   const [projectOwnerId, setProjectOwnerId] = useState<string | null>(null)
@@ -98,6 +111,7 @@ export default function ProjectEditorContainer({
   const shownRef = useRef(loaded)
 
   useEffect(() => {
+    if (!isInlineActive) return
     if (authLoading) return
     const supabase = createClient()
     supabase
@@ -111,20 +125,21 @@ export default function ProjectEditorContainer({
           setIsPublicProject(data.is_public)
         } else if (!user) {
           sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
-          router.replace('/login')
+          leaveEditor('/login')
         } else {
-          router.replace('/projects')
+          leaveEditor('/projects')
         }
       })
-  }, [projectId, authLoading, user, router])
+  }, [projectId, authLoading, user, leaveEditor, isInlineActive])
 
   useEffect(() => {
+    if (!isInlineActive) return
     if (authLoading || isPublicProject === null) return
     if (!isPublicProject && (!user || user.id !== projectOwnerId)) {
       if (!user) sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
-      router.replace(user ? '/projects' : '/login')
+      leaveEditor(user ? '/projects' : '/login')
     }
-  }, [authLoading, isPublicProject, user, projectOwnerId, router, projectId])
+  }, [authLoading, isPublicProject, user, projectOwnerId, projectId, leaveEditor, isInlineActive])
 
   const isOwner = user?.id === projectOwnerId
   const readOnly = !isOwner
@@ -152,6 +167,7 @@ export default function ProjectEditorContainer({
   }
 
   useEffect(() => {
+    if (!isInlineActive) return
     if (pendingImages || shownRef.current) return
     let cancelled = false
     getCachedProjectData(projectId).then(async (cached) => {
@@ -167,10 +183,11 @@ export default function ProjectEditorContainer({
     })
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  }, [projectId, isInlineActive])
 
   const userId = user?.id
   useEffect(() => {
+    if (!isInlineActive) return
     if (!projectId) return
     if (isNewProject) return
     if (isPublicProject === null) return
@@ -219,10 +236,6 @@ export default function ProjectEditorContainer({
       setInitialMessages(messages)
       setInitialTitle(title)
       setLoaded(true)
-
-      if (userId && snapshots.length > 0 && snapshots[0].imageUrl) {
-        updateCover(snapshots[0].imageUrl)
-      }
     }).catch((err: unknown) => {
       if (cancelled) return
       console.error('Failed to load project:', err)
@@ -235,7 +248,7 @@ export default function ProjectEditorContainer({
     })
 
     return () => { cancelled = true }
-  }, [userId, projectId, loadProject, updateCover, isPublicProject, isNewProject])
+  }, [userId, projectId, loadProject, isPublicProject, isNewProject, isInlineActive])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
     saveSnapshot(snapshot, sortOrder, onUploaded)
@@ -266,13 +279,13 @@ export default function ProjectEditorContainer({
   }, [user, router, onProjectCreated])
 
   const handleBack = useCallback(() => {
-    if (navigatingRef.current) return
-    navigatingRef.current = true
     if (onBack) {
       onBack()
-    } else {
-      router.push(user ? '/projects' : '/home')
+      return
     }
+    if (navigatingRef.current) return
+    navigatingRef.current = true
+    router.push(user ? '/projects' : '/home')
   }, [onBack, router, user])
 
   if (!loaded) {
@@ -307,6 +320,9 @@ export default function ProjectEditorContainer({
         timelineVersion={timelineVersion}
         initialMusicTaskId={initialMusicTaskId}
         readOnly={readOnly}
+        disableAgentLiveReload={disableAgentLiveReload}
+        disableBodyScrollLock={disableBodyScrollLock}
+        inactive={!isInlineActive}
       />
     </div>
   )

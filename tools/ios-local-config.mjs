@@ -75,5 +75,6 @@ config.server.allowNavigation = Array.from(new Set([
 fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
 console.log(`iOS Debug WebView will load: ${config.server.url}`);
-console.log('Start the local server with: npm run dev:ios');
+console.log('For stable phone acceptance, run: npm run build && npm run start:ios');
+console.log('For active development with Fast Refresh, run: npm run dev:ios');
 console.log('Then open ios/App/App.xcworkspace in Xcode and Run on your iPhone.');

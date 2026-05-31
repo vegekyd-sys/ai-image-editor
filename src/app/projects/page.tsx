@@ -1,16 +1,16 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Suspense, type CSSProperties } from 'react'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, cacheProjectsList } from '@/lib/imageCache'
+import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, getLastProjectsListSync, cacheProjectsList } from '@/lib/imageCache'
 import { isHeicFile } from '@/lib/imageUtils'
-import { useLocale, LocaleToggle } from '@/lib/i18n'
-import { getThumbnailUrl } from '@/lib/supabase/storage'
+import { useLocale } from '@/lib/i18n'
+import { getOriginFormatThumbnailUrl, getThumbnailUrl } from '@/lib/supabase/storage'
 import { createProject } from '@/lib/createProject'
 import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
@@ -42,6 +42,9 @@ const IOS_PROJECT_PAN_EDGE_PX = 36
 const IOS_PROJECT_PAN_COMMIT_PX = 86
 const IOS_PROJECT_PAN_MIN_DX = 10
 const IOS_PROJECT_OVERLAY_CLOSE_MS = 190
+const IOS_PROJECT_RETURN_REFRESH_GUARD_MS = 1200
+const IOS_PROJECT_AUTH_GRACE_MS = 1800
+const IOS_PROJECT_NAV_LOG_SESSION_KEY = 'makaron:ios-project-nav-log'
 
 function isMakaronIOSAppShell() {
   if (typeof window === 'undefined' || typeof document === 'undefined' || typeof navigator === 'undefined') return false
@@ -53,6 +56,34 @@ function isMakaronIOSAppShell() {
     || document.documentElement.dataset.nativePlatform === 'ios'
     || document.documentElement.classList.contains('makaron-ios-app')
     || navigator.userAgent.includes('MakaronIOS')
+}
+
+function logIOSProjectNav(event: string, data?: Record<string, unknown>) {
+  if (typeof window === 'undefined' || !isMakaronIOSAppShell()) return
+  const target = window as typeof window & {
+    __makaronIOSProjectNavLog?: Array<{ event: string; t: number; data?: Record<string, unknown> }>
+  }
+  const state = {
+    href: window.location.href,
+    scrollY: Math.round(window.scrollY),
+    innerHeight: Math.round(window.innerHeight),
+    docHeight: Math.round(document.documentElement.scrollHeight),
+    bodyHeight: Math.round(document.body.scrollHeight),
+    cardCount: document.querySelectorAll('.mkr-card').length,
+    hasProjectsPage: Boolean(document.querySelector('.makaron-projects-page')),
+    hasEditor: Boolean(document.querySelector('[data-testid="editor"]')),
+    hasOverlay: Boolean(document.querySelector('[data-makaron-ios-project-overlay="true"]')),
+    hasHiddenEditor: Boolean(document.querySelector('[data-makaron-ios-project-overlay="true"][aria-hidden="true"]')),
+  }
+  const entry = { event, t: Math.round(performance.now()), data: { ...state, ...data } }
+  target.__makaronIOSProjectNavLog = [...(target.__makaronIOSProjectNavLog ?? []).slice(-80), entry]
+  try {
+    const previous = JSON.parse(sessionStorage.getItem(IOS_PROJECT_NAV_LOG_SESSION_KEY) || '[]') as typeof target.__makaronIOSProjectNavLog
+    sessionStorage.setItem(IOS_PROJECT_NAV_LOG_SESSION_KEY, JSON.stringify([...(previous ?? []), entry].slice(-80)))
+  } catch {
+    // Debug logging must never affect navigation.
+  }
+  console.info('[ios-project-nav]', event, entry.data)
 }
 
 function timeAgo(dateStr: string): string {
@@ -78,19 +109,24 @@ function ProjectsPageInner() {
   const { user, loading: authLoading } = useAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
-  const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
   // Phase 1: Synchronous memory cache — same-session instant render
   const [projects, setProjects] = useState<ProjectWithSnapshots[]>(() => {
     if (typeof window === 'undefined') return []
     const userId = user?.id
-    if (!userId) return []
+    if (!userId) {
+      return isMakaronIOSAppShell()
+        ? ((getLastProjectsListSync()?.projects as ProjectWithSnapshots[] | undefined) ?? [])
+        : []
+    }
     return (getCachedProjectsListSync(userId) as ProjectWithSnapshots[]) ?? []
   })
   const [loadingProjects, setLoadingProjects] = useState(() => {
     if (typeof window === 'undefined') return true
     const userId = user?.id
-    if (!userId) return true
+    if (!userId) {
+      return !(isMakaronIOSAppShell() && (getLastProjectsListSync()?.projects.length ?? 0) > 0)
+    }
     return getCachedProjectsListSync(userId) === null
   })
   const createInput = useCreateInput()
@@ -101,8 +137,8 @@ function ProjectsPageInner() {
   const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
   const [creditBalance, setCreditBalance] = useState<number | null>(null)
   const [showWelcome, setShowWelcome] = useState(false)
-  const [skillUploading, setSkillUploading] = useState(false)
-  const [skillUploadError, setSkillUploadError] = useState<string | null>(null)
+  const [, setSkillUploading] = useState(false)
+  const [, setSkillUploadError] = useState<string | null>(null)
   const handleSkillUpload = useCallback(async (file: File) => {
     setSkillUploading(true)
     setSkillUploadError(null)
@@ -145,9 +181,12 @@ function ProjectsPageInner() {
     const t = setTimeout(load, 2000)
     return () => clearTimeout(t)
   }, [])
-  // Auto-select skill from URL param (after claim redirect)
+  // Auto-select skill from URL param (after claim redirect). Read from the
+  // browser URL directly so iOS inline project navigation never subscribes
+  // this page to Next search-param router updates.
   useEffect(() => {
-    const skillParam = searchParams.get('skill')
+    if (typeof window === 'undefined') return
+    const skillParam = new URLSearchParams(window.location.search).get('skill')
     if (skillParam && availableSkills.length > 0) {
       const match = availableSkills.find(s => s.name === skillParam)
       if (match) {
@@ -155,7 +194,7 @@ function ProjectsPageInner() {
       }
       window.history.replaceState({}, '', '/projects')
     }
-  }, [searchParams, availableSkills])
+  }, [availableSkills])
 
   const skillFileRef = useRef<HTMLInputElement>(null)
 
@@ -163,14 +202,25 @@ function ProjectsPageInner() {
   const [navigating, setNavigating] = useState(false)
   const [iosAppShell, setIosAppShell] = useState(() => isMakaronIOSAppShell())
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
+  const projectsRef = useRef(projects)
+  const loadingProjectsRef = useRef(loadingProjects)
   const [activeIOSProjectId, setActiveIOSProjectId] = useState<string | null>(null)
+  const [renderedIOSProjectId, setRenderedIOSProjectId] = useState<string | null>(null)
   const activeIOSProjectIdRef = useRef<string | null>(null)
+  const renderedIOSProjectIdRef = useRef<string | null>(null)
   const [iosProjectX, setIosProjectX] = useState(0)
   const [iosProjectSettling, setIosProjectSettling] = useState(false)
   const [iosProjectPanActive, setIosProjectPanActive] = useState(false)
   const iosProjectOverlayRef = useRef<HTMLDivElement | null>(null)
   const iosProjectPanRef = useRef({ tracking: false, startX: 0, startY: 0, lastX: 0, startTime: 0, locked: false })
   const iosProjectCloseTimerRef = useRef<number | null>(null)
+  const iosProjectClosingRef = useRef(false)
+  const iosProjectScrollYRef = useRef(0)
+  const pendingIOSProjectsRefreshRef = useRef<ProjectWithSnapshots[] | null>(null)
+  const iosProjectReturnFreezeUntilRef = useRef(0)
+  const iosProjectAuthGraceUntilRef = useRef(0)
+  const iosProjectNavGenerationRef = useRef(0)
+  const iosReturnSelfTestStartedRef = useRef(false)
 
   const clearIOSProjectCloseTimer = useCallback(() => {
     if (iosProjectCloseTimerRef.current === null) return
@@ -178,10 +228,41 @@ function ProjectsPageInner() {
     iosProjectCloseTimerRef.current = null
   }, [])
 
+  const applyProjectsRefresh = useCallback((nextProjects: ProjectWithSnapshots[]) => {
+    const isFrozenIOSReturn = isMakaronIOSAppShell()
+      && (
+        activeIOSProjectIdRef.current
+        || performance.now() < iosProjectReturnFreezeUntilRef.current
+      )
+    const needsInitialProjects = loadingProjectsRef.current && projectsRef.current.length === 0
+
+    if (isFrozenIOSReturn && !needsInitialProjects) {
+      logIOSProjectNav('projects-refresh-stashed', {
+        activeProjectId: activeIOSProjectIdRef.current,
+        frozenUntil: iosProjectReturnFreezeUntilRef.current,
+        count: nextProjects.length,
+      })
+      pendingIOSProjectsRefreshRef.current = nextProjects
+      return
+    }
+
+    shownRef.current = true
+    logIOSProjectNav('projects-refresh-applied', { count: nextProjects.length, duringFrozenReturn: isFrozenIOSReturn, needsInitialProjects })
+    setProjects(nextProjects)
+    setLoadingProjects(false)
+  }, [])
+
   const openIOSProject = useCallback((projectId: string) => {
     if (typeof window === 'undefined') return
     clearIOSProjectCloseTimer()
+    iosProjectClosingRef.current = false
+    iosProjectNavGenerationRef.current += 1
+    pendingIOSProjectsRefreshRef.current = null
+    iosProjectScrollYRef.current = window.scrollY
+    logIOSProjectNav('open-project', { projectId, scrollY: iosProjectScrollYRef.current })
     activeIOSProjectIdRef.current = projectId
+    renderedIOSProjectIdRef.current = projectId
+    setRenderedIOSProjectId(projectId)
     setActiveIOSProjectId(projectId)
     setIosProjectSettling(true)
     setIosProjectPanActive(false)
@@ -192,7 +273,11 @@ function ProjectsPageInner() {
   const replaceIOSProject = useCallback((projectId: string) => {
     if (typeof window === 'undefined') return
     clearIOSProjectCloseTimer()
+    iosProjectClosingRef.current = false
+    logIOSProjectNav('replace-project', { projectId })
     activeIOSProjectIdRef.current = projectId
+    renderedIOSProjectIdRef.current = projectId
+    setRenderedIOSProjectId(projectId)
     setActiveIOSProjectId(projectId)
     setIosProjectSettling(false)
     setIosProjectPanActive(false)
@@ -201,6 +286,15 @@ function ProjectsPageInner() {
 
   const closeIOSProject = useCallback(() => {
     if (!activeIOSProjectIdRef.current || typeof window === 'undefined') return
+    if (iosProjectClosingRef.current) {
+      logIOSProjectNav('close-project-ignored-already-closing', { projectId: activeIOSProjectIdRef.current })
+      return
+    }
+    iosProjectClosingRef.current = true
+    const closingProjectId = activeIOSProjectIdRef.current
+    logIOSProjectNav('close-project-start', { projectId: closingProjectId, scrollY: iosProjectScrollYRef.current })
+    iosProjectReturnFreezeUntilRef.current = performance.now() + IOS_PROJECT_RETURN_REFRESH_GUARD_MS
+    iosProjectAuthGraceUntilRef.current = performance.now() + IOS_PROJECT_AUTH_GRACE_MS
     clearIOSProjectCloseTimer()
     setIosProjectSettling(true)
     setIosProjectPanActive(false)
@@ -208,9 +302,18 @@ function ProjectsPageInner() {
     iosProjectCloseTimerRef.current = window.setTimeout(() => {
       iosProjectCloseTimerRef.current = null
       activeIOSProjectIdRef.current = null
+      iosProjectClosingRef.current = false
+      iosProjectNavGenerationRef.current += 1
       setActiveIOSProjectId(null)
       setIosProjectX(0)
       setIosProjectSettling(false)
+      pendingIOSProjectsRefreshRef.current = null
+      logIOSProjectNav('close-project-commit', {
+        scrollY: iosProjectScrollYRef.current,
+        frozenUntil: iosProjectReturnFreezeUntilRef.current,
+      })
+      window.scrollTo(0, iosProjectScrollYRef.current)
+      logIOSProjectNav('editor-retained-hidden-after-return', { projectId: closingProjectId })
     }, IOS_PROJECT_OVERLAY_CLOSE_MS)
   }, [clearIOSProjectCloseTimer])
 
@@ -274,24 +377,50 @@ function ProjectsPageInner() {
     setActionSheet(null)
   }, [actionSheet, renameValue])
 
+  const canHoldIOSProjectsDuringAuthGap = useIOSInlineProjectNavigation
+    && projects.length > 0
+    && typeof performance !== 'undefined'
+    && performance.now() < iosProjectAuthGraceUntilRef.current
+  const canHoldCachedIOSProjectsWithoutUser = useIOSInlineProjectNavigation
+    && projects.length > 0
+    && !user
+
   useEffect(() => {
-    if (!authLoading && !user) router.replace('/login')
-  }, [user, authLoading, router])
+    if (authLoading || user) return
+    if (canHoldCachedIOSProjectsWithoutUser) {
+      logIOSProjectNav('auth-empty-held-with-cached-projects')
+      return
+    }
+    if (canHoldIOSProjectsDuringAuthGap) {
+      const remaining = Math.max(0, iosProjectAuthGraceUntilRef.current - performance.now())
+      logIOSProjectNav('auth-gap-held-after-return', { remaining: Math.round(remaining) })
+      const timer = window.setTimeout(() => {
+        if (!activeIOSProjectIdRef.current) router.replace('/login')
+      }, remaining + 20)
+      return () => window.clearTimeout(timer)
+    }
+    router.replace('/login')
+  }, [user, authLoading, router, canHoldIOSProjectsDuringAuthGap, canHoldCachedIOSProjectsWithoutUser])
 
   useEffect(() => {
     activeIOSProjectIdRef.current = activeIOSProjectId
   }, [activeIOSProjectId])
 
-  useEffect(() => () => clearIOSProjectCloseTimer(), [clearIOSProjectCloseTimer])
+  useEffect(() => {
+    renderedIOSProjectIdRef.current = renderedIOSProjectId
+  }, [renderedIOSProjectId])
 
   useEffect(() => {
-    if (!activeIOSProjectId) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [activeIOSProjectId])
+    projectsRef.current = projects
+  }, [projects])
+
+  useEffect(() => {
+    loadingProjectsRef.current = loadingProjects
+  }, [loadingProjects])
+
+  useEffect(() => () => {
+    clearIOSProjectCloseTimer()
+  }, [clearIOSProjectCloseTimer])
 
   useEffect(() => {
     const overlay = iosProjectOverlayRef.current
@@ -328,12 +457,10 @@ function ProjectsPageInner() {
     let cancelled = false
     getCachedProjectsList(userId).then((cached) => {
       if (cancelled || shownRef.current || !cached) return
-      shownRef.current = true
-      setProjects(cached as ProjectWithSnapshots[])
-      setLoadingProjects(false)
+      applyProjectsRefresh(cached as ProjectWithSnapshots[])
     })
     return () => { cancelled = true }
-  }, [userId])
+  }, [userId, applyProjectsRefresh])
 
   // Phase 3: Supabase fetch (always runs when user is available, refreshes cache)
   useEffect(() => {
@@ -343,6 +470,7 @@ function ProjectsPageInner() {
 
     async function fetchProjects() {
       try {
+        const fetchNavGeneration = iosProjectNavGenerationRef.current
         const { data: projectRows, error: pErr } = await supabase
           .from('projects')
           .select('id, title, cover_url, updated_at, created_at')
@@ -350,6 +478,14 @@ function ProjectsPageInner() {
           .order('created_at', { ascending: false })
 
         if (cancelled) return
+        if (isMakaronIOSAppShell() && fetchNavGeneration !== iosProjectNavGenerationRef.current && projectsRef.current.length > 0) {
+          logIOSProjectNav('projects-fetch-discarded-nav-generation-changed', {
+            fetchNavGeneration,
+            currentNavGeneration: iosProjectNavGenerationRef.current,
+            phase: 'projects',
+          })
+          return
+        }
 
         if (pErr || !projectRows) {
           console.error('Failed to fetch projects:', pErr)
@@ -359,14 +495,13 @@ function ProjectsPageInner() {
 
         if (projectRows.length === 0) {
           cacheProjectsList(userId!, [])
-          shownRef.current = true
-          setProjects([])
-          setLoadingProjects(false)
+          applyProjectsRefresh([])
           return
         }
 
         // Fetch all snapshots (incremental optimization based on current displayed projects)
-        const currentMap = new Map(projects.map(p => [p.id, p]))
+        const currentProjects = projectsRef.current
+        const currentMap = new Map(currentProjects.map(p => [p.id, p]))
         const staleIds = projectRows
           .filter(p => {
             const cached = currentMap.get(p.id)
@@ -403,6 +538,14 @@ function ProjectsPageInner() {
         }
 
         if (cancelled) return
+        if (isMakaronIOSAppShell() && fetchNavGeneration !== iosProjectNavGenerationRef.current && projectsRef.current.length > 0) {
+          logIOSProjectNav('projects-fetch-discarded-nav-generation-changed', {
+            fetchNavGeneration,
+            currentNavGeneration: iosProjectNavGenerationRef.current,
+            phase: 'snapshots',
+          })
+          return
+        }
 
         // Fetch which projects have completed videos (v1: project_animations, v2: snapshots with type=video)
         const projectIds = projectRows.map(p => p.id)
@@ -417,6 +560,14 @@ function ProjectsPageInner() {
         }
 
         if (cancelled) return
+        if (isMakaronIOSAppShell() && fetchNavGeneration !== iosProjectNavGenerationRef.current && projectsRef.current.length > 0) {
+          logIOSProjectNav('projects-fetch-discarded-nav-generation-changed', {
+            fetchNavGeneration,
+            currentNavGeneration: iosProjectNavGenerationRef.current,
+            phase: 'videos',
+          })
+          return
+        }
 
         const result: ProjectWithSnapshots[] = projectRows
           .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [], hasVideo: videoProjectIds.has(p.id) }))
@@ -441,11 +592,17 @@ function ProjectsPageInner() {
         }
 
         if (cancelled) return
+        if (isMakaronIOSAppShell() && fetchNavGeneration !== iosProjectNavGenerationRef.current && projectsRef.current.length > 0) {
+          logIOSProjectNav('projects-fetch-discarded-nav-generation-changed', {
+            fetchNavGeneration,
+            currentNavGeneration: iosProjectNavGenerationRef.current,
+            phase: 'cache-patch',
+          })
+          return
+        }
         // Cache clean Supabase data (with URLs, no base64)
         cacheProjectsList(userId!, result)
-        shownRef.current = true
-        setProjects(displayResult)
-        setLoadingProjects(false)
+        applyProjectsRefresh(displayResult)
       } catch (err) {
         if (cancelled) return
         console.error('Failed to fetch projects:', err)
@@ -485,6 +642,11 @@ function ProjectsPageInner() {
       if (selectedSkill) opts.skill = selectedSkill
       const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined, extractedMetadataRef.current)
       if (!result) throw new Error('Failed to create project')
+      if (useIOSInlineProjectNavigation) {
+        createInput.setCreating(false)
+        openIOSProject(result.projectId)
+        return
+      }
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('Create project error:', err)
@@ -495,7 +657,7 @@ function ProjectsPageInner() {
       }
       createInput.setCreating(false)
     }
-  }, [user, createInput, router, selectedSkill, t])
+  }, [user, createInput, router, selectedSkill, t, useIOSInlineProjectNavigation, openIOSProject])
 
   // Unified create: text only, image only, or both — all go through handleCreateProject
   const handleCreate = useCallback(async () => {
@@ -599,7 +761,52 @@ function ProjectsPageInner() {
     window.setTimeout(resetIOSProjectPan, 180)
   }, [closeIOSProject, resetIOSProjectPan])
 
-  if (authLoading || !user) {
+  const canRenderCachedIOSProjectsWhileAuthPending = useIOSInlineProjectNavigation
+    && (authLoading || canHoldIOSProjectsDuringAuthGap || canHoldCachedIOSProjectsWithoutUser)
+    && projects.length > 0
+
+  useEffect(() => {
+    if (!useIOSInlineProjectNavigation || iosReturnSelfTestStartedRef.current || projects.length === 0) return
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('iosReturnSelfTest') !== '1') return
+
+    iosReturnSelfTestStartedRef.current = true
+    const project = projects[0]
+    const startScrollY = window.scrollY
+    const startCount = projects.length
+    logIOSProjectNav('return-self-test-start', { projectId: project.id, startCount, startScrollY })
+    openIOSProject(project.id)
+
+    const closeTimer = window.setTimeout(() => {
+      logIOSProjectNav('return-self-test-close-request', { projectId: project.id })
+      closeIOSProject()
+    }, 1200)
+    const assertTimer = window.setTimeout(() => {
+      const visibleCards = document.querySelectorAll('.mkr-card').length
+      const overlay = document.querySelector('[data-makaron-ios-project-overlay="true"]') as HTMLElement | null
+      const passed = window.location.pathname === '/projects'
+        && visibleCards > 0
+        && overlay?.style.visibility === 'hidden'
+      logIOSProjectNav(passed ? 'return-self-test-pass' : 'return-self-test-fail', {
+        projectId: project.id,
+        visibleCards,
+        startCount,
+        startScrollY,
+        scrollY: window.scrollY,
+        overlayVisibility: overlay?.style.visibility,
+        pathname: window.location.pathname,
+      })
+      window.history.replaceState({}, '', '/projects')
+    }, 2600)
+
+    return () => {
+      window.clearTimeout(closeTimer)
+      window.clearTimeout(assertTimer)
+    }
+  }, [useIOSInlineProjectNavigation, projects, openIOSProject, closeIOSProject])
+
+  if ((authLoading || !user) && !canRenderCachedIOSProjectsWhileAuthPending) {
     return (
       <div style={{ height: '100dvh', background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Spinner />
@@ -687,7 +894,15 @@ function ProjectsPageInner() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className={`mkr-page makaron-projects-page${navigating ? ' page-slide-out' : ''}`} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden' }}>
+      <div
+        className={`mkr-page makaron-projects-page${navigating ? ' page-slide-out' : ''}`}
+        style={{
+          minHeight: '100dvh',
+          background: '#000',
+          color: '#fff',
+          overflowX: 'hidden',
+        }}
+      >
 
         {/* Ambient glow — center at 40% so top is black, fades to purple below */}
         <div style={{
@@ -818,6 +1033,7 @@ function ProjectsPageInner() {
                   project={project}
                   index={i}
                   useInlineNavigation={useIOSInlineProjectNavigation}
+                  useIOSSafeImageUrls={useIOSInlineProjectNavigation}
                   onMore={(e) => openActionSheet(e, project)}
                   onNavigate={handleProjectNavigate}
                 />
@@ -934,15 +1150,21 @@ function ProjectsPageInner() {
         </div>
       )}
 
-      {activeIOSProjectId && (
+      {renderedIOSProjectId && (
         <div
           ref={iosProjectOverlayRef}
           data-makaron-ios-project-overlay="true"
+          aria-hidden={activeIOSProjectId ? undefined : 'true'}
           className="fixed inset-0 z-[240] bg-black"
           style={{
             transform: `translate3d(${iosProjectX}px, 0, 0)`,
             transition: iosProjectSettling ? `transform ${IOS_PROJECT_OVERLAY_CLOSE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none',
             willChange: iosProjectPanActive || iosProjectSettling ? 'transform' : undefined,
+            visibility: activeIOSProjectId ? 'visible' : 'hidden',
+            contentVisibility: activeIOSProjectId ? 'visible' : 'hidden',
+            pointerEvents: activeIOSProjectId ? 'auto' : 'none',
+            contain: 'layout paint',
+            isolation: 'isolate',
             touchAction: 'pan-y',
             overscrollBehaviorX: 'contain',
           }}
@@ -952,12 +1174,15 @@ function ProjectsPageInner() {
           onTouchCancel={handleIOSProjectPanEnd}
         >
           <ProjectEditorContainer
-            key={activeIOSProjectId}
-            projectId={activeIOSProjectId}
+            key={renderedIOSProjectId}
+            projectId={renderedIOSProjectId}
             className=""
             loadingClassName="h-dvh bg-black"
             onBack={closeIOSProject}
             onProjectCreated={replaceIOSProject}
+            disableAgentLiveReload
+            disableBodyScrollLock
+            isInlineActive={activeIOSProjectId === renderedIOSProjectId}
           />
         </div>
       )}
@@ -1015,18 +1240,25 @@ function ProjectCard({
   project,
   index,
   useInlineNavigation,
+  useIOSSafeImageUrls,
   onMore,
   onNavigate,
 }: {
   project: ProjectWithSnapshots
   index: number
   useInlineNavigation: boolean
+  useIOSSafeImageUrls: boolean
   onMore: (e: React.MouseEvent) => void
   onNavigate: (e: React.MouseEvent<HTMLElement>, project: ProjectWithSnapshots) => void
 }) {
   // Use last snapshot with an actual image URL (skip design snapshots with empty image_url)
   const lastSnap = project.snapshots.filter(s => s.image_url).pop() ?? project.snapshots[project.snapshots.length - 1]
-  const [loaded, setLoaded] = useState(false)
+  const imageSrc = lastSnap.image_url
+    ? useIOSSafeImageUrls
+      ? getOriginFormatThumbnailUrl(lastSnap.image_url, 400, 50, 400)
+      : getThumbnailUrl(lastSnap.image_url, 400, 50, 400)
+    : undefined
+  const [loaded, setLoaded] = useState(useIOSSafeImageUrls)
 
   const cardStyle: CSSProperties = {
     display: 'block',
@@ -1035,7 +1267,7 @@ function ProjectCard({
     borderRadius: '16px',
     overflow: 'hidden',
     background: '#120d1a',
-    animationDelay: `${index * 0.06}s`,
+    animationDelay: useIOSSafeImageUrls ? undefined : `${index * 0.06}s`,
     textDecoration: 'none',
     border: 'none',
     padding: 0,
@@ -1046,26 +1278,28 @@ function ProjectCard({
   const cardContent = (
     <>
       {/* Placeholder shimmer while image loads */}
-      {!loaded && (
+      {!loaded && !useIOSSafeImageUrls && (
         <div style={{
           position: 'absolute', inset: 0,
           background: 'linear-gradient(135deg, #120d1a 0%, #1c1026 50%, #120d1a 100%)',
         }} />
       )}
 
-      {/* Full-bleed photo — use Supabase transform for smaller thumbnails */}
+      {/* Full-bleed photo — iOS app avoids transform/WebP thumbnails to keep WKWebView return stable. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={lastSnap.image_url ? getThumbnailUrl(lastSnap.image_url, 400, 50, 400) : undefined}
+        src={imageSrc}
         alt={project.title}
         fetchPriority={index < 4 ? 'high' : undefined}
+        loading={index < 4 ? 'eager' : 'lazy'}
+        decoding="async"
         style={{
           width: '100%', height: '100%',
           objectFit: 'cover',
           display: 'block',
           pointerEvents: 'none',
-          opacity: loaded ? 1 : 0,
-          transition: 'opacity 0.3s',
+          opacity: loaded || useIOSSafeImageUrls ? 1 : 0,
+          transition: useIOSSafeImageUrls ? 'none' : 'opacity 0.3s',
           userSelect: 'none',
           WebkitUserSelect: 'none',
         }}
@@ -1174,7 +1408,7 @@ function ProjectCard({
       <div
         role="link"
         tabIndex={0}
-        className="mkr-card mkr-row-enter"
+        className="mkr-card"
         onClick={(e) => onNavigate(e, project)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') onNavigate(e as unknown as React.MouseEvent<HTMLElement>, project)

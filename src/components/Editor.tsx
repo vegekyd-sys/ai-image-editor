@@ -71,6 +71,9 @@ interface EditorProps {
   initialMusicTaskId?: string | null;
   timelineVersion?: number;
   readOnly?: boolean;
+  disableAgentLiveReload?: boolean;
+  disableBodyScrollLock?: boolean;
+  inactive?: boolean;
 }
 
 export default function Editor({
@@ -96,6 +99,9 @@ export default function Editor({
   initialMusicTaskId,
   timelineVersion = 1,
   readOnly,
+  disableAgentLiveReload = false,
+  disableBodyScrollLock = false,
+  inactive = false,
 }: EditorProps = {}) {
   // Merge legacy single + new multi into one array
   const pendingImages = pendingImagesProp ?? (pendingImage ? [pendingImage] : undefined);
@@ -1617,13 +1623,16 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // ── Reconnect to active background agent run ──
   // Mount-time detection: use standard reconnect flow (replay + realtime).
-  // Live detection (CLI triggers run while page already loaded): reload page so
-  // the mount-time reconnect handles it identically to a manual refresh.
+  // Live detection (CLI triggers run while page already loaded): standalone
+  // project pages may reload for a clean reconnect. iOS inline project overlays
+  // must never schedule a page reload because the timeout can outlive the
+  // overlay and reload /projects after the user taps Back.
   const mountReconnectHandledRef = useRef(false);
   useEffect(() => {
+    if (inactive) return;
     if (!activeRunId || isAgentActive) return;
 
-    if (!mountReconnectHandledRef.current) {
+    if (!mountReconnectHandledRef.current || disableAgentLiveReload) {
       // First detection after mount — use standard reconnect
       mountReconnectHandledRef.current = true;
       setIsAgentActive(true);
@@ -1663,9 +1672,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     // Live detection — reload page for clean reconnect
     // Delay slightly to ensure DualWriter has flushed user message to DB
-    setTimeout(() => window.location.reload(), 1500);
+    const reloadTimer = window.setTimeout(() => window.location.reload(), 1500);
+    return () => window.clearTimeout(reloadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRunId]);
+  }, [activeRunId, disableAgentLiveReload, inactive]);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
   // NOTE: no compressBase64 here — annotated image is used as generation base,
@@ -2195,6 +2205,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // Auto-trigger upload when a pending image is passed (new project from projects page)
   // Lock body scroll while editor is mounted to prevent iOS back-navigation jump
   useEffect(() => {
+    if (disableBodyScrollLock) return;
     const prev = { overflow: document.body.style.overflow, position: document.body.style.position, width: document.body.style.width, top: document.body.style.top };
     document.body.style.overflow = 'hidden';
     document.body.style.position = 'fixed';
@@ -2206,7 +2217,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       document.body.style.width = prev.width;
       document.body.style.top = prev.top;
     };
-  }, []);
+  }, [disableBodyScrollLock]);
 
   const initHandled = useRef(false);
 
@@ -2336,6 +2347,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // Existing project with no tips on latest snapshot — auto-fetch (skip design snapshots)
   const autoFetchTriggered = useRef(false);
   useEffect(() => {
+    if (inactive) return;
     if (autoFetchTriggered.current || pendingImages?.length) return;
     const lastSnap = snapshots[snapshots.length - 1];
     if (!lastSnap || lastSnap.tips.length > 0) return;
@@ -2350,7 +2362,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     } else {
       fetchTipsForSnapshot(lastSnap.id, image);
     }
-  }, [snapshots, pendingImages, fetchTipsForSnapshot]);
+  }, [snapshots, pendingImages, fetchTipsForSnapshot, inactive]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
   // Pick up late-arriving initialMusicTaskId (from Supabase fetch after cache-init)
@@ -2382,6 +2394,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   // Poll all processing animations (v1 only — v2 uses snapshot polling above)
   useEffect(() => {
+    if (inactive) return;
     if (isV2) return;
     const processing = animations.filter(a => a.status === 'processing' && a.taskId);
     if (processing.length === 0) return;
@@ -2403,10 +2416,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [animations]);
+  }, [animations, inactive]);
 
   // v2: Poll video snapshots with status=processing
   useEffect(() => {
+    if (inactive) return;
     if (!isV2) return;
     const processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing' && s.videoMeta.taskId);
     if (processing.length === 0) return;
@@ -2455,11 +2469,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [snapshots, isV2]);
+  }, [snapshots, isV2, inactive]);
 
 
   // Preload adjacent snapshots (not yet in DOM) so swipe transitions are instant
   useEffect(() => {
+    if (inactive) return;
     for (const offset of [-1, 1]) {
       const src = timeline[viewIndex + offset];
       if (src && src.startsWith('http')) {
@@ -2467,7 +2482,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         img.src = src;
       }
     }
-  }, [viewIndex, timeline]);
+  }, [viewIndex, timeline, inactive]);
 
   // Drive StatusBar text based on tips/preview generation progress
   useEffect(() => {
@@ -2510,6 +2525,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   // ── Music polling: poll Suno status when musicTaskId is set ──
   useEffect(() => {
+    if (inactive) return;
     if (!musicTaskId) return;
     console.log(`🎵 [music] polling started for ${musicTaskId}`);
     let stopped = false;
@@ -2577,7 +2593,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     poll();
     const interval = setInterval(poll, 2_000);
     return () => { stopped = true; clearInterval(interval); };
-  }, [musicTaskId, projectId, t]);
+  }, [musicTaskId, projectId, t, inactive]);
 
 
   // When animationState transitions — handle creation flow lifecycle
@@ -2776,6 +2792,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   // Agent elapsed timer — DOM updates every 1s keep iOS Safari from dropping SSE
   useEffect(() => {
+    if (inactive) {
+      agentTimerRef.current = null;
+      return;
+    }
     if (!isAgentActive) {
       agentTimerRef.current = null;
       return;
@@ -2790,7 +2810,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setAgentStatus(`${ref.phase} (${elapsed}s)`);
     }, 1000);
     return () => clearInterval(timer);
-  }, [isAgentActive, t]);
+  }, [isAgentActive, t, inactive]);
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
@@ -2862,6 +2882,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // Auto-capture poster for design snapshots loaded from Supabase without a poster image
   const posterCapturedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
+    if (inactive) return;
     for (const snap of snapshots) {
       if (snap.design && !snap.image && !posterCapturedRef.current.has(snap.id)) {
         posterCapturedRef.current.add(snap.id);
@@ -2872,7 +2893,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         ).catch(() => {});
       }
     }
-  }, [snapshots, handleDesignPoster]);
+  }, [snapshots, handleDesignPoster, inactive]);
 
   const videoStartTimeRef = useRef<number>(0);
   const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string, startTime?: number) => {
@@ -2962,6 +2983,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // push a history state on enter, listen for popstate to go back to GUI.
   // Desktop: no history management needed (CUI is always visible as side panel)
   useEffect(() => {
+    if (inactive) {
+      hasCuiHistoryState.current = false;
+      return;
+    }
     if (isDesktop) return;
     if (viewMode === 'cui') {
       // pushState may already have been called by openCUI (for Safari snapshot timing)
@@ -2990,7 +3015,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       hasCuiHistoryState.current = false;
       window.history.back(); // listener already removed by cleanup above — silently pops
     }
-  }, [viewMode, isDesktop]);
+  }, [viewMode, isDesktop, inactive]);
 
   const resetCuiPan = useCallback(() => {
     cuiPanRef.current.tracking = false;
