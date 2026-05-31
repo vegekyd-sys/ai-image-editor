@@ -200,6 +200,44 @@ describe('iOS App Store readiness guardrails', () => {
     expect(activate).toContain('makaron-ios-page');
   });
 
+  it('keeps the iOS in-app route surface covered by app-shell guardrails', () => {
+    const appShellRoutes = [
+      { route: '/dashboard', file: 'src/app/dashboard/page.tsx', required: ['makaron-ios-page', 'navigateBackInIOSApp', "readNativeJSONCache<DashboardPayload>('/api/billing/dashboard')"] },
+      { route: '/profile', file: 'src/app/profile/page.tsx', required: ['makaron-ios-page', 'navigateBackInIOSApp'] },
+      { route: '/skills', file: 'src/app/skills/page.tsx', required: ['makaron-ios-page', 'navigateBackInIOSApp', "readNativeJSONCache<SkillsPayload>('/api/skills')"] },
+      { route: '/admin', file: 'src/app/admin/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/admin/status', file: 'src/app/admin/status/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/claim', file: 'src/app/claim/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/mcp', file: 'src/app/mcp/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/login', file: 'src/app/login/page.tsx', required: ['makaron-ios-page', 'userAgentHasMakaronIOSToken'] },
+      { route: '/activate', file: 'src/app/activate/page.tsx', required: ['makaron-ios-page'] },
+    ];
+
+    for (const page of appShellRoutes) {
+      const source = fs.readFileSync(path.join(root, page.file), 'utf8');
+      for (const token of page.required) {
+        expect(source, `${page.route} should include ${token}`).toContain(token);
+      }
+      expect(source, `${page.route} should not use body transform back hacks`).not.toContain('document.body.style.transform');
+      expect(source, `${page.route} should not clone page snapshots for back gestures`).not.toContain('cloneNode');
+    }
+
+    const home = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
+    const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
+    const projectPage = fs.readFileSync(path.join(root, 'src/app/projects/[id]/page.tsx'), 'utf8');
+    const agentContent = fs.readFileSync(path.join(root, 'src/components/AgentContent.tsx'), 'utf8');
+    const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
+
+    expect(home).toContain('handleSkillBackPanStart');
+    expect(home).toContain('readNativeJSONCache<HomeSkill[]>');
+    expect(projects).toContain('data-makaron-ios-project-overlay');
+    expect(projects).toContain('warmProjectEditorCaches');
+    expect(projectPage).toContain('ProjectEditorContainer');
+    expect(agentContent).toContain('makaron-ios-page');
+    expect(editor).toContain('makaron-editor-shell');
+    expect(editor).toContain('data-makaron-cui-pan');
+  });
+
   it('saves editor images and videos through native Photos on iOS before web fallbacks', () => {
     const bridge = fs.readFileSync(path.join(root, 'ios/App/App/MakaronBridgeViewController.swift'), 'utf8');
     const nativeMedia = fs.readFileSync(path.join(root, 'src/lib/native-media.ts'), 'utf8');
