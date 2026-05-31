@@ -614,16 +614,22 @@ function HomePageInner() {
     if (createInput.creating) return
     const allFiles = Array.from(e.dataTransfer.files ?? [])
     const zipFile = allFiles.find(f => f.name.endsWith('.zip'))
-    if (zipFile) { handleSkillUpload(zipFile); return }
     const droppedFiles = allFiles.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || isHeicFile(f))
+    if (!zipFile && droppedFiles.length === 0) return
+    const authedUser = await requireAuth()
+    if (!authedUser) return
+    if (zipFile) { handleSkillUpload(zipFile); return }
     createInput.addFiles(droppedFiles)
-  }, [createInput, handleSkillUpload])
+  }, [createInput, handleSkillUpload, requireAuth])
 
-  const handleSlotDrop = useCallback((e: React.DragEvent) => {
+  const handleSlotDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
+    if (files.length === 0) return
+    const authedUser = await requireAuth()
+    if (!authedUser) return
     createInput.addFiles(files)
-  }, [createInput])
+  }, [createInput, requireAuth])
 
   const renderUploadSlots = useCallback((template: { image_count?: number; before_images?: string[] }, isActive: boolean) => {
     const minSlots = template.image_count ?? 1
