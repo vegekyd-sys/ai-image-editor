@@ -11,6 +11,7 @@ const NATIVE_BOOT_LOG_SESSION_KEY = 'makaron:ios-native-boot-log';
 const IOS_PAGE_BACK_EDGE_PX = 32;
 const IOS_PAGE_BACK_LOCK_PX = 12;
 const IOS_PAGE_BACK_COMMIT_PX = 92;
+const IOS_PAGE_BACK_SETTLE_MS = 180;
 const NATIVE_APP_PREFETCH_ROUTES = ['/home', '/projects', '/dashboard', '/profile', '/skills'];
 const NATIVE_APP_WARM_API_PATHS = ['/api/home-skills', '/api/skills', '/api/billing/credits', '/api/billing/dashboard'];
 
@@ -118,7 +119,13 @@ export default function NativeAppBootstrap() {
         startY: 0,
         lastX: 0,
         startTime: 0,
+        target: null as HTMLElement | null,
+        originalTransform: '',
+        originalTransition: '',
+        originalWillChange: '',
+        originalBoxShadow: '',
       };
+      let pageBackRestoreTimer: number | undefined;
       const resetPageBackPan = () => {
         pageBackPan.tracking = false;
         pageBackPan.locked = false;
@@ -127,10 +134,54 @@ export default function NativeAppBootstrap() {
         pageBackPan.lastX = 0;
         pageBackPan.startTime = 0;
       };
+      const restorePageBackTarget = () => {
+        if (pageBackRestoreTimer !== undefined) {
+          window.clearTimeout(pageBackRestoreTimer);
+          pageBackRestoreTimer = undefined;
+        }
+        const target = pageBackPan.target;
+        if (!target) return;
+        target.style.transform = pageBackPan.originalTransform;
+        target.style.transition = pageBackPan.originalTransition;
+        target.style.willChange = pageBackPan.originalWillChange;
+        target.style.boxShadow = pageBackPan.originalBoxShadow;
+        pageBackPan.target = null;
+      };
+      const cancelPageBackPan = () => {
+        resetPageBackPan();
+        const target = pageBackPan.target;
+        if (!target) return;
+        target.style.transition = `transform ${IOS_PAGE_BACK_SETTLE_MS}ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow ${IOS_PAGE_BACK_SETTLE_MS}ms ease`;
+        target.style.transform = 'translate3d(0, 0, 0)';
+        target.style.boxShadow = pageBackPan.originalBoxShadow;
+        pageBackRestoreTimer = window.setTimeout(restorePageBackTarget, IOS_PAGE_BACK_SETTLE_MS + 40);
+      };
+      const preparePageBackTarget = (): boolean => {
+        if (pageBackPan.target) return true;
+        const target = document.querySelector('.makaron-ios-page') as HTMLElement | null;
+        if (!target) return false;
+        pageBackPan.target = target;
+        pageBackPan.originalTransform = target.style.transform;
+        pageBackPan.originalTransition = target.style.transition;
+        pageBackPan.originalWillChange = target.style.willChange;
+        pageBackPan.originalBoxShadow = target.style.boxShadow;
+        target.style.transition = 'none';
+        target.style.willChange = 'transform';
+        target.style.transform = 'translate3d(0, 0, 0)';
+        return true;
+      };
+      const setPageBackOffset = (x: number) => {
+        const target = pageBackPan.target;
+        if (!target) return;
+        const offset = Math.max(0, Math.min(window.innerWidth, x));
+        target.style.transform = `translate3d(${offset}px, 0, 0)`;
+        target.style.boxShadow = offset > 1 ? '-18px 0 44px rgba(0,0,0,0.35)' : pageBackPan.originalBoxShadow;
+      };
       const onPageBackTouchStart = (event: TouchEvent) => {
         if (event.touches.length !== 1 || !shouldUsePageBackGesture() || isEditableElement(event.target)) return;
         const touch = event.touches[0];
         if (!touch || touch.clientX > IOS_PAGE_BACK_EDGE_PX) return;
+        if (!preparePageBackTarget()) return;
         pageBackPan.tracking = true;
         pageBackPan.locked = false;
         pageBackPan.startX = touch.clientX;
@@ -146,7 +197,7 @@ export default function NativeAppBootstrap() {
         const dy = touch.clientY - pageBackPan.startY;
         if (!pageBackPan.locked) {
           if (dx < -IOS_PAGE_BACK_LOCK_PX || (Math.abs(dy) > IOS_PAGE_BACK_LOCK_PX && Math.abs(dy) > dx)) {
-            resetPageBackPan();
+            cancelPageBackPan();
             return;
           }
           if (dx < IOS_PAGE_BACK_LOCK_PX || dx < Math.abs(dy) * 1.15) return;
@@ -154,6 +205,7 @@ export default function NativeAppBootstrap() {
         }
         event.preventDefault();
         pageBackPan.lastX = touch.clientX;
+        setPageBackOffset(dx);
       };
       const onPageBackTouchEnd = (event: TouchEvent) => {
         if (!pageBackPan.tracking) return;
@@ -164,18 +216,29 @@ export default function NativeAppBootstrap() {
         const velocity = dx / elapsed;
         const shouldGoBack = pageBackPan.locked && (dx >= IOS_PAGE_BACK_COMMIT_PX || velocity > 0.55);
         resetPageBackPan();
-        if (!shouldGoBack || !shouldUsePageBackGesture()) return;
-        event.preventDefault();
-        if (window.history.length > 1) {
-          window.history.back();
-        } else {
-          window.location.assign('/home');
+        if (!shouldGoBack || !shouldUsePageBackGesture()) {
+          cancelPageBackPan();
+          return;
         }
+        event.preventDefault();
+        const target = pageBackPan.target;
+        if (target) {
+          target.style.transition = `transform ${IOS_PAGE_BACK_SETTLE_MS}ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow ${IOS_PAGE_BACK_SETTLE_MS}ms ease`;
+        }
+        setPageBackOffset(window.innerWidth);
+        pageBackRestoreTimer = window.setTimeout(() => {
+          restorePageBackTarget();
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.assign('/home');
+          }
+        }, IOS_PAGE_BACK_SETTLE_MS);
       };
       window.addEventListener('touchstart', onPageBackTouchStart, { passive: true, capture: true });
       window.addEventListener('touchmove', onPageBackTouchMove, { passive: false, capture: true });
       window.addEventListener('touchend', onPageBackTouchEnd, { passive: false, capture: true });
-      window.addEventListener('touchcancel', resetPageBackPan, { passive: true, capture: true });
+      window.addEventListener('touchcancel', cancelPageBackPan, { passive: true, capture: true });
 
       const onNativePhotoInputClick = async (event: MouseEvent) => {
         const input = event.target instanceof HTMLInputElement
@@ -263,7 +326,8 @@ export default function NativeAppBootstrap() {
         window.removeEventListener('touchstart', onPageBackTouchStart, { capture: true });
         window.removeEventListener('touchmove', onPageBackTouchMove, { capture: true });
         window.removeEventListener('touchend', onPageBackTouchEnd, { capture: true });
-        window.removeEventListener('touchcancel', resetPageBackPan, { capture: true });
+        window.removeEventListener('touchcancel', cancelPageBackPan, { capture: true });
+        restorePageBackTarget();
         document.removeEventListener('click', onNativePhotoInputClick, { capture: true });
         keyboardShow.remove();
         keyboardHide.remove();

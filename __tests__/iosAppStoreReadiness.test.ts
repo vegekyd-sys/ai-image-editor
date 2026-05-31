@@ -107,11 +107,15 @@ describe('iOS App Store readiness guardrails', () => {
     const topBar = fs.readFileSync(path.join(root, 'src/components/TopBar.tsx'), 'utf8');
     const creditPopup = fs.readFileSync(path.join(root, 'src/components/CreditPopup.tsx'), 'utf8');
     const nativeCache = fs.readFileSync(path.join(root, 'src/lib/native-app-cache.ts'), 'utf8');
+    const projectsListWarm = fs.readFileSync(path.join(root, 'src/lib/projects-list-warm.ts'), 'utf8');
     const projectEditorCache = fs.readFileSync(path.join(root, 'src/lib/project-editor-cache.ts'), 'utf8');
 
     expect(bootstrap).toContain('IOS_PAGE_BACK_EDGE_PX');
     expect(bootstrap).toContain('IOS_PAGE_BACK_COMMIT_PX');
     expect(bootstrap).toContain('shouldUsePageBackGesture');
+    expect(bootstrap).toContain('setPageBackOffset(dx)');
+    expect(bootstrap).toContain("document.querySelector('.makaron-ios-page')");
+    expect(bootstrap).toContain('translate3d(${offset}px, 0, 0)');
     expect(bootstrap).toContain("path === '/projects'");
     expect(bootstrap).toContain("path === '/home'");
     expect(bootstrap).toContain("document.querySelector('.makaron-editor-shell')");
@@ -132,6 +136,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeCache).toContain('sessionStorage.setItem');
     expect(topBar).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(topBar).toContain("writeNativeJSONCache('/api/billing/credits', d)");
+    expect(topBar).toContain('TOPBAR_ROUTE_WARM_APIS');
+    expect(topBar).toContain("onPointerDown={() => warmTopBarRoute('/dashboard')}");
+    expect(topBar).toContain("onPointerDown={() => warmTopBarRoute('/skills')}");
     expect(editor).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(editor).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(editor).toContain("writeNativeJSONCache('/api/skills', d)");
@@ -140,6 +147,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(home).toContain("writeNativeJSONCache('/api/home-skills', data)");
     expect(projects).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(projects).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
+    expect(projectsListWarm).toContain('warmProjectsListCache');
+    expect(projectsListWarm).toContain('cacheProjectsList(userId, projects)');
+    expect(topBar).toContain('warmProjectsListCache(user.id)');
     expect(creditPopup).toContain("writeNativeJSONCache('/api/billing/credits', data)");
     expect(projectEditorCache).toContain('warmProjectEditorCache');
     expect(projectEditorCache).toContain('cacheProjectData');
@@ -187,6 +197,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeMedia).toContain('makaron:native-media:last-result');
     expect(nativeMedia).toContain('webkit?.messageHandlers?.makaronNative');
     expect(download).toContain('isNativePhotoLibrarySaveAvailable');
+    expect(download).toContain('normalizeImageBlobForNativeSave');
+    expect(download).toContain("canvas.toBlob((result) =>");
+    expect(download).toContain("'image/jpeg', 0.95");
     expect(download).toContain('saveBlobToNativePhotoLibrary');
     expect(download).toContain('saveUrlToNativePhotoLibrary');
   });

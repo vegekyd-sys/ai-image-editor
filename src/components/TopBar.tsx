@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
 import Changelog from '@/components/Changelog'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
-import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
+import { readNativeJSONCache, warmNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
+import { isMakaronIOSApp } from '@/lib/native-app'
+import { warmProjectsListCache } from '@/lib/projects-list-warm'
 
 interface TopBarProps {
   page: 'home' | 'projects'
@@ -15,6 +17,14 @@ interface TopBarProps {
 
 interface CreditsPayload {
   balance?: number
+}
+
+const TOPBAR_ROUTE_WARM_APIS: Record<string, string[]> = {
+  '/home': ['/api/home-skills', '/api/skills'],
+  '/projects': ['/api/skills', '/api/billing/credits'],
+  '/dashboard': ['/api/billing/dashboard', '/api/billing/credits'],
+  '/profile': ['/api/billing/credits'],
+  '/skills': ['/api/skills'],
 }
 
 export default function TopBar({ page }: TopBarProps) {
@@ -29,6 +39,41 @@ export default function TopBar({ page }: TopBarProps) {
     return cached?.balance ?? null
   })
   const [showChangelog, setShowChangelog] = useState(false)
+
+  const warmTopBarRoute = useCallback((path: string) => {
+    const route = path.split('?')[0] || path
+    try {
+      router.prefetch(route)
+    } catch {
+      // Prefetch is opportunistic; tap should still navigate normally.
+    }
+    if (!isMakaronIOSApp()) return
+    TOPBAR_ROUTE_WARM_APIS[route]?.forEach((apiPath) => {
+      void warmNativeJSONCache(apiPath)
+    })
+    if (route === '/projects' && user?.id) {
+      void warmProjectsListCache(user.id)
+    }
+  }, [router, user?.id])
+
+  const navigateTopBar = useCallback((path: string) => {
+    setUserMenuOpen(false)
+    warmTopBarRoute(path)
+    router.push(path)
+  }, [router, warmTopBarRoute])
+
+  useEffect(() => {
+    if (!isMakaronIOSApp()) return
+    const warm = () => {
+      ['/home', '/projects', '/dashboard', '/profile', '/skills'].forEach(warmTopBarRoute)
+    }
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(warm, { timeout: 1200 })
+      return () => cancelIdleCallback(id)
+    }
+    const timer = window.setTimeout(warm, 400)
+    return () => window.clearTimeout(timer)
+  }, [warmTopBarRoute])
 
   useEffect(() => {
     if (!user) return
@@ -59,7 +104,9 @@ export default function TopBar({ page }: TopBarProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {page === 'home' && user && (
             <button
-              onClick={() => router.push('/projects')}
+              onPointerDown={() => warmTopBarRoute('/projects')}
+              onFocus={() => warmTopBarRoute('/projects')}
+              onClick={() => navigateTopBar('/projects')}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
@@ -78,7 +125,9 @@ export default function TopBar({ page }: TopBarProps) {
           )}
           {page === 'projects' && (
             <button
-              onClick={() => router.push('/home')}
+              onPointerDown={() => warmTopBarRoute('/home')}
+              onFocus={() => warmTopBarRoute('/home')}
+              onClick={() => navigateTopBar('/home')}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
@@ -115,6 +164,10 @@ export default function TopBar({ page }: TopBarProps) {
           {user && creditBalance !== null && (
             <Link
               href="/dashboard"
+              prefetch
+              onPointerDown={() => warmTopBarRoute('/dashboard')}
+              onFocus={() => warmTopBarRoute('/dashboard')}
+              onClick={() => warmTopBarRoute('/dashboard')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 padding: '4px 10px', borderRadius: 8,
@@ -162,7 +215,6 @@ export default function TopBar({ page }: TopBarProps) {
                 const avatarUrl = user.user_metadata?.avatar_url
                 const displayName = user.user_metadata?.full_name || user.user_metadata?.name
                 const initials = (displayName || user.email || '?')[0].toUpperCase()
-                const isOAuth = user.app_metadata?.provider === 'google'
                 const menuBtnStyle: React.CSSProperties = {
                   display: 'block', width: '100%', textAlign: 'left',
                   padding: '10px 16px', background: 'none', border: 'none',
@@ -175,10 +227,12 @@ export default function TopBar({ page }: TopBarProps) {
                     background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
                     borderRadius: 12, padding: '4px 0', minWidth: 200,
                     boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
-                  }}>
-                    {/* User card header */}
+	                  }}>
+	                    {/* User card header */}
                     <button
-                      onClick={() => { setUserMenuOpen(false); router.push('/profile') }}
+                      onPointerDown={() => warmTopBarRoute('/profile')}
+                      onFocus={() => warmTopBarRoute('/profile')}
+                      onClick={() => navigateTopBar('/profile')}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10, width: '100%',
                         padding: '12px 16px', background: 'none', border: 'none',
@@ -211,7 +265,9 @@ export default function TopBar({ page }: TopBarProps) {
                     </button>
                     <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
                     <button
-                      onClick={() => { setUserMenuOpen(false); router.push('/dashboard') }}
+                      onPointerDown={() => warmTopBarRoute('/dashboard')}
+                      onFocus={() => warmTopBarRoute('/dashboard')}
+                      onClick={() => navigateTopBar('/dashboard')}
                       style={menuBtnStyle}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'none')}
@@ -219,7 +275,9 @@ export default function TopBar({ page }: TopBarProps) {
                       {locale === 'zh' ? '数据面板' : 'Dashboard'}
                     </button>
                     <button
-                      onClick={() => { setUserMenuOpen(false); router.push('/dashboard?tab=keys') }}
+                      onPointerDown={() => warmTopBarRoute('/dashboard?tab=keys')}
+                      onFocus={() => warmTopBarRoute('/dashboard?tab=keys')}
+                      onClick={() => navigateTopBar('/dashboard?tab=keys')}
                       style={menuBtnStyle}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'none')}
@@ -227,7 +285,9 @@ export default function TopBar({ page }: TopBarProps) {
                       {locale === 'zh' ? '获取 API' : 'Get API'}
                     </button>
                     <button
-                      onClick={() => { setUserMenuOpen(false); router.push('/skills') }}
+                      onPointerDown={() => warmTopBarRoute('/skills')}
+                      onFocus={() => warmTopBarRoute('/skills')}
+                      onClick={() => navigateTopBar('/skills')}
                       style={menuBtnStyle}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'none')}
@@ -271,7 +331,9 @@ export default function TopBar({ page }: TopBarProps) {
                 {locale === 'zh' ? 'EN' : '中文'}
               </button>
               <button
-                onClick={() => router.push('/login')}
+                onPointerDown={() => warmTopBarRoute('/login')}
+                onFocus={() => warmTopBarRoute('/login')}
+                onClick={() => navigateTopBar('/login')}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',

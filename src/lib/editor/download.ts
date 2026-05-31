@@ -18,6 +18,51 @@ export interface DownloadAssetParams {
   projectTitle?: string;
 }
 
+function blobToImageElement(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not decode image before native save'));
+    };
+    image.src = url;
+  });
+}
+
+async function normalizeImageBlobForNativeSave(blob: Blob): Promise<{ blob: Blob; filenameExt: 'jpg' | 'png' }> {
+  if (blob.type === 'image/jpeg' || blob.type === 'image/jpg') {
+    return { blob, filenameExt: 'jpg' };
+  }
+  if (blob.type === 'image/png') {
+    return { blob, filenameExt: 'png' };
+  }
+
+  try {
+    const image = await blobToImageElement(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || canvas.width === 0 || canvas.height === 0) throw new Error('Could not prepare image canvas');
+    ctx.drawImage(image, 0, 0);
+    const jpegBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result);
+        else reject(new Error('Could not encode image for native save'));
+      }, 'image/jpeg', 0.95);
+    });
+    return { blob: jpegBlob, filenameExt: 'jpg' };
+  } catch (error) {
+    console.warn('Native image save normalization failed, using original image blob:', error);
+    return { blob, filenameExt: blob.type === 'image/png' ? 'png' : 'jpg' };
+  }
+}
+
 export async function downloadAsset(params: DownloadAssetParams): Promise<void> {
   const {
     timeline,
@@ -206,14 +251,16 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
 
     const res = await fetch(img);
     const blob = await res.blob();
-    const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg';
+    const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
     const slug = (projectTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
     const idx = (snapIdxForSave ?? viewIndex) + 1;
     const filename = `makaron-${slug}-${idx}.${ext}`;
 
     if (isNativePhotoLibrarySaveAvailable()) {
       try {
-        await saveBlobToNativePhotoLibrary(blob, filename, 'image');
+        const nativeImage = await normalizeImageBlobForNativeSave(blob);
+        const nativeFilename = `makaron-${slug}-${idx}.${nativeImage.filenameExt}`;
+        await saveBlobToNativePhotoLibrary(nativeImage.blob, nativeFilename, 'image');
         setIsSaving(false);
         showSaveToast();
         return;
