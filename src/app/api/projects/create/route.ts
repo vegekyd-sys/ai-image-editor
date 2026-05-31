@@ -6,7 +6,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta } from '@/types';
 
 const MAX_VIDEO_DURATION = 15;
-const MAX_VIDEO_DURATION_TOLERANCE = 0.5;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
 
 function formatSeconds(seconds: number): string {
@@ -85,8 +84,8 @@ export async function POST(req: NextRequest) {
       for (let videoIndex = 0; videoIndex < videos.length; videoIndex++) {
         const videoUrl = videos[videoIndex];
         const providedMeta = providedVideoMetas[videoIndex] || null;
-        if (providedMeta?.duration && providedMeta.duration > MAX_VIDEO_DURATION + MAX_VIDEO_DURATION_TOLERANCE) {
-          return NextResponse.json({ error: `Video too long (${formatSeconds(providedMeta.duration)}s). Maximum ${MAX_VIDEO_DURATION}s, with ${MAX_VIDEO_DURATION_TOLERANCE}s metadata tolerance.` }, { status: 400 });
+        if (providedMeta?.duration && providedMeta.duration > MAX_VIDEO_DURATION) {
+          return NextResponse.json({ error: `Video too long (${formatSeconds(providedMeta.duration)}s). Maximum ${MAX_VIDEO_DURATION}s.` }, { status: 400 });
         }
         if (providedMeta?.width && providedMeta?.height && providedMeta.width * providedMeta.height > MAX_VIDEO_FRAME_PIXELS) {
           return NextResponse.json({ error: `Video resolution too high (${providedMeta.width}x${providedMeta.height}). Maximum is <=1080p.` }, { status: 400 });
@@ -199,8 +198,8 @@ export async function POST(req: NextRequest) {
     for (let videoIndex = 0; videoIndex < videos.length; videoIndex++) {
       const videoUrl = videos[videoIndex];
       const providedMeta = providedVideoMetas[videoIndex] || null;
-      if (providedMeta?.duration && providedMeta.duration > MAX_VIDEO_DURATION + MAX_VIDEO_DURATION_TOLERANCE) {
-        return NextResponse.json({ error: `Video too long (${formatSeconds(providedMeta.duration)}s). Maximum ${MAX_VIDEO_DURATION}s, with ${MAX_VIDEO_DURATION_TOLERANCE}s metadata tolerance.` }, { status: 400 });
+      if (providedMeta?.duration && providedMeta.duration > MAX_VIDEO_DURATION) {
+        return NextResponse.json({ error: `Video too long (${formatSeconds(providedMeta.duration)}s). Maximum ${MAX_VIDEO_DURATION}s.` }, { status: 400 });
       }
       if (providedMeta?.width && providedMeta?.height && providedMeta.width * providedMeta.height > MAX_VIDEO_FRAME_PIXELS) {
         return NextResponse.json({ error: `Video resolution too high (${providedMeta.width}x${providedMeta.height}). Maximum is <=1080p.` }, { status: 400 });

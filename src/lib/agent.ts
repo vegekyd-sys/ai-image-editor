@@ -17,7 +17,7 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import animatePrompt from './prompts/animate.md';
-import type { Tip } from '@/types';
+import type { Tip, VideoModel } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 
@@ -52,6 +52,8 @@ interface AgentContext {
   preferredModel?: ModelId;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
+  /** User/app selected video model. Defaults to seedance when absent. */
+  videoModel?: VideoModel;
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event (v1) */
   // Legacy v1 fields — no longer set by generate_animation, but kept for SSE event type compat
   animationTaskId?: string;
@@ -339,6 +341,8 @@ function createTools(ctx: AgentContext) {
     generate_animation: tool({
       description: `Submit a video script for rendering.
 
+Use this tool only after the user has confirmed a video script that is already visible in the conversation. Never call it in the same turn where you first write the script.
+
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
 Hard constraints (apply even before reading the guide):
@@ -346,14 +350,14 @@ Hard constraints (apply even before reading the guide):
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. Works for both Kling and SeeDance.
 - Total duration: 5-15 seconds.
-- Video edit duration lock: when editing a timeline video, output duration should match that source video's duration from Media Index. If metadata is slightly over 15s (for example 15.1s), set \`duration: 15\`; never fall back to 5s unless the user explicitly asks to shorten it.
+- Video edit duration lock: when editing a timeline video, output duration should match that source video's duration from Media Index; never fall back to 5s unless the user explicitly asks to shorten it.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
-- Write script in chat first, then call this tool to submit`,
+- The script must have been shown to the user and confirmed before this tool is called.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos.'),
         duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. For timeline video edits, set this to the source video duration from Media Index. Omit for smart mode only when generating from photos.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
-        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: kling.'),
+        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: seedance unless the app selection or user asks for Kling.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
@@ -376,7 +380,7 @@ Hard constraints (apply even before reading the guide):
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
-          const videoModel = model || (ctx as any).videoModel || 'kling';
+          const videoModel = model || ctx.videoModel || 'seedance';
 
           // Video harness: validate before calling API
           const { validateVideoScript } = await import('./video-harness');
@@ -1314,6 +1318,7 @@ export async function* runMakaronAgent(
     projectId,
     generatedImages: [],
     animationImageUrls: options?.animationImageUrls,
+    videoModel: options?.videoModel as VideoModel | undefined,
     preferredModel: options?.preferredModel,
     snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
