@@ -180,8 +180,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bootstrap).not.toContain('cloneNode');
     expect(nativeNavigation).toContain('navigateBackInIOSApp');
     expect(nativeNavigation).toContain('isMakaronIOSApp');
-    expect(nativeNavigation).toContain('window.history.back()');
-    expect(nativeNavigation).toContain("window.location.assign(fallbackPath)");
+    expect(nativeNavigation).toContain('env.history');
+    expect(nativeNavigation).toContain('history.back()');
+    expect(nativeNavigation).toContain('location.assign(fallbackPath)');
     expect(dashboard).toContain('navigateBackInIOSApp');
     expect(skills).toContain('navigateBackInIOSApp');
     expect(profile).toContain('navigateBackInIOSApp');
