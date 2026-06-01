@@ -25,6 +25,8 @@ function isEditableElement(target: EventTarget | null): boolean {
 }
 
 function shouldUsePageBackGesture(): boolean {
+  const stackDepth = Number(document.documentElement.dataset.makaronIOSPageStackDepth ?? '0');
+  if (stackDepth > 1) return false;
   const path = window.location.pathname;
   if (path === '/' || path === '/home' || path.startsWith('/home/')) return false;
   if (path === '/projects' || path.startsWith('/projects/')) return false;

@@ -67,6 +67,41 @@ function LazyVideo({ src, style }: { src: string; style: React.CSSProperties }) 
   )
 }
 
+function SkillVideo({ src, style, eager = false }: { src: string; style: React.CSSProperties; eager?: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const video = ref.current
+    if (!video) return
+    video.muted = true
+    video.playsInline = true
+    if (eager) video.load()
+    const play = () => {
+      void video.play().catch(() => {
+        window.setTimeout(() => {
+          video.muted = true
+          void video.play().catch(() => undefined)
+        }, 80)
+      })
+    }
+    const raf = window.requestAnimationFrame(play)
+    return () => window.cancelAnimationFrame(raf)
+  }, [eager, src])
+
+  return (
+    <video
+      ref={ref}
+      src={src}
+      autoPlay
+      loop
+      muted
+      playsInline
+      preload={eager ? 'auto' : 'metadata'}
+      style={style}
+    />
+  )
+}
+
 export default function HomePage() {
   return <Suspense><HomePageInner /></Suspense>
 }
@@ -112,6 +147,7 @@ function HomePageInner() {
   const detailSwipeRef = useRef<{ startY: number; startIdx: number; swiping: boolean } | null>(null)
   const wheelCooldownRef = useRef(false)
   const [kbInset, setKbInset] = useState(0)
+  const [nativeKbInset, setNativeKbInset] = useState(0)
   const [textareaFocused, setTextareaFocused] = useState(false)
   const scrollStartY = useRef<number | null>(null)
   const inlineInputRef = useRef<HTMLDivElement>(null)
@@ -138,6 +174,14 @@ function HomePageInner() {
   selectedDetailRef.current = selectedDetail
   const homeSkillsRef = useRef(homeSkills)
   homeSkillsRef.current = homeSkills
+  const effectiveKbInset = Math.max(kbInset, nativeKbInset)
+
+  const writeSkillDetailPath = useCallback((skillId: string, mode: 'push' | 'replace') => {
+    const state = isIOSAppShell ? { makaronHomeSkill: true, skillId } : null
+    const url = isIOSAppShell ? '/home' : `/home?skill=${encodeURIComponent(skillId)}`
+    if (mode === 'push') window.history.pushState(state, '', url)
+    else window.history.replaceState(state, '', url)
+  }, [isIOSAppShell])
 
   const resetSkillBackPan = useCallback(() => {
     skillBackPanRef.current = { tracking: false, locked: false, startX: 0, startY: 0, lastX: 0, startTime: 0 }
@@ -163,8 +207,11 @@ function HomePageInner() {
     createInput.clear()
     if (!options?.preservePan) resetSkillBackPan()
     detailPathActiveRef.current = false
-    if (historyMode === 'pushHome') window.history.pushState(null, '', '/home')
-  }, [createInput, resetSkillBackPan])
+    if (historyMode === 'pushHome') {
+      if (isIOSAppShell) window.history.replaceState(null, '', '/home')
+      else window.history.pushState(null, '', '/home')
+    }
+  }, [createInput, isIOSAppShell, resetSkillBackPan])
 
   const handleSkillBackPanStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     if (!selectedDetailRef.current || isDesktop || !isIOSAppShell || e.touches.length !== 1) return
@@ -384,6 +431,27 @@ function HomePageInner() {
   }, [])
 
   useEffect(() => {
+    const readNativeInset = () => {
+      const raw = getComputedStyle(document.documentElement)
+        .getPropertyValue('--makaron-native-keyboard-inset')
+        .trim()
+      const next = Number.parseFloat(raw)
+      setNativeKbInset(Number.isFinite(next) ? Math.max(0, Math.round(next)) : 0)
+    }
+    const onNativeInset = (event: Event) => {
+      const inset = (event as CustomEvent<{ inset?: number }>).detail?.inset
+      if (typeof inset === 'number') {
+        setNativeKbInset(Math.max(0, Math.round(inset)))
+      } else {
+        readNativeInset()
+      }
+    }
+    readNativeInset()
+    window.addEventListener('makaron-keyboard-inset-change', onNativeInset)
+    return () => window.removeEventListener('makaron-keyboard-inset-change', onNativeInset)
+  }, [])
+
+  useEffect(() => {
     const el = inputBoxRef.current
     if (!el) return
     const ro = new ResizeObserver(([entry]) => {
@@ -433,26 +501,40 @@ function HomePageInner() {
   // Unmute active slide's video, mute all others (after transition completes)
   useEffect(() => {
     if (!selectedDetail) return
-    const tid = setTimeout(() => {
+    const playActiveVideo = () => {
       const snap = detailSnapRef.current
       if (!snap) return
-      const idx = homeSkills.findIndex(s => s.id === selectedDetail.id)
       const slides = snap.querySelectorAll('.mkr-detail-slide')
-      slides.forEach((slide, i) => {
+      slides.forEach((slide) => {
         const video = slide.querySelector('video') as HTMLVideoElement | null
         if (!video) return
-        if (i === idx) {
-          video.currentTime = 0
-          video.muted = false
-          video.play().catch(() => { video.muted = true })
+        if (slide.getAttribute('data-skill-id') === selectedDetail.id) {
+          video.muted = true
+          video.playsInline = true
+          try {
+            if (video.readyState >= 1) video.currentTime = 0
+          } catch {
+            // Some iOS media states reject currentTime before metadata.
+          }
+          video.play().catch(() => {
+            window.setTimeout(() => {
+              video.muted = true
+              void video.play().catch(() => undefined)
+            }, 80)
+          })
         } else {
           video.muted = true
           video.pause()
         }
       })
-    }, 450)
-    return () => clearTimeout(tid)
-  }, [selectedDetail, homeSkills])
+    }
+    const raf = window.requestAnimationFrame(playActiveVideo)
+    const tid = window.setTimeout(playActiveVideo, 420)
+    return () => {
+      window.cancelAnimationFrame(raf)
+      window.clearTimeout(tid)
+    }
+  }, [selectedDetail])
 
   // Open detail overlay from URL param (?skill={id})
   useEffect(() => {
@@ -467,8 +549,8 @@ function HomePageInner() {
     createInput.setText(skill.prompt)
     setHeroExpanded(true)
     detailPathActiveRef.current = true
-    window.history.replaceState(null, '', `/home/${skillId}`)
-  }, [homeSkills]) // eslint-disable-line react-hooks/exhaustive-deps
+    writeSkillDetailPath(skillId, 'replace')
+  }, [homeSkills, writeSkillDetailPath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
   const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -497,19 +579,44 @@ function HomePageInner() {
   }, [hasSelectedDetail, closeSkillDetail])
 
   useEffect(() => {
-    if (!hasSelectedDetail || !detailPathActiveRef.current || pathname !== '/home') return
+    if (isIOSAppShell) return
+    const hasSkillQuery = new URLSearchParams(window.location.search).has('skill')
+    if (!hasSelectedDetail || !detailPathActiveRef.current || pathname !== '/home' || hasSkillQuery) return
     closeSkillDetail('none')
-  }, [closeSkillDetail, hasSelectedDetail, pathname])
+  }, [closeSkillDetail, hasSelectedDetail, isIOSAppShell, pathname, searchParams])
 
   useEffect(() => {
     const el = inlineInputRef.current
     if (!el) return
     const io = new IntersectionObserver(([entry]) => {
-      setShowFixedInput(!entry.isIntersecting)
+      setShowFixedInput(textareaFocused || !entry.isIntersecting)
     }, { threshold: 0.1 })
     io.observe(el)
     return () => io.disconnect()
-  }, [])
+  }, [textareaFocused])
+
+  useEffect(() => {
+    if (isDesktop) return
+    const syncFixedInput = () => {
+      const inlineRect = inlineInputRef.current?.getBoundingClientRect()
+      const inlineMostlyVisible = inlineRect
+        ? inlineRect.top >= 0 && inlineRect.bottom <= window.innerHeight * 0.72
+        : false
+      const scrollTop = Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)
+      setShowFixedInput(textareaFocused || !inlineMostlyVisible || scrollTop > 24)
+    }
+    syncFixedInput()
+    window.addEventListener('scroll', syncFixedInput, { passive: true })
+    window.addEventListener('resize', syncFixedInput)
+    window.visualViewport?.addEventListener('resize', syncFixedInput)
+    window.visualViewport?.addEventListener('scroll', syncFixedInput)
+    return () => {
+      window.removeEventListener('scroll', syncFixedInput)
+      window.removeEventListener('resize', syncFixedInput)
+      window.visualViewport?.removeEventListener('resize', syncFixedInput)
+      window.visualViewport?.removeEventListener('scroll', syncFixedInput)
+    }
+  }, [isDesktop, textareaFocused])
 
   useEffect(() => {
     const el = inlineBoxRef.current
@@ -559,6 +666,26 @@ function HomePageInner() {
 
   const cardSwipeRef = useRef<HTMLDivElement>(null)
   const inlineCardSwipeRef = useRef<HTMLDivElement>(null)
+
+  const focusFixedComposer = useCallback(() => {
+    setTextareaFocused(true)
+    setShowFixedInput(true)
+    if (isDesktop) return
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        textareaRef.current?.focus({ preventScroll: true })
+        resizeTextarea()
+      }, 16)
+    })
+  }, [isDesktop, resizeTextarea])
+
+  const handleComposerBlur = useCallback(() => {
+    window.setTimeout(() => {
+      const active = document.activeElement
+      if (active === textareaRef.current || active === inlineTextareaRef.current) return
+      setTextareaFocused(false)
+    }, 0)
+  }, [])
 
   const [dragOver, setDragOver] = useState(false)
   const dragCounterRef = useRef(0)
@@ -751,9 +878,12 @@ function HomePageInner() {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
       if (variant === 'thumb') {
+        if (opts?.priority) {
+          return <SkillVideo src={normalizeDomain(url)} style={style} eager />
+        }
         return <LazyVideo src={normalizeDomain(url)} style={style} />
       }
-      return <video src={normalizeDomain(url)} autoPlay loop muted playsInline preload="auto" style={style} />
+      return <SkillVideo src={normalizeDomain(url)} style={style} eager />
     }
     const src = variant === 'thumb'
       ? getThumbnailUrl(url, 400, 70, 533, 'cover')
@@ -796,7 +926,7 @@ function HomePageInner() {
         detailInnerRef.current.style.transform = `translateY(${-idx * slideH}px)`
       }
       detailPathActiveRef.current = true
-      window.history.pushState(null, '', `/home/${template.id}`)
+      writeSkillDetailPath(template.id, 'push')
     })
   }
 
@@ -925,7 +1055,7 @@ function HomePageInner() {
           </div>
 
           {/* ── Inline Input Box ── */}
-          <div ref={inlineInputRef} className="relative z-10" style={{
+          <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
           }}>
             <CreateInputBox
@@ -942,8 +1072,8 @@ function HomePageInner() {
               showLoginIcon={!user}
               onSubmit={handleCreate}
               onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
-              onTextareaFocus={() => setTextareaFocused(true)}
-              onTextareaBlur={() => setTextareaFocused(false)}
+              onTextareaFocus={focusFixedComposer}
+              onTextareaBlur={handleComposerBlur}
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
@@ -1069,9 +1199,9 @@ function HomePageInner() {
         )}
 
         {/* ── Bottom Input Box (fixed, slides in when inline is off-screen) ── */}
-        <div ref={inputWrapperRef} style={{
+        <div ref={inputWrapperRef} data-makaron-home-fixed-composer="true" style={{
           position: 'fixed', left: 0, right: 0,
-          bottom: textareaFocused && kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
+          bottom: textareaFocused && effectiveKbInset > 0 ? `${effectiveKbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
           zIndex: Z.INPUT,
           pointerEvents: 'none',
           ...(isDesktop ? {
@@ -1105,8 +1235,8 @@ function HomePageInner() {
               showLoginIcon={!user}
               onSubmit={handleCreate}
               onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
-              onTextareaFocus={() => setTextareaFocused(true)}
-              onTextareaBlur={() => setTextareaFocused(false)}
+              onTextareaFocus={focusFixedComposer}
+              onTextareaBlur={handleComposerBlur}
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
@@ -1319,7 +1449,7 @@ function HomePageInner() {
                     createInput.clear()
                     createInput.setText(t.prompt)
                     detailPathActiveRef.current = true
-                    window.history.replaceState(null, '', `/home/${t.id}`)
+                    writeSkillDetailPath(t.id, 'replace')
                   }
                 }
                 detailSwipeRef.current = null
@@ -1346,7 +1476,7 @@ function HomePageInner() {
                   createInput.clear()
                   createInput.setText(t.prompt)
                   detailPathActiveRef.current = true
-                  window.history.replaceState(null, '', `/home/${t.id}`)
+                  writeSkillDetailPath(t.id, 'replace')
                 }
               }}
               style={{
@@ -1367,6 +1497,7 @@ function HomePageInner() {
                   <div
                     key={template.id}
                     className="mkr-detail-slide"
+                    data-skill-id={template.id}
                     style={{ position: 'absolute', top: `${i * 100}%`, left: 0, width: '100%', height: '100%' }}
                   >
                     {inWindow && renderCoverMedia(template.image, '', 'detail', { priority: template.id === selectedDetail?.id })}

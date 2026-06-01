@@ -67,6 +67,7 @@ describe('iOS App Store readiness guardrails', () => {
 
   it('keeps native safe-area padding scoped to iOS editor controls instead of the body', () => {
     const globals = fs.readFileSync(path.join(root, 'src/app/globals.css'), 'utf8');
+    const layout = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const topBar = fs.readFileSync(path.join(root, 'src/components/TopBar.tsx'), 'utf8');
@@ -79,6 +80,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(globals).toContain('.makaron-ios-app .makaron-editor-bottom-bar');
     expect(globals).toContain('.makaron-ios-app .makaron-topbar');
     expect(globals).toContain('.makaron-ios-app .makaron-projects-hero');
+    expect(globals).toContain('.makaron-ios-app .makaron-ios-stack-entry');
+    expect(layout).toContain('NativeIOSPageStack');
     expect(editor).toContain('makaron-editor-shell');
     expect(editor).toContain('makaron-editor-topbar');
     expect(editor).toContain('makaron-editor-bottom-bar');
@@ -114,6 +117,8 @@ describe('iOS App Store readiness guardrails', () => {
     const authProvider = fs.readFileSync(path.join(root, 'src/components/AuthProvider.tsx'), 'utf8');
     const nativeCache = fs.readFileSync(path.join(root, 'src/lib/native-app-cache.ts'), 'utf8');
     const nativeNavigation = fs.readFileSync(path.join(root, 'src/lib/native-navigation.ts'), 'utf8');
+    const nativePageStack = fs.readFileSync(path.join(root, 'src/lib/native-page-stack.ts'), 'utf8');
+    const pageStack = fs.readFileSync(path.join(root, 'src/components/NativeIOSPageStack.tsx'), 'utf8');
     const nativePhotoPicker = fs.readFileSync(path.join(root, 'src/lib/native-photo-picker.ts'), 'utf8');
     const projectsListWarm = fs.readFileSync(path.join(root, 'src/lib/projects-list-warm.ts'), 'utf8');
     const projectEditorCache = fs.readFileSync(path.join(root, 'src/lib/project-editor-cache.ts'), 'utf8');
@@ -164,6 +169,23 @@ describe('iOS App Store readiness guardrails', () => {
     expect(topBar).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(topBar).toContain("writeNativeJSONCache('/api/billing/credits', d)");
     expect(topBar).toContain('TOPBAR_ROUTE_WARM_APIS');
+    expect(topBar).toContain('requestNativePageStackPush(path)');
+    expect(nativeNavigation).toContain('requestNativePageStackBack(fallbackPath');
+    expect(nativePageStack).toContain('NATIVE_PAGE_STACK_PUSH_EVENT');
+    expect(nativePageStack).toContain('NATIVE_PAGE_STACK_BACK_EVENT');
+    expect(nativePageStack).toContain('isNativeIOSAppRuntime');
+    expect(nativePageStack).toContain('document.documentElement.dataset.nativePlatform');
+    expect(pageStack).toContain('PendingPageShell');
+    expect(pageStack).toContain('FrozenPage');
+    expect(pageStack).toContain('useSearchParams');
+    expect(pageStack).toContain("const path = `${pathname || '/'}${search ? `?${search}` : ''}`");
+    expect(pageStack).toContain('fallbackPath={fallbackPath}');
+    expect(pageStack).toContain('entriesRef.current');
+    expect(pageStack).toContain('data-makaron-ios-page-stack-back-button');
+    expect(pageStack).toContain('data-makaron-ios-stack-entry');
+    expect(pageStack).toContain('data-makaron-ios-stack-frozen');
+    expect(pageStack).toContain('window.history.back()');
+    expect(dashboard).toContain('onClick={handleBackToApp}');
     expect(topBar).toContain('scheduleTopBarWarm');
     expect(topBar).toContain('warmTopBarMenuRoutes');
     expect(topBar).toContain("['/profile', '/dashboard', '/dashboard?tab=keys', '/skills'].forEach(warmTopBarRoute)");
@@ -191,6 +213,14 @@ describe('iOS App Store readiness guardrails', () => {
     expect(home).toContain("readNativeJSONCache<HomeSkill[]>('/api/home-skills')");
     expect(home).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(home).toContain("writeNativeJSONCache('/api/home-skills', data)");
+    expect(home).toContain('makaron-keyboard-inset-change');
+    expect(home).toContain('nativeKbInset');
+    expect(home).toContain('const effectiveKbInset = Math.max(kbInset, nativeKbInset)');
+    expect(home).toContain('const focusFixedComposer = useCallback');
+    expect(home).toContain('textareaRef.current?.focus({ preventScroll: true })');
+    expect(home).toContain('window.visualViewport?.addEventListener');
+    expect(home).toContain('setShowFixedInput(textareaFocused || !inlineMostlyVisible || scrollTop > 24)');
+    expect(home).toContain('data-makaron-home-fixed-composer');
     expect(projects).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(projects).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(projectsListWarm).toContain('warmProjectsListCache');
@@ -455,8 +485,11 @@ describe('iOS App Store readiness guardrails', () => {
     expect(homePage).toContain('onTouchMoveCapture={handleSkillBackPanMove}');
     expect(homePage).toContain('onTouchEndCapture={handleSkillBackPanEnd}');
     expect(homePage).toContain("window.addEventListener('popstate', onPop)");
-    expect(homePage).toContain("window.history.pushState(null, '', `/home/${template.id}`)");
-    expect(homePage).toContain("window.history.replaceState(null, '', `/home/${t.id}`)");
+    expect(homePage).toContain('writeSkillDetailPath(template.id, \'push\')');
+    expect(homePage).toContain('writeSkillDetailPath(t.id, \'replace\')');
+    expect(homePage).toContain("const url = isIOSAppShell ? '/home' : `/home?skill=${encodeURIComponent(skillId)}`");
+    expect(homePage).toContain('function SkillVideo');
+    expect(homePage).toContain("slide.getAttribute('data-skill-id') === selectedDetail.id");
     expect(homePage).not.toContain('document.body.style.transform');
     expect(homePage).not.toContain('cloneNode');
     expect(homePage).not.toContain('makaron-ios-project');
@@ -616,6 +649,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectContainer).toContain('isInlineActive?: boolean');
     expect(projectContainer).toContain('if (!isInlineActive) return');
     expect(projectContainer).toContain('inactive={!isInlineActive}');
+    expect(projectContainer).toContain('makaron-editor-topbar');
+    expect(projectContainer).toContain('makaron-editor-loading-shimmer');
+    expect(projectContainer).toContain('min-h-[78px]');
+    expect(projectContainer).not.toContain('Loading project');
     expect(projectContainer).toContain('const leaveEditor = useCallback');
     expect(projectContainer).toContain('if (onBack)');
     expect(projectContainer).toContain('onBack()');

@@ -141,6 +141,9 @@ describe('iOS secondary pages app-like behavior', () => {
   it('keeps topbar navigation immediate and schedules warming after router push', async () => {
     const events: string[] = [];
     window.history.replaceState({}, '', '/home');
+    window.addEventListener('makaron-ios-page-stack-push', ((event: CustomEvent<{ path: string }>) => {
+      events.push(`stack:${event.detail.path}`);
+    }) as EventListener, { once: true });
     mocks.push.mockImplementation((path: string) => events.push(`push:${path}`));
     mocks.warmNativeJSONCache.mockImplementation((path: string) => {
       events.push(`warm:${path}`);
@@ -154,7 +157,8 @@ describe('iOS secondary pages app-like behavior', () => {
     render(<TopBar page="home" />);
     screen.getByRole('button', { name: '打开数据面板' }).click();
 
-    expect(events[0]).toBe('push:/dashboard');
+    expect(events[0]).toBe('stack:/dashboard');
+    expect(events[1]).toBe('push:/dashboard');
     expect(mocks.push).toHaveBeenCalledWith('/dashboard');
     expect(sessionStorage.getItem('makaron:ios-last-primary-route')).toBe('/home');
     await new Promise((resolve) => window.setTimeout(resolve, 5));

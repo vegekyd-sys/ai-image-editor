@@ -92,6 +92,19 @@ body {
   padding-top: calc(20vh - 44px) !important;
 }
 
+.makaron-ios-app .makaron-ios-stack-entry {
+  position: fixed;
+  inset: 0;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #000;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  will-change: transform;
+  touch-action: pan-y;
+}
+
 /* Hide scrollbar for chat */
 .hide-scrollbar::-webkit-scrollbar {
   display: none;

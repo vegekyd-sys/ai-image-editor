@@ -17,6 +17,7 @@ import {
   getCachedProjectsListSync,
   getLastProjectsListSync,
 } from '@/lib/imageCache';
+import { requestNativePageStackPush } from '@/lib/native-page-stack';
 
 describe('iOS native app detection', () => {
   it('detects the Makaron iOS user-agent token', () => {
@@ -51,6 +52,17 @@ describe('iOS native app detection', () => {
   it('suppresses web billing inside iOS app mode only', () => {
     expect(shouldSuppressWebBilling({ userAgent: `App ${MAKARON_IOS_USER_AGENT_TOKEN}` })).toBe(true);
     expect(shouldSuppressWebBilling({ userAgent: 'Mozilla/5.0 Safari' })).toBe(false);
+  });
+
+  it('dispatches native page stack pushes when the native bootstrap marked iOS', () => {
+    document.documentElement.dataset.nativePlatform = 'ios';
+    const events: string[] = [];
+    window.addEventListener('makaron-ios-page-stack-push', ((event: CustomEvent<{ path: string }>) => {
+      events.push(event.detail.path);
+    }) as EventListener, { once: true });
+
+    expect(requestNativePageStackPush('/skills')).toBe(true);
+    expect(events).toEqual(['/skills']);
   });
 
   it('keeps a synchronous session fallback for the iOS projects page', async () => {

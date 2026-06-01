@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 import AuthProvider from "@/components/AuthProvider";
 import NativeAppBootstrap from "@/components/NativeAppBootstrap";
+import NativeIOSPageStack from "@/components/NativeIOSPageStack";
 import { LocaleProvider } from "@/lib/i18n";
 import "./globals.css";
 
@@ -50,7 +52,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black`}
       >
-        <LocaleProvider><AuthProvider><NativeAppBootstrap />{children}</AuthProvider></LocaleProvider>
+        <LocaleProvider>
+          <AuthProvider>
+            <NativeAppBootstrap />
+            <Suspense fallback={<>{children}</>}>
+              <NativeIOSPageStack>{children}</NativeIOSPageStack>
+            </Suspense>
+          </AuthProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

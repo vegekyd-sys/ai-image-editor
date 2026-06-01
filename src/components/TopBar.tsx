@@ -9,6 +9,7 @@ import { getThumbnailUrl } from '@/lib/supabase/storage'
 import { readNativeJSONCache, warmNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 import { isMakaronIOSApp } from '@/lib/native-app'
 import { warmProjectsListCache } from '@/lib/projects-list-warm'
+import { requestNativePageStackPush } from '@/lib/native-page-stack'
 
 interface TopBarProps {
   page: 'home' | 'projects'
@@ -78,6 +79,7 @@ export default function TopBar({ page }: TopBarProps) {
         }
       }
     }
+    requestNativePageStackPush(path)
     router.push(path)
     if (isMakaronIOSApp()) {
       window.setTimeout(() => {

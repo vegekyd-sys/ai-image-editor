@@ -185,11 +185,32 @@ function DashboardInner() {
 
   if (loading) {
     return (
-      <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black flex items-center justify-center">
-        <svg className="animate-spin h-6 w-6 text-fuchsia-500" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+      <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black text-white p-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <button
+              type="button"
+              onClick={handleBackToApp}
+              className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white/60"
+            >
+              <span className="text-lg leading-none">‹</span>
+              <span>Back</span>
+            </button>
+            <div className="h-5 w-16 rounded-md bg-white/5" />
+          </div>
+          <div className="mb-8">
+            <div className="text-xs uppercase tracking-[0.16em] text-white/25 mb-3">Loading</div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+          </div>
+          <div className="space-y-4">
+            <div className="h-28 rounded-2xl border border-white/8 bg-white/[0.04]" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-24 rounded-xl border border-white/8 bg-white/[0.035]" />
+              <div className="h-24 rounded-xl border border-white/8 bg-white/[0.035]" />
+            </div>
+            <div className="h-40 rounded-2xl border border-white/8 bg-white/[0.025]" />
+          </div>
+        </div>
       </div>
     )
   }
