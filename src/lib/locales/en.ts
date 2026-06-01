@@ -36,6 +36,7 @@ const en = {
   'auth.verifyEmail.resent': 'Email sent!',
   'auth.verifyEmail.checkSpam': "Don't see it? Check your spam folder.",
   'auth.continue': 'Continue',
+  'auth.sendingCode': 'Sending code...',
   'auth.tryFree': 'Try free',
   'auth.otp.title': 'Enter verification code',
   'auth.otp.subtitle': 'We sent a 6-digit code to',

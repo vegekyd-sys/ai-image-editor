@@ -67,17 +67,19 @@ function LazyVideo({ src, style }: { src: string; style: React.CSSProperties }) 
   )
 }
 
-function SkillVideo({ src, style, eager = false }: { src: string; style: React.CSSProperties; eager?: boolean }) {
+function SkillVideo({ src, style, eager = false, muted = true }: { src: string; style: React.CSSProperties; eager?: boolean; muted?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
     const video = ref.current
     if (!video) return
-    video.muted = true
+    video.muted = muted
+    video.defaultMuted = muted
     video.playsInline = true
     if (eager) video.load()
     const play = () => {
       void video.play().catch(() => {
+        if (!muted) return
         window.setTimeout(() => {
           video.muted = true
           void video.play().catch(() => undefined)
@@ -86,7 +88,7 @@ function SkillVideo({ src, style, eager = false }: { src: string; style: React.C
     }
     const raf = window.requestAnimationFrame(play)
     return () => window.cancelAnimationFrame(raf)
-  }, [eager, src])
+  }, [eager, muted, src])
 
   return (
     <video
@@ -94,7 +96,7 @@ function SkillVideo({ src, style, eager = false }: { src: string; style: React.C
       src={src}
       autoPlay
       loop
-      muted
+      muted={muted}
       playsInline
       preload={eager ? 'auto' : 'metadata'}
       style={style}
@@ -125,10 +127,7 @@ function HomePageInner() {
   const inputWrapperRef = useRef<HTMLDivElement>(null)
   const [inputWrapperHeight, setInputWrapperHeight] = useState(0)
   const [slotDragOver, setSlotDragOver] = useState(-1)
-  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>(() => {
-    const nativeCached = readNativeJSONCache<HomeSkill[]>('/api/home-skills')
-    return nativeCached?.length ? nativeCached : getCachedHomeSkills()
-  })
+  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>(() => (
     readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
@@ -434,14 +433,23 @@ function HomePageInner() {
 
   useEffect(() => {
     const vv = window.visualViewport
-    if (!vv) return
+    const updateNativeInset = (event: Event) => {
+      const detail = (event as CustomEvent<{ inset?: number }>).detail
+      if (typeof detail?.inset === 'number') setKbInset(Math.max(0, Math.round(detail.inset)))
+    }
+    window.addEventListener('makaron-keyboard-inset-change', updateNativeInset)
+    if (!vv) return () => window.removeEventListener('makaron-keyboard-inset-change', updateNativeInset)
     const update = () => {
       const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
       setKbInset(Math.round(inset))
     }
     vv.addEventListener('resize', update)
     vv.addEventListener('scroll', update)
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update) }
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+      window.removeEventListener('makaron-keyboard-inset-change', updateNativeInset)
+    }
   }, [])
 
   useEffect(() => {
@@ -502,7 +510,8 @@ function HomePageInner() {
         const video = slide.querySelector('video') as HTMLVideoElement | null
         if (!video) return
         if (slide.getAttribute('data-skill-id') === selectedDetail.id) {
-          video.muted = true
+          video.muted = false
+          video.defaultMuted = false
           video.playsInline = true
           try {
             if (video.readyState >= 1) video.currentTime = 0
@@ -511,7 +520,7 @@ function HomePageInner() {
           }
           video.play().catch(() => {
             window.setTimeout(() => {
-              video.muted = true
+              video.muted = false
               void video.play().catch(() => undefined)
             }, 80)
           })
@@ -833,7 +842,7 @@ function HomePageInner() {
         }
         return <LazyVideo src={normalizeDomain(url)} style={style} />
       }
-      return <SkillVideo src={normalizeDomain(url)} style={style} eager />
+      return <SkillVideo src={normalizeDomain(url)} style={style} eager muted={variant !== 'detail'} />
     }
     const src = variant === 'thumb'
       ? getThumbnailUrl(url, 400, 70, 533, 'cover')
@@ -880,6 +889,7 @@ function HomePageInner() {
     })
   }
 
+  const revealHomeBehindSkillPan = Boolean(selectedDetail && (skillBackPanActive || skillBackPanSettling))
 
   return (
     <>
@@ -975,7 +985,7 @@ function HomePageInner() {
           background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
         }} />
 
-        <div style={{ display: viewMode === 'agent' || selectedDetail ? 'none' : undefined }}>
+        <div style={{ display: viewMode === 'agent' || (selectedDetail && !revealHomeBehindSkillPan) ? 'none' : undefined }}>
           <TopBar page="home" />
         </div>
 
@@ -986,7 +996,10 @@ function HomePageInner() {
 
         <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
         {/* ── Hero: Landing-page style ── */}
-        <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
+        <div className="relative flex flex-col items-center" style={{
+          paddingBottom: '40px',
+          display: selectedDetail && heroExpanded && !revealHomeBehindSkillPan ? 'none' : undefined,
+        }}>
           {/* Glow */}
           <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
 
@@ -1054,6 +1067,7 @@ function HomePageInner() {
         {/* ── Skill Template Grid ── */}
         <div style={{
           flex: 1,
+          display: selectedDetail && heroExpanded && !revealHomeBehindSkillPan ? 'none' : undefined,
           paddingLeft: isDesktop ? '24px' : '14px',
           paddingRight: isDesktop ? '24px' : '14px',
           paddingTop: 0,
@@ -1238,8 +1252,7 @@ function HomePageInner() {
             transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
             opacity: heroExpanded ? 0 : 1,
           }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, extraStyle: { position: 'absolute' } })}
+            {!heroExpanded && renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, extraStyle: { position: 'absolute' } })}
           </div>
         )
       })()}

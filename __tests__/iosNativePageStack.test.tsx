@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import NativeIOSPageStack, { sanitizeFrozenHTMLForIOSStack } from '@/components/NativeIOSPageStack';
+import { cacheProjectsList } from '@/lib/imageCache';
 
 const mocks = vi.hoisted(() => ({
   pathname: '/projects',
@@ -24,6 +25,8 @@ describe('NativeIOSPageStack', () => {
     mocks.pathname = '/projects';
     mocks.search = '';
     document.documentElement.dataset.nativePlatform = 'ios';
+    window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
   it('keeps the previous page mounted and shows a pending native page immediately on iOS pushes', async () => {
@@ -65,6 +68,133 @@ describe('NativeIOSPageStack', () => {
     expect(underEntry?.getAttribute('data-makaron-ios-stack-frozen')).toBe('true');
     expect(underEntry?.textContent).toContain('Projects page');
     expect(underEntry?.textContent).not.toContain('Dashboard loaded');
+  });
+
+  it('keeps primary tab underlays live and shows a project-like pending shell immediately', async () => {
+    mocks.pathname = '/home';
+    const { rerender, container } = render(
+      <NativeIOSPageStack>
+        <main>
+          <h1>Home live page</h1>
+          <video src="https://cdn.example.com/skill.mp4" />
+        </main>
+      </NativeIOSPageStack>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-makaron-ios-page-stack="true"]')).toBeTruthy();
+    });
+
+    const video = container.querySelector('video') as HTMLVideoElement;
+    const pause = vi.spyOn(video, 'pause').mockImplementation(() => undefined);
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('makaron-ios-page-stack-push', {
+        detail: { path: '/projects' },
+      }));
+    });
+
+    expect(screen.getByText('Home live page')).toBeTruthy();
+    expect(pause).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText('Makaron')).toBeTruthy();
+      expect(screen.getByText('one man branding studio')).toBeTruthy();
+      expect(screen.getByText('Recents')).toBeTruthy();
+      expect(container.querySelector('[data-makaron-ios-stack-pending="true"]')).toBeTruthy();
+    });
+    expect(container.querySelector('[data-makaron-ios-stack-entry="under"]')?.getAttribute('data-makaron-ios-stack-frozen')).toBeNull();
+    expect(container.querySelector('[data-makaron-ios-stack-entry="under"]')?.textContent).toContain('Home live page');
+
+    mocks.pathname = '/projects';
+    rerender(
+      <NativeIOSPageStack>
+        <main>Projects loaded</main>
+      </NativeIOSPageStack>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Projects loaded')).toBeTruthy();
+      expect(container.querySelector('[data-makaron-ios-stack-pending="true"]')).toBeNull();
+    });
+  });
+
+  it('updates the pending Projects shell with cached project cards as soon as warmup finishes', async () => {
+    mocks.pathname = '/home';
+    const { container } = render(
+      <NativeIOSPageStack>
+        <main>Home live page</main>
+      </NativeIOSPageStack>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-makaron-ios-page-stack="true"]')).toBeTruthy();
+    });
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('makaron-ios-page-stack-push', {
+        detail: { path: '/projects' },
+      }));
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-makaron-ios-pending-projects-shell="true"]')).toBeTruthy();
+    });
+
+    act(() => {
+      cacheProjectsList('user-1', [{
+        id: 'project-1',
+        title: '妈妈生日温馨时光',
+        updated_at: new Date().toISOString(),
+        snapshots: [{ image_url: 'https://cdn.makaron.app/project-1.jpg' }],
+      }]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('妈妈生日温馨时光')).toBeTruthy();
+      expect(container.querySelectorAll('.mkr-card').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('keeps a pending native push alive when iOS detection and push happen before the route changes', async () => {
+    delete document.documentElement.dataset.nativePlatform;
+    mocks.pathname = '/home';
+    const { rerender, container } = render(
+      <NativeIOSPageStack>
+        <main>Home live page</main>
+      </NativeIOSPageStack>,
+    );
+
+    document.documentElement.dataset.nativePlatform = 'ios';
+    act(() => {
+      window.dispatchEvent(new CustomEvent('makaron-ios-page-stack-push', {
+        detail: { path: '/projects' },
+      }));
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-makaron-ios-pending-projects-shell="true"]')).toBeTruthy();
+      expect(container.querySelector('[data-makaron-ios-stack-pending="true"]')).toBeTruthy();
+    });
+
+    rerender(
+      <NativeIOSPageStack>
+        <main>Home still current while route is loading</main>
+      </NativeIOSPageStack>,
+    );
+
+    expect(container.querySelector('[data-makaron-ios-pending-projects-shell="true"]')).toBeTruthy();
+
+    mocks.pathname = '/projects';
+    rerender(
+      <NativeIOSPageStack>
+        <main>Projects loaded</main>
+      </NativeIOSPageStack>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Projects loaded')).toBeTruthy();
+      expect(container.querySelector('[data-makaron-ios-stack-pending="true"]')).toBeNull();
+    });
   });
 
   it('handles native back requests through the stack before falling back to history', async () => {

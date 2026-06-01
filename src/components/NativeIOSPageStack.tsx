@@ -3,6 +3,9 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { isMakaronIOSApp } from '@/lib/native-app';
+import { getLastProjectsListSync, PROJECTS_LIST_CACHE_UPDATED_EVENT } from '@/lib/imageCache';
+import { getOriginFormatThumbnailUrl } from '@/lib/supabase/storage';
+import { MakaronSpark } from '@/components/MakaronLogo';
 import {
   NATIVE_PAGE_STACK_BACK_EVENT,
   NATIVE_PAGE_STACK_PUSH_EVENT,
@@ -26,6 +29,14 @@ interface StackEntry {
   frozen?: boolean;
 }
 
+interface PendingProject {
+  id: string;
+  title?: string;
+  updated_at?: string;
+  snapshots?: { image_url?: string }[];
+  hasVideo?: boolean;
+}
+
 function normalizePath(path: string): string {
   if (!path) return '/';
   try {
@@ -47,11 +58,30 @@ function pathTitle(path: string): string {
   return 'Makaron';
 }
 
+function timeAgoShort(input?: string): string {
+  if (!input) return '';
+  const diff = Date.now() - new Date(input).getTime();
+  if (!Number.isFinite(diff) || diff < 0) return '';
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return `${Math.floor(days / 7)}w`;
+}
+
 function shouldUseNativeStack(path: string): boolean {
   const pathname = path.split('?')[0];
   if (pathname === '/' || pathname === '/home' || pathname === '/projects') return true;
   if (pathname.startsWith('/home/') || pathname.startsWith('/projects/')) return false;
   return true;
+}
+
+function isPrimaryNativeTabPath(path: string): boolean {
+  const pathname = path.split('?')[0];
+  return pathname === '/home' || pathname === '/projects';
 }
 
 function makeEntry(path: string, node: ReactNode, phase: StackPhase, pending = false): StackEntry {
@@ -102,6 +132,10 @@ function PendingPageShell({ path, fallbackPath }: { path: string; fallbackPath: 
     }));
   };
 
+  if (path.split('?')[0] === '/projects') {
+    return <PendingProjectsShell />;
+  }
+
   return (
     <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black text-white p-6">
       <div className="max-w-2xl mx-auto">
@@ -134,6 +168,159 @@ function PendingPageShell({ path, fallbackPath }: { path: string; fallbackPath: 
   );
 }
 
+function PendingProjectsShell() {
+  const readCachedProjects = useCallback(() => {
+    try {
+      return (getLastProjectsListSync()?.projects as PendingProject[] | undefined)?.slice(0, 8) ?? [];
+    } catch {
+      return [];
+    }
+  }, []);
+  const [cachedProjects, setCachedProjects] = useState<PendingProject[]>(() => readCachedProjects());
+  useEffect(() => {
+    const refresh = () => setCachedProjects(readCachedProjects());
+    refresh();
+    window.addEventListener(PROJECTS_LIST_CACHE_UPDATED_EVENT, refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.removeEventListener(PROJECTS_LIST_CACHE_UPDATED_EVENT, refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [readCachedProjects]);
+  const cards: PendingProject[] = cachedProjects.length > 0
+    ? cachedProjects
+    : Array.from({ length: 6 }, (_, index) => ({ id: `pending-${index}` }));
+
+  return (
+    <div
+      className="makaron-ios-page makaron-ios-page-x makaron-projects-page min-h-dvh bg-black text-white overflow-hidden"
+      data-makaron-ios-pending-projects-shell="true"
+    >
+      <style>{`
+        @keyframes makaron-ios-project-shimmer {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(100%); }
+        }
+        .makaron-ios-pending-card {
+          cursor: pointer;
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
+          -webkit-user-select: none;
+        }
+      `}</style>
+      <div
+        aria-hidden="true"
+        className="fixed left-0 right-0 top-0 pointer-events-none"
+        style={{
+          height: 520,
+          background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
+        }}
+      />
+      <div className="relative z-[1] px-5 pt-5">
+        <div className="flex items-center justify-between text-[0.65rem] uppercase tracking-[0.1em] text-white/45">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+              探索
+            </span>
+            <span>更新日志</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="h-7 w-16 rounded-lg border border-white/[0.06] bg-white/[0.04]" />
+            <span className="h-11 w-11 rounded-xl border border-white/[0.06] bg-white/[0.03]" />
+          </div>
+        </div>
+      </div>
+
+      <div className="relative z-[1] flex flex-col items-center px-4" style={{ paddingTop: '20vh', paddingBottom: 40 }}>
+        <div className="flex items-center gap-3">
+          <MakaronSpark size="clamp(34px, 6vw, 52px)" />
+          <div className="font-extrabold text-white leading-none tracking-[-0.04em]" style={{ fontSize: 'clamp(3rem, 12vw, 5rem)' }}>
+            Makaron
+          </div>
+        </div>
+        <div className="mt-1 text-[1.25rem] tracking-wide text-fuchsia-400/90" style={{ fontFamily: 'Caveat, cursive' }}>
+          one man branding studio
+        </div>
+        <div className="mt-8 w-full max-w-[480px] rounded-[18px] border border-white/[0.1] bg-white/[0.03] overflow-hidden">
+          <div className="grid grid-cols-[96px_1fr] min-h-[86px]">
+            <div className="flex items-center justify-center border-r border-white/[0.1] bg-fuchsia-950/20">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.75)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </div>
+            <div className="flex flex-col justify-between p-4">
+              <div className="h-5 w-[78%] rounded-full bg-white/[0.08]" />
+              <div className="flex justify-end gap-5 text-sm font-semibold">
+                <span className="text-white/35">Skill</span>
+                <span className="text-fuchsia-400">+ Create</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative z-[1] mt-2">
+        <div className="mb-3 flex items-center gap-3 px-4">
+          <span className="text-[0.58rem] uppercase tracking-[0.2em] text-white/20">Recents</span>
+          <span className="h-px flex-1 bg-white/[0.07]" />
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 px-4 pb-20">
+          {cards.map((project, index) => {
+            const lastSnap = project.snapshots?.filter((snap) => snap.image_url).at(-1);
+            const imageUrl = lastSnap?.image_url
+              ? getOriginFormatThumbnailUrl(lastSnap.image_url, 400, 50, 400)
+              : undefined;
+            return (
+              <div key={project.id ?? index} className="mkr-card makaron-ios-pending-card relative aspect-square overflow-hidden rounded-2xl bg-[#120d1a]">
+                {imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="relative h-full w-full overflow-hidden bg-[linear-gradient(135deg,#120d1a_0%,#1c1026_50%,#120d1a_100%)]">
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        background: 'linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.07) 45%, transparent 70%)',
+                        transform: 'translateX(-100%)',
+                        animation: `makaron-ios-project-shimmer 1.45s ease-in-out ${index * 0.07}s infinite`,
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
+                {project.title ? (
+                  <div className="absolute inset-x-0 bottom-0 p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 truncate text-[0.82rem] font-medium text-white">{project.title}</div>
+                      <div className="shrink-0 text-[0.62rem] text-white/45">{timeAgoShort(project.updated_at)}</div>
+                    </div>
+                    {project.snapshots && project.snapshots.length > 1 && (
+                      <span className="mt-1.5 inline-flex rounded-md bg-black/50 px-1.5 py-0.5 text-[0.68rem] font-medium text-white/80">
+                        {project.snapshots.length} snaps
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="absolute inset-x-0 bottom-0 p-2.5">
+                    <div className="h-4 w-2/3 rounded-full bg-white/[0.1]" />
+                    <div className="mt-2 h-5 w-16 rounded-md bg-black/40" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FrozenPage({ html }: { html: string }) {
   return (
     <div
@@ -142,6 +329,17 @@ function FrozenPage({ html }: { html: string }) {
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
+}
+
+function pauseMediaForIOSStack(root: HTMLElement | null) {
+  if (!root) return;
+  root.querySelectorAll('video, audio').forEach((node) => {
+    try {
+      (node as HTMLMediaElement).pause();
+    } catch {
+      // Best-effort: page stack transitions should never depend on media state.
+    }
+  });
 }
 
 export default function NativeIOSPageStack({ children }: { children: ReactNode }) {
@@ -189,6 +387,9 @@ export default function NativeIOSPageStack({ children }: { children: ReactNode }
             : entry
         ));
       }
+      if (top?.pending && top.path !== pathKey) {
+        return current;
+      }
 
       const previousIndex = current.findIndex((entry) => entry.path === pathKey);
       if (previousIndex >= 0) {
@@ -228,7 +429,10 @@ export default function NativeIOSPageStack({ children }: { children: ReactNode }
       const detail = (event as CustomEvent<{ path?: string }>).detail;
       const nextPath = normalizePath(detail?.path ?? '');
       if (!nextPath || !shouldUseNativeStack(nextPath) || nextPath === latestPathRef.current) return;
-      const frozenHtml = sanitizeFrozenHTMLForIOSStack(activeEntryRef.current?.innerHTML ?? '');
+      const currentTop = entriesRef.current[entriesRef.current.length - 1];
+      const keepLivePrimaryTab = Boolean(currentTop && isPrimaryNativeTabPath(currentTop.path) && isPrimaryNativeTabPath(nextPath));
+      pauseMediaForIOSStack(activeEntryRef.current);
+      const frozenHtml = keepLivePrimaryTab ? '' : sanitizeFrozenHTMLForIOSStack(activeEntryRef.current?.innerHTML ?? '');
       setEntries((current) => {
         const top = current[current.length - 1];
         if (top?.path === nextPath) return current;

@@ -69,8 +69,8 @@ export default function TopBar({ page }: TopBarProps) {
 
   const navigateTopBar = useCallback((path: string) => {
     setUserMenuOpen(false)
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
     if (isMakaronIOSApp()) {
-      const currentPath = window.location.pathname
       if (currentPath === '/home' || currentPath === '/projects') {
         try {
           sessionStorage.setItem(IOS_LAST_PRIMARY_ROUTE_KEY, currentPath)
@@ -102,6 +102,9 @@ export default function TopBar({ page }: TopBarProps) {
 
   useEffect(() => {
     if (!isMakaronIOSApp()) return
+    if (page === 'home' && user?.id) {
+      void warmProjectsListCache(user.id)
+    }
     const warm = () => {
       ['/home', '/projects', '/dashboard', '/profile', '/skills'].forEach(warmTopBarRoute)
     }
@@ -111,7 +114,7 @@ export default function TopBar({ page }: TopBarProps) {
     }
     const timer = window.setTimeout(warm, 400)
     return () => window.clearTimeout(timer)
-  }, [warmTopBarRoute])
+  }, [page, user?.id, warmTopBarRoute])
 
   useEffect(() => {
     if (!user) return
@@ -273,7 +276,7 @@ export default function TopBar({ page }: TopBarProps) {
                     borderRadius: 12, padding: '4px 0', minWidth: 200,
                     boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 240,
 	                  }}>
-	                    {/* User card header */}
+                    {/* User card header */}
                     <button
                       onClick={() => navigateTopBar('/profile')}
                       style={{
@@ -290,6 +293,7 @@ export default function TopBar({ page }: TopBarProps) {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
                         {avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={getThumbnailUrl(avatarUrl, 72, 80, 72, 'cover')} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
                           <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 600 }}>{initials}</span>

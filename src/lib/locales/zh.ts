@@ -36,6 +36,7 @@ const zh = {
   'auth.verifyEmail.resent': '邮件已发送！',
   'auth.verifyEmail.checkSpam': '没看到？检查一下垃圾邮件文件夹。',
   'auth.continue': '继续',
+  'auth.sendingCode': '发送验证码中...',
   'auth.tryFree': '免费试用',
   'auth.otp.title': '输入验证码',
   'auth.otp.subtitle': '验证码已发送到',

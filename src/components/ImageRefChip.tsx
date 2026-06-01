@@ -11,7 +11,7 @@ interface ImageRefChipProps {
   onNavigate?: (index: number) => void;
 }
 
-export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefChipProps) {
+export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -29,10 +29,10 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
 
   const imgSrc = snapshot?.imageUrl || snapshot?.image;
   const thumbUrl = imgSrc && imgSrc.startsWith('http')
-    ? getThumbnailUrl(imgSrc, 40, 60, 40, 'cover')
+    ? getThumbnailUrl(imgSrc, 96, 85, 96, 'cover')
     : undefined;
   const previewUrl = imgSrc && imgSrc.startsWith('http')
-    ? getThumbnailUrl(imgSrc, 400, 90, 400, 'cover')
+    ? getThumbnailUrl(imgSrc, 680, 90, 680, 'contain')
     : imgSrc;
 
   // Track loaded URL instead of boolean — same URL reopens instantly (no spinner flash)
@@ -83,6 +83,7 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
   const popover = showPreview && previewUrl ? (
     <span
       ref={popoverRef}
+      data-makaron-image-ref-preview="true"
       className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
       style={{ ...popoverStyle, display: 'block' }}
       onMouseEnter={() => { if (!isTouchDevice.current) cancelHide(); }}
@@ -118,6 +119,8 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
     <span ref={wrapperRef} className="relative inline-flex items-center align-baseline">
       <span
         ref={chipRef}
+        data-makaron-cui-tap-target="true"
+        data-makaron-image-ref-chip="true"
         role="button"
         tabIndex={0}
         className="inline-flex items-center gap-1 bg-white/10 hover:bg-white/20 rounded-md px-1.5 py-0.5 text-xs font-medium text-white/80 transition-colors cursor-pointer"
@@ -126,8 +129,13 @@ export default function ImageRefChip({ index, snapshot, onNavigate }: ImageRefCh
         onMouseLeave={() => { if (!isTouchDevice.current) scheduleHide(); }}
         onClick={(e) => {
           e.stopPropagation();
-          if (onNavigate) { onNavigate(index); setShowPreview(false); }
-          else if (showPreview) { setShowPreview(false); } else { updatePosition(); setShowPreview(true); }
+          if (showPreview) {
+            setShowPreview(false);
+            return;
+          }
+          cancelHide();
+          updatePosition();
+          setShowPreview(true);
         }}
       >
         {thumbUrl && (

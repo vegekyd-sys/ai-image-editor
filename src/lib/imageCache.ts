@@ -6,6 +6,8 @@ const PROJECTS_LIST_SESSION_KEY = 'makaron:last-projects-list'
 const PROJECTS_LIST_LOCAL_KEY = 'makaron:last-projects-list:persistent'
 const TTL_MS = 30 * 24 * 60 * 60 * 1000  // 30 days
 
+export const PROJECTS_LIST_CACHE_UPDATED_EVENT = 'makaron-projects-list-cache-updated'
+
 interface CacheEntry {
   key: string
   base64: string
@@ -209,6 +211,11 @@ export function cacheProjectsList(userId: string, projects: any[]): void {
     }
   } catch {
     // Web storage failures are non-critical
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(PROJECTS_LIST_CACHE_UPDATED_EVENT, {
+      detail: { userId, count: projects.length },
+    }))
   }
   void writeProjectsListToIDB(entry)
 }
