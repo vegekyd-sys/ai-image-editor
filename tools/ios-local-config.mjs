@@ -46,6 +46,7 @@ config.server = config.server ?? {};
 if (args.includes('--reset')) {
   delete config.server.url;
   delete config.server.cleartext;
+  delete config.server.errorPath;
   config.server.allowNavigation = prodAllowNavigation;
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
   console.log('iOS Capacitor config reset to production web origin.');
@@ -67,6 +68,7 @@ try {
 
 config.server.url = parsed.toString().replace(/\/$/, '');
 config.server.cleartext = parsed.protocol === 'http:';
+config.server.errorPath = 'index.html';
 config.server.allowNavigation = Array.from(new Set([
   ...prodAllowNavigation,
   parsed.hostname,

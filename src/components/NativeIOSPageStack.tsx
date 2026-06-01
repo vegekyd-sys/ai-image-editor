@@ -65,6 +65,35 @@ function makeEntry(path: string, node: ReactNode, phase: StackPhase, pending = f
   };
 }
 
+export function sanitizeFrozenHTMLForIOSStack(html: string): string {
+  if (!html) return '';
+  const template = document.createElement('template');
+  template.innerHTML = html;
+
+  template.content.querySelectorAll('script, iframe').forEach((node) => node.remove());
+  template.content.querySelectorAll('video, audio').forEach((node) => {
+    const replacement = document.createElement('div');
+    replacement.className = (node as HTMLElement).className;
+    replacement.setAttribute('data-makaron-ios-frozen-media', 'true');
+    const style = (node as HTMLElement).getAttribute('style');
+    replacement.setAttribute('style', [
+      style ?? '',
+      'background:#050505',
+      'pointer-events:none',
+    ].filter(Boolean).join(';'));
+    node.replaceWith(replacement);
+  });
+  template.content.querySelectorAll('source, [autoplay]').forEach((node) => {
+    if (node.nodeName.toLowerCase() === 'source') {
+      node.remove();
+      return;
+    }
+    (node as HTMLElement).removeAttribute('autoplay');
+  });
+
+  return template.innerHTML;
+}
+
 function PendingPageShell({ path, fallbackPath }: { path: string; fallbackPath: string }) {
   const goBack = () => {
     window.dispatchEvent(new CustomEvent(NATIVE_PAGE_STACK_BACK_EVENT, {
@@ -199,7 +228,7 @@ export default function NativeIOSPageStack({ children }: { children: ReactNode }
       const detail = (event as CustomEvent<{ path?: string }>).detail;
       const nextPath = normalizePath(detail?.path ?? '');
       if (!nextPath || !shouldUseNativeStack(nextPath) || nextPath === latestPathRef.current) return;
-      const frozenHtml = activeEntryRef.current?.innerHTML ?? '';
+      const frozenHtml = sanitizeFrozenHTMLForIOSStack(activeEntryRef.current?.innerHTML ?? '');
       setEntries((current) => {
         const top = current[current.length - 1];
         if (top?.path === nextPath) return current;

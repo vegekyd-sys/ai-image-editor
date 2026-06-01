@@ -16,22 +16,84 @@
       }
 
       body {
-        display: grid;
-        place-items: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        box-sizing: border-box;
+      }
+
+      .panel {
+        width: min(360px, 100%);
+        text-align: center;
+      }
+
+      .mark {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 18px;
+        border-radius: 18px;
+        background: radial-gradient(circle at 50% 45%, #d946ef 0%, #7c2d92 58%, #171019 100%);
+        box-shadow: 0 0 42px rgba(217, 70, 239, 0.35);
       }
 
       .brand {
-        font-size: 28px;
+        font-size: 24px;
         font-weight: 800;
         letter-spacing: 0;
+      }
+
+      .status {
+        margin-top: 12px;
+        color: rgba(255,255,255,0.54);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .actions {
+        margin-top: 22px;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+        font: inherit;
+        font-size: 14px;
+        padding: 10px 16px;
       }
     </style>
   </head>
   <body>
-    <div class="brand">Makaron</div>
+    <div class="panel">
+      <div class="mark"></div>
+      <div class="brand">Makaron</div>
+      <div id="status" class="status">Connecting to local iOS dev server...</div>
+      <div class="actions">
+        <button id="retry">Retry</button>
+      </div>
+    </div>
     <script>
-      window.Capacitor?.Plugins?.SplashScreen?.hide?.().catch?.(() => {});
-      window.location.replace('https://www.makaron.app/');
+      const url = 'http://192.168.100.147:3001/home';
+      const statusEl = document.getElementById('status');
+      const connect = async () => {
+        statusEl.textContent = 'Connecting to ' + url + ' ...';
+        try {
+          await fetch(url, { method: 'HEAD', cache: 'no-store' });
+          window.location.replace(url);
+        } catch (error) {
+          statusEl.textContent = 'Cannot reach the local dev server. Keep the Mac awake and make sure port 3001 is running.';
+        } finally {
+          window.Capacitor?.Plugins?.SplashScreen?.hide?.().catch?.(() => {});
+        }
+      };
+      document.getElementById('retry').addEventListener('click', connect);
+      connect();
     </script>
   </body>
 </html>

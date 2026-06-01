@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import NativeIOSPageStack from '@/components/NativeIOSPageStack';
+import NativeIOSPageStack, { sanitizeFrozenHTMLForIOSStack } from '@/components/NativeIOSPageStack';
 
 const mocks = vi.hoisted(() => ({
   pathname: '/projects',
@@ -134,5 +134,22 @@ describe('NativeIOSPageStack', () => {
     });
     expect(container.querySelector('[data-makaron-ios-stack-entry="under"]')?.textContent).toContain('Home page');
     expect(container.querySelector('[data-makaron-ios-stack-entry="under"]')?.textContent).not.toContain('Loading');
+  });
+
+  it('sanitizes frozen underlays so Home videos cannot keep playing behind secondary pages', () => {
+    const frozen = sanitizeFrozenHTMLForIOSStack(`
+      <section>
+        <video autoplay loop muted playsinline src="https://cdn.example.com/skill.mp4" style="position:absolute;inset:0"></video>
+        <iframe src="/home"></iframe>
+        <p>Home page</p>
+      </section>
+    `);
+
+    expect(frozen).toContain('Home page');
+    expect(frozen).toContain('data-makaron-ios-frozen-media');
+    expect(frozen).not.toContain('<video');
+    expect(frozen).not.toContain('<iframe');
+    expect(frozen).not.toContain('autoplay');
+    expect(frozen).not.toContain('skill.mp4');
   });
 });

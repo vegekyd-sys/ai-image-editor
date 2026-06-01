@@ -105,6 +105,11 @@ body {
   touch-action: pan-y;
 }
 
+html.makaron-ios-project-overlay-open,
+html.makaron-ios-project-overlay-open body {
+  overflow: hidden;
+}
+
 /* Hide scrollbar for chat */
 .hide-scrollbar::-webkit-scrollbar {
   display: none;

@@ -33,11 +33,13 @@ describe('iOS App Store readiness guardrails', () => {
     expect(plan).toContain('StoreKit');
   });
 
-  it('bundles a local fallback shell that forwards to the production web app', () => {
+  it('bundles a local fallback shell that makes iOS debug black screens diagnosable', () => {
     const shell = fs.readFileSync(path.join(root, 'capacitor-www/index.html'), 'utf8');
     expect(shell).toContain('viewport-fit=cover');
     expect(shell).toContain('SplashScreen');
-    expect(shell).toContain('https://www.makaron.app/');
+    expect(shell).toContain('Connecting to local iOS dev server');
+    expect(shell).toContain('http://192.168.100.147:3001/home');
+    expect(shell).toContain('Cannot reach the local dev server');
   });
 
   it('declares iOS permission purpose strings and portrait-only full-screen orientation', () => {
@@ -177,6 +179,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativePageStack).toContain('document.documentElement.dataset.nativePlatform');
     expect(pageStack).toContain('PendingPageShell');
     expect(pageStack).toContain('FrozenPage');
+    expect(pageStack).toContain('sanitizeFrozenHTMLForIOSStack');
+    expect(pageStack).toContain("querySelectorAll('video, audio')");
+    expect(pageStack).toContain('data-makaron-ios-frozen-media');
+    expect(pageStack).toContain("querySelectorAll('script, iframe')");
     expect(pageStack).toContain('useSearchParams');
     expect(pageStack).toContain("const path = `${pathname || '/'}${search ? `?${search}` : ''}`");
     expect(pageStack).toContain('fallbackPath={fallbackPath}');
@@ -198,6 +204,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(topBar).toContain('if (!userMenuOpen) return');
     expect(topBar).toContain('warmTopBarMenuRoutes()');
     expect(topBar).toContain("aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}");
+    expect(topBar).toContain("aria-label={locale === 'zh' ? '打开个人菜单' : 'Open account menu'}");
+    expect(topBar).toContain('data-makaron-user-menu-trigger');
+    expect(topBar).toContain('minWidth: 44');
+    expect(topBar).toContain('minHeight: 44');
     expect(topBar).toContain("onClick={() => navigateTopBar('/dashboard')}");
     expect(topBar).not.toContain('onPointerDown={warmTopBarMenuRoutes}');
     expect(topBar).not.toContain("onPointerDown={() => scheduleTopBarWarm('/dashboard')}");
@@ -213,14 +223,18 @@ describe('iOS App Store readiness guardrails', () => {
     expect(home).toContain("readNativeJSONCache<HomeSkill[]>('/api/home-skills')");
     expect(home).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(home).toContain("writeNativeJSONCache('/api/home-skills', data)");
-    expect(home).toContain('makaron-keyboard-inset-change');
-    expect(home).toContain('nativeKbInset');
-    expect(home).toContain('const effectiveKbInset = Math.max(kbInset, nativeKbInset)');
-    expect(home).toContain('const focusFixedComposer = useCallback');
-    expect(home).toContain('textareaRef.current?.focus({ preventScroll: true })');
-    expect(home).toContain('window.visualViewport?.addEventListener');
-    expect(home).toContain('setShowFixedInput(textareaFocused || !inlineMostlyVisible || scrollTop > 24)');
     expect(home).toContain('data-makaron-home-fixed-composer');
+    expect(home).toContain('setShowFixedInput(!entry.isIntersecting)');
+    expect(home).toContain('bottom: textareaFocused && kbInset > 0');
+    expect(home).toContain('const blurHomeComposers = useCallback');
+    expect(home).toContain('inlineTextareaRef.current?.blur()');
+    expect(home).toContain('setKbInset(0)');
+    expect(home).toContain("display: viewMode === 'agent' || selectedDetail ? 'none' : undefined");
+    expect(home).toContain("isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}");
+    expect(home).not.toContain('const effectiveKbInset = Math.max(kbInset, nativeKbInset)');
+    expect(home).not.toContain('const focusFixedComposer = useCallback');
+    expect(home).not.toContain('textareaRef.current?.focus({ preventScroll: true })');
+    expect(home).not.toContain('window.addEventListener(\'makaron-keyboard-inset-change\'');
     expect(projects).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(projects).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(projectsListWarm).toContain('warmProjectsListCache');
@@ -503,6 +517,7 @@ describe('iOS App Store readiness guardrails', () => {
     const projectContainer = fs.readFileSync(path.join(root, 'src/components/ProjectEditorContainer.tsx'), 'utf8');
     const imageCache = fs.readFileSync(path.join(root, 'src/lib/imageCache.ts'), 'utf8');
     const storage = fs.readFileSync(path.join(root, 'src/lib/supabase/storage.ts'), 'utf8');
+    const globals = fs.readFileSync(path.join(root, 'src/app/globals.css'), 'utf8');
     const bridge = fs.readFileSync(path.join(root, 'ios/App/App/MakaronBridgeViewController.swift'), 'utf8');
     const storyboard = fs.readFileSync(path.join(root, 'ios/App/App/Base.lproj/Main.storyboard'), 'utf8');
     const project = fs.readFileSync(path.join(root, 'ios/App/App.xcodeproj/project.pbxproj'), 'utf8');
@@ -610,6 +625,12 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).not.toContain('`/projects/${projectId}`');
     expect(projectsPage).not.toContain("router.push('/projects')");
     expect(projectsPage).not.toContain("router.replace('/projects')");
+    expect(projectsPage).toContain("import { createPortal } from 'react-dom'");
+    expect(projectsPage).toContain('createPortal((');
+    expect(projectsPage).toContain('document.body)');
+    expect(projectsPage).toContain("document.documentElement.classList.add('makaron-ios-project-overlay-open')");
+    expect(projectsPage).toContain("document.documentElement.classList.remove('makaron-ios-project-overlay-open')");
+    expect(globals).toContain('html.makaron-ios-project-overlay-open');
     expect(projectsPage).toContain('ProjectEditorContainer');
     expect(projectsPage).toContain('disableAgentLiveReload');
     expect(projectsPage).toContain('disableBodyScrollLock');

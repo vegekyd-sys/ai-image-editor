@@ -3,6 +3,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { Suspense, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
@@ -595,6 +596,14 @@ function ProjectsPageInner() {
     overlay.addEventListener('touchstart', blockNativeBackSwipe, { capture: true, passive: false })
     return () => overlay.removeEventListener('touchstart', blockNativeBackSwipe, { capture: true })
   }, [activeIOSProjectId])
+
+  useEffect(() => {
+    if (!useIOSInlineProjectNavigation || !activeIOSProjectId || typeof document === 'undefined') return
+    document.documentElement.classList.add('makaron-ios-project-overlay-open')
+    return () => {
+      document.documentElement.classList.remove('makaron-ios-project-overlay-open')
+    }
+  }, [useIOSInlineProjectNavigation, activeIOSProjectId])
 
   // Measure input box height → set photo slot width = height (square)
   useEffect(() => {
@@ -1416,13 +1425,14 @@ function ProjectsPageInner() {
         </div>
       )}
 
-      {renderedIOSProjectId && (
+      {renderedIOSProjectId && typeof document !== 'undefined' && createPortal((
         <div
           ref={iosProjectOverlayRef}
           data-makaron-ios-project-overlay="true"
           aria-hidden={activeIOSProjectId ? undefined : 'true'}
-          className="fixed inset-0 z-[240] bg-black"
+          className="fixed inset-0 bg-black"
           style={{
+            zIndex: 2147483000,
             transform: `translate3d(${iosProjectX}px, 0, 0)`,
             transition: iosProjectSettling ? `transform ${IOS_PROJECT_OVERLAY_CLOSE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none',
             willChange: iosProjectPanActive || iosProjectSettling ? 'transform' : undefined,
@@ -1442,8 +1452,8 @@ function ProjectsPageInner() {
           <ProjectEditorContainer
             key={renderedIOSProjectId}
             projectId={renderedIOSProjectId}
-            className=""
-            loadingClassName="h-dvh bg-black"
+            className="h-dvh w-full bg-black overflow-hidden"
+            loadingClassName="h-dvh w-full bg-black overflow-hidden"
             onBack={closeIOSProject}
             onProjectCreated={replaceIOSProject}
             disableAgentLiveReload
@@ -1451,7 +1461,7 @@ function ProjectsPageInner() {
             isInlineActive={activeIOSProjectId === renderedIOSProjectId}
           />
         </div>
-      )}
+      ), document.body)}
 
       {/* Welcome credits popup */}
       {showWelcome && creditBalance !== null && creditBalance > 0 && (

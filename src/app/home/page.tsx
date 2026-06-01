@@ -147,7 +147,6 @@ function HomePageInner() {
   const detailSwipeRef = useRef<{ startY: number; startIdx: number; swiping: boolean } | null>(null)
   const wheelCooldownRef = useRef(false)
   const [kbInset, setKbInset] = useState(0)
-  const [nativeKbInset, setNativeKbInset] = useState(0)
   const [textareaFocused, setTextareaFocused] = useState(false)
   const scrollStartY = useRef<number | null>(null)
   const inlineInputRef = useRef<HTMLDivElement>(null)
@@ -174,7 +173,22 @@ function HomePageInner() {
   selectedDetailRef.current = selectedDetail
   const homeSkillsRef = useRef(homeSkills)
   homeSkillsRef.current = homeSkills
-  const effectiveKbInset = Math.max(kbInset, nativeKbInset)
+
+  const blurHomeComposers = useCallback(() => {
+    textareaRef.current?.blur()
+    inlineTextareaRef.current?.blur()
+    setTextareaFocused(false)
+    setKbInset(0)
+  }, [])
+
+  const handleHomeTextareaBlur = useCallback(() => {
+    window.setTimeout(() => {
+      const active = document.activeElement
+      if (active === textareaRef.current || active === inlineTextareaRef.current) return
+      setTextareaFocused(false)
+      setKbInset(0)
+    }, 0)
+  }, [])
 
   const writeSkillDetailPath = useCallback((skillId: string, mode: 'push' | 'replace') => {
     const state = isIOSAppShell ? { makaronHomeSkill: true, skillId } : null
@@ -431,27 +445,6 @@ function HomePageInner() {
   }, [])
 
   useEffect(() => {
-    const readNativeInset = () => {
-      const raw = getComputedStyle(document.documentElement)
-        .getPropertyValue('--makaron-native-keyboard-inset')
-        .trim()
-      const next = Number.parseFloat(raw)
-      setNativeKbInset(Number.isFinite(next) ? Math.max(0, Math.round(next)) : 0)
-    }
-    const onNativeInset = (event: Event) => {
-      const inset = (event as CustomEvent<{ inset?: number }>).detail?.inset
-      if (typeof inset === 'number') {
-        setNativeKbInset(Math.max(0, Math.round(inset)))
-      } else {
-        readNativeInset()
-      }
-    }
-    readNativeInset()
-    window.addEventListener('makaron-keyboard-inset-change', onNativeInset)
-    return () => window.removeEventListener('makaron-keyboard-inset-change', onNativeInset)
-  }, [])
-
-  useEffect(() => {
     const el = inputBoxRef.current
     if (!el) return
     const ro = new ResizeObserver(([entry]) => {
@@ -480,7 +473,7 @@ function HomePageInner() {
     const onTouchMove = (e: TouchEvent) => {
       if (scrollStartY.current === null) return
       if (Math.abs(e.touches[0].clientY - scrollStartY.current) > 8) {
-        textareaRef.current?.blur()
+        blurHomeComposers()
       }
     }
     el.addEventListener('touchstart', onTouchStart, { passive: true })
@@ -489,7 +482,7 @@ function HomePageInner() {
       el.removeEventListener('touchstart', onTouchStart)
       el.removeEventListener('touchmove', onTouchMove)
     }
-  }, [])
+  }, [blurHomeComposers])
 
   useEffect(() => {
     if (selectedDetail) {
@@ -589,34 +582,11 @@ function HomePageInner() {
     const el = inlineInputRef.current
     if (!el) return
     const io = new IntersectionObserver(([entry]) => {
-      setShowFixedInput(textareaFocused || !entry.isIntersecting)
+      setShowFixedInput(!entry.isIntersecting)
     }, { threshold: 0.1 })
     io.observe(el)
     return () => io.disconnect()
-  }, [textareaFocused])
-
-  useEffect(() => {
-    if (isDesktop) return
-    const syncFixedInput = () => {
-      const inlineRect = inlineInputRef.current?.getBoundingClientRect()
-      const inlineMostlyVisible = inlineRect
-        ? inlineRect.top >= 0 && inlineRect.bottom <= window.innerHeight * 0.72
-        : false
-      const scrollTop = Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)
-      setShowFixedInput(textareaFocused || !inlineMostlyVisible || scrollTop > 24)
-    }
-    syncFixedInput()
-    window.addEventListener('scroll', syncFixedInput, { passive: true })
-    window.addEventListener('resize', syncFixedInput)
-    window.visualViewport?.addEventListener('resize', syncFixedInput)
-    window.visualViewport?.addEventListener('scroll', syncFixedInput)
-    return () => {
-      window.removeEventListener('scroll', syncFixedInput)
-      window.removeEventListener('resize', syncFixedInput)
-      window.visualViewport?.removeEventListener('resize', syncFixedInput)
-      window.visualViewport?.removeEventListener('scroll', syncFixedInput)
-    }
-  }, [isDesktop, textareaFocused])
+  }, [])
 
   useEffect(() => {
     const el = inlineBoxRef.current
@@ -666,26 +636,6 @@ function HomePageInner() {
 
   const cardSwipeRef = useRef<HTMLDivElement>(null)
   const inlineCardSwipeRef = useRef<HTMLDivElement>(null)
-
-  const focusFixedComposer = useCallback(() => {
-    setTextareaFocused(true)
-    setShowFixedInput(true)
-    if (isDesktop) return
-    window.requestAnimationFrame(() => {
-      window.setTimeout(() => {
-        textareaRef.current?.focus({ preventScroll: true })
-        resizeTextarea()
-      }, 16)
-    })
-  }, [isDesktop, resizeTextarea])
-
-  const handleComposerBlur = useCallback(() => {
-    window.setTimeout(() => {
-      const active = document.activeElement
-      if (active === textareaRef.current || active === inlineTextareaRef.current) return
-      setTextareaFocused(false)
-    }, 0)
-  }, [])
 
   const [dragOver, setDragOver] = useState(false)
   const dragCounterRef = useRef(0)
@@ -1025,7 +975,7 @@ function HomePageInner() {
           background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
         }} />
 
-        <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
+        <div style={{ display: viewMode === 'agent' || selectedDetail ? 'none' : undefined }}>
           <TopBar page="home" />
         </div>
 
@@ -1057,6 +1007,7 @@ function HomePageInner() {
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
+            ...(isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}),
           }}>
             <CreateInputBox
               input={createInput}
@@ -1072,8 +1023,8 @@ function HomePageInner() {
               showLoginIcon={!user}
               onSubmit={handleCreate}
               onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
-              onTextareaFocus={focusFixedComposer}
-              onTextareaBlur={handleComposerBlur}
+              onTextareaFocus={() => setTextareaFocused(true)}
+              onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
@@ -1201,7 +1152,7 @@ function HomePageInner() {
         {/* ── Bottom Input Box (fixed, slides in when inline is off-screen) ── */}
         <div ref={inputWrapperRef} data-makaron-home-fixed-composer="true" style={{
           position: 'fixed', left: 0, right: 0,
-          bottom: textareaFocused && effectiveKbInset > 0 ? `${effectiveKbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
+          bottom: textareaFocused && kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
           zIndex: Z.INPUT,
           pointerEvents: 'none',
           ...(isDesktop ? {
@@ -1235,8 +1186,8 @@ function HomePageInner() {
               showLoginIcon={!user}
               onSubmit={handleCreate}
               onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
-              onTextareaFocus={focusFixedComposer}
-              onTextareaBlur={handleComposerBlur}
+              onTextareaFocus={() => setTextareaFocused(true)}
+              onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}

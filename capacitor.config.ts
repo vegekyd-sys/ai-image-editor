@@ -21,6 +21,7 @@ const config: CapacitorConfig = {
       'makaron.app',
       'cdn.makaron.app',
     ],
+    errorPath: 'index.html',
   },
   plugins: {
     Keyboard: {

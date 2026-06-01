@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DashboardPage from '@/app/dashboard/page';
 import SkillsPage from '@/app/skills/page';
@@ -164,5 +164,21 @@ describe('iOS secondary pages app-like behavior', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 5));
     expect(events).toContain('warm:/api/billing/dashboard');
     expect(events.indexOf('push:/dashboard')).toBeLessThan(events.indexOf('warm:/api/billing/dashboard'));
+  });
+
+  it('keeps the account menu trigger as a reliable native-sized touch target', () => {
+    mocks.readNativeJSONCache.mockImplementation((path: string) => {
+      if (path === '/api/billing/credits') return { balance: 42 };
+      return null;
+    });
+
+    render(<TopBar page="home" />);
+    const trigger = screen.getByRole('button', { name: '打开个人菜单' });
+    expect(trigger.getAttribute('data-makaron-user-menu-trigger')).toBe('true');
+    expect(trigger.getAttribute('style')).toContain('min-width: 44px');
+    expect(trigger.getAttribute('style')).toContain('min-height: 44px');
+
+    fireEvent.click(trigger);
+    expect(screen.getByText('获取 API')).toBeTruthy();
   });
 });

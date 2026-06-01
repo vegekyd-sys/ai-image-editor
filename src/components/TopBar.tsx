@@ -138,7 +138,7 @@ export default function TopBar({ page }: TopBarProps) {
 
   return (
     <>
-      <div className="makaron-topbar" style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 50 }}>
+      <div className="makaron-topbar" style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 140 }}>
         {/* Left side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {page === 'home' && user && (
@@ -225,13 +225,25 @@ export default function TopBar({ page }: TopBarProps) {
           {user ? (
             <div ref={userMenuRef} style={{ position: 'relative' }}>
               <button
+                type="button"
+                aria-label={locale === 'zh' ? '打开个人菜单' : 'Open account menu'}
+                data-makaron-user-menu-trigger="true"
                 onClick={() => setUserMenuOpen(v => !v)}
                 style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
+                  background: userMenuOpen ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: 12,
+                  cursor: 'pointer',
                   fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
                   color: userMenuOpen ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.45)',
-                  transition: 'color 0.2s',
+                  transition: 'color 0.2s, background 0.2s, border-color 0.2s',
                   display: 'flex', alignItems: 'center', gap: 4,
+                  minWidth: 44,
+                  minHeight: 44,
+                  padding: '0 12px',
+                  justifyContent: 'center',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
                 onMouseLeave={e => { if (!userMenuOpen) e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
@@ -259,7 +271,7 @@ export default function TopBar({ page }: TopBarProps) {
                     position: 'absolute', top: '100%', right: 0, marginTop: 8,
                     background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
                     borderRadius: 12, padding: '4px 0', minWidth: 200,
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 240,
 	                  }}>
 	                    {/* User card header */}
                     <button
