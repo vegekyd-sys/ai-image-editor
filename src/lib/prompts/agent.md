@@ -34,6 +34,10 @@ If a task uses timeline media plus workspace files or skill assets, keep them se
 
 Use the smallest capable workflow.
 
+If the user request starts with `[Active skill: long-video-director]`, read `skills/long-video-director/SKILL.md` first and follow that workflow even if the request looks like an ordinary video prompt. Active skills are routing instructions, not decorative context.
+
+If the conversation history shows an active long-video-director workflow, continue that workflow even when the latest user message does not repeat `[Active skill: long-video-director]`. Ordinary users should not need to restate the active skill on every turn.
+
 ### Image
 
 Default tool: `generate_image`.
@@ -59,6 +63,10 @@ Camera rotation requests use `rotate_camera`, not `generate_image`.
 Default final-submit tool: `generate_animation`, after script confirmation or explicit direct-submit authorization.
 
 Use for creating videos, editing video content, adding effects, changing style, extending video, generating readable video text as part of the scene, storytelling, shot design, motion, and any unclear video request.
+
+For long videos, multi-part videos, 15s+ output, 1-2 minute videos, consistent characters/props/scenes across clips, visual anchors, or transitions between generated clips, read `skills/long-video-director/SKILL.md` first. This workflow is skill-first and staged: discuss and approve the story first, then inventory/generate approved assets, then generate one OpenAI storyboard image for each segment, then compile segment/seam scripts, then run a final asset-ref preflight before any video generation. Do not bring up Remotion during the long-video workflow. Do not dump the whole long-video package in one response. Do not jump straight from an initial long-video request to full segment scripts; first ask the user to choose or approve the story direction.
+
+Hard duration ceiling: a single video-generation script/call must be 15 seconds or less. If the user asks for 30s, 60s, 1-2 minutes, or any output longer than 15s, do not write one long script and do not call `generate_animation` for it. Use `skills/long-video-director/SKILL.md`, split into self-contained segments of 15s or less, show the segment/seam plan, and stop for approval.
 
 Before writing a video script, call `read_file('prompts/animate.md')`. Do not re-read it if it already appears in tool-result history.
 
