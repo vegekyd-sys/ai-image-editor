@@ -117,6 +117,7 @@ describe('iOS App Store readiness guardrails', () => {
     const nativePhotoPicker = fs.readFileSync(path.join(root, 'src/lib/native-photo-picker.ts'), 'utf8');
     const projectsListWarm = fs.readFileSync(path.join(root, 'src/lib/projects-list-warm.ts'), 'utf8');
     const projectEditorCache = fs.readFileSync(path.join(root, 'src/lib/project-editor-cache.ts'), 'utf8');
+    const imageCache = fs.readFileSync(path.join(root, 'src/lib/imageCache.ts'), 'utf8');
 
     expect(bootstrap).toContain('IOS_PAGE_BACK_EDGE_PX');
     expect(bootstrap).toContain('IOS_PAGE_BACK_COMMIT_PX');
@@ -139,9 +140,13 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bootstrap).toContain('warmNativeJSONCache(path)');
     expect(dashboard).toContain("readNativeJSONCache<DashboardPayload>('/api/billing/dashboard')");
     expect(dashboard).toContain("writeNativeJSONCache('/api/billing/dashboard', data)");
+    expect(dashboard).toContain('if (!cachedDashboard) setLoading(true)');
+    expect(dashboard).not.toContain("useEffect(() => {\n    setLoading(true)\n    fetchDashboard().finally(() => setLoading(false))");
     expect(skills).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(skills).toContain("writeNativeJSONCache('/api/skills', data)");
-    expect(nativeCache).toContain('sessionStorage.setItem');
+    expect(nativeCache).toContain('window.sessionStorage');
+    expect(nativeCache).toContain('localStorage');
+    expect(nativeCache).toContain("getStorage('local')");
     expect(nativeCache).toContain('removeNativeJSONCache');
     expect(authProvider).toContain("const AUTH_USER_CACHE_KEY = '/auth/user'");
     expect(authProvider).toContain('isMakaronIOSApp');
@@ -150,16 +155,36 @@ describe('iOS App Store readiness guardrails', () => {
     expect(authProvider).toContain('readNativeJSONCache<User>(AUTH_USER_CACHE_KEY)');
     expect(authProvider).toContain('writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)');
     expect(authProvider).toContain('removeNativeJSONCache(AUTH_USER_CACHE_KEY)');
+    expect(authProvider).toContain('warmNativeUserCaches');
+    expect(authProvider).toContain("warmNativeJSONCache('/api/billing/credits')");
+    expect(authProvider).toContain("warmNativeJSONCache('/api/billing/dashboard')");
+    expect(authProvider).toContain("warmNativeJSONCache('/api/skills')");
+    expect(authProvider).toContain("warmNativeJSONCache('/api/home-skills')");
+    expect(authProvider).toContain('warmProjectsListCache(userId)');
     expect(topBar).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(topBar).toContain("writeNativeJSONCache('/api/billing/credits', d)");
     expect(topBar).toContain('TOPBAR_ROUTE_WARM_APIS');
+    expect(topBar).toContain('scheduleTopBarWarm');
     expect(topBar).toContain('warmTopBarMenuRoutes');
     expect(topBar).toContain("['/profile', '/dashboard', '/dashboard?tab=keys', '/skills'].forEach(warmTopBarRoute)");
-    expect(topBar).toContain('onPointerDown={warmTopBarMenuRoutes}');
+    expect(topBar).toContain('router.push(path)');
+    expect(topBar).toContain("requestIdleCallback(warm, { timeout: 1600 })");
+    expect(topBar).toContain('window.setTimeout(warm, 240)');
+    expect(topBar).not.toContain('window.setTimeout(() => warmTopBarRoute(path), 0)');
+    const navigateTopBarStart = topBar.indexOf('const navigateTopBar');
+    expect(topBar.indexOf('router.push(path)', navigateTopBarStart)).toBeLessThan(topBar.indexOf('scheduleTopBarWarm(path)', navigateTopBarStart));
+    expect(topBar).toContain('if (!userMenuOpen) return');
+    expect(topBar).toContain('warmTopBarMenuRoutes()');
     expect(topBar).toContain("aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}");
     expect(topBar).toContain("onClick={() => navigateTopBar('/dashboard')}");
-    expect(topBar).toContain("onPointerDown={() => warmTopBarRoute('/dashboard')}");
-    expect(topBar).toContain("onPointerDown={() => warmTopBarRoute('/skills')}");
+    expect(topBar).not.toContain('onPointerDown={warmTopBarMenuRoutes}');
+    expect(topBar).not.toContain("onPointerDown={() => scheduleTopBarWarm('/dashboard')}");
+    expect(topBar).not.toContain("onPointerDown={() => scheduleTopBarWarm('/projects')}");
+    expect(topBar).not.toContain("onPointerDown={() => scheduleTopBarWarm('/home')}");
+    expect(topBar).not.toContain("onPointerDown={() => warmTopBarRoute('/dashboard')}");
+    expect(topBar).not.toContain("onPointerDown={() => warmTopBarRoute('/projects')}");
+    expect(topBar).not.toContain("onPointerDown={() => warmTopBarRoute('/home')}");
+    expect(topBar).not.toContain("onPointerDown={() => warmTopBarRoute('/skills')}");
     expect(editor).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(editor).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(editor).toContain("writeNativeJSONCache('/api/skills', d)");
@@ -170,6 +195,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projects).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(projectsListWarm).toContain('warmProjectsListCache');
     expect(projectsListWarm).toContain('cacheProjectsList(userId, projects)');
+    expect(imageCache).toContain('PROJECTS_LIST_LOCAL_KEY');
+    expect(imageCache).toContain('localStorage.setItem(PROJECTS_LIST_LOCAL_KEY');
     expect(topBar).toContain('warmProjectsListCache(user.id)');
     expect(creditPopup).toContain("writeNativeJSONCache('/api/billing/credits', data)");
     expect(projectEditorCache).toContain('warmProjectEditorCache');
@@ -181,6 +208,16 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bootstrap).toContain('acceptsNativePhotoPicker');
     expect(bootstrap).toContain('acceptsNativeMediaPickerAccept(input.accept)');
     expect(bootstrap).toContain('nativePickerAllowsVideo(input.accept)');
+    expect(bootstrap).toContain('getIOSPageBackBackdropRoute');
+    expect(bootstrap).toContain('document.createElement(\'iframe\')');
+    expect(bootstrap).toContain('showPageBackBackdrop(true)');
+    expect(bootstrap).toContain('showPageBackBackdrop(false)');
+    expect(bootstrap).toContain('makaron-ios-warm-page-backdrop');
+    expect(bootstrap).toContain('schedulePageBackBackdropWarm()');
+    expect(bootstrap).toContain('hidePageBackBackdrop()');
+    expect(bootstrap).toContain('IOS_LAST_PRIMARY_ROUTE_KEY');
+    expect(topBar).toContain('sessionStorage.setItem(IOS_LAST_PRIMARY_ROUTE_KEY, currentPath)');
+    expect(topBar).toContain("window.dispatchEvent(new Event('makaron-ios-warm-page-backdrop'))");
     expect(nativePhotoPicker).toContain("normalized.includes('video/')");
     expect(nativePhotoPicker).toContain("normalized.includes('.heic')");
     expect(bootstrap).toContain("input.dispatchEvent(new Event('change'");
@@ -203,6 +240,17 @@ describe('iOS App Store readiness guardrails', () => {
     expect(skills).toContain('makaron-ios-page');
     expect(profile).toContain('makaron-ios-page');
     expect(admin).toContain('makaron-ios-page');
+    expect(dashboard).toContain('makaron-ios-page makaron-ios-page-x');
+    expect(profile).toContain('makaron-ios-page makaron-ios-page-x');
+    expect(admin).toContain('makaron-ios-page makaron-ios-page-x');
+    expect(dashboard).not.toContain('makaron-ios-page min-h-dvh bg-black text-white p-6 max-w-2xl mx-auto');
+    expect(profile).not.toContain('makaron-ios-page min-h-dvh bg-black text-white p-6 max-w-lg mx-auto');
+    expect(admin).not.toContain('makaron-ios-page min-h-dvh bg-black text-white p-6 max-w-2xl mx-auto');
+    expect(agentContent).not.toContain('makaron-ios-page makaron-ios-page-x min-h-screen w-full bg-black text-gray-200 font-mono p-6 md:p-12 max-w-4xl mx-auto');
+    expect(dashboard).toContain('<div className="max-w-2xl mx-auto">');
+    expect(profile).toContain('<div className="max-w-lg mx-auto">');
+    expect(admin).toContain('<div className="max-w-2xl mx-auto">');
+    expect(agentContent).toContain('<div className="max-w-4xl mx-auto">');
     expect(adminStatus).toContain('makaron-ios-page');
     expect(demo3d).toContain('makaron-ios-page');
     expect(videoRelease).toContain('makaron-ios-page');
@@ -228,6 +276,8 @@ describe('iOS App Store readiness guardrails', () => {
       { route: '/s/[code]', file: 'src/app/s/[code]/page.tsx', required: ['makaron-ios-page'] },
       { route: '/login', file: 'src/app/login/page.tsx', required: ['makaron-ios-page', 'userAgentHasMakaronIOSToken'] },
       { route: '/activate', file: 'src/app/activate/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/landingpage', file: 'src/app/landingpage/page.tsx', required: ['makaron-ios-page'] },
+      { route: '/moveable-test', file: 'src/app/moveable-test/page.tsx', required: ['makaron-ios-page'] },
     ];
 
     for (const page of appShellRoutes) {
@@ -253,6 +303,65 @@ describe('iOS App Store readiness guardrails', () => {
     expect(agentContent).toContain('makaron-ios-page');
     expect(editor).toContain('makaron-editor-shell');
     expect(editor).toContain('data-makaron-cui-pan');
+  });
+
+  it('keeps every current app page classified for iOS app-shell coverage', () => {
+    const appDir = path.join(root, 'src/app');
+    const pages: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name === 'page.tsx') pages.push(path.relative(root, full));
+      }
+    };
+    walk(appDir);
+
+    const shellCovered = new Set([
+      'src/app/activate/page.tsx',
+      'src/app/admin/page.tsx',
+      'src/app/admin/status/page.tsx',
+      'src/app/claim/page.tsx',
+      'src/app/dashboard/page.tsx',
+      'src/app/demo-3d/page.tsx',
+      'src/app/landingpage/page.tsx',
+      'src/app/login/page.tsx',
+      'src/app/mcp/page.tsx',
+      'src/app/moveable-test/page.tsx',
+      'src/app/profile/page.tsx',
+      'src/app/releases/video-in-timeline/page.tsx',
+      'src/app/s/[code]/page.tsx',
+      'src/app/skills/page.tsx',
+    ]);
+    const handledByComposition = new Set([
+      'src/app/agent/page.tsx',
+      'src/app/home/page.tsx',
+      'src/app/projects/page.tsx',
+      'src/app/projects/[id]/page.tsx',
+    ]);
+    const redirectsOnly = new Set([
+      'src/app/page.tsx',
+      'src/app/home/[skillId]/page.tsx',
+    ]);
+
+    expect([...shellCovered, ...handledByComposition, ...redirectsOnly].sort()).toEqual([...pages].sort());
+
+    for (const file of shellCovered) {
+      const source = fs.readFileSync(path.join(root, file), 'utf8');
+      expect(source, `${file} should include iOS page shell`).toContain('makaron-ios-page');
+      expect(source, `${file} should include horizontal safe-area shell`).toContain('makaron-ios-page-x');
+      const shellLines = source.split('\n').filter((line) => line.includes('makaron-ios-page'));
+      for (const line of shellLines) {
+        expect(line, `${file} must not constrain the iOS shell width`).not.toMatch(/\b(max-w-|mx-auto)\b/);
+      }
+    }
+    expect(fs.readFileSync(path.join(root, 'src/app/agent/page.tsx'), 'utf8')).toContain('AgentContent');
+    expect(fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8')).toContain('AgentContent');
+    expect(fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8')).toContain('data-makaron-ios-project-overlay');
+    expect(fs.readFileSync(path.join(root, 'src/app/projects/[id]/page.tsx'), 'utf8')).toContain('ProjectEditorContainer');
+    for (const file of redirectsOnly) {
+      expect(fs.readFileSync(path.join(root, file), 'utf8'), `${file} should be redirect-only`).toContain('redirect(');
+    }
   });
 
   it('saves editor images and videos through native Photos on iOS before web fallbacks', () => {
@@ -315,11 +424,19 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bootstrap).toContain('nativeKeyboardInset');
     expect(bootstrap).toContain('viewportKeyboardInset');
     expect(bootstrap).toContain('Math.max(nativeKeyboardInset, viewportKeyboardInset)');
+    expect(bootstrap).toContain('keyboardWillShow');
+    expect(bootstrap).toContain('keyboardDidShow');
+    expect(bootstrap).toContain('keyboardWillHide');
+    expect(bootstrap).toContain('keyboardDidHide');
     expect(chat).toContain('nativeKbInset');
     expect(chat).toContain('effectiveKbInset');
     expect(chat).toContain('keyboardInsetCss');
     expect(chat).toContain('var(--makaron-native-keyboard-inset');
     expect(chat).toContain('calc(${inputBarH}px + ${keyboardInsetCss})');
+    expect(chat).toContain("className={isPanel ? 'flex-shrink-0 px-3' : 'fixed left-0 right-0 px-3'}");
+    expect(chat).toContain('keepInputAboveKeyboard');
+    expect(chat).toContain('onFocus={keepInputAboveKeyboard}');
+    expect(chat).toContain("scrollIntoView({ block: 'end', inline: 'nearest' })");
   });
 
   it('keeps iOS home skill detail back swipe scoped to the skill overlay', () => {

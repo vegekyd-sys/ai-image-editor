@@ -18,6 +18,8 @@ interface CreditsPayload {
   balance?: number
 }
 
+const IOS_LAST_PRIMARY_ROUTE_KEY = 'makaron:ios-last-primary-route'
+
 const TOPBAR_ROUTE_WARM_APIS: Record<string, string[]> = {
   '/home': ['/api/home-skills', '/api/skills'],
   '/projects': ['/api/skills', '/api/billing/credits'],
@@ -55,14 +57,45 @@ export default function TopBar({ page }: TopBarProps) {
     }
   }, [router, user?.id])
 
+  const scheduleTopBarWarm = useCallback((path: string) => {
+    const warm = () => warmTopBarRoute(path)
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(warm, { timeout: 1600 })
+      return
+    }
+    window.setTimeout(warm, 240)
+  }, [warmTopBarRoute])
+
   const navigateTopBar = useCallback((path: string) => {
     setUserMenuOpen(false)
-    warmTopBarRoute(path)
+    if (isMakaronIOSApp()) {
+      const currentPath = window.location.pathname
+      if (currentPath === '/home' || currentPath === '/projects') {
+        try {
+          sessionStorage.setItem(IOS_LAST_PRIMARY_ROUTE_KEY, currentPath)
+        } catch {
+          // Best-effort visual backdrop for native-like secondary page back.
+        }
+      }
+    }
     router.push(path)
-  }, [router, warmTopBarRoute])
+    if (isMakaronIOSApp()) {
+      window.setTimeout(() => {
+        window.dispatchEvent(new Event('makaron-ios-warm-page-backdrop'))
+      }, 320)
+    }
+    scheduleTopBarWarm(path)
+  }, [router, scheduleTopBarWarm])
 
   const warmTopBarMenuRoutes = useCallback(() => {
-    ['/profile', '/dashboard', '/dashboard?tab=keys', '/skills'].forEach(warmTopBarRoute)
+    const warm = () => {
+      ['/profile', '/dashboard', '/dashboard?tab=keys', '/skills'].forEach(warmTopBarRoute)
+    }
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(warm, { timeout: 1600 })
+      return
+    }
+    window.setTimeout(warm, 240)
   }, [warmTopBarRoute])
 
   useEffect(() => {
@@ -91,6 +124,7 @@ export default function TopBar({ page }: TopBarProps) {
 
   useEffect(() => {
     if (!userMenuOpen) return
+    warmTopBarMenuRoutes()
     const handler = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false)
@@ -98,7 +132,7 @@ export default function TopBar({ page }: TopBarProps) {
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [userMenuOpen])
+  }, [userMenuOpen, warmTopBarMenuRoutes])
 
   return (
     <>
@@ -107,8 +141,6 @@ export default function TopBar({ page }: TopBarProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {page === 'home' && user && (
             <button
-              onPointerDown={() => warmTopBarRoute('/projects')}
-              onFocus={() => warmTopBarRoute('/projects')}
               onClick={() => navigateTopBar('/projects')}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
@@ -128,8 +160,6 @@ export default function TopBar({ page }: TopBarProps) {
           )}
           {page === 'projects' && (
             <button
-              onPointerDown={() => warmTopBarRoute('/home')}
-              onFocus={() => warmTopBarRoute('/home')}
               onClick={() => navigateTopBar('/home')}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
@@ -168,8 +198,6 @@ export default function TopBar({ page }: TopBarProps) {
             <button
               type="button"
               aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}
-              onPointerDown={() => warmTopBarRoute('/dashboard')}
-              onFocus={() => warmTopBarRoute('/dashboard')}
               onClick={() => navigateTopBar('/dashboard')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
@@ -195,8 +223,6 @@ export default function TopBar({ page }: TopBarProps) {
           {user ? (
             <div ref={userMenuRef} style={{ position: 'relative' }}>
               <button
-                onPointerDown={warmTopBarMenuRoutes}
-                onFocus={warmTopBarMenuRoutes}
                 onClick={() => setUserMenuOpen(v => !v)}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -235,8 +261,6 @@ export default function TopBar({ page }: TopBarProps) {
 	                  }}>
 	                    {/* User card header */}
                     <button
-                      onPointerDown={() => warmTopBarRoute('/profile')}
-                      onFocus={() => warmTopBarRoute('/profile')}
                       onClick={() => navigateTopBar('/profile')}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10, width: '100%',
@@ -270,8 +294,6 @@ export default function TopBar({ page }: TopBarProps) {
                     </button>
                     <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
                     <button
-                      onPointerDown={() => warmTopBarRoute('/dashboard')}
-                      onFocus={() => warmTopBarRoute('/dashboard')}
                       onClick={() => navigateTopBar('/dashboard')}
                       style={menuBtnStyle}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
@@ -280,8 +302,6 @@ export default function TopBar({ page }: TopBarProps) {
                       {locale === 'zh' ? '数据面板' : 'Dashboard'}
                     </button>
                     <button
-                      onPointerDown={() => warmTopBarRoute('/dashboard?tab=keys')}
-                      onFocus={() => warmTopBarRoute('/dashboard?tab=keys')}
                       onClick={() => navigateTopBar('/dashboard?tab=keys')}
                       style={menuBtnStyle}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
@@ -290,8 +310,6 @@ export default function TopBar({ page }: TopBarProps) {
                       {locale === 'zh' ? '获取 API' : 'Get API'}
                     </button>
                     <button
-                      onPointerDown={() => warmTopBarRoute('/skills')}
-                      onFocus={() => warmTopBarRoute('/skills')}
                       onClick={() => navigateTopBar('/skills')}
                       style={menuBtnStyle}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
@@ -336,8 +354,6 @@ export default function TopBar({ page }: TopBarProps) {
                 {locale === 'zh' ? 'EN' : '中文'}
               </button>
               <button
-                onPointerDown={() => warmTopBarRoute('/login')}
-                onFocus={() => warmTopBarRoute('/login')}
                 onClick={() => navigateTopBar('/login')}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',

@@ -13,6 +13,7 @@ const IOS_PAGE_BACK_EDGE_PX = 32;
 const IOS_PAGE_BACK_LOCK_PX = 12;
 const IOS_PAGE_BACK_COMMIT_PX = 92;
 const IOS_PAGE_BACK_SETTLE_MS = 180;
+const IOS_LAST_PRIMARY_ROUTE_KEY = 'makaron:ios-last-primary-route';
 const NATIVE_APP_PREFETCH_ROUTES = ['/home', '/projects', '/dashboard', '/profile', '/skills'];
 const NATIVE_APP_WARM_API_PATHS = ['/api/home-skills', '/api/skills', '/api/billing/credits', '/api/billing/dashboard'];
 
@@ -32,6 +33,16 @@ function shouldUsePageBackGesture(): boolean {
   if (document.querySelector('[data-makaron-cui-pan]')) return false;
   if (document.querySelector('.mkr-detail-snap')) return false;
   return true;
+}
+
+function getIOSPageBackBackdropRoute(): string {
+  try {
+    const stored = sessionStorage.getItem(IOS_LAST_PRIMARY_ROUTE_KEY);
+    if (stored === '/home' || stored === '/projects') return stored;
+  } catch {
+    // Storage is best-effort; /projects is the safest app fallback.
+  }
+  return '/projects';
 }
 
 function warmNativeAppShell(router: ReturnType<typeof useRouter>) {
@@ -124,8 +135,69 @@ export default function NativeAppBootstrap() {
         originalTransition: '',
         originalWillChange: '',
         originalBoxShadow: '',
+        originalPosition: '',
+        originalZIndex: '',
       };
       let pageBackRestoreTimer: number | undefined;
+      let pageBackBackdrop: HTMLIFrameElement | null = null;
+      let pageBackBackdropTimer: number | undefined;
+      const hidePageBackBackdrop = () => {
+        if (pageBackBackdropTimer !== undefined) {
+          window.clearTimeout(pageBackBackdropTimer);
+          pageBackBackdropTimer = undefined;
+        }
+        if (!pageBackBackdrop) return;
+        pageBackBackdrop.style.opacity = '0';
+        pageBackBackdropTimer = window.setTimeout(() => {
+          pageBackBackdrop?.remove();
+          pageBackBackdrop = null;
+          pageBackBackdropTimer = undefined;
+        }, 220);
+      };
+      const showPageBackBackdrop = (visible = true) => {
+        const route = getIOSPageBackBackdropRoute();
+        if (!pageBackBackdrop) {
+          pageBackBackdrop = document.createElement('iframe');
+          pageBackBackdrop.setAttribute('aria-hidden', 'true');
+          pageBackBackdrop.tabIndex = -1;
+          pageBackBackdrop.src = route;
+          pageBackBackdrop.style.position = 'fixed';
+          pageBackBackdrop.style.inset = '0';
+          pageBackBackdrop.style.width = '100%';
+          pageBackBackdrop.style.height = '100%';
+          pageBackBackdrop.style.border = '0';
+          pageBackBackdrop.style.background = '#000';
+          pageBackBackdrop.style.pointerEvents = 'none';
+          pageBackBackdrop.style.zIndex = '0';
+          pageBackBackdrop.style.opacity = '0';
+          pageBackBackdrop.style.transition = 'opacity 120ms ease';
+          document.body.appendChild(pageBackBackdrop);
+        } else if (pageBackBackdrop.getAttribute('src') !== route) {
+          pageBackBackdrop.src = route;
+        }
+        if (pageBackBackdropTimer !== undefined) {
+          window.clearTimeout(pageBackBackdropTimer);
+          pageBackBackdropTimer = undefined;
+        }
+        if (visible) {
+          window.requestAnimationFrame(() => {
+            if (pageBackBackdrop) pageBackBackdrop.style.opacity = '1';
+          });
+        } else {
+          pageBackBackdrop.style.opacity = '0';
+        }
+      };
+      const warmPageBackBackdrop = () => {
+        if (!shouldUsePageBackGesture()) return;
+        showPageBackBackdrop(false);
+      };
+      const schedulePageBackBackdropWarm = () => {
+        if (typeof window.requestIdleCallback === 'function') {
+          window.requestIdleCallback(warmPageBackBackdrop, { timeout: 1400 });
+          return;
+        }
+        window.setTimeout(warmPageBackBackdrop, 360);
+      };
       const resetPageBackPan = () => {
         pageBackPan.tracking = false;
         pageBackPan.locked = false;
@@ -145,6 +217,8 @@ export default function NativeAppBootstrap() {
         target.style.transition = pageBackPan.originalTransition;
         target.style.willChange = pageBackPan.originalWillChange;
         target.style.boxShadow = pageBackPan.originalBoxShadow;
+        target.style.position = pageBackPan.originalPosition;
+        target.style.zIndex = pageBackPan.originalZIndex;
         pageBackPan.target = null;
       };
       const cancelPageBackPan = () => {
@@ -155,6 +229,7 @@ export default function NativeAppBootstrap() {
         target.style.transform = 'translate3d(0, 0, 0)';
         target.style.boxShadow = pageBackPan.originalBoxShadow;
         pageBackRestoreTimer = window.setTimeout(restorePageBackTarget, IOS_PAGE_BACK_SETTLE_MS + 40);
+        hidePageBackBackdrop();
       };
       const preparePageBackTarget = (): boolean => {
         if (pageBackPan.target) return true;
@@ -165,6 +240,13 @@ export default function NativeAppBootstrap() {
         pageBackPan.originalTransition = target.style.transition;
         pageBackPan.originalWillChange = target.style.willChange;
         pageBackPan.originalBoxShadow = target.style.boxShadow;
+        pageBackPan.originalPosition = target.style.position;
+        pageBackPan.originalZIndex = target.style.zIndex;
+        showPageBackBackdrop(true);
+        if (getComputedStyle(target).position === 'static') {
+          target.style.position = 'relative';
+        }
+        target.style.zIndex = '2';
         target.style.transition = 'none';
         target.style.willChange = 'transform';
         target.style.transform = 'translate3d(0, 0, 0)';
@@ -233,12 +315,15 @@ export default function NativeAppBootstrap() {
           } else {
             window.location.assign('/home');
           }
+          window.setTimeout(hidePageBackBackdrop, 500);
         }, IOS_PAGE_BACK_SETTLE_MS);
       };
       window.addEventListener('touchstart', onPageBackTouchStart, { passive: true, capture: true });
       window.addEventListener('touchmove', onPageBackTouchMove, { passive: false, capture: true });
       window.addEventListener('touchend', onPageBackTouchEnd, { passive: false, capture: true });
       window.addEventListener('touchcancel', cancelPageBackPan, { passive: true, capture: true });
+      window.addEventListener('makaron-ios-warm-page-backdrop', schedulePageBackBackdropWarm);
+      schedulePageBackBackdropWarm();
 
       const onNativePhotoInputClick = async (event: MouseEvent) => {
         const input = event.target instanceof HTMLInputElement
@@ -302,15 +387,20 @@ export default function NativeAppBootstrap() {
         applyKeyboardInset();
       };
 
-      const keyboardShow = await Keyboard.addListener('keyboardWillShow', (info) => {
+      const onKeyboardShow = (info: { keyboardHeight: number }) => {
         nativeKeyboardInset = info.keyboardHeight;
         applyKeyboardInset();
-      });
-      const keyboardHide = await Keyboard.addListener('keyboardWillHide', () => {
+      };
+      const onKeyboardHide = () => {
         nativeKeyboardInset = 0;
         viewportKeyboardInset = 0;
         applyKeyboardInset();
-      });
+      };
+
+      const keyboardWillShow = await Keyboard.addListener('keyboardWillShow', onKeyboardShow);
+      const keyboardDidShow = await Keyboard.addListener('keyboardDidShow', onKeyboardShow);
+      const keyboardWillHide = await Keyboard.addListener('keyboardWillHide', onKeyboardHide);
+      const keyboardDidHide = await Keyboard.addListener('keyboardDidHide', onKeyboardHide);
 
       window.visualViewport?.addEventListener('resize', updateFromViewport);
       window.visualViewport?.addEventListener('scroll', updateFromViewport);
@@ -327,10 +417,14 @@ export default function NativeAppBootstrap() {
         window.removeEventListener('touchmove', onPageBackTouchMove, { capture: true });
         window.removeEventListener('touchend', onPageBackTouchEnd, { capture: true });
         window.removeEventListener('touchcancel', cancelPageBackPan, { capture: true });
+        window.removeEventListener('makaron-ios-warm-page-backdrop', schedulePageBackBackdropWarm);
         restorePageBackTarget();
+        hidePageBackBackdrop();
         document.removeEventListener('click', onNativePhotoInputClick, { capture: true });
-        keyboardShow.remove();
-        keyboardHide.remove();
+        keyboardWillShow.remove();
+        keyboardDidShow.remove();
+        keyboardWillHide.remove();
+        keyboardDidHide.remove();
         window.visualViewport?.removeEventListener('resize', updateFromViewport);
         window.visualViewport?.removeEventListener('scroll', updateFromViewport);
         setInset(0);

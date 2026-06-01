@@ -3,6 +3,7 @@ const STORE = 'images'
 const PROJECT_STORE = 'project-data'
 const PROJECTS_LIST_STORE = 'projects-list'
 const PROJECTS_LIST_SESSION_KEY = 'makaron:last-projects-list'
+const PROJECTS_LIST_LOCAL_KEY = 'makaron:last-projects-list:persistent'
 const TTL_MS = 30 * 24 * 60 * 60 * 1000  // 30 days
 
 interface CacheEntry {
@@ -199,11 +200,15 @@ export function cacheProjectsList(userId: string, projects: any[]): void {
   const entry: ProjectsListCacheEntry = { userId, projects, cachedAt: Date.now() }
   projectsListMemCache = entry
   try {
+    const serialized = JSON.stringify(entry)
     if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem(PROJECTS_LIST_SESSION_KEY, JSON.stringify(entry))
+      sessionStorage.setItem(PROJECTS_LIST_SESSION_KEY, serialized)
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(PROJECTS_LIST_LOCAL_KEY, serialized)
     }
   } catch {
-    // Session storage failures are non-critical
+    // Web storage failures are non-critical
   }
   void writeProjectsListToIDB(entry)
 }
@@ -226,11 +231,19 @@ export function getLastProjectsListSync():
   if (mem && Date.now() - mem.cachedAt < TTL_MS) {
     return { userId: mem.userId, projects: mem.projects }
   }
-  try {
-    const raw = sessionStorage.getItem(PROJECTS_LIST_SESSION_KEY)
+  const readEntry = (raw: string | null) => {
     if (!raw) return null
     const entry = JSON.parse(raw) as ProjectsListCacheEntry
     if (!entry?.userId || !Array.isArray(entry.projects) || Date.now() - entry.cachedAt > TTL_MS) return null
+    return entry
+  }
+  try {
+    let entry = readEntry(sessionStorage.getItem(PROJECTS_LIST_SESSION_KEY))
+    if (!entry && typeof localStorage !== 'undefined') {
+      entry = readEntry(localStorage.getItem(PROJECTS_LIST_LOCAL_KEY))
+      if (entry) sessionStorage.setItem(PROJECTS_LIST_SESSION_KEY, JSON.stringify(entry))
+    }
+    if (!entry) return null
     projectsListMemCache = entry
     return { userId: entry.userId, projects: entry.projects }
   } catch {
@@ -285,7 +298,10 @@ export function clearUserCache(): void {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(PROJECTS_LIST_SESSION_KEY)
     }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(PROJECTS_LIST_LOCAL_KEY)
+    }
   } catch {
-    // Session storage failures are non-critical
+    // Web storage failures are non-critical
   }
 }

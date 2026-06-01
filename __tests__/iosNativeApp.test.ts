@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  readNativeJSONCache,
+  removeNativeJSONCache,
+  writeNativeJSONCache,
+} from '@/lib/native-app-cache';
 import {
   MAKARON_IOS_USER_AGENT_TOKEN,
   isCapacitorIOS,
@@ -48,7 +53,7 @@ describe('iOS native app detection', () => {
     expect(shouldSuppressWebBilling({ userAgent: 'Mozilla/5.0 Safari' })).toBe(false);
   });
 
-  it('keeps a synchronous session fallback for the iOS projects page', () => {
+  it('keeps a synchronous session fallback for the iOS projects page', async () => {
     clearUserCache();
 
     const projects = [{
@@ -64,10 +69,34 @@ describe('iOS native app detection', () => {
 
     expect(getCachedProjectsListSync('user-1')).toEqual(projects);
     expect(getLastProjectsListSync()).toEqual({ userId: 'user-1', projects });
+    expect(localStorage.getItem('makaron:last-projects-list:persistent')).toContain('Cached Project');
 
-    clearUserCache();
+    sessionStorage.clear();
 
-    expect(getCachedProjectsListSync('user-1')).toBeNull();
-    expect(getLastProjectsListSync()).toBeNull();
+    vi.resetModules();
+    const freshImageCache = await import('@/lib/imageCache');
+    expect(freshImageCache.getCachedProjectsListSync('user-1')).toEqual(projects);
+    expect(sessionStorage.getItem('makaron:last-projects-list')).toContain('Cached Project');
+
+    freshImageCache.clearUserCache();
+
+    expect(freshImageCache.getCachedProjectsListSync('user-1')).toBeNull();
+    expect(freshImageCache.getLastProjectsListSync()).toBeNull();
+    expect(localStorage.getItem('makaron:last-projects-list:persistent')).toBeNull();
+  });
+
+  it('persists native JSON cache across WebView session resets', () => {
+    sessionStorage.clear();
+    localStorage.clear();
+
+    writeNativeJSONCache('/api/billing/dashboard', { balance: 123 });
+    sessionStorage.clear();
+
+    expect(readNativeJSONCache<{ balance: number }>('/api/billing/dashboard')).toEqual({ balance: 123 });
+    expect(sessionStorage.getItem('makaron:native-cache:/api/billing/dashboard')).toContain('"balance":123');
+
+    removeNativeJSONCache('/api/billing/dashboard');
+    expect(readNativeJSONCache('/api/billing/dashboard')).toBeNull();
+    expect(localStorage.getItem('makaron:native-cache:/api/billing/dashboard')).toBeNull();
   });
 });

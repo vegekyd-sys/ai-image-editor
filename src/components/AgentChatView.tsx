@@ -568,17 +568,30 @@ export default function AgentChatView({
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
   const [kbInset, setKbInset] = useState(0);
   const [nativeKbInset, setNativeKbInset] = useState(0);
+  const syncKeyboardInsetFromViewport = useCallback(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    setKbInset(Math.round(inset));
+  }, []);
+  const keepInputAboveKeyboard = useCallback(() => {
+    syncKeyboardInsetFromViewport();
+    window.setTimeout(syncKeyboardInsetFromViewport, 80);
+    window.setTimeout(syncKeyboardInsetFromViewport, 220);
+    window.setTimeout(() => {
+      inputBarRef.current?.scrollIntoView({ block: 'end', inline: 'nearest' });
+    }, 260);
+  }, [syncKeyboardInsetFromViewport]);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const update = () => {
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setKbInset(Math.round(inset));
+    vv.addEventListener('resize', syncKeyboardInsetFromViewport);
+    vv.addEventListener('scroll', syncKeyboardInsetFromViewport);
+    return () => {
+      vv.removeEventListener('resize', syncKeyboardInsetFromViewport);
+      vv.removeEventListener('scroll', syncKeyboardInsetFromViewport);
     };
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
-  }, []);
+  }, [syncKeyboardInsetFromViewport]);
   useEffect(() => {
     const readNativeInset = () => {
       const raw = getComputedStyle(document.documentElement)
@@ -1348,7 +1361,7 @@ export default function AgentChatView({
 
       {!readOnly && <div
         ref={inputBarRef}
-        className={isPanel ? 'flex-shrink-0 px-3' : 'absolute left-0 right-0 px-3'}
+        className={isPanel ? 'flex-shrink-0 px-3' : 'fixed left-0 right-0 px-3'}
         style={isPanel ? {
           paddingBottom: '12px',
           paddingTop: '12px',
@@ -1377,6 +1390,8 @@ export default function AgentChatView({
             aria-label="Chat with agent"
             value={input}
             rows={1}
+            onFocus={keepInputAboveKeyboard}
+            onClick={keepInputAboveKeyboard}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if ((e.key === 'Enter' || e.code === 'Enter') && e.altKey) {

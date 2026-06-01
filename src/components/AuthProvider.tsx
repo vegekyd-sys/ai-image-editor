@@ -4,8 +4,9 @@ import { createContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User, SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { clearUserCache } from '@/lib/imageCache'
-import { readNativeJSONCache, writeNativeJSONCache, removeNativeJSONCache } from '@/lib/native-app-cache'
+import { readNativeJSONCache, writeNativeJSONCache, removeNativeJSONCache, warmNativeJSONCache } from '@/lib/native-app-cache'
 import { isMakaronIOSApp } from '@/lib/native-app'
+import { warmProjectsListCache } from '@/lib/projects-list-warm'
 
 const AUTH_USER_CACHE_KEY = '/auth/user'
 
@@ -29,6 +30,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [user, setUser] = useState<User | null>(cachedUser)
   const [loading, setLoading] = useState(() => !cachedUser)
   const supabaseRef = useRef<SupabaseClient | null>(null)
+  const nativeWarmUserIdRef = useRef<string | null>(null)
 
   function getSupabase() {
     if (!supabaseRef.current) {
@@ -36,6 +38,23 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     }
     return supabaseRef.current
   }
+
+  const warmNativeUserCaches = useCallback((userId: string) => {
+    if (!useNativeAuthCache || nativeWarmUserIdRef.current === userId) return
+    nativeWarmUserIdRef.current = userId
+    const warm = () => {
+      void warmNativeJSONCache('/api/billing/credits')
+      void warmNativeJSONCache('/api/billing/dashboard')
+      void warmNativeJSONCache('/api/skills')
+      void warmNativeJSONCache('/api/home-skills')
+      void warmProjectsListCache(userId)
+    }
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(warm, { timeout: 1800 })
+    } else {
+      window.setTimeout(warm, 600)
+    }
+  }, [useNativeAuthCache])
 
   useEffect(() => {
     const supabase = getSupabase()
@@ -48,6 +67,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         if (session?.user) writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)
         else removeNativeJSONCache(AUTH_USER_CACHE_KEY)
       }
+      if (session?.user) warmNativeUserCaches(session.user.id)
 
       // Background validation: verify JWT is still valid (non-blocking, never forces logout)
       if (session?.user) {
@@ -65,10 +85,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         if (session?.user) writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)
         else removeNativeJSONCache(AUTH_USER_CACHE_KEY)
       }
+      if (session?.user) warmNativeUserCaches(session.user.id)
     })
 
     return () => subscription.unsubscribe()
-  }, [useNativeAuthCache])
+  }, [useNativeAuthCache, warmNativeUserCaches])
 
   const signOut = useCallback(async () => {
     clearUserCache()
