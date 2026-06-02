@@ -101,6 +101,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     // Resolve duration: explicit user choice > video edit source duration > parsed script > smart mode.
     // This prevents accidental 5s edits, while still allowing requests like "turn this 10s video into 8s".
     const resolvedDuration = duration ?? (referenceVideoDuration != null ? Math.min(MAX_VIDEO_DURATION, referenceVideoDuration) : undefined) ?? parseTotalDuration(finalPrompt);
+    if (resolvedDuration != null && resolvedDuration > MAX_VIDEO_DURATION) {
+      return {
+        success: false,
+        message: 'Video duration must be 15 seconds or less. For longer videos, split the plan into separate segments and assemble them after approval.',
+      };
+    }
 
     // Provider routing: explicit videoModel > env var > default kling
     let provider: string;

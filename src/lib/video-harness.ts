@@ -3,6 +3,10 @@
  * Returns null if OK, or an error string to send back to the Agent for retry.
  */
 
+import { parseTotalDuration } from './kling';
+
+const MAX_VIDEO_DURATION = 15;
+
 function urlMatch(a: string, b: string): boolean {
   try {
     const ua = new URL(a);
@@ -31,6 +35,11 @@ export function validateVideoScript(opts: {
       return 'Motion Control requires a reference video. Pass the video URL as video_ref_url.'
     }
     return null
+  }
+
+  const parsedDuration = parseTotalDuration(prompt)
+  if (parsedDuration != null && parsedDuration > MAX_VIDEO_DURATION) {
+    return `A single video generation script can be at most ${MAX_VIDEO_DURATION} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${MAX_VIDEO_DURATION}s or less, and do not submit one long script.`
   }
 
   // 1. Image reference check: prompt has images available but doesn't reference any

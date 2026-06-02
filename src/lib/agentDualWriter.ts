@@ -258,8 +258,9 @@ export class AgentDualWriter {
       this.flushTimer = null;
     }
     if (!this.contentBuffer) return;
-    await this.insertEvent('content', { text: this.contentBuffer });
+    const text = this.contentBuffer;
     this.contentBuffer = '';
+    await this.insertEvent('content', { text });
   }
 
   /** Call in after() or finally block. */
