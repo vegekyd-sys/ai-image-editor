@@ -8,6 +8,13 @@ allowed-tools: run_code generate_animation analyze_video write_file
 
 Use `run_code` with `runtime: "node"` whenever the user asks for real MP4 operations: split, trim, concat, transcode, resize, crop, extract frames, preserve audio, replace audio, or prepare long videos for Seedance/Kling.
 
+Use this skill for file truth, not design truth:
+
+- Choose FFmpeg when the user cares about an existing MP4 as a file: exact duration, codecs, chunking, audio, export format, or final stitched deliverables.
+- Choose Remotion/design runtime when the user wants editable motion graphics, typography systems, reusable title cards, overlays, or patchable code.
+- A common pipeline is FFmpeg first, model generation second, concat last. Remotion is separate and optional unless the user specifically wants an editable design layer.
+- Do not use Remotion to fake a split/trim/concat task. Do not use FFmpeg when the request is really "build me a motion template I can keep editing."
+
 This is intentionally a recipe skill, not a narrow tool. You have a full Node backend:
 
 - `require('fs')`, `require('path')`, `require('child_process')`

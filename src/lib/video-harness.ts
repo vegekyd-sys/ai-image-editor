@@ -4,6 +4,9 @@
  */
 
 import { getVideoModelCapability } from '@/lib/video-model-capabilities';
+import { parseTotalDuration } from './kling';
+
+const MAX_VIDEO_DURATION = 15;
 
 function urlMatch(a: string, b: string): boolean {
   try {
@@ -35,6 +38,11 @@ export function validateVideoScript(opts: {
     return null
   }
 
+  const parsedDuration = parseTotalDuration(prompt)
+  if (parsedDuration != null && parsedDuration > MAX_VIDEO_DURATION) {
+    return `A single video generation script can be at most ${MAX_VIDEO_DURATION} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${MAX_VIDEO_DURATION}s or less, and do not submit one long script.`
+  }
+
   // 1. Image reference check: prompt has images available but doesn't reference any
   // Skip when video_ref_url is provided (video editing doesn't require image references)
   const refs = [...new Set(
@@ -61,8 +69,11 @@ export function validateVideoScript(opts: {
   }
 
   // 4. base mode requires a model that can edit the reference video as the base.
-  if (videoRefUrl && videoRefType === 'base' && !getVideoModelCapability(model).supportsBaseVideoEdit) {
-    return `Video editing (base mode) is not supported by ${getVideoModelCapability(model).label}. Choose a model with base video editing support, or use video_ref_type="feature" for style/motion reference.`
+  if (videoRefUrl && videoRefType === 'base') {
+    const capability = getVideoModelCapability(model)
+    if (!capability.supportsBaseVideoEdit) {
+      return `Video editing (base mode) is not supported by ${capability.label}. Choose a model with base video editing support, or use video_ref_type="feature" for style/motion reference.`
+    }
   }
 
   // 5. image_refs contains URLs already in Media Index

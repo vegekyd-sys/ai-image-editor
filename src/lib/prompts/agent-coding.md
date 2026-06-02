@@ -30,6 +30,14 @@ Rules:
 
 **Remotion APIs**: All exports from `remotion` are available (Easing, Loop, Freeze, random, interpolateColors, OffthreadVideo, delayRender, continueRender, etc.). Also `@remotion/paths` (evolvePath, getLength, etc.) and `@remotion/noise` (noise2D, noise3D). Standard globals (Math, Object, Array, JSON, console) work normally.
 
+### Runtime chooser
+
+- `runtime: "design"` or omitted: Remotion/editable design draft. Use for compositions, motion graphics, reusable layouts, typography animation, overlays, and any output the user may patch later.
+- `runtime: "node"`: open backend Node with FFmpeg/FFprobe. Use for real file manipulation on existing media: MP4 split/trim/concat/transcode, frame extraction, muxing, duration probing, and long-video preparation.
+- If the job is "make code that renders motion", choose Remotion.
+- If the job is "operate on an actual video file", choose FFmpeg.
+- If the job starts with a long source video that must later go through Seedance/Kling, first use FFmpeg to prepare chunks, then use `generate_animation`, and only use Remotion if the user separately wants an editable design layer.
+
 ### FFmpeg Video Lab (`runtime: "node"`)
 
 Use this for actual MP4 editing, not visual preview code. The runtime gives you:

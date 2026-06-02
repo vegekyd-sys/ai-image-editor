@@ -8,6 +8,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-02',
+    en: { title: 'Long Story Skill', items: [
+      'Makaron now supports video creation beyond the 15-second limit.',
+      'The new long story skill helps turn one idea into a longer, multi-segment video with a more continuous narrative.',
+      'Before rendering, you can review anchors, storyboards, and the script step by step.',
+    ]},
+    zh: { title: 'Long Story Skill', items: [
+      'Makaron 现在支持超过 15 秒的视频生成。',
+      '新的 long story skill 可以把一个想法扩展成更长、分段连续的故事视频。',
+      '在正式生成前，用户可以逐步查看并确认锚定物、分镜和脚本。',
+    ]},
+  },
+  {
     date: '2026-05-31',
     en: { title: 'Agent Prompt Rebuild', items: [
       'Much faster first response: Agent now starts from a compact router prompt instead of eagerly loading every skill file.',
