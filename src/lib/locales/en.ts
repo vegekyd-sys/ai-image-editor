@@ -27,6 +27,7 @@ const en = {
   'auth.createAccount': 'Create your account',
   'auth.back': 'Back',
   'auth.continueWithGoogle': 'Continue with Google',
+  'auth.continueWithApple': 'Continue with Apple',
   'auth.orDivider': 'or',
   'auth.goRegister': 'Sign up',
   'auth.verifyEmail.title': 'Check your inbox',

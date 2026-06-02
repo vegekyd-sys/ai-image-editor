@@ -19,10 +19,14 @@ describe('iOS App Store readiness guardrails', () => {
     expect(config.plugins?.Keyboard).toMatchObject({ resize: 'none', style: 'DARK' });
   });
 
-  it('routes Makaron iOS WebView users away from Google OAuth', () => {
+  it('keeps Google available in Makaron iOS WebView with Apple as the equivalent App Store login option', () => {
     const loginPage = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
     expect(loginPage).toContain('userAgentHasMakaronIOSToken');
-    expect(loginPage).toContain('{!inApp &&');
+    expect(loginPage).toContain('handleAppleLogin');
+    expect(loginPage).toContain("provider: 'apple'");
+    expect(loginPage).toContain("provider: 'google'");
+    expect(loginPage).toContain('auth.continueWithApple');
+    expect(loginPage).toContain('auth.continueWithGoogle');
   });
 
   it('tracks the migration acceptance criteria in docs', () => {

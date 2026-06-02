@@ -28,6 +28,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [appleLoading, setAppleLoading] = useState(false)
   const [error, setError] = useState('')
 
   // OTP state (8 digits)
@@ -81,6 +82,19 @@ export default function LoginPage() {
       },
     })
     if (error) { setError(t('auth.networkError')); setGoogleLoading(false) }
+  }
+
+  // ── Apple OAuth ──
+  const handleAppleLogin = async () => {
+    setAppleLoading(true)
+    setError('')
+    const { error } = await getSupabase().auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback`,
+      },
+    })
+    if (error) { setError(t('auth.networkError')); setAppleLoading(false) }
   }
 
   // ── Smart Continue ──
@@ -347,7 +361,54 @@ export default function LoginPage() {
         {/* ══════ FORM VIEW ══════ */}
         {view === 'form' && (
           <>
-            {!inApp && (
+            {inApp ? (
+              <>
+                <button
+                  onClick={handleAppleLogin}
+                  disabled={appleLoading}
+                  className="w-full py-3 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                  style={{ background: '#fff', border: '1px solid rgba(255,255,255,0.2)', color: '#050505' }}
+                >
+                  {appleLoading ? (
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  ) : (
+                    <>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M16.37 1.51c0 1.08-.43 2.1-1.15 2.88-.78.85-2.06 1.5-3.08 1.42-.13-1.04.38-2.16 1.1-2.96.8-.89 2.18-1.52 3.13-1.34Zm3.96 16.02c-.59 1.35-.87 1.96-1.62 3.15-1.05 1.67-2.53 3.75-4.36 3.77-1.63.02-2.05-1.09-4.26-1.08-2.22.01-2.68 1.1-4.31 1.08-1.83-.02-3.22-1.89-4.27-3.56-2.94-4.69-3.25-10.2-1.44-13.13C1.36 5.71 3.4 4.51 5.31 4.51c1.95 0 3.18 1.07 4.79 1.07 1.57 0 2.52-1.07 4.78-1.07 1.71 0 3.52.93 4.8 2.55-4.22 2.31-3.54 8.34.65 10.47Z" />
+                      </svg>
+                      {t('auth.continueWithApple')}
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleGoogleLogin}
+                  disabled={googleLoading}
+                  className="w-full mt-3 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}
+                >
+                  {googleLoading ? (
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  ) : (
+                    <>
+                      <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                      </svg>
+                      {t('auth.continueWithGoogle')}
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center gap-3 my-6">
+                  <div className="flex-1 h-px bg-white/10" />
+                  <span className="text-white/25 text-xs">{t('auth.orDivider')}</span>
+                  <div className="flex-1 h-px bg-white/10" />
+                </div>
+              </>
+            ) : (
               <>
                 <button
                   onClick={handleGoogleLogin}

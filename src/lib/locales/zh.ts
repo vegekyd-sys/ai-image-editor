@@ -27,6 +27,7 @@ const zh = {
   'auth.createAccount': '创建账号',
   'auth.back': '返回',
   'auth.continueWithGoogle': '使用 Google 登录',
+  'auth.continueWithApple': '使用 Apple 登录',
   'auth.orDivider': '或',
   'auth.goRegister': '注册',
   'auth.verifyEmail.title': '查看你的收件箱',
