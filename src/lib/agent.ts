@@ -20,6 +20,7 @@ import animatePrompt from './prompts/animate.md';
 import type { Tip, VideoModel } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
+import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -1495,6 +1496,7 @@ export async function* runMakaronAgent(
 
     // State machine for extracting code from run_code tool-input-delta
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
+    const textDeltaState = createTextDeltaState();
 
     for await (const event of result.fullStream) {
       // ── TTFB — log first stream event that indicates model is producing output ──
@@ -1581,7 +1583,8 @@ export async function* runMakaronAgent(
 
       // ── Text delta ──────────────────────────────────────────────────────────
       if (event.type === 'text-delta') {
-        yield { type: 'content', text: event.text };
+        const text = normalizeTextDelta(event as { delta?: unknown; textDelta?: unknown; text?: unknown }, textDeltaState);
+        if (text) yield { type: 'content', text };
         continue;
       }
 
