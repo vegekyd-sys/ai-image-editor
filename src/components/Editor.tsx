@@ -22,6 +22,10 @@ import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelin
 import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
+
+const IOS_CUI_PAN_EDGE_PX = 36;
+const IOS_CUI_PAN_COMMIT_PX = 86;
+const IOS_CUI_PAN_MIN_DX = 10;
 import { downloadAsset } from '@/lib/editor/download';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
@@ -44,18 +48,6 @@ import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEP
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache';
 
 export type { AnimationState } from '@/lib/editor/types';
-
-const IOS_CUI_PAN_EDGE_PX = 36;
-const IOS_CUI_PAN_COMMIT_PX = 86;
-const IOS_CUI_PAN_MIN_DX = 10;
-
-function normalizeInlineImageIdentity(src?: string) {
-  if (!src) return '';
-  return src
-    .split('?')[0]
-    .replace('/storage/v1/render/image/public/', '/storage/v1/object/public/')
-    .replace('/storage/v1/render/image/authenticated/', '/storage/v1/object/authenticated/');
-}
 
 interface EditorProps {
   projectId?: string;
@@ -2778,14 +2770,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
-    const tappedIdentity = normalizeInlineImageIdentity(imgSrc);
-    const snapIdx = snapshots.findIndex((s) => {
-      if (s.messageId === messageId) return true;
-      if (!tappedIdentity) return false;
-      return [s.image, s.imageUrl]
-        .filter((src): src is string => Boolean(src))
-        .some((src) => normalizeInlineImageIdentity(src) === tappedIdentity);
-    });
+    const snapIdx = snapshots.findIndex(s => s.messageId === messageId);
     if (snapIdx < 0) return;
     const snap = snapshots[snapIdx];
     const src = imgSrc || snap?.image || snap?.imageUrl || '';
@@ -2999,42 +2984,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     }
   }, [videoTimelineIndex, isDesktop, cuiPanelWidth, viewIndex, selectedVideoId]);
 
-  // Navigate GUI canvas to a snapshot when clicking @N chip in CUI.
-  const handleNavigateToSnapshot = useCallback((snapIndex: number, chipRect?: DOMRect, imageSrc?: string) => {
+  // Navigate GUI canvas to a snapshot when clicking @N chip in CUI (desktop only)
+  const handleNavigateToSnapshot = useCallback((snapIndex: number) => {
+    if (!isDesktop) return; // mobile keeps default hover/tap preview
     if (snapIndex < 0 || snapIndex >= snapshots.length) return;
     setViewIndex(timelineFromSnap(snapIndex, draftParentIndex));
-    if (!isDesktop) {
-      const cr = lastCanvasRect.current;
-      const snap = snapshots[snapIndex];
-      const src = imageSrc || snap?.image || snap?.imageUrl || '';
-      if (chipRect && cr && src) {
-        const imgEl = canvasAreaRef.current?.querySelector('img');
-        const vidEl = canvasAreaRef.current?.querySelector('video');
-        const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight)
-          ? imgEl.naturalWidth / imgEl.naturalHeight
-          : (vidEl?.videoWidth && vidEl?.videoHeight)
-            ? vidEl.videoWidth / vidEl.videoHeight
-            : lastImageAR.current;
-        const imgInCanvas = containRect(cr.w, cr.h, ar);
-        const toRect = { l: cr.l + imgInCanvas.l, t: cr.t + imgInCanvas.t, w: imgInCanvas.w, h: imgInCanvas.h };
-        const fromRect = { l: chipRect.left, t: chipRect.top, w: chipRect.width, h: chipRect.height };
-        const dummy = { l: 0, t: 0, w: 0, h: 0 };
-        setHeroAnim({
-          src,
-          fromRect, toRect,
-          fromImg: dummy, toImg: dummy,
-          fromRadius: '8px', toRadius: '0px',
-          active: false,
-          objectCover: true,
-        });
-        requestAnimationFrame(() => requestAnimationFrame(() =>
-          setHeroAnim(p => p ? { ...p, active: true } : null)
-        ));
-        setTimeout(() => setHeroAnim(null), HERO_DURATION + 120);
-      }
-      setViewMode('gui');
-      return;
-    }
     // If GUI is smaller than CUI, snap to 50/50
     const containerW = document.querySelector('.flex.flex-row')?.clientWidth ?? 0;
     if (containerW && cuiPanelWidth > containerW / 2) {
@@ -3042,7 +2996,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setCuiPanelWidth(midW);
       if (cuiPanelRef.current) cuiPanelRef.current.style.width = `${midW}px`;
     }
-  }, [snapshots, draftParentIndex, isDesktop, cuiPanelWidth]);
+  }, [snapshots.length, draftParentIndex, isDesktop, cuiPanelWidth]);
 
   // Track whether we've pushed a CUI history state that hasn't been consumed yet.
   // We need this because setViewMode('gui') can be called via two paths:
@@ -3098,9 +3052,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   const isCuiPanEditableTarget = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return false;
-    return Boolean(target.closest(
-      'input, textarea, select, button, a, video, audio, [role="button"], [role="link"], [contenteditable="true"], [data-makaron-cui-tap-target="true"], [data-makaron-editor-tap-target="true"]'
-    ));
+    return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
   };
 
   const handleCuiPanStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
@@ -3859,26 +3811,19 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         </div>
       </>) : viewMode === 'cui' ? (
         <div
+          data-makaron-cui-pan="true"
           className="fixed inset-0 z-40"
           style={{
             transform: `translate3d(${cuiPanX}px, 0, 0)`,
             transition: cuiPanSettling ? 'transform 170ms ease-out' : 'none',
             willChange: cuiPanActive ? 'transform' : undefined,
+            touchAction: 'pan-y',
           }}
+          onTouchStart={handleCuiPanStart}
+          onTouchMove={handleCuiPanMove}
+          onTouchEnd={handleCuiPanEnd}
+          onTouchCancel={handleCuiPanEnd}
         >
-          <div
-            data-makaron-cui-pan="true"
-            className="absolute left-0 bottom-0 z-[45]"
-            style={{
-              top: 'calc(env(safe-area-inset-top) + 68px)',
-              width: IOS_CUI_PAN_EDGE_PX,
-              touchAction: 'none',
-            }}
-            onTouchStart={handleCuiPanStart}
-            onTouchMove={handleCuiPanMove}
-            onTouchEnd={handleCuiPanEnd}
-            onTouchCancel={handleCuiPanEnd}
-          />
           <AgentChatView
             {...cuiSharedProps}
             onBack={() => {
@@ -3891,7 +3836,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             onPipTap={handlePipTap}
             hidePip={heroAnim !== null || pullProgress !== null}
             focusOnOpen={isViewingDraft}
-            onNavigateToSnapshot={handleNavigateToSnapshot}
+            onNavigateToSnapshot={undefined}
           />
         </div>
       ) : null}
@@ -3984,7 +3929,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       {/* Hero Overlay: animates between canvas rect and PiP rect during GUI↔CUI transition */}
       {heroAnim && (
         <div
-          data-makaron-hero-overlay="true"
           className="fixed pointer-events-none z-[100] overflow-hidden"
           style={{
             left:   heroAnim.active ? heroAnim.toRect.l : heroAnim.fromRect.l,

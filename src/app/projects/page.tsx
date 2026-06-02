@@ -854,9 +854,7 @@ function ProjectsPageInner() {
 
   const isIOSProjectPanEditableTarget = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return false
-    return Boolean(target.closest(
-      'input, textarea, select, button, a, video, audio, [role="button"], [role="link"], [contenteditable="true"], [data-makaron-editor-tap-target="true"]'
-    ))
+    return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
   }
 
   const isCuiOpen = () => {
@@ -1154,10 +1152,6 @@ function ProjectsPageInner() {
 
         @keyframes mkr-spin { to { transform: rotate(360deg); } }
         .mkr-spin { animation: mkr-spin 0.9s linear infinite; }
-        @keyframes mkr-shimmer {
-          from { transform: translateX(-100%); }
-          to { transform: translateX(100%); }
-        }
 
         .mkr-more-btn {
           transition: background 0.15s, opacity 0.15s;
@@ -1269,8 +1263,8 @@ function ProjectsPageInner() {
         ════════════════════════════════ */}
         <div style={{ position: 'relative', zIndex: 1, marginTop: '8px', maxWidth: isDesktop ? '1232px' : undefined, margin: isDesktop ? '8px auto 0' : undefined }}>
 
-          {/* Section divider — keep visible during iOS/cache hydration so the default view matches the real gallery. */}
-          {(loadingProjects || projects.length > 0) && (
+          {/* Section divider — only show when projects exist */}
+          {!loadingProjects && projects.length > 0 && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '10px',
               padding: '0 16px', marginBottom: '14px',
@@ -1286,42 +1280,8 @@ function ProjectsPageInner() {
           )}
 
           {loadingProjects ? (
-            <div
-              aria-label="Loading projects"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
-                gap: isDesktop ? '14px' : '10px',
-                padding: '0 16px 80px',
-                maxWidth: isDesktop ? '1200px' : undefined,
-                margin: isDesktop ? '0 auto' : undefined,
-              }}
-            >
-              {Array.from({ length: 6 }, (_, index) => (
-                <div
-                  key={index}
-                  className="mkr-card"
-                  style={{
-                    position: 'relative',
-                    aspectRatio: '1 / 1',
-                    borderRadius: 16,
-                    overflow: 'hidden',
-                    background: 'linear-gradient(135deg, #120d1a 0%, #1c1026 50%, #120d1a 100%)',
-                  }}
-                >
-                  <div style={{
-                    position: 'absolute', inset: 0,
-                    background: 'linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.06) 45%, transparent 70%)',
-                    transform: 'translateX(-100%)',
-                    animation: `mkr-shimmer 1.4s ease-in-out ${index * 0.06}s infinite`,
-                  }} />
-                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%)' }} />
-                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '10px 10px 11px' }}>
-                    <div style={{ height: 15, width: '68%', borderRadius: 999, background: 'rgba(255,255,255,0.12)' }} />
-                    <div style={{ marginTop: 7, height: 21, width: 68, borderRadius: 6, background: 'rgba(0,0,0,0.42)' }} />
-                  </div>
-                </div>
-              ))}
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
+              <Spinner size={20} />
             </div>
           ) : projects.length === 0 ? (
             <p style={{
@@ -1481,23 +1441,14 @@ function ProjectsPageInner() {
             pointerEvents: activeIOSProjectId ? 'auto' : 'none',
             contain: 'layout paint',
             isolation: 'isolate',
+            touchAction: 'pan-y',
             overscrollBehaviorX: 'contain',
           }}
+          onTouchStart={handleIOSProjectPanStart}
+          onTouchMove={handleIOSProjectPanMove}
+          onTouchEnd={handleIOSProjectPanEnd}
+          onTouchCancel={handleIOSProjectPanEnd}
         >
-          <div
-            data-makaron-ios-project-pan-edge="true"
-            className="absolute left-0 bottom-0 z-[80]"
-            style={{
-              top: 'calc(env(safe-area-inset-top) + 72px)',
-              width: IOS_PROJECT_PAN_EDGE_PX,
-              touchAction: 'none',
-              pointerEvents: activeIOSProjectId ? 'auto' : 'none',
-            }}
-            onTouchStart={handleIOSProjectPanStart}
-            onTouchMove={handleIOSProjectPanMove}
-            onTouchEnd={handleIOSProjectPanEnd}
-            onTouchCancel={handleIOSProjectPanEnd}
-          />
           <ProjectEditorContainer
             key={renderedIOSProjectId}
             projectId={renderedIOSProjectId}

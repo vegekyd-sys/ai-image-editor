@@ -26,6 +26,12 @@ const IOS_SKILL_BACK_EDGE_PX = 36
 const IOS_SKILL_BACK_LOCK_PX = 10
 const IOS_SKILL_BACK_COMMIT_PX = 88
 const IOS_SKILL_BACK_CLOSE_MS = 180
+const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
+
+function getHomeScrollContainer(node: HTMLElement | null): HTMLElement | null {
+  if (!node) return null
+  return node.closest('[data-makaron-ios-stack-entry]') as HTMLElement | null
+}
 
 interface SkillsPayload {
   skills?: { name: string; label: string; icon: string; color: string; builtIn: boolean }[]
@@ -67,19 +73,17 @@ function LazyVideo({ src, style }: { src: string; style: React.CSSProperties }) 
   )
 }
 
-function SkillVideo({ src, style, eager = false, muted = true }: { src: string; style: React.CSSProperties; eager?: boolean; muted?: boolean }) {
+function SkillVideo({ src, style, eager = false }: { src: string; style: React.CSSProperties; eager?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
     const video = ref.current
     if (!video) return
-    video.muted = muted
-    video.defaultMuted = muted
+    video.muted = true
     video.playsInline = true
     if (eager) video.load()
     const play = () => {
       void video.play().catch(() => {
-        if (!muted) return
         window.setTimeout(() => {
           video.muted = true
           void video.play().catch(() => undefined)
@@ -88,7 +92,7 @@ function SkillVideo({ src, style, eager = false, muted = true }: { src: string; 
     }
     const raf = window.requestAnimationFrame(play)
     return () => window.cancelAnimationFrame(raf)
-  }, [eager, muted, src])
+  }, [eager, src])
 
   return (
     <video
@@ -96,7 +100,7 @@ function SkillVideo({ src, style, eager = false, muted = true }: { src: string; 
       src={src}
       autoPlay
       loop
-      muted={muted}
+      muted
       playsInline
       preload={eager ? 'auto' : 'metadata'}
       style={style}
@@ -127,7 +131,10 @@ function HomePageInner() {
   const inputWrapperRef = useRef<HTMLDivElement>(null)
   const [inputWrapperHeight, setInputWrapperHeight] = useState(0)
   const [slotDragOver, setSlotDragOver] = useState(-1)
-  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
+  const [homeSkills, setHomeSkills] = useState<HomeSkill[]>(() => {
+    const nativeCached = readNativeJSONCache<HomeSkill[]>('/api/home-skills')
+    return nativeCached?.length ? nativeCached : getCachedHomeSkills()
+  })
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>(() => (
     readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
@@ -153,6 +160,7 @@ function HomePageInner() {
   const inlineBoxRef = useRef<HTMLDivElement>(null)
   const [inlineBoxHeight, setInlineBoxHeight] = useState(0)
   const [showFixedInput, setShowFixedInput] = useState(false)
+  const fixedInputSyncFrameRef = useRef<number | null>(null)
   const [shareToast, setShareToast] = useState(false)
   const openedFromUrlRef = useRef(false)
   const detailPathActiveRef = useRef(false)
@@ -433,23 +441,14 @@ function HomePageInner() {
 
   useEffect(() => {
     const vv = window.visualViewport
-    const updateNativeInset = (event: Event) => {
-      const detail = (event as CustomEvent<{ inset?: number }>).detail
-      if (typeof detail?.inset === 'number') setKbInset(Math.max(0, Math.round(detail.inset)))
-    }
-    window.addEventListener('makaron-keyboard-inset-change', updateNativeInset)
-    if (!vv) return () => window.removeEventListener('makaron-keyboard-inset-change', updateNativeInset)
+    if (!vv) return
     const update = () => {
       const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
       setKbInset(Math.round(inset))
     }
     vv.addEventListener('resize', update)
     vv.addEventListener('scroll', update)
-    return () => {
-      vv.removeEventListener('resize', update)
-      vv.removeEventListener('scroll', update)
-      window.removeEventListener('makaron-keyboard-inset-change', updateNativeInset)
-    }
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update) }
   }, [])
 
   useEffect(() => {
@@ -510,8 +509,7 @@ function HomePageInner() {
         const video = slide.querySelector('video') as HTMLVideoElement | null
         if (!video) return
         if (slide.getAttribute('data-skill-id') === selectedDetail.id) {
-          video.muted = false
-          video.defaultMuted = false
+          video.muted = true
           video.playsInline = true
           try {
             if (video.readyState >= 1) video.currentTime = 0
@@ -520,7 +518,7 @@ function HomePageInner() {
           }
           video.play().catch(() => {
             window.setTimeout(() => {
-              video.muted = false
+              video.muted = true
               void video.play().catch(() => undefined)
             }, 80)
           })
@@ -587,15 +585,106 @@ function HomePageInner() {
     closeSkillDetail('none')
   }, [closeSkillDetail, hasSelectedDetail, isIOSAppShell, pathname, searchParams])
 
+  const syncFixedInputVisibility = useCallback(() => {
+    if (isDesktop) return
+    const scrollContainer = getHomeScrollContainer(inlineInputRef.current)
+    const inlineRect = inlineInputRef.current?.getBoundingClientRect()
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+    const inlineMostlyVisible = inlineRect
+      ? inlineRect.top >= 0 && inlineRect.bottom <= viewportHeight - 24
+      : false
+    const scrollTop = scrollContainer
+      ? scrollContainer.scrollTop
+      : Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)
+    if (!textareaFocused && scrollTop <= 24) {
+      setShowFixedInput(false)
+      return
+    }
+    setShowFixedInput(textareaFocused || scrollTop > 24 || !inlineMostlyVisible)
+  }, [isDesktop, textareaFocused])
+
   useEffect(() => {
-    const el = inlineInputRef.current
-    if (!el) return
-    const io = new IntersectionObserver(([entry]) => {
-      setShowFixedInput(!entry.isIntersecting)
-    }, { threshold: 0.1 })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [])
+    if (isDesktop) return
+    const scheduleSync = () => {
+      if (fixedInputSyncFrameRef.current !== null) {
+        window.cancelAnimationFrame(fixedInputSyncFrameRef.current)
+      }
+      fixedInputSyncFrameRef.current = window.requestAnimationFrame(() => {
+        fixedInputSyncFrameRef.current = null
+        syncFixedInputVisibility()
+      })
+    }
+
+    scheduleSync()
+
+    const scrollContainer = getHomeScrollContainer(inlineInputRef.current)
+
+    const inlineResizeObserver = inlineInputRef.current
+      ? new ResizeObserver(() => scheduleSync())
+      : null
+    if (inlineResizeObserver && inlineInputRef.current) {
+      inlineResizeObserver.observe(inlineInputRef.current)
+    }
+
+    scrollContainer?.addEventListener('scroll', scheduleSync, { passive: true })
+    window.addEventListener('scroll', scheduleSync, { passive: true })
+    window.addEventListener('resize', scheduleSync)
+    window.addEventListener('pageshow', scheduleSync)
+    window.addEventListener('popstate', scheduleSync)
+    window.addEventListener('makaron-ios-page-stack-back', scheduleSync as EventListener)
+    window.addEventListener('makaron-ios-page-stack-push', scheduleSync as EventListener)
+    window.visualViewport?.addEventListener('resize', scheduleSync)
+    window.visualViewport?.addEventListener('scroll', scheduleSync)
+
+    return () => {
+      if (fixedInputSyncFrameRef.current !== null) {
+        window.cancelAnimationFrame(fixedInputSyncFrameRef.current)
+        fixedInputSyncFrameRef.current = null
+      }
+      inlineResizeObserver?.disconnect()
+      scrollContainer?.removeEventListener('scroll', scheduleSync)
+      window.removeEventListener('scroll', scheduleSync)
+      window.removeEventListener('resize', scheduleSync)
+      window.removeEventListener('pageshow', scheduleSync)
+      window.removeEventListener('popstate', scheduleSync)
+      window.removeEventListener('makaron-ios-page-stack-back', scheduleSync as EventListener)
+      window.removeEventListener('makaron-ios-page-stack-push', scheduleSync as EventListener)
+      window.visualViewport?.removeEventListener('resize', scheduleSync)
+      window.visualViewport?.removeEventListener('scroll', scheduleSync)
+    }
+  }, [isDesktop, syncFixedInputVisibility])
+
+  useEffect(() => {
+    if (!isIOSAppShell) return
+    let shouldReset = false
+    try {
+      shouldReset = sessionStorage.getItem(IOS_RESET_HOME_SCROLL_KEY) === '1'
+      if (shouldReset) sessionStorage.removeItem(IOS_RESET_HOME_SCROLL_KEY)
+    } catch {
+      shouldReset = false
+    }
+    if (!shouldReset) return
+
+    const resetToTop = () => {
+      const scrollContainer = getHomeScrollContainer(inlineInputRef.current)
+      if (scrollContainer) {
+        scrollContainer.scrollTop = 0
+      }
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+      document.documentElement.scrollTop = 0
+      document.body.scrollTop = 0
+      setShowFixedInput(false)
+      syncFixedInputVisibility()
+    }
+
+    resetToTop()
+    const rafId = window.requestAnimationFrame(resetToTop)
+    const timerId = window.setTimeout(resetToTop, 180)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+      window.clearTimeout(timerId)
+    }
+  }, [isIOSAppShell, syncFixedInputVisibility])
 
   useEffect(() => {
     const el = inlineBoxRef.current
@@ -842,7 +931,7 @@ function HomePageInner() {
         }
         return <LazyVideo src={normalizeDomain(url)} style={style} />
       }
-      return <SkillVideo src={normalizeDomain(url)} style={style} eager muted={variant !== 'detail'} />
+      return <SkillVideo src={normalizeDomain(url)} style={style} eager />
     }
     const src = variant === 'thumb'
       ? getThumbnailUrl(url, 400, 70, 533, 'cover')
@@ -889,7 +978,6 @@ function HomePageInner() {
     })
   }
 
-  const revealHomeBehindSkillPan = Boolean(selectedDetail && (skillBackPanActive || skillBackPanSettling))
 
   return (
     <>
@@ -985,7 +1073,7 @@ function HomePageInner() {
           background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
         }} />
 
-        <div style={{ display: viewMode === 'agent' || (selectedDetail && !revealHomeBehindSkillPan) ? 'none' : undefined }}>
+        <div style={{ display: viewMode === 'agent' || selectedDetail ? 'none' : undefined }}>
           <TopBar page="home" />
         </div>
 
@@ -996,10 +1084,7 @@ function HomePageInner() {
 
         <div style={{ display: viewMode === 'agent' ? 'none' : undefined }}>
         {/* ── Hero: Landing-page style ── */}
-        <div className="relative flex flex-col items-center" style={{
-          paddingBottom: '40px',
-          display: selectedDetail && heroExpanded && !revealHomeBehindSkillPan ? 'none' : undefined,
-        }}>
+        <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
           {/* Glow */}
           <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
 
@@ -1067,7 +1152,6 @@ function HomePageInner() {
         {/* ── Skill Template Grid ── */}
         <div style={{
           flex: 1,
-          display: selectedDetail && heroExpanded && !revealHomeBehindSkillPan ? 'none' : undefined,
           paddingLeft: isDesktop ? '24px' : '14px',
           paddingRight: isDesktop ? '24px' : '14px',
           paddingTop: 0,
@@ -1252,7 +1336,8 @@ function HomePageInner() {
             transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
             opacity: heroExpanded ? 0 : 1,
           }}>
-            {!heroExpanded && renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, extraStyle: { position: 'absolute' } })}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, extraStyle: { position: 'absolute' } })}
           </div>
         )
       })()}

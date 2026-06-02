@@ -8,7 +8,6 @@ import { getThumbnailUrl } from '@/lib/supabase/storage';
 interface ImageRefChipProps {
   index: number; // 0-based
   snapshot?: Snapshot;
-  onNavigate?: (index: number) => void;
 }
 
 export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
@@ -29,10 +28,10 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
 
   const imgSrc = snapshot?.imageUrl || snapshot?.image;
   const thumbUrl = imgSrc && imgSrc.startsWith('http')
-    ? getThumbnailUrl(imgSrc, 96, 85, 96, 'cover')
+    ? getThumbnailUrl(imgSrc, 40, 60, 40, 'cover')
     : undefined;
   const previewUrl = imgSrc && imgSrc.startsWith('http')
-    ? getThumbnailUrl(imgSrc, 680, 90, 680, 'contain')
+    ? getThumbnailUrl(imgSrc, 400, 90, 400, 'cover')
     : imgSrc;
 
   // Track loaded URL instead of boolean — same URL reopens instantly (no spinner flash)
@@ -62,6 +61,16 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
 
   const popoverRef = useRef<HTMLSpanElement>(null);
 
+  const togglePreview = useCallback(() => {
+    if (showPreview) {
+      setShowPreview(false);
+      return;
+    }
+    cancelHide();
+    updatePosition();
+    setShowPreview(true);
+  }, [cancelHide, showPreview, updatePosition]);
+
   // Close on outside tap / scroll (mobile)
   useEffect(() => {
     if (!showPreview) return;
@@ -83,7 +92,6 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
   const popover = showPreview && previewUrl ? (
     <span
       ref={popoverRef}
-      data-makaron-image-ref-preview="true"
       className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
       style={{ ...popoverStyle, display: 'block' }}
       onMouseEnter={() => { if (!isTouchDevice.current) cancelHide(); }}
@@ -119,23 +127,20 @@ export default function ImageRefChip({ index, snapshot }: ImageRefChipProps) {
     <span ref={wrapperRef} className="relative inline-flex items-center align-baseline">
       <span
         ref={chipRef}
-        data-makaron-cui-tap-target="true"
-        data-makaron-image-ref-chip="true"
         role="button"
         tabIndex={0}
         className="inline-flex items-center gap-1 bg-white/10 hover:bg-white/20 rounded-md px-1.5 py-0.5 text-xs font-medium text-white/80 transition-colors cursor-pointer"
         onTouchStart={() => { isTouchDevice.current = true; }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          togglePreview();
+        }}
         onMouseEnter={() => { if (!isTouchDevice.current) { cancelHide(); updatePosition(); setShowPreview(true); } }}
         onMouseLeave={() => { if (!isTouchDevice.current) scheduleHide(); }}
         onClick={(e) => {
           e.stopPropagation();
-          if (showPreview) {
-            setShowPreview(false);
-            return;
-          }
-          cancelHide();
-          updatePosition();
-          setShowPreview(true);
+          togglePreview();
         }}
       >
         {thumbUrl && (

@@ -33,7 +33,6 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
   };
   return (
     <div
-      data-makaron-cui-tap-target="true"
       className="mt-2.5 relative overflow-hidden rounded-2xl cursor-pointer active:opacity-75 transition-opacity"
       style={{ maxWidth: 308, border: '1px solid rgba(255,255,255,0.08)' }}
       onClick={(e) => onNavigate(e, videoRef.current?.currentTime || 0)}
@@ -345,15 +344,12 @@ function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) 
 }
 
 /** Shared Markdown renderer to avoid duplicating component overrides.
- *  @N, <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
+ *  <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
-function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number, chipRect?: DOMRect, imageSrc?: string) => void; onViewFile?: (path: string) => void }) {
-  // Replace visible timeline references with inline code `MEDIA_REF_N` so markdown structure stays intact.
-  // The CUI displays @1/@2 to users, while agent/tool prompts may still contain <<<media_N>>>.
+function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onViewFile?: (path: string) => void }) {
+  // Replace <<<media_N>>> and <<<image_N>>> with inline code `MEDIA_REF_N` so markdown structure stays intact
   let processed = snapshots
-    ? text
-      .replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
-      .replace(/(^|[^\w@`])@(\d+)\b/g, '$1`MEDIA_REF_$2`')
+    ? text.replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
     : text;
   // Replace `path/to/file.md` with FILE_REF token for clickable file chips
   processed = processed.replace(/`([^`]*\.md)`/g, '`FILE_REF_$1`');
@@ -438,42 +434,6 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
   );
 }
 
-function InlineMediaRefText({ text, snapshots, onNavigateToSnapshot }: { text: string; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number, chipRect?: DOMRect, imageSrc?: string) => void }) {
-  const parts = useMemo(() => {
-    if (!snapshots || snapshots.length === 0) return [text] as (string | { index: number })[];
-    const result: (string | { index: number })[] = [];
-    const regex = /<<<(?:image|media)_(\d+)>>>|(^|[^\w@`])@(\d+)\b/g;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(text)) !== null) {
-      if (match[1]) {
-        if (match.index > lastIndex) result.push(text.slice(lastIndex, match.index));
-        result.push({ index: parseInt(match[1], 10) - 1 });
-        lastIndex = regex.lastIndex;
-        continue;
-      }
-
-      const prefix = match[2] || '';
-      if (match.index > lastIndex) result.push(text.slice(lastIndex, match.index));
-      if (prefix) result.push(prefix);
-      result.push({ index: parseInt(match[3], 10) - 1 });
-      lastIndex = regex.lastIndex;
-    }
-    if (lastIndex < text.length) result.push(text.slice(lastIndex));
-    return result.length > 0 ? result : [text];
-  }, [snapshots, text]);
-
-  return (
-    <>
-      {parts.map((part, i) => (
-        typeof part === 'string'
-          ? <span key={i}>{part}</span>
-          : <ImageRefChip key={i} index={part.index} snapshot={snapshots?.[part.index]} onNavigate={onNavigateToSnapshot} />
-      ))}
-    </>
-  );
-}
-
 export type PreferredModel = 'auto' | 'gemini' | 'qwen' | 'pony' | 'wai' | 'openai';
 
 interface AgentChatViewProps {
@@ -500,7 +460,7 @@ interface AgentChatViewProps {
   videoModel?: import('@/types').VideoModel;
   onVideoModelChange?: (model: import('@/types').VideoModel) => void;
   /** Navigate GUI canvas to snapshot by 0-based index */
-  onNavigateToSnapshot?: (index: number, chipRect?: DOMRect, imageSrc?: string) => void;
+  onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
   onVideoTap?: (rect?: DOMRect, posterSrc?: string, animId?: string, startTime?: number) => void;
   /** Design poster captured from visible Player — update snapshot.image */
@@ -928,12 +888,12 @@ export default function AgentChatView({
     if (isExiting) onBack();
   }, [isExiting, onBack]);
 
-  const handleInlineImageClick = useCallback((messageId: string, e?: React.MouseEvent, sourceUrl?: string) => {
+  const handleInlineImageClick = useCallback((messageId: string, e?: React.MouseEvent) => {
     const imgEl = e?.currentTarget?.querySelector('img') as HTMLImageElement | null;
     const rect = imgEl?.getBoundingClientRect();
     const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight) ? imgEl.naturalWidth / imgEl.naturalHeight : undefined;
     setIsExiting(true);
-    onImageTap(messageId, rect ?? undefined, sourceUrl || imgEl?.src);
+    onImageTap(messageId, rect ?? undefined, imgEl?.src);
   }, [onImageTap]);
 
   const handleInlineVideoClick = useCallback((e: React.MouseEvent, videoUrl: string, animId?: string, startTime?: number) => {
@@ -1158,9 +1118,7 @@ export default function AgentChatView({
                       </div>
                     )}
                     {msg.content && (
-                      <div className={`whitespace-pre-wrap ${isPanel ? 'px-3 py-2' : 'px-4 py-2.5'}`}>
-                        <InlineMediaRefText text={msg.content} snapshots={snapshots} onNavigateToSnapshot={onNavigateToSnapshot} />
-                      </div>
+                      <div className={`whitespace-pre-wrap ${isPanel ? 'px-3 py-2' : 'px-4 py-2.5'}`}>{msg.content}</div>
                     )}
                   </div>
                 </div>
@@ -1254,8 +1212,7 @@ export default function AgentChatView({
                       const snapIdx = getSnapshotIndex(msg.id);
                       return (
                         <button
-                          data-makaron-cui-tap-target="true"
-                          onClick={(e) => handleInlineImageClick(msg.id, e, msg.image)}
+                          onClick={(e) => handleInlineImageClick(msg.id, e)}
                           className="block w-full mt-3 active:opacity-75 transition-opacity relative"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1280,8 +1237,7 @@ export default function AgentChatView({
                         {msg.images.map((url, i) => (
                           <button
                             key={`${msg.id}-frame-${i}`}
-                            data-makaron-cui-tap-target="true"
-                            onClick={(e) => handleInlineImageClick(msg.id, e, url)}
+                            onClick={(e) => handleInlineImageClick(msg.id, e)}
                             className="flex-shrink-0 active:opacity-75 transition-opacity relative"
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef, type TouchEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
@@ -20,6 +20,8 @@ interface CreditsPayload {
 }
 
 const IOS_LAST_PRIMARY_ROUTE_KEY = 'makaron:ios-last-primary-route'
+const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
+const TOPBAR_TOUCH_NAV_SUPPRESS_MS = 700
 
 const TOPBAR_ROUTE_WARM_APIS: Record<string, string[]> = {
   '/home': ['/api/home-skills', '/api/skills'],
@@ -27,6 +29,10 @@ const TOPBAR_ROUTE_WARM_APIS: Record<string, string[]> = {
   '/dashboard': ['/api/billing/dashboard', '/api/billing/credits'],
   '/profile': ['/api/billing/credits'],
   '/skills': ['/api/skills'],
+}
+
+function isPrimaryTopBarRoute(path: string): boolean {
+  return path === '/home' || path === '/projects'
 }
 
 export default function TopBar({ page }: TopBarProps) {
@@ -41,6 +47,7 @@ export default function TopBar({ page }: TopBarProps) {
     return cached?.balance ?? null
   })
   const [showChangelog, setShowChangelog] = useState(false)
+  const lastTouchNavRef = useRef<{ path: string; at: number } | null>(null)
 
   const warmTopBarRoute = useCallback((path: string) => {
     const route = path.split('?')[0] || path
@@ -69,25 +76,52 @@ export default function TopBar({ page }: TopBarProps) {
 
   const navigateTopBar = useCallback((path: string) => {
     setUserMenuOpen(false)
+    const inIOSApp = isMakaronIOSApp()
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
-    if (isMakaronIOSApp()) {
-      if (currentPath === '/home' || currentPath === '/projects') {
-        try {
-          sessionStorage.setItem(IOS_LAST_PRIMARY_ROUTE_KEY, currentPath)
-        } catch {
-          // Best-effort visual backdrop for native-like secondary page back.
-        }
+    if (inIOSApp && isPrimaryTopBarRoute(currentPath)) {
+      try {
+        sessionStorage.setItem(IOS_LAST_PRIMARY_ROUTE_KEY, currentPath)
+      } catch {
+        // Best-effort visual backdrop for native-like secondary page back.
       }
     }
-    requestNativePageStackPush(path)
-    router.push(path)
-    if (isMakaronIOSApp()) {
-      window.setTimeout(() => {
-        window.dispatchEvent(new Event('makaron-ios-warm-page-backdrop'))
-      }, 320)
+    if (inIOSApp && currentPath === '/projects' && path === '/home') {
+      try {
+        sessionStorage.setItem(IOS_RESET_HOME_SCROLL_KEY, '1')
+      } catch {
+        // Best-effort only.
+      }
+    }
+    if (!isPrimaryTopBarRoute(path)) {
+      if (inIOSApp) {
+        requestNativePageStackPush(path)
+      }
+      router.push(path)
+      if (inIOSApp) {
+        window.setTimeout(() => {
+          window.dispatchEvent(new Event('makaron-ios-warm-page-backdrop'))
+        }, 320)
+      }
+    } else {
+      router.push(path)
     }
     scheduleTopBarWarm(path)
   }, [router, scheduleTopBarWarm])
+
+  const handleTopBarTouchNavigate = useCallback((event: TouchEvent<HTMLButtonElement>, path: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    lastTouchNavRef.current = { path, at: Date.now() }
+    navigateTopBar(path)
+  }, [navigateTopBar])
+
+  const handleTopBarClickNavigate = useCallback((path: string) => {
+    const lastTouchNav = lastTouchNavRef.current
+    if (lastTouchNav && lastTouchNav.path === path && Date.now() - lastTouchNav.at < TOPBAR_TOUCH_NAV_SUPPRESS_MS) {
+      return
+    }
+    navigateTopBar(path)
+  }, [navigateTopBar])
 
   const warmTopBarMenuRoutes = useCallback(() => {
     const warm = () => {
@@ -102,9 +136,6 @@ export default function TopBar({ page }: TopBarProps) {
 
   useEffect(() => {
     if (!isMakaronIOSApp()) return
-    if (page === 'home' && user?.id) {
-      void warmProjectsListCache(user.id)
-    }
     const warm = () => {
       ['/home', '/projects', '/dashboard', '/profile', '/skills'].forEach(warmTopBarRoute)
     }
@@ -114,7 +145,7 @@ export default function TopBar({ page }: TopBarProps) {
     }
     const timer = window.setTimeout(warm, 400)
     return () => window.clearTimeout(timer)
-  }, [page, user?.id, warmTopBarRoute])
+  }, [warmTopBarRoute])
 
   useEffect(() => {
     if (!user) return
@@ -146,13 +177,16 @@ export default function TopBar({ page }: TopBarProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {page === 'home' && user && (
             <button
-              onClick={() => navigateTopBar('/projects')}
+              onClick={() => handleTopBarClickNavigate('/projects')}
+              onTouchEnd={(e) => handleTopBarTouchNavigate(e, '/projects')}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
                 color: 'rgba(255,255,255,0.45)',
                 display: 'flex', alignItems: 'center', gap: 5,
                 transition: 'color 0.2s',
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
               onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
               onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
@@ -165,13 +199,16 @@ export default function TopBar({ page }: TopBarProps) {
           )}
           {page === 'projects' && (
             <button
-              onClick={() => navigateTopBar('/home')}
+              onClick={() => handleTopBarClickNavigate('/home')}
+              onTouchEnd={(e) => handleTopBarTouchNavigate(e, '/home')}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
                 color: 'rgba(255,255,255,0.45)',
                 display: 'flex', alignItems: 'center', gap: 5,
                 transition: 'color 0.2s',
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
               onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
               onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
@@ -276,7 +313,7 @@ export default function TopBar({ page }: TopBarProps) {
                     borderRadius: 12, padding: '4px 0', minWidth: 200,
                     boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 240,
 	                  }}>
-                    {/* User card header */}
+	                    {/* User card header */}
                     <button
                       onClick={() => navigateTopBar('/profile')}
                       style={{
@@ -293,7 +330,6 @@ export default function TopBar({ page }: TopBarProps) {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
                         {avatarUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={getThumbnailUrl(avatarUrl, 72, 80, 72, 'cover')} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
                           <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 600 }}>{initials}</span>
