@@ -22,6 +22,9 @@ describe('iOS App Store readiness guardrails', () => {
   it('keeps Google available in Makaron iOS WebView with Apple as the equivalent App Store login option', () => {
     const loginPage = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
     expect(loginPage).toContain('userAgentHasMakaronIOSToken');
+    expect(loginPage).toContain('NEXT_PUBLIC_ENABLE_APPLE_LOGIN');
+    expect(loginPage).toContain('inApp && appleLoginEnabled');
+    expect(loginPage).toContain(') : !inApp ? (');
     expect(loginPage).toContain('handleAppleLogin');
     expect(loginPage).toContain("provider: 'apple'");
     expect(loginPage).toContain("provider: 'google'");

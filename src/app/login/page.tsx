@@ -19,10 +19,15 @@ function isInAppBrowser(): boolean {
     || /MicroMessenger|WeChat|QQ|DingTalk|Douyin|BytedanceWebview|FBAN|FBAV|Instagram|Line|Twitter/i.test(ua)
 }
 
+function isAppleLoginEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_ENABLE_APPLE_LOGIN === 'true'
+}
+
 export default function LoginPage() {
   const { t } = useLocale()
   const [view, setView] = useState<View>('form')
   const [inApp] = useState(isInAppBrowser)
+  const [appleLoginEnabled] = useState(isAppleLoginEnabled)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -361,7 +366,7 @@ export default function LoginPage() {
         {/* ══════ FORM VIEW ══════ */}
         {view === 'form' && (
           <>
-            {inApp ? (
+            {inApp && appleLoginEnabled ? (
               <>
                 <button
                   onClick={handleAppleLogin}
@@ -408,7 +413,7 @@ export default function LoginPage() {
                   <div className="flex-1 h-px bg-white/10" />
                 </div>
               </>
-            ) : (
+            ) : !inApp ? (
               <>
                 <button
                   onClick={handleGoogleLogin}
@@ -437,7 +442,7 @@ export default function LoginPage() {
                   <div className="flex-1 h-px bg-white/10" />
                 </div>
               </>
-            )}
+            ) : null}
 
 
             <form onSubmit={handleContinue} className="space-y-4">

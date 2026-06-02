@@ -14,7 +14,7 @@ Makaron iOS is considered migration-ready when the TestFlight build and the shar
 ## Manual Device Acceptance
 
 - Launch from a real iPhone and reach `https://www.makaron.app` from the bundled shell.
-- Login with email OTP; Google login is not shown in the iOS WebView path.
+- Login with email OTP. Google login is shown in the iOS WebView only when `NEXT_PUBLIC_ENABLE_APPLE_LOGIN=true` and the Supabase Apple provider is enabled, so Apple and Google appear together for App Store Guideline 4.8 compliance.
 - Upload an image or HEIC, generate tips, preview, commit, and open CUI.
 - Focus every chat/editor textarea; keyboard must not cover the active input or cause a persistent layout jump.
 - Trigger credits exhausted UI; no Stripe Top Up or Subscribe button appears inside the iOS app.
@@ -25,4 +25,5 @@ Makaron iOS is considered migration-ready when the TestFlight build and the shar
 - Digital credits/subscriptions are not sold through Stripe inside iOS. StoreKit must be added before enabling in-app purchase.
 - Privacy policy, support URL, demo account, and reviewer notes must be prepared in App Store Connect before external review.
 - Permission strings must explain camera/photo/microphone use for user-selected creative assets only.
+- If Google OAuth is enabled in the iOS WebView, Sign in with Apple must also be enabled and working as an equivalent option.
 - The app should be tested on device before submission and must not present placeholder or beta-only content.
