@@ -60,15 +60,32 @@ describe('agent prompt policy guards', () => {
     const agentTs = read('src/lib/agent.ts')
 
     expect(agent).toContain('a single video-generation script/call must be 15 seconds or less')
+    expect(agent).toContain('if the user provides or approves a complete video script whose total duration is 15 seconds or less')
+    expect(agent).toContain('Put the entire title + all `Shot N (Xs):` lines + `Style:` line into the same `story_prompt`')
+    expect(agent).toContain('Do not submit only one shot, the first shot, or one line from the script')
+    expect(agent).toContain('Do not split it just because it contains multiple `Shot N (Xs):` lines')
     expect(agent).toContain('If the user asks for 30s')
     expect(agent).toContain('Use `skills/long-video-director/SKILL.md`')
     expect(agent).toContain('[Active skill: long-video-director]')
+    expect(agent).toContain('if an existing timeline/reference video is longer than 15 seconds')
+    expect(agent).toContain('do not compress the whole source into one 5s or 15s edit')
 
     expect(animate).toContain('Every normal script sent to a video generation model must be **15 seconds or less**')
+    expect(animate).toContain('keep it as **one video generation script**')
+    expect(animate).toContain('The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together')
+    expect(animate).toContain('Do not submit only a single shot or a single line from the script')
+    expect(animate).toContain('Multiple shots are normal inside one 15s video')
     expect(animate).toContain('do **not** write one long script')
+    expect(animate).toContain('If the source/reference video itself is longer than 15s')
+    expect(animate).toContain('For longer source videos, use the long-video-director workflow instead of one short compressed edit')
 
     expect(agentTs).toContain('Single-call total duration: 5-15 seconds')
+    expect(agentTs).toContain('If a complete script totals 15 seconds or less, submit it as one video generation call')
+    expect(agentTs).toContain('Put the whole title, every \\`Shot N (Xs):\\` line, and the \\`Style:\\` line into the same \\`story_prompt\\`')
+    expect(agentTs).toContain('Do not submit only one shot, the first shot, or one line from the script')
     expect(agentTs).toContain('Total duration must be 15 seconds or less')
+    expect(agentTs).toContain('Long source video rule')
+    expect(agentTs).toContain('if a timeline/reference video is longer than 15 seconds')
   })
 
   it('keeps Seedance as the default video model unless user or app selects Kling', () => {

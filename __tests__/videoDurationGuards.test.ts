@@ -40,4 +40,23 @@ describe('video duration guards', () => {
 
     expect(error).toBeNull()
   })
+
+  it('allows one 15s script with multiple shots without forcing segment splitting', () => {
+    const error = validateVideoScript({
+      prompt: [
+        '水槽功能秀',
+        '',
+        '主产品是 <<<media_1>>>（金色水槽）。',
+        'Shot 1 (2s): Wide shot, slow push-in on the sink.',
+        'Shot 2 (3s): Close-up, water drains into a fast vortex.',
+        'Shot 3 (3s): Mid-shot, dark liquid pours and disappears.',
+        'Shot 4 (4s): Close-up, cup washer sprays through a glass.',
+        'Shot 5 (3s): Hero shot, faucet water slows and stops.',
+        'Style: Luxury kitchen product ad.',
+      ].join('\n'),
+      imageCount: 1,
+    })
+
+    expect(error).toBeNull()
+  })
 })
