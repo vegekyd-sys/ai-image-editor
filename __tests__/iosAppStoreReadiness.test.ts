@@ -691,6 +691,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(editor).toContain("top: 'calc(env(safe-area-inset-top) + 68px)'");
     expect(chatView).toContain('data-makaron-cui-tap-target="true"');
     expect(chatView).toContain('sourceUrl || imgEl?.src');
+    expect(chatView).toContain('function InlineMediaRefText');
+    expect(chatView).toContain("replace(/(^|[^\\w@`])@(\\d+)\\b/g, '$1`MEDIA_REF_$2`')");
+    expect(chatView).toContain('regex = /<<<(?:image|media)_(\\d+)>>>|(^|[^\\w@`])@(\\d+)\\b/g');
     expect(imageRefChip).toContain('data-makaron-cui-tap-target="true"');
     expect(imageRefChip).toContain('data-makaron-image-ref-chip="true"');
     expect(imageRefChip).toContain('data-makaron-image-ref-preview="true"');

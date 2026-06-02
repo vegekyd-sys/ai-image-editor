@@ -345,12 +345,15 @@ function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) 
 }
 
 /** Shared Markdown renderer to avoid duplicating component overrides.
- *  <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
+ *  @N, <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
 function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number, chipRect?: DOMRect, imageSrc?: string) => void; onViewFile?: (path: string) => void }) {
-  // Replace <<<media_N>>> and <<<image_N>>> with inline code `MEDIA_REF_N` so markdown structure stays intact
+  // Replace visible timeline references with inline code `MEDIA_REF_N` so markdown structure stays intact.
+  // The CUI displays @1/@2 to users, while agent/tool prompts may still contain <<<media_N>>>.
   let processed = snapshots
-    ? text.replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
+    ? text
+      .replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
+      .replace(/(^|[^\w@`])@(\d+)\b/g, '$1`MEDIA_REF_$2`')
     : text;
   // Replace `path/to/file.md` with FILE_REF token for clickable file chips
   processed = processed.replace(/`([^`]*\.md)`/g, '`FILE_REF_$1`');
@@ -432,6 +435,42 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
     >
       {processed}
     </ReactMarkdown>
+  );
+}
+
+function InlineMediaRefText({ text, snapshots, onNavigateToSnapshot }: { text: string; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number, chipRect?: DOMRect, imageSrc?: string) => void }) {
+  const parts = useMemo(() => {
+    if (!snapshots || snapshots.length === 0) return [text] as (string | { index: number })[];
+    const result: (string | { index: number })[] = [];
+    const regex = /<<<(?:image|media)_(\d+)>>>|(^|[^\w@`])@(\d+)\b/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      if (match[1]) {
+        if (match.index > lastIndex) result.push(text.slice(lastIndex, match.index));
+        result.push({ index: parseInt(match[1], 10) - 1 });
+        lastIndex = regex.lastIndex;
+        continue;
+      }
+
+      const prefix = match[2] || '';
+      if (match.index > lastIndex) result.push(text.slice(lastIndex, match.index));
+      if (prefix) result.push(prefix);
+      result.push({ index: parseInt(match[3], 10) - 1 });
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < text.length) result.push(text.slice(lastIndex));
+    return result.length > 0 ? result : [text];
+  }, [snapshots, text]);
+
+  return (
+    <>
+      {parts.map((part, i) => (
+        typeof part === 'string'
+          ? <span key={i}>{part}</span>
+          : <ImageRefChip key={i} index={part.index} snapshot={snapshots?.[part.index]} onNavigate={onNavigateToSnapshot} />
+      ))}
+    </>
   );
 }
 
@@ -1119,7 +1158,9 @@ export default function AgentChatView({
                       </div>
                     )}
                     {msg.content && (
-                      <div className={`whitespace-pre-wrap ${isPanel ? 'px-3 py-2' : 'px-4 py-2.5'}`}>{msg.content}</div>
+                      <div className={`whitespace-pre-wrap ${isPanel ? 'px-3 py-2' : 'px-4 py-2.5'}`}>
+                        <InlineMediaRefText text={msg.content} snapshots={snapshots} onNavigateToSnapshot={onNavigateToSnapshot} />
+                      </div>
                     )}
                   </div>
                 </div>
