@@ -10,6 +10,7 @@ Makaron iOS is considered migration-ready when the TestFlight build and the shar
 - Keyboard adaptation: visual viewport keyboard overlap is clamped, rounded, and ignored when the keyboard is not active.
 - Billing compliance: iOS native app mode suppresses Stripe checkout/subscription entry points until StoreKit is implemented.
 - App Store readiness: Capacitor config uses a bundled launch shell, avoids production `server.url`, includes iOS navigation allowlist, and keeps zoom disabled.
+- Final smoke: `npm run smoke:ios-final` verifies login button policy and full email OTP registration with a temporary Supabase test user. Add `-- --live-ai` plus `IOS_SMOKE_EMAIL`, `IOS_SMOKE_PASSWORD`, and `IOS_SMOKE_IMAGE` to verify Home skill creation, CUI `@x` preview, and generated-image return-to-canvas with the real AI pipeline.
 
 ## Manual Device Acceptance
 
