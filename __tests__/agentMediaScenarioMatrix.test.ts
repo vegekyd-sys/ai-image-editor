@@ -12,8 +12,13 @@ describe('agent media scenario matrix', () => {
   const generateImageTool = read('src/lib/prompts/generate_image_tool.md')
   const animate = read('src/lib/prompts/animate.md')
   const coding = read('src/lib/prompts/agent-coding.md')
+  const remotion = read('src/lib/prompts/remotion-composition.md')
   const ffmpegSkill = read('src/skills/video-ffmpeg-lab/SKILL.md')
   const agentTs = read('src/lib/agent.ts')
+  const agentContext = read('src/lib/agent-context.ts')
+  const editor = read('src/components/Editor.tsx')
+  const agentRoute = read('src/app/api/agent/route.ts')
+  const designHarness = read('src/lib/design-harness.ts')
 
   it('keeps the core agent prompt as a lightweight router', () => {
     expect(agent.length).toBeLessThan(8_000)
@@ -23,7 +28,8 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('Default tool: `generate_image`')
     expect(agent).toContain('Default tool: `generate_animation`')
     expect(agent).toContain('Default tool: `run_code` with `runtime: "node"`')
-    expect(agent).toContain('Default tool: `run_code` with `runtime: "design"`')
+    expect(agent).toContain('Default tool: `run_code` with `runtime: "composition"`')
+    expect(agent).toContain('prompts/remotion-composition.md')
     expect(agent).toContain('Use `generate_music` only when the user asks')
   })
 
@@ -68,16 +74,81 @@ describe('agent media scenario matrix', () => {
     expect(ffmpegSkill).not.toContain('Cheaper/default')
   })
 
-  it('separates design draft semantics from node media outputs', () => {
-    expect(coding).toContain('Design runtime (`runtime: "design"` or omitted)')
-    expect(coding).toContain('Node media runtime (`runtime: "node"`)')
-    expect(coding).toContain('For direct file tasks like "split this video into two videos", `type: "files"` is the final answer')
-    expect(coding).toContain('Intermediate chunks for long-video generation workflows should be saved and described, but not published')
+  it('separates generic coding, Remotion composition, and node media outputs', () => {
+    expect(coding).toContain('Generic Coding (run_code)')
+    expect(coding).toContain('runtime: "composition"')
+    expect(coding).toContain('legacy alias for `runtime: "composition"`')
+    expect(coding).toContain('Node Media Runtime')
+    expect(coding).toContain('For direct requests such as "split this video into two videos", return those URLs and stop')
+    expect(coding).toContain('Intermediate chunks for long-video workflows stay as workspace outputs, not timeline snapshots')
+    expect(coding).toContain('pass those 1-based indices in the `run_code` tool input as `media_refs`')
+    expect(coding).toContain('Concat two timeline videos: `runtime: "node"`, `media_refs: [A, B]`')
+    expect(coding).toContain('[Current Remotion composition code]')
+    expect(coding).not.toContain('[Current design code]')
+    expect(coding).not.toContain('### Video Designs')
+    expect(coding).not.toContain('花字')
+    expect(coding).not.toContain('Think like a music video director')
+    expect(remotion).toContain('Remotion Composition')
+    expect(remotion).toContain('Editable Fields')
+    expect(remotion).toContain('trimBefore')
+    expect(remotion).toContain('<Sequence>')
+    expect(remotion).toContain('composition draft')
+    expect(remotion).toContain('function Composition(props)')
+    expect(remotion).not.toContain('function Design(props)')
     expect(coding).not.toContain('ALL`run_code` output')
     expect(coding).not.toContain('ALL** `run_code` output')
     expect(agentTs).toContain('\\`type: "files"\\` outputs are already saved workspace files')
+    expect(agentTs).toContain("z.enum(['composition', 'design', 'node'])")
     expect(agentTs).toContain('not individual binary outputs from type:"files"')
     expect(agentTs).toContain('mediaResult.type === \'video\'')
+  })
+
+  it('keeps agent-visible media context on composition terminology', () => {
+    expect(agentContext).toContain("isComposition ? 'composition' : 'image'")
+    expect(agentContext).toContain('[composition code: ')
+    expect(agentContext).toContain('[COMPOSITION MODE]')
+    expect(agentContext).toContain('[Composition Editable State]')
+    expect(agentContext).toContain('runtime: "composition"')
+    expect(agentContext).toContain('normalizeLegacyCompositionDescription')
+    expect(agentContext).toContain("normalizeLegacyCompositionDescription(s.description, '[Remotion composition]')")
+    expect(agentContext).not.toContain('[code: ')
+    expect(agentContext).not.toContain('[DESIGN MODE]')
+    expect(agentContext).not.toContain('[Design Editable State]')
+
+    expect(agentTs).toContain('[Current Remotion composition code')
+    expect(agentTs).toContain('Capture a screenshot of a Remotion composition')
+    expect(agentTs).toContain('No composition found')
+    expect(agentTs).toContain('Composition ready')
+    expect(agentTs).not.toContain('[Current design code')
+    expect(agentTs).not.toContain('Capture a screenshot of a design')
+    expect(agentTs).not.toContain('No design found')
+    expect(agentTs).not.toContain('Design ready')
+
+    expect(editor).toContain("isComposition ? 'composition' : 'image'")
+    expect(editor).toContain("normalizeLegacyCompositionDescription(s.description, '[composition]')")
+    expect(editor).toContain('current Remotion composition via run_code patch')
+    expect(editor).not.toContain("description: designDesc || '[design]'")
+    expect(editor).not.toContain('current design via run_code patch')
+
+    expect(agentRoute).toContain('latest Remotion composition code')
+    expect(agentRoute).not.toContain('latest design code')
+  })
+
+  it('keeps generic image/layout routing away from Remotion design terminology', () => {
+    expect(agent).toContain('layout/mockup image generation')
+    expect(agent).toContain('generic layout/mockup/image tasks')
+    expect(generateImageTool).toContain('layout/mockup images')
+    expect(generateImageTool).toContain('multi-turn layout/mockup image tasks')
+    expect(image).toContain('images, videos, Remotion compositions, and node media work')
+    expect(coding).toContain('generic layout/mockup/image tasks')
+    expect(agent).not.toContain('design/layout generation')
+    expect(generateImageTool).not.toContain('design/layout images')
+    expect(generateImageTool).not.toContain('multi-turn design tasks')
+
+    expect(designHarness).toContain('Composition rejected')
+    expect(designHarness).toContain('Composition compile error')
+    expect(designHarness).not.toContain('Design rejected')
+    expect(designHarness).not.toContain('Design compile error')
   })
 
   it('documents the new long-video FFmpeg state machine', () => {
@@ -93,6 +164,9 @@ describe('agent media scenario matrix', () => {
       'Never publish source chunks as timeline snapshots',
       'do not start a second `run_code` just to re-open a file from the previous temp directory',
       'return both URLs from the first `type: "files"` run and stop',
+      'the `run_code` tool call must include those 1-based indices as `media_refs`',
+      'concat `<<<media_1>>>` + `<<<media_2>>>` → `media_refs: [1, 2]`',
+      'if (inputFiles.length < 2)',
     ]
 
     for (const marker of required) {

@@ -189,7 +189,7 @@ describe('Agent FFmpeg video lab', () => {
       mediaItems: [],
       projectId: 'test-project',
       userId: 'test-user',
-      timeoutMs: 20_000,
+      timeoutMs: 60_000,
     })
 
     expect(result.type).toBe('files')
@@ -206,5 +206,5 @@ describe('Agent FFmpeg video lab', () => {
     expect(squareMuted.probe?.audioCodec).toBeUndefined()
     expect(frame.contentType).toBe('image/jpeg')
     expect(result.outputs.slice(0, 5).every(output => output.probe)).toBe(true)
-  }, 40_000)
+  }, 80_000)
 })

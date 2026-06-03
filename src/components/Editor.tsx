@@ -1745,6 +1745,14 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
   const animPromptInFlightRef = useRef(false);
+  const normalizeLegacyCompositionDescription = useCallback((description: string | undefined, fallback: string) => {
+    if (!description) return fallback;
+    const trimmed = description.trim();
+    if (trimmed === '[design]' || trimmed === '[design/video]') return fallback;
+    if (trimmed === 'still design') return 'still composition';
+    return description;
+  }, []);
+
   const generateAnimationPrompt = useCallback(async (overrideImageUrls?: string[]) => {
     const imageUrls = overrideImageUrls || animationStateRef.current?.imageUrls;
     if (!projectId || !imageUrls?.length) return;
@@ -1759,12 +1767,15 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // Build Media Index with descriptions so Agent can pick items intelligently
     const mediaIndex = snapshotsRef.current.map((s, i) => {
       const isVid = s.type === 'video';
-      const typeLabel = isVid ? 'video' : 'image';
+      const isComposition = !!s.design && !isVid;
+      const typeLabel = isVid ? 'video' : isComposition ? 'composition' : 'image';
       const desc = isVid
         ? (s.description || s.videoMeta?.prompt?.split('\n')[0]?.slice(0, 60) || '[video]')
-        : i === 0
-          ? (s.description || 'Original upload')
-          : (s.description || '(no description)');
+        : isComposition
+          ? normalizeLegacyCompositionDescription(s.description, '[composition]')
+          : i === 0
+            ? (s.description || 'Original upload')
+            : (s.description || '(no description)');
       return `<<<media_${i + 1}>>> [${typeLabel}] — ${desc}`;
     }).join('\n');
 
@@ -1848,7 +1859,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setIsAgentActive(false);
       animPromptInFlightRef.current = false;
     }
-  }, [projectId, onSaveMessage, locale, t]);
+  }, [projectId, onSaveMessage, locale, t, normalizeLegacyCompositionDescription]);
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
@@ -2808,7 +2819,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
     }).catch(() => {});
     const audioUrl = track.audioUrl;
-    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
+    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current Remotion composition via run_code patch with runtime: "composition". If no active composition, read the latest composition code from workspace first.`;
     handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
@@ -3864,7 +3875,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               image: posterImage, // poster already captured — all existing code works
               tips: [],
               messageId: msgId,
-              description: designDesc || '[design]',
+              description: designDesc || '[composition]',
               design: currentDesign,
             };
             setSnapshots(prev => {

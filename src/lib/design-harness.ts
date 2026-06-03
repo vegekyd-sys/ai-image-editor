@@ -93,7 +93,7 @@ function checkCompile(code: string): string | null {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`⚠️ [design-harness] compile failed: ${msg}`);
-    return `⚠️ Design compile error: ${msg}. Fix the syntax error in your code and try again.`;
+    return `⚠️ Composition compile error: ${msg}. Fix the syntax error in your code and try again.`;
   }
 }
 
@@ -102,11 +102,11 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
   const serialized = JSON.stringify({ code, props });
 
   if (serialized.includes('"ctx.snapshotImages') || serialized.includes("'ctx.snapshotImages")) {
-    return '⚠️ Design rejected: ctx.snapshotImages[N] was passed as a string literal instead of being evaluated. Use template literal interpolation: `${ctx.snapshotImages[N]}` to embed the actual URL. Regenerate.';
+    return '⚠️ Composition rejected: ctx.snapshotImages[N] was passed as a string literal instead of being evaluated. Use template literal interpolation: `${ctx.snapshotImages[N]}` to embed the actual URL. Regenerate.';
   }
 
   if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{5120000,}/.test(serialized)) {
-    return '⚠️ Design rejected: Base64 image data >5MB found in code/props. Use ctx.snapshotImages[N] URLs for full-size images. Regenerate.';
+    return '⚠️ Composition rejected: Base64 image data >5MB found in code/props. Use ctx.snapshotImages[N] URLs for full-size images. Regenerate.';
   }
 
   return null;
@@ -130,10 +130,10 @@ function checkImageUrls(code: string): string | null {
 
   for (const src of srcValues) {
     if (!src || src === 'undefined' || src === 'null' || src === '') {
-      return '⚠️ Design rejected: An <Img> tag has an empty or undefined src. Make sure all ctx.snapshotImages[N] have valid URLs. Regenerate.';
+      return '⚠️ Composition rejected: An <Img> tag has an empty or undefined src. Make sure all ctx.snapshotImages[N] have valid URLs. Regenerate.';
     }
     if (!src.startsWith('https://') && !src.startsWith('data:image/')) {
-      return `⚠️ Design rejected: Image src "${src.substring(0, 60)}..." is not a valid HTTPS URL. Use ctx.snapshotImages[N]. Regenerate.`;
+      return `⚠️ Composition rejected: Image src "${src.substring(0, 60)}..." is not a valid HTTPS URL. Use ctx.snapshotImages[N]. Regenerate.`;
     }
   }
 

@@ -10,7 +10,7 @@ Never re-analyze images you have already seen. If you called `analyze_image` ear
 
 ## Snapshot Index
 
-General Media Index rules live in `agent.md` and apply to images, videos, design, and node media work.
+General Media Index rules live in `agent.md` and apply to images, videos, Remotion compositions, and node media work.
 
 Image-specific reminder: `media_index` selects the edit base and becomes Image 1 for the model. `reference_media_indices` adds extra timeline snapshots and they become Image 2, Image 3, and so on.
 

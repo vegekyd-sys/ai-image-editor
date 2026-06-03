@@ -165,10 +165,10 @@ export async function POST(req: NextRequest) {
             return;
           }
 
-          // musicReady: background music generation completed — agent injects <Audio> into design
+          // musicReady: background music generation completed — agent injects <Audio> into the composition
           if (musicReady && musicAudioUrl) {
             const musicPrompt = withLocale(
-              `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest design code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code to render the updated version with music.`,
+              `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest Remotion composition code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code with runtime: "composition" to render the updated version with music.`,
               locale,
             );
             await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {

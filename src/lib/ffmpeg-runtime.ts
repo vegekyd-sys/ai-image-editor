@@ -45,23 +45,7 @@ export async function findFfmpeg(): Promise<string> {
 export async function findFfprobe(): Promise<string> {
   if (await commandExists('ffprobe')) return 'ffprobe'
 
-  let packagePath = ''
-  try {
-    packagePath = require('ffprobe-static')?.path || ''
-  } catch {
-    packagePath = ''
-  }
-
-  const found = firstExisting([
-    packagePath,
-    path.resolve(process.cwd(), 'node_modules/ffprobe-static/bin/darwin/arm64/ffprobe'),
-    path.resolve(process.cwd(), 'node_modules/ffprobe-static/bin/darwin/x64/ffprobe'),
-    path.resolve(process.cwd(), 'node_modules/ffprobe-static/bin/linux/x64/ffprobe'),
-    path.resolve(process.cwd(), 'node_modules/ffprobe-static/bin/linux/arm64/ffprobe'),
-  ])
-  if (found) return found
-
-  throw new Error('ffprobe not found - install ffprobe-static or add ffprobe to PATH')
+  throw new Error('ffprobe not found on PATH')
 }
 
 export interface VideoProbe {
@@ -82,8 +66,40 @@ function parseFps(value?: string): number | undefined {
   return num / den
 }
 
+function parseDuration(value?: string): number | null {
+  if (!value) return null
+  const match = value.match(/(\d+):(\d+):(\d+(?:\.\d+)?)/)
+  if (!match) return null
+  const [, hours, minutes, seconds] = match
+  return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
+}
+
+async function probeVideoFileWithFfmpeg(filePath: string): Promise<VideoProbe> {
+  const ffmpegPath = await findFfmpeg()
+  try {
+    await execFileAsync(ffmpegPath, ['-i', filePath, '-f', 'null', '-'], {
+      timeout: 30_000,
+      maxBuffer: 10 * 1024 * 1024,
+    })
+  } catch (e) {
+    const stderr = typeof (e as { stderr?: unknown }).stderr === 'string'
+      ? (e as { stderr: string }).stderr
+      : ''
+    const duration = parseDuration(stderr.match(/Duration:\s*([^,\n]+)/)?.[1])
+    const sizeMatch = stderr.match(/Video:.*?,\s*(\d+)x(\d+)[,\s]/)
+    return {
+      duration,
+      width: sizeMatch ? Number(sizeMatch[1]) : undefined,
+      height: sizeMatch ? Number(sizeMatch[2]) : undefined,
+    }
+  }
+  return { duration: null }
+}
+
 export async function probeVideoFile(filePath: string): Promise<VideoProbe> {
-  const ffprobePath = await findFfprobe()
+  const ffprobePath = await findFfprobe().catch(() => null)
+  if (!ffprobePath) return probeVideoFileWithFfmpeg(filePath)
+
   const { stdout } = await execFileAsync(ffprobePath, [
     '-v', 'error',
     '-print_format', 'json',

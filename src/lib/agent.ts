@@ -64,6 +64,7 @@ interface AgentContext {
   animationModel?: string;
   /** Video snapshot pending emit (v2) */
   pendingVideoSnapshot?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta };
+  pendingVideoSnapshots?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta }[];
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<media_1>>> */
   snapshotImages: string[];
   /** 0-based index of the snapshot the user is currently viewing */
@@ -74,6 +75,17 @@ interface AgentContext {
   userSkills?: ParsedSkill[];
   /** Timeline version: 1 = legacy (project_animations), 2 = video-in-timeline (snapshots) */
   timelineVersion?: number;
+}
+
+interface WorkspaceMediaOutputDraft {
+  path?: string;
+  storageUrl: string;
+  contentType: string;
+  description?: string;
+  duration?: number | null;
+  width?: number;
+  height?: number;
+  updatedAt?: string;
 }
 
 export type AgentStreamEvent =
@@ -153,7 +165,10 @@ async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
     for (let i = 0; i < Math.min(dbSnaps.length, ctx.snapshotImages.length); i++) {
       const snap = dbSnaps[i];
       if (snap.type === 'video') {
-        if (snap.image_url && !snap.image_url.endsWith('.mp4') && !ctx.snapshotImages[i]?.startsWith('http')) {
+        const videoUrl = typeof snap.video_meta?.videoUrl === 'string' ? snap.video_meta.videoUrl : '';
+        if (videoUrl) {
+          ctx.snapshotImages[i] = videoUrl;
+        } else if (snap.image_url && !ctx.snapshotImages[i]?.startsWith('http')) {
           ctx.snapshotImages[i] = snap.image_url;
         }
         continue;
@@ -163,6 +178,200 @@ async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
       }
     }
   } catch { /* best effort */ }
+}
+
+function isImageContentType(contentType?: string): boolean {
+  return !!contentType?.startsWith('image/');
+}
+
+function isVideoContentType(contentType?: string): boolean {
+  return !!contentType?.startsWith('video/');
+}
+
+function mediaKindMatches(contentType: string | undefined, mediaType: 'image' | 'video' | 'all'): boolean {
+  if (mediaType === 'all') return isImageContentType(contentType) || isVideoContentType(contentType);
+  if (mediaType === 'image') return isImageContentType(contentType);
+  return isVideoContentType(contentType);
+}
+
+function getWorkspaceMediaOutputs(ctx: AgentContext): WorkspaceMediaOutputDraft[] {
+  return ((ctx as any).__workspaceMediaOutputs || []) as WorkspaceMediaOutputDraft[];
+}
+
+function rememberWorkspaceMediaOutputs(ctx: AgentContext, outputs: WorkspaceMediaOutputDraft[]): void {
+  if (!outputs.length) return;
+  const existing = getWorkspaceMediaOutputs(ctx);
+  const seen = new Set(existing.map(o => o.path || o.storageUrl));
+  const merged = [...existing];
+  for (const output of outputs) {
+    const key = output.path || output.storageUrl;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(output);
+  }
+  (ctx as any).__workspaceMediaOutputs = merged.slice(-30);
+}
+
+function outputDisplayName(output: WorkspaceMediaOutputDraft, fallback: string): string {
+  if (output.description) return output.description;
+  const path = output.path || output.storageUrl;
+  const file = path.split('/').pop()?.replace(/\.[a-z0-9]+$/i, '') || fallback;
+  return file.replace(/[-_]+/g, ' ').trim() || fallback;
+}
+
+async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
+  workspacePaths?: string[];
+  limit?: number;
+  mediaType?: 'image' | 'video' | 'all';
+  name?: string;
+}): Promise<{ success: boolean; message: string; published: Array<{ snapshotId: string; type: 'image' | 'video'; url: string; path?: string }> }> {
+  if (!ctx.supabase || !ctx.userId) {
+    return { success: false, message: 'Workspace not available (no Supabase connection).', published: [] };
+  }
+
+  const mediaType = options.mediaType || 'all';
+  const requestedPaths = (options.workspacePaths || []).filter(Boolean);
+  const limit = Math.max(1, Math.min(options.limit || requestedPaths.length || 10, 20));
+  const remembered = getWorkspaceMediaOutputs(ctx);
+  const rememberedByPath = new Map(remembered.filter(o => o.path).map(o => [o.path!, o]));
+  const rememberedByUrl = new Map(remembered.map(o => [o.storageUrl, o]));
+
+  let candidates: WorkspaceMediaOutputDraft[] = [];
+
+  if (requestedPaths.length > 0) {
+    const pathSet = new Set(requestedPaths);
+    candidates.push(...remembered.filter(o => (o.path && pathSet.has(o.path)) || pathSet.has(o.storageUrl)));
+
+    const workspaceOnlyPaths = requestedPaths.filter(p => !/^https?:\/\//i.test(p));
+    if (workspaceOnlyPaths.length > 0) {
+      const { data, error } = await ctx.supabase
+        .from('workspace_files')
+        .select('path, content_type, storage_url, updated_at')
+        .eq('user_id', ctx.userId)
+        .in('path', workspaceOnlyPaths);
+      if (error) return { success: false, message: `Workspace lookup failed: ${error.message}`, published: [] };
+      candidates.push(...(data || []).map((row: Record<string, string>) => ({
+        path: row.path,
+        storageUrl: toPublicStorageUrl(row.storage_url),
+        contentType: row.content_type,
+        updatedAt: row.updated_at,
+        ...rememberedByPath.get(row.path),
+      })));
+    }
+
+    candidates.push(...requestedPaths
+      .filter(p => /^https?:\/\//i.test(p))
+      .map(url => rememberedByUrl.get(url) || {
+        storageUrl: toPublicStorageUrl(url),
+        contentType: /\.(mp4|mov|webm)(?:\?|$)/i.test(url) ? 'video/mp4' : 'image/jpeg',
+      } satisfies WorkspaceMediaOutputDraft));
+
+    const order = new Map(requestedPaths.map((p, i) => [p, i]));
+    candidates.sort((a, b) => (order.get(a.path || a.storageUrl) ?? 999) - (order.get(b.path || b.storageUrl) ?? 999));
+  } else {
+    candidates.push(...remembered.filter(o => mediaKindMatches(o.contentType, mediaType)).slice(-limit));
+
+    const { data, error } = await ctx.supabase
+      .from('workspace_files')
+      .select('path, content_type, storage_url, updated_at')
+      .eq('user_id', ctx.userId)
+      .like('path', `${ctx.projectId}/media/%`)
+      .order('updated_at', { ascending: false })
+      .limit(Math.max(limit * 3, 20));
+    if (error) return { success: false, message: `Workspace lookup failed: ${error.message}`, published: [] };
+
+    const rows: WorkspaceMediaOutputDraft[] = ((data || []) as Array<Record<string, string>>)
+      .map((row: Record<string, string>) => ({
+        path: row.path,
+        storageUrl: toPublicStorageUrl(row.storage_url),
+        contentType: row.content_type,
+        updatedAt: row.updated_at,
+        ...rememberedByPath.get(row.path),
+      }))
+      .filter((o: WorkspaceMediaOutputDraft) => mediaKindMatches(o.contentType, mediaType))
+      .slice(0, limit)
+      .reverse();
+    candidates.push(...rows);
+  }
+
+  const unique = new Map<string, WorkspaceMediaOutputDraft>();
+  for (const candidate of candidates) {
+    if (!candidate.storageUrl || !mediaKindMatches(candidate.contentType, mediaType)) continue;
+    unique.set(candidate.path || candidate.storageUrl, candidate);
+  }
+  const outputs = [...unique.values()].slice(-limit);
+  if (!outputs.length) {
+    const typeLabel = mediaType === 'all' ? 'image/video' : mediaType;
+    return { success: false, message: `No recent workspace ${typeLabel} outputs found for this project.`, published: [] };
+  }
+
+  const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
+  const published: Array<{ snapshotId: string; type: 'image' | 'video'; url: string; path?: string }> = [];
+
+  for (const [index, output] of outputs.entries()) {
+    const snapshotId = crypto.randomUUID();
+    const sortResult = await ctx.supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
+    const sortOrder = sortResult.data ?? Date.now();
+    const description = outputDisplayName(output, `${options.name || 'workspace output'} ${index + 1}`);
+
+    if (isVideoContentType(output.contentType)) {
+      const taskId = `workspace-${snapshotId}`;
+      const videoMeta: VideoMeta = {
+        taskId,
+        videoUrl: output.storageUrl,
+        providerUrl: output.storageUrl,
+        videoPath: output.path,
+        prompt: description,
+        sourceSnapshotIds: [],
+        sourceUrls: [output.storageUrl],
+        status: 'completed',
+        duration: typeof output.duration === 'number' ? output.duration : null,
+        model: 'upload',
+        createdAt: new Date().toISOString(),
+        width: output.width,
+        height: output.height,
+      };
+      const { error } = await ctx.supabase.from('snapshots').insert({
+        id: snapshotId,
+        project_id: ctx.projectId,
+        image_url: VIDEO_PLACEHOLDER_IMAGE,
+        tips: [],
+        message_id: '',
+        sort_order: sortOrder,
+        type: 'video',
+        video_meta: videoMeta,
+        description,
+      });
+      if (error) return { success: false, message: `Video publish failed: ${error.message}`, published };
+
+      ctx.snapshotImages.push(output.storageUrl);
+      ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+      if (!ctx.pendingVideoSnapshots) ctx.pendingVideoSnapshots = [];
+      ctx.pendingVideoSnapshots.push({ snapshotId, taskId, videoMeta });
+      published.push({ snapshotId, type: 'video', url: output.storageUrl, path: output.path });
+    } else if (isImageContentType(output.contentType)) {
+      const { error } = await ctx.supabase.from('snapshots').insert({
+        id: snapshotId,
+        project_id: ctx.projectId,
+        image_url: output.storageUrl,
+        tips: [],
+        message_id: '',
+        sort_order: sortOrder,
+        description,
+      });
+      if (error) return { success: false, message: `Image publish failed: ${error.message}`, published };
+
+      ctx.snapshotImages.push(output.storageUrl);
+      ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+      published.push({ snapshotId, type: 'image', url: output.storageUrl, path: output.path });
+    }
+  }
+
+  return {
+    success: true,
+    message: `Published ${published.length} workspace media output${published.length === 1 ? '' : 's'} to timeline:\n${published.map((p, i) => `${i + 1}. ${p.type}: ${p.url}`).join('\n')}`,
+    published,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -202,12 +411,12 @@ Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_cod
 
 ### File organization
 - **User-level** (shared across projects): \`skills/\`, \`memory/\`
-- **Project-level** (current project): \`${projectPath}code/\`${projectId ? ` — save design code here` : ''}
+- **Project-level** (current project): \`${projectPath}code/\`${projectId ? ` — save composition/code files here` : ''}
 - **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
 
 ### run_code
 Execute JavaScript in two modes:
-- \`runtime: "design"\` for Remotion/editable design drafts, animated templates, overlays, and sharp utilities.
+- \`runtime: "composition"\` for Remotion/editable composition drafts, animated templates, overlays, and sharp utilities. \`runtime: "design"\` is a legacy alias.
 - \`runtime: "node"\` for real MP4 work with FFmpeg/FFprobe: split, trim, concat, transcode, extract frames, mux audio, and long-video preparation.
 For finished single images, posters, infographics, and marketing graphics, use \`generate_image\` instead unless the user asks for editable or animated code.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
@@ -616,7 +825,7 @@ Hard constraints:
         }
 
         if (!videoUrl) {
-          return { error: `No video found at <<<media_${media_index}>>>. This snapshot may not be a video, or video is still processing. Use analyze_image to see the poster, or preview_frame for design frames.` };
+          return { error: `No video found at <<<media_${media_index}>>>. This snapshot may not be a video, or video is still processing. Use analyze_image to see the poster, or preview_frame for composition frames.` };
         }
 
         try {
@@ -640,14 +849,14 @@ Hard constraints:
     }),
 
     preview_frame: tool({
-      description: `Capture a screenshot of a design at a specific frame or time.
-Use media_index to target any snapshot with a design (including video snapshots).
+      description: `Capture a screenshot of a Remotion composition at a specific frame or time.
+Use media_index to target any snapshot with a composition (including video snapshots).
 For video snapshots: use timestamp to see specific moments in the video.
 For understanding video content (what happens, scenes, pacing), use analyze_video instead.
-Omit media_index to use the current (last edited) design.
+Omit media_index to use the current (last edited) composition.
 Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
-        media_index: z.number().optional().describe('1-based snapshot index (<<<media_1>>> = 1). Target any snapshot that has a design/video. Omit to use current design.'),
+        media_index: z.number().optional().describe('1-based snapshot index (<<<media_1>>> = 1). Target any snapshot that has a composition/video. Omit to use current composition.'),
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
@@ -655,7 +864,7 @@ Returns the rendered image so you can see it with your vision.`,
       execute: async ({ media_index, frame, timestamp, question }) => {
         let design = (ctx as any).__lastDesignPayload;
 
-        // Load design from specific snapshot if media_index provided
+        // Load composition payload from a specific snapshot if media_index provided.
         if (media_index !== undefined && ctx.supabase && ctx.userId) {
           const v = validateImageIndex(ctx.snapshotImages, media_index);
           if (v.error) return { error: v.error };
@@ -679,7 +888,7 @@ Returns the rendered image so you can see it with your vision.`,
           }
         }
 
-        if (!design) return { error: 'No design found. Use run_code first, or specify media_index of a snapshot with a design/video.' };
+        if (!design) return { error: 'No composition found. Use run_code first, or specify media_index of a snapshot with a composition/video.' };
 
         const fps = design.animation?.fps || 30;
         const dur = design.animation?.durationInSeconds || 0;
@@ -844,19 +1053,35 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
 Set fromLastRunCode=true to save the last run_code output.
-Design runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
+Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
 Node media runtime: \`type: "files"\` outputs are already saved workspace files; do not call write_file for those links. \`type: "video"\` is a single final MP4 and can be published with write_file.
+Set fromWorkspaceOutputs=true to publish recent workspace image/video outputs to the timeline. Use this when the user says "publish the videos/images you just exported" in a later turn; do not re-run FFmpeg.
 Path is auto-generated from the current project and output type. Just provide a short name.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Design drafts can publish to timeline; node media chunks should usually be save-only until the final MP4.'),
+        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Composition drafts can publish to timeline; node media chunks should usually be save-only until the final MP4.'),
+        fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use for previously exported FFmpeg/image outputs, including across turns.'),
+        workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths or storage URLs to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
+        mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
+        limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
         publish: z.boolean().optional().describe('Whether to publish to timeline. Default true. Set false to save workspace output without creating a Snapshot.'),
       }),
-      execute: async ({ path: filePath, name, content, fromLastRunCode, publish: shouldPublish }) => {
+      execute: async ({ path: filePath, name, content, fromLastRunCode, fromWorkspaceOutputs, workspacePaths, mediaType, limit, publish: shouldPublish }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, message: 'Workspace not available (no Supabase connection).' };
+        }
+        if (fromWorkspaceOutputs) {
+          if (shouldPublish === false) {
+            return { success: false, message: 'fromWorkspaceOutputs is for publishing existing workspace media to the timeline. Omit publish:false.' };
+          }
+          return publishWorkspaceMediaOutputs(ctx, {
+            workspacePaths,
+            mediaType: mediaType || 'all',
+            limit,
+            name,
+          });
         }
         let fileContent = content || '';
         let savePath = filePath || '';
@@ -998,10 +1223,11 @@ Path is auto-generated from the current project and output type. Just provide a 
     run_code: tool({
       description: `Execute JavaScript.
 
-Before first use, read \`prompts/agent-coding.md\`. For real MP4 splitting, trimming, concat, transcode, frames, or audio muxing, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
+Before first use, read \`prompts/agent-coding.md\`. For Remotion/editable compositions, also read \`prompts/remotion-composition.md\`. For real MP4 splitting, trimming, concat, transcode, frames, or audio muxing, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
 
 Runtimes:
-- \`runtime: "design"\` or omitted: Remotion/editable design draft, animated template, overlay, sharp utility.
+- \`runtime: "composition"\`: Remotion/editable composition draft, animated template, overlay, sharp utility.
+- \`runtime: "design"\` or omitted: legacy alias for \`runtime: "composition"\`.
 - \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real media files.
 
 Return exactly one supported shape:
@@ -1013,14 +1239,14 @@ Return exactly one supported shape:
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-Design hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light.
 
-Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobePath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4.`,
+Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; then read \`inputFiles[0].inputPath\`. Do not hardcode Media Index URLs for FFmpeg inputs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
-        description: z.string().optional().describe('Brief description of what this code does. For designs/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
-        media_refs: z.array(z.number()).optional().describe('1-based snapshot indices to pre-fetch as Buffers (e.g. [2, 3] for <<<media_2>>> and <<<media_3>>>). Available in code as images[0], images[1], ... (Buffer order matches this array).'),
-        runtime: z.enum(['design', 'node']).optional().describe('design = existing safe Remotion/sharp runtime (default). node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
+        description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
+        media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>> or [1, 2] for concat). REQUIRED for runtime:"node" FFmpeg work on timeline media; the files are downloaded and exposed as inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs.'),
+        runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }),
       execute: async ({ code, description: desc, media_refs, runtime }) => {
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
@@ -1057,11 +1283,23 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobeP
             supabase: ctx.supabase,
           });
 
-          if (mediaResult.type === 'error') {
-            return { type: 'text' as const, content: `Node media runtime error: ${mediaResult.content || 'unknown error'}` };
-          }
+	          if (mediaResult.type === 'error') {
+	            return { type: 'text' as const, content: `Node media runtime error: ${mediaResult.content || 'unknown error'}` };
+	          }
 
-          const primary = mediaResult.primaryOutput;
+	          rememberWorkspaceMediaOutputs(ctx, mediaResult.outputs
+	            .filter(o => o.storageUrl && (isImageContentType(o.contentType) || isVideoContentType(o.contentType)))
+	            .map(o => ({
+	              path: o.workspacePath,
+	              storageUrl: o.storageUrl!,
+	              contentType: o.contentType || 'application/octet-stream',
+	              description: o.description || desc,
+	              duration: o.duration ?? o.probe?.duration ?? null,
+	              width: o.width ?? o.probe?.width,
+	              height: o.height ?? o.probe?.height,
+	            })));
+
+	          const primary = mediaResult.primaryOutput;
           if (mediaResult.type === 'video' && primary?.contentType?.startsWith('video/') && primary.storageUrl) {
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
             (ctx as any).__runCodeDrafts.push({
@@ -1092,9 +1330,15 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobeP
             });
           }
 
+          const outputLinks = mediaResult.outputs
+            .map((o, i) => `${i + 1}. ${o.description ? `${o.description}: ` : ''}${o.storageUrl || o.workspacePath || o.path || '(no path)'}`)
+            .join('\n') || '(none)';
+          const outputMessage = `Workspace outputs:\n${outputLinks}`;
           return {
             type: 'text' as const,
-            content: mediaResult.content || `Node media run complete. Workspace outputs are ready; do not call write_file for type:"files" outputs. Use these MP4/file links directly, or continue to the next step such as generate_animation/concat.\n${mediaResult.outputs.map((o, i) => `${i + 1}. ${o.description ? `${o.description}: ` : ''}${o.storageUrl || o.workspacePath || o.path || '(no path)'}`).join('\n') || '(none)'}`,
+            content: mediaResult.content
+              ? `${mediaResult.content}\n\n${outputMessage}`
+              : `Node media run complete. Workspace outputs are ready; do not call write_file for type:"files" outputs. Use these MP4/file links directly, or continue to the next step such as generate_animation/concat.\n${outputMessage}`,
           };
         }
 
@@ -1187,7 +1431,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobeP
             }
           };
 
-          // { type: 'patch', edits: [...] } — Incremental search & replace on last design or a specific design via code_path
+          // { type: 'patch', edits: [...] } — Incremental search & replace on last composition or a specific composition via code_path
           if (result?.type === 'patch' && Array.isArray(result.edits)) {
             let baseDesign = (ctx as any).__lastDesignPayload;
 
@@ -1205,7 +1449,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobeP
             }
 
             if (!baseDesign) {
-              return { type: 'text' as const, content: 'No active design to patch. Use type: "render" to create a design first, or provide code_path to patch a specific design.' };
+              return { type: 'text' as const, content: 'No active composition to patch. Use type: "render" to create a composition first, or provide code_path to patch a specific composition.' };
             }
             let code = baseDesign.code;
             for (const edit of result.edits) {
@@ -1254,16 +1498,16 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobeP
                 durationInSeconds: result.durationInSeconds || result.duration || 5,
               };
             }
-            // ── Design harness: compile + image reference checks ──
+            // ── Composition harness: compile + image reference checks ──
             const harnessError = validateDesign({ code: result.code, props: result.props });
             if (harnessError) {
               return { type: 'text' as const, content: harnessError };
             }
 
-            // ── Harness passed — store design ──
+            // ── Harness passed — store composition ──
             // Auto-generate description if Agent didn't provide one
             const autoDesc = desc || (() => {
-              const type = animation ? `${animation.durationInSeconds}s video` : 'still design';
+              const type = animation ? `${animation.durationInSeconds}s video` : 'still composition';
               // Extract text content from code (string literals in JSX)
               const textMatches = result.code.match(/>([^<>{}\n]{3,60})</g)?.slice(0, 5).map((m: string) => m.slice(1).trim()).filter(Boolean);
               const textHint = textMatches?.length ? `: "${textMatches.slice(0, 3).join('", "')}"` : '';
@@ -1291,7 +1535,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobeP
             (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, content: `Design ready — draft ${draftIdx}. Use preview_frame to check key frames, then publish: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
+            return { type: 'text' as const, content: `Composition ready — draft ${draftIdx}. Use preview_frame to check key frames, then publish: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
           }
 
           // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
@@ -1361,7 +1605,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`ffprobeP
       // Cache point marker — cache all tools preceding this one (PR #8137 patch).
       // Must stay on the LAST tool in this map so the whole tools block is cached.
       providerOptions: { bedrock: { cachePoint: { type: 'default' } } },
-      description: `Generate background music for the current design/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
+      description: `Generate background music for the current composition/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
@@ -1508,9 +1752,10 @@ export async function* runMakaronAgent(
       ),
     ];
   } else {
-    // Inject current design code into prompt so Agent can patch without read_file
+    // Inject current composition code into prompt so Agent can patch without read_file.
+    // `design` remains the internal legacy field name only.
     const designInjection = options?.currentDesign?.code
-      ? `[Current design code — modify with run_code patch mode, no need to read_file]\n\`\`\`json\n${JSON.stringify({ code: options.currentDesign.code, width: options.currentDesign.width, height: options.currentDesign.height, animation: options.currentDesign.animation })}\n\`\`\`\n\n`
+      ? `[Current Remotion composition code — modify with run_code patch mode using runtime: "composition"; no need to read_file]\n\`\`\`json\n${JSON.stringify({ code: options.currentDesign.code, width: options.currentDesign.width, height: options.currentDesign.height, animation: options.currentDesign.animation })}\n\`\`\`\n\n`
       : '';
     userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
   }
@@ -1896,6 +2141,12 @@ export async function* runMakaronAgent(
           ctx.animationPrompt = undefined;
           ctx.animationImageUrls_ = undefined;
           ctx.animationModel = undefined;
+        }
+        if (ctx.pendingVideoSnapshots?.length) {
+          for (const pending of ctx.pendingVideoSnapshots) {
+            yield { type: 'video_snapshot', ...pending };
+          }
+          ctx.pendingVideoSnapshots = undefined;
         }
         if (ctx.pendingVideoSnapshot) {
           yield { type: 'video_snapshot', ...ctx.pendingVideoSnapshot };

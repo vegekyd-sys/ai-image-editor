@@ -18,12 +18,17 @@ Use this skill for file truth, not design truth:
 This is intentionally a recipe skill, not a narrow tool. You have a full Node backend:
 
 - `require('fs')`, `require('path')`, `require('child_process')`
-- `ffmpegPath`, `ffprobePath`
+- `ffmpegPath`
+- `ffprobePath` may be empty in deployment. Prefer `probeVideo(path)` instead of calling ffprobe directly.
 - `inputFiles` from `media_refs`
 - `ctx.media` with real `.mp4` URLs for video snapshots
 - `outputDir` for generated files
 - `saveOutput(localPath, workspacePath?, contentType?)`
 - `probeVideo(path)`
+
+Tool call rule: when the user references timeline media such as `<<<media_1>>>`, `<<<media_2>>>`, or "current video", the `run_code` tool call must include those 1-based indices as `media_refs`. Examples: split `<<<media_1>>>` → `media_refs: [1]`; concat `<<<media_1>>>` + `<<<media_2>>>` → `media_refs: [1, 2]`. Inside code, use `inputFiles[N].inputPath`. Do not start by hardcoding `ctx.media[N].url`; use it only for metadata or diagnostics.
+
+Publish rule: if FFmpeg already exported workspace images/videos and the user later says "publish/send them to timeline", call `write_file({ fromWorkspaceOutputs: true, mediaType: "video"|"image"|"all", limit: N })` or pass exact `workspacePaths`. Do not re-run the FFmpeg cut just to publish existing outputs.
 
 ## Think in FFmpeg primitives
 
@@ -68,6 +73,7 @@ const { promisify } = require('util');
 const path = require('path');
 const exec = promisify(execFile);
 
+if (!inputFiles.length) throw new Error('Missing media_refs. Call run_code again with media_refs: [1] for <<<media_1>>>.');
 const input = inputFiles[0].inputPath;
 const info = await probeVideo(input);
 const duration = info.duration || 0;
@@ -120,6 +126,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const exec = promisify(execFile);
 
+if (inputFiles.length < 2) throw new Error('Missing media_refs. Call run_code again with media_refs for every clip, e.g. [1, 2].');
 const listPath = path.join(outputDir, 'concat.txt');
 await fs.writeFile(
   listPath,

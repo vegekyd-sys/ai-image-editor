@@ -56,6 +56,14 @@ interface DbMessage {
   content: string;
 }
 
+function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
+  if (!description) return fallback;
+  const trimmed = description.trim();
+  if (trimmed === '[design]' || trimmed === '[design/video]') return fallback;
+  if (trimmed === 'still design') return 'still composition';
+  return description;
+}
+
 export async function buildPromptContext(
   projectId: string,
   supabase: SupabaseClient,
@@ -140,40 +148,40 @@ export async function buildPromptContext(
         const isRef = s.type === 'reference';
         const isVideo = s.type === 'video';
         const videoMeta = s.video_meta as Record<string, unknown> | undefined;
-        const isDesign = !!s.design_path && !isVideo;
+        const isComposition = !!s.design_path && !isVideo;
         const desc = isVideo
           ? (s.description || (videoMeta?.prompt as string)?.split('\n')[0]?.slice(0, 60) || '[video]')
           : isRef
             ? (s.description || 'Skill reference image')
-            : isDesign
-              ? (s.description || '[design/video]')
+            : isComposition
+              ? normalizeLegacyCompositionDescription(s.description, '[Remotion composition]')
               : i === 0 || snapshots.slice(0, i).every(ss => ss.type === 'reference')
                 ? (s.description || '原图 / Original upload')
                 : (s.description || '(use analyze_image to see this snapshot)');
         const typeLabel = isVideo
           ? (videoMeta?.status === 'completed' && videoMeta?.duration ? `video, ${videoMeta.duration}s` : videoMeta?.status && videoMeta.status !== 'completed' ? `video, ${videoMeta.status}` : 'video')
-          : isRef ? 'reference' : isDesign ? 'design' : 'image';
+          : isRef ? 'reference' : isComposition ? 'composition' : 'image';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
         const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';
-        const codePath = s.design_path && !isVideo ? ` [code: ${s.design_path}]` : '';
+        const codePath = s.design_path && !isVideo ? ` [composition code: ${s.design_path}]` : '';
         return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${codePath}`;
       }).join('\n')}\n\n`
     : '';
 
-  // Video/Design mode warnings (mutually exclusive)
+  // Video/composition mode warnings (mutually exclusive)
   const videoWarning = currentSnapIsVideo
-    ? `[VIDEO MODE] You are viewing a video. Use analyze_video to understand its content. Do NOT read or patch its design code — that is only a playback wrapper.\n\n`
+    ? `[VIDEO MODE] You are viewing a video. Use analyze_video to understand its content. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
     : '';
 
   const designWarning = !currentSnapIsVideo && currentDesign
-    ? `[DESIGN MODE] You are viewing a design/video (not a photo). The design code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this design.\n\n`
+    ? `[COMPOSITION MODE] You are viewing a Remotion composition (not a photo). The composition code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this composition.\n\n`
     : '';
 
-  // Design editable state
+  // Composition editable state
   const designContext = currentDesign?.editables?.length
-    ? `[Design Editable State]\n${currentDesign.editables.map(f =>
+    ? `[Composition Editable State]\n${currentDesign.editables.map(f =>
         `- ${f.label} (${f.propKey}): "${(currentDesign!.props as Record<string, unknown>)?.[f.propKey] ?? ''}"`
-      ).join('\n')}\nUser may have edited these values in the GUI. To modify the design, use run_code with { type: 'patch', edits: [...] }.\n\n`
+      ).join('\n')}\nUser may have edited these values in the GUI. To modify the composition, use run_code with { type: 'patch', edits: [...] } and runtime: "composition".\n\n`
     : '';
 
   // Frontend-only warnings

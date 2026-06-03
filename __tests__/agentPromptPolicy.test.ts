@@ -15,7 +15,8 @@ describe('agent prompt policy guards', () => {
 
     expect(agent).toContain('Default tool: `generate_image`')
     expect(agent).toContain('Static charts, infographics, posters, and marketing images go to `generate_image`')
-    expect(agentTs).toContain('\\`runtime: "design"\\` or omitted: Remotion/editable design draft')
+    expect(agentTs).toContain('\\`runtime: "composition"\\`: Remotion/editable composition draft')
+    expect(agentTs).toContain('\\`runtime: "design"\\` or omitted: legacy alias for \\`runtime: "composition"\\`')
     expect(agentTs).toContain('\\`runtime: "node"\\`: open backend Node with FFmpeg/FFprobe')
   })
 

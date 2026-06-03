@@ -197,7 +197,7 @@ export async function buildMediaItems(options: {
 
 export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promise<MediaSandboxResult> {
   const ffmpegPath = await findFfmpeg()
-  const ffprobePath = await findFfprobe()
+  const ffprobePath = await findFfprobe().catch(() => '')
   const workDir = await mkdtemp(path.join(tmpdir(), 'makaron-media-'))
   const inputDir = path.join(workDir, 'inputs')
   const outputDir = path.join(workDir, 'outputs')
