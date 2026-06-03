@@ -266,13 +266,17 @@ function rememberWorkspaceMediaOutputs(ctx: AgentContext, outputs: WorkspaceMedi
   (ctx as any).__workspaceMediaOutputs = merged.slice(-30);
 }
 
+function cleanMediaDescription(description: string): string {
+  return description
+    .replace(/\s*:\s*(?:undefined|null|NaN)s?\s*$/i, '')
+    .replace(/\b(?:undefined|null|NaN)s?\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function outputDisplayName(output: WorkspaceMediaOutputDraft, fallback: string): string {
   if (output.description) {
-    const cleaned = output.description
-      .replace(/\s*:\s*(?:undefined|null|NaN)s?\s*$/i, '')
-      .replace(/\b(?:undefined|null|NaN)s?\b/gi, '')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
+    const cleaned = cleanMediaDescription(output.description);
     if (cleaned) return cleaned;
   }
   const path = output.path || output.storageUrl;
@@ -1115,7 +1119,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
 Set fromLastRunCode=true to save the last run_code output.
 Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
-Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file.
+Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file. Do not use node/FFmpeg as a fallback for ordinary editable timeline splicing of existing videos; patch or publish the Remotion composition instead.
 Set fromWorkspaceOutputs=true to publish recent workspace image/video outputs to the timeline. Use this immediately after direct FFmpeg deliverables, or later when the user says "publish the videos/images you just exported"; do not re-run FFmpeg.
 Path is auto-generated from the current project and output type. Just provide a short name.`,
       inputSchema: z.object({
@@ -1225,7 +1229,7 @@ Path is auto-generated from the current project and output type. Just provide a 
               videoUrl,
               providerUrl: videoUrl,
               videoPath: lastDraft.workspacePath,
-              prompt: lastDraft.description || name || 'FFmpeg video',
+              prompt: cleanMediaDescription(lastDraft.description || name || 'FFmpeg video') || name || 'FFmpeg video',
               sourceSnapshotIds: [],
               sourceUrls: [videoUrl],
               status: 'completed',
@@ -1245,7 +1249,7 @@ Path is auto-generated from the current project and output type. Just provide a 
               sort_order: sortData ?? 0,
               type: 'video',
               video_meta: videoMeta,
-              description: lastDraft.description || name || 'FFmpeg video',
+              description: cleanMediaDescription(lastDraft.description || name || 'FFmpeg video') || name || 'FFmpeg video',
             });
             if (insertError) {
               return { success: false, message: `Video publish failed: ${insertError.message}` };
@@ -1289,7 +1293,7 @@ Before first use, read \`prompts/agent-coding.md\`. For Remotion/editable compos
 Runtimes:
 - \`runtime: "composition"\`: Remotion/editable composition draft, animated template, overlay, sharp utility.
 - \`runtime: "design"\` or omitted: legacy alias for \`runtime: "composition"\`.
-- \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real file-level media operations.
+- \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real file-level media operations. Never use node as a fallback for ordinary editable timeline splicing of existing videos.
 
 Return exactly one supported shape:
 - \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
@@ -1302,7 +1306,7 @@ Return exactly one supported shape:
 
 Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light.
 
-Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; then read \`inputFiles[0].inputPath\`. Do not hardcode Media Index URLs for FFmpeg inputs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4.`,
+Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; then read \`inputFiles[0].inputPath\`. Do not hardcode Media Index URLs for FFmpeg inputs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),

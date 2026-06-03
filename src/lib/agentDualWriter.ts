@@ -161,7 +161,7 @@ export class AgentDualWriter {
             tips: [],
             message_id: this.currentMessageId,
             sort_order: sortOrder,
-            description: designDesc || '[design]',
+            description: designDesc || '[composition]',
             design_path: designPath,
           }, { onConflict: 'id' }).then(({ error }) => {
             if (error) console.error('[DualWriter] design snapshot upsert error:', error);

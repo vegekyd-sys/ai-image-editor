@@ -68,6 +68,7 @@ Node media runtime:
 - If the user references timeline media such as `<<<media_1>>>` or `<<<media_2>>>`, pass those 1-based indices in the `run_code` tool input as `media_refs` (for example `media_refs: [1, 2]`). In node code, use `inputFiles`, not direct timeline URLs.
 - Do not use a separate probe-only run for simple splits. In one node run, combine `probeVideo(input)` with fallbacks from `inputFiles[0].duration`, `ctx.media[0].duration`, or explicit user-stated cut points.
 - Do not use node/FFmpeg for ordinary editable timeline splicing of two existing videos. If the user says "put these two videos together", "剪在一起", "add transitions/subtitles", or wants a free-edit timeline, use `runtime: "composition"` with Remotion `<Sequence>` and `<Video>`.
+- Do not switch from composition to node/FFmpeg as a fallback for ordinary timeline splicing when preview is imperfect. Patch the Remotion composition or report the preview issue; keep the workflow editable.
 
 `generate_image` is the exception: it publishes directly to the timeline.
 
@@ -90,6 +91,7 @@ Node media call checklist:
 - Split one timeline video: `runtime: "node"`, `media_refs: [N]`, code reads `inputFiles[0].inputPath`.
 - Final file-level assembly of generated chunks: `runtime: "node"`, `media_refs` or workspace paths for the generated MP4s, then export one mobile-safe MP4.
 - Ordinary splice of two existing timeline videos: `runtime: "composition"`, not node.
+- Failed or imperfect Remotion preview for ordinary splice: patch composition, not node fallback.
 - If `inputFiles` is empty, stop and fix the tool call by adding `media_refs`; do not retry by hardcoding URLs.
 
 ## Verification
