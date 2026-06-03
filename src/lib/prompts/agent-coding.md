@@ -66,6 +66,7 @@ Node media runtime:
 - Publish only the final user-facing MP4 with `write_file({ fromLastRunCode: true, name: "slug" })`.
 - If there are multiple exported chunk files and the user asks to put them on the timeline, publish the existing workspace outputs with `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })`; do not cut them again.
 - If the user references timeline media such as `<<<media_1>>>` or `<<<media_2>>>`, pass those 1-based indices in the `run_code` tool input as `media_refs` (for example `media_refs: [1, 2]`). In node code, use `inputFiles`, not direct timeline URLs.
+- Do not use a separate probe-only run for simple splits. In one node run, combine `probeVideo(input)` with fallbacks from `inputFiles[0].duration`, `ctx.media[0].duration`, or explicit user-stated cut points.
 - Do not use node/FFmpeg for ordinary editable timeline splicing of two existing videos. If the user says "put these two videos together", "剪在一起", "add transitions/subtitles", or wants a free-edit timeline, use `runtime: "composition"` with Remotion `<Sequence>` and `<Video>`.
 
 `generate_image` is the exception: it publishes directly to the timeline.

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { MAX_ACCEPTED_DURATION, MAX_DURATION } from '@/lib/video-upload'
 import { buildMediaItems, runNodeMediaCode } from '@/lib/media-sandbox'
 
@@ -6,6 +8,15 @@ describe('Agent FFmpeg video lab', () => {
   it('allows long uploads for Agent-side FFmpeg workflows', () => {
     expect(MAX_DURATION).toBeGreaterThanOrEqual(120)
     expect(MAX_ACCEPTED_DURATION).toBeGreaterThan(38.776)
+  })
+
+  it('keeps Makaron CLI upload and provider video limits separate', () => {
+    const cli = readFileSync(join(process.cwd(), 'packages/makaron-cli/bin/makaron.mjs'), 'utf8')
+    expect(cli).toContain('const MAX_VIDEO_UPLOAD_DURATION = 120')
+    expect(cli).toContain('const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15')
+    expect(cli).toContain('maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
+    expect(cli).toContain('Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
+    expect(cli).not.toContain('const MAX_VIDEO_DURATION = 15')
   })
 
   it('resolves video snapshots to the real mp4 URL, not the poster image', async () => {

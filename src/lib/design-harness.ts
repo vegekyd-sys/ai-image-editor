@@ -105,6 +105,10 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
     return '⚠️ Composition rejected: ctx.snapshotImages[N] was passed as a string literal instead of being evaluated. Use template literal interpolation: `${ctx.snapshotImages[N]}` to embed the actual URL. Regenerate.';
   }
 
+  if (/<<<media_\d+>>>/.test(serialized)) {
+    return '⚠️ Composition rejected: unresolved Media Index placeholder found. Use actual ctx.snapshotImages[N] URLs or props resolved from Media Index. Regenerate.';
+  }
+
   if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{5120000,}/.test(serialized)) {
     return '⚠️ Composition rejected: Base64 image data >5MB found in code/props. Use ctx.snapshotImages[N] URLs for full-size images. Regenerate.';
   }

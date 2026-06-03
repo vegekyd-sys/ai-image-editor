@@ -30,6 +30,8 @@ Tool call rule: when FFmpeg work references timeline media such as `<<<media_1>>
 
 Publish rule: if FFmpeg already exported workspace images/videos and the user later says "publish/send them to timeline", call `write_file({ fromWorkspaceOutputs: true, mediaType: "video"|"image"|"all", limit: N })` or pass exact `workspacePaths`. Do not re-run the FFmpeg cut just to publish existing outputs.
 
+Probe rule: do not spend a separate `run_code` call only to probe before a simple split. In one node run, call `probeVideo(input)` and fall back to `inputFiles[0].duration`, `ctx.media[0].duration`, or explicit user-stated cut points. If the user says "30s into 3 x 10s", cut those ranges directly in the same run.
+
 ## Think in FFmpeg primitives
 
 Do not memorize one tool per request. Translate the user's intent into a small graph:
@@ -75,15 +77,19 @@ const exec = promisify(execFile);
 
 if (!inputFiles.length) throw new Error('Missing media_refs. Call run_code again with media_refs: [1] for <<<media_1>>>.');
 const input = inputFiles[0].inputPath;
-const info = await probeVideo(input);
-const duration = info.duration || 0;
-if (!duration) throw new Error('Could not read video duration');
+const info = await probeVideo(input).catch(() => ({}));
+const duration = info.duration || inputFiles[0].duration || ctx.media?.[0]?.duration || 0;
 
 // Pick ONE segment plan:
 const parts = [
+  // If the user explicitly requested 30s split into 3 equal videos:
+  { start: 0, len: 10, label: 'Part 1' },
+  { start: 10, len: 10, label: 'Part 2' },
+  { start: 20, len: 10, label: 'Part 3' },
+
   // Exactly two videos:
-  { start: 0, len: duration / 2, label: 'Part 1' },
-  { start: duration / 2, len: duration / 2, label: 'Part 2' },
+  // { start: 0, len: duration / 2, label: 'Part 1' },
+  // { start: duration / 2, len: duration / 2, label: 'Part 2' },
 
   // Or <=15s chunks:
   // ...Array.from({ length: Math.ceil(duration / 15) }, (_, i) => ({

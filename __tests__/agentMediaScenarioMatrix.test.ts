@@ -97,6 +97,7 @@ describe('agent media scenario matrix', () => {
     expect(remotion).toContain('trimBefore')
     expect(remotion).toContain('<Sequence>')
     expect(remotion).toContain('put two existing timeline videos together')
+    expect(remotion).toContain('Do not leave `<<<media_N>>>` placeholders inside `props.clipA`')
     expect(remotion).toContain('composition draft')
     expect(remotion).toContain('function Composition(props)')
     expect(remotion).not.toContain('function Design(props)')
@@ -129,6 +130,8 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('Capture a screenshot of a Remotion composition')
     expect(agentTs).toContain('Patch failed: no base composition')
     expect(agentTs).toContain('Composition ready')
+    expect(agentTs).toContain('resolveMediaMarkersInValue')
+    expect(designHarness).toContain('unresolved Media Index placeholder')
     expect(agentTs).not.toContain('[Current Remotion composition code')
     expect(agentTs).not.toContain('[Current design code')
     expect(agentTs).not.toContain('Capture a screenshot of a design')
@@ -177,6 +180,9 @@ describe('agent media scenario matrix', () => {
       'return both URLs from the first `type: "files"` run and stop',
       'the `run_code` tool call must include those 1-based indices as `media_refs`',
       'use Remotion composition instead',
+      'do not spend a separate `run_code` call only to probe before a simple split',
+      'inputFiles[0].duration',
+      'explicit user-stated cut points',
       'if (inputFiles.length < 2)',
     ]
 

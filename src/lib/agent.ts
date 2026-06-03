@@ -132,6 +132,25 @@ function validateImageIndex(snapshotImages: string[], index: number): { idx: num
   return { idx };
 }
 
+function resolveMediaMarkersInString(value: string, snapshotImages: string[]): string {
+  return value.replace(/<<<media_(\d+)>>>/g, (marker, rawIndex) => {
+    const media = snapshotImages[Number(rawIndex) - 1];
+    return media || marker;
+  });
+}
+
+function resolveMediaMarkersInValue(value: unknown, snapshotImages: string[]): unknown {
+  if (typeof value === 'string') return resolveMediaMarkersInString(value, snapshotImages);
+  if (Array.isArray(value)) return value.map(item => resolveMediaMarkersInValue(item, snapshotImages));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([key, item]) => [key, resolveMediaMarkersInValue(item, snapshotImages)])
+    );
+  }
+  return value;
+}
+
 /** Fetch an image source (URL or base64 data URL) into a JPEG Buffer.
  *  Always normalizes to JPEG to avoid MIME type mismatches (e.g. PNG labeled as JPEG). */
 async function fetchImageBuffer(
@@ -1464,7 +1483,11 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               code = code.replace(edit.old, edit.new);
             }
             const mergedProps = result.props ? { ...(baseDesign.props || {}), ...result.props } : baseDesign.props;
-            const patched = { ...baseDesign, code, props: mergedProps };
+            const patched = {
+              ...baseDesign,
+              code: resolveMediaMarkersInString(code, ctx.snapshotImages),
+              props: resolveMediaMarkersInValue(mergedProps, ctx.snapshotImages) as Record<string, unknown> | undefined,
+            };
             if (result.editables) patched.editables = result.editables;
 
             const harnessError = validateDesign({ code: patched.code, props: patched.props });
@@ -1502,7 +1525,9 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               };
             }
             // ── Composition harness: compile + image reference checks ──
-            const harnessError = validateDesign({ code: result.code, props: result.props });
+            const resolvedCode = resolveMediaMarkersInString(result.code, ctx.snapshotImages);
+            const resolvedProps = resolveMediaMarkersInValue(result.props, ctx.snapshotImages) as Record<string, unknown> | undefined;
+            const harnessError = validateDesign({ code: resolvedCode, props: resolvedProps });
             if (harnessError) {
               return { type: 'text' as const, content: harnessError };
             }
@@ -1517,10 +1542,10 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               return `${type} (${result.width || 1080}x${result.height || 1350})${textHint}`;
             })();
             const designPayload = {
-              code: result.code,
+              code: resolvedCode,
               width: result.width || 1080,
               height: result.height || 1350,
-              props: result.props,
+              props: resolvedProps,
               animation,
               description: autoDesc,
               ...(result.editables ? { editables: result.editables } : {}),

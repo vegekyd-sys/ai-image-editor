@@ -137,7 +137,7 @@ try {
     await page.locator('input[type="email"]').first().fill(email)
     await page.locator('input[type="password"]').first().fill(password)
     await Promise.all([
-      page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 45_000 }),
+      page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 45_000, waitUntil: 'domcontentloaded' }),
       page.locator('button[type="submit"]').first().click(),
     ]).catch(async () => {
       // Some auth redirects go through "/" quickly; force projects after session cookie is set.
