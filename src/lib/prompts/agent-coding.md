@@ -8,7 +8,7 @@ Do not use this as a Remotion creative guide. For editable timelines, motion gra
 
 - `runtime: "composition"`: Remotion/editable composition runtime. Use for patchable motion graphics, typography, overlays, title cards, video timelines, and composition drafts.
 - `runtime: "design"` or omitted: legacy alias for `runtime: "composition"`. The word `design` is a historical internal name, not a reason to route generic layout/mockup/image tasks to Remotion.
-- `runtime: "node"`: open backend Node runtime with FFmpeg/FFprobe. Use for real media files: MP4 split/trim/concat/transcode, frame extraction, muxing, duration probing, and long-video preparation.
+- `runtime: "node"`: open backend Node runtime with FFmpeg/FFprobe. Use for real file-level MP4 operations: split, exact trim/export, transcode, frame extraction, muxing, duration probing, long-video preparation, and final assembly of generated chunks.
 
 If the task is a static poster, infographic, e-commerce page, layout image, or marketing visual, use `generate_image` unless the user explicitly asks for editable code or animation.
 
@@ -66,6 +66,7 @@ Node media runtime:
 - Publish only the final user-facing MP4 with `write_file({ fromLastRunCode: true, name: "slug" })`.
 - If there are multiple exported chunk files and the user asks to put them on the timeline, publish the existing workspace outputs with `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })`; do not cut them again.
 - If the user references timeline media such as `<<<media_1>>>` or `<<<media_2>>>`, pass those 1-based indices in the `run_code` tool input as `media_refs` (for example `media_refs: [1, 2]`). In node code, use `inputFiles`, not direct timeline URLs.
+- Do not use node/FFmpeg for ordinary editable timeline splicing of two existing videos. If the user says "put these two videos together", "剪在一起", "add transitions/subtitles", or wants a free-edit timeline, use `runtime: "composition"` with Remotion `<Sequence>` and `<Video>`.
 
 `generate_image` is the exception: it publishes directly to the timeline.
 
@@ -86,7 +87,8 @@ Prefer H.264/AAC/yuv420p with `-movflags +faststart` for mobile-compatible final
 
 Node media call checklist:
 - Split one timeline video: `runtime: "node"`, `media_refs: [N]`, code reads `inputFiles[0].inputPath`.
-- Concat two timeline videos: `runtime: "node"`, `media_refs: [A, B]`, code reads both `inputFiles`.
+- Final file-level assembly of generated chunks: `runtime: "node"`, `media_refs` or workspace paths for the generated MP4s, then export one mobile-safe MP4.
+- Ordinary splice of two existing timeline videos: `runtime: "composition"`, not node.
 - If `inputFiles` is empty, stop and fix the tool call by adding `media_refs`; do not retry by hardcoding URLs.
 
 ## Verification

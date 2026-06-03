@@ -4,6 +4,8 @@ Use this prompt only for editable Remotion compositions: motion graphics, video 
 
 Use `runtime: "composition"` for new work. `runtime: "design"` is a legacy alias that maps to the same implementation.
 
+When the user asks to put two existing timeline videos together, cut clips freely, add transitions, add subtitles, or make a sequence that can be edited later, this is the default runtime. Use Remotion `<Sequence>` and `<Video>` rather than FFmpeg.
+
 Do not use this prompt for static posters, infographics, e-commerce pages, or ordinary layout images unless the user explicitly asks for editable code or animation.
 
 ## Runtime Contract

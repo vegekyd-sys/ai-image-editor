@@ -82,7 +82,8 @@ describe('agent media scenario matrix', () => {
     expect(coding).toContain('For direct requests such as "split this video into two videos", return those URLs and stop')
     expect(coding).toContain('Intermediate chunks for long-video workflows stay as workspace outputs, not timeline snapshots')
     expect(coding).toContain('pass those 1-based indices in the `run_code` tool input as `media_refs`')
-    expect(coding).toContain('Concat two timeline videos: `runtime: "node"`, `media_refs: [A, B]`')
+    expect(coding).toContain('Ordinary splice of two existing timeline videos: `runtime: "composition"`, not node.')
+    expect(coding).toContain('Do not use node/FFmpeg for ordinary editable timeline splicing of two existing videos')
     expect(coding).toContain('[Current Composition]')
     expect(coding).toContain('[Current composition pointer]')
     expect(coding).toContain('code_path')
@@ -95,6 +96,7 @@ describe('agent media scenario matrix', () => {
     expect(remotion).toContain('Editable Fields')
     expect(remotion).toContain('trimBefore')
     expect(remotion).toContain('<Sequence>')
+    expect(remotion).toContain('put two existing timeline videos together')
     expect(remotion).toContain('composition draft')
     expect(remotion).toContain('function Composition(props)')
     expect(remotion).not.toContain('function Design(props)')
@@ -167,14 +169,14 @@ describe('agent media scenario matrix', () => {
       'split_source',
       'generate_chunks',
       'collect_outputs',
-      'concat_outputs',
+      'assemble_outputs',
       'publish_final',
       'Do not run the same split again',
       'Never publish source chunks as timeline snapshots',
       'do not start a second `run_code` just to re-open a file from the previous temp directory',
       'return both URLs from the first `type: "files"` run and stop',
       'the `run_code` tool call must include those 1-based indices as `media_refs`',
-      'concat `<<<media_1>>>` + `<<<media_2>>>` → `media_refs: [1, 2]`',
+      'use Remotion composition instead',
       'if (inputFiles.length < 2)',
     ]
 

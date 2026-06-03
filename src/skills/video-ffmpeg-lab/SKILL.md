@@ -6,14 +6,14 @@ allowed-tools: run_code generate_animation analyze_video write_file
 
 # Video FFmpeg Lab
 
-Use `run_code` with `runtime: "node"` whenever the user asks for real MP4 operations: split, trim, concat, transcode, resize, crop, extract frames, preserve audio, replace audio, or prepare long videos for Seedance/Kling.
+Use `run_code` with `runtime: "node"` whenever the user asks for real file-level MP4 operations: split, exact trim/export, transcode, resize, crop, extract frames, preserve audio, replace audio, or prepare long videos for Seedance/Kling.
 
 Use this skill for file truth, not design truth:
 
-- Choose FFmpeg when the user cares about an existing MP4 as a file: exact duration, codecs, chunking, audio, export format, or final stitched deliverables.
-- Choose Remotion/design runtime when the user wants editable motion graphics, typography systems, reusable title cards, overlays, or patchable code.
-- A common pipeline is FFmpeg first, model generation second, concat last. Remotion is separate and optional unless the user specifically wants an editable design layer.
-- Do not use Remotion to fake a split/trim/concat task. Do not use FFmpeg when the request is really "build me a motion template I can keep editing."
+- Choose FFmpeg when the user cares about an existing MP4 as a file: exact duration, codecs, chunking, audio, export format, model-sized chunks, or final file-level deliverables.
+- Choose Remotion/composition runtime when the user wants editable timelines, two existing timeline videos cut together, typography systems, reusable title cards, overlays, transitions, subtitles, or patchable code.
+- A common long-video generation pipeline is FFmpeg first, model generation second, file-level assembly last. Remotion is separate and optional unless the user wants an editable timeline layer.
+- Do not use Remotion to fake a source-video split/export task. Do not use FFmpeg when the request is really "put these timeline videos together in an editable sequence."
 
 This is intentionally a recipe skill, not a narrow tool. You have a full Node backend:
 
@@ -26,7 +26,7 @@ This is intentionally a recipe skill, not a narrow tool. You have a full Node ba
 - `saveOutput(localPath, workspacePath?, contentType?)`
 - `probeVideo(path)`
 
-Tool call rule: when the user references timeline media such as `<<<media_1>>>`, `<<<media_2>>>`, or "current video", the `run_code` tool call must include those 1-based indices as `media_refs`. Examples: split `<<<media_1>>>` → `media_refs: [1]`; concat `<<<media_1>>>` + `<<<media_2>>>` → `media_refs: [1, 2]`. Inside code, use `inputFiles[N].inputPath`. Do not start by hardcoding `ctx.media[N].url`; use it only for metadata or diagnostics.
+Tool call rule: when FFmpeg work references timeline media such as `<<<media_1>>>`, `<<<media_2>>>`, or "current video", the `run_code` tool call must include those 1-based indices as `media_refs`. Example: split `<<<media_1>>>` → `media_refs: [1]`. Inside code, use `inputFiles[N].inputPath`. Do not start by hardcoding `ctx.media[N].url`; use it only for metadata or diagnostics. If the task is simply cutting two existing timeline videos together, stop and use Remotion composition instead.
 
 Publish rule: if FFmpeg already exported workspace images/videos and the user later says "publish/send them to timeline", call `write_file({ fromWorkspaceOutputs: true, mediaType: "video"|"image"|"all", limit: N })` or pass exact `workspacePaths`. Do not re-run the FFmpeg cut just to publish existing outputs.
 
@@ -38,7 +38,7 @@ Do not memorize one tool per request. Translate the user's intent into a small g
 - Select time: trim, split into equal parts, split by max duration, or cut around highlights.
 - Transform image: scale, crop, pad, rotate, stabilize-ish crop, color grade, overlay text/image.
 - Transform sound: keep audio, mute, normalize, replace BGM, delay, fade in/out.
-- Assemble: concat clips, mux audio, make proxy/preview, export mobile MP4.
+- Assemble file deliverables: stitch generated chunks, mux audio, make proxy/preview, export mobile MP4.
 - Verify: probe every MP4 and return useful descriptions.
 
 For Makaron UX, prefer H.264/AAC/yuv420p with `-movflags +faststart` unless the user asks for another format.
@@ -59,7 +59,7 @@ Current known defaults:
 | SeeDance | 15s | 15.5s | Default video model, higher quality, feature/reference mode preferred. |
 | Kling | 10s | 10.5s | Cheaper option, supports base video edit when capability allows it. |
 
-If a new model appears, follow its capability/tool error messages instead of inventing a new case. The workflow stays the same: probe → segment to accepted duration → generate per segment → concat.
+If a new model appears, follow its capability/tool error messages instead of inventing a new case. The long-video generation workflow stays the same: probe → segment to accepted duration → generate per segment → assemble generated outputs.
 
 When the user asks to make the run cheaper, prefer Kling only when the requested source duration, reference-video mode, text/audio needs, and tool errors indicate Kling can support it. If Kling cannot handle the requested operation, say so briefly and continue with SeeDance.
 
@@ -117,7 +117,9 @@ After a split run, treat the returned files as a manifest. Do not run the same s
 
 For direct split/trim/export requests, `type: "files"` is the final answer. The returned workspace URLs are the MP4 deliverables. Do not call `write_file` for each returned file, and do not start a second `run_code` just to re-open a file from the previous temp directory.
 
-## Assembly pattern
+## Final file assembly pattern
+
+Use this only after a workflow has produced file-level chunks that need one exported MP4, such as generated long-video segments. Do not use this as the default for "put two existing timeline videos together"; that is Remotion composition work.
 
 ```js
 const { execFile } = require('child_process');
@@ -199,11 +201,11 @@ Use this checklist to avoid repeated splitting and wasted tokens:
 2. `split_source`: create chunks once and return `type: "files"` with descriptions like `Chunk 1/2, 14.98s`.
 3. `generate_chunks`: submit each manifest chunk to `generate_animation`.
 4. `collect_outputs`: wait for all generated chunk URLs.
-5. `concat_outputs`: run `runtime: "node"` once to stitch generated chunks.
+5. `assemble_outputs`: run `runtime: "node"` once to stitch generated chunks into a final MP4.
 6. `publish_final`: call `write_file` once for the final MP4.
 
 Never publish source chunks as timeline snapshots unless the user explicitly asks to see the chunks as separate videos.
 
 Never split a generated chunk again unless a tool error says the generated chunk is still too long for the next step.
 
-If the user asks for two separate deliverable videos, return both URLs from the first `type: "files"` run and stop. If the user asks for one final edited video, return one `type: "video"` from the concat/final run and publish that single final MP4 with `write_file`.
+If the user asks for two separate deliverable videos, return both URLs from the first `type: "files"` run and stop. If a long-video generation workflow needs one final file deliverable, return one `type: "video"` from the final assembly run and publish that single final MP4 with `write_file`.

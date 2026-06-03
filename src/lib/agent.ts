@@ -419,7 +419,7 @@ Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_cod
 ### run_code
 Execute JavaScript in two modes:
 - \`runtime: "composition"\` for Remotion/editable composition drafts, animated templates, overlays, and sharp utilities. \`runtime: "design"\` is a legacy alias.
-- \`runtime: "node"\` for real MP4 work with FFmpeg/FFprobe: split, trim, concat, transcode, extract frames, mux audio, and long-video preparation.
+- \`runtime: "node"\` for real file-level MP4 work with FFmpeg/FFprobe: split, exact trim/export, transcode, extract frames, mux audio, long-video preparation, and final assembly of generated chunks.
 For finished single images, posters, infographics, and marketing graphics, use \`generate_image\` instead unless the user asks for editable or animated code.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
@@ -1225,12 +1225,12 @@ Path is auto-generated from the current project and output type. Just provide a 
     run_code: tool({
       description: `Execute JavaScript.
 
-Before first use, read \`prompts/agent-coding.md\`. For Remotion/editable compositions, also read \`prompts/remotion-composition.md\`. For real MP4 splitting, trimming, concat, transcode, frames, or audio muxing, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
+Before first use, read \`prompts/agent-coding.md\`. For Remotion/editable compositions, also read \`prompts/remotion-composition.md\`. For real file-level MP4 splitting, exact trimming/export, transcode, frames, audio muxing, long-video preparation, or final assembly of generated chunks, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
 
 Runtimes:
 - \`runtime: "composition"\`: Remotion/editable composition draft, animated template, overlay, sharp utility.
 - \`runtime: "design"\` or omitted: legacy alias for \`runtime: "composition"\`.
-- \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real media files.
+- \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real file-level media operations.
 
 Return exactly one supported shape:
 - \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
@@ -1247,7 +1247,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
-        media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>> or [1, 2] for concat). REQUIRED for runtime:"node" FFmpeg work on timeline media; the files are downloaded and exposed as inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs.'),
+        media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the files are downloaded and exposed as inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }),
       execute: async ({ code, description: desc, media_refs, runtime }) => {
@@ -1340,7 +1340,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             type: 'text' as const,
             content: mediaResult.content
               ? `${mediaResult.content}\n\n${outputMessage}`
-              : `Node media run complete. Workspace outputs are ready; do not call write_file for type:"files" outputs. Use these MP4/file links directly, or continue to the next step such as generate_animation/concat.\n${outputMessage}`,
+              : `Node media run complete. Workspace outputs are ready; do not call write_file for type:"files" outputs. Use these MP4/file links directly, or continue to the next file-level step such as generate_animation or final assembly.\n${outputMessage}`,
           };
         }
 

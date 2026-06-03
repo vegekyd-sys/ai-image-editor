@@ -71,13 +71,13 @@ Default video model follows the app selection, usually SeeDance. If the user ask
 
 Default tool: `run_code` with `runtime: "node"`, after reading `skills/video-ffmpeg-lab/SKILL.md`.
 
-For long-video style transfer, do not repeatedly split the same source. Probe once, split once into a manifest of chunks, generate per chunk, then concat the generated chunks.
+For long-video style transfer: probe once, split once, generate per chunk, then assemble. Do not route ordinary timeline editing to FFmpeg.
 
 ### Remotion Composition Runtime
 
 Default tool: `run_code` with `runtime: "composition"`, after reading `prompts/remotion-composition.md`.
 
-Use for editable Remotion timelines, trims, subtitles, kinetic typography, overlays, title cards, animated templates, and patchable drafts.
+Use for editable timelines/trims/subtitles/overlays; default for "put these two videos together" / "剪在一起".
 
 `runtime: "design"` is a legacy alias. Internal `design` names are historical and do not mean generic layout/mockup/image tasks should use Remotion.
 
