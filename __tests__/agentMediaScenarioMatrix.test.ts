@@ -130,6 +130,8 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('Capture a screenshot of a Remotion composition')
     expect(agentTs).toContain('Patch failed: no base composition')
     expect(agentTs).toContain('Composition ready')
+    expect(agentTs).toContain('Draft is not saved yet')
+    expect(agentTs).toContain('publish: false')
     expect(agentTs).toContain('resolveMediaMarkersInValue')
     expect(designHarness).toContain('unresolved Media Index placeholder')
     expect(agentTs).not.toContain('[Current Remotion composition code')
