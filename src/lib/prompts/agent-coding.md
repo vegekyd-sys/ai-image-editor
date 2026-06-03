@@ -35,6 +35,7 @@ When editing existing code, prefer `type: "patch"`:
 ```js
 return {
   type: 'patch',
+  code_path: 'code/snapshot-id.json', // required when editing a persisted workspace composition
   edits: [
     { old: 'exact string in current code', new: 'replacement string' }
   ]
@@ -44,8 +45,10 @@ return {
 - Each `old` string must match exactly once. If it is ambiguous, include more surrounding context.
 - Use patch for modify, add, or delete operations.
 - Include `props` when changing editable values alongside code.
+- If the current context includes `[Current Composition]`, `[Current composition pointer]`, or `[composition code: ...]`, include that exact path as `code_path`.
+- If you need exact strings for a persisted composition, call `read_file(code_path)` once, then still return `type: "patch"` with the same `code_path`.
 - Only use a fresh `render` when starting from scratch or replacing the whole structure.
-- If the user message contains `[Current Remotion composition code]`, patch directly without reading files.
+- Do not rely on implicit remembered composition code across turns.
 
 ## Workspace And Publish
 

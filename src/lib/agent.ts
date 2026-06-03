@@ -1,4 +1,5 @@
 import { streamText, tool, stepCountIs } from 'ai';
+import type { ModelMessage } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
@@ -93,7 +94,8 @@ export type AgentStreamEvent =
   | { type: 'content'; text: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string; usedModel?: string }
-  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
+  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
+  | { type: 'tool_result'; tool: string; toolCallId?: string; step?: number; output?: unknown }
   | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }
   | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta }
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
@@ -486,7 +488,7 @@ function createTools(ctx: AgentContext) {
     generate_image: tool({
       description: generateImageToolPrompt,
       inputSchema: z.object({
-        editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, write only the direction — template rules are auto-injected.'),
+        editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.enum(['gemini', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
@@ -1099,10 +1101,10 @@ Path is auto-generated from the current project and output type. Just provide a 
               message: 'write_file({ fromLastRunCode: true }) saves the run_code source/publishable draft, not individual binary outputs from type:"files". Use the storageUrl links returned by run_code, or return a single type:"video" final MP4 and publish that.',
             };
           }
-          // Auto-generate path. Node/FFmpeg runs save the executable JS; design runs save JSON payload.
+          // Auto-generate path. Node/FFmpeg runs save the executable JS; composition runs save JSON payload.
           if (!savePath) {
             const snapshotIdx = ctx.snapshotImages.length;
-            const slug = (name || 'design').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+            const slug = (name || 'composition').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
             const isVideoCode = lastDraftForPath?.type === 'video';
             savePath = isVideoCode
               ? `${ctx.projectId}/media-code/snapshot-${snapshotIdx}-${slug}.js`
@@ -1198,7 +1200,7 @@ Path is auto-generated from the current project and output type. Just provide a 
           }
         }
 
-        return { success: true, message: `Saved: ${savePath}`, storageUrl: toPublicStorageUrl(result.storageUrl || '') };
+        return { success: true, message: `Saved: ${savePath}`, path: savePath, storageUrl: toPublicStorageUrl(result.storageUrl || '') };
       },
     }),
 
@@ -1449,7 +1451,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             }
 
             if (!baseDesign) {
-              return { type: 'text' as const, content: 'No active composition to patch. Use type: "render" to create a composition first, or provide code_path to patch a specific composition.' };
+              return { type: 'text' as const, content: 'Patch failed: no base composition. Provide code_path in the patch result, e.g. return { type: "patch", code_path: "code/...", edits: [...] }. Do not fall back to render unless the user asked for a new composition.' };
             }
             let code = baseDesign.code;
             for (const edit of result.edits) {
@@ -1485,7 +1487,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             }
 
             const draftIdx = drafts.length;
-            return { type: 'text' as const, content: `Patched — draft ${draftIdx} updated. Use preview_frame to verify key frames. Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
+            const patchSource = result.code_path ? ` from ${result.code_path}` : '';
+            return { type: 'text' as const, content: `Patched${patchSource} — draft ${draftIdx} updated. Use preview_frame to verify key frames. Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -1684,7 +1687,7 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }>; timelineVersion?: number; perf?: AgentPerf },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
   const ctx: AgentContext = {
@@ -1705,17 +1708,13 @@ export async function* runMakaronAgent(
     timelineVersion: options?.timelineVersion,
   };
 
-  // Pre-load design for patch support across sessions
-  if (options?.currentDesign?.code) {
-    (ctx as any).__lastDesignPayload = options.currentDesign;
-  }
-
   const allTools = createTools(ctx);
   perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
   let stepCount = 0;
   let toolCallStartTime = 0;
   let toolCallName = '';
+  let activeToolCallId: string | undefined;
   const agentStartTime = Date.now();
 
   const analysisOnly = options?.analysisOnly ?? false;
@@ -1752,10 +1751,12 @@ export async function* runMakaronAgent(
       ),
     ];
   } else {
-    // Inject current composition code into prompt so Agent can patch without read_file.
-    // `design` remains the internal legacy field name only.
-    const designInjection = options?.currentDesign?.code
-      ? `[Current Remotion composition code — modify with run_code patch mode using runtime: "composition"; no need to read_file]\n\`\`\`json\n${JSON.stringify({ code: options.currentDesign.code, width: options.currentDesign.width, height: options.currentDesign.height, animation: options.currentDesign.animation })}\n\`\`\`\n\n`
+    // Inject only the pointer/metadata, never full composition code. The agent
+    // must pass code_path explicitly in run_code patch mode for persisted compositions.
+    const promptHasCompositionPointer = typeof prompt === 'string'
+      && (prompt.includes('[Current Composition]') || prompt.includes('[Current composition pointer]'));
+    const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
+      ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } and runtime: "composition". Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
     userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
   }
@@ -1783,9 +1784,10 @@ export async function* runMakaronAgent(
   const userImagesCount = Array.isArray(userContent)
     ? userContent.filter((p: { type?: string }) => p?.type === 'image').length
     : 0;
-  // analysis / tipReaction / animation modes intentionally skip history to keep
-  // the request single-turn (matches prior behavior). Normal chat sends it.
-  const sendHistory = !analysisOnly && !tipReactionOnly && !(animImages?.length);
+  // analysis / tipReaction modes intentionally skip history to keep
+  // the request single-turn (matches prior behavior). Normal chat and video
+  // requests send it so read_file/tool results can be reused cross-turn.
+  const sendHistory = !analysisOnly && !tipReactionOnly;
   const history = sendHistory ? (options?.history ?? []) : [];
   console.log(
     `[agent-req] systemChars=${systemPrompt.length} toolsChars=${toolsChars} userChars=${userContentChars} images=${userImagesCount} historyTurns=${history.length} mode=${tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal'}`
@@ -1825,14 +1827,16 @@ export async function* runMakaronAgent(
 
   let firstContentAt = 0;
 
-  // B7: cache the conversation history up through the last assistant turn.
+  // B7: cache the conversation history up through the last non-user turn.
+  // Tool-aware history can end with a `tool` message, so include it in the
+  // cache point; otherwise expensive tool results sit outside cached prefix.
   // Only worth the cacheWrite cost when the conversation has real history
-  // (≥ 2 prior turns including at least one assistant). Short sessions skip.
-  const msgs: Array<{ role: 'user' | 'assistant'; content: unknown; providerOptions?: Record<string, unknown> }> =
-    [...history, { role: 'user', content: userContent }];
+  // (≥ 2 prior turns including at least one model/tool response). Short sessions skip.
+  const msgs: Array<ModelMessage & { providerOptions?: Record<string, unknown> }> =
+    [...history, { role: 'user', content: userContent } as ModelMessage];
   if (history.length >= 2) {
     for (let i = msgs.length - 2; i >= 0; i--) {
-      if (msgs[i].role === 'assistant') {
+      if (msgs[i].role === 'assistant' || msgs[i].role === 'tool') {
         msgs[i].providerOptions = { bedrock: { cachePoint: { type: 'default' } } };
         break;
       }
@@ -1968,6 +1972,7 @@ export async function* runMakaronAgent(
       if (event.type === 'tool-call') {
         toolCallStartTime = Date.now();
         toolCallName = event.toolName;
+        activeToolCallId = (event as { toolCallId?: string }).toolCallId || crypto.randomUUID();
         console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
         perf?.mark('tool_call', {
           tool: event.toolName,
@@ -2047,6 +2052,8 @@ export async function* runMakaronAgent(
         yield {
           type: 'tool_call',
           tool: event.toolName,
+          toolCallId: activeToolCallId,
+          step: stepCount,
           input: isRunCode
             ? { ...toolInput, code: ((toolInput.code as string)).slice(0, 100) + `... (${(toolInput.code as string).length} chars)` }
             : toolInput,
@@ -2069,6 +2076,8 @@ export async function* runMakaronAgent(
       if (event.type === 'tool-result') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const toolName = (event as any).toolName as string | undefined;
+        const toolCallId = ((event as any).toolCallId as string | undefined) || activeToolCallId;
+        const toolOutput = ((event as any).output ?? (event as any).result) as unknown;
         const toolDuration = toolCallStartTime ? ((Date.now() - toolCallStartTime) / 1000).toFixed(1) : '?';
         console.log(`⏱️ [agent] tool-result "${toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (tool took ${toolDuration}s)`);
         perf?.mark('tool_result', {
@@ -2080,6 +2089,10 @@ export async function* runMakaronAgent(
         // Reset status after tool completes so stale status doesn't linger during thinking
         const isEnLocale = options?.locale === 'en';
         yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
+        if (toolName) {
+          yield { type: 'tool_result', tool: toolName, toolCallId, step: stepCount, output: toolOutput };
+        }
+        activeToolCallId = undefined;
 
         // Emit image_analyzed event so frontend can save the description
         if (toolName === 'analyze_image' || toolName === 'analyze_video') {

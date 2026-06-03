@@ -130,6 +130,7 @@ export async function POST(req: NextRequest) {
           supabase,
           userId: userId,
           currentDesign: ctx.currentDesign,
+          currentDesignPath: ctx.currentDesignPath,
           history: ctx.history,
           timelineVersion,
         })) {

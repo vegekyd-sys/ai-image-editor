@@ -9,8 +9,10 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ModelMessage } from 'ai';
 import type { DesignPayload, Tip } from '@/types';
 import * as workspace from './workspace';
+import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 
 export interface PromptContextOptions {
   /** 0-based index of the snapshot the user is viewing. Defaults to last. */
@@ -32,10 +34,11 @@ export interface PromptContextResult {
   /** Prior user/assistant turns (excluding the current user prompt).
    *  Passed to streamText as the messages[] prefix so Bedrock sees a real
    *  multi-turn conversation — required for per-turn cachePoint (B7). */
-  history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  history: ModelMessage[];
   snapshotImages: string[];
   currentSnapshotIndex: number;
   currentDesign?: DesignPayload;
+  currentDesignPath?: string;
   originalImage?: string;
 }
 
@@ -52,8 +55,10 @@ interface DbSnapshot {
 }
 
 interface DbMessage {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
+  created_at: string;
 }
 
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
@@ -72,8 +77,8 @@ export async function buildPromptContext(
 ): Promise<PromptContextResult> {
   const { userMessage, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = options;
 
-  // Query snapshots and messages in parallel
-  const [snapshotsRes, messagesRes] = await Promise.all([
+  // Query snapshots, visible messages, and private tool history in parallel.
+  const [snapshotsRes, messagesRes, toolHistoryRes] = await Promise.all([
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
@@ -81,13 +86,20 @@ export async function buildPromptContext(
       .order('sort_order', { ascending: true }),
     supabase
       .from('messages')
-      .select('role, content')
+      .select('id, role, content, created_at')
       .eq('project_id', projectId)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('agent_tool_history')
+      .select('created_at, run_id, step, seq, tool_call_id, tool_name, input, output')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
       .order('created_at', { ascending: true }),
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
   const messages: DbMessage[] = messagesRes.data ?? [];
+  const toolHistory: DbToolHistoryRow[] = toolHistoryRes.data ?? [];
 
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
@@ -96,9 +108,10 @@ export async function buildPromptContext(
   // their design_path is only a Remotion playback wrapper, not user-editable code)
   let currentDesign: DesignPayload | undefined;
   const currentSnapIsVideo = currentSnap?.type === 'video';
-  if (currentSnap?.design_path && !currentSnapIsVideo) {
+  const currentDesignPath = currentSnap?.design_path && !currentSnapIsVideo ? currentSnap.design_path : undefined;
+  if (currentDesignPath) {
     try {
-      const file = await workspace.readFile(currentSnap.design_path, supabase, userId);
+      const file = await workspace.readFile(currentDesignPath, supabase, userId);
       if (file) currentDesign = JSON.parse(file.content);
     } catch { /* design load failed, continue without */ }
   }
@@ -119,15 +132,10 @@ export async function buildPromptContext(
     ? `[图片分析结果]\n${currentSnap.description}\n\n`
     : '';
 
-  // Conversation history — real user/assistant turns, passed to streamText as
-  // messages[] prefix (no longer stringified into user content).
-  // Drop trailing user messages so the current turn's prompt isn't duplicated
-  // if the caller already wrote it to DB before building context.
-  const filtered = messages
-    .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
-    .map(m => ({ role: m.role, content: m.content }));
-  while (filtered.length && filtered[filtered.length - 1].role === 'user') filtered.pop();
-  const history = filtered.slice(-50);
+  // Conversation history — real AI SDK ModelMessage[] turns, including private
+  // sanitized tool call/results. Drop trailing user messages so the current
+  // turn's prompt isn't duplicated if the caller already wrote it to DB.
+  const history = buildModelHistoryFromRows(messages, toolHistory, 50);
 
   // Tips
   const currentTips: Tip[] = Array.isArray(currentSnap?.tips) ? currentSnap.tips : [];
@@ -173,15 +181,16 @@ export async function buildPromptContext(
     ? `[VIDEO MODE] You are viewing a video. Use analyze_video to understand its content. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
     : '';
 
-  const designWarning = !currentSnapIsVideo && currentDesign
-    ? `[COMPOSITION MODE] You are viewing a Remotion composition (not a photo). The composition code is provided above. Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Read the code and description to understand this composition.\n\n`
+  const designWarning = !currentSnapIsVideo && currentDesignPath
+    ? `[COMPOSITION MODE] You are viewing a Remotion composition (not a photo). Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Modify the existing composition by using its workspace code path with run_code patch mode.\n\n`
     : '';
 
-  // Composition editable state
-  const designContext = currentDesign?.editables?.length
-    ? `[Composition Editable State]\n${currentDesign.editables.map(f =>
+  // Composition editable state and path contract. Keep the full code out of the
+  // prompt; the agent must use code_path explicitly when patching persisted compositions.
+  const designContext = currentDesignPath
+    ? `[Current Composition]\npath: ${currentDesignPath}${currentDesign ? `\nwidth: ${currentDesign.width}\nheight: ${currentDesign.height}${currentDesign.animation ? `\nanimation: ${currentDesign.animation.durationInSeconds}s @ ${currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this composition, call run_code with { type: 'patch', code_path: '${currentDesignPath}', edits: [...] } and runtime: "composition". Do not recreate it with render unless the user asks for a new composition.\n${currentDesign?.editables?.length ? `\n[Composition Editable State]\n${currentDesign.editables.map(f =>
         `- ${f.label} (${f.propKey}): "${(currentDesign!.props as Record<string, unknown>)?.[f.propKey] ?? ''}"`
-      ).join('\n')}\nUser may have edited these values in the GUI. To modify the composition, use run_code with { type: 'patch', edits: [...] } and runtime: "composition".\n\n`
+      ).join('\n')}\nUser may have edited these values in the GUI. Preserve/merge current props when patching.\n` : ''}\n`
     : '';
 
   // Frontend-only warnings
@@ -217,6 +226,7 @@ export async function buildPromptContext(
     snapshotImages,
     currentSnapshotIndex,
     currentDesign,
+    currentDesignPath,
     originalImage,
   };
 }

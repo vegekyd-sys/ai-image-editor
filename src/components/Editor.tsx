@@ -1577,7 +1577,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
+        { prompt: text, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );

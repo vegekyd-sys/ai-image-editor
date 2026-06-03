@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     const { prompt, image, originalImage, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
-            musicReady, musicAudioUrl, currentDesign, videoModel,
+            musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel,
             headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = await req.json();
     endReadBody({
       projectId: projectId || null,
@@ -208,7 +209,8 @@ export async function POST(req: NextRequest) {
           let agentSnapshotImages = snapshotImages?.length ? snapshotImages : (agentImage ? [agentImage] : []);
           let agentCurrentSnapshotIndex = currentSnapshotIndex ?? Math.max(agentSnapshotImages.length - 1, 0);
           let agentCurrentDesign = currentDesign;
-          let agentHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+          let agentCurrentDesignPath = typeof currentDesignPath === 'string' ? currentDesignPath : undefined;
+          let agentHistory: ModelMessage[] = [];
 
           if (needsPromptContext) {
             // Unified context: both frontend and headless use buildPromptContext.
@@ -229,6 +231,7 @@ export async function POST(req: NextRequest) {
               historyTurns: ctx.history.length,
               mediaCount: ctx.snapshotImages.length,
               hasCurrentDesign: !!ctx.currentDesign,
+              currentDesignPath: ctx.currentDesignPath || null,
             });
 
             agentPrompt = ctx.fullPrompt;
@@ -238,6 +241,7 @@ export async function POST(req: NextRequest) {
             agentSnapshotImages = snapshotImages?.length ? snapshotImages : ctx.snapshotImages;
             agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
             agentCurrentDesign = currentDesign || ctx.currentDesign;
+            agentCurrentDesignPath = agentCurrentDesignPath || ctx.currentDesignPath;
             agentHistory = ctx.history;
           } else {
             perf.mark('build_prompt_context_skipped', {
@@ -274,7 +278,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, history: agentHistory, timelineVersion, perf })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
                 if (event.type === 'usage') { usageEvent = event; continue; }
                 if (writer) {
                   await writer.processAndEnqueue(event);

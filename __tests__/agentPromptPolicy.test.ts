@@ -22,6 +22,7 @@ describe('agent prompt policy guards', () => {
 
   it('keeps built-in image skill triggers visible before the image guide is read', () => {
     const agent = read('src/lib/prompts/agent.md')
+    const agentTs = read('src/lib/agent.ts')
     const tool = read('src/lib/prompts/generate_image_tool.md')
     const image = read('src/lib/prompts/image.md')
 
@@ -38,6 +39,8 @@ describe('agent prompt policy guards', () => {
     expect(tool).toContain('Do not read `prompts/image.md` just to route the skill')
     expect(tool).not.toContain('prompts/enhance.md')
     expect(image).toContain('backend no longer injects the full template automatically')
+    expect(agentTs).not.toContain('template rules are auto-injected')
+    expect(agentTs).toContain('you must have read and internalized that skill prompt once')
   })
 
   it('requires script confirmation before video provider submission unless direct-submit is explicit', () => {
@@ -98,6 +101,24 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('prefer Kling')
     expect(agentTs).toContain('normalizeVideoModelId(model || (ctx as any).videoModel)')
     expect(agentTs).toContain('Default follows the app selection (usually seedance)')
+  })
+
+  it('uses path-based composition patching instead of full currentDesign code injection', () => {
+    const agentTs = read('src/lib/agent.ts')
+    const coding = read('src/lib/prompts/agent-coding.md')
+    const context = read('src/lib/agent-context.ts')
+
+    expect(agentTs).toContain('[Current composition pointer]')
+    expect(agentTs).toContain('currentDesignPath')
+    expect(agentTs).toContain('code_path')
+    expect(agentTs).not.toContain('[Current Remotion composition code')
+    expect(agentTs).not.toContain('__lastDesignPayload = options.currentDesign')
+
+    expect(coding).toContain('include that exact path as `code_path`')
+    expect(coding).toContain('Do not rely on implicit remembered composition code across turns')
+    expect(context).toContain('[Current Composition]')
+    expect(context).toContain('code_path')
+    expect(context).not.toContain('[Current Design]')
   })
 
   it('routes long video work through the long-video-director skill before short video scripts', () => {
