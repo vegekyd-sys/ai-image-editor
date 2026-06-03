@@ -19,6 +19,17 @@ describe('Agent FFmpeg video lab', () => {
     expect(cli).not.toContain('const MAX_VIDEO_DURATION = 15')
   })
 
+  it('publishes direct FFmpeg MP4 deliverables to the timeline by default', () => {
+    const skill = readFileSync(join(process.cwd(), 'src/skills/video-ffmpeg-lab/SKILL.md'), 'utf8')
+    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+
+    expect(skill).toContain('if FFmpeg produces user-facing MP4 deliverables, publish them to the timeline immediately')
+    expect(skill).toContain('Direct user-facing split/trim/export requests are different: publish those MP4 deliverables to the timeline')
+    expect(agent).toContain('If these are user-facing MP4 deliverables, immediately publish them with write_file({ fromWorkspaceOutputs: true, mediaType: "video"')
+    expect(agent).not.toContain('For direct split/trim/export requests, `type: "files"` is the final answer')
+    expect(agent).not.toContain('do not call write_file for type:"files" outputs')
+  })
+
   it('resolves video snapshots to the real mp4 URL, not the poster image', async () => {
     const fakeSupabase = {
       from: () => ({

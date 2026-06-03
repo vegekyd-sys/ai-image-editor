@@ -28,7 +28,7 @@ This is intentionally a recipe skill, not a narrow tool. You have a full Node ba
 
 Tool call rule: when FFmpeg work references timeline media such as `<<<media_1>>>`, `<<<media_2>>>`, or "current video", the `run_code` tool call must include those 1-based indices as `media_refs`. Example: split `<<<media_1>>>` → `media_refs: [1]`. Inside code, use `inputFiles[N].inputPath`. Do not start by hardcoding `ctx.media[N].url`; use it only for metadata or diagnostics. If the task is simply cutting two existing timeline videos together, stop and use Remotion composition instead.
 
-Publish rule: if FFmpeg already exported workspace images/videos and the user later says "publish/send them to timeline", call `write_file({ fromWorkspaceOutputs: true, mediaType: "video"|"image"|"all", limit: N })` or pass exact `workspacePaths`. Do not re-run the FFmpeg cut just to publish existing outputs.
+Publish rule: if FFmpeg produces user-facing MP4 deliverables, publish them to the timeline immediately with `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })` or exact `workspacePaths` before saying the task is complete. Examples: "split this video into 3 parts", "cut the first 10 seconds", "trim/export this clip", "transcode this MP4". If FFmpeg already exported workspace images/videos and the user later says "publish/send them to timeline", publish existing outputs; do not re-run the FFmpeg cut just to publish.
 
 Probe rule: do not spend a separate `run_code` call only to probe before a simple split. In one node run, call `probeVideo(input)` and fall back to `inputFiles[0].duration`, `ctx.media[0].duration`, or explicit user-stated cut points. If the user says "30s into 3 x 10s", cut those ranges directly in the same run.
 
@@ -121,7 +121,7 @@ return { type: 'files', outputs };
 
 After a split run, treat the returned files as a manifest. Do not run the same split again unless the source video, model limit, or requested cut points changed.
 
-For direct split/trim/export requests, `type: "files"` is the final answer. The returned workspace URLs are the MP4 deliverables. Do not call `write_file` for each returned file, and do not start a second `run_code` just to re-open a file from the previous temp directory.
+For direct split/trim/export requests, `type: "files"` contains the MP4 deliverables. Do not stop at workspace URLs: immediately publish those exported MP4s to the timeline with one `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })` call so the user can see them. Do not start a second `run_code` just to re-open a file from the previous temp directory.
 
 ## Final file assembly pattern
 
@@ -210,8 +210,8 @@ Use this checklist to avoid repeated splitting and wasted tokens:
 5. `assemble_outputs`: run `runtime: "node"` once to stitch generated chunks into a final MP4.
 6. `publish_final`: call `write_file` once for the final MP4.
 
-Never publish source chunks as timeline snapshots unless the user explicitly asks to see the chunks as separate videos.
+Never publish source chunks for model-preparation workflows as timeline snapshots unless the user explicitly asks to see the chunks as separate videos. Direct user-facing split/trim/export requests are different: publish those MP4 deliverables to the timeline.
 
 Never split a generated chunk again unless a tool error says the generated chunk is still too long for the next step.
 
-If the user asks for two separate deliverable videos, return both URLs from the first `type: "files"` run and stop. If a long-video generation workflow needs one final file deliverable, return one `type: "video"` from the final assembly run and publish that single final MP4 with `write_file`.
+If the user asks for two separate deliverable videos, export both from the first `type: "files"` run and publish both to the timeline with `fromWorkspaceOutputs`. If a long-video generation workflow needs one final file deliverable, return one `type: "video"` from the final assembly run and publish that single final MP4 with `write_file`.

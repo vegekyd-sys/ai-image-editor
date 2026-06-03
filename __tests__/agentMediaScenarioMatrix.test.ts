@@ -79,8 +79,9 @@ describe('agent media scenario matrix', () => {
     expect(coding).toContain('runtime: "composition"')
     expect(coding).toContain('legacy alias for `runtime: "composition"`')
     expect(coding).toContain('Node Media Runtime')
-    expect(coding).toContain('For direct requests such as "split this video into two videos", return those URLs and stop')
-    expect(coding).toContain('Intermediate chunks for long-video workflows stay as workspace outputs, not timeline snapshots')
+    expect(coding).toContain('For direct user-facing MP4 requests such as "split this video into two videos"')
+    expect(coding).toContain('immediately publish the exported MP4s with `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })`')
+    expect(coding).toContain('Intermediate chunks for long-video model-preparation workflows stay as workspace outputs')
     expect(coding).toContain('pass those 1-based indices in the `run_code` tool input as `media_refs`')
     expect(coding).toContain('Ordinary splice of two existing timeline videos: `runtime: "composition"`, not node.')
     expect(coding).toContain('Do not use node/FFmpeg for ordinary editable timeline splicing of two existing videos')
@@ -183,9 +184,10 @@ describe('agent media scenario matrix', () => {
       'assemble_outputs',
       'publish_final',
       'Do not run the same split again',
-      'Never publish source chunks as timeline snapshots',
-      'do not start a second `run_code` just to re-open a file from the previous temp directory',
-      'return both URLs from the first `type: "files"` run and stop',
+      'Never publish source chunks for model-preparation workflows as timeline snapshots',
+      'Direct user-facing split/trim/export requests are different: publish those MP4 deliverables to the timeline',
+      'Do not start a second `run_code` just to re-open a file from the previous temp directory',
+      'export both from the first `type: "files"` run and publish both to the timeline with `fromWorkspaceOutputs`',
       'the `run_code` tool call must include those 1-based indices as `media_refs`',
       'use Remotion composition instead',
       'do not spend a separate `run_code` call only to probe before a simple split',

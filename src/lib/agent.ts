@@ -1108,15 +1108,15 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
 Set fromLastRunCode=true to save the last run_code output.
 Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
-Node media runtime: \`type: "files"\` outputs are already saved workspace files; do not call write_file for those links. \`type: "video"\` is a single final MP4 and can be published with write_file.
-Set fromWorkspaceOutputs=true to publish recent workspace image/video outputs to the timeline. Use this when the user says "publish the videos/images you just exported" in a later turn; do not re-run FFmpeg.
+Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file.
+Set fromWorkspaceOutputs=true to publish recent workspace image/video outputs to the timeline. Use this immediately after direct FFmpeg deliverables, or later when the user says "publish the videos/images you just exported"; do not re-run FFmpeg.
 Path is auto-generated from the current project and output type. Just provide a short name.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
         fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Composition drafts can publish to timeline; node media chunks should usually be save-only until the final MP4.'),
-        fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use for previously exported FFmpeg/image outputs, including across turns.'),
+        fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns.'),
         workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths or storage URLs to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
         limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
@@ -1370,7 +1370,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             const dur = typeof primary.duration === 'number' ? `, ${primary.duration.toFixed(1)}s` : '';
             return {
               type: 'text' as const,
-              content: `Node media run complete — final video output ${draftIdx} saved to workspace${dur}: ${primary.storageUrl}\nPublish it with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).`,
+              content: `Node media run complete — final video output ${draftIdx} saved to workspace${dur}: ${primary.storageUrl}\nIf this MP4 is the user-facing result, immediately publish it with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }) before telling the user it is done. If it is only an intermediate model-prep chunk, keep it in workspace.`,
             };
           }
 
@@ -1391,8 +1391,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           return {
             type: 'text' as const,
             content: mediaResult.content
-              ? `${mediaResult.content}\n\n${outputMessage}`
-              : `Node media run complete. Workspace outputs are ready; do not call write_file for type:"files" outputs. Use these MP4/file links directly, or continue to the next file-level step such as generate_animation or final assembly.\n${outputMessage}`,
+              ? `${mediaResult.content}\n\n${outputMessage}\n\nIf these are user-facing MP4 deliverables, immediately publish them with write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: ${mediaResult.outputs.length || 1} }) before telling the user it is done. Keep them as workspace outputs only for intermediate model-preparation chunks or when the user explicitly says not to publish.`
+              : `Node media run complete. Workspace outputs are ready.\n${outputMessage}\n\nIf these are user-facing MP4 deliverables, immediately publish them with write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: ${mediaResult.outputs.length || 1} }) before telling the user it is done. Keep them as workspace outputs only for intermediate model-preparation chunks or when the user explicitly says not to publish.`,
           };
         }
 
