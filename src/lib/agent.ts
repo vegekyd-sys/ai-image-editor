@@ -1511,7 +1511,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
 
             const draftIdx = drafts.length;
             const patchSource = result.code_path ? ` from ${result.code_path}` : '';
-            return { type: 'text' as const, content: `Patched${patchSource} — draft ${draftIdx} updated. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "slug", publish: false }) to save the editable workspace draft. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "slug" }).` };
+            return { type: 'text' as const, content: `Patched${patchSource} — draft ${draftIdx} updated. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "slug", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "slug" }).` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -1563,7 +1563,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, content: `Composition ready — draft ${draftIdx}. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "<descriptive-slug>", publish: false }) to save the editable workspace draft. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).` };
+            return { type: 'text' as const, content: `Composition ready — draft ${draftIdx}. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "<descriptive-slug>", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).` };
           }
 
           // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)

@@ -40,6 +40,8 @@ After every meaningful render or patch, save the code with `write_file({ fromLas
 
 If the change includes transitions, subtitles, overlays, trim timing, cropping, or other visible timeline edits, call `preview_frame` on stable middle frames before telling the user it is complete or publishing it.
 
+When changing trim timing or total sequence length, update `animation.durationInSeconds` to match the final timeline exactly (`totalFrames / fps`). Do not tell the user a clip is 18s while returning a 20s animation.
+
 ## Remotion APIs
 
 Available APIs include all exports from `remotion`, `@remotion/media`, `@remotion/paths`, and `@remotion/noise`.
@@ -146,5 +148,6 @@ After render or patch:
 - Review code shape and media references first.
 - Use `preview_frame` when visual verification is needed.
 - Visual verification is required for transitions, subtitles, overlays, trim timing, cropping, or any composition you are about to publish to the timeline.
+- For trim edits, verify the final `animation.durationInSeconds` matches the actual total frame count before saving or publishing.
 - Capture stable middle frames for each scene, not transition starts.
 - Check subject cropping, text readability, overlay placement, and final frame content.
