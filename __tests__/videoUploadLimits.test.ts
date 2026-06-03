@@ -34,4 +34,14 @@ describe('video upload duration limits', () => {
     expect(zh).not.toContain('metadata 误差')
     expect(en).not.toContain('metadata padding accepted')
   })
+
+  it('does not direct-upload videos above the Storage object limit', () => {
+    const source = read('src/lib/video-upload.ts')
+
+    expect(source).toContain('const STORAGE_UPLOAD_MAX_SIZE = 50 * 1024 * 1024')
+    expect(source).toContain('const DIRECT_UPLOAD_MAX_SIZE = 48 * 1024 * 1024')
+    expect(source).toContain('TRANSCODE_TARGET_SIZE')
+    expect(source).toContain('videoBitrate')
+    expect(source).toContain('Video upload too large after processing')
+  })
 })
