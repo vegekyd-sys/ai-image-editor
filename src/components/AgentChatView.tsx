@@ -346,7 +346,7 @@ function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) 
 /** Shared Markdown renderer to avoid duplicating component overrides.
  *  <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
-function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onViewFile?: (path: string) => void }) {
+function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPreviewSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onPreviewSnapshot?: (index: number, triggerEl?: HTMLElement | null) => void; onViewFile?: (path: string) => void }) {
   // Replace <<<media_N>>> and <<<image_N>>> with inline code `MEDIA_REF_N` so markdown structure stays intact
   let processed = snapshots
     ? text.replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
@@ -372,7 +372,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
         const m = str.match(/^MEDIA_REF_(\d+)$/);
         if (m) {
           const idx = parseInt(m[1]) - 1;
-          return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
+          return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} onPreview={onPreviewSnapshot} />;
         }
       }
       // Intercept FILE_REF tokens → render FileRefChip
@@ -422,7 +422,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
     th: ({ children }: { children?: React.ReactNode }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
     td: ({ children }: { children?: React.ReactNode }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [snapshots, onNavigateToSnapshot, onViewFile, isPanel]);
+  }), [snapshots, onNavigateToSnapshot, onPreviewSnapshot, onViewFile, isPanel]);
 
   return (
     <ReactMarkdown
@@ -549,6 +549,13 @@ export default function AgentChatView({
   const processingCount = attachments.filter(a => a.status === 'processing').length;
   const allReady = attachments.length > 0 && attachments.every(a => a.status === 'ready' || a.status === 'error');
   const [isExiting, setIsExiting] = useState(false);
+  const [inlineImagePreview, setInlineImagePreview] = useState<{
+    src: string;
+    snapIdx: number | null;
+    style: React.CSSProperties;
+  } | null>(null);
+  const [inlineImagePreviewLoadedUrl, setInlineImagePreviewLoadedUrl] = useState<string | null>(null);
+  const inlineImagePreviewRef = useRef<HTMLSpanElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCountRef = useRef(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -565,6 +572,7 @@ export default function AgentChatView({
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
   const [inputBarH, setInputBarH] = useState(96);
+
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
   const [kbInset, setKbInset] = useState(0);
   const [nativeKbInset, setNativeKbInset] = useState(0);
@@ -888,13 +896,78 @@ export default function AgentChatView({
     if (isExiting) onBack();
   }, [isExiting, onBack]);
 
+  const openInlineImagePreview = useCallback((src: string, snapIdx: number | null, triggerEl?: HTMLElement | null) => {
+    if (!src) return;
+    const triggerRect = triggerEl?.getBoundingClientRect();
+    const pw = Math.min(300, window.innerWidth * 0.6);
+    let left = (window.innerWidth - pw) / 2;
+    let top = Math.max(8, Math.min(96, window.innerHeight - pw - 8));
+    if (triggerRect) {
+      const triggerCenter = triggerRect.left + triggerRect.width / 2;
+      left = triggerCenter - pw / 2;
+      if (left < 8) left = 8;
+      if (left + pw > window.innerWidth - 8) left = window.innerWidth - 8 - pw;
+      const spaceAbove = triggerRect.top - 8;
+      const spaceBelow = window.innerHeight - triggerRect.bottom - 8;
+      top = spaceAbove >= pw || spaceAbove >= spaceBelow
+        ? triggerRect.top - pw - 4
+        : triggerRect.bottom + 4;
+      top = Math.max(8, Math.min(top, window.innerHeight - pw - 8));
+    }
+    setInlineImagePreview({
+      src,
+      snapIdx,
+      style: {
+        position: 'absolute',
+        top,
+        left,
+        width: pw,
+        height: pw,
+        zIndex: 9999,
+      },
+    });
+  }, []);
+
   const handleInlineImageClick = useCallback((messageId: string, e?: React.MouseEvent) => {
-    const imgEl = e?.currentTarget?.querySelector('img') as HTMLImageElement | null;
-    const rect = imgEl?.getBoundingClientRect();
-    const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight) ? imgEl.naturalWidth / imgEl.naturalHeight : undefined;
-    setIsExiting(true);
-    onImageTap(messageId, rect ?? undefined, imgEl?.src);
-  }, [onImageTap]);
+    const triggerEl = e?.currentTarget as HTMLElement | undefined;
+    const imgEl = triggerEl?.querySelector('img') as HTMLImageElement | null;
+    const msg = messages.find(m => m.id === messageId);
+    const previewSrc = msg?.image || imgEl?.src || '';
+    const snapIdx = getSnapshotIndex(messageId);
+    if (!previewSrc) return;
+    openInlineImagePreview(previewSrc, snapIdx, triggerEl);
+  }, [getSnapshotIndex, messages, openInlineImagePreview]);
+
+  const handlePreviewSnapshot = useCallback((index: number, triggerEl?: HTMLElement | null) => {
+    const snapshot = snapshots[index];
+    const previewSrc = snapshot?.imageUrl || snapshot?.image || '';
+    openInlineImagePreview(previewSrc, index + 1, triggerEl);
+  }, [openInlineImagePreview, snapshots]);
+
+  useEffect(() => {
+    if (!inlineImagePreview) return;
+    const close = () => setInlineImagePreview(null);
+    const isOutside = (target: EventTarget | null) => {
+      if (!target) return false;
+      const node = target as Node;
+      if (inlineImagePreviewRef.current?.contains(node)) return false;
+      return true;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (isOutside(event.target)) close();
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      if (isOutside(event.target)) close();
+    };
+    document.addEventListener('scroll', close, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('touchstart', onTouchStart, true);
+    return () => {
+      document.removeEventListener('scroll', close, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('touchstart', onTouchStart, true);
+    };
+  }, [inlineImagePreview]);
 
   const handleInlineVideoClick = useCallback((e: React.MouseEvent, videoUrl: string, animId?: string, startTime?: number) => {
     if (!onVideoTap) return;
@@ -1176,6 +1249,7 @@ export default function AgentChatView({
                           isPanel={isPanel}
                           snapshots={snapshots}
                           onNavigateToSnapshot={onNavigateToSnapshot}
+                          onPreviewSnapshot={handlePreviewSnapshot}
                           onViewFile={setViewingFile}
                         />
                         {/* Inline video — natural aspect ratio, play button, tap to navigate */}
@@ -1532,6 +1606,55 @@ export default function AgentChatView({
           </div>
         </div>
       </div>}
+      {inlineImagePreview && (() => {
+        const previewUrl = inlineImagePreview.src.startsWith('http')
+          ? getThumbnailUrl(inlineImagePreview.src, 400, 90, 400, 'cover')
+          : inlineImagePreview.src;
+        const imgLoaded = inlineImagePreviewLoadedUrl === previewUrl;
+        return (
+          <span
+            ref={inlineImagePreviewRef}
+            data-testid="cui-inline-image-preview"
+            className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
+            style={{
+              ...inlineImagePreview.style,
+              display: 'block',
+              WebkitTouchCallout: 'none',
+              WebkitUserSelect: 'none',
+              userSelect: 'none',
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {!imgLoaded && (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', inset: 0, background: '#111' }}>
+                <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  {inlineImagePreview.snapIdx !== null && (
+                    <span className="text-white/30 text-xs">@{inlineImagePreview.snapIdx}</span>
+                  )}
+                  <span className="animate-spin" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.5)', borderRadius: '50%' }} />
+                </span>
+              </span>
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt=""
+              draggable={false}
+              onLoad={() => setInlineImagePreviewLoadedUrl(previewUrl)}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+            />
+            {imgLoaded && inlineImagePreview.snapIdx !== null && (
+              <span
+                className="bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md"
+                style={{ position: 'absolute', bottom: 8, left: 8 }}
+              >
+                @{inlineImagePreview.snapIdx}
+              </span>
+            )}
+          </span>
+        );
+      })()}
     </div>
     {viewingFile && <FileViewer path={viewingFile} onClose={() => setViewingFile(null)} />}
     </>

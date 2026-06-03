@@ -202,20 +202,32 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (${usedModel || 'gemini'} took ${genDuration}s)`);
 
       const snapId = serverSnapshotId || generateId();
+      const displayImage = serverImageUrl || imageData;
+      const existingSnapshot = ctx.snapshotsRef.current.find(s => s.id === snapId);
+      const targetMessageId = existingSnapshot?.messageId || currentMsgId;
       const editDesc = ctx.lastEditPromptRef.current
         ? `[agent] ${ctx.lastEditPromptRef.current.slice(0, 100)}`
         : undefined;
       const newSnapshot: Snapshot = {
         id: snapId,
-        image: imageData,
+        image: displayImage,
         tips: [],
-        messageId: currentMsgId,
+        messageId: targetMessageId,
         description: editDesc,
         ...(serverImageUrl ? { imageUrl: serverImageUrl } : {}),
       };
 
       ctx.setSnapshots(prev => {
-        if (prev.some(s => s.id === snapId)) return prev;
+        if (prev.some(s => s.id === snapId)) {
+          return prev.map(s => s.id === snapId
+            ? {
+              ...s,
+              image: s.image || displayImage,
+              ...(serverImageUrl && !s.imageUrl ? { imageUrl: serverImageUrl } : {}),
+              messageId: s.messageId || targetMessageId,
+            }
+            : s);
+        }
         return [...prev, newSnapshot];
       });
 
@@ -223,9 +235,9 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         ctx.setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
       });
       if (editDesc) ctx.onUpdateDescription?.(snapId, editDesc);
-      ctx.cacheImage(`snap:${snapId}`, imageData);
+      ctx.cacheImage(`snap:${snapId}`, displayImage);
 
-      ctx.fetchTipsForSnapshot(snapId, imageData, 'none');
+      ctx.fetchTipsForSnapshot(snapId, displayImage, 'none');
       ctx.autoFetchTriggered.current = true;
       setStatus(ctx.t('status.imageGenerated'));
 
@@ -241,15 +253,31 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const capturedInputImages = ctx.lastEditInputImagesRef.current;
       ctx.lastEditPromptRef.current = null;
       ctx.lastEditInputImagesRef.current = null;
-      ctx.setMessages(prev => prev.map(m =>
-        m.id === id ? {
-          ...m,
-          image: imageData,
-          editPrompt: capturedPrompt ?? undefined,
-          editModel: usedModel ?? undefined,
-          editInputImages: capturedInputImages ?? undefined,
-        } : m,
-      ));
+      ctx.setMessages(prev => {
+        const primaryMessageId = targetMessageId || id;
+        const candidateIds = new Set([primaryMessageId].filter(Boolean));
+        let attached = false;
+        const attach = (m: import('@/types').Message) => {
+          attached = true;
+          return {
+            ...m,
+            image: displayImage,
+            editPrompt: capturedPrompt ?? m.editPrompt,
+            editModel: usedModel ?? m.editModel,
+            editInputImages: capturedInputImages ?? m.editInputImages,
+          };
+        };
+
+        let next = prev.map(m => candidateIds.has(m.id) ? attach(m) : m);
+        if (!attached) {
+          const lastAssistantIdx = [...next].reverse().findIndex(m => m.role === 'assistant');
+          if (lastAssistantIdx >= 0) {
+            const idx = next.length - 1 - lastAssistantIdx;
+            next = next.map((m, i) => i === idx ? attach(m) : m);
+          }
+        }
+        return next;
+      });
 
     },
 
