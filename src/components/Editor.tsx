@@ -42,6 +42,7 @@ import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
+import { formatVideoMediaSpec } from '@/lib/media-aspect';
 
 export type { AnimationState } from '@/lib/editor/types';
 
@@ -1768,7 +1769,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     const mediaIndex = snapshotsRef.current.map((s, i) => {
       const isVid = s.type === 'video';
       const isComposition = !!s.design && !isVid;
-      const typeLabel = isVid ? 'video' : isComposition ? 'composition' : 'image';
+      const videoSpec = isVid ? formatVideoMediaSpec(s.videoMeta) : '';
+      const typeLabel = isVid ? (videoSpec ? `video, ${videoSpec}` : 'video') : isComposition ? 'composition' : 'image';
       const desc = isVid
         ? (s.description || s.videoMeta?.prompt?.split('\n')[0]?.slice(0, 60) || '[video]')
         : isComposition

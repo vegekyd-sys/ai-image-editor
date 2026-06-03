@@ -20,6 +20,7 @@ describe('agent media scenario matrix', () => {
   const agentDualWriter = read('src/lib/agentDualWriter.ts')
   const agentRoute = read('src/app/api/agent/route.ts')
   const designHarness = read('src/lib/design-harness.ts')
+  const mediaAspect = read('src/lib/media-aspect.ts')
 
   it('keeps the core agent prompt as a lightweight router', () => {
     expect(agent.length).toBeLessThan(8_000)
@@ -84,6 +85,7 @@ describe('agent media scenario matrix', () => {
     expect(coding).toContain('immediately publish the exported MP4s with `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })`')
     expect(coding).toContain('Intermediate chunks for long-video model-preparation workflows stay as workspace outputs')
     expect(coding).toContain('pass those 1-based indices in the `run_code` tool input as `media_refs`')
+    expect(coding).toContain('Two 9:16 portrait videos spliced together must return a 9:16 portrait canvas')
     expect(coding).toContain('Ordinary splice of two existing timeline videos: `runtime: "composition"`, not node.')
     expect(coding).toContain('Do not use node/FFmpeg for ordinary editable timeline splicing of two existing videos')
     expect(coding).toContain('Do not switch from composition to node/FFmpeg as a fallback for ordinary timeline splicing')
@@ -97,6 +99,11 @@ describe('agent media scenario matrix', () => {
     expect(coding).not.toContain('花字')
     expect(coding).not.toContain('Think like a music video director')
     expect(remotion).toContain('Remotion Composition')
+    expect(remotion).toContain('Canvas Aspect Contract')
+    expect(remotion).toContain('derive the Remotion canvas from the selected Media Index video dimensions')
+    expect(remotion).toContain('Never place portrait timeline videos into a 16:9 landscape canvas')
+    expect(remotion).toContain('width: 1080')
+    expect(remotion).toContain('height: 1920')
     expect(remotion).toContain('Editable Fields')
     expect(remotion).toContain('trimBefore')
     expect(remotion).toContain('<Sequence>')
@@ -113,6 +120,9 @@ describe('agent media scenario matrix', () => {
     expect(coding).not.toContain('ALL** `run_code` output')
     expect(agentTs).toContain('\\`type: "files"\\` outputs are already saved workspace files')
     expect(agentTs).toContain("z.enum(['composition', 'design', 'node'])")
+    expect(agentTs).toContain('validateCompositionMediaAspect')
+    expect(agentTs).toContain('Composition rejected: selected timeline video(s)')
+    expect(agentTs).toContain('9:16 portrait sources must return a 9:16 portrait canvas')
     expect(agentTs).toContain('not individual binary outputs from type:"files"')
     expect(agentTs).toContain('Never use node as a fallback for ordinary editable timeline splicing')
     expect(agentTs).toContain('mediaResult.type === \'video\'')
@@ -127,6 +137,8 @@ describe('agent media scenario matrix', () => {
     expect(agentContext).toContain('runtime: "composition"')
     expect(agentContext).toContain('code_path')
     expect(agentContext).toContain('normalizeLegacyCompositionDescription')
+    expect(agentContext).toContain('formatVideoMediaSpec(videoMeta)')
+    expect(agentContext).toContain('videoSpec ? `video, ${videoSpec}`')
     expect(agentContext).toContain("normalizeLegacyCompositionDescription(s.description, '[Remotion composition]')")
     expect(agentContext).not.toContain('[code: ')
     expect(agentContext).not.toContain('[DESIGN MODE]')
@@ -155,6 +167,7 @@ describe('agent media scenario matrix', () => {
 
     expect(editor).toContain("isComposition ? 'composition' : 'image'")
     expect(editor).toContain("normalizeLegacyCompositionDescription(s.description, '[composition]')")
+    expect(editor).toContain('formatVideoMediaSpec(s.videoMeta)')
     expect(editor).toContain('current Remotion composition via run_code patch')
     expect(agentDualWriter).toContain("description: designDesc || '[composition]'")
     expect(editor).not.toContain("description: designDesc || '[design]'")
@@ -163,6 +176,10 @@ describe('agent media scenario matrix', () => {
 
     expect(agentRoute).toContain('latest Remotion composition code')
     expect(agentRoute).not.toContain('latest design code')
+
+    expect(mediaAspect).toContain('formatAspectRatio')
+    expect(mediaAspect).toContain('formatOrientation')
+    expect(mediaAspect).toContain('formatVideoMediaSpec')
   })
 
   it('keeps generic image/layout routing away from Remotion design terminology', () => {

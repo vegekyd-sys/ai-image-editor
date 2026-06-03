@@ -13,6 +13,7 @@ import type { ModelMessage } from 'ai';
 import type { DesignPayload, Tip } from '@/types';
 import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
+import { formatVideoMediaSpec } from './media-aspect';
 
 export interface PromptContextOptions {
   /** 0-based index of the snapshot the user is viewing. Defaults to last. */
@@ -166,8 +167,9 @@ export async function buildPromptContext(
               : i === 0 || snapshots.slice(0, i).every(ss => ss.type === 'reference')
                 ? (s.description || '原图 / Original upload')
                 : (s.description || '(use analyze_image to see this snapshot)');
+        const videoSpec = isVideo ? formatVideoMediaSpec(videoMeta) : '';
         const typeLabel = isVideo
-          ? (videoMeta?.status === 'completed' && videoMeta?.duration ? `video, ${videoMeta.duration}s` : videoMeta?.status && videoMeta.status !== 'completed' ? `video, ${videoMeta.status}` : 'video')
+          ? (videoSpec ? `video, ${videoSpec}` : 'video')
           : isRef ? 'reference' : isComposition ? 'composition' : 'image';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
         const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';

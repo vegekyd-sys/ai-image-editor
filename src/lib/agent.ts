@@ -23,6 +23,7 @@ import type { Tip, VideoMeta, VideoModel } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
+import { formatAspectRatio, formatOrientation } from './media-aspect';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -182,6 +183,67 @@ function normalizeCompositionAnimation(
     return { ...animation, fps, durationInSeconds: inferredSeconds };
   }
   return { ...animation, fps, durationInSeconds: currentSeconds };
+}
+
+async function validateCompositionMediaAspect(
+  ctx: AgentContext,
+  result: { code: string; props?: Record<string, unknown>; width?: number; height?: number },
+): Promise<string | null> {
+  const outputWidth = Number(result.width || 1080);
+  const outputHeight = Number(result.height || 1350);
+  if (!Number.isFinite(outputWidth) || !Number.isFinite(outputHeight) || outputWidth <= 0 || outputHeight <= 0) {
+    return null;
+  }
+  if (!ctx.supabase || !ctx.projectId) return null;
+
+  try {
+    const { data: rows } = await ctx.supabase
+      .from('snapshots')
+      .select('video_meta')
+      .eq('project_id', ctx.projectId)
+      .eq('type', 'video');
+
+    const haystack = JSON.stringify({ code: result.code, props: result.props ?? {} });
+    const videoRows = (rows ?? []) as Array<{ video_meta?: Record<string, unknown> | null }>;
+    const matched = videoRows
+      .map(row => row.video_meta)
+      .filter((meta: Record<string, unknown> | null | undefined): meta is Record<string, unknown> => !!meta)
+      .map((meta) => {
+        const url = typeof meta.videoUrl === 'string' ? meta.videoUrl : '';
+        const width = Number(meta.width);
+        const height = Number(meta.height);
+        return { url, width, height };
+      })
+      .filter((item) => item.url && haystack.includes(item.url) && Number.isFinite(item.width) && Number.isFinite(item.height) && item.width > 0 && item.height > 0);
+
+    if (!matched.length) return null;
+
+    const sourceRatios = matched.map(item => item.width / item.height);
+    const minRatio = Math.min(...sourceRatios);
+    const maxRatio = Math.max(...sourceRatios);
+    const sourceRatio = sourceRatios.reduce((sum, ratio) => sum + ratio, 0) / sourceRatios.length;
+    const outputRatio = outputWidth / outputHeight;
+
+    // Only hard-reject when selected videos clearly share one aspect. Mixed-ratio
+    // timelines may intentionally use a platform canvas with contain/background.
+    if ((maxRatio - minRatio) / sourceRatio > 0.03) return null;
+    if (Math.abs(outputRatio / sourceRatio - 1) <= 0.05) return null;
+
+    const first = matched[0];
+    const sourceAspect = formatAspectRatio(first.width, first.height) || `${first.width}:${first.height}`;
+    const sourceOrientation = formatOrientation(first.width, first.height) || 'unknown';
+    const outputAspect = formatAspectRatio(outputWidth, outputHeight) || `${outputWidth}:${outputHeight}`;
+    const dims = matched.map(item => `${Math.round(item.width)}x${Math.round(item.height)}`).join(', ');
+    const recommended = sourceOrientation === 'portrait'
+      ? '1080x1920'
+      : sourceOrientation === 'landscape'
+        ? '1920x1080'
+        : '1080x1080';
+
+    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect} ${sourceOrientation}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition".`;
+  } catch {
+    return null;
+  }
 }
 
 /** Fetch an image source (URL or base64 data URL) into a JPEG Buffer.
@@ -1304,7 +1366,7 @@ Return exactly one supported shape:
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio and orientation: 9:16 portrait sources must return a 9:16 portrait canvas such as 1080x1920, never a 16:9 landscape canvas.
 
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; then read \`inputFiles[0].inputPath\`. Do not hardcode Media Index URLs for FFmpeg inputs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
@@ -1575,6 +1637,15 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             const harnessError = validateDesign({ code: resolvedCode, props: resolvedProps });
             if (harnessError) {
               return { type: 'text' as const, content: harnessError };
+            }
+            const aspectError = await validateCompositionMediaAspect(ctx, {
+              code: resolvedCode,
+              props: resolvedProps,
+              width: result.width,
+              height: result.height,
+            });
+            if (aspectError) {
+              return { type: 'text' as const, content: aspectError };
             }
 
             // ── Harness passed — store composition ──
