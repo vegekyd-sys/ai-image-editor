@@ -23,7 +23,7 @@ import type { Tip, VideoMeta, VideoModel } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
-import { formatAspectRatio, formatOrientation } from './media-aspect';
+import { formatAspectRatio } from './media-aspect';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -231,16 +231,15 @@ async function validateCompositionMediaAspect(
 
     const first = matched[0];
     const sourceAspect = formatAspectRatio(first.width, first.height) || `${first.width}:${first.height}`;
-    const sourceOrientation = formatOrientation(first.width, first.height) || 'unknown';
     const outputAspect = formatAspectRatio(outputWidth, outputHeight) || `${outputWidth}:${outputHeight}`;
     const dims = matched.map(item => `${Math.round(item.width)}x${Math.round(item.height)}`).join(', ');
-    const recommended = sourceOrientation === 'portrait'
+    const recommended = first.width < first.height
       ? '1080x1920'
-      : sourceOrientation === 'landscape'
+      : first.width > first.height
         ? '1920x1080'
         : '1080x1080';
 
-    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect} ${sourceOrientation}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition".`;
+    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition".`;
   } catch {
     return null;
   }
@@ -1366,7 +1365,7 @@ Return exactly one supported shape:
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio and orientation: 9:16 portrait sources must return a 9:16 portrait canvas such as 1080x1920, never a 16:9 landscape canvas.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas.
 
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; then read \`inputFiles[0].inputPath\`. Do not hardcode Media Index URLs for FFmpeg inputs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({

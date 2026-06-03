@@ -29,14 +29,6 @@ export function formatAspectRatio(width: unknown, height: unknown): string | und
   return `${Math.round(w / divisor)}:${Math.round(h / divisor)}`;
 }
 
-export function formatOrientation(width: unknown, height: unknown): 'portrait' | 'landscape' | 'square' | undefined {
-  const w = finitePositive(width);
-  const h = finitePositive(height);
-  if (!w || !h) return undefined;
-  if (w === h) return 'square';
-  return w < h ? 'portrait' : 'landscape';
-}
-
 export function formatDurationSeconds(duration: unknown): string | undefined {
   const d = finitePositive(duration);
   if (!d) return undefined;
@@ -51,13 +43,11 @@ export function formatVideoMediaSpec(meta: MediaMetaLike | undefined): string {
   const width = finitePositive(meta?.width);
   const height = finitePositive(meta?.height);
   const aspect = formatAspectRatio(width, height);
-  const orientation = formatOrientation(width, height);
 
   if (status && status !== 'completed') parts.push(status);
   if (duration) parts.push(duration);
   if (width && height) parts.push(`${Math.round(width)}x${Math.round(height)}`);
-  if (aspect && orientation) parts.push(`${aspect} ${orientation}`);
+  if (aspect) parts.push(aspect);
 
   return parts.join(', ');
 }
-

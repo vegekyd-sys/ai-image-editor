@@ -14,12 +14,12 @@ Do not use this prompt for static posters, infographics, e-commerce pages, or or
 
 ## Canvas Aspect Contract
 
-For timeline videos, derive the Remotion canvas from the selected Media Index video dimensions. Preserve the source aspect ratio and orientation unless the user explicitly asks to reframe.
+For timeline videos, derive the Remotion canvas from the selected Media Index video dimensions. Preserve the source aspect ratio unless the user explicitly asks to reframe.
 
-- If the selected videos share a portrait 9:16 aspect (for example `360x640`, `720x1280`, or `1080x1920`), return a 9:16 portrait canvas such as `width: 1080, height: 1920`. Never place portrait timeline videos into a 16:9 landscape canvas.
-- If the selected videos share a landscape 16:9 aspect, use a 16:9 landscape canvas such as `width: 1920, height: 1080`.
+- If the selected videos share a 9:16 aspect (for example `360x640`, `720x1280`, or `1080x1920`), return a 9:16 canvas such as `width: 1080, height: 1920`. Never place 9:16 timeline videos into a 16:9 canvas.
+- If the selected videos share a 16:9 aspect, use a 16:9 canvas such as `width: 1920, height: 1080`.
 - If the selected videos share a square aspect, use a square canvas such as `width: 1080, height: 1080`.
-- If dimensions are mixed, choose the user's target platform/orientation when stated; otherwise preserve the current composition's aspect when editing, or use `contain` with an intentional background instead of silently cropping into the wrong orientation.
+- If dimensions are mixed, choose the user's target platform/aspect when stated; otherwise preserve the current composition's aspect when editing, or use `contain` with an intentional background instead of silently cropping into the wrong aspect.
 - Use `objectFit: 'cover'` only after the canvas aspect matches the intended output. `cover` is not a fix for putting 9:16 footage inside a 16:9 canvas.
 
 ## Runtime Contract
@@ -30,7 +30,7 @@ First composition:
 return {
   type: 'render',
   code,
-  // Example for portrait 9:16 source videos. Use the selected media aspect.
+  // Example for 9:16 source videos. Use the selected media aspect.
   width: 1080,
   height: 1920,
   props,
