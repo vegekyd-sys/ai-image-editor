@@ -136,6 +136,8 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('publish: false')
     expect(agentTs).toContain('call preview_frame before telling the user it is complete')
     expect(agentTs).toContain('animation.durationInSeconds matches the final frame count')
+    expect(agentTs).toContain('normalizeCompositionAnimation')
+    expect(agentTs).toContain('inferCompositionTotalFrames')
     expect(agentTs).toContain('resolveMediaMarkersInValue')
     expect(designHarness).toContain('unresolved Media Index placeholder')
     expect(agentTs).not.toContain('[Current Remotion composition code')

@@ -151,6 +151,39 @@ function resolveMediaMarkersInValue(value: unknown, snapshotImages: string[]): u
   return value;
 }
 
+function inferCompositionTotalFrames(code: string): number | null {
+  let maxFrame = 0;
+  let found = false;
+  const sequencePattern = /<Sequence\b([^>]*)>/g;
+  for (const match of code.matchAll(sequencePattern)) {
+    const attrs = match[1] || '';
+    const from = Number(attrs.match(/\bfrom=\{?(\d+)\}?/)?.[1] || 0);
+    const duration = Number(attrs.match(/\bdurationInFrames=\{?(\d+)\}?/)?.[1] || 0);
+    if (!Number.isFinite(from) || !Number.isFinite(duration) || duration <= 0) continue;
+    found = true;
+    maxFrame = Math.max(maxFrame, from + duration);
+  }
+  return found ? maxFrame : null;
+}
+
+function normalizeCompositionAnimation(
+  code: string,
+  animation: { fps?: number; durationInSeconds?: number; format?: string } | undefined
+): { fps: number; durationInSeconds: number; format?: string } | undefined {
+  if (!animation) return undefined;
+  const fps = Number(animation.fps) || 30;
+  const inferredFrames = inferCompositionTotalFrames(code);
+  if (!inferredFrames) {
+    return { ...animation, fps, durationInSeconds: Number(animation.durationInSeconds) || 5 };
+  }
+  const inferredSeconds = Number((inferredFrames / fps).toFixed(3));
+  const currentSeconds = Number(animation.durationInSeconds) || inferredSeconds;
+  if (Math.abs(currentSeconds - inferredSeconds) > 0.05) {
+    return { ...animation, fps, durationInSeconds: inferredSeconds };
+  }
+  return { ...animation, fps, durationInSeconds: currentSeconds };
+}
+
 /** Fetch an image source (URL or base64 data URL) into a JPEG Buffer.
  *  Always normalizes to JPEG to avoid MIME type mismatches (e.g. PNG labeled as JPEG). */
 async function fetchImageBuffer(
@@ -1488,6 +1521,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               code: resolveMediaMarkersInString(code, ctx.snapshotImages),
               props: resolveMediaMarkersInValue(mergedProps, ctx.snapshotImages) as Record<string, unknown> | undefined,
             };
+            patched.animation = normalizeCompositionAnimation(patched.code, patched.animation);
             if (result.editables) patched.editables = result.editables;
 
             const harnessError = validateDesign({ code: patched.code, props: patched.props });
@@ -1541,6 +1575,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               const textHint = textMatches?.length ? `: "${textMatches.slice(0, 3).join('", "')}"` : '';
               return `${type} (${result.width || 1080}x${result.height || 1350})${textHint}`;
             })();
+            animation = normalizeCompositionAnimation(resolvedCode, animation);
             const designPayload = {
               code: resolvedCode,
               width: result.width || 1080,
