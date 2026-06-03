@@ -30,6 +30,14 @@ describe('Agent FFmpeg video lab', () => {
     expect(agent).not.toContain('do not call write_file for type:"files" outputs')
   })
 
+  it('cleans invalid workspace output durations from published timeline titles', () => {
+    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+
+    expect(agent).toContain('function outputDisplayName')
+    expect(agent).toContain('(?:undefined|null|NaN)s?')
+    expect(agent).toContain('if (cleaned) return cleaned')
+  })
+
   it('resolves video snapshots to the real mp4 URL, not the poster image', async () => {
     const fakeSupabase = {
       from: () => ({

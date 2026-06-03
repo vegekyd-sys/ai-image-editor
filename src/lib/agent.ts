@@ -267,7 +267,14 @@ function rememberWorkspaceMediaOutputs(ctx: AgentContext, outputs: WorkspaceMedi
 }
 
 function outputDisplayName(output: WorkspaceMediaOutputDraft, fallback: string): string {
-  if (output.description) return output.description;
+  if (output.description) {
+    const cleaned = output.description
+      .replace(/\s*:\s*(?:undefined|null|NaN)s?\s*$/i, '')
+      .replace(/\b(?:undefined|null|NaN)s?\b/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    if (cleaned) return cleaned;
+  }
   const path = output.path || output.storageUrl;
   const file = path.split('/').pop()?.replace(/\.[a-z0-9]+$/i, '') || fallback;
   return file.replace(/[-_]+/g, ' ').trim() || fallback;
