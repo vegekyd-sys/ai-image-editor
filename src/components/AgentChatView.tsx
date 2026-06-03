@@ -319,11 +319,22 @@ function fixMarkdownDelimiters(text: string): string {
   );
 }
 
+const CODE_COLLAPSE_LINE_THRESHOLD = 24;
+const CODE_COLLAPSE_CHAR_THRESHOLD = 1800;
+
+function getCodeLineCount(text: string): number {
+  return text.replace(/\n$/, '').split('\n').length;
+}
+
+function shouldCollapseCodeBlock(text: string): boolean {
+  return getCodeLineCount(text) > CODE_COLLAPSE_LINE_THRESHOLD
+    || text.length > CODE_COLLAPSE_CHAR_THRESHOLD;
+}
 
 /** Collapsible code block — original markdown code style + toggle button */
 function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const lineCount = text.split('\n').length;
+  const lineCount = getCodeLineCount(text);
 
   return (
     <div className="my-2">
@@ -390,9 +401,9 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
       if (inline || isShort) {
         return <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>;
       }
-      // Long code blocks: collapsible
-      const lines = text.split('\n');
-      if (lines.length > 3) {
+      // Only truly long code blocks default to collapsed. Short fenced blocks
+      // are often scripts, outlines, or structured notes rather than code dumps.
+      if (shouldCollapseCodeBlock(text)) {
         return <CollapsibleCode text={text} isPanel={isPanel} />;
       }
       return <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>;
