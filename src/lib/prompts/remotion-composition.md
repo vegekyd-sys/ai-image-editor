@@ -38,6 +38,8 @@ return {
 
 After every meaningful render or patch, save the code with `write_file({ fromLastRunCode: true, name: "slug", publish: false })`. Publish with `write_file({ fromLastRunCode: true, name: "slug" })` when the result is ready for the timeline.
 
+If the change includes transitions, subtitles, overlays, trim timing, cropping, or other visible timeline edits, call `preview_frame` on stable middle frames before telling the user it is complete or publishing it.
+
 ## Remotion APIs
 
 Available APIs include all exports from `remotion`, `@remotion/media`, `@remotion/paths`, and `@remotion/noise`.
@@ -142,6 +144,7 @@ For static visuals, use `generate_image` instead of Remotion unless editability 
 
 After render or patch:
 - Review code shape and media references first.
-- Use `preview_frame` only when visual verification is needed.
+- Use `preview_frame` when visual verification is needed.
+- Visual verification is required for transitions, subtitles, overlays, trim timing, cropping, or any composition you are about to publish to the timeline.
 - Capture stable middle frames for each scene, not transition starts.
 - Check subject cropping, text readability, overlay placement, and final frame content.
