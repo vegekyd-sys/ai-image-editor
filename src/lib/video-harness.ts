@@ -3,6 +3,7 @@
  * Returns null if OK, or an error string to send back to the Agent for retry.
  */
 
+import { getVideoModelCapability } from '@/lib/video-model-capabilities';
 import { parseTotalDuration } from './kling';
 
 const MAX_VIDEO_DURATION = 15;
@@ -67,9 +68,12 @@ export function validateVideoScript(opts: {
     }
   }
 
-  // 4. base mode only on Kling
-  if (videoRefUrl && videoRefType === 'base' && model === 'seedance') {
-    return 'Video editing (base mode) is only supported by Kling. Either switch to model="kling" or use video_ref_type="feature" for style/motion reference.'
+  // 4. base mode requires a model that can edit the reference video as the base.
+  if (videoRefUrl && videoRefType === 'base') {
+    const capability = getVideoModelCapability(model)
+    if (!capability.supportsBaseVideoEdit) {
+      return `Video editing (base mode) is not supported by ${capability.label}. Choose a model with base video editing support, or use video_ref_type="feature" for style/motion reference.`
+    }
   }
 
   // 5. image_refs contains URLs already in Media Index

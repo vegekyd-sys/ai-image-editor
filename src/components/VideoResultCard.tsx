@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ProjectAnimation } from '@/types';
 import { useLocale } from '@/lib/i18n';
 import PillCarousel from '@/components/PillCarousel';
+import { getModelInfo } from '@/lib/model-registry';
 
 function ElapsedTimer({ since }: { since: string }) {
   const sinceMs = new Date(since || undefined as unknown as string).getTime();
@@ -83,7 +84,8 @@ export default function VideoResultCard({
           const thumbUrl = anim.imageUrl;
           const title = videoTitle(anim.prompt, idx);
 
-          const modelLabel = anim.videoModel === 'seedance' ? 'SD' : anim.videoModel === 'upload' ? '' : 'K3';
+          const modelInfo = anim.videoModel ? getModelInfo(anim.videoModel) : undefined;
+          const modelLabel = anim.videoModel === 'upload' ? '' : (modelInfo?.id || anim.videoModel || '').slice(0, 2).toUpperCase();
           const durationLabel = anim.duration ? `${Math.round(anim.duration)}s` : null;
           let statusText: React.ReactNode;
           if (isCompleted) {

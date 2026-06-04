@@ -97,6 +97,16 @@ Returns immediately:
 npx makaron-cli chat --project <id> --image ref1.jpg --image ref2.jpg -b "use these as style reference"
 ```
 
+### Inspect existing timeline media
+
+Before starting a follow-up run on an existing project, list the current timeline media so you know what assets are available and which `<<<media_N>>>` references to use:
+
+```bash
+npx makaron-cli project media <projectId> --json
+```
+
+This is project-scoped. `responses get <runId> --pick output` only returns artifacts from one run; `project media` returns the whole project timeline: original uploads, references, generated images, video snapshots, and editable compositions.
+
 ### With video input (MP4/MOV/WebM)
 
 ```bash
@@ -110,8 +120,8 @@ npx makaron-cli chat --project <id> --video party.mp4 --image kid.jpg -b "make t
 npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "splice these into one seamless video"
 ```
 
-Video files are uploaded via signed URL. CLI local video uploads follow the same compatibility contract as the normal frontend flow: `.mp4`, `.mov`, or `.webm`, max 200MB, target max 15s with 0.5s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode oversized videos; the CLI rejects them so later Seedance editing does not fail.
-The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos. Seedance video-reference editing is supported for ~15s videos that meet the same upload limits; Kling remains the base/direct edit path.
+Video files are uploaded via signed URL. CLI local video uploads support `.mp4`, `.mov`, or `.webm`, max 50MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits.
+The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct `video create` is standalone and does not write timeline entries.
 
 ### Check status (single query)

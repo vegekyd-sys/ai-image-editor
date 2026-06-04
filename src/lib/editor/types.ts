@@ -1,3 +1,5 @@
+import type { VideoModel } from '@/types'
+
 export interface AnimationState {
   imageUrls: string[]
   prompt: string
@@ -9,7 +11,7 @@ export interface AnimationState {
   error: string | null
   duration: number | null  // null = smart mode (API decides 3-15s)
   pollSeconds: number
-  videoModel: 'kling' | 'seedance'
+  videoModel: VideoModel
 }
 
 export interface HeroAnim {

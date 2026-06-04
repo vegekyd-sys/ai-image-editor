@@ -209,6 +209,7 @@ interface RemotionRendererProps {
 export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, posterImage, onLoading, onContainerRef, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const onPlayerRefRef = useRef(onPlayerRef);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
   const [compileError, setCompileError] = useState<string | null>(null);
@@ -258,9 +259,17 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   }, [onContainerRef, Component]);
 
   useEffect(() => {
-    onPlayerRef?.(playerRef.current);
-    return () => onPlayerRef?.(null);
-  }, [onPlayerRef, Component]);
+    onPlayerRefRef.current = onPlayerRef;
+  }, [onPlayerRef]);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    onPlayerRefRef.current?.(player);
+    return () => {
+      player?.pause();
+      onPlayerRefRef.current?.(null);
+    };
+  }, [Component]);
 
   // Pause Remotion Player when a MusicCard starts playing
   useEffect(() => {

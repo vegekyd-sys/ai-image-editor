@@ -5,6 +5,8 @@ import { Snapshot, ProjectAnimation } from '@/types';
 import type { AnimationState } from '@/components/Editor';
 import { useLocale } from '@/lib/i18n';
 import MediaRefText from '@/components/MediaRefText';
+import { getModelInfo, getVideoModels } from '@/lib/model-registry';
+import { getDefaultVideoModelId, getVideoModelCapability } from '@/lib/video-model-capabilities';
 
 interface AnimateSheetProps {
   snapshots: Snapshot[];
@@ -29,7 +31,13 @@ export default function AnimateSheet({
 }: AnimateSheetProps) {
   const { t } = useLocale();
   const isDetail = mode === 'detail' && !!detailAnimation;
-  const { prompt, userHint, status, error, duration, videoModel = 'kling' } = animationState;
+  const { prompt, userHint, status, error, duration, videoModel = getDefaultVideoModelId() } = animationState;
+  const videoModels = getVideoModels();
+  const getVideoModelLabel = (id?: string | null) => {
+    if (!id || id === 'upload') return '';
+    const modelInfo = getModelInfo(id);
+    return modelInfo ? t(modelInfo.nameKey as Parameters<typeof t>[0]) : id;
+  };
 
   const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set());
   const [selectedThumbId, setSelectedThumbId] = useState<string | null>(null);
@@ -246,7 +254,7 @@ export default function AnimateSheet({
                   borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
                   fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
                 }}>
-                  {detailAnimation.videoModel === 'seedance' ? 'SeeDance 2.0' : 'Kling O3'}
+                  {getVideoModelLabel(detailAnimation.videoModel)}
                 </div>
                 )}
                 <div style={{
@@ -492,16 +500,16 @@ export default function AnimateSheet({
                     fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
                   }}>{t('animate.model')}</div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    {(['kling', 'seedance'] as const).map(m => (
-                      <button key={m} onClick={() => onStateChange({ videoModel: m })}
+                    {videoModels.map(m => (
+                      <button key={m.id} onClick={() => onStateChange({ videoModel: m.id })}
                         style={{
                           flex: 1, padding: '8px 12px', borderRadius: 10,
-                          border: `1px solid ${videoModel === m ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                          background: videoModel === m ? 'rgba(232,121,249,0.1)' : 'rgba(255,255,255,0.04)',
-                          color: videoModel === m ? '#e879f9' : 'rgba(255,255,255,0.5)',
+                          border: `1px solid ${videoModel === m.id ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                          background: videoModel === m.id ? 'rgba(232,121,249,0.1)' : 'rgba(255,255,255,0.04)',
+                          color: videoModel === m.id ? '#e879f9' : 'rgba(255,255,255,0.5)',
                           fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.15s',
                         }}>
-                        {m === 'kling' ? 'Kling O3' : 'SeeDance 2.0'}
+                        {t(m.nameKey as Parameters<typeof t>[0])}
                       </button>
                     ))}
                   </div>
@@ -546,7 +554,12 @@ export default function AnimateSheet({
                       borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
                       fontSize: '0.82rem', color: 'rgba(255,255,255,0.4)',
                     }}>
-                      {duration != null ? `~$${(duration * (videoModel === 'seedance' ? 0.121 : 0.112)).toFixed(2)}` : t('animate.costByDuration')}
+                      {duration != null
+                        ? (() => {
+                          const costPerSecond = getVideoModelCapability(videoModel).estimatedCostPerSecondUsd;
+                          return costPerSecond != null ? `~$${(duration * costPerSecond).toFixed(2)}` : t('animate.costByDuration');
+                        })()
+                        : t('animate.costByDuration')}
                     </div>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentStreamEvent } from './agent';
 import { uploadImage } from './supabase/storage';
+import { sanitizeToolHistory, type ToolHistoryBudget } from './agentToolHistory';
 
 /**
  * Server-side persistence for agent events. Handles:
@@ -23,6 +24,13 @@ export class AgentDualWriter {
   private messageText = '';
   private currentMessageId = crypto.randomUUID();
   private currentMessageHasImage = false;
+  private pendingToolCalls = new Map<string, {
+    tool: string;
+    input: Record<string, unknown>;
+    step: number;
+  }>();
+  private toolHistorySeq = 0;
+  private toolHistoryBudget: ToolHistoryBudget = { rows: 0, chars: 0 };
 
   constructor(
     private runId: string,
@@ -153,7 +161,7 @@ export class AgentDualWriter {
             tips: [],
             message_id: this.currentMessageId,
             sort_order: sortOrder,
-            description: designDesc || '[design]',
+            description: designDesc || '[composition]',
             design_path: designPath,
           }, { onConflict: 'id' }).then(({ error }) => {
             if (error) console.error('[DualWriter] design snapshot upsert error:', error);
@@ -214,14 +222,28 @@ export class AgentDualWriter {
 
       case 'tool_call': {
         await this.flushContent();
+        await this.saveCurrentMessage();
         const input = { ...event.input };
         if (typeof input.code === 'string' && input.code.length > 2000) {
           input.code = input.code.slice(0, 2000) + '...(truncated)';
         }
         delete input.image;
         delete input.images;
+        if (event.toolCallId) {
+          this.pendingToolCalls.set(event.toolCallId, {
+            tool: event.tool,
+            input,
+            step: event.step ?? 0,
+          });
+        }
         await this.insertEvent('tool_call', { tool: event.tool, input });
         this.tryEnqueue(event);
+        return;
+      }
+
+      case 'tool_result': {
+        await this.flushContent();
+        await this.persistToolResult(event);
         return;
       }
 
@@ -308,6 +330,67 @@ export class AgentDualWriter {
       });
     } catch (err) {
       console.error('[DualWriter] Failed to insert event:', type, err);
+    }
+  }
+
+  private async persistToolResult(event: Extract<AgentStreamEvent, { type: 'tool_result' }>) {
+    if (!event.toolCallId) {
+      await this.insertEvent('tool_result_unmatched', {
+        tool: event.tool,
+        reason: 'missing_tool_call_id',
+      });
+      return;
+    }
+
+    const pending = this.pendingToolCalls.get(event.toolCallId);
+    if (!pending) {
+      await this.insertEvent('tool_result_unmatched', {
+        tool: event.tool,
+        toolCallId: event.toolCallId,
+        reason: 'missing_pending_tool_call',
+      });
+      return;
+    }
+
+    const sanitized = sanitizeToolHistory(
+      pending.tool,
+      pending.input,
+      event.output,
+      this.toolHistoryBudget,
+    );
+    this.toolHistoryBudget.rows += 1;
+    this.toolHistoryBudget.chars += sanitized.inputChars + sanitized.outputChars;
+    this.pendingToolCalls.delete(event.toolCallId);
+
+    try {
+      await this.supabase.from('agent_tool_history').insert({
+        run_id: this.runId,
+        project_id: this.projectId,
+        user_id: this.userId,
+        step: pending.step,
+        seq: this.toolHistorySeq++,
+        tool_call_id: event.toolCallId,
+        tool_name: pending.tool,
+        input: sanitized.input,
+        output: sanitized.output,
+        omitted: sanitized.omitted,
+        input_chars: sanitized.inputChars,
+        output_chars: sanitized.outputChars,
+      });
+      await this.insertEvent('tool_result', {
+        tool: pending.tool,
+        toolCallId: event.toolCallId,
+        omitted: sanitized.omitted,
+        inputChars: sanitized.inputChars,
+        outputChars: sanitized.outputChars,
+      });
+    } catch (err) {
+      console.error('[DualWriter] Failed to persist tool history:', err);
+      await this.insertEvent('tool_result_persist_error', {
+        tool: pending.tool,
+        toolCallId: event.toolCallId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 }
