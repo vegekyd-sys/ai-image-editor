@@ -27,7 +27,8 @@ const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJFN2YYaWaQjABUKLqxQcA_fhxPLFDY';
 
-const MAX_VIDEO_FILE_SIZE = 200 * 1024 * 1024;
+const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50;
+const MAX_VIDEO_UPLOAD_FILE_SIZE = MAX_VIDEO_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
 const MAX_VIDEO_UPLOAD_DURATION = 120;
 const MAX_VIDEO_UPLOAD_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15;
@@ -743,8 +744,8 @@ function validateVideoFile(videoPath, options = {}) {
     return { ok: false, error: `Video file not found: ${videoPath}` };
   }
   const stat = fs.statSync(videoPath);
-  if (stat.size > MAX_VIDEO_FILE_SIZE) {
-    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max 200MB)` };
+  if (stat.size > MAX_VIDEO_UPLOAD_FILE_SIZE) {
+    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB). The CLI uploads directly to Storage; use the frontend to transcode larger videos first.` };
   }
   const ext = path.extname(videoPath).slice(1).toLowerCase();
   if (!['mp4', 'mov', 'webm'].includes(ext)) {
@@ -772,8 +773,8 @@ function validateVideoFileForAnalysis(videoPath) {
   if (stat.size === 0) {
     return { ok: false, error: `Video file is empty: ${videoPath}` };
   }
-  if (stat.size > MAX_VIDEO_FILE_SIZE) {
-    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max 200MB)` };
+  if (stat.size > MAX_VIDEO_UPLOAD_FILE_SIZE) {
+    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB). The CLI uploads directly to Storage; use the frontend to transcode larger videos first.` };
   }
   const ext = path.extname(videoPath).slice(1).toLowerCase();
   if (!['mp4', 'mov', 'webm'].includes(ext)) {
@@ -959,7 +960,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
     const uploadedVideoUrls = [...prevalidatedVideoUrlList];
     const uploadedVideoMetas = prevalidatedVideoUrlList.map(() => null);
     if (prevalidatedVideoUrlList.length) {
-      process.stderr.write(`📹 Assuming public video URL(s) already match Makaron upload limits: ≤${MAX_VIDEO_UPLOAD_DURATION}s, ≤200MB, ≤1080p.\n`);
+      process.stderr.write(`📹 Assuming public video URL(s) already match Makaron upload limits: ≤${MAX_VIDEO_UPLOAD_DURATION}s, ≤${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB, ≤1080p.\n`);
     }
     for (const videoPath of prevalidatedVideoFileList) {
       process.stderr.write(`📹 Uploading ${path.basename(videoPath)} (${(fs.statSync(videoPath).size/1024/1024).toFixed(1)}MB)...\n`);
@@ -975,7 +976,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
 
     // Add videos to project via projects/create (same as images)
     if (uploadedVideoUrls.length === 0) {
-      process.stderr.write(`❌ No valid videos were uploaded. Local videos must be MP4/MOV/WebM, ≤${MAX_VIDEO_UPLOAD_DURATION}s, ≤200MB, and ≤1080p.\n`);
+      process.stderr.write(`❌ No valid videos were uploaded. Local videos must be MP4/MOV/WebM, ≤${MAX_VIDEO_UPLOAD_DURATION}s, ≤${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB, and ≤1080p.\n`);
       process.exit(1);
     }
 
@@ -1195,7 +1196,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
     let videoUrl = isHttpUrl(video) ? video : null;
     let inputVideoMeta = null;
     if (videoUrl) {
-      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits: ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤200MB, ≤1080p.\n`);
+      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits: ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB, ≤1080p.\n`);
     }
     if (video && !videoUrl) {
       const valid = validateVideoFile(video, {

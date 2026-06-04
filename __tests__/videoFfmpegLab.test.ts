@@ -12,11 +12,19 @@ describe('Agent FFmpeg video lab', () => {
 
   it('keeps Makaron CLI upload and provider video limits separate', () => {
     const cli = readFileSync(join(process.cwd(), 'packages/makaron-cli/bin/makaron.mjs'), 'utf8')
+    const readme = readFileSync(join(process.cwd(), 'packages/makaron-cli/README.md'), 'utf8')
+    const skill = readFileSync(join(process.cwd(), 'packages/makaron-cli/SKILL.md'), 'utf8')
+
     expect(cli).toContain('const MAX_VIDEO_UPLOAD_DURATION = 120')
+    expect(cli).toContain('const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50')
     expect(cli).toContain('const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15')
     expect(cli).toContain('maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
     expect(cli).toContain('Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
     expect(cli).not.toContain('const MAX_VIDEO_DURATION = 15')
+    expect(readme).toContain('max 50MB, max 120s')
+    expect(skill).toContain('max 50MB, max 120s')
+    expect(readme).not.toContain('max 200MB, max 120s')
+    expect(skill).not.toContain('max 200MB, max 120s')
   })
 
   it('publishes direct FFmpeg MP4 deliverables to the timeline by default', () => {

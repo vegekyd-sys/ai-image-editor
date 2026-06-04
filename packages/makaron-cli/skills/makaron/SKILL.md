@@ -102,7 +102,7 @@ npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "comb
 npx makaron-cli chat --project auto --video https://example.com/dance.mp4 -b "extend this to 15 seconds"
 ```
 
-Supported formats: MP4, MOV, WebM. CLI local video uploads follow the same project-upload contract as the normal frontend flow: max 200MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode oversized videos; the CLI rejects videos above those upload limits. Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
+Supported formats: MP4, MOV, WebM. CLI local video uploads support max 50MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits. Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
 
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct video commands are standalone raw-tool calls.
 
