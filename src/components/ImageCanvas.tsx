@@ -166,6 +166,7 @@ export default function ImageCanvas({
   const [videoDuration, setVideoDuration] = useState(0);
   // Remotion Player custom controls — frame tracked via ref (no re-render during playback)
   const remotionRef = useRef<PlayerRef | null>(null);
+  const [remotionPlayer, setRemotionPlayer] = useState<PlayerRef | null>(null);
   const [remotionPlaying, setRemotionPlaying] = useState(false);
   const remotionFrameRef = useRef(0);
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
@@ -667,6 +668,33 @@ export default function ImageCanvas({
     }
   }, [remotionTotalFrames, remotionFps, remotionDuration]);
 
+  useEffect(() => {
+    const player = remotionPlayer;
+    if (!player || !currentDesign?.animation) return;
+
+    const syncPlaying = () => setRemotionPlaying(player.isPlaying());
+    const syncFrame = () => updateRemotionUI();
+    const onEnded = () => {
+      setRemotionPlaying(false);
+      updateRemotionUI();
+    };
+
+    setRemotionPlaying(player.isPlaying());
+    updateRemotionUI();
+    player.addEventListener('play', syncPlaying);
+    player.addEventListener('pause', syncPlaying);
+    player.addEventListener('ended', onEnded);
+    player.addEventListener('frameupdate', syncFrame);
+    player.addEventListener('timeupdate', syncFrame);
+    return () => {
+      player.removeEventListener('play', syncPlaying);
+      player.removeEventListener('pause', syncPlaying);
+      player.removeEventListener('ended', onEnded);
+      player.removeEventListener('frameupdate', syncFrame);
+      player.removeEventListener('timeupdate', syncFrame);
+    };
+  }, [remotionPlayer, currentDesign?.animation, currentDesign?.code, updateRemotionUI]);
+
   // RAF loop during playback — lightweight, no state updates
   useEffect(() => {
     if (!remotionPlaying || !remotionRef.current) return;
@@ -685,51 +713,20 @@ export default function ImageCanvas({
     return () => cancelAnimationFrame(raf);
   }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
-  // Preload all images + videos in design code via browser cache, then call onReady
-  const preloadDesignAssets = useCallback((code: string): Promise<void> => {
-    // Video URLs are cached by RemotionRenderer's resolveVideoUrls — only preload images here
-    const videoExts = /\.(mp4|webm|mov)([^\s"'`<>)}\]]*)?$/i;
-    const imageUrls = new Set<string>();
-    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/[^\s"'`<>)}\]]*/gi)) {
-      if (!videoExts.test(m[0])) imageUrls.add(m[0]);
-    }
-    for (const m of code.matchAll(/https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi)) imageUrls.add(m[0]);
-
-    const imagePromises = [...imageUrls].map(url => new Promise<void>(resolve => {
-      const img = new Image();
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
-      img.src = url;
-    }));
-
-    if (imagePromises.length === 0) return Promise.resolve();
-    return Promise.all(imagePromises).then(() => {});
-  }, []);
-
-  // Reset + auto-play when switching to a design snapshot
-  const remotionAutoPlayRef = useRef(false);
+  // Reset when switching to a design snapshot. Remotion compositions should only
+  // start from an explicit user click; auto-play during code generation is noisy.
   useEffect(() => {
+    const player = remotionRef.current;
+    player?.pause();
     setRemotionPlaying(false);
     setRemotionBuffering(false);
     setRemotionLoading(!!currentDesign?.animation);
     remotionFrameRef.current = 0;
     remotionStartedRef.current = false;
-    // Mark for auto-play — actual play triggered when Player ref arrives
-    remotionAutoPlayRef.current = !!currentDesign?.animation;
-    // Try auto-play now if ref already available — preload images first
-    if (currentDesign?.animation && remotionRef.current) {
-      let cancelled = false;
-      preloadDesignAssets(currentDesign.code).then(() => {
-        if (cancelled) return;
-        remotionRef.current?.play();
-        remotionStartedRef.current = true;
-        setRemotionPlaying(true);
-        remotionAutoPlayRef.current = false;
-      });
-      return () => { cancelled = true; };
-    }
+    updateRemotionUI();
+    return () => player?.pause();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex]);
+  }, [currentIndex, currentDesign?.code]);
 
   // Pause on buffering, resume when assets ready — like a real video player
   // Debounce resume to avoid flicker when multiple images load in quick succession
@@ -1164,16 +1161,9 @@ export default function ImageCanvas({
               onContainerRef={setDesignContainerEl}
               onPlayerRef={(ref) => {
                 remotionRef.current = ref;
+                setRemotionPlayer(ref);
+                setRemotionPlaying(ref?.isPlaying() ?? false);
                 if (editableFields?.length) setDesignPlayerRef(ref);
-                // Auto-play if pending (ref wasn't ready during useEffect)
-                if (ref && remotionAutoPlayRef.current && currentDesign) {
-                  remotionAutoPlayRef.current = false;
-                  preloadDesignAssets(currentDesign.code).then(() => {
-                    ref.play();
-                    remotionStartedRef.current = true;
-                    setRemotionPlaying(true);
-                  });
-                }
               }}
             />
 
