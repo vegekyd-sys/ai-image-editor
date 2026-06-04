@@ -69,6 +69,9 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('[Active skill: long-video-director]')
     expect(agent).toContain('if an existing timeline/reference video is longer than 15 seconds')
     expect(agent).toContain('do not compress the whole source into one 5s or 15s edit')
+    expect(agent).toContain('add together the durations of all uploaded/timeline/reference videos')
+    expect(agent).toContain('The combined source duration must be 15 seconds or less')
+    expect(agent).toContain('keep the output duration aligned with the combined source duration shown in Media Index')
 
     expect(animate).toContain('Every normal script sent to a video generation model must be **15 seconds or less**')
     expect(animate).toContain('keep it as **one video generation script**')
@@ -78,6 +81,8 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('do **not** write one long script')
     expect(animate).toContain('If the source/reference video itself is longer than 15s')
     expect(animate).toContain('For longer source videos, use the long-video-director workflow instead of one short compressed edit')
+    expect(animate).toContain('their **combined source duration must be 15 seconds or less** for a single SeeDance generation')
+    expect(animate).toContain('This is an input limit, not a creative long-video workflow')
 
     expect(agentTs).toContain('Single-call total duration: 5-15 seconds')
     expect(agentTs).toContain('If a complete script totals 15 seconds or less, submit it as one video generation call')
@@ -86,6 +91,8 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Total duration must be 15 seconds or less')
     expect(agentTs).toContain('Long source video rule')
     expect(agentTs).toContain('if a timeline/reference video is longer than 15 seconds')
+    expect(agentTs).toContain('the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less')
+    expect(agentTs).toContain('set this to the combined source video duration from Media Index')
   })
 
   it('keeps Seedance as the default video model unless user or app selects Kling', () => {

@@ -21,6 +21,8 @@ If the user gives a complete script whose total duration is 15s or less, keep it
 
 If the source/reference video itself is longer than 15s, do **not** compress the whole source into one short 5s or 15s edit unless the user explicitly asks to summarize it. Treat it as long-video input: analyze its pacing, split it into self-contained segments of 15s or less, carry the seam requirements into each segment script, and wait for approval before rendering.
 
+If the prompt references one or more uploaded/reference videos, their **combined source duration must be 15 seconds or less** for a single SeeDance generation. This is an input limit, not a creative long-video workflow. If the total duration is longer than 15s, do not submit those videos together as one generation.
+
 ## Modes
 
 Choose the best mode based on user intent. Modes are mutually exclusive.
@@ -44,6 +46,7 @@ Rules:
 - **Timeline videos**: just use `<<<media_N>>>` — auto-routed to SeeDance
 - **External videos** (workspace/skill assets): pass `video_ref_url` + `video_ref_type: feature`
 - **Duration lock**: when editing an existing video up to 15s, the output duration should match the input video duration. If the source video is 10s, write a 10s edit and set duration to 10s. If source metadata is slightly over 15s (for example 15.1s), set duration to 15s. For longer source videos, use the long-video-director workflow instead of one short compressed edit. Never default to a 5s script for video editing unless the user explicitly asks to shorten it.
+- **Combined video limit**: when referencing one or more timeline/uploaded videos or external reference videos, add their source durations together. The total must be 15s or less for one SeeDance generation.
 - Can combine images + videos in the same prompt
 - Keep prompt concise (under 200 chars when referencing video for motion)
 - `keep_original_sound: true` to preserve the original audio

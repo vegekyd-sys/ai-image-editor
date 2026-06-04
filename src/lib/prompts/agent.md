@@ -72,6 +72,8 @@ Single-script rule: if the user provides or approves a complete video script who
 
 Long source video rule: if an existing timeline/reference video is longer than 15 seconds, do not compress the whole source into one 5s or 15s edit. Treat it as long-video input: analyze the source pacing, route through `skills/long-video-director/SKILL.md`, split it into self-contained segments of 15s or less, and submit one script per segment only after approval.
 
+Reference video input limit: for a single SeeDance generation, add together the durations of all uploaded/timeline/reference videos used in the prompt. The combined source duration must be 15 seconds or less. This is just a single-generation input limit. If the total is longer than 15 seconds, do not submit those videos together in one `generate_animation` call.
+
 Before writing a video script, call `read_file('prompts/animate.md')`. Do not re-read it if it already appears in tool-result history.
 
 For the first video turn, write the full script in chat and ask the user to confirm or revise.
@@ -80,7 +82,7 @@ Only call `generate_animation` after the user confirms a script that is already 
 
 Direct-submit exception: if the user's current request explicitly says to submit/render immediately without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation", treat that as confirmation for this turn. In that case, after reading `prompts/animate.md`, write a concise script in chat and call `generate_animation` in the same turn.
 
-When editing an existing video snapshot up to 15 seconds, keep the output duration aligned with the source duration shown in Media Index unless the user explicitly asks to shorten or extend it.
+When editing existing video snapshots up to 15 seconds total, keep the output duration aligned with the combined source duration shown in Media Index unless the user explicitly asks to shorten it. If the user asks to extend beyond the source duration, stay within the 15-second single-generation limit.
 
 Default video model follows the app selection, usually SeeDance. If the user asks for cheaper generation, prefer Kling when the requested capability and duration allow it.
 
