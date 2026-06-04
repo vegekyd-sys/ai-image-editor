@@ -97,6 +97,16 @@ Returns immediately:
 npx makaron-cli chat --project <id> --image ref1.jpg --image ref2.jpg -b "use these as style reference"
 ```
 
+### Inspect existing timeline media
+
+Before starting a follow-up run on an existing project, list the current timeline media so you know what assets are available and which `<<<media_N>>>` references to use:
+
+```bash
+npx makaron-cli project media <projectId> --json
+```
+
+This is project-scoped. `responses get <runId> --pick output` only returns artifacts from one run; `project media` returns the whole project timeline: original uploads, references, generated images, video snapshots, and editable compositions.
+
 ### With video input (MP4/MOV/WebM)
 
 ```bash

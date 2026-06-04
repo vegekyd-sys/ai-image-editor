@@ -586,6 +586,34 @@ async function listProjects(baseUrl, headers) {
   console.log('');
 }
 
+async function listProjectMedia(baseUrl, headers, projectId, opts = {}) {
+  const res = await fetch(`${baseUrl}/api/projects/${projectId}/media`, { headers });
+  if (!res.ok) { console.error('Project media failed:', await res.text()); process.exit(1); }
+  const data = await res.json();
+  if (opts.json) {
+    console.log(JSON.stringify(data, null, 2));
+    return data;
+  }
+
+  console.log(`🎞️  ${data.title || 'Untitled'}`);
+  console.log(`   Project: ${data.projectUrl || `${APP_URL}/projects/${projectId}`}`);
+  const media = data.media || [];
+  if (!media.length) {
+    console.log('   No timeline media yet.');
+    return data;
+  }
+  for (const item of media) {
+    const ref = item.ref || `<<<media_${item.index}>>>`;
+    const status = item.status && item.status !== 'completed' ? ` ${item.status}` : '';
+    const duration = typeof item.duration === 'number' ? ` ${item.duration}s` : '';
+    const dimensions = item.width && item.height ? ` ${item.width}x${item.height}` : '';
+    const description = item.description ? ` — ${item.description}` : '';
+    const url = item.url ? `\n      ${item.url}` : '';
+    console.log(`  ${String(item.index).padStart(2)}. ${ref} [${item.type}${status}${duration}${dimensions}]${description}${url}`);
+  }
+  return data;
+}
+
 function timeSince(date) {
   const s = Math.floor((Date.now() - date.getTime()) / 1000);
   if (s < 60) return 'just now';
@@ -1095,6 +1123,19 @@ if (command === '--version' || command === '-v' || command === 'version') {
 } else if (command === 'list' || command === 'ls') {
   const { headers, baseUrl } = getAuth();
   await listProjects(baseUrl, headers);
+} else if (command === 'project' || command === 'projects') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+  if (sub === 'media') {
+    const projectId = args[2];
+    if (!projectId) { console.error('Usage: makaron project media <projectId> [--json]'); process.exit(1); }
+    const jsonOutput = args.includes('--json');
+    await listProjectMedia(baseUrl, headers, projectId, { json: jsonOutput });
+  } else {
+    console.log(`Project commands:
+  project media <projectId> --json      List timeline media for a project
+`);
+  }
 } else if (command === 'abort') {
   const { headers, baseUrl } = getAuth();
   const runId = args[1];
@@ -1516,6 +1557,7 @@ Commands:
   claim                              Get claim URL for human to link account
   login                              Log in to Makaron (human interactive)
   list (ls)                          List all projects
+  project media <projectId> --json    List timeline media for a project
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   create --title "name"              Create empty project (text-to-image)

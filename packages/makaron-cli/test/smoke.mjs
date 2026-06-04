@@ -46,6 +46,42 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/projects/project-auto-1/media') {
+    sendJson(200, {
+      projectId: 'project-auto-1',
+      projectUrl: 'https://app.example/projects/project-auto-1',
+      title: 'Mock Project',
+      media: [
+        {
+          id: 'media_1',
+          index: 1,
+          ref: '<<<media_1>>>',
+          type: 'image',
+          status: 'completed',
+          snapshot_id: 'snap_image_1',
+          snapshotId: 'snap_image_1',
+          url: 'https://cdn.example/source.jpg',
+          description: 'Original upload',
+        },
+        {
+          id: 'media_2',
+          index: 2,
+          ref: '<<<media_2>>>',
+          type: 'video',
+          status: 'completed',
+          snapshot_id: 'snap_video_1',
+          snapshotId: 'snap_video_1',
+          url: 'https://cdn.example/video.mp4',
+          posterUrl: 'https://cdn.example/poster.jpg',
+          duration: 12.4,
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/video-snapshot/123e4567-e89b-12d3-a456-426614174000') {
     sendJson(200, { id: '123e4567-e89b-12d3-a456-426614174000', status: 'completed', videoUrl: 'https://cdn.example/video.mp4' });
     return;
@@ -138,6 +174,18 @@ try {
   {
     const result = await expectSuccess(['responses', 'get', 'run_mock_1', '--pick', 'project_url']);
     assert.equal(result.stdout.trim(), 'https://app.example/projects/project-auto-1');
+  }
+
+  {
+    const result = await expectSuccess(['project', 'media', 'project-auto-1', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.projectId, 'project-auto-1');
+    assert.equal(data.media.length, 2);
+    assert.equal(data.media[0].ref, '<<<media_1>>>');
+    assert.equal(data.media[1].type, 'video');
+    assert.equal(data.media[1].duration, 12.4);
+    const mediaRequest = requests.find(req => req.pathname === '/api/projects/project-auto-1/media');
+    assert.equal(mediaRequest?.method, 'GET');
   }
 
   {
