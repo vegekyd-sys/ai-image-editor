@@ -8,6 +8,23 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-04',
+    en: { title: 'Video Agent — From Generation to Editing', items: [
+      'Makaron can now edit videos, not just generate them.',
+      'Upload longer videos up to 120 seconds.',
+      'Split, trim, caption, and combine clips by chatting.',
+      'Finished edits go straight onto the timeline.',
+      'Agent remembers files, previews, and results across turns.',
+    ]},
+    zh: { title: 'Video Agent — 从生成到剪辑', items: [
+      'Makaron 现在不只是生成视频，也能剪视频。',
+      '支持更长素材，最长可上传 120 秒。',
+      '分段、裁剪、字幕、拼接，都可以聊天完成。',
+      '剪好的结果会直接出现在时间线上。',
+      'Agent 会记住文件、预览和结果，下一轮接着做。',
+    ]},
+  },
+  {
     date: '2026-06-02',
     en: { title: 'Long Story Skill', items: [
       'Makaron now supports video creation beyond the 15-second limit.',
