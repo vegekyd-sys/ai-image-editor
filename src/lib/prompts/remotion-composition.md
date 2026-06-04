@@ -59,10 +59,13 @@ When changing trim timing or total sequence length, update `animation.durationIn
 
 Available APIs include all exports from `remotion`, `@remotion/media`, `@remotion/paths`, and `@remotion/noise`.
 
+- Do not import Remotion packages, destructure from `window.Remotion`, or write `Remotion.AbsoluteFill`. All APIs are already in scope. Use `<AbsoluteFill>`, `<Video>`, `<Sequence>`, and hooks directly.
+- Name the main exported component `Composition`. Helper components are allowed, but the renderable timeline should be `function Composition(props) { ... }`.
 - Use Remotion `<Img>`, never HTML `<img>`.
 - Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.
+- Never use `startFrom` or `endAt` for `<Video>` trimming in Makaron compositions. They are deprecated/unsafe in this runtime and can make every sequenced clip restart from the first frame. Use `trimBefore={sourceStartFrame}` and `trimAfter={sourceEndFrame}` instead.
 - Use `AbsoluteFill`, `interpolate`, `spring`, `Easing`, `useCurrentFrame`, and `useVideoConfig` for animation.
 
 Video trimming example:

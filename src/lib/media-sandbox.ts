@@ -1,12 +1,20 @@
-import { createRequire } from 'module'
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'fs/promises'
-import { existsSync } from 'fs'
-import { tmpdir } from 'os'
+import * as childProcess from 'child_process'
+import * as crypto from 'crypto'
+import * as fs from 'fs'
+import * as fsPromises from 'fs/promises'
+import * as os from 'os'
 import path from 'path'
-import { pathToFileURL } from 'url'
+import * as stream from 'stream'
+import * as url from 'url'
+import * as util from 'util'
 import { findFfmpeg, findFfprobe, probeVideoFile, type VideoProbe } from './ffmpeg-runtime'
 import * as workspace from './workspace'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'
+
+const { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } = fsPromises
+const { existsSync } = fs
+const { tmpdir } = os
+const { pathToFileURL } = url
 
 type SupabaseClient = any
 
@@ -136,6 +144,34 @@ function normalizeOutputs(raw: unknown, outputDir: string): MediaSandboxOutput[]
     }))
 }
 
+function createNodeMediaRequire(): NodeRequire {
+  const builtins: Record<string, unknown> = {
+    fs,
+    'node:fs': fs,
+    'fs/promises': fsPromises,
+    'node:fs/promises': fsPromises,
+    path,
+    'node:path': path,
+    os,
+    'node:os': os,
+    child_process: childProcess,
+    'node:child_process': childProcess,
+    util,
+    'node:util': util,
+    stream,
+    'node:stream': stream,
+    url,
+    'node:url': url,
+    crypto,
+    'node:crypto': crypto,
+  }
+
+  return ((id: string) => {
+    if (id in builtins) return builtins[id]
+    throw new Error(`Module "${id}" is not available in the Node media runtime. Use Node built-ins such as fs, path, child_process, util, os, stream, url, and crypto.`)
+  }) as NodeRequire
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
@@ -253,7 +289,7 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       ffprobePath,
     }
 
-    const localRequire = createRequire(import.meta.url)
+    const localRequire = createNodeMediaRequire()
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
     const runner = new AsyncFunction(
       'require',
