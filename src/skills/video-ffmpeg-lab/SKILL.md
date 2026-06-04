@@ -59,7 +59,7 @@ Current known defaults:
 | Model | Chunk target | Reference limit | Notes |
 | --- | ---: | ---: | --- |
 | SeeDance | 15s | 15.5s | Default video model, higher quality, feature/reference mode preferred. |
-| Kling | 10s | 10.5s | Cheaper option, supports base video edit when capability allows it. |
+| Kling | 15s | 10.5s | Cheaper option, supports base video edit when capability allows it. |
 
 If a new model appears, follow its capability/tool error messages instead of inventing a new case. The long-video generation workflow stays the same: probe → segment to accepted duration → generate per segment → assemble generated outputs.
 
@@ -193,7 +193,7 @@ Use these as building blocks inside the segment planner or assembly pattern:
 
 1. Analyze/probe the source video.
 2. Choose model capability: SeeDance is default; Kling is cheaper when it supports the request.
-3. Use the segment planner once to create model-sized chunks: Kling `<=10s`, SeeDance `<=15s`.
+3. Use the segment planner once to create model-sized chunks: Kling `<=15s`, SeeDance `<=15s`.
 4. Save chunks to workspace and keep the returned manifest in the conversation.
 5. Call `generate_animation` for each chunk with the user's requested model and the same style direction.
 6. Use the assembly pattern to stitch generated chunks.

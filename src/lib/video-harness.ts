@@ -7,7 +7,6 @@ import { getVideoModelCapability } from '@/lib/video-model-capabilities';
 import { parseTotalDuration } from './kling';
 
 const MAX_VIDEO_DURATION = 15;
-
 function urlMatch(a: string, b: string): boolean {
   try {
     const ua = new URL(a);
@@ -27,8 +26,9 @@ export function validateVideoScript(opts: {
   videoRefType?: string
   model?: string
   motionControl?: boolean
+  duration?: number
 }): string | null {
-  const { prompt, imageCount, videoRefUrl, videoRefType, model, motionControl } = opts
+  const { prompt, imageCount, videoRefUrl, videoRefType, model, motionControl, duration } = opts
 
   // Motion control: only need video_ref_url, skip image reference checks
   if (motionControl) {
@@ -38,9 +38,16 @@ export function validateVideoScript(opts: {
     return null
   }
 
+  const capability = getVideoModelCapability(model)
   const parsedDuration = parseTotalDuration(prompt)
+  if (parsedDuration != null && parsedDuration < capability.minOutputDuration) {
+    return `A single ${capability.label} video generation script must be at least ${capability.minOutputDuration} seconds, but this script totals ${parsedDuration}s. Extend it to a compact ${capability.minOutputDuration}s script and set duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`
+  }
   if (parsedDuration != null && parsedDuration > MAX_VIDEO_DURATION) {
     return `A single video generation script can be at most ${MAX_VIDEO_DURATION} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${MAX_VIDEO_DURATION}s or less, and do not submit one long script.`
+  }
+  if (duration != null && duration < capability.minOutputDuration) {
+    return `${capability.label} video generation duration must be at least ${capability.minOutputDuration} seconds, but duration=${duration}. Use duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`
   }
 
   // 1. Image reference check: prompt has images available but doesn't reference any
@@ -70,7 +77,6 @@ export function validateVideoScript(opts: {
 
   // 4. base mode requires a model that can edit the reference video as the base.
   if (videoRefUrl && videoRefType === 'base') {
-    const capability = getVideoModelCapability(model)
     if (!capability.supportsBaseVideoEdit) {
       return `Video editing (base mode) is not supported by ${capability.label}. Choose a model with base video editing support, or use video_ref_type="feature" for style/motion reference.`
     }

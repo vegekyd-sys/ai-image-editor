@@ -17,11 +17,11 @@ A short title on the first line (2-5 words, no quotes, no markdown), then the vi
 
 ## Duration Ceiling
 
-Every normal script sent to a video generation model must be **15 seconds or less**.
+Every normal SeeDance script sent to a video generation model must be **4 to 15 seconds**. SeeDance's minimum output duration is 4 seconds; 5 seconds is only the default/common preset. If the user asks for a 1s, 2s, or 3s video, write a compact 4s script and set generation duration to 4s.
 
 If the user asks for 30s, 60s, 1-2 minutes, "long video", or anything longer than 15s, do **not** write one long script. Use the long-video-director workflow: split the idea into separate self-contained segment scripts of 15s or less, plan the seams between them, and wait for user approval before any rendering.
 
-If the user gives a complete script whose total duration is 15s or less, keep it as **one video generation script**. The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together as one prompt, with the generation duration set to the total script duration when known. Do not submit only a single shot or a single line from the script. Do not split a valid short script into separate generations just because it has multiple `Shot N (Xs):` lines. Multiple shots are normal inside one 15s video.
+If the user gives a complete script whose total duration is 4s to 15s, keep it as **one video generation script**. The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together as one prompt, with the generation duration set to the total script duration when known. If the script totals less than 4s, extend it to a compact 4s script instead of submitting a shorter duration. Do not submit only a single shot or a single line from the script. Do not split a valid short script into separate generations just because it has multiple `Shot N (Xs):` lines. Multiple shots are normal inside one 15s video.
 
 If the source/reference video itself is longer than 15s, do **not** compress the whole source into one short 5s or 15s edit unless the user explicitly asks to summarize it. Treat it as long-video input: analyze its pacing, split it into self-contained segments of 15s or less, carry the seam requirements into each segment script, and wait for approval before rendering.
 
@@ -170,8 +170,8 @@ Shot 2 (3s): Close-up, ...
 
 9. **Segment seams**: If this script is part of a long-video segment plan, any seam requirements must be written into the script itself. The first shot/action must satisfy the previous seam's required opening, and the final shot/action must satisfy the next seam's required ending. Do not leave continuity only as a separate note outside the script.
 
-10. **Duration**: 5s = compact, 10s = complete detail. Recommend 10s for complex scenes.
-   - **Video editing exception**: if the prompt references an existing video up to 15s, match the source video's duration (e.g. a 10s source video → 10s edited video). If metadata is slightly over 15s, use 15s. If the source is longer than 15s, split it into long-video segments first. Do not use the single-photo 5s formula for video edits.
+10. **Duration**: 4s = minimum compact unit, 5s = default/common preset, 10s = complete detail. Recommend 10s for complex scenes. Never write or submit a SeeDance generated video duration below 4s.
+   - **Video editing exception**: if the prompt references an existing video up to 15s, match the source video's duration (e.g. a 10s source video → 10s edited video), but clamp the output to the SeeDance model range: minimum 4s, maximum 15s. If metadata is slightly over 15s, use 15s. If the source is shorter than 4s, use 4s. If the source is longer than 15s, split it into long-video segments first. Do not use the single-photo 5s formula for video edits.
 
 11. **Select & reorder**: Pick 3-7 images from the Media Index. Skip duplicates and weak edits. Reorder freely for the strongest story — don't follow upload order.
 

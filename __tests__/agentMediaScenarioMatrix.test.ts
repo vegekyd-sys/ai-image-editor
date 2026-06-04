@@ -72,7 +72,7 @@ describe('agent media scenario matrix', () => {
     expect(animate).toContain('usually SeeDance')
     expect(animate).toContain('prefer Kling only when duration and capability allow it')
     expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | Default video model')
-    expect(ffmpegSkill).toContain('| Kling | 10s | 10.5s | Cheaper option')
+    expect(ffmpegSkill).toContain('| Kling | 15s | 10.5s | Cheaper option')
     expect(ffmpegSkill).not.toContain('Cheaper/default')
   })
 

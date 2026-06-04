@@ -2,6 +2,79 @@ import { describe, expect, it } from 'vitest'
 import { validateVideoScript } from '../src/lib/video-harness'
 
 describe('video duration guards', () => {
+  it('rejects a Seedance video script shorter than 4 seconds', () => {
+    const error = validateVideoScript({
+      prompt: [
+        '快速眨眼',
+        '',
+        '主角是 <<<media_1>>>（人物）。',
+        'Shot 1 (3s): Close-up, she blinks and smiles.',
+        'Style: Soft portrait.',
+      ].join('\n'),
+      imageCount: 1,
+      model: 'seedance',
+    })
+
+    expect(error).toContain('at least 4 seconds')
+    expect(error).toContain('totals 3s')
+    expect(error).toContain('duration=4')
+  })
+
+  it('allows a 4 second Seedance script', () => {
+    const error = validateVideoScript({
+      prompt: [
+        '快速回眸',
+        '',
+        '主角是 <<<media_1>>>（人物）。',
+        'Shot 1 (4s): Close-up, she turns back and smiles.',
+        'Style: Soft portrait.',
+      ].join('\n'),
+      imageCount: 1,
+      model: 'seedance',
+      duration: 4,
+    })
+
+    expect(error).toBeNull()
+  })
+
+  it('rejects an explicit Seedance duration shorter than 4 seconds', () => {
+    const error = validateVideoScript({
+      prompt: [
+        '人物回眸',
+        '',
+        '主角是 <<<media_1>>>（人物）。',
+        'Shot 1 (5s): Close-up, she turns back and smiles.',
+        'Style: Soft portrait.',
+      ].join('\n'),
+      imageCount: 1,
+      model: 'seedance',
+      duration: 3,
+    })
+
+    expect(error).toContain('duration must be at least 4 seconds')
+    expect(error).toContain('duration=3')
+    expect(error).toContain('duration=4')
+  })
+
+  it('still rejects a Kling duration shorter than 5 seconds', () => {
+    const error = validateVideoScript({
+      prompt: [
+        '人物回眸',
+        '',
+        '主角是 <<<media_1>>>（人物）。',
+        'Shot 1 (4s): Close-up, she turns back and smiles.',
+        'Style: Soft portrait.',
+      ].join('\n'),
+      imageCount: 1,
+      model: 'kling',
+      duration: 4,
+    })
+
+    expect(error).toContain('Kling')
+    expect(error).toContain('at least 5 seconds')
+    expect(error).toContain('duration=5')
+  })
+
   it('rejects a single generated video script longer than 15 seconds', () => {
     const error = validateVideoScript({
       prompt: [

@@ -1,6 +1,7 @@
 export interface VideoModelCapability {
   id: string
   label: string
+  minOutputDuration: number
   maxOutputDuration: number
   maxReferenceVideoDuration: number
   supportsVideoReference: boolean
@@ -15,16 +16,18 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   kling: {
     id: 'kling',
     label: 'Kling',
-    maxOutputDuration: 10,
+    minOutputDuration: 5,
+    maxOutputDuration: 15,
     maxReferenceVideoDuration: 10.5,
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
-    longVideoChunkSeconds: 10,
+    longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.112,
   },
   seedance: {
     id: 'seedance',
     label: 'SeeDance',
+    minOutputDuration: 4,
     maxOutputDuration: 15,
     maxReferenceVideoDuration: 15.5,
     supportsVideoReference: true,
@@ -35,6 +38,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   piapi: {
     id: 'piapi',
     label: 'PiAPI Kling',
+    minOutputDuration: 5,
     maxOutputDuration: 15,
     maxReferenceVideoDuration: 0,
     supportsVideoReference: false,
@@ -47,6 +51,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
 const GENERIC_VIDEO_MODEL: VideoModelCapability = {
   id: 'generic',
   label: 'Video model',
+  minOutputDuration: 4,
   maxOutputDuration: 15,
   maxReferenceVideoDuration: 15.5,
   supportsVideoReference: true,
@@ -91,6 +96,10 @@ export function validateVideoModelRequest(options: {
   hasVideoReference?: boolean
 }): string | null {
   const capability = getVideoModelCapability(options.model)
+
+  if (options.outputDuration != null && options.outputDuration < capability.minOutputDuration) {
+    return `${capability.label} duration must be ${capability.minOutputDuration} seconds or more.`
+  }
 
   if (options.outputDuration != null && options.outputDuration > capability.maxOutputDuration) {
     return `${capability.label} duration must be ${capability.maxOutputDuration} seconds or less.`

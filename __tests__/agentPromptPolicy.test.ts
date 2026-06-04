@@ -59,12 +59,14 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('直接提交渲染')
   })
 
-  it('keeps single video generation capped at 15s and routes longer requests to the director skill', () => {
+  it('keeps single video generation in the model duration range and routes longer requests to the director skill', () => {
     const agent = read('src/lib/prompts/agent.md')
     const animate = read('src/lib/prompts/animate.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('a single video-generation script/call must be 15 seconds or less')
+    expect(agent).toContain('a single SeeDance video-generation script/call must be 4 to 15 seconds')
+    expect(agent).toContain("SeeDance's minimum output duration is 4 seconds")
+    expect(agent).toContain('set `duration: 4`')
     expect(agent).toContain('if the user provides or approves a complete video script whose total duration is 15 seconds or less')
     expect(agent).toContain('Put the entire title + all `Shot N (Xs):` lines + `Style:` line into the same `story_prompt`')
     expect(agent).toContain('Do not submit only one shot, the first shot, or one line from the script')
@@ -77,9 +79,12 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('add together the durations of all uploaded/timeline/reference videos')
     expect(agent).toContain('The combined source duration must be 15 seconds or less')
     expect(agent).toContain('keep the output duration aligned with the combined source duration shown in Media Index')
+    expect(agent).toContain('clamp it to the SeeDance model range: minimum 4s, maximum 15s')
 
-    expect(animate).toContain('Every normal script sent to a video generation model must be **15 seconds or less**')
+    expect(animate).toContain('Every normal SeeDance script sent to a video generation model must be **4 to 15 seconds**')
+    expect(animate).toContain("SeeDance's minimum output duration is 4 seconds")
     expect(animate).toContain('keep it as **one video generation script**')
+    expect(animate).toContain('If the script totals less than 4s, extend it to a compact 4s script instead of submitting a shorter duration')
     expect(animate).toContain('The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together')
     expect(animate).toContain('Do not submit only a single shot or a single line from the script')
     expect(animate).toContain('Multiple shots are normal inside one 15s video')
@@ -88,8 +93,12 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('For longer source videos, use the long-video-director workflow instead of one short compressed edit')
     expect(animate).toContain('their **combined source duration must be 15 seconds or less** for a single SeeDance generation')
     expect(animate).toContain('This is an input limit, not a creative long-video workflow')
+    expect(animate).toContain('Never write or submit a SeeDance generated video duration below 4s')
 
-    expect(agentTs).toContain('Single-call total duration: 5-15 seconds')
+    expect(agentTs).toContain('SeeDance is 4-15 seconds')
+    expect(agentTs).toContain('4s minimum output, 5s default/common preset')
+    expect(agentTs).toContain('Kling is 5-15 seconds')
+    expect(agentTs).toContain('set \\`duration: 4\\`')
     expect(agentTs).toContain('If a complete script totals 15 seconds or less, submit it as one video generation call')
     expect(agentTs).toContain('Put the whole title, every \\`Shot N (Xs):\\` line, and the \\`Style:\\` line into the same \\`story_prompt\\`')
     expect(agentTs).toContain('Do not submit only one shot, the first shot, or one line from the script')
@@ -97,7 +106,9 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Long source video rule')
     expect(agentTs).toContain('if a timeline/reference video is longer than 15 seconds')
     expect(agentTs).toContain('the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less')
-    expect(agentTs).toContain('set this to the combined source video duration from Media Index')
+    expect(agentTs).toContain('set this to the combined source video duration from Media Index clamped to the selected model range')
+    expect(agentTs).not.toContain('Duration in seconds: 3, 5, 7, 10, or 15')
+    expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")
   })
 
   it('keeps Seedance as the default video model unless user or app selects Kling', () => {

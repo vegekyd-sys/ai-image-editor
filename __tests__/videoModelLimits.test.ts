@@ -24,7 +24,7 @@ describe('video model reference limits', () => {
     expect(result.message).toContain('FFmpeg')
   })
 
-  it('fails fast before calling Kling with output duration over 10s', async () => {
+  it('allows Kling output duration up to 15s', async () => {
     const result = await createVideo({
       script: 'Cyberpunk restyle\n\nRestyle <<<media_1>>>.',
       images: [],
@@ -35,7 +35,8 @@ describe('video model reference limits', () => {
     })
 
     expect(result.success).toBe(false)
-    expect(result.message).toContain('Kling duration must be 10 seconds or less')
+    expect(result.message).not.toContain('Kling duration must be 10 seconds or less')
+    expect(result.message).toContain('KLING_ACCESS_KEY')
   })
 
   it('allows SeeDance reference durations up to the 15s range before provider submission', async () => {
