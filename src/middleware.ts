@@ -66,6 +66,20 @@ export async function middleware(request: NextRequest) {
   const user = session?.user
 
   const { pathname } = request.nextUrl
+  const isPublicRoute =
+    pathname === '/' ||
+    pathname === '/landingpage' ||
+    pathname === '/home' ||
+    pathname.startsWith('/home/') ||
+    pathname === '/makaron' ||
+    pathname === '/agent' ||
+    pathname === '/claim' ||
+    pathname === '/mcp' ||
+    pathname === '/admin/status' ||
+    pathname.startsWith('/s/') ||
+    pathname.startsWith('/releases/') ||
+    pathname.startsWith('/use-cases')
+
   // Local dev: skip invite-code activation gate
   const isDev = process.env.NODE_ENV === 'development'
   const activated = isDev || request.cookies.get('mkr_activated')?.value === '1'
@@ -76,7 +90,7 @@ export async function middleware(request: NextRequest) {
     const isProjectView = /^\/projects\/[0-9a-f-]{36}$/.test(pathname)
     if (isProjectView) return supabaseResponse
 
-    if (pathname !== '/login' && pathname !== '/landingpage' && pathname !== '/' && pathname !== '/home' && !pathname.startsWith('/home/') && pathname !== '/agent' && pathname !== '/claim' && pathname !== '/mcp' && pathname !== '/admin/status' && !pathname.startsWith('/s/') && !pathname.startsWith('/releases/')) {
+    if (pathname !== '/login' && !isPublicRoute) {
       const url = request.nextUrl.clone()
       url.pathname = '/home'
       return NextResponse.redirect(url)
@@ -112,8 +126,8 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  // /home is always accessible (new users land here with ?welcome=1 before activation completes)
-  if (pathname === '/home' || pathname.startsWith('/home/')) {
+  // Public routes stay accessible even when a logged-in user is not activated yet.
+  if (isPublicRoute) {
     return supabaseResponse
   }
 

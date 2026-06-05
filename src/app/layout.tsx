@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import AuthProvider from "@/components/AuthProvider";
 import { LocaleProvider } from "@/lib/i18n";
+import { DEFAULT_DESCRIPTION, DEFAULT_OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/seo";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,8 +16,27 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Makaron - one man creative studio",
-  description: "AI-powered image editor - chat to edit your photos",
+  metadataBase: new URL(SITE_URL),
+  applicationName: SITE_NAME,
+  title: {
+    default: "Makaron - AI creative studio for images and video",
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: DEFAULT_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: "Makaron - AI creative studio for images and video",
+    description: DEFAULT_DESCRIPTION,
+    url: "/home",
+    images: [{ url: DEFAULT_OG_IMAGE }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Makaron - AI creative studio for images and video",
+    description: DEFAULT_DESCRIPTION,
+    images: [DEFAULT_OG_IMAGE],
+  },
   icons: {
     icon: [
       { url: "/favicon.ico" },
@@ -42,7 +62,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className="bg-black">
+    <html lang="en" className="bg-black">
       <head>
         <link rel="preconnect" href="https://cdn.makaron.app" />
       </head>
