@@ -1,0 +1,34 @@
+{
+  "createdAt": "2026-06-05T04:41:15.802Z",
+  "activatedAt": "2026-06-05T04:41:53.584Z",
+  "purpose": "Preview $5 total traffic smoke test for K-pop Stage. Uses preview URL, not production.",
+  "previewUrl": "https://ai-image-editor-fzqq68i46-vegekyd-sys-projects.vercel.app",
+  "landingUrl": "https://ai-image-editor-fzqq68i46-vegekyd-sys-projects.vercel.app/home?skill=9db4bfb9-2e52-46e0-a59d-500f12e9f262&locale=en&utm_source=meta&utm_medium=paid_social&utm_campaign=preview_kpop_stage_5usd_lifetime&utm_content=kpop_stage_video_v1",
+  "skillId": "9db4bfb9-2e52-46e0-a59d-500f12e9f262",
+  "videoId": "1198750513313564",
+  "imageHash": "f387dc97dae4af539bdb0001362baa3c",
+  "campaign": {
+    "id": "120247269042970267",
+    "name": "PREVIEW $5 LIFETIME | Traffic | K-pop Stage | 20260605",
+    "status": "ACTIVE",
+    "objective": "OUTCOME_TRAFFIC"
+  },
+  "adset": {
+    "id": "120247269044370267",
+    "name": "US 18-34 mobile | LPV | $5 lifetime | kpop-stage | 20260605",
+    "status": "ACTIVE",
+    "lifetime_budget_usd": 5,
+    "optimization_goal": "LANDING_PAGE_VIEWS",
+    "start_time": "2026-06-05T04:51:15.802Z",
+    "end_time": "2026-06-06T04:51:15.802Z"
+  },
+  "creative": {
+    "id": "1498926924703491",
+    "name": "Preview K-pop Stage video_v1 | 20260605"
+  },
+  "ad": {
+    "id": "120247269046960267",
+    "name": "Preview K-pop Stage video_v1 | ACTIVE | 20260605",
+    "status": "ACTIVE"
+  }
+}
