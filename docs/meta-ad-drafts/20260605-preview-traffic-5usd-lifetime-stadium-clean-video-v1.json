@@ -1,0 +1,34 @@
+{
+  "createdAt": "2026-06-05T05:24:53.950Z",
+  "activatedAt": "2026-06-05T05:25:33.353Z",
+  "purpose": "Preview $5 total traffic smoke test for cleaned stadium style creative. Uses preview URL, not production.",
+  "previewUrl": "https://ai-image-editor-fzqq68i46-vegekyd-sys-projects.vercel.app",
+  "landingUrl": "https://ai-image-editor-fzqq68i46-vegekyd-sys-projects.vercel.app/home?skill=7ef2c391-a7e4-4519-ac06-62ec3acff2ac&locale=en&utm_source=meta&utm_medium=paid_social&utm_campaign=preview_stadium_clean_5usd_lifetime&utm_content=stadium_clean_video_v1",
+  "skillId": "7ef2c391-a7e4-4519-ac06-62ec3acff2ac",
+  "videoId": "4358416714371722",
+  "imageHash": "ec84cf5f0adc29a86ed8dd79fd4ac675",
+  "campaign": {
+    "id": "120247272125460267",
+    "name": "PREVIEW $5 LIFETIME | Traffic | Stadium Clean | 20260605",
+    "status": "ACTIVE",
+    "objective": "OUTCOME_TRAFFIC"
+  },
+  "adset": {
+    "id": "120247272125830267",
+    "name": "US 18-34 mobile | LPV | $5 lifetime | stadium-clean | 20260605",
+    "status": "ACTIVE",
+    "lifetime_budget_usd": 5,
+    "optimization_goal": "LANDING_PAGE_VIEWS",
+    "start_time": "2026-06-05T05:34:53.950Z",
+    "end_time": "2026-06-06T05:34:53.950Z"
+  },
+  "creative": {
+    "id": "2517628045336755",
+    "name": "Preview Stadium Clean video_v1 | 20260605"
+  },
+  "ad": {
+    "id": "120247272127520267",
+    "name": "Preview Stadium Clean video_v1 | ACTIVE | 20260605",
+    "status": "ACTIVE"
+  }
+}
