@@ -13,6 +13,7 @@ export type MetaStandardEvent =
   | 'Purchase'
 
 type MetaEventParams = Record<string, string | number | boolean | undefined>
+const ANON_ID_KEY = 'mkr_anonymous_id'
 
 declare global {
   interface Window {
@@ -42,6 +43,57 @@ function attributionParams(attribution?: MarketingAttribution): MetaEventParams 
   }
 }
 
+function getAnonymousId(): string | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    const existing = localStorage.getItem(ANON_ID_KEY)
+    if (existing) return existing
+    const next = createMetaEventId('anon')
+    localStorage.setItem(ANON_ID_KEY, next)
+    return next
+  } catch {
+    return undefined
+  }
+}
+
+function logFirstPartyMarketingEvent(
+  event: MetaStandardEvent,
+  params: MetaEventParams,
+  eventId: string,
+) {
+  if (typeof window === 'undefined') return
+
+  const attribution = getMarketingAttribution()
+  const payload = {
+    eventName: event,
+    eventId,
+    eventSource: 'browser',
+    params,
+    attribution,
+    skillId: params.skill_id || attribution.skill_id,
+    projectId: params.project_id,
+    anonymousId: getAnonymousId(),
+    url: window.location.href,
+    path: `${window.location.pathname}${window.location.search}`,
+    referrer: document.referrer,
+  }
+
+  try {
+    const body = JSON.stringify(payload)
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: 'application/json' })
+      navigator.sendBeacon('/api/marketing/events', blob)
+      return
+    }
+    fetch('/api/marketing/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => {})
+  } catch {}
+}
+
 export function trackMetaEvent(
   event: MetaStandardEvent,
   params: MetaEventParams = {},
@@ -49,14 +101,16 @@ export function trackMetaEvent(
   attempt = 0,
 ) {
   if (typeof window === 'undefined') return
+  const finalEventId = eventId || createMetaEventId(event.toLowerCase())
+  const merged = { ...attributionParams(), ...params }
+  if (attempt === 0) logFirstPartyMarketingEvent(event, merged, finalEventId)
   if (!window.fbq) {
     if (attempt < 6) {
-      window.setTimeout(() => trackMetaEvent(event, params, eventId, attempt + 1), 500)
+      window.setTimeout(() => trackMetaEvent(event, params, finalEventId, attempt + 1), 500)
     }
     return
   }
-  const merged = { ...attributionParams(), ...params }
-  window.fbq('track', event, merged, eventId ? { eventID: eventId } : undefined)
+  window.fbq('track', event, merged, { eventID: finalEventId })
 }
 
 export function trackCheckoutStart(
