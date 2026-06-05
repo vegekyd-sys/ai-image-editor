@@ -1,0 +1,32 @@
+{
+  "createdAt": "2026-06-05T04:19:05.174Z",
+  "purpose": "Preview $5 total traffic smoke test. Uses preview URL, not production.",
+  "previewUrl": "https://ai-image-editor-fzqq68i46-vegekyd-sys-projects.vercel.app",
+  "landingUrl": "https://ai-image-editor-fzqq68i46-vegekyd-sys-projects.vercel.app/home?skill=7ef2c391-a7e4-4519-ac06-62ec3acff2ac&locale=en&utm_source=meta&utm_medium=paid_social&utm_campaign=preview_broadcast_candid_5usd_lifetime&utm_content=video_v1",
+  "videoId": "2074961840036592",
+  "imageHash": "45860f57a41a1d9d1aa01c0e81749910",
+  "campaign": {
+    "id": "120247267461950267",
+    "name": "PREVIEW $5 LIFETIME | Traffic | Broadcast Candid | 20260605",
+    "status": "PAUSED",
+    "objective": "OUTCOME_TRAFFIC"
+  },
+  "adset": {
+    "id": "120247267462150267",
+    "name": "US 18-34 mobile | LPV | $5 lifetime | preview | 20260605",
+    "status": "PAUSED",
+    "lifetime_budget_usd": 5,
+    "optimization_goal": "LANDING_PAGE_VIEWS",
+    "start_time": "2026-06-05T04:34:05.174Z",
+    "end_time": "2026-06-06T04:34:05.174Z"
+  },
+  "creative": {
+    "id": "1326527133013753",
+    "name": "Preview $5 lifetime Broadcast Candid video_v1 | 20260605"
+  },
+  "ad": {
+    "id": "120247267463500267",
+    "name": "Preview $5 lifetime Broadcast Candid video_v1 | PAUSED | 20260605",
+    "status": "PAUSED"
+  }
+}
