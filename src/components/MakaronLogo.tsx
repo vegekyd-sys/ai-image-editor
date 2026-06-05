@@ -39,11 +39,21 @@ type LogoProps = {
   style?: CSSProperties
 }
 
+export const MAKARON_WORDMARK_STYLE: CSSProperties = {
+  fontFamily: '"Helvetica Neue", Arial, system-ui, sans-serif',
+  fontWeight: 800,
+  letterSpacing: '-0.015em',
+  color: '#fff',
+  lineHeight: 1,
+  fontKerning: 'normal',
+  WebkitFontSmoothing: 'antialiased',
+}
+
 export default function MakaronLogo({ markSize = 48, textClassName, className, style }: LogoProps) {
   return (
     <div className={className} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, ...style }}>
       <MakaronSpark size={markSize} />
-      <div className={textClassName} style={{ fontWeight: 800, color: '#fff', lineHeight: 1 }}>
+      <div className={textClassName} style={MAKARON_WORDMARK_STYLE}>
         Makaron
       </div>
     </div>

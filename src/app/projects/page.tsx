@@ -16,7 +16,7 @@ import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
 import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
-import { MakaronSpark } from '@/components/MakaronLogo'
+import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 
 interface ProjectWithSnapshots {
   id: string
@@ -526,11 +526,8 @@ function ProjectsPageInner() {
 
             {/* Wordmark */}
             <div style={{
-              fontWeight: 800,
+              ...MAKARON_WORDMARK_STYLE,
               fontSize: 'clamp(3rem, 12vw, 5rem)',
-              letterSpacing: '-0.04em',
-              color: '#fff',
-              lineHeight: 1,
             }}>
               Makaron
             </div>
