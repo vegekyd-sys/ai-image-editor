@@ -67,7 +67,7 @@ function expectNoRobotsNoindex(html, path) {
 
 async function checkRobots() {
   const { text } = await fetchText('/robots.txt');
-  for (const path of ['/makaron', '/agent', '/home', '/use-cases/', '/releases/']) {
+  for (const path of ['/makaron', '/agent', '/home', '/skill/', '/use-cases/', '/releases/']) {
     expectIncludes(text, `Allow: ${path}`, `robots allow ${path}`);
   }
   expectIncludes(text, `Sitemap: ${publicBaseUrl}/sitemap.xml`, 'robots sitemap URL');

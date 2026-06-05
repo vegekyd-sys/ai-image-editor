@@ -18,7 +18,11 @@ Make `www.makaron.app` discoverable for the brand query `makaron`, with multiple
 - `/use-cases/ai-poster-generator`
 - `/use-cases/pet-stickers`
 - `/use-cases/social-content`
-- Filtered active `/home/{skillId}` pages from `home_skills`
+- Filtered active `/skill/{skillId}` pages from `home_skills`
+
+Route ownership note: `/home/{skillId}` is an app compatibility route that redirects to
+`/home?skill={skillId}`. Do not turn it into a standalone SEO page; login and mobile
+detail UI flows depend on that route shape. Skill SEO pages live under `/skill/{skillId}`.
 
 ## Pre-Deploy Gates
 

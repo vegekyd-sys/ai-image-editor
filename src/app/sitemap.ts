@@ -31,7 +31,7 @@ async function getActiveSkillPages(): Promise<MetadataRoute.Sitemap> {
     return (data as SkillRow[])
       .filter(isIndexableSkill)
       .map((skill) => ({
-        url: `${SITE_URL}/home/${skill.id}`,
+        url: `${SITE_URL}/skill/${skill.id}`,
         lastModified: skill.updated_at ? new Date(skill.updated_at) : new Date(),
         changeFrequency: 'weekly',
         priority: 0.72,

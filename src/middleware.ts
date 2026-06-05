@@ -73,6 +73,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/home/') ||
     pathname === '/makaron' ||
     pathname === '/agent' ||
+    pathname.startsWith('/skill/') ||
     pathname === '/claim' ||
     pathname === '/mcp' ||
     pathname === '/admin/status' ||
