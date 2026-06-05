@@ -64,13 +64,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="bg-black">
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} bg-black`}>
       <head>
         <link rel="preconnect" href="https://cdn.makaron.app" />
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black`}
-      >
+      <body className="antialiased bg-black">
         <LocaleProvider>
           <AuthProvider>
             <Suspense fallback={null}>
