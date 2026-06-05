@@ -40,13 +40,11 @@ type LogoProps = {
 }
 
 export const MAKARON_WORDMARK_STYLE: CSSProperties = {
-  fontFamily: '"Helvetica Neue", Arial, system-ui, sans-serif',
-  fontWeight: 800,
-  letterSpacing: '-0.015em',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif',
+  fontWeight: 600,
+  letterSpacing: '0.005em',
   color: '#fff',
   lineHeight: 1,
-  fontKerning: 'normal',
-  WebkitFontSmoothing: 'antialiased',
 }
 
 export default function MakaronLogo({ markSize = 48, textClassName, className, style }: LogoProps) {
