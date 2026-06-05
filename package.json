@@ -13,6 +13,7 @@
     "lint:agent-docs": "node scripts/lint-makaron-cli-agent-docs.mjs",
     "lint:customer-docs": "node scripts/lint-customer-docs.mjs",
     "postinstall": "npx patch-package --patch-dir patches",
+    "ads:swipe": "node scripts/meta-swipe-apify.mjs",
     "mcp": "npx tsx --require ./md-loader.cjs mcp-server.ts --stdio",
     "mcp:http": "npx tsx --require ./md-loader.cjs mcp-server.ts"
   },

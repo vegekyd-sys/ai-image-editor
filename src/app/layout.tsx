@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 import AuthProvider from "@/components/AuthProvider";
+import MarketingTracker from "@/components/MarketingTracker";
 import { LocaleProvider } from "@/lib/i18n";
 import { DEFAULT_DESCRIPTION, DEFAULT_OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/seo";
 import "./globals.css";
@@ -69,7 +71,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black`}
       >
-        <LocaleProvider><AuthProvider>{children}</AuthProvider></LocaleProvider>
+        <LocaleProvider>
+          <AuthProvider>
+            <Suspense fallback={null}>
+              <MarketingTracker />
+            </Suspense>
+            {children}
+          </AuthProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

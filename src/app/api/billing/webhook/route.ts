@@ -4,7 +4,17 @@ import { addCredits } from '@/lib/billing/credits'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getPlan, getPlanByPriceId } from '@/lib/billing/plans'
 import { upsertSubscription } from '@/lib/billing/subscription'
+import { sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
 import type Stripe from 'stripe'
+
+function parseMetadataJson(raw?: string | null): Record<string, unknown> {
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.text()
@@ -54,6 +64,25 @@ export async function POST(req: NextRequest) {
           sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
           sub.cancel_at_period_end ?? false,
         )
+        if (session.metadata?.meta_event_id) {
+          const plan = getPlan(planId)
+          await sendMetaCapiEvent({
+            eventName: 'Subscribe',
+            eventId: session.metadata.meta_event_id,
+            userId,
+            email: session.customer_details?.email,
+            value: plan ? (interval === 'year' ? plan.annualPrice : plan.monthlyPrice) / 100 : undefined,
+            currency: 'USD',
+            fbp: session.metadata.fbp || undefined,
+            fbc: session.metadata.fbc || undefined,
+            eventSourceUrl: 'https://www.makaron.app/dashboard',
+            customData: {
+              plan_id: planId,
+              billing_interval: interval,
+              ...parseMetadataJson(session.metadata.attribution),
+            },
+          })
+        }
         console.log(`[Stripe webhook] Subscription created: user=${userId} plan=${planId} interval=${interval}`)
       }
 
@@ -93,6 +122,25 @@ export async function POST(req: NextRequest) {
       source: 'topup',
     })
 
+    if (session.metadata?.meta_event_id) {
+      await sendMetaCapiEvent({
+        eventName: 'Purchase',
+        eventId: session.metadata.meta_event_id,
+        userId,
+        email: session.customer_details?.email,
+        value: amountUsd,
+        currency: 'USD',
+        fbp: session.metadata.fbp || undefined,
+        fbc: session.metadata.fbc || undefined,
+        eventSourceUrl: 'https://www.makaron.app/dashboard',
+        customData: {
+          tier: session.metadata?.tier,
+          credits,
+          ...parseMetadataJson(session.metadata.attribution),
+        },
+      })
+    }
+
     console.log(`[Stripe webhook] Added ${credits} credits to user ${userId} ($${amountUsd})`)
   }
 
@@ -104,7 +152,6 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const invoice = event.data.object as any
     const invoiceId = invoice.id as string
-    const amountPaid = invoice.amount_paid ?? 0
     // Stripe 2026 API: subscription in parent.subscription_details.subscription
     const subscriptionId = (invoice.subscription ?? invoice.parent?.subscription_details?.subscription) as string | null
 

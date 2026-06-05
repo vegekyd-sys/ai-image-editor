@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 
 interface InviteCode {
   id: string
@@ -36,8 +37,86 @@ interface TokenRateEntry {
   updated_at: string
 }
 
+interface MetaInsightsSummary {
+  spend?: string
+  impressions?: string
+  clicks?: string
+  cpc?: string
+  ctr?: string
+  actions?: { action_type: string; value: string }[]
+}
+
+interface MetaStatus {
+  config: {
+    apiVersion: string
+    adAccountId?: string
+    businessId?: string
+    pageId?: string
+    pixelId?: string
+    appId?: string
+    hasAccessToken: boolean
+    hasCapiToken: boolean
+    hasInstagramActorId: boolean
+  }
+  account: {
+    id: string
+    name?: string
+    account_status?: number
+    amount_spent?: string
+    balance?: string
+    currency?: string
+    timezone_name?: string
+  } | null
+  pixels: {
+    id: string
+    name?: string
+    last_fired_time?: string
+    is_unavailable?: boolean
+  }[]
+  campaigns: {
+    id: string
+    name?: string
+    status?: string
+    effective_status?: string
+    objective?: string
+    daily_budget?: string
+    lifetime_budget?: string
+    created_time?: string
+    updated_time?: string
+  }[]
+  insights: {
+    yesterday: MetaInsightsSummary | null
+    last7d: MetaInsightsSummary | null
+  }
+  fetchedAt: string
+}
+
+function fmtNumber(value?: string | number): string {
+  const n = Number(value ?? 0)
+  return Number.isFinite(n) ? n.toLocaleString() : '0'
+}
+
+function fmtCurrency(value?: string | number, currency = 'USD'): string {
+  const n = Number(value ?? 0)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Number.isFinite(n) ? n : 0)
+}
+
+function accountStatusLabel(status?: number): string {
+  if (status === 1) return 'Active'
+  if (status === 2) return 'Disabled'
+  if (status === 3) return 'Unsettled'
+  if (status === 7) return 'Pending review'
+  if (status === 9) return 'In grace period'
+  if (status === 100) return 'Pending closure'
+  return status ? `Status ${status}` : 'Unknown'
+}
+
+function actionValue(insights: MetaInsightsSummary | null, actionType: string): string {
+  return insights?.actions?.find(a => a.action_type === actionType)?.value ?? '0'
+}
+
 export default function AdminPage() {
-  const [tab, setTab] = useState<'codes' | 'waitlist' | 'billing' | 'skills'>('codes')
+  const [tab, setTab] = useState<'codes' | 'waitlist' | 'billing' | 'skills' | 'meta'>('codes')
   const [codes, setCodes] = useState<InviteCode[]>([])
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
   const [pricing, setPricing] = useState<CreditPricing[]>([])
@@ -54,6 +133,9 @@ export default function AdminPage() {
   const [addCreditAmount, setAddCreditAmount] = useState('100')
   const [addCreditResult, setAddCreditResult] = useState<string | null>(null)
   const [addingCredits, setAddingCredits] = useState(false)
+  const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null)
+  const [metaLoading, setMetaLoading] = useState(false)
+  const [metaError, setMetaError] = useState('')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [homeSkills, setHomeSkills] = useState<any[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,10 +192,31 @@ export default function AdminPage() {
     setWelcomeInput(String(data.welcomeCredits ?? 500))
   }, [])
 
+  const fetchMetaStatus = useCallback(async () => {
+    setMetaLoading(true)
+    setMetaError('')
+    try {
+      const res = await fetch('/api/admin/meta/status')
+      if (res.status === 403) { setError('Not authorized'); return }
+      const data = await res.json()
+      if (!res.ok) {
+        setMetaError(data.error || 'Failed to load Meta status')
+        setMetaStatus(null)
+        return
+      }
+      setMetaStatus(data)
+    } catch {
+      setMetaError('Failed to load Meta status')
+      setMetaStatus(null)
+    } finally {
+      setMetaLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle(), fetchHomeSkills()]).finally(() => setLoading(false))
-  }, [fetchCodes, fetchWaitlist, fetchPricing, fetchTokenRates, fetchBillingToggle, fetchHomeSkills])
+    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle(), fetchHomeSkills(), fetchMetaStatus()]).finally(() => setLoading(false))
+  }, [fetchCodes, fetchWaitlist, fetchPricing, fetchTokenRates, fetchBillingToggle, fetchHomeSkills, fetchMetaStatus])
 
   const handleCreate = async () => {
     if (!newCode.trim()) return
@@ -160,10 +263,10 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-black text-white p-6 max-w-2xl mx-auto">
+    <div className="min-h-dvh bg-black text-white p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Admin</h1>
-        <a href="/projects" className="text-white/40 text-sm hover:text-white/60">← Back to app</a>
+        <Link href="/projects" className="text-white/40 text-sm hover:text-white/60">← Back to app</Link>
       </div>
 
       {/* Tabs */}
@@ -199,6 +302,14 @@ export default function AdminPage() {
           }`}
         >
           Skills ({homeSkills.length})
+        </button>
+        <button
+          onClick={() => setTab('meta')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+            tab === 'meta' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
+          }`}
+        >
+          Meta Ads
         </button>
       </div>
 
@@ -694,6 +805,165 @@ export default function AdminPage() {
             <p className="text-white/30 text-sm text-center py-4">No token rates configured</p>
           )}
         </>
+      )}
+
+      {/* ══════ META ADS TAB ══════ */}
+      {tab === 'meta' && (
+        <div className="space-y-4">
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium">Meta Ads Readiness</div>
+              <div className="text-xs text-white/40 mt-0.5">
+                Read-only account, Pixel, campaign, and spend checks. No ads are created here.
+              </div>
+              {metaStatus?.fetchedAt && (
+                <div className="text-[11px] text-white/25 mt-1">Updated {new Date(metaStatus.fetchedAt).toLocaleString()}</div>
+              )}
+            </div>
+            <button
+              onClick={fetchMetaStatus}
+              disabled={metaLoading}
+              className="px-3 py-1.5 rounded-lg bg-white/10 text-white/70 text-xs font-medium hover:bg-white/15 disabled:opacity-40"
+            >
+              {metaLoading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+
+          {metaError && (
+            <div className="bg-red-500/10 border border-red-400/20 rounded-xl p-4 text-sm text-red-300">
+              {metaError}
+            </div>
+          )}
+
+          {metaStatus && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white/[0.04] border border-white/10 rounded-xl p-4">
+                  <div className="text-xs text-white/40">Ad account</div>
+                  <div className="mt-2 text-sm font-medium">{metaStatus.account?.name || 'Unknown'}</div>
+                  <div className="mt-1 text-xs text-green-400">{accountStatusLabel(metaStatus.account?.account_status)}</div>
+                </div>
+                <div className="bg-white/[0.04] border border-white/10 rounded-xl p-4">
+                  <div className="text-xs text-white/40">Yesterday spend</div>
+                  <div className="mt-2 text-xl font-semibold">{fmtCurrency(metaStatus.insights.yesterday?.spend, metaStatus.account?.currency)}</div>
+                  <div className="mt-1 text-xs text-white/30">{fmtNumber(metaStatus.insights.yesterday?.clicks)} clicks</div>
+                </div>
+                <div className="bg-white/[0.04] border border-white/10 rounded-xl p-4">
+                  <div className="text-xs text-white/40">Last 7 days spend</div>
+                  <div className="mt-2 text-xl font-semibold">{fmtCurrency(metaStatus.insights.last7d?.spend, metaStatus.account?.currency)}</div>
+                  <div className="mt-1 text-xs text-white/30">{fmtNumber(metaStatus.insights.last7d?.impressions)} impressions</div>
+                </div>
+                <div className="bg-white/[0.04] border border-white/10 rounded-xl p-4">
+                  <div className="text-xs text-white/40">Campaigns</div>
+                  <div className="mt-2 text-xl font-semibold">{metaStatus.campaigns.length}</div>
+                  <div className="mt-1 text-xs text-white/30">{metaStatus.campaigns.filter(c => c.effective_status === 'ACTIVE').length} active</div>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-white/[0.04] border border-white/10 rounded-xl p-4">
+                  <div className="text-sm font-medium mb-3">Tracking</div>
+                  <div className="space-y-2">
+                    {metaStatus.pixels.map(pixel => (
+                      <div key={pixel.id} className="rounded-lg bg-black/20 border border-white/5 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm">{pixel.name || pixel.id}</div>
+                            <div className="text-xs text-white/35 font-mono mt-0.5">{pixel.id}</div>
+                          </div>
+                          <span className={pixel.is_unavailable ? 'text-red-400 text-xs' : 'text-green-400 text-xs'}>
+                            {pixel.is_unavailable ? 'Unavailable' : 'Available'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-white/35 mt-2">
+                          Last fired: {pixel.last_fired_time ? new Date(pixel.last_fired_time).toLocaleString() : 'No recent event'}
+                        </div>
+                      </div>
+                    ))}
+                    {metaStatus.pixels.length === 0 && <div className="text-sm text-white/30">No pixels found on this ad account.</div>}
+                  </div>
+                </div>
+
+                <div className="bg-white/[0.04] border border-white/10 rounded-xl p-4">
+                  <div className="text-sm font-medium mb-3">API Config</div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <span className="text-white/35">API version</span><span>{metaStatus.config.apiVersion}</span>
+                    <span className="text-white/35">Ad account</span><span className="font-mono">{metaStatus.config.adAccountId}</span>
+                    <span className="text-white/35">Business</span><span className="font-mono">{metaStatus.config.businessId || '—'}</span>
+                    <span className="text-white/35">Page</span><span className="font-mono">{metaStatus.config.pageId || '—'}</span>
+                    <span className="text-white/35">Pixel</span><span className="font-mono">{metaStatus.config.pixelId || '—'}</span>
+                    <span className="text-white/35">Access token</span><span className={metaStatus.config.hasAccessToken ? 'text-green-400' : 'text-red-400'}>{metaStatus.config.hasAccessToken ? 'Configured' : 'Missing'}</span>
+                    <span className="text-white/35">CAPI token</span><span className={metaStatus.config.hasCapiToken ? 'text-green-400' : 'text-red-400'}>{metaStatus.config.hasCapiToken ? 'Configured' : 'Missing'}</span>
+                    <span className="text-white/35">Instagram actor</span><span className={metaStatus.config.hasInstagramActorId ? 'text-green-400' : 'text-amber-300'}>{metaStatus.config.hasInstagramActorId ? 'Configured' : 'Missing'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white/[0.04] border border-white/10 rounded-xl p-4">
+                <div className="text-sm font-medium mb-3">Account Insights</div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                  {([
+                    ['Spend', fmtCurrency(metaStatus.insights.last7d?.spend, metaStatus.account?.currency)],
+                    ['Impressions', fmtNumber(metaStatus.insights.last7d?.impressions)],
+                    ['Clicks', fmtNumber(metaStatus.insights.last7d?.clicks)],
+                    ['CTR', `${Number(metaStatus.insights.last7d?.ctr ?? 0).toFixed(2)}%`],
+                    ['CPC', fmtCurrency(metaStatus.insights.last7d?.cpc, metaStatus.account?.currency)],
+                    ['Purchases', actionValue(metaStatus.insights.last7d, 'purchase')],
+                    ['Subscribes', actionValue(metaStatus.insights.last7d, 'subscribe')],
+                    ['Checkouts', actionValue(metaStatus.insights.last7d, 'initiate_checkout')],
+                    ['Registrations', actionValue(metaStatus.insights.last7d, 'complete_registration')],
+                    ['Customizes', actionValue(metaStatus.insights.last7d, 'customize_product')],
+                  ] as const).map(([label, value]) => (
+                    <div key={label} className="rounded-lg bg-black/20 border border-white/5 p-3">
+                      <div className="text-xs text-white/35">{label}</div>
+                      <div className="mt-1 font-semibold">{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white/[0.04] border border-white/10 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-white/10 text-sm font-medium">Campaigns</div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-white/40 text-xs border-b border-white/10">
+                      <th className="text-left px-4 py-3 font-medium">Name</th>
+                      <th className="text-left px-4 py-3 font-medium">Objective</th>
+                      <th className="text-left px-4 py-3 font-medium">Status</th>
+                      <th className="text-right px-4 py-3 font-medium">Budget</th>
+                      <th className="text-right px-4 py-3 font-medium">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metaStatus.campaigns.map(campaign => (
+                      <tr key={campaign.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                        <td className="px-4 py-3">
+                          <div>{campaign.name || campaign.id}</div>
+                          <div className="font-mono text-[11px] text-white/25 mt-0.5">{campaign.id}</div>
+                        </td>
+                        <td className="px-4 py-3 text-white/55 text-xs">{campaign.objective || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className={campaign.effective_status === 'ACTIVE' ? 'text-green-400 text-xs' : 'text-white/45 text-xs'}>
+                            {campaign.effective_status || campaign.status || '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-white/55 text-xs">
+                          {campaign.daily_budget ? `Daily ${campaign.daily_budget}` : campaign.lifetime_budget ? `Lifetime ${campaign.lifetime_budget}` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right text-white/35 text-xs">
+                          {campaign.updated_time ? new Date(campaign.updated_time).toLocaleDateString() : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {metaStatus.campaigns.length === 0 && (
+                  <div className="text-white/30 text-sm text-center py-8">No campaigns yet. Next step is creating paused draft campaigns.</div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* ══════ SKILLS TAB ══════ */}

@@ -1,6 +1,8 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { compressImageFile } from '@/lib/image/compress'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
+import { getMarketingAttribution } from '@/lib/marketing/attribution'
+import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 import type { PhotoMetadata } from '@/types'
 
 function isVideoFile(file: File): boolean {
@@ -34,6 +36,18 @@ async function createProjectShell(title = 'Untitled'): Promise<string> {
   return data.projectId as string
 }
 
+function trackProjectCreated(projectId: string, options?: { prompt?: string; skill?: string }) {
+  const attribution = getMarketingAttribution()
+  const skillId = options?.skill || attribution.skill_id
+  trackMetaEvent('CustomizeProduct', {
+    content_type: 'project',
+    content_name: skillId || 'custom_project',
+    project_id: projectId,
+    skill_id: skillId,
+    has_prompt: Boolean(options?.prompt),
+  }, createMetaEventId('project.create'))
+}
+
 /**
  * Create a new project with optimistic navigation.
  * Creates the project through the backend, stores pending media in sessionStorage,
@@ -52,6 +66,7 @@ export async function createProject(
 
   if (files.length === 0) {
     const projectId = await createProjectShell();
+    trackProjectCreated(projectId, options);
     return { projectId };
   }
 
@@ -67,6 +82,7 @@ export async function createProject(
     ]);
     if (base64) sessionStorage.setItem('pendingImages', JSON.stringify([base64]));
     if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
+    trackProjectCreated(projectId, options);
     return { projectId, metadata };
   }
 
@@ -89,5 +105,6 @@ export async function createProject(
 
   if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
 
+  trackProjectCreated(projectId, options);
   return { projectId, metadata };
 }
