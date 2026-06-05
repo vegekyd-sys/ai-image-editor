@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
       .eq('project_id', projectId)
       .order('sort_order')
     const autoVideoUrls: string[] = []
+    const referenceVideoMetas: Array<{ width?: number | null; height?: number | null }> = []
     let referenceVideoDuration: number | undefined
     if (dbSnaps?.length) {
       const scriptRefs = [...new Set(
@@ -53,6 +54,10 @@ export async function POST(req: NextRequest) {
         const videoUrl = meta?.videoUrl as string | undefined
         if (snap?.type === 'video' && videoUrl) {
           autoVideoUrls.push(videoUrl)
+          referenceVideoMetas.push({
+            width: Number.isFinite(Number(meta?.width)) ? Number(meta?.width) : null,
+            height: Number.isFinite(Number(meta?.height)) ? Number(meta?.height) : null,
+          })
           const sourceDuration = Number(meta?.duration)
           if (Number.isFinite(sourceDuration) && sourceDuration > 0) {
             referenceVideoDuration = (referenceVideoDuration ?? 0) + sourceDuration
@@ -75,6 +80,7 @@ export async function POST(req: NextRequest) {
       videoModel: selectedVideoModel,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
       referenceVideoDuration,
+      referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
     })
 
     if (!skillResult.success || !skillResult.taskId) {

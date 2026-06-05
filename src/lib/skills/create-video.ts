@@ -1,5 +1,5 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
-import { getVideoModelCapability, normalizeVideoModelId, resolveVideoOutputDuration, validateVideoModelRequest } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveVideoOutputDuration, validateVideoModelRequest, type VideoReferenceMeta } from '@/lib/video-model-capabilities';
 
 export interface CreateVideoInput {
   script: string;
@@ -12,6 +12,7 @@ export interface CreateVideoInput {
   videoReferType?: 'base' | 'feature';  // default: 'base'
   videoUrls?: string[];                 // Auto-detected video references from timeline
   referenceVideoDuration?: number;       // Timeline video duration; output should match when editing video
+  referenceVideoMetas?: VideoReferenceMeta[];
   keepOriginalSound?: boolean;          // default: false
   // Motion Control (Kling only)
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
@@ -25,7 +26,7 @@ export interface CreateVideoResult {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, referenceVideoDuration, keepOriginalSound, motionControl, characterOrientation } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length;
   const provider = normalizeVideoModelId(videoModel);
   const capability = getVideoModelCapability(provider);
@@ -33,6 +34,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     model: provider,
     outputDuration: duration,
     referenceVideoDuration,
+    referenceVideoMetas,
     hasVideoReference,
   });
 

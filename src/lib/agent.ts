@@ -695,6 +695,7 @@ Hard constraints:
 - Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
 - Long source video rule: if a timeline/reference video is longer than 15 seconds, do not shrink the whole source into one 5s or 15s edit. Use \`skills/long-video-director/SKILL.md\`, analyze/split it into self-contained segments of 15s or less, and submit one script per segment after approval.
 - Reference video input limit: for one SeeDance generation, the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less. This is a single-generation input limit; do not submit videos whose combined duration is longer than 15s together in one call.
+- Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. Tiny videos below 409,600 frame pixels must be resized/padded before submission. For Kling, use one .mp4/.mov reference video, <=200MB, resolution <=2K; no explicit Kling video resolution lower bound is documented.
 - Video edit duration lock: when editing timeline videos up to 15 seconds total, output duration should match the combined source duration from Media Index, clamped to the selected model range. For SeeDance, clamp to 4-15s; if combined source duration is under 4s, set \`duration: 4\`. For long-video pipelines, duration lock applies per FFmpeg chunk.
 - Default model follows app selection, usually SeeDance. If the user asks for cheaper, prefer Kling only when capability and duration allow it.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
@@ -705,7 +706,7 @@ Hard constraints:
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
         model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance). Use exact ids from the video model selector or skill instructions.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
@@ -751,6 +752,7 @@ Hard constraints:
           // Auto-route video references: query DB for snapshot types
           const autoVideoUrls: string[] = [];
           let totalVideoRefDuration = 0;
+          const referenceVideoMetas: Array<{ width?: number | null; height?: number | null }> = [];
           if (ctx.supabase && ctx.projectId) {
             const { data: dbSnaps } = await ctx.supabase
               .from('snapshots')
@@ -767,6 +769,10 @@ Hard constraints:
                 const videoUrl = meta?.videoUrl as string | undefined;
                 if (snap?.type === 'video' && videoUrl) {
                   autoVideoUrls.push(videoUrl);
+                  referenceVideoMetas.push({
+                    width: Number.isFinite(Number(meta?.width)) ? Number(meta?.width) : null,
+                    height: Number.isFinite(Number(meta?.height)) ? Number(meta?.height) : null,
+                  });
                   totalVideoRefDuration += (meta?.duration as number) || 0;
                   imageUrls[ref - 1] = '';
                 }
@@ -779,6 +785,7 @@ Hard constraints:
             model: videoModel,
             outputDuration: duration,
             referenceVideoDuration,
+            referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             hasVideoReference: allVideoUrls.length > 0,
           });
           if (modelError) {
@@ -803,6 +810,7 @@ Hard constraints:
             videoReferType: video_ref_type,
             videoUrls: allVideoUrls.length ? allVideoUrls : undefined,
             referenceVideoDuration,
+            referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             keepOriginalSound: keep_original_sound,
             motionControl: motion_control,
             characterOrientation: character_orientation,

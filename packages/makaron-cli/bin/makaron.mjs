@@ -34,6 +34,11 @@ const MAX_VIDEO_UPLOAD_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE = 0.5;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
+const SEEDANCE_MIN_VIDEO_FRAME_PIXELS = 409_600;
+const SEEDANCE_MIN_VIDEO_SIDE = 300;
+const SEEDANCE_MAX_VIDEO_SIDE = 6000;
+const SEEDANCE_MIN_VIDEO_ASPECT = 0.4;
+const SEEDANCE_MAX_VIDEO_ASPECT = 2.5;
 
 function getCliVersion() {
   try {
@@ -768,6 +773,11 @@ function probeLocalVideo(videoPath) {
 function validateVideoFile(videoPath, options = {}) {
   const maxDuration = options.maxDuration ?? MAX_VIDEO_UPLOAD_DURATION;
   const durationTolerance = options.durationTolerance ?? MAX_VIDEO_UPLOAD_DURATION_TOLERANCE;
+  const minFramePixels = options.minFramePixels ?? 0;
+  const minSide = options.minSide ?? 0;
+  const maxSide = options.maxSide ?? Infinity;
+  const minAspect = options.minAspect ?? 0;
+  const maxAspect = options.maxAspect ?? Infinity;
   if (!fs.existsSync(videoPath)) {
     return { ok: false, error: `Video file not found: ${videoPath}` };
   }
@@ -788,6 +798,19 @@ function validateVideoFile(videoPath, options = {}) {
   }
   if (meta.width * meta.height > MAX_VIDEO_FRAME_PIXELS) {
     return { ok: false, error: `Video resolution too high: ${meta.width}x${meta.height} (${meta.width * meta.height} px). Max is <=1080p (${MAX_VIDEO_FRAME_PIXELS} px). Re-upload through the frontend to transcode, or export a smaller video.` };
+  }
+  const framePixels = meta.width * meta.height;
+  const aspect = meta.width / meta.height;
+  if (
+    framePixels < minFramePixels ||
+    meta.width < minSide ||
+    meta.height < minSide ||
+    meta.width > maxSide ||
+    meta.height > maxSide ||
+    aspect < minAspect ||
+    aspect > maxAspect
+  ) {
+    return { ok: false, error: `Video size does not meet provider limits: ${meta.width}x${meta.height} (${framePixels} px, aspect ${aspect.toFixed(2)}). Required: frame pixels >=${minFramePixels}, sides ${minSide}-${Number.isFinite(maxSide) ? maxSide : '∞'}px, aspect ${minAspect}-${Number.isFinite(maxAspect) ? maxAspect : '∞'}. Resize/pad with FFmpeg before submitting.` };
   }
   const mime = ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4';
   return { ok: true, mime, meta };
@@ -1236,13 +1259,21 @@ if (command === '--version' || command === '-v' || command === 'version') {
 
     let videoUrl = isHttpUrl(video) ? video : null;
     let inputVideoMeta = null;
+    const selectedVideoModel = videoModel || 'kling';
     if (videoUrl) {
-      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits: ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB, ≤1080p.\n`);
+      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K.\n`);
     }
     if (video && !videoUrl) {
       const valid = validateVideoFile(video, {
         maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
+        ...(selectedVideoModel === 'seedance' ? {
+          minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
+          minSide: SEEDANCE_MIN_VIDEO_SIDE,
+          maxSide: SEEDANCE_MAX_VIDEO_SIDE,
+          minAspect: SEEDANCE_MIN_VIDEO_ASPECT,
+          maxAspect: SEEDANCE_MAX_VIDEO_ASPECT,
+        } : {}),
       });
       if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
       inputVideoMeta = valid.meta;
@@ -1254,7 +1285,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
     const vArgs = videoUrl
-      ? { videoUrl, editPrompt: script, images, videoModel: videoModel || 'kling', referType: (videoModel || 'kling') === 'seedance' ? 'feature' : 'base' }
+      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, referType: selectedVideoModel === 'seedance' ? 'feature' : 'base' }
       : { script, images };
     const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;

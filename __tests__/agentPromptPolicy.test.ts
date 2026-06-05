@@ -78,6 +78,10 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('do not compress the whole source into one 5s or 15s edit')
     expect(agent).toContain('add together the durations of all uploaded/timeline/reference videos')
     expect(agent).toContain('The combined source duration must be 15 seconds or less')
+    expect(agent).toContain('width and height each 300-6000px')
+    expect(agent).toContain('frame pixels width*height between 409,600 and 2,086,876')
+    expect(agent).toContain('tiny videos below 409,600 frame pixels must be resized/padded before submission')
+    expect(agent).toContain('Kling reference video size is less specific')
     expect(agent).toContain('keep the output duration aligned with the combined source duration shown in Media Index')
     expect(agent).toContain('clamp it to the SeeDance model range: minimum 4s, maximum 15s')
 
@@ -93,6 +97,8 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('For longer source videos, use the long-video-director workflow instead of one short compressed edit')
     expect(animate).toContain('their **combined source duration must be 15 seconds or less** for a single SeeDance generation')
     expect(animate).toContain('This is an input limit, not a creative long-video workflow')
+    expect(animate).toContain('frame pixels width*height between 409,600 and 2,086,876')
+    expect(animate).toContain('Kling docs do not state a video resolution lower bound')
     expect(animate).toContain('Never write or submit a SeeDance generated video duration below 4s')
 
     expect(agentTs).toContain('SeeDance is 4-15 seconds')
@@ -106,6 +112,8 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Long source video rule')
     expect(agentTs).toContain('if a timeline/reference video is longer than 15 seconds')
     expect(agentTs).toContain('the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less')
+    expect(agentTs).toContain('frame pixels width*height between 409,600 and 2,086,876')
+    expect(agentTs).toContain('Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented')
     expect(agentTs).toContain('set this to the combined source video duration from Media Index clamped to the selected model range')
     expect(agentTs).not.toContain('Duration in seconds: 3, 5, 7, 10, or 15')
     expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")

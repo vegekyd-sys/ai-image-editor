@@ -50,16 +50,17 @@ For Makaron UX, prefer H.264/AAC/yuv420p with `-movflags +faststart` unless the 
 Do not hardcode one workflow per model. Treat model limits as capabilities:
 
 - `maxReferenceVideoDuration`: longest source/reference clip the model can accept.
+- `referenceVideoSize`: provider input size constraints such as file size, width/height, aspect ratio, and frame pixels.
 - `maxOutputDuration`: longest generated output duration per task.
 - `longVideoChunkSeconds`: target FFmpeg chunk length for long-video pipelines.
 - `supportsBaseVideoEdit`: whether direct base video editing is supported.
 
 Current known defaults:
 
-| Model | Chunk target | Reference limit | Notes |
-| --- | ---: | ---: | --- |
-| SeeDance | 15s | 15.5s | Default video model, higher quality, feature/reference mode preferred. |
-| Kling | 15s | 10.5s | Cheaper option, supports base video edit when capability allows it. |
+| Model | Chunk target | Reference duration | Reference size | Notes |
+| --- | ---: | ---: | --- | --- |
+| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px; aspect ratio 0.4-2.5; frame pixels 409,600-2,086,876 | Default video model, higher quality, feature/reference mode preferred. The lower frame-pixel bound matters: tiny videos must be resized/padded before submission. |
+| Kling | 15s | 10.5s | <=200MB; resolution <=2K; no documented video resolution lower bound | Cheaper option, supports base video edit when capability allows it. |
 
 If a new model appears, follow its capability/tool error messages instead of inventing a new case. The long-video generation workflow stays the same: probe → segment to accepted duration → generate per segment → assemble generated outputs.
 

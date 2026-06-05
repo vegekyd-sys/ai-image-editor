@@ -39,6 +39,73 @@ describe('video model reference limits', () => {
     expect(result.message).toContain('KLING_ACCESS_KEY')
   })
 
+  it('fails fast before calling SeeDance with reference videos below the frame-pixel minimum', async () => {
+    const result = await createVideo({
+      script: 'Tiny reference\n\nRestyle <<<media_1>>>.',
+      images: [],
+      videoUrls: ['https://example.com/tiny.mp4'],
+      referenceVideoDuration: 8,
+      referenceVideoMetas: [{ width: 320, height: 320 }],
+      duration: 8,
+      videoModel: 'seedance',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('SeeDance reference video size')
+    expect(result.message).toContain('320x320')
+    expect(result.message).toContain('409,600-2,086,876')
+    expect(result.message).toContain('resize/pad')
+  })
+
+  it('allows valid SeeDance reference video dimensions before provider submission', async () => {
+    const result = await createVideo({
+      script: 'Valid reference\n\nRestyle <<<media_1>>>.',
+      images: [],
+      videoUrls: ['https://example.com/valid.mp4'],
+      referenceVideoDuration: 8,
+      referenceVideoMetas: [{ width: 720, height: 1280 }],
+      duration: 8,
+      videoModel: 'seedance',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).not.toContain('reference video size')
+    expect(result.message).toContain('EVOLINK_API_KEY')
+  })
+
+  it('does not invent a Kling reference-video lower resolution limit', async () => {
+    const result = await createVideo({
+      script: 'Tiny Kling reference\n\nRestyle <<<media_1>>>.',
+      images: [],
+      videoUrls: ['https://example.com/tiny.mp4'],
+      referenceVideoDuration: 8,
+      referenceVideoMetas: [{ width: 320, height: 320 }],
+      duration: 8,
+      videoModel: 'kling',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).not.toContain('reference video size')
+    expect(result.message).toContain('KLING_ACCESS_KEY')
+  })
+
+  it('rejects Kling reference videos above the documented 2K limit', async () => {
+    const result = await createVideo({
+      script: 'Large Kling reference\n\nRestyle <<<media_1>>>.',
+      images: [],
+      videoUrls: ['https://example.com/large.mp4'],
+      referenceVideoDuration: 8,
+      referenceVideoMetas: [{ width: 2560, height: 1440 }],
+      duration: 8,
+      videoModel: 'kling',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('Kling reference video size')
+    expect(result.message).toContain('outside provider limits')
+    expect(result.message).toContain('<=200MB, resolution <=2K')
+  })
+
   it('allows SeeDance reference durations up to the 15s range before provider submission', async () => {
     const result = await createVideo({
       script: 'Cyberpunk restyle\n\nRestyle <<<media_1>>>.',

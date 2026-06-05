@@ -4,10 +4,30 @@ export interface VideoModelCapability {
   minOutputDuration: number
   maxOutputDuration: number
   maxReferenceVideoDuration: number
+  referenceVideoSize?: VideoReferenceSizeCapability
   supportsVideoReference: boolean
   supportsBaseVideoEdit: boolean
   longVideoChunkSeconds: number
   estimatedCostPerSecondUsd?: number
+}
+
+export interface VideoReferenceSizeCapability {
+  maxFileSizeMb?: number
+  minWidth?: number
+  maxWidth?: number
+  minHeight?: number
+  maxHeight?: number
+  minAspectRatio?: number
+  maxAspectRatio?: number
+  minFramePixels?: number
+  maxFramePixels?: number
+  description: string
+}
+
+export interface VideoReferenceMeta {
+  width?: number | null
+  height?: number | null
+  fileSizeBytes?: number | null
 }
 
 const DEFAULT_MODEL_ID = 'seedance'
@@ -19,6 +39,11 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     minOutputDuration: 5,
     maxOutputDuration: 15,
     maxReferenceVideoDuration: 10.5,
+    referenceVideoSize: {
+      maxFileSizeMb: 200,
+      maxFramePixels: 2_086_876,
+      description: '<=200MB, resolution <=2K; no documented video resolution lower bound',
+    },
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
     longVideoChunkSeconds: 15,
@@ -30,6 +55,18 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     minOutputDuration: 4,
     maxOutputDuration: 15,
     maxReferenceVideoDuration: 15.5,
+    referenceVideoSize: {
+      maxFileSizeMb: 50,
+      minWidth: 300,
+      maxWidth: 6000,
+      minHeight: 300,
+      maxHeight: 6000,
+      minAspectRatio: 0.4,
+      maxAspectRatio: 2.5,
+      minFramePixels: 409_600,
+      maxFramePixels: 2_086_876,
+      description: '<=50MB, width/height 300-6000px, aspect 0.4-2.5, frame pixels 409,600-2,086,876',
+    },
     supportsVideoReference: true,
     supportsBaseVideoEdit: false,
     longVideoChunkSeconds: 15,
@@ -54,6 +91,18 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
   minOutputDuration: 4,
   maxOutputDuration: 15,
   maxReferenceVideoDuration: 15.5,
+  referenceVideoSize: {
+    maxFileSizeMb: 50,
+    minWidth: 300,
+    maxWidth: 6000,
+    minHeight: 300,
+    maxHeight: 6000,
+    minAspectRatio: 0.4,
+    maxAspectRatio: 2.5,
+    minFramePixels: 409_600,
+    maxFramePixels: 2_086_876,
+    description: '<=50MB, width/height 300-6000px, aspect 0.4-2.5, frame pixels 409,600-2,086,876',
+  },
   supportsVideoReference: true,
   supportsBaseVideoEdit: false,
   longVideoChunkSeconds: 15,
@@ -93,6 +142,7 @@ export function validateVideoModelRequest(options: {
   model?: string | null
   outputDuration?: number
   referenceVideoDuration?: number
+  referenceVideoMetas?: VideoReferenceMeta[]
   hasVideoReference?: boolean
 }): string | null {
   const capability = getVideoModelCapability(options.model)
@@ -111,6 +161,51 @@ export function validateVideoModelRequest(options: {
 
   if (options.referenceVideoDuration != null && options.referenceVideoDuration > capability.maxReferenceVideoDuration) {
     return `${capability.label} reference video duration must be ${capability.maxReferenceVideoDuration.toFixed(1).replace(/\.0$/, '')} seconds or less. Read skills/video-ffmpeg-lab/SKILL.md, then use run_code runtime="node" with FFmpeg to split the source video first, submit one generation task per chunk, and concatenate the results.`
+  }
+
+  const sizeError = validateVideoReferenceSize(capability, options.referenceVideoMetas)
+  if (sizeError) return sizeError
+
+  return null
+}
+
+export function validateVideoReferenceSize(
+  capability: VideoModelCapability,
+  metas?: VideoReferenceMeta[] | null
+): string | null {
+  if (!metas?.length || !capability.referenceVideoSize) return null
+  const size = capability.referenceVideoSize
+
+  for (const meta of metas) {
+    const width = Number(meta.width)
+    const height = Number(meta.height)
+    const hasDimensions = Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0
+
+    if (hasDimensions) {
+      const pixels = width * height
+      const aspect = width / height
+      if (
+        (size.minWidth != null && width < size.minWidth) ||
+        (size.maxWidth != null && width > size.maxWidth) ||
+        (size.minHeight != null && height < size.minHeight) ||
+        (size.maxHeight != null && height > size.maxHeight) ||
+        (size.minAspectRatio != null && aspect < size.minAspectRatio) ||
+        (size.maxAspectRatio != null && aspect > size.maxAspectRatio) ||
+        (size.minFramePixels != null && pixels < size.minFramePixels) ||
+        (size.maxFramePixels != null && pixels > size.maxFramePixels)
+      ) {
+        return `${capability.label} reference video size ${width}x${height} (${pixels} px, aspect ${aspect.toFixed(2)}) is outside provider limits: ${size.description}. Use FFmpeg to resize/pad the video before submitting it to the model.`
+      }
+    }
+
+    const fileSizeBytes = Number(meta.fileSizeBytes)
+    if (
+      size.maxFileSizeMb != null &&
+      Number.isFinite(fileSizeBytes) &&
+      fileSizeBytes > size.maxFileSizeMb * 1024 * 1024
+    ) {
+      return `${capability.label} reference video file is too large (${(fileSizeBytes / 1024 / 1024).toFixed(1)}MB). Provider limit: ${size.description}.`
+    }
   }
 
   return null

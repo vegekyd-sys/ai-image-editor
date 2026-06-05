@@ -15,7 +15,7 @@ export interface EvolinkTaskInput {
   aspectRatio?: string       // adaptive/16:9/9:16/1:1/4:3/3:4/21:9
   quality?: string           // 720p (default) / 480p
   generateAudio?: boolean    // default true
-  videoUrls?: string[]       // 0-3 reference videos
+  videoUrls?: string[]       // 0-3 reference videos; <=50MB, width/height 300-6000px, frame pixels 409,600-2,086,876
   audioUrls?: string[]       // 0-3 reference audios
 }
 

@@ -59,6 +59,8 @@ Long source video rule: if an existing timeline/reference video is longer than 1
 
 Reference video input limit: for a single SeeDance generation, add together the durations of all uploaded/timeline/reference videos used in the prompt. The combined source duration must be 15 seconds or less. If longer, do not submit those videos together in one `generate_animation` call.
 
+Reference video size limit: for a single SeeDance generation, uploaded/timeline/reference videos must be .mp4/.mov, <=50MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. The lower bound matters: tiny videos below 409,600 frame pixels must be resized/padded before submission. Kling reference video size is less specific: one .mp4/.mov video, <=200MB, resolution <=2K; no explicit video resolution lower bound is documented.
+
 Before writing a video script, call `read_file('prompts/animate.md')`. Do not re-read it if it already appears in tool-result history.
 
 Only call `generate_animation` after the user confirms a visible script, e.g. "确认", "开始生成", "提交", or "就这个". If they ask for changes, revise and ask again.

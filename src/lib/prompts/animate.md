@@ -51,6 +51,8 @@ Rules:
 - **External videos** (workspace/skill assets): pass `video_ref_url` + `video_ref_type: feature`
 - **Duration lock**: when editing an existing video up to 15s, the output duration should match the input video duration. If the source video is 10s, write a 10s edit and set duration to 10s. If source metadata is slightly over 15s (for example 15.1s), set duration to 15s. For longer source videos, use the long-video-director workflow instead of one short compressed edit. Never default to a 5s script for video editing unless the user explicitly asks to shorten it.
 - **Combined video limit**: when referencing one or more timeline/uploaded videos or external reference videos, add their source durations together. The total must be 15s or less for one SeeDance generation.
+- **SeeDance video size limit**: .mp4/.mov, <=50MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. If the source is too small, resize/pad it before generation; do not submit tiny reference videos directly.
+- **Kling video size limit**: one .mp4/.mov reference video, <=200MB, resolution <=2K. Kling docs do not state a video resolution lower bound.
 - Can combine images + videos in the same prompt
 - Keep prompt concise (under 200 chars when referencing video for motion)
 - `keep_original_sound: true` to preserve the original audio
@@ -180,8 +182,8 @@ Shot 2 (3s): Close-up, ...
 13. **Stability safeguard**: For shots with close-up faces or detailed character features, append a brief stability cue at the end of that shot: "人物面部稳定清晰" or "face stable, no distortion". This reduces face deformation in complex motion scenes.
 ## Model Notes
 
-- **Kling**: Supports dialogue with voice synthesis, real human faces, video editing (base mode). Use `Shot N (Xs):` format or continuous prose.
-- **SeeDance**: Best visual quality. Supports real human faces and reference video.
+- **Kling**: Supports dialogue with voice synthesis, real human faces, video editing (base mode). Reference video size: one .mp4/.mov, <=200MB, resolution <=2K; no documented video resolution lower bound. Use `Shot N (Xs):` format or continuous prose.
+- **SeeDance**: Best visual quality. Supports real human faces and reference video. Reference video size: .mp4/.mov, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876.
 
 ## Reference Video Usage
 
