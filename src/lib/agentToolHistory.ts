@@ -226,6 +226,47 @@ function compactAnalysisOutput(output: unknown, omitted: string[]): ToolResultOu
   return { type: 'json', value: safe };
 }
 
+function compactTranscriptOutput(output: JsonRecord, omitted: string[]): ToolResultOutput {
+  if (output.error) return { type: 'error-text', value: String(output.error) };
+  const transcript = output.transcript && typeof output.transcript === 'object'
+    ? output.transcript as JsonRecord
+    : undefined;
+  if (!transcript) return { type: 'json', value: sanitizeUnknown(output, omitted, TOOL_HISTORY_MAX_ANALYSIS_CHARS) };
+
+  const utterances = Array.isArray(transcript.utterances) ? transcript.utterances : [];
+  if (utterances.length > 80) omitted.push('truncated_transcript_utterances');
+
+  return {
+    type: 'json',
+    value: {
+      cached: output.cached,
+      media_index: output.media_index,
+      videoUrl: output.videoUrl,
+      provider: transcript.provider,
+      model: transcript.model,
+      durationMs: transcript.durationMs,
+      text: typeof transcript.text === 'string'
+        ? truncateText(transcript.text, TOOL_HISTORY_MAX_ANALYSIS_CHARS, omitted, 'truncated_transcript_text')
+        : '',
+      utteranceCount: utterances.length,
+      utterances: utterances.slice(0, 80).map(item => {
+        const u = item && typeof item === 'object' ? item as JsonRecord : {};
+        const words = Array.isArray(u.words) ? u.words : [];
+        return {
+          startMs: u.startMs,
+          endMs: u.endMs,
+          speaker: u.speaker,
+          text: u.text,
+          words: words.slice(0, 40).map(word => {
+            const w = word && typeof word === 'object' ? word as JsonRecord : {};
+            return { text: w.text, startMs: w.startMs, endMs: w.endMs };
+          }),
+        };
+      }),
+    },
+  };
+}
+
 function sanitizeOutput(toolName: string, rawOutput: unknown, omitted: string[]): ToolResultOutput {
   const output = rawOutput && typeof rawOutput === 'object' ? rawOutput as JsonRecord : { content: rawOutput };
   switch (toolName) {
@@ -246,6 +287,8 @@ function sanitizeOutput(toolName: string, rawOutput: unknown, omitted: string[])
     case 'analyze_image':
     case 'analyze_video':
       return compactAnalysisOutput(rawOutput, omitted);
+    case 'transcribe_audio':
+      return compactTranscriptOutput(output, omitted);
     default:
       return { type: 'json', value: sanitizeUnknown(rawOutput, omitted, TOOL_HISTORY_MAX_OUTPUT_CHARS) };
   }

@@ -70,6 +70,14 @@ function normalizeLegacyCompositionDescription(description: string | undefined, 
   return description;
 }
 
+function formatTranscriptMediaHint(videoMeta: Record<string, unknown> | undefined): string {
+  const transcript = videoMeta?.transcript as Record<string, unknown> | undefined;
+  if (!transcript || typeof transcript.text !== 'string' || !transcript.text.trim()) return '';
+  const utteranceCount = Array.isArray(transcript.utterances) ? transcript.utterances.length : 0;
+  const preview = transcript.text.trim().replace(/\s+/g, ' ').slice(0, 180);
+  return ` [ASR transcript cached: ${utteranceCount} utterances, "${preview}${transcript.text.length > 180 ? '...' : ''}"]`;
+}
+
 export async function buildPromptContext(
   projectId: string,
   supabase: SupabaseClient,
@@ -173,14 +181,15 @@ export async function buildPromptContext(
           : isRef ? 'reference' : isComposition ? 'composition' : 'image';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
         const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';
+        const transcriptTag = isVideo ? formatTranscriptMediaHint(videoMeta) : '';
         const codePath = s.design_path && !isVideo ? ` [composition code: ${s.design_path}]` : '';
-        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${codePath}`;
+        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${transcriptTag}${codePath}`;
       }).join('\n')}\n\n`
     : '';
 
   // Video/composition mode warnings (mutually exclusive)
   const videoWarning = currentSnapIsVideo
-    ? `[VIDEO MODE] You are viewing a video. Use analyze_video to understand its content. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
+    ? `[VIDEO MODE] You are viewing a video. Use analyze_video for visual scenes/actions. Use transcribe_audio for dialogue, subtitles, word/utterance timestamps, or time-based cuts. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
     : '';
 
   const designWarning = !currentSnapIsVideo && currentDesignPath

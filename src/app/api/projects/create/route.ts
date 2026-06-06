@@ -8,6 +8,7 @@ import type { VideoMeta } from '@/types';
 const MAX_VIDEO_DURATION = 120;
 const MAX_VIDEO_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
+const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
 function formatSeconds(seconds: number): string {
   return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
@@ -33,6 +34,32 @@ async function resolveImageUrl(
   const filename = `snapshot-${crypto.randomUUID()}.jpg`;
   const storageUrl = await uploadImage(supabase, userId, projectId, filename, base64);
   return storageUrl || url;
+}
+
+async function probeVideoDimensionsFromUrl(videoUrl: string): Promise<{ width: number; height: number } | null> {
+  try {
+    const res = await fetch(videoUrl);
+    if (!res.ok) return null;
+    const length = Number(res.headers.get('content-length') || 0);
+    if (length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
+
+    const buffer = new Uint8Array(await res.arrayBuffer());
+    if (buffer.length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
+
+    const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
+    return probeMP4Dimensions(buffer);
+  } catch {
+    return null;
+  }
+}
+
+async function fillMissingVideoDimensions(
+  videoUrl: string,
+  current: { width?: number; height?: number },
+): Promise<{ width?: number; height?: number }> {
+  if (current.width && current.height) return current;
+  const dims = await probeVideoDimensionsFromUrl(videoUrl);
+  return dims ? { width: dims.width, height: dims.height } : current;
 }
 
 /**
@@ -112,6 +139,7 @@ export async function POST(req: NextRequest) {
             }
           } catch { /* use original URL */ }
         }
+        ({ width, height } = await fillMissingVideoDimensions(permanentUrl, { width, height }));
 
         // Extract poster frame from video
         let posterUrl = '';
@@ -225,6 +253,7 @@ export async function POST(req: NextRequest) {
           }
         } catch { /* use original URL */ }
       }
+      ({ width, height } = await fillMissingVideoDimensions(permanentUrl, { width, height }));
 
       // Extract poster frame
       let posterUrl = '';

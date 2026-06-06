@@ -1,7 +1,7 @@
 ---
 name: video-ffmpeg-lab
 description: Real MP4 editing mindset for Makaron Agent using run_code runtime=node, FFmpeg, FFprobe, and workspace outputs.
-allowed-tools: run_code generate_animation analyze_video write_file
+allowed-tools: run_code generate_animation analyze_video transcribe_audio write_file
 ---
 
 # Video FFmpeg Lab
@@ -27,6 +27,8 @@ This is intentionally a recipe skill, not a narrow tool. You have a full Node ba
 - `probeVideo(path)`
 
 Tool call rule: when FFmpeg work references timeline media such as `<<<media_1>>>`, `<<<media_2>>>`, or "current video", the `run_code` tool call must include those 1-based indices as `media_refs`. Example: split `<<<media_1>>>` → `media_refs: [1]`. Inside code, use `inputFiles[N].inputPath`. Do not start by hardcoding `ctx.media[N].url`; use it only for metadata or diagnostics. If the task is simply cutting two existing timeline videos together, stop and use Remotion composition instead.
+
+Transcript rule: when the requested cut point depends on spoken words, subtitles, dialogue, or "the part where they say ...", call `transcribe_audio` before `run_code`. Use the returned utterance/word timestamps as the segment plan; do not guess speech timing from `analyze_video`.
 
 Publish rule: if FFmpeg produces user-facing MP4 deliverables, publish them to the timeline immediately with `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })` or exact `workspacePaths` before saying the task is complete. Examples: "split this video into 3 parts", "cut the first 10 seconds", "trim/export this clip", "transcode this MP4". If FFmpeg already exported workspace images/videos and the user later says "publish/send them to timeline", publish existing outputs; do not re-run the FFmpeg cut just to publish.
 

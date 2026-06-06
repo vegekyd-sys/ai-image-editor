@@ -20,6 +20,7 @@ For timeline videos, derive the Remotion canvas from the selected Media Index vi
 - If the selected videos share a 16:9 aspect, use a 16:9 canvas such as `width: 1920, height: 1080`.
 - If the selected videos share a square aspect, use a square canvas such as `width: 1080, height: 1080`.
 - If dimensions are mixed, choose the user's target platform/aspect when stated; otherwise preserve the current composition's aspect when editing, or use `contain` with an intentional background instead of silently cropping into the wrong aspect.
+- Do not describe mixed-aspect decisions as "runtime forced 9:16" just because one referenced source is vertical.
 - Use `objectFit: 'cover'` only after the canvas aspect matches the intended output. `cover` is not a fix for putting 9:16 footage inside a 16:9 canvas.
 
 ## Runtime Contract

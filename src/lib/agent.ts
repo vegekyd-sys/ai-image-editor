@@ -12,6 +12,7 @@ import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { normalizeVideoModelId, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
 import { createMusic } from './skills/create-music';
+import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -24,6 +25,8 @@ import { toPublicStorageUrl } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
+
+const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Model
@@ -67,6 +70,8 @@ interface AgentContext {
   /** Video snapshot pending emit (v2) */
   pendingVideoSnapshot?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta };
   pendingVideoSnapshots?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta }[];
+  /** Workspace image snapshots already inserted into DB; emit so live timeline matches refresh state. */
+  pendingImageSnapshots?: { snapshotId: string; imageUrl: string; description?: string }[];
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<media_1>>> */
   snapshotImages: string[];
   /** 0-based index of the snapshot the user is currently viewing */
@@ -94,7 +99,7 @@ export type AgentStreamEvent =
   | { type: 'status'; text: string }
   | { type: 'content'; text: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
-  | { type: 'image'; image: string; usedModel?: string }
+  | { type: 'image'; image: string; usedModel?: string; snapshotId?: string; imageUrl?: string; description?: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
   | { type: 'tool_result'; tool: string; toolCallId?: string; step?: number; output?: unknown }
   | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }
@@ -185,6 +190,54 @@ function normalizeCompositionAnimation(
   return { ...animation, fps, durationInSeconds: currentSeconds };
 }
 
+function formatMs(ms: number | null | undefined): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '?';
+  return (ms / 1000).toFixed(2).replace(/\.00$/, '');
+}
+
+function formatTranscriptWords(words: TranscriptWord[] | undefined, maxChars: number): string {
+  if (!words?.length || maxChars <= 0) return '';
+  let out = '';
+  for (const word of words) {
+    const next = `${out ? ' | ' : ''}${formatMs(word.startMs)}-${formatMs(word.endMs)} ${word.text}`;
+    if (out.length + next.length > maxChars) return `${out} | ...`;
+    out += next;
+  }
+  return out;
+}
+
+function formatTranscriptForModel(transcript: VolcengineAsrTranscript): string {
+  const lines: string[] = [
+    `Transcript (${transcript.provider}/${transcript.model}, ${transcript.durationMs ? `${formatMs(transcript.durationMs)}s` : 'duration unknown'}):`,
+    transcript.text || '(empty transcript)',
+    '',
+    'Utterance timecodes:',
+  ];
+
+  let charBudget = 24_000;
+  for (const [idx, utterance] of transcript.utterances.entries()) {
+    const line = `${idx + 1}. [${formatMs(utterance.startMs)}s-${formatMs(utterance.endMs)}s]${utterance.speaker ? ` speaker ${utterance.speaker}` : ''} ${utterance.text}`;
+    if (charBudget - line.length < 0) {
+      lines.push('[transcript truncated]');
+      break;
+    }
+    lines.push(line);
+    charBudget -= line.length;
+    const words = formatTranscriptWords(utterance.words, Math.min(1200, charBudget));
+    if (words) {
+      const wordLine = `   words: ${words}`;
+      if (charBudget - wordLine.length < 0) {
+        lines.push('   words: [truncated]');
+        break;
+      }
+      lines.push(wordLine);
+      charBudget -= wordLine.length;
+    }
+  }
+
+  return lines.join('\n');
+}
+
 async function validateCompositionMediaAspect(
   ctx: AgentContext,
   result: { code: string; props?: Record<string, unknown>; width?: number; height?: number },
@@ -199,22 +252,42 @@ async function validateCompositionMediaAspect(
   try {
     const { data: rows } = await ctx.supabase
       .from('snapshots')
-      .select('video_meta')
+      .select('id, video_meta')
       .eq('project_id', ctx.projectId)
       .eq('type', 'video');
 
     const haystack = JSON.stringify({ code: result.code, props: result.props ?? {} });
-    const videoRows = (rows ?? []) as Array<{ video_meta?: Record<string, unknown> | null }>;
-    const matched = videoRows
-      .map(row => row.video_meta)
-      .filter((meta: Record<string, unknown> | null | undefined): meta is Record<string, unknown> => !!meta)
-      .map((meta) => {
-        const url = typeof meta.videoUrl === 'string' ? meta.videoUrl : '';
-        const width = Number(meta.width);
-        const height = Number(meta.height);
-        return { url, width, height };
-      })
-      .filter((item) => item.url && haystack.includes(item.url) && Number.isFinite(item.width) && Number.isFinite(item.height) && item.width > 0 && item.height > 0);
+    const videoRows = (rows ?? []) as Array<{ id?: string; video_meta?: Record<string, unknown> | null }>;
+    const matched: Array<{ url: string; width: number; height: number }> = [];
+
+    for (const row of videoRows) {
+      const meta = row.video_meta;
+      if (!meta) continue;
+      const url = typeof meta.videoUrl === 'string' ? meta.videoUrl : '';
+      if (!url || !haystack.includes(url)) continue;
+
+      let width = Number(meta.width);
+      let height = Number(meta.height);
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        const probed = await probeTimelineVideoDimensions(url);
+        if (probed) {
+          width = probed.width;
+          height = probed.height;
+          if (row.id) {
+            const nextMeta = { ...meta, width, height };
+            const { error } = await ctx.supabase
+              .from('snapshots')
+              .update({ video_meta: nextMeta })
+              .eq('id', row.id);
+            if (error) console.warn('[composition-aspect] failed to cache probed dimensions:', error.message);
+          }
+        }
+      }
+
+      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+        matched.push({ url, width, height });
+      }
+    }
 
     if (!matched.length) return null;
 
@@ -240,6 +313,23 @@ async function validateCompositionMediaAspect(
         : '1080x1080';
 
     return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition".`;
+  } catch {
+    return null;
+  }
+}
+
+async function probeTimelineVideoDimensions(url: string): Promise<{ width: number; height: number } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const length = Number(res.headers.get('content-length') || 0);
+    if (length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
+
+    const buffer = new Uint8Array(await res.arrayBuffer());
+    if (buffer.length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
+
+    const { probeMP4Dimensions } = await import('./mp4-probe');
+    return probeMP4Dimensions(buffer);
   } catch {
     return null;
   }
@@ -489,6 +579,8 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
 
       ctx.snapshotImages.push(output.storageUrl);
       ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+      if (!ctx.pendingImageSnapshots) ctx.pendingImageSnapshots = [];
+      ctx.pendingImageSnapshots.push({ snapshotId, imageUrl: output.storageUrl, description });
       published.push({ snapshotId, type: 'image', url: output.storageUrl, path: output.path });
     }
   }
@@ -506,6 +598,20 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
 
 function getAgentSystemPrompt(): string {
   return agentPrompt;
+}
+
+function* flushPendingImageSnapshots(ctx: AgentContext): Generator<AgentStreamEvent> {
+  if (!ctx.pendingImageSnapshots?.length) return;
+  for (const pending of ctx.pendingImageSnapshots) {
+    yield {
+      type: 'image',
+      image: pending.imageUrl,
+      imageUrl: pending.imageUrl,
+      snapshotId: pending.snapshotId,
+      description: pending.description,
+    };
+  }
+  ctx.pendingImageSnapshots = undefined;
 }
 
 /** Rough token estimate — 1 token ≈ 4 chars for English, ~1.5-2 for CJK. Use 3.5 as middle ground. */
@@ -983,6 +1089,94 @@ Hard constraints:
       },
     }),
 
+    transcribe_audio: tool({
+      description: `Transcribe audio or a timeline video with Volcengine ASR and return dialogue/subtitle timecodes.
+
+Use this when the user asks for transcript, subtitles, dialogue, spoken words, lyrics-like speech timing, or time-based editing such as "cut the part where they say X", "remove this sentence", "剪掉这句话", "按逐字稿剪", or "find the timestamp for ...".
+
+For timeline videos, pass media_index. For external audio/video URLs, pass media_url. Results are cached into the video snapshot's video_meta.transcript when media_index is used. Use analyze_video instead for visual scene/action understanding.`,
+      inputSchema: z.object({
+        media_index: z.number().optional().describe('1-based Media Index index of the video to transcribe (<<<media_1>>> = 1). Preferred for timeline videos.'),
+        media_url: z.string().optional().describe('External public audio/video URL to transcribe. Use only when the media is not in Media Index.'),
+        language: z.string().optional().describe('Optional ASR language code such as zh-CN, en-US, ja-JP, ko-KR, id-ID. Omit for auto/default.'),
+        force_refresh: z.boolean().optional().describe('Set true to ignore cached transcript and call ASR again. Default false.'),
+      }),
+      execute: async ({ media_index, media_url, language, force_refresh }) => {
+        let resolvedUrl = media_url;
+        let snapshotId: string | undefined;
+        let videoMeta: Record<string, unknown> | undefined;
+
+        if (!resolvedUrl && media_index !== undefined) {
+          const v = validateImageIndex(ctx.snapshotImages, media_index);
+          if (v.error) return { error: v.error };
+
+          const mediaUrl = ctx.snapshotImages[v.idx];
+          if (mediaUrl && /\.(mp4|webm|mov|mp3|wav|ogg|opus)(?:\?|$)/i.test(mediaUrl)) {
+            resolvedUrl = mediaUrl;
+          }
+
+          if (ctx.supabase && ctx.userId) {
+            const { data: snaps, error: snapErr } = await ctx.supabase
+              .from('snapshots')
+              .select('id, video_meta')
+              .eq('project_id', ctx.projectId)
+              .order('sort_order', { ascending: true });
+            if (snapErr) console.error('[transcribe_audio] DB query error:', snapErr.message);
+            const snap = snaps?.[v.idx];
+            snapshotId = snap?.id as string | undefined;
+            videoMeta = snap?.video_meta as Record<string, unknown> | undefined;
+            const cached = videoMeta?.transcript as VolcengineAsrTranscript | undefined;
+            if (cached?.text && !force_refresh) {
+              return { transcript: cached, cached: true, media_index, videoUrl: cached.sourceUrl || resolvedUrl };
+            }
+            resolvedUrl = resolvedUrl || (videoMeta?.videoUrl as string | undefined);
+          }
+        }
+
+        if (!resolvedUrl || !/^https?:\/\//i.test(resolvedUrl)) {
+          return { error: 'transcribe_audio requires a public audio/video URL or a valid video media_index.' };
+        }
+
+        try {
+          const transcript = await transcribeWithVolcengineAsr({
+            mediaUrl: resolvedUrl,
+            uid: ctx.userId || 'makaron-agent',
+            language,
+          });
+
+          if (ctx.supabase && snapshotId && videoMeta) {
+            const nextMeta = { ...videoMeta, transcript };
+            const { error: updateError } = await ctx.supabase
+              .from('snapshots')
+              .update({ video_meta: nextMeta })
+              .eq('id', snapshotId);
+            if (updateError) console.error('[transcribe_audio] transcript cache update failed:', updateError.message);
+          }
+
+          return { transcript, cached: false, media_index, videoUrl: resolvedUrl };
+        } catch (err) {
+          return { error: `ASR transcription failed: ${err instanceof Error ? err.message : String(err)}` };
+        }
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toModelOutput({ output }: { output: any }) {
+        if (output.error) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        const transcript = output.transcript as VolcengineAsrTranscript | undefined;
+        if (!transcript) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: 'No transcript returned.' }] };
+        }
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}`,
+          }],
+        };
+      },
+    }),
+
     preview_frame: tool({
       description: `Capture a screenshot of a Remotion composition at a specific frame or time.
 Use media_index to target any snapshot with a composition (including video snapshots).
@@ -1374,7 +1568,7 @@ Return exactly one supported shape:
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
 
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; then read \`inputFiles[0].inputPath\`. Do not hardcode Media Index URLs for FFmpeg inputs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
@@ -2140,6 +2334,8 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: isEnLocale
             ? (q ? `Analyzing video: ${q.slice(0, 50)}` : 'Analyzing video')
             : (q ? `分析视频：${q.slice(0, 40)}` : '分析视频') };
+        } else if (event.toolName === 'transcribe_audio') {
+          yield { type: 'status', text: isEnLocale ? 'Transcribing audio...' : '转写音频中...' };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number };
           const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
@@ -2298,6 +2494,7 @@ export async function* runMakaronAgent(
           yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel };
           imagesSent++;
         }
+        yield* flushPendingImageSnapshots(ctx);
         if (ctx.animationTaskId) {
           yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '', imageUrls: ctx.animationImageUrls_, model: ctx.animationModel };
           ctx.animationTaskId = undefined;
@@ -2342,6 +2539,7 @@ export async function* runMakaronAgent(
       yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel };
       imagesSent++;
     }
+    yield* flushPendingImageSnapshots(ctx);
 
     console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
     perf?.mark('agent_done', {
