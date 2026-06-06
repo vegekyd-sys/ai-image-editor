@@ -27,9 +27,7 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 | `editPrompt` | string | ✅ | 英文编辑指令 |
 | `skill` | string | | `enhance` / `creative` / `wild` / `captions` |
 | `model` | string | | 指定生图模型：`gemini`（默认）/ `qwen` / `pony` / `wai` / `openai`，见下方说明 |
-| `originalImage` | string | | 原图（人脸修复参考） |
-| `referenceImages` | string[] | | 参考图数组（最多 3 张） |
-| `useOriginalAsReference` | boolean | | 是否用原图做参考 |
+| `referenceImages` | string[] | | 参考图数组（最多 3 张）；需要按原图修复时，把原图放这里 |
 | `aspectRatio` | string | | 目标比例，如 `"4:5"` |
 
 **Skill 说明：**

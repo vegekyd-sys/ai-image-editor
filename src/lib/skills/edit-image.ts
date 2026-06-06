@@ -5,7 +5,6 @@ import type { SkillContext, SkillResult } from './index';
 export interface EditImageInput {
   editPrompt: string;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
-  useOriginalAsReference?: boolean;
   aspectRatio?: string;
   /** @deprecated Use workspace service instead. Kept for backward compat. */
   skillPrompts?: Record<string, string>;
@@ -19,8 +18,7 @@ export async function editImage(
   input: EditImageInput,
   ctx: SkillContext,
 ): Promise<SkillResult> {
-  const { editPrompt, skill, useOriginalAsReference, aspectRatio, preferredModel, isNsfw } = input;
-  const hasOriginal = ctx.originalImage && ctx.originalImage !== ctx.currentImage;
+  const { editPrompt, skill, aspectRatio, preferredModel, isNsfw } = input;
   const hasReference = !!ctx.referenceImages?.length;
 
   // Agent reads skill templates via read_file and internalizes rules into editPrompt.
@@ -28,19 +26,11 @@ export async function editImage(
   const finalPrompt = editPrompt;
 
   const t0 = Date.now();
-  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} useOriginalAsReference=${!!useOriginalAsReference} hasOriginal=${!!hasOriginal} hasReference=${hasReference} model=${preferredModel ?? 'auto'}\neditPrompt: ${editPrompt.slice(0, 200)}\n`);
+  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} hasReference=${hasReference} model=${preferredModel ?? 'auto'}\neditPrompt: ${editPrompt.slice(0, 200)}\n`);
 
   // Build references array for multi-image mode
   let references: { url: string; role: string }[] | undefined;
-  if (hasReference && useOriginalAsReference && hasOriginal) {
-    const refs = ctx.referenceImages!;
-    console.log(`📸 Multi-image mode (original + ${refs.length} user reference(s))`);
-    references = [
-      { url: ctx.currentImage!,   role: 'Image 1 = 当前编辑版本【编辑基础】' },
-      { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准，还原偏离元素】' },
-      ...refs.map((r, i) => ({ url: r, role: `Image ${i + 3} = 用户上传的参考图${refs.length > 1 ? `（第${i + 1}张）` : ''}【按用户指令使用】` })),
-    ];
-  } else if (hasReference && ctx.currentImage) {
+  if (hasReference && ctx.currentImage) {
     const refs = ctx.referenceImages!;
     console.log(`📸 Multi-image mode (${refs.length} user reference(s))`);
     references = [
@@ -51,12 +41,6 @@ export async function editImage(
     const refs = ctx.referenceImages!;
     console.log(`📸 Text-to-image with ${refs.length} reference(s)`);
     references = refs.map((r, i) => ({ url: r, role: `Image ${i + 1} = reference image` }));
-  } else if (useOriginalAsReference && hasOriginal) {
-    console.log('📸 Two-image mode (original as reference)');
-    references = [
-      { url: ctx.currentImage!,   role: 'Image 1 = 当前编辑版本【编辑基础，保持此图的构图/场景/人物位置】' },
-      { url: ctx.originalImage!, role: 'Image 2 = 原图【参考基准：用于还原任何已偏离的元素（人脸/颜色/背景等），构图基础仍以 Image 1 为准】' },
-    ];
   } else {
     console.log('📸 Single-image mode');
   }

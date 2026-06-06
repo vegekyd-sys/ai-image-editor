@@ -119,7 +119,6 @@ export async function POST(req: NextRequest) {
       let agentModel = '';
       try {
         for await (const event of runMakaronAgent(ctx.fullPrompt, ctx.snapshotImages[ctx.currentSnapshotIndex] || '', projectId, {
-          originalImage: ctx.originalImage,
           locale,
           preferredModel,
           videoModel,

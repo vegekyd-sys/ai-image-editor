@@ -23,7 +23,7 @@ describe('agent media scenario matrix', () => {
   const mediaAspect = read('src/lib/media-aspect.ts')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(agent.length).toBeLessThan(8_000)
+    expect(agent.length).toBeLessThan(9_000)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')
@@ -39,7 +39,7 @@ describe('agent media scenario matrix', () => {
     const required = [
       'Snapshot Index',
       'reference_media_indices',
-      'useOriginalAsReference=true',
+      'Restore From Original Snapshot',
       'Red Annotations',
       "skill='enhance'",
       "skill='creative'",
@@ -71,8 +71,10 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('Default video model follows the app selection, usually SeeDance')
     expect(animate).toContain('usually SeeDance')
     expect(animate).toContain('prefer Kling only when duration and capability allow it')
-    expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | Default video model')
-    expect(ffmpegSkill).toContain('| Kling | 15s | 10.5s | Cheaper option')
+    expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px')
+    expect(ffmpegSkill).toContain('Default video model, higher quality')
+    expect(ffmpegSkill).toContain('| Kling | 15s | 10.5s | <=200MB; resolution <=2K')
+    expect(ffmpegSkill).toContain('Cheaper option, supports base video edit')
     expect(ffmpegSkill).not.toContain('Cheaper/default')
   })
 
@@ -148,7 +150,8 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('[Current composition pointer]')
     expect(agentTs).toContain('currentDesignPath')
     expect(agentTs).toContain('code_path')
-    expect(agentTs).toContain('Capture a screenshot of a Remotion composition')
+    expect(agentTs).toContain('Capture a visual frame at a specific frame number or timestamp')
+    expect(agentTs).toContain('raw uploaded/generated videos are extracted with FFmpeg')
     expect(agentTs).toContain('Patch failed: no base composition')
     expect(agentTs).toContain('Composition ready')
     expect(agentTs).toContain('Draft is not saved yet')

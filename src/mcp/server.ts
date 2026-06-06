@@ -92,9 +92,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       editPrompt: z.string().describe('English editing instructions describing what to change'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
       model: z.enum(['gemini', 'qwen', 'pony', 'wai', 'openai']).nullish().describe('NEVER set unless user literally names a model. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
-      originalImage: z.string().nullish().describe('Original photo URL/base64 for face restoration reference'),
-      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3)'),
-      useOriginalAsReference: z.boolean().nullish().describe('Use originalImage as reference for face/color restoration'),
+      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
     },
     async (params) => {
@@ -110,7 +108,6 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
 
         const ctx = {
           currentImage: image,
-          originalImage: params.originalImage ? resolveImage(params.originalImage) : undefined,
           referenceImages: params.referenceImages?.map(resolveImage),
         };
 
@@ -119,7 +116,6 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
             editPrompt: wrappedPrompt,
             skill: params.skill ?? undefined,
             preferredModel: params.model ?? undefined,
-            useOriginalAsReference: params.useOriginalAsReference ?? undefined,
             aspectRatio: params.aspectRatio ?? undefined,
           },
           ctx,

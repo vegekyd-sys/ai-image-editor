@@ -13,6 +13,10 @@ describe('createProject upload flow', () => {
   beforeEach(() => {
     sessionStorage.clear()
     vi.restoreAllMocks()
+    Object.defineProperty(navigator, 'sendBeacon', {
+      configurable: true,
+      value: vi.fn(() => true),
+    })
   })
 
   it('creates an image project through the backend instead of browser Supabase inserts', async () => {
@@ -22,6 +26,12 @@ describe('createProject upload flow', () => {
       }),
     }
     const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/marketing/events') {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
       expect(url).toBe('/api/projects/create')
       return new Response(JSON.stringify({ projectId: 'project-from-api', snapshots: [] }), {
         status: 200,
@@ -38,6 +48,6 @@ describe('createProject upload flow', () => {
     expect(JSON.parse(sessionStorage.getItem('pendingImages') || '[]')).toEqual([
       'data:image/jpeg;base64,compressed',
     ])
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/create', expect.any(Object))
   })
 })

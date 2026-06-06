@@ -81,7 +81,7 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
-  const inputImageLabels = [t('chat.currentImage'), t('chat.originalImage')];
+  const inputImageLabels = [t('chat.currentImage'), t('chat.referenceImage')];
   const modelLabels: Record<string, string> = { gemini: 'nano banana 2', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
   const modelLabel = modelLabels[editModel || ''] || editModel || 'model';
   return (

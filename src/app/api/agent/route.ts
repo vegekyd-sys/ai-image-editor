@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     if (!creditCheck.ok) return creditCheck.response;
 
     const endReadBody = perf.span('read_body');
-    const { prompt, image, originalImage, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
+    const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel,
@@ -205,7 +205,6 @@ export async function POST(req: NextRequest) {
           const needsPromptContext = !analysisOnly || (!image && !(snapshotImages?.length));
           let agentPrompt = prompt ?? '';
           let agentImage = image || (snapshotImages?.[currentSnapshotIndex ?? 0]) || '';
-          let agentOriginalImage = originalImage || image || '';
           let agentSnapshotImages = snapshotImages?.length ? snapshotImages : (agentImage ? [agentImage] : []);
           let agentCurrentSnapshotIndex = currentSnapshotIndex ?? Math.max(agentSnapshotImages.length - 1, 0);
           let agentCurrentDesign = currentDesign;
@@ -237,7 +236,6 @@ export async function POST(req: NextRequest) {
             agentPrompt = ctx.fullPrompt;
             // Frontend may pass images directly (new uploads not yet in DB)
             agentImage = image || ctx.snapshotImages[ctx.currentSnapshotIndex] || '';
-            agentOriginalImage = originalImage || ctx.originalImage;
             agentSnapshotImages = snapshotImages?.length ? snapshotImages : ctx.snapshotImages;
             agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
             agentCurrentDesign = currentDesign || ctx.currentDesign;
@@ -278,7 +276,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
                 if (event.type === 'usage') { usageEvent = event; continue; }
                 if (writer) {
                   await writer.processAndEnqueue(event);

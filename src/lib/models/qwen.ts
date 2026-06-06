@@ -14,7 +14,7 @@ export const qwenBackend: ModelBackend = {
   async generate(req: GenerateImageRequest): Promise<{ image: string | null }> {
     if (!isQwenAvailable()) return { image: null };
 
-    // Multi-reference path (useOriginalAsReference or referenceImages)
+    // Multi-reference path
     if (req.references?.length) {
       const { generateWithQwenMulti } = await import('../comfyui-qwen');
       return { image: await generateWithQwenMulti(req.references, req.prompt) };

@@ -20,6 +20,16 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('\\`runtime: "node"\\`: open backend Node with FFmpeg/FFprobe')
   })
 
+  it('keeps preview_frame as one public tool with Remotion and FFmpeg engines', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg')
+    expect(agentTs).toContain('For raw video snapshots: use timestamp')
+    expect(agentTs).toContain("source: 'video'")
+    expect(agentTs).toContain("source: 'composition'")
+    expect(agentTs).not.toContain('extract_video_frame: tool')
+  })
+
   it('keeps built-in image skill triggers visible before the image guide is read', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')

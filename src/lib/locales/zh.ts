@@ -94,7 +94,7 @@ const zh = {
 
   // Agent chat
   'chat.currentImage': '当前图（编辑基础）',
-  'chat.originalImage': '原图（人脸参考）',
+  'chat.referenceImage': '参考图',
   'chat.promptCard': '发给 nano banana 2 的 prompt',
   'chat.expand': '展开 ▼',
   'chat.collapse': '收起 ▲',

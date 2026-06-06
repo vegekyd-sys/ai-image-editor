@@ -1481,11 +1481,6 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // UI state flags — server-side buildPromptContext handles all project context
     const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
 
-    // Always pass the original snapshot (index 0) as reference for face/person preservation
-    const originalSnapshot = snapshotsRef.current[0];
-    const rawOriginal = originalSnapshot ? getImageForApi(originalSnapshot) : undefined;
-    const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64Image(rawOriginal, 3_000_000) : rawOriginal;
-
     // Snapshot images for API: prefer Storage URLs (tiny payload).
     // base64 fallback only for the current image (needed for vision); others skip if no URL yet.
     // Wait briefly for image uploads to complete (up to 5s) if any snapshot lacks a URL
@@ -1578,7 +1573,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
+        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );

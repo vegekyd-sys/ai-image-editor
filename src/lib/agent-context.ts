@@ -40,7 +40,6 @@ export interface PromptContextResult {
   currentSnapshotIndex: number;
   currentDesign?: DesignPayload;
   currentDesignPath?: string;
-  originalImage?: string;
 }
 
 interface DbSnapshot {
@@ -220,7 +219,6 @@ export async function buildPromptContext(
   const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map(s => s.image_url || '');
-  const originalImage = snapshots[0]?.image_url || undefined;
 
   return {
     fullPrompt,
@@ -229,6 +227,5 @@ export async function buildPromptContext(
     currentSnapshotIndex,
     currentDesign,
     currentDesignPath,
-    originalImage,
   };
 }

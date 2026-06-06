@@ -176,6 +176,7 @@ function compactPreviewFrameOutput(output: JsonRecord, omitted: string[]): ToolR
     type: 'json',
     value: {
       workspaceUrl: output.workspaceUrl,
+      source: output.source,
       frame: output.frame,
       timestamp: output.timestamp,
       message: output.message,

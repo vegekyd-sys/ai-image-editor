@@ -42,7 +42,6 @@ const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-sonnet-4-6
 
 interface AgentContext {
   currentImage: string;       // base64 data URL – updated after each generation
-  originalImage?: string;     // base64 data URL – the very first image, never changes
   referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -293,6 +292,58 @@ async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
       }
     }
   } catch { /* best effort */ }
+}
+
+function isVideoUrl(url?: string): boolean {
+  return /\.(mp4|mov|webm)(?:\?|$)/i.test(url || '');
+}
+
+async function resolveVideoUrlForMediaIndex(ctx: AgentContext, mediaIndex: number): Promise<{
+  idx: number;
+  videoUrl?: string;
+  duration?: number;
+  fps?: number;
+  error?: string;
+}> {
+  const v = validateImageIndex(ctx.snapshotImages, mediaIndex);
+  if (v.error) return { idx: -1, error: v.error };
+
+  const directUrl = ctx.snapshotImages[v.idx];
+  if (isVideoUrl(directUrl)) return { idx: v.idx, videoUrl: directUrl };
+
+  if (!ctx.supabase || !ctx.userId) {
+    return { idx: v.idx, error: `No video file found at <<<media_${mediaIndex}>>>. Use analyze_image for still images/posters, or preview_frame for Remotion compositions.` };
+  }
+
+  try {
+    const { data: snaps, error: snapErr } = await ctx.supabase
+      .from('snapshots')
+      .select('type, image_url, video_meta')
+      .eq('project_id', ctx.projectId)
+      .order('sort_order', { ascending: true });
+    if (snapErr) console.error('[resolveVideoUrlForMediaIndex] DB query error:', snapErr.message);
+
+    const snap = snaps?.[v.idx] as { type?: string; image_url?: string; video_meta?: Record<string, unknown> } | undefined;
+    const meta = snap?.video_meta;
+    const videoUrl = typeof meta?.videoUrl === 'string' ? meta.videoUrl : '';
+    const posterOrFallback = typeof snap?.image_url === 'string' ? snap.image_url : directUrl;
+    const fallbackVideoUrl = isVideoUrl(posterOrFallback) ? posterOrFallback : '';
+    const duration = Number(meta?.duration);
+    const fps = Number(meta?.fps);
+
+    if (videoUrl || fallbackVideoUrl) {
+      return {
+        idx: v.idx,
+        videoUrl: videoUrl || fallbackVideoUrl,
+        duration: Number.isFinite(duration) ? duration : undefined,
+        fps: Number.isFinite(fps) ? fps : undefined,
+      };
+    }
+  } catch (e) {
+    console.error('[resolveVideoUrlForMediaIndex] exception:', e);
+  }
+
+  return { idx: v.idx, error: `No real video file found at <<<media_${mediaIndex}>>>. Use preview_frame only for Remotion compositions with design_path.` };
 }
 
 function isImageContentType(contentType?: string): boolean {
@@ -615,12 +666,11 @@ function createTools(ctx: AgentContext) {
         editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.enum(['gemini', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
-        useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit for text-to-image (no photo sent). For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, media_index, reference_media_indices }) => {
+      execute: async ({ editPrompt, skill, model, aspectRatio, media_index, reference_media_indices }) => {
         // Resolve which image to edit — agent must pass media_index to include a photo
         let editTarget: string | undefined;
         if (media_index !== undefined) {
@@ -645,8 +695,8 @@ function createTools(ctx: AgentContext) {
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
-          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
-          { currentImage: editTarget, originalImage: editTarget ? ctx.originalImage : undefined, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
+          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { currentImage: editTarget, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
         // Bill for image generation (separate from Agent LLM tokens)
         if (skillResult.usage) {
@@ -927,7 +977,7 @@ Hard constraints:
     }),
 
     analyze_video: tool({
-      description: 'Analyze video content using Gemini vision. Returns scene descriptions, actions, pacing, audio cues. Use for understanding what happens in a video. For checking a specific frame visually, use preview_frame instead.',
+      description: 'Analyze video content using Gemini vision. Returns scene descriptions, actions, pacing, audio cues. Use for understanding what happens in a video. For checking a specific raw video or Remotion frame visually, use preview_frame with timestamp/frame instead.',
       inputSchema: z.object({
         media_index: z.number().describe('1-based snapshot index of the video to analyze (<<<media_1>>> = 1)'),
         question: z.string().optional().describe('Specific aspect to focus on (e.g. "what happens at 5s?", "describe the pacing", "what audio/dialogue is there?")'),
@@ -939,8 +989,8 @@ Hard constraints:
         // Get video URL: first check snapshotImages (may already contain video URL), then DB fallback
         let videoUrl: string | undefined;
         const mediaUrl = ctx.snapshotImages[v.idx];
-        console.log(`[analyze_video] media_index=${media_index} idx=${v.idx} mediaUrl=${mediaUrl?.substring(0, 80)} isVideo=${/\.(mp4|webm|mov)/i.test(mediaUrl || '')}`);
-        if (mediaUrl && /\.(mp4|webm|mov)/i.test(mediaUrl)) {
+        console.log(`[analyze_video] media_index=${media_index} idx=${v.idx} mediaUrl=${mediaUrl?.substring(0, 80)} isVideo=${isVideoUrl(mediaUrl)}`);
+        if (isVideoUrl(mediaUrl)) {
           videoUrl = mediaUrl;
         } else if (ctx.supabase && ctx.userId) {
           try {
@@ -960,7 +1010,7 @@ Hard constraints:
         }
 
         if (!videoUrl) {
-          return { error: `No video found at <<<media_${media_index}>>>. This snapshot may not be a video, or video is still processing. Use analyze_image to see the poster, or preview_frame for composition frames.` };
+          return { error: `No video found at <<<media_${media_index}>>>. This snapshot may not be a video, or video is still processing. Use analyze_image to see the poster, or preview_frame for specific raw-video/composition frames.` };
         }
 
         try {
@@ -984,32 +1034,34 @@ Hard constraints:
     }),
 
     preview_frame: tool({
-      description: `Capture a screenshot of a Remotion composition at a specific frame or time.
-Use media_index to target any snapshot with a composition (including video snapshots).
-For video snapshots: use timestamp to see specific moments in the video.
+      description: `Capture a visual frame at a specific frame number or timestamp.
+Use media_index to target any timeline snapshot. Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg.
+For raw video snapshots: use timestamp to see specific moments in the actual MP4/MOV/WebM.
 For understanding video content (what happens, scenes, pacing), use analyze_video instead.
 Omit media_index to use the current (last edited) composition.
 Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
-        media_index: z.number().optional().describe('1-based snapshot index (<<<media_1>>> = 1). Target any snapshot that has a composition/video. Omit to use current composition.'),
+        media_index: z.number().optional().describe('1-based snapshot index (<<<media_1>>> = 1). Target a Remotion composition or raw video. Omit to use current composition.'),
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
       }),
       execute: async ({ media_index, frame, timestamp, question }) => {
         let design = (ctx as any).__lastDesignPayload;
+        let rawVideo: { url: string; duration?: number; fps?: number } | null = null;
+        const targetMediaIndex = media_index ?? (!design ? ctx.currentSnapshotIndex + 1 : undefined);
 
         // Load composition payload from a specific snapshot if media_index provided.
-        if (media_index !== undefined && ctx.supabase && ctx.userId) {
-          const v = validateImageIndex(ctx.snapshotImages, media_index);
+        if (targetMediaIndex !== undefined && ctx.supabase && ctx.userId) {
+          const v = validateImageIndex(ctx.snapshotImages, targetMediaIndex);
           if (v.error) return { error: v.error };
           try {
             const { data: snaps } = await ctx.supabase
               .from('snapshots')
-              .select('design_path')
+              .select('type, image_url, design_path, video_meta')
               .eq('project_id', ctx.projectId)
               .order('sort_order', { ascending: true });
-            const snap = snaps?.[v.idx];
+            const snap = snaps?.[v.idx] as { type?: string; image_url?: string; design_path?: string; video_meta?: Record<string, unknown> } | undefined;
             if (snap?.design_path) {
               const storagePath = `${ctx.userId}/workspace/${snap.design_path}`;
               const { data: urlData } = ctx.supabase.storage.from('images').getPublicUrl(storagePath);
@@ -1017,13 +1069,82 @@ Returns the rendered image so you can see it with your vision.`,
                 const res = await fetch(`${urlData.publicUrl}?t=${Date.now()}`);
                 if (res.ok) design = await res.json();
               }
+            } else {
+              const meta = snap?.video_meta;
+              const videoUrl = typeof meta?.videoUrl === 'string' ? meta.videoUrl : '';
+              const fallbackUrl = isVideoUrl(ctx.snapshotImages[v.idx]) ? ctx.snapshotImages[v.idx] : (isVideoUrl(snap?.image_url) ? snap?.image_url || '' : '');
+              const duration = Number(meta?.duration);
+              const fps = Number(meta?.fps);
+              if (snap?.type === 'video' || videoUrl || fallbackUrl) {
+                rawVideo = {
+                  url: videoUrl || fallbackUrl,
+                  duration: Number.isFinite(duration) ? duration : undefined,
+                  fps: Number.isFinite(fps) ? fps : undefined,
+                };
+              }
             }
           } catch (e) {
-            console.warn(`[preview_frame] failed to load design for media_index=${media_index}:`, e);
+            console.warn(`[preview_frame] failed to load design for media_index=${targetMediaIndex}:`, e);
+          }
+        } else if (targetMediaIndex !== undefined) {
+          const resolved = await resolveVideoUrlForMediaIndex(ctx, targetMediaIndex);
+          if (resolved.videoUrl) {
+            rawVideo = { url: resolved.videoUrl, duration: resolved.duration, fps: resolved.fps };
           }
         }
 
-        if (!design) return { error: 'No composition found. Use run_code first, or specify media_index of a snapshot with a composition/video.' };
+        if (targetMediaIndex !== undefined && !design && !rawVideo) {
+          const resolved = await resolveVideoUrlForMediaIndex(ctx, targetMediaIndex);
+          if (resolved.videoUrl) {
+            rawVideo = { url: resolved.videoUrl, duration: resolved.duration, fps: resolved.fps };
+          }
+        }
+
+        if (rawVideo) {
+          if (!rawVideo.url) return { error: `No video URL found at <<<media_${targetMediaIndex}>>>.` };
+          const videoFps = rawVideo.fps || 30;
+          const maxTimestamp = rawVideo.duration && rawVideo.duration > 0 ? Math.max(0, rawVideo.duration - (1 / videoFps)) : undefined;
+          const targetTimestamp = timestamp !== undefined
+            ? timestamp
+            : frame !== undefined
+              ? frame / videoFps
+              : 0.5;
+          const clampedTimestamp = Math.max(0, maxTimestamp !== undefined ? Math.min(targetTimestamp, maxTimestamp) : targetTimestamp);
+          const targetFrame = Math.max(0, Math.round(clampedTimestamp * videoFps));
+          const totalFrames = rawVideo.duration && rawVideo.duration > 0 ? Math.max(1, Math.round(rawVideo.duration * videoFps)) : undefined;
+
+          try {
+            const { extractVideoFrame } = await import('./video-frame');
+            const jpegBuffer = await extractVideoFrame(rawVideo.url, { timestamp: clampedTimestamp });
+
+            let wsUrl = '';
+            const wsPath = `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-t${clampedTimestamp.toFixed(2).replace('.', '-')}-${Date.now()}.jpg`;
+            if (ctx.supabase && ctx.userId) {
+              const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+              if (ws.storageUrl) wsUrl = ws.storageUrl;
+            }
+
+            console.log(`🖼️ [agent] preview_frame: raw video t=${clampedTimestamp.toFixed(2)}s, ${(jpegBuffer.length / 1024).toFixed(0)} KB (ffmpeg)`);
+            return {
+              base64Data: jpegBuffer.toString('base64'),
+              mimeType: 'image/jpeg',
+              source: 'video',
+              timestamp: clampedTimestamp,
+              frame: targetFrame,
+              totalFrames,
+              fps: videoFps,
+              question,
+              workspaceUrl: wsUrl,
+              workspacePath: wsPath,
+            };
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`⚠️ [agent] preview_frame video extraction failed: ${msg}`);
+            return { error: `Failed to extract video frame at ${clampedTimestamp.toFixed(2)}s: ${msg}` };
+          }
+        }
+
+        if (!design) return { error: 'No composition or raw video found. Use run_code first, or specify media_index of a Remotion composition/raw video snapshot.' };
 
         const fps = design.animation?.fps || 30;
         const dur = design.animation?.durationInSeconds || 0;
@@ -1062,6 +1183,7 @@ Returns the rendered image so you can see it with your vision.`,
           return {
             base64Data: jpegBuffer.toString('base64'),
             mimeType: 'image/jpeg',
+            source: 'composition',
             frame: targetFrame,
             totalFrames,
             fps,
@@ -1837,12 +1959,11 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
   const ctx: AgentContext = {
     currentImage,
-    originalImage: options?.originalImage,
     referenceImages: options?.referenceImages,
     projectId,
     generatedImages: [],
@@ -2163,7 +2284,7 @@ export async function* runMakaronAgent(
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
-          const inp = event.input as { useOriginalAsReference?: boolean; media_index?: number; reference_media_indices?: number[]; media_refs?: string[] };
+          const inp = event.input as { media_index?: number; reference_media_indices?: number[]; media_refs?: string[] };
           // Resolve the actual edit target (respects media_index; omit = text-to-image)
           let displayTarget: string | undefined;
           if (inp.media_index !== undefined) {
@@ -2187,10 +2308,8 @@ export async function* runMakaronAgent(
           const extraRefs: string[] = [];
           if (inp.media_refs?.length) extraRefs.push(...inp.media_refs);
           if (displayTarget || extraRefs.length) {
-            const twoImageMode = displayTarget && inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
             toolCallImages = [
               ...(displayTarget ? [displayTarget] : []),
-              ...(twoImageMode ? [ctx.originalImage!] : []),
               ...(ctx.referenceImages ?? []),
               ...snapshotRefs,
             ];
