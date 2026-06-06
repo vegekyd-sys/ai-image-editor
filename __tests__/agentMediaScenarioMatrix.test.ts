@@ -32,6 +32,7 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('Default tool: `generate_animation`')
     expect(agent).toContain('Default tool: `run_code` with `runtime: "node"`')
     expect(agent).toContain('Default tool: `run_code` with `runtime: "composition"`')
+    expect(agent).toContain('call `transcribe_audio` first')
     expect(agent).toContain('prompts/remotion-composition.md')
     expect(agent).toContain('Use `generate_music` only when the user asks')
   })
@@ -76,6 +77,7 @@ describe('agent media scenario matrix', () => {
     expect(ffmpegSkill).toContain('Default video model, higher quality')
     expect(ffmpegSkill).toContain('| Kling | 15s | 10.5s | <=200MB; resolution <=2K')
     expect(ffmpegSkill).toContain('Cheaper option, supports base video edit')
+    expect(ffmpegSkill).toContain('call `transcribe_audio` before `run_code`')
     expect(ffmpegSkill).not.toContain('Cheaper/default')
   })
 
@@ -129,6 +131,8 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('not individual binary outputs from type:"files"')
     expect(agentTs).toContain('Never use node as a fallback for ordinary editable timeline splicing')
     expect(agentTs).toContain('mediaResult.type === \'video\'')
+    expect(agentTs).toContain('transcribe_audio')
+    expect(agentTs).toContain('transcribeWithVolcengineAsr')
   })
 
   it('keeps agent-visible media context on composition terminology', () => {
@@ -141,6 +145,8 @@ describe('agent media scenario matrix', () => {
     expect(agentContext).toContain('code_path')
     expect(agentContext).toContain('normalizeLegacyCompositionDescription')
     expect(agentContext).toContain('formatVideoMediaSpec(videoMeta)')
+    expect(agentContext).toContain('formatTranscriptMediaHint(videoMeta)')
+    expect(agentContext).toContain('[ASR transcript cached:')
     expect(agentContext).toContain('videoSpec ? `video, ${videoSpec}`')
     expect(agentContext).toContain("return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '')")
     expect(agentDualWriter).toContain("case 'preview_frame_captured'")

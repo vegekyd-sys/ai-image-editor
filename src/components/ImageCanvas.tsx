@@ -147,9 +147,13 @@ export default function ImageCanvas({
   // Image loading state
   const [imageLoaded, setImageLoaded] = useState(true);
 
+  const activeDraftDesign = isDraft ? draftDesign : null;
+  const timelineDesign = animatedDesigns?.get(currentIndex) || null;
+  const currentDesign = activeDraftDesign || timelineDesign;
+
   // Long content: height/width > 2.5 — disables zoom, enables scroll
   const isLongContent = (() => {
-    const design = animatedDesigns?.get(currentIndex);
+    const design = currentDesign;
     if (design) return design.height / design.width > 2.5;
     if (naturalDims.w && naturalDims.h) return naturalDims.h / naturalDims.w > 2.5;
     return false;
@@ -251,7 +255,7 @@ export default function ImageCanvas({
     }
 
     // Long press detection — skip for video entry and animated designs
-    const hasAnimation = !!(draftDesign?.animation || animatedDesigns?.get(currentIndex)?.animation);
+    const hasAnimation = !!currentDesign?.animation;
     if (previousImage && !isVideoEntry && !hasAnimation) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
@@ -259,7 +263,7 @@ export default function ImageCanvas({
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, currentIndex, draftDesign, animatedDesigns, selectedEditableId]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, currentIndex, currentDesign, selectedEditableId]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
@@ -439,7 +443,7 @@ export default function ImageCanvas({
     }
 
     // Long press → compare (works at any zoom level, same as touch) — skip for animated designs
-    const hasAnimationMouse = !!(draftDesign?.animation || animatedDesigns?.get(currentIndex)?.animation);
+    const hasAnimationMouse = !!currentDesign?.animation;
     if (previousImage && !hasAnimationMouse) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
@@ -447,7 +451,7 @@ export default function ImageCanvas({
         mousePanning.current = false; // stop panning when comparing
       }, 200);
     }
-  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, currentIndex, draftDesign, animatedDesigns, selectedEditableId]);
+  }, [previousImage, isVideoEntry, clearLongPress, annotationMode, scale, currentIndex, currentDesign, selectedEditableId]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (selectedEditableId) return;
@@ -646,9 +650,8 @@ export default function ImageCanvas({
     }
   }, [videoPlayTrigger, isVideoEntry, videoUrl, videoStartTime]);
 
-  // Remotion Player: poll current frame for custom seek bar
-  // draftDesign takes priority over animatedDesigns (video wrapper etc.)
-  const currentDesign = draftDesign || animatedDesigns?.get(currentIndex) || null;
+  // Remotion Player: poll current frame for custom seek bar.
+  // Draft design only takes priority while the virtual draft slot is selected.
   const remotionFps = currentDesign?.animation?.fps || 30;
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));

@@ -507,7 +507,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const currentDisplayImage = isViewingVideo
     ? (currentSnap?.image || currentSnap?.imageUrl || timeline[viewIndex] || '')
     : (timeline[viewIndex] || '');
-  const hasRenderableCurrentDesign = !!(draftDesign || designsMap.get(viewIndex));
+  const hasRenderableCurrentDesign = !!((isAtDraftSlot ? draftDesign : null) || designsMap.get(viewIndex));
   const showCanvasPlaceholder = shouldShowCanvasPlaceholder({
     timeline,
     viewIndex,

@@ -49,17 +49,19 @@ Do not call `analyze_image` before direct edits; `generate_image` already receiv
 
 Default tool: `generate_animation`, after script confirmation or explicit direct-submit authorization.
 
-For long videos, multi-part videos, 15s+ output, 1-2 minute videos, visual anchors, or generated-clip transitions, read `skills/long-video-director/SKILL.md` first. `long-video-director` is orchestration and review only: it routes anchor work to `skills/long-video-anchor/SKILL.md`, storyboard work to `skills/long-video-storyboard/SKILL.md`, and final scripts/preflight to `prompts/animate.md`. Stages: discuss and approve the story first, then anchors, director beat board, then generate and inspect one OpenAI storyboard image for each segment, scripts, and preflight. After segment-outline approval, the next gate is director beat board, not storyboard generation. Do not use fenced code blocks for long-video review content. Do not bring up Remotion during the long-video workflow. Do not dump the whole long-video package in one response. Do not jump straight from an initial long-video request to full segment scripts.
+For dialogue, subtitles, transcript, or time-based editing by spoken words, call `transcribe_audio` first. Use its utterance/word timestamps to decide edit points. Use `analyze_video` for visual scenes/actions, not for exact speech timing.
 
-Hard duration range: a single SeeDance video-generation script/call must be 4 to 15 seconds. SeeDance's minimum output duration is 4 seconds; 5 seconds is only the default/common preset. If requested/source duration is shorter than 4s, write a compact 4s script and set `duration: 4`. If the user asks for 30s, 60s, 1-2 minutes, or any output longer than 15s, Use `skills/long-video-director/SKILL.md`, split into <=15s segments, show the segment/seam plan, and stop for approval.
+For long videos, multi-part videos, 15s+ output, 1-2 minute videos, visual anchors, or generated-clip transitions, read `skills/long-video-director/SKILL.md` first. That workflow is staged review: story → anchors → director beat board → storyboard image per segment → scripts/preflight. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
 
-Single-script rule: if the user provides or approves a complete video script whose total duration is 15 seconds or less, render it as one `generate_animation` call. Put the entire title + all `Shot N (Xs):` lines + `Style:` line into the same `story_prompt`; set `duration` when known. Do not submit only one shot, the first shot, or one line from the script. Do not split it just because it contains multiple `Shot N (Xs):` lines.
+Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than 15s, use `skills/long-video-director/SKILL.md`, split into <=15s segments, show the segment plan, and stop for approval.
 
-Long source video rule: if an existing timeline/reference video is longer than 15 seconds, do not compress the whole source into one 5s or 15s edit. Analyze pacing, route through `skills/long-video-director/SKILL.md`, split into <=15s segments, and submit one script per segment only after approval.
+Single-script rule: if a complete approved script is <=15s, submit it as one `generate_animation` call with the full title, all shots, and style line in one `story_prompt`. Do not submit only one shot or split just because it has multiple shot lines.
 
-Reference video input limit: for a single SeeDance generation, add together the durations of all uploaded/timeline/reference videos used in the prompt. The combined source duration must be 15 seconds or less. If longer, do not submit those videos together in one `generate_animation` call.
+Long source video rule: if an existing timeline/reference video is >15s, do not compress the whole source into one short edit. Analyze pacing, route through `skills/long-video-director/SKILL.md`, split into <=15s segments, and submit per segment only after approval.
 
-Reference video size limit: for a single SeeDance generation, uploaded/timeline/reference videos must be .mp4/.mov, <=50MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. The lower bound matters: tiny videos below 409,600 frame pixels must be resized/padded before submission. Kling reference video size is less specific: one .mp4/.mov video, <=200MB, resolution <=2K; no explicit video resolution lower bound is documented.
+Reference video input limit: one SeeDance generation may use up to 15s combined source/reference video duration. If longer, do not submit those videos together.
+
+Reference video size limit: SeeDance references must be .mp4/.mov, <=50MB, dimensions 300-6000px, aspect 0.4-2.5, and 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K; no explicit lower resolution bound is documented.
 
 Before writing a video script, call `read_file('prompts/animate.md')`. Do not re-read it if it already appears in tool-result history.
 
@@ -77,11 +79,15 @@ Default tool: `run_code` with `runtime: "node"`, after reading `skills/video-ffm
 
 For long-video style transfer: probe once, split once, generate per chunk, then assemble. Do not route ordinary timeline editing to FFmpeg.
 
+When the user asks to cut/remove/export based on dialogue or subtitles, call `transcribe_audio` on the relevant video before `run_code`. Then use the transcript timecodes as FFmpeg cut points.
+
 ### Remotion Composition Runtime
 
 Default tool: `run_code` with `runtime: "composition"`, after reading `prompts/remotion-composition.md`.
 
 Use for editable timelines/trims/subtitles/overlays; default for "put these two videos together" / "剪在一起".
+
+For subtitle overlays or transcript-driven editable trims, call `transcribe_audio` first and use the returned utterance/word timestamps in the Remotion composition.
 
 `runtime: "design"` is a legacy alias. Internal `design` names are historical and do not mean generic layout/mockup/image tasks should use Remotion.
 

@@ -76,14 +76,20 @@ export class AgentDualWriter {
 
       case 'image': {
         await this.flushContent();
-        const snapshotId = crypto.randomUUID();
-        const filename = `snapshot-${snapshotId}.jpg`;
-        const imageUrl = await uploadImage(
-          this.supabase, this.userId, this.projectId, filename, event.image,
-        );
+        const prePublishedSnapshotId = event.snapshotId;
+        const prePublishedImageUrl = event.imageUrl || (event.image.startsWith('http') ? event.image : undefined);
+        const snapshotId = prePublishedSnapshotId || crypto.randomUUID();
+        let imageUrl = prePublishedImageUrl || null;
+
+        if (!imageUrl) {
+          const filename = `snapshot-${snapshotId}.jpg`;
+          imageUrl = await uploadImage(
+            this.supabase, this.userId, this.projectId, filename, event.image,
+          );
+        }
 
         // Write snapshots table
-        if (imageUrl) {
+        if (imageUrl && !prePublishedSnapshotId) {
           const sortOrder = await this.nextSortOrder();
           await this.supabase.from('snapshots').upsert({
             id: snapshotId,
@@ -96,6 +102,8 @@ export class AgentDualWriter {
             if (error) console.error('[DualWriter] snapshot upsert error:', error);
           });
           this.currentMessageHasImage = true;
+        } else if (imageUrl) {
+          this.currentMessageHasImage = true;
         }
 
         // Write agent_events
@@ -103,6 +111,7 @@ export class AgentDualWriter {
           snapshotId,
           imageUrl: imageUrl ?? undefined,
           usedModel: event.usedModel,
+          description: event.description,
         });
 
         // SSE: enriched event with server IDs
