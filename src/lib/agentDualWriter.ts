@@ -247,6 +247,18 @@ export class AgentDualWriter {
         return;
       }
 
+      case 'preview_frame_captured': {
+        await this.flushContent();
+        this.currentMessageHasImage = true;
+        await this.saveCurrentMessage();
+        await this.insertEvent('preview_frame_captured', {
+          workspaceUrl: event.workspaceUrl,
+          messageId: this.currentMessageId,
+        });
+        this.tryEnqueue(event);
+        return;
+      }
+
       case 'status': {
         await this.flushContent();
         await this.insertEvent('status', { text: event.text });

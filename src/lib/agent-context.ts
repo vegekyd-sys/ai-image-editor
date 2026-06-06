@@ -218,7 +218,11 @@ export async function buildPromptContext(
   // Assemble
   const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
-  const snapshotImages = snapshots.map(s => s.image_url || '');
+  const snapshotImages = snapshots.map((s) => {
+    const videoMeta = s.video_meta as Record<string, unknown> | undefined;
+    const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : '';
+    return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '');
+  });
 
   return {
     fullPrompt,
