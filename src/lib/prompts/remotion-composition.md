@@ -164,6 +164,7 @@ For static visuals, use `generate_image` instead of Remotion unless editability 
 After render or patch:
 - Review code shape and media references first.
 - Use `preview_frame` when visual verification is needed.
+- A `preview_frame` screenshot is a publishable workspace image. If the user wants that exact frame on the timeline, call `write_file({ fromWorkspaceOutputs: true, mediaType: "image", limit: 1 })` or pass the returned `workspacePath`; do not route it through an image model.
 - Visual verification is required for transitions, subtitles, overlays, trim timing, cropping, or any composition you are about to publish to the timeline.
 - If `preview_frame` returns an image or no explicit textual error, do not infer a Remotion compatibility failure from missing prose. Continue by patching if needed, then save/publish the composition.
 - For trim edits, verify the final `animation.durationInSeconds` matches the actual total frame count before saving or publishing.

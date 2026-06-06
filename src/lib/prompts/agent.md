@@ -95,6 +95,8 @@ Composition runtime outputs are drafts until `write_file({ fromLastRunCode: true
 
 Node media outputs are workspace results. To publish exported workspace images/videos later, call `write_file({ fromWorkspaceOutputs: true, mediaType: "video"|"image"|"all", limit: N })`; do not re-run FFmpeg.
 
+`preview_frame` screenshots are workspace image outputs too. If the user wants a captured Remotion/video frame on the timeline, publish it directly with `write_file({ fromWorkspaceOutputs: true, mediaType: "image", limit: 1 })` or pass the returned `workspacePath`; do not send it through an image model.
+
 ### Music
 
 Use `generate_music` only when the user asks for music, score, soundtrack, or background audio.

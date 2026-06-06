@@ -99,5 +99,6 @@ Node media call checklist:
 
 - Review code before screenshots: dimensions, positions, media URLs, text sizes, and return shape.
 - Use `preview_frame` only when visual verification is needed.
+- `preview_frame` screenshots are workspace image outputs and can be published directly with `write_file({ fromWorkspaceOutputs: true, mediaType: "image", limit: 1 })`; never use an image model just to move a screenshot onto the timeline.
 - Batch preview frames in one turn when checking multiple frames.
 - Do not use `<<<image_N>>>` to inspect drafts. Those only reference published timeline media.

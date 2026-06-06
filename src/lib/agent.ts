@@ -538,16 +538,25 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
   } else {
     candidates.push(...remembered.filter(o => mediaKindMatches(o.contentType, mediaType)).slice(-limit));
 
-    const { data, error } = await ctx.supabase
-      .from('workspace_files')
-      .select('path, content_type, storage_url, updated_at')
-      .eq('user_id', ctx.userId)
-      .like('path', `${ctx.projectId}/media/%`)
-      .order('updated_at', { ascending: false })
-      .limit(Math.max(limit * 3, 20));
-    if (error) return { success: false, message: `Workspace lookup failed: ${error.message}`, published: [] };
+    const lookupPrefixes = [
+      `${ctx.projectId}/media/%`,
+      ...(mediaType !== 'video' ? [`${ctx.projectId}/drafts/%`] : []),
+    ];
+    const workspaceRows: Array<Record<string, string>> = [];
+    for (const prefix of lookupPrefixes) {
+      const { data, error } = await ctx.supabase
+        .from('workspace_files')
+        .select('path, content_type, storage_url, updated_at')
+        .eq('user_id', ctx.userId)
+        .like('path', prefix)
+        .order('updated_at', { ascending: false })
+        .limit(Math.max(limit * 3, 20));
+      if (error) return { success: false, message: `Workspace lookup failed: ${error.message}`, published: [] };
+      workspaceRows.push(...((data || []) as Array<Record<string, string>>));
+    }
 
-    const rows: WorkspaceMediaOutputDraft[] = ((data || []) as Array<Record<string, string>>)
+    const rows: WorkspaceMediaOutputDraft[] = workspaceRows
+      .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
       .map((row: Record<string, string>) => ({
         path: row.path,
         storageUrl: toPublicStorageUrl(row.storage_url),
@@ -1315,7 +1324,16 @@ Returns the rendered image so you can see it with your vision.`,
             const wsPath = `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-t${clampedTimestamp.toFixed(2).replace('.', '-')}-${Date.now()}.jpg`;
             if (ctx.supabase && ctx.userId) {
               const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
-              if (ws.storageUrl) wsUrl = ws.storageUrl;
+              if (ws.storageUrl) {
+                wsUrl = toPublicStorageUrl(ws.storageUrl);
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: wsPath,
+                  storageUrl: wsUrl,
+                  contentType: 'image/jpeg',
+                  description: `video frame at ${clampedTimestamp.toFixed(2)}s`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              }
             }
 
             console.log(`🖼️ [agent] preview_frame: raw video t=${clampedTimestamp.toFixed(2)}s, ${(jpegBuffer.length / 1024).toFixed(0)} KB (ffmpeg)`);
@@ -1368,8 +1386,15 @@ Returns the rendered image so you can see it with your vision.`,
           if (ctx.supabase && ctx.userId) {
             const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
             if (ws.storageUrl) {
-              wsUrl = ws.storageUrl;
+              wsUrl = toPublicStorageUrl(ws.storageUrl);
               if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
+              rememberWorkspaceMediaOutputs(ctx, [{
+                path: wsPath,
+                storageUrl: wsUrl,
+                contentType: 'image/jpeg',
+                description: `composition frame ${targetFrame}`,
+                updatedAt: new Date().toISOString(),
+              }]);
             }
           }
 
