@@ -2130,8 +2130,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           createdAt: new Date().toISOString(),
         },
       };
-      setSnapshots(prev => [...prev, processingSnap]);
+      setSnapshots(prev => {
+        const next = [...prev, processingSnap];
+        snapshotsRef.current = next;
+        return next;
+      });
       // Navigate to new video snapshot
+      viewIndexRef.current = snapshots.length;
       requestAnimationFrame(() => setViewIndex(snapshots.length));
 
       // Step 3: Transcode + upload
@@ -2170,14 +2175,22 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       };
       setSnapshots(prev => {
         const next = prev.map(s => s.id === snapId ? completedSnap : s);
+        snapshotsRef.current = next;
         return next;
       });
       onSaveSnapshot?.(completedSnap, snapshots.length, (uploadedUrl) => {
-        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: uploadedUrl } : s));
+        setSnapshots(prev => {
+          const next = prev.map(s => s.id === snapId ? { ...s, imageUrl: uploadedUrl } : s);
+          snapshotsRef.current = next;
+          return next;
+        });
       });
 
-      // Auto-analyze video content — use normal agent request (DB is ready by now)
-      handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount: 1 });
+      // Auto-analyze video content through the normal tool-aware agent flow so
+      // analyze_video's result is persisted in agent_tool_history for reuse.
+      const mediaIndex = snapshots.length + 1;
+      const videoAnalysisPrompt = `[System] User uploaded a video at <<<media_${mediaIndex}>>>. First call analyze_video with media_index ${mediaIndex}. Then summarize the duration, key subjects/actions, and mood in 2-3 conversational sentences.`;
+      handleAgentRequest(videoAnalysisPrompt, undefined, undefined, { silent: true, uploadedVideoCount: 1 });
 
       // Return 1-based index (snapshot was appended at snapshots.length)
       return snapshots.length + 1;
@@ -2198,7 +2211,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       ));
       return null;
     }
-  }, [snapshots.length, projectId, onSaveSnapshot, t]);
+  }, [snapshots.length, projectId, onSaveSnapshot, handleAgentRequest, t]);
 
   // Auto-trigger upload when a pending image is passed (new project from projects page)
   // Lock body scroll while editor is mounted to prevent iOS back-navigation jump
@@ -2323,7 +2336,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
       // ── Step 6b: Video analysis (if videos, no prompt) ──
       if (hasVideos && !hasPrompt) {
-        handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount: pendingVideos!.length });
+        const count = pendingVideos!.length;
+        const firstVideoIndex = Math.max(1, workSnapshots.length - count + 1);
+        const lastVideoIndex = workSnapshots.length;
+        const videoRange = count === 1
+          ? `<<<media_${firstVideoIndex}>>>`
+          : `<<<media_${firstVideoIndex}>>> to <<<media_${lastVideoIndex}>>>`;
+        const videoAnalysisPrompt = `[System] User uploaded ${count === 1 ? 'a video' : `${count} videos`} at ${videoRange}. First call analyze_video for each uploaded video media_index. Then summarize the duration, key subjects/actions, and mood in 2-3 conversational sentences.`;
+        handleAgentRequest(videoAnalysisPrompt, undefined, undefined, { silent: true, uploadedVideoCount: count });
       }
 
       // ── Step 7: Agent request (if prompt) ──

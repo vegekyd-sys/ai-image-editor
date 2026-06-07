@@ -382,6 +382,9 @@ export class AgentDualWriter {
     this.toolHistoryBudget.rows += 1;
     this.toolHistoryBudget.chars += sanitized.inputChars + sanitized.outputChars;
     this.pendingToolCalls.delete(event.toolCallId);
+    if (pending.tool === 'analyze_video') {
+      await this.maybePersistVideoAnalysisDescription(pending.input, event.output);
+    }
 
     try {
       await this.supabase.from('agent_tool_history').insert({
@@ -412,6 +415,47 @@ export class AgentDualWriter {
         toolCallId: event.toolCallId,
         error: err instanceof Error ? err.message : String(err),
       });
+    }
+  }
+
+  private normalizeSnapshotDescription(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const text = value.replace(/\s+/g, ' ').trim();
+    if (!text) return null;
+    return text.slice(0, 800);
+  }
+
+  private async maybePersistVideoAnalysisDescription(input: Record<string, unknown>, output: unknown) {
+    const mediaIndex = typeof input.media_index === 'number' ? input.media_index : null;
+    if (!mediaIndex || mediaIndex < 1) return;
+
+    const raw = output && typeof output === 'object'
+      ? (output as Record<string, unknown>).analysis
+      : null;
+    const description = this.normalizeSnapshotDescription(raw);
+    if (!description) return;
+
+    try {
+      const { data: snaps, error } = await this.supabase
+        .from('snapshots')
+        .select('id, description')
+        .eq('project_id', this.projectId)
+        .order('sort_order', { ascending: true });
+      if (error) {
+        console.error('[DualWriter] video description snapshot lookup error:', error);
+        return;
+      }
+
+      const snap = snaps?.[mediaIndex - 1] as { id?: string; description?: string | null } | undefined;
+      if (!snap?.id || (typeof snap.description === 'string' && snap.description.trim())) return;
+
+      const { error: updateError } = await this.supabase
+        .from('snapshots')
+        .update({ description })
+        .eq('id', snap.id);
+      if (updateError) console.error('[DualWriter] video description update error:', updateError);
+    } catch (err) {
+      console.error('[DualWriter] video description persist error:', err);
     }
   }
 }

@@ -69,4 +69,58 @@ describe('AgentDualWriter', () => {
       }),
     });
   });
+
+  it('backfills video snapshot description from analyze_video tool results', async () => {
+    const updates: Array<{ table: string; row: Record<string, unknown>; id?: string }> = [];
+    const snapshots = [
+      { id: 'snap-1', description: null },
+      { id: 'snap-2', description: '' },
+    ];
+    const fakeSupabase = {
+      from: (table: string) => {
+        const builder = {
+          insert: async () => ({ error: null }),
+          upsert: async () => ({ error: null }),
+          select: () => builder,
+          eq: (column: string, value: string) => {
+            if (table === 'snapshots' && column === 'id') {
+              updates[updates.length - 1].id = value;
+              return Promise.resolve({ error: null });
+            }
+            return builder;
+          },
+          order: async () => ({ data: snapshots, error: null }),
+          update: (row: Record<string, unknown>) => {
+            updates.push({ table, row });
+            return builder;
+          },
+        };
+        return builder;
+      },
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.processAndEnqueue({
+      type: 'tool_call',
+      tool: 'analyze_video',
+      toolCallId: 'tool-1',
+      step: 0,
+      input: { media_index: 2, question: 'summarize' },
+    });
+    await writer.processAndEnqueue({
+      type: 'tool_result',
+      tool: 'analyze_video',
+      toolCallId: 'tool-1',
+      step: 0,
+      output: { analysis: 'This video shows a product update.\n\nIt mentions video editing.' },
+    });
+
+    expect(updates).toEqual([
+      {
+        table: 'snapshots',
+        row: { description: 'This video shows a product update. It mentions video editing.' },
+        id: 'snap-2',
+      },
+    ]);
+  });
 });
