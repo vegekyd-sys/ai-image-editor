@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { Message } from '@/types';
 import { compressImageFile } from '@/lib/imageUtils';
 import { useLocale } from '@/lib/i18n';
+import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { Snapshot } from '@/types';
 import ImageRefChip from '@/components/ImageRefChip';
@@ -80,7 +81,7 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
 function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
-  const inputImageLabels = [t('chat.currentImage'), t('chat.originalImage')];
+  const inputImageLabels = [t('chat.currentImage'), t('chat.referenceImage')];
   const modelLabels: Record<string, string> = { gemini: 'nano banana 2', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
   const modelLabel = modelLabels[editModel || ''] || editModel || 'model';
   return (
@@ -318,11 +319,22 @@ function fixMarkdownDelimiters(text: string): string {
   );
 }
 
+const CODE_COLLAPSE_LINE_THRESHOLD = 24;
+const CODE_COLLAPSE_CHAR_THRESHOLD = 1800;
+
+function getCodeLineCount(text: string): number {
+  return text.replace(/\n$/, '').split('\n').length;
+}
+
+function shouldCollapseCodeBlock(text: string): boolean {
+  return getCodeLineCount(text) > CODE_COLLAPSE_LINE_THRESHOLD
+    || text.length > CODE_COLLAPSE_CHAR_THRESHOLD;
+}
 
 /** Collapsible code block — original markdown code style + toggle button */
 function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const lineCount = text.split('\n').length;
+  const lineCount = getCodeLineCount(text);
 
   return (
     <div className="my-2">
@@ -389,9 +401,9 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
       if (inline || isShort) {
         return <code className={`font-mono ${isPanel ? 'text-[14px]' : 'text-[18px]'} px-1.5 py-0.5 rounded`} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>{children}</code>;
       }
-      // Long code blocks: collapsible
-      const lines = text.split('\n');
-      if (lines.length > 3) {
+      // Only truly long code blocks default to collapsed. Short fenced blocks
+      // are often scripts, outlines, or structured notes rather than code dumps.
+      if (shouldCollapseCodeBlock(text)) {
         return <CollapsibleCode text={text} isPanel={isPanel} />;
       }
       return <code className={`block font-mono ${isPanel ? 'text-[14px] p-2' : 'text-[18px] p-3'} rounded-xl my-2 overflow-x-auto`} style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}>{children}</code>;
@@ -504,7 +516,7 @@ export default function AgentChatView({
   currentSnapshotIndex,
   preferredModel = 'auto',
   onModelChange,
-  videoModel = 'kling',
+  videoModel = getDefaultVideoModelId(),
   onVideoModelChange,
   onNavigateToSnapshot,
   onVideoTap,
@@ -915,6 +927,7 @@ export default function AgentChatView({
           style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
         >
           <button
+            data-testid="chat-back"
             onClick={handleBack}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm hover:bg-white/10 active:bg-white/15 transition-colors"
           >
@@ -928,6 +941,7 @@ export default function AgentChatView({
       {/* ── Floating PiP (overlay mode only) ── */}
       {!isPanel && currentImage && (
         <div
+          data-testid="cui-pip"
           className="absolute z-50 rounded-2xl overflow-hidden select-none"
           style={{
             width: PIP,
@@ -1283,13 +1297,13 @@ export default function AgentChatView({
                 v.muted = true; v.src = url;
                 await new Promise<void>(r => { v.onloadedmetadata = () => r(); setTimeout(r, 5000); });
                 const videoDuration = v.duration;
-                const { MAX_DURATION } = await import('@/lib/video-upload');
-                if (videoDuration > MAX_DURATION) {
+                const { MAX_DURATION, MAX_ACCEPTED_DURATION } = await import('@/lib/video-upload');
+                if (videoDuration > MAX_ACCEPTED_DURATION) {
                   v.pause(); v.removeAttribute('src'); v.load();
                   URL.revokeObjectURL(url);
                   setAttachments(prev => [...prev, { id, type: 'video', thumbnail: '', status: 'error' as const }]);
                   setTimeout(() => setAttachments(prev => prev.filter(a => a.id !== id)), 3000);
-                  alert(t('video.tooLong').replace('{duration}', String(Math.round(videoDuration))).replace('{max}', String(MAX_DURATION)));
+                  alert(t('video.tooLong').replace('{duration}', videoDuration.toFixed(1).replace(/\.0$/, '')).replace('{max}', String(MAX_DURATION)));
                   continue;
                 }
                 v.currentTime = Math.min(0.5, v.duration * 0.1);

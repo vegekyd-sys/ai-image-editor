@@ -3791,3 +3791,85 @@ get-video-status.ts (skill)
 | Enterprise | $200 | 24,000 | 20% |
 
 Stripe 用 `price_data`（动态价格），不需要预创建 Price ID。
+
+---
+
+## Video Edit Duration Lock (2026-05-30)
+
+### 新原则
+
+视频编辑默认遵守 **“源视频时长 = 编辑后视频时长”**。
+
+如果用户上传/引用一个 10s 视频并要求“加魔法感”“改风格”“加特效”等编辑，系统应生成 10s 编辑结果，而不是套用图片生成视频的 5s 默认模板。
+
+同时，**用户显式指定时长优先**：
+- 10s 视频 → “编辑成 8s”：生成 8s，不被服务器兜底强制改回 10s
+- 13s 视频 → 默认编辑：生成 13s
+- 13s 视频 → “做一版 5s”：生成 5s
+
+### 实现
+
+时长优先级统一为：
+
+```ts
+duration ?? referenceVideoDuration ?? parseTotalDuration(finalPrompt)
+```
+
+- `duration`：用户/Agent 明确传入的目标时长，优先级最高
+- `referenceVideoDuration`：timeline video 的 `video_meta.duration`，作为视频编辑默认兜底
+- `parseTotalDuration(finalPrompt)`：仅在没有显式时长、也没有源视频时长时，从脚本解析
+
+涉及路径：
+- `/api/video-snapshot`：识别 prompt 中引用的 timeline video，读取 `video_meta.duration`，用于提交、metadata、计费
+- `/api/animate`：旧 animate path 同步补齐同样逻辑
+- Agent `generate_animation`：自动路由 timeline video reference 时累加源视频时长，传给 `createVideo`
+- `create-video.ts`：skill 层按上述优先级解析最终时长，并保留 15s 上限校验
+- `agent.md` / `animate.md`：prompt 层明确 video edit duration lock，避免 Agent 把视频编辑写成默认 5s
+
+### 验证
+
+- `4月4日 (1).mp4` 源视频约 10.17s，要求给女孩加魔法感后，结果约 10.10s，未掉到 5s
+- 用户补测两条“小鸟”任务：
+  - 13s 视频默认编辑 → 13s 生成成功
+  - 明确要求 5s 版本 → 5s 生成成功
+- 结论：服务器兜底不会覆盖用户显式时长；只在用户没有指定时长时，用源视频时长兜底
+
+---
+
+## Makaron CLI Video Analysis + Seedance Error Surfacing (2026-05-30)
+
+### CLI 版本
+
+`makaron-cli` 升级到 `0.7.5`，已发布到 npm latest。
+
+### 改动
+
+- `chat --video` / `video create --video` 本地视频上传限制对齐前端流程：MP4/MOV/WebM、≤200MB、目标 ≤15s（0.5s metadata 容差）、≤1080p / 2,086,876 frame pixels
+- `chat --project auto --video` 先校验本地视频，再创建项目，避免无效视频生成空项目
+- CLI 上传视频到 timeline 时把 `duration/width/height` 写入 `video_meta`
+- 新增唯一视频分析命令：`makaron analyze --video input.mp4 "question"`
+- 不保留 `analyse`、`video analyze`、`analyze video` 隐藏别名
+- 分析视频不套用 15s/1080p 限制，只做基础上传检查：存在、非空、MP4/MOV/WebM、≤200MB
+- MCP 新增 `makaron_analyze_video`
+- `video create --model seedance --video ...` 明确走 Seedance reference-video edit，传 `videoModel=seedance` + `referType=feature`
+- 本地 reference video 未显式传 `--duration` 时，默认使用源视频时长
+- CLI video polling/status 现在完整透出 provider 失败原因，并避免重复输出同一段 error
+
+### 测试
+
+测试文件：`/Users/tianyicai/Downloads/20260530-034323.mp4`
+
+- 原视频 `720x1280 / 38.8s`：CLI 正确拦截 `Video too long: 39s (max 15s)`
+- 裁剪版 `720x1280 / 15s`：能提交 Seedance，最终 provider 返回 `content_policy_violation`
+- 去音轨版 `720x1280 / 15s / no audio`：仍然返回同一条 `content_policy_violation`
+- 压缩版 `608x1080 / 15s`：仍然返回同一条 `content_policy_violation`
+- 结论：本轮失败不是 1080p 分辨率入口问题，也不是单纯音乐版权问题；是 Evolink/Seedance provider 的内容策略判断。CLI 只需正确透出 provider 原始错误。
+
+测试项目：`https://www.makaron.app/projects/fe3809ae-3368-4802-874b-230999422d3d`
+
+### Follow-up: 15s metadata tolerance (2026-05-30)
+
+- 实测 `/Users/tianyicai/Downloads/7b1560cf-06f6-463f-a464-f75117991f00.mp4`：容器 duration `15.082667s`，视频流 `14.966667s`，`1080x1920`
+- 绕过本地硬拦截直传 Seedance/Evolink，`duration: 5` 输出成功：`task-unified-1780089477-psc65jfx`
+- 结论：`duration > 15` 不能直接硬拦。前端、CUI、项目页/Home 页、CLI、projects/create、Agent duration guard 统一改成目标 15s + 0.5s metadata/audio padding 容差
+- 输出/计费 duration 仍钳到 15s；16s 继续拦截；1s 不本地拦截，但 provider 错误必须正确透出并返回非 0 exit

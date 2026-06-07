@@ -1,40 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest } from '@/lib/api-auth'
 import { createVideo } from '@/lib/skills/create-video'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
+import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 30
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    const user = session?.user
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authResult = await authenticateRequest(req)
+    if ('error' in authResult) return authResult.error
+    const { userId, supabase } = authResult.auth
 
-    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, sourceSnapshotIds } = await req.json()
+    const {
+      projectId,
+      imageUrls,
+      prompt,
+      duration,
+      aspectRatio,
+      videoModel,
+      sourceSnapshotIds,
+      videoUrl,
+      videoReferType,
+      keepOriginalSound,
+    } = await req.json()
+    const selectedVideoModel = normalizeVideoModelId(videoModel)
+    const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
+    const inputVideoUrl = typeof videoUrl === 'string' && videoUrl.startsWith('http') ? videoUrl : undefined
 
-    if (!projectId || !imageUrls?.length || !prompt) {
+    if (!projectId || !prompt || (inputImageUrls.length === 0 && !inputVideoUrl)) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
     const { data: project } = await supabase
       .from('projects')
-      .select('id')
+      .select('id, user_id')
       .eq('id', projectId)
-      .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    if (project.user_id !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const creditCheck = await requireCredits(user.id, 50)
+    const creditCheck = await requireCredits(userId, 50)
     if (!creditCheck.ok) return creditCheck.response
 
     // Save original imageUrls before mutation (for detail view display)
-    const allSourceUrls: string[] = [...imageUrls].filter((u: string) => !!u)
-    const originalFirstUrl = imageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || ''
+    const allSourceUrls: string[] = [...inputImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : [])].filter((u: string) => !!u)
+    const originalFirstUrl = inputImageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || ''
 
     // Auto-route video references: detect video snapshots in imageUrls
     const { data: dbSnaps } = await supabase
@@ -43,27 +57,47 @@ export async function POST(req: NextRequest) {
       .eq('project_id', projectId)
       .order('sort_order')
     const autoVideoUrls: string[] = []
+    const referenceVideoMetas: Array<{ width?: number | null; height?: number | null }> = []
+    let referenceVideoDuration: number | undefined
     if (dbSnaps?.length) {
       const scriptRefs = [...new Set(
         Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))
       )]
       for (const ref of scriptRefs) {
         const snap = dbSnaps[ref - 1]
-        const videoUrl = (snap?.video_meta as Record<string, unknown> | null)?.videoUrl as string | undefined
+        const meta = snap?.video_meta as Record<string, unknown> | null
+        const videoUrl = meta?.videoUrl as string | undefined
         if (snap?.type === 'video' && videoUrl) {
           autoVideoUrls.push(videoUrl)
-          imageUrls[ref - 1] = ''
+          referenceVideoMetas.push({
+            width: Number.isFinite(Number(meta?.width)) ? Number(meta?.width) : null,
+            height: Number.isFinite(Number(meta?.height)) ? Number(meta?.height) : null,
+          })
+          const sourceDuration = Number(meta?.duration)
+          if (Number.isFinite(sourceDuration) && sourceDuration > 0) {
+            referenceVideoDuration = (referenceVideoDuration ?? 0) + sourceDuration
+          }
+          inputImageUrls[ref - 1] = ''
         }
       }
     }
+    if (referenceVideoDuration != null && referenceVideoDuration > 15.5) {
+      return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum 15s with small metadata tolerance.` }, { status: 400 })
+    }
+    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(15, Math.round(referenceVideoDuration)) : undefined)
 
     const skillResult = await createVideo({
       script: prompt,
-      images: imageUrls,
-      duration,
+      images: inputImageUrls,
+      duration: effectiveDuration,
       aspectRatio,
-      videoModel,
+      videoModel: selectedVideoModel,
+      videoUrl: inputVideoUrl,
+      videoReferType,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+      referenceVideoDuration,
+      referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
+      keepOriginalSound,
     })
 
     if (!skillResult.success || !skillResult.taskId) {
@@ -81,8 +115,8 @@ export async function POST(req: NextRequest) {
       sourceSnapshotIds: sourceSnapshotIds || [],
       sourceUrls: allSourceUrls.length > 0 ? allSourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
       status: 'processing',
-      duration: duration || null,
-      model: videoModel || 'kling',
+      duration: effectiveDuration || null,
+      model: selectedVideoModel,
       createdAt: new Date().toISOString(),
     }
 
@@ -104,12 +138,12 @@ export async function POST(req: NextRequest) {
     if (error) throw error
 
     // Deduct credits — store amount in videoMeta for refund on failure
-    const videoSec = duration || 10
+    const videoSec = effectiveDuration || 10
     const creditsCharged = Math.ceil(videoSec * 22)
     videoMeta.creditsCharged = creditsCharged
     supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId).then(() => {})
 
-    deductFixedCredits(user.id, creditsCharged, 'create_video', undefined, undefined)
+    deductFixedCredits(userId, creditsCharged, 'create_video', undefined, undefined)
       .catch(e => console.error('[billing] video-snapshot deduct error:', e))
 
     return NextResponse.json({ snapshotId, taskId, videoMeta })

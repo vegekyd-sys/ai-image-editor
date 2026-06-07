@@ -26,6 +26,14 @@ export interface AgentRunRow {
   metadata: Record<string, unknown> | null
 }
 
+type AgentRunStatus = AgentRunRow['status'] | 'in_progress' | 'queued'
+
+interface AgentRunApiResponse {
+  status: AgentRunStatus
+  first_message_id?: string
+  events?: AgentEventRow[]
+}
+
 interface UseAgentRunOptions {
   projectId: string
   enabled: boolean
@@ -112,18 +120,22 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
     setIsReconnecting(true)
 
     try {
-      // 1. Get run metadata (firstMessageId) + all events
-      const [runRes, eventsRes] = await Promise.all([
-        supabase.from('agent_runs').select('metadata').eq('id', activeRunId).single(),
-        supabase.from('agent_events').select('*').eq('run_id', activeRunId).order('seq', { ascending: true }),
-      ])
+      const fetchRunEvents = async (afterSeq?: number): Promise<AgentRunApiResponse> => {
+        const params = new URLSearchParams({ events: 'true' })
+        if (afterSeq !== undefined) params.set('after', String(afterSeq))
+        const res = await fetch(`/api/agent/run/${activeRunId}?${params.toString()}`)
+        if (!res.ok) throw new Error(`agent run fetch failed: ${res.status}`)
+        return res.json() as Promise<AgentRunApiResponse>
+      }
 
-      const events = eventsRes.data ?? []
-      const metadata = runRes.data?.metadata as Record<string, unknown> | null
+      // 1. Get run metadata (firstMessageId) + all events through the API.
+      // Public project viewers cannot read agent_events directly because RLS stays owner-only.
+      const initialRun = await fetchRunEvents()
+      const events = initialRun.events ?? []
 
       // 2. Collect all messageIds from this run (to remove static loadProject versions)
       const msgIds: string[] = []
-      const firstMsgId = metadata?.firstMessageId as string | undefined
+      const firstMsgId = initialRun.first_message_id
       if (firstMsgId) msgIds.push(firstMsgId)
       for (const ev of events) {
         if (ev.type === 'new_turn' && (ev.data as Record<string, unknown>)?.messageId) {
@@ -149,13 +161,9 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
       setIsReconnecting(false)
 
       // Helper: fetch and replay any events we missed (gap between lastSeenSeq and DB)
-      const catchUpMissedEvents = async () => {
-        const { data: missed } = await supabase
-          .from('agent_events')
-          .select('*')
-          .eq('run_id', activeRunId)
-          .gt('seq', lastSeenSeq)
-          .order('seq', { ascending: true })
+      const catchUpMissedEvents = async (): Promise<AgentRunStatus | undefined> => {
+        const latestRun = await fetchRunEvents(lastSeenSeq)
+        const missed = latestRun.events ?? []
         if (missed?.length) {
           for (const ev of missed) {
             if (ev.seq <= lastSeenSeq) continue
@@ -163,22 +171,17 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
             dispatchEvent(ev as AgentEventRow, callbacks)
           }
         }
+        return latestRun.status
       }
 
       // 2. Check if run already completed (could have finished while we were loading)
-      const { data: runNow } = await supabase
-        .from('agent_runs')
-        .select('status')
-        .eq('id', activeRunId)
-        .single()
-
-      if (runNow?.status === 'completed' || runNow?.status === 'aborted') {
+      if (initialRun.status === 'completed' || initialRun.status === 'aborted') {
         await catchUpMissedEvents()
         callbacks.onDone?.()
         setActiveRunId(null)
         return
       }
-      if (runNow?.status === 'failed') {
+      if (initialRun.status === 'failed') {
         await catchUpMissedEvents()
         callbacks.onError?.('Agent run failed')
         setActiveRunId(null)
@@ -241,17 +244,11 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
       const pollTimer = setInterval(async () => {
         try {
           // Always catch up missed events (not just on completion)
-          await catchUpMissedEvents()
-
-          const { data: run } = await supabase
-            .from('agent_runs')
-            .select('status')
-            .eq('id', activeRunId)
-            .single()
-          if (run?.status === 'completed' || run?.status === 'failed' || run?.status === 'aborted') {
+          const status = await catchUpMissedEvents()
+          if (status === 'completed' || status === 'failed' || status === 'aborted') {
             clearInterval(pollTimer)
             await catchUpMissedEvents() // final catch-up
-            if (run.status === 'completed') callbacks.onDone?.()
+            if (status === 'completed') callbacks.onDone?.()
             else callbacks.onError?.('Agent run failed')
             disconnect()
           }
@@ -259,7 +256,6 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
       }, 2000)
 
       // Store poll timer for cleanup
-      const origDisconnect = disconnect
       channelsRef.current.push({ unsubscribe: () => clearInterval(pollTimer) } as unknown as RealtimeChannel)
     } catch (err) {
       console.error('[useAgentRun] reconnect error:', err)
@@ -323,6 +319,13 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
         (data as { prompt: string }).prompt ?? '',
       )
       break
+    case 'video_snapshot': {
+      const video = data as { snapshotId?: string; taskId?: string; videoMeta?: import('@/types').VideoMeta }
+      if (video.snapshotId && video.taskId && video.videoMeta) {
+        callbacks.onVideoSnapshot?.(video.snapshotId, video.taskId, video.videoMeta)
+      }
+      break
+    }
     case 'image_analyzed':
       callbacks.onImageAnalyzed?.((data as { imageIndex: number }).imageIndex)
       break

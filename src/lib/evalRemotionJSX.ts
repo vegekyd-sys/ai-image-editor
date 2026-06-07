@@ -128,6 +128,36 @@ function compileBabel(src: string): string | null {
   }
 }
 
+export function normalizeRemotionScopeDeclarations(code: string): string {
+  return code
+    .trim()
+    .replace(/^\s*(?:const|let|var)\s*\{[^}]*\}\s*=\s*(?:window\.)?Remotion\s*;?\s*$/gm, '')
+    .replace(/^\s*(?:const|let|var)\s+Remotion\s*=\s*window\.Remotion\s*;?\s*$/gm, '')
+    .replace(/\bwindow\.Remotion\./g, '')
+    .replace(/\bRemotion\./g, '')
+    .trim();
+}
+
+export function pickRemotionComponentName(code: string): string {
+  const names = [
+    ...Array.from(code.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g), m => m[1]),
+    ...Array.from(code.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/g), m => m[1]),
+  ];
+
+  const preferred = ['Composition', 'Design', 'AgentDesign', 'DevLog', 'App', 'Main', 'Scene'];
+  for (const name of preferred) {
+    if (names.includes(name)) return name;
+  }
+
+  const descriptive = [...names].reverse().find(name =>
+    /(?:Composition|Design)$/i.test(name) &&
+    !/(?:Caption|Badge|Label|Title|Subtitle|Overlay)$/i.test(name)
+  );
+  if (descriptive) return descriptive;
+
+  return names[names.length - 1] || 'Design';
+}
+
 /**
  * Transpile Agent JSX code → React component.
  * Tries Sucrase first (bundled, instant). Falls back to Babel CDN if Sucrase fails.
@@ -135,7 +165,7 @@ function compileBabel(src: string): string | null {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
   try {
-    const src = code.trim();
+    const src = normalizeRemotionScopeDeclarations(code);
 
     // Try Sucrase first (bundled, no CDN dependency)
     let compiled = compileSucrase(src);
@@ -151,9 +181,9 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
       return null;
     }
 
-    // Extract the function name and return it
-    const fnMatch = src.match(/function\s+(\w+)/);
-    const fnName = fnMatch?.[1] || 'Design';
+    // Prefer the primary composition function. Agent code often declares helper
+    // components first (Caption, Badge, etc.) and the real composition last.
+    const fnName = pickRemotionComponentName(src);
     const execCode = `${compiled}\nreturn ${fnName};`;
 
     const scopeKeys = Object.keys(REMOTION_SCOPE);

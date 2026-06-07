@@ -38,8 +38,6 @@ export interface CreateInputBoxProps {
   installingSkill?: boolean;
   overrideLabel?: string | null;
   skillDirection?: 'up' | 'down';
-  skillFileRef?: React.RefObject<HTMLInputElement | null>;
-  onSkillFileChange?: (file: File) => void;
   // Drag-drop
   dragOver?: boolean;
   onDragEnter?: (e: React.DragEvent) => void;
@@ -72,8 +70,6 @@ export default function CreateInputBox({
   installingSkill,
   overrideLabel,
   skillDirection,
-  skillFileRef,
-  onSkillFileChange,
   dragOver = false,
   onDragEnter,
   onDragOver,
@@ -340,10 +336,6 @@ export default function CreateInputBox({
             overrideLabel={overrideLabel}
             direction={skillDirection}
           />
-          {skillFileRef && onSkillFileChange && (
-            <input ref={skillFileRef} type="file" accept=".zip" style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) onSkillFileChange(f); e.target.value = ''; }} />
-          )}
           <button
             className="mkr-create-btn"
             data-testid="create-project"

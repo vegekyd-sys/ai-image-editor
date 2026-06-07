@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest } from '@/lib/api-auth'
+import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
@@ -8,28 +9,42 @@ import type { VideoMeta } from '@/types'
 
 export const maxDuration = 60
 
+type SnapshotProject = { user_id?: string; is_public?: boolean } | Array<{ user_id?: string; is_public?: boolean }>
+
+function getProjectInfo(projects: SnapshotProject | null | undefined) {
+  return Array.isArray(projects) ? projects[0] : projects
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ snapshotId: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    const user = session?.user
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
     const { snapshotId } = await params
+    const admin = getSupabaseAdmin()
+    const authResult = await authenticateRequest(req)
+    const authUserId = 'auth' in authResult ? authResult.auth.userId : null
+    const hasBearerAuth = req.headers.get('authorization')?.startsWith('Bearer ') ?? false
 
     // Load snapshot with video_meta
-    const { data: snap } = await supabase
+    const { data: snap } = await admin
       .from('snapshots')
-      .select('id, project_id, video_meta, image_url')
+      .select('id, project_id, video_meta, image_url, projects(user_id, is_public)')
       .eq('id', snapshotId)
-      .single()
+      .maybeSingle()
 
     if (!snap?.video_meta) {
       return NextResponse.json({ error: 'Not a video snapshot' }, { status: 404 })
     }
+
+    const project = getProjectInfo(snap.projects as SnapshotProject)
+    const ownerUserId = project?.user_id
+    const isPublic = project?.is_public === true
+    if (!isPublic && (!authUserId || authUserId !== ownerUserId)) {
+      return 'error' in authResult ? authResult.error : NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    if (hasBearerAuth && 'error' in authResult) return authResult.error
+    if (!ownerUserId) return NextResponse.json({ error: 'Project owner not found' }, { status: 404 })
 
     const videoMeta = snap.video_meta as VideoMeta
 
@@ -75,7 +90,7 @@ export async function GET(
     if (result.status === 'completed' && result.videoUrl) {
       const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl, providerUrl: result.videoUrl }
 
-      await supabase
+      await admin
         .from('snapshots')
         .update({ video_meta: updatedMeta })
         .eq('id', snapshotId)
@@ -91,16 +106,16 @@ export async function GET(
           const { probeMP4Dimensions } = await import('@/lib/mp4-probe')
           const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 }
 
-          const permanentUrl = await uploadVideo(supabase, user.id, projectId, snapshotId, buffer)
+          const permanentUrl = await uploadVideo(admin, ownerUserId, projectId, snapshotId, buffer)
           if (permanentUrl) {
             const finalMeta: VideoMeta = {
               ...updatedMeta,
               videoUrl: permanentUrl,
-              videoPath: `${user.id}/projects/${projectId}/animation/${snapshotId}.mp4`,
+              videoPath: `${ownerUserId}/projects/${projectId}/animation/${snapshotId}.mp4`,
               width: dims.width,
               height: dims.height,
             }
-            await supabase
+            await admin
               .from('snapshots')
               .update({ video_meta: finalMeta })
               .eq('id', snapshotId)
@@ -110,12 +125,12 @@ export async function GET(
             try {
               const { extractVideoPoster } = await import('@/lib/video-poster')
               const posterBuffer = await extractVideoPoster(permanentUrl)
-              const posterPath = `${user.id}/${projectId}/posters/${snapshotId}.jpg`
-              const { error: posterErr } = await supabase.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true })
+              const posterPath = `${ownerUserId}/${projectId}/posters/${snapshotId}.jpg`
+              const { error: posterErr } = await admin.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true })
               if (!posterErr) {
-                const { data: urlData } = supabase.storage.from('images').getPublicUrl(posterPath)
+                const { data: urlData } = admin.storage.from('images').getPublicUrl(posterPath)
                 if (urlData?.publicUrl) {
-                  await supabase.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snapshotId)
+                  await admin.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snapshotId)
                   console.log(`Video poster extracted: ${snapshotId}`)
                 }
               }
@@ -150,22 +165,27 @@ export async function DELETE(
   { params }: { params: Promise<{ snapshotId: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authResult = await authenticateRequest(req)
+    if ('error' in authResult) return authResult.error
+    const { userId } = authResult.auth
+    const admin = getSupabaseAdmin()
 
     const { snapshotId } = await params
 
-    const { data: snap } = await supabase
+    const { data: snap } = await admin
       .from('snapshots')
-      .select('video_meta')
+      .select('video_meta, projects(user_id)')
       .eq('id', snapshotId)
-      .single()
+      .maybeSingle()
+
+    const project = getProjectInfo(snap?.projects as SnapshotProject)
+    if (!snap) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (project?.user_id !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     if (snap?.video_meta) {
       const videoMeta = snap.video_meta as VideoMeta
       const updatedMeta: VideoMeta = { ...videoMeta, status: 'abandoned' }
-      await supabase
+      await admin
         .from('snapshots')
         .update({ video_meta: updatedMeta })
         .eq('id', snapshotId)

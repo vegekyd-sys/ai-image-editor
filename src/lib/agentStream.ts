@@ -31,7 +31,6 @@ export interface AgentStreamCallbacks {
 export async function streamAgent(
   body: {
     prompt: string; image: string; projectId: string;
-    originalImage?: string;
     animationImageUrls?: string[];  // Supabase Storage URLs for animation mode
     animationImages?: string[];  // Actual image data (base64 or URL) for Agent vision in animation mode
     analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean;

@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'agent_registration_disabled' }, { status: 503 })
   }
 
-  // IP rate limiting: max 5 challenges per IP per hour
+  // IP rate limiting: max 30 challenges per IP per hour
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown'
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
 
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     .eq('ip_address', ip)
     .gte('created_at', oneHourAgo)
 
-  if ((count ?? 0) >= 5) {
+  if ((count ?? 0) >= 30) {
     return NextResponse.json({ error: 'rate_limited', message: 'Too many registration attempts. Try again in 1 hour.' }, { status: 429 })
   }
 

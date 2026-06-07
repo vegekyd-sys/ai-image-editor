@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import RollingTagline from '@/components/RollingTagline'
+import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
+import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
@@ -16,7 +19,7 @@ function isInAppBrowser(): boolean {
 }
 
 export default function LoginPage() {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const [view, setView] = useState<View>('form')
   const [inApp] = useState(isInAppBrowser)
 
@@ -189,6 +192,7 @@ export default function LoginPage() {
 
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
+        trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
         let returnUrl = localStorage.getItem('mkr_return_url') || ''
         localStorage.removeItem('mkr_return_url')
         // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
@@ -331,11 +335,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm relative z-10">
         {/* Wordmark */}
         <div className="flex items-center justify-center gap-3 mb-1">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(217,70,239)" strokeWidth="1.8" strokeLinecap="round">
-            <line x1="12" y1="2" x2="12" y2="22" /><line x1="2" y1="12" x2="22" y2="12" />
-            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /><line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
-          </svg>
-          <div style={{ fontWeight: 800, fontSize: 'clamp(2.2rem, 10vw, 3.2rem)', letterSpacing: '-0.04em', color: '#fff', lineHeight: 1 }}>
+          <MakaronSpark size={30} />
+          <div style={{ ...MAKARON_WORDMARK_STYLE, fontSize: 'clamp(2.2rem, 10vw, 3.2rem)' }}>
             Makaron
           </div>
         </div>
@@ -400,9 +401,9 @@ export default function LoginPage() {
               </button>
             </p>
             <p className="mt-6 text-center">
-              <a href="/home" className="text-white/25 hover:text-white/50 text-xs transition-colors">
+              <Link href="/home" className="text-white/25 hover:text-white/50 text-xs transition-colors">
                 ← {t('auth.back')}
-              </a>
+              </Link>
             </p>
           </>
         )}

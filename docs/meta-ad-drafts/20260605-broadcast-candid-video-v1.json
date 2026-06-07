@@ -1,0 +1,30 @@
+{
+  "createdAt": "2026-06-05T03:27:06.941Z",
+  "deletedAt": "2026-06-05T04:20:00.000Z",
+  "deleteReason": "Superseded by preview $5 lifetime traffic smoke test. Deleted in Meta to avoid accidentally enabling a production-url conversion draft.",
+  "supersededBy": "docs/meta-ad-drafts/20260605-preview-traffic-5usd-lifetime-broadcast-candid-video-v1.json",
+  "landingUrl": "https://www.makaron.app/home?skill=7ef2c391-a7e4-4519-ac06-62ec3acff2ac&locale=en&utm_source=meta&utm_medium=paid_social&utm_campaign=asian_cool_broadcast_candid&utm_content=video_v1",
+  "videoId": "2074961840036592",
+  "imageHash": "45860f57a41a1d9d1aa01c0e81749910",
+  "campaign": {
+    "id": "120247265397160267",
+    "name": "Makaron | Asian Cool | Broadcast Candid | 20260605",
+    "status": "DELETED"
+  },
+  "adset": {
+    "id": "120247265435010267",
+    "name": "US 18-34 mobile | CompleteRegistration | $20d | 20260605",
+    "status": "DELETED",
+    "daily_budget_usd": 20,
+    "optimization_event": "CompleteRegistration"
+  },
+  "creative": {
+    "id": "1684410929468586",
+    "name": "Broadcast Candid video_v1 | 20260605"
+  },
+  "ad": {
+    "id": "120247265481850267",
+    "name": "Broadcast Candid video_v1 | paused | 20260605",
+    "status": "DELETED"
+  }
+}

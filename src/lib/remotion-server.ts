@@ -13,6 +13,48 @@ type SandboxInstance = import('@vercel/sandbox').Sandbox;
 let _sandboxId: string | null = null;
 let _sandboxPromise: Promise<SandboxInstance> | null = null;
 
+export function normalizeRemotionServerCode(code: string): string {
+  return code
+    .trim()
+    .replace(/^\s*(?:const|let|var)\s*\{[^}]*\}\s*=\s*(?:window\.)?Remotion\s*;?\s*$/gm, '')
+    .replace(/^\s*(?:const|let|var)\s+Remotion\s*=\s*window\.Remotion\s*;?\s*$/gm, '')
+    .replace(/\bwindow\.Remotion\./g, '')
+    .replace(/\bRemotion\./g, '')
+    .trim();
+}
+
+export function pickRemotionServerComponentName(code: string): string {
+  const names = [
+    ...Array.from(code.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g), m => m[1]),
+    ...Array.from(code.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/g), m => m[1]),
+  ];
+
+  const preferred = ['Composition', 'Design', 'AgentDesign', 'DevLog', 'App', 'Main', 'Scene'];
+  for (const name of preferred) {
+    if (names.includes(name)) return name;
+  }
+
+  const descriptive = [...names].reverse().find(name =>
+    /(?:Composition|Design)$/i.test(name) &&
+    !/(?:Caption|Badge|Label|Title|Subtitle|Overlay)$/i.test(name)
+  );
+  if (descriptive) return descriptive;
+
+  return names[names.length - 1] || 'Design';
+}
+
+export function prepareRemotionCodeForSandbox(code: string): string {
+  const normalized = normalizeRemotionServerCode(code);
+  const componentName = pickRemotionServerComponentName(normalized);
+  if (componentName === 'Design') return normalized;
+
+  return `function Design(props) {
+  return React.createElement(${componentName}, props);
+}
+
+${normalized}`;
+}
+
 /** Get or create a Sandbox from snapshot. Reuses across renders and requests. */
 async function ensureSandbox(): Promise<SandboxInstance> {
   const { Sandbox } = await import('@vercel/sandbox');
@@ -77,7 +119,7 @@ export async function renderDesignFrame(
         sandbox,
         compositionId: 'dynamic-design',
         inputProps: {
-          code: design.code,
+          code: prepareRemotionCodeForSandbox(design.code),
           designProps: design.props || {},
           fps,
           durationInFrames,

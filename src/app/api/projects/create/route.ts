@@ -5,6 +5,15 @@ import sharp from 'sharp';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta } from '@/types';
 
+const MAX_VIDEO_DURATION = 120;
+const MAX_VIDEO_DURATION_TOLERANCE = 1;
+const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
+const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
+
+function formatSeconds(seconds: number): string {
+  return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
+}
+
 async function resolveImageUrl(
   url: string,
   supabase: SupabaseClient,
@@ -27,6 +36,32 @@ async function resolveImageUrl(
   return storageUrl || url;
 }
 
+async function probeVideoDimensionsFromUrl(videoUrl: string): Promise<{ width: number; height: number } | null> {
+  try {
+    const res = await fetch(videoUrl);
+    if (!res.ok) return null;
+    const length = Number(res.headers.get('content-length') || 0);
+    if (length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
+
+    const buffer = new Uint8Array(await res.arrayBuffer());
+    if (buffer.length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
+
+    const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
+    return probeMP4Dimensions(buffer);
+  } catch {
+    return null;
+  }
+}
+
+async function fillMissingVideoDimensions(
+  videoUrl: string,
+  current: { width?: number; height?: number },
+): Promise<{ width?: number; height?: number }> {
+  if (current.width && current.height) return current;
+  const dims = await probeVideoDimensionsFromUrl(videoUrl);
+  return dims ? { width: dims.width, height: dims.height } : current;
+}
+
 /**
  * POST /api/projects/create — Create a new project with an initial image.
  *
@@ -39,13 +74,14 @@ export async function POST(req: NextRequest) {
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
 
-    const { imageUrl, imageBase64, imageUrls, imageBase64s, videoUrls, title, _addToProject } = await req.json();
+    const { imageUrl, imageBase64, imageUrls, imageBase64s, videoUrls, videoMetas, title, _addToProject } = await req.json();
 
     // Support single or multiple images
     const urls: (string | undefined)[] = imageUrls || (imageUrl ? [imageUrl] : []);
     const base64s: (string | undefined)[] = imageBase64s || (imageBase64 ? [imageBase64] : []);
     const imageCount = Math.max(urls.length, base64s.length);
     const videos: string[] = videoUrls || [];
+    const providedVideoMetas: Array<{ duration?: number; width?: number; height?: number } | null> = Array.isArray(videoMetas) ? videoMetas : [];
 
     // Add images/videos to existing project (used by CLI chat --image / --video)
     if (_addToProject && (imageCount > 0 || videos.length > 0)) {
@@ -73,11 +109,19 @@ export async function POST(req: NextRequest) {
       }
 
       // Add video snapshots
-      for (const videoUrl of videos) {
+      for (let videoIndex = 0; videoIndex < videos.length; videoIndex++) {
+        const videoUrl = videos[videoIndex];
+        const providedMeta = providedVideoMetas[videoIndex] || null;
+        if (providedMeta?.duration && providedMeta.duration > MAX_VIDEO_DURATION + MAX_VIDEO_DURATION_TOLERANCE) {
+          return NextResponse.json({ error: `Video too long (${formatSeconds(providedMeta.duration)}s). Maximum ${MAX_VIDEO_DURATION}s, with ${MAX_VIDEO_DURATION_TOLERANCE}s metadata tolerance.` }, { status: 400 });
+        }
+        if (providedMeta?.width && providedMeta?.height && providedMeta.width * providedMeta.height > MAX_VIDEO_FRAME_PIXELS) {
+          return NextResponse.json({ error: `Video resolution too high (${providedMeta.width}x${providedMeta.height}). Maximum is <=1080p.` }, { status: 400 });
+        }
         const snapshotId = crypto.randomUUID();
         let permanentUrl = videoUrl;
-        let width: number | undefined;
-        let height: number | undefined;
+        let width: number | undefined = providedMeta?.width;
+        let height: number | undefined = providedMeta?.height;
 
         // Fetch + upload to our Storage if external URL
         if (!isPermanentUrl(videoUrl)) {
@@ -95,6 +139,7 @@ export async function POST(req: NextRequest) {
             }
           } catch { /* use original URL */ }
         }
+        ({ width, height } = await fillMissingVideoDimensions(permanentUrl, { width, height }));
 
         // Extract poster frame from video
         let posterUrl = '';
@@ -114,7 +159,7 @@ export async function POST(req: NextRequest) {
         const videoMeta: VideoMeta = {
           taskId: null, videoUrl: permanentUrl, prompt: '',
           sourceSnapshotIds: [], sourceUrls: [],
-          status: 'completed', duration: null, model: 'upload',
+          status: 'completed', duration: providedMeta?.duration ?? null, model: 'upload',
           createdAt: new Date().toISOString(), width, height,
         };
         await supabase.from('snapshots').insert({
@@ -179,11 +224,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Create video snapshots
-    for (const videoUrl of videos) {
+    for (let videoIndex = 0; videoIndex < videos.length; videoIndex++) {
+      const videoUrl = videos[videoIndex];
+      const providedMeta = providedVideoMetas[videoIndex] || null;
+      if (providedMeta?.duration && providedMeta.duration > MAX_VIDEO_DURATION + MAX_VIDEO_DURATION_TOLERANCE) {
+        return NextResponse.json({ error: `Video too long (${formatSeconds(providedMeta.duration)}s). Maximum ${MAX_VIDEO_DURATION}s, with ${MAX_VIDEO_DURATION_TOLERANCE}s metadata tolerance.` }, { status: 400 });
+      }
+      if (providedMeta?.width && providedMeta?.height && providedMeta.width * providedMeta.height > MAX_VIDEO_FRAME_PIXELS) {
+        return NextResponse.json({ error: `Video resolution too high (${providedMeta.width}x${providedMeta.height}). Maximum is <=1080p.` }, { status: 400 });
+      }
       const snapshotId = crypto.randomUUID();
       let permanentUrl = videoUrl;
-      let width: number | undefined;
-      let height: number | undefined;
+      let width: number | undefined = providedMeta?.width;
+      let height: number | undefined = providedMeta?.height;
 
       if (!isPermanentUrl(videoUrl)) {
         try {
@@ -200,6 +253,7 @@ export async function POST(req: NextRequest) {
           }
         } catch { /* use original URL */ }
       }
+      ({ width, height } = await fillMissingVideoDimensions(permanentUrl, { width, height }));
 
       // Extract poster frame
       let posterUrl = '';
@@ -219,7 +273,7 @@ export async function POST(req: NextRequest) {
       const videoMeta: VideoMeta = {
         taskId: null, videoUrl: permanentUrl, prompt: '',
         sourceSnapshotIds: [], sourceUrls: [],
-        status: 'completed', duration: null, model: 'upload',
+        status: 'completed', duration: providedMeta?.duration ?? null, model: 'upload',
         createdAt: new Date().toISOString(), width, height,
       };
       const { error: snapError } = await supabase.from('snapshots').insert({

@@ -1,0 +1,11 @@
+{
+  "startUrls": [
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=all&q=AI%20photo%20editor&search_type=keyword_unordered"
+    }
+  ],
+  "resultsLimit": 10,
+  "includeAboutPage": true,
+  "isDetailsPerAd": false,
+  "activeStatus": "active"
+}

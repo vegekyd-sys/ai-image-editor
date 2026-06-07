@@ -123,6 +123,70 @@ async function checkComfyUI(
   }, 3000)
 }
 
+async function checkQwen(): Promise<ServiceResult> {
+  if (process.env.QWEN_PROVIDER === 'vast') {
+    const endpoint = process.env.VAST_QWEN_ENDPOINT
+    const apiKey = process.env.VAST_API_KEY
+    if (!endpoint || !apiKey) return unavailable('Vast Qwen env not set')
+
+    return checkWithTimeout('comfyui_qwen', async () => {
+      const res = await fetch('https://run.vast.ai/route/', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ endpoint, cost: 1 }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      if (!data?.url) throw new Error(data?.status || data?.error_msg || 'Vast worker not ready')
+    }, 5000)
+  }
+
+  return checkComfyUI('comfyui_qwen', 'COMFYUI_QWEN_URL')
+}
+
+async function checkComfyUIDiffusersModel(
+  name: string,
+  envVar: string,
+  modelEnvVar: string,
+  defaultModel: string,
+): Promise<ServiceResult> {
+  const url = process.env[envVar]
+  if (!url) return unavailable(`${envVar} not set`)
+
+  const model = process.env[modelEnvVar] || defaultModel
+  return checkWithTimeout(name, async () => {
+    const res = await fetch(`${url}/object_info/DiffusersLoader`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const models = data?.DiffusersLoader?.input?.required?.model_path?.[0]
+    if (!Array.isArray(models)) throw new Error('DiffusersLoader model list unavailable')
+    if (!models.includes(model)) throw new Error(`${model} not available`)
+  }, 5000)
+}
+
+async function checkComfyUICheckpointModel(
+  name: string,
+  envVar: string,
+  modelEnvVar: string,
+  defaultModel: string,
+): Promise<ServiceResult> {
+  const url = process.env[envVar]
+  if (!url) return unavailable(`${envVar} not set`)
+
+  const model = process.env[modelEnvVar] || defaultModel
+  return checkWithTimeout(name, async () => {
+    const res = await fetch(`${url}/object_info/CheckpointLoaderSimple`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const models = data?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0]
+    if (!Array.isArray(models)) throw new Error('Checkpoint model list unavailable')
+    if (!models.includes(model)) throw new Error(`${model} not available`)
+  }, 5000)
+}
+
 async function checkKling(): Promise<ServiceResult> {
   const accessKey = process.env.KLING_ACCESS_KEY
   const secretKey = process.env.KLING_SECRET_KEY
@@ -183,6 +247,7 @@ export async function GET() {
     bedrock,
     comfyuiQwen,
     comfyuiPony,
+    comfyuiWai,
     kling,
     piapi,
     azureOpenai,
@@ -194,8 +259,19 @@ export async function GET() {
     checkGemini(),
     checkOpenRouter(),
     checkBedrock(),
-    checkComfyUI('comfyui_qwen', 'COMFYUI_QWEN_URL'),
-    checkComfyUI('comfyui_pony', 'COMFYUI_PONY_URL'),
+    checkQwen(),
+    checkComfyUIDiffusersModel(
+      'comfyui_pony',
+      'COMFYUI_PONY_URL',
+      'COMFYUI_PONY_MODEL',
+      'fucktasticAnimePony_v22',
+    ),
+    checkComfyUICheckpointModel(
+      'comfyui_wai',
+      'COMFYUI_WAI_URL',
+      'COMFYUI_WAI_CHECKPOINT',
+      'waiIllustriousSDXL_v160.safetensors',
+    ),
     checkKling(),
     checkPiAPI(),
     checkAzureOpenAI(),
@@ -211,6 +287,7 @@ export async function GET() {
     bedrock,
     comfyui_qwen: comfyuiQwen,
     comfyui_pony: comfyuiPony,
+    comfyui_wai: comfyuiWai,
     kling,
     piapi,
     azure_openai: azureOpenai,

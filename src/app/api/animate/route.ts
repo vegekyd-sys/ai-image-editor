@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
+import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
 
 export const maxDuration = 30
 
@@ -14,6 +15,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel } = await req.json()
+    const selectedVideoModel = normalizeVideoModelId(videoModel)
 
     if (!projectId || !imageUrls?.length || !prompt) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -39,29 +41,46 @@ export async function POST(req: NextRequest) {
       .select('type, video_meta')
       .eq('project_id', projectId)
       .order('sort_order')
-    let autoVideoUrls: string[] = []
+    const autoVideoUrls: string[] = []
+    const referenceVideoMetas: Array<{ width?: number | null; height?: number | null }> = []
+    let referenceVideoDuration: number | undefined
     if (dbSnaps?.length) {
       const scriptRefs = [...new Set(
         Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))
       )]
       for (const ref of scriptRefs) {
         const snap = dbSnaps[ref - 1]
-        const videoUrl = (snap?.video_meta as Record<string, unknown> | null)?.videoUrl as string | undefined
+        const meta = snap?.video_meta as Record<string, unknown> | null
+        const videoUrl = meta?.videoUrl as string | undefined
         if (snap?.type === 'video' && videoUrl) {
           autoVideoUrls.push(videoUrl)
+          referenceVideoMetas.push({
+            width: Number.isFinite(Number(meta?.width)) ? Number(meta?.width) : null,
+            height: Number.isFinite(Number(meta?.height)) ? Number(meta?.height) : null,
+          })
+          const sourceDuration = Number(meta?.duration)
+          if (Number.isFinite(sourceDuration) && sourceDuration > 0) {
+            referenceVideoDuration = (referenceVideoDuration ?? 0) + sourceDuration
+          }
           imageUrls[ref - 1] = ''
         }
       }
     }
+    if (referenceVideoDuration != null && referenceVideoDuration > 15.5) {
+      return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum 15s with small metadata tolerance.` }, { status: 400 })
+    }
+    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(15, Math.round(referenceVideoDuration)) : undefined)
 
     // Call skill layer (stateless, no DB)
     const skillResult = await createVideo({
       script: prompt,
       images: imageUrls,
-      duration,
+      duration: effectiveDuration,
       aspectRatio,
-      videoModel,
+      videoModel: selectedVideoModel,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+      referenceVideoDuration,
+      referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
     })
 
     if (!skillResult.success || !skillResult.taskId) {
@@ -88,12 +107,12 @@ export async function POST(req: NextRequest) {
 
     // Deduct credits for video generation (fire-and-forget)
     // Per-second billing: 22 credits/s ($0.11/s × 2x markup), default 10s if smart mode
-    const videoSec = duration || 10
-    const toolName = videoModel === 'seedance' ? 'create_video_seedance' : 'create_video_kling'
+    const videoSec = effectiveDuration || 10
+    const toolName = selectedVideoModel === 'seedance' ? 'create_video_seedance' : 'create_video_kling'
     const { getToolPrice } = await import('@/lib/billing/pricing')
     const price = await getToolPrice(toolName)
     const creditsPerSec = price?.credits ?? 22
-    deductFixedCredits(user.id, Math.ceil(videoSec * creditsPerSec), toolName, videoModel || 'kling', undefined)
+    deductFixedCredits(user.id, Math.ceil(videoSec * creditsPerSec), toolName, selectedVideoModel, undefined)
       .catch(e => console.error('[billing] animate deduct error:', e))
 
     return NextResponse.json({ animationId: animation.id, taskId })

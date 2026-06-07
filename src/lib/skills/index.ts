@@ -2,7 +2,6 @@ import type { ModelId } from '../models/types';
 
 export interface SkillContext {
   currentImage?: string;       // Supabase URL or base64 data URL. Omit for text-to-image.
-  originalImage?: string;      // original photo (for face restoration reference)
   referenceImages?: string[];  // user-uploaded reference images
 }
 

@@ -3,9 +3,16 @@
 import { renderMediaOnWeb } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
-export const MAX_DURATION = 16; // 16 seconds
-const MAX_FRAME_PIXELS = 2_086_876; // SeeDance limit: width × height must not exceed this
-const DIRECT_UPLOAD_MAX_SIZE = 100 * 1024 * 1024; // 100MB — skip transcode for any H.264 MP4
+export const MAX_DURATION = 120; // Upload limit only. Model reference-video limits stay in generate_animation/create-video.
+export const MAX_DURATION_TOLERANCE = 1; // Allow tiny container/audio metadata padding over the upload limit
+export const MAX_ACCEPTED_DURATION = MAX_DURATION + MAX_DURATION_TOLERANCE;
+export const MAX_FRAME_PIXELS = 2_086_876; // SeeDance limit: width × height must not exceed ~1080p
+const STORAGE_UPLOAD_MAX_SIZE = 50 * 1024 * 1024; // images bucket limit
+const DIRECT_UPLOAD_MAX_SIZE = 48 * 1024 * 1024; // keep direct uploads below Storage's hard limit
+const TRANSCODE_TARGET_SIZE = 42 * 1024 * 1024; // leave room for mux/container overhead
+const AUDIO_BITRATE = 128_000;
+const MIN_VIDEO_BITRATE = 1_200_000;
+const MAX_VIDEO_BITRATE = 8_000_000;
 
 export interface VideoUploadResult {
   videoBlob: Blob;      // H.264 MP4 blob ready for upload
@@ -38,9 +45,9 @@ async function extractVideoInfo(file: File): Promise<{
   const width = video.videoWidth;
   const height = video.videoHeight;
 
-  if (duration > MAX_DURATION) {
+  if (duration > MAX_ACCEPTED_DURATION) {
     URL.revokeObjectURL(blobUrl);
-    throw new Error(`Video too long (${Math.round(duration)}s). Maximum ${MAX_DURATION}s.`);
+    throw new Error(`Video too long (${duration.toFixed(1).replace(/\\.0$/, '')}s). Maximum ${MAX_DURATION}s.`);
   }
 
   video.pause();
@@ -69,6 +76,12 @@ function calcOutputDims(w: number, h: number): { width: number; height: number }
   };
 }
 
+function calcUploadVideoBitrate(duration: number): number {
+  const availableBitsPerSecond = Math.floor((TRANSCODE_TARGET_SIZE * 8) / Math.max(1, duration));
+  const target = availableBitsPerSecond - AUDIO_BITRATE;
+  return Math.max(MIN_VIDEO_BITRATE, Math.min(MAX_VIDEO_BITRATE, target));
+}
+
 /**
  * Process a video file for upload:
  * 1. Extract poster + metadata
@@ -87,7 +100,7 @@ export async function processVideoUpload(
   const { blobUrl, duration, width, height } = info;
   const out = calcOutputDims(width, height);
 
-  // Fast path: H.264 MP4 under size limit AND within resolution limit → direct upload
+  // Fast path: H.264 MP4 under Storage's object limit AND within resolution limit → direct upload
   const needsResize = width * height > MAX_FRAME_PIXELS;
   if (isLikelyH264(file) && file.size <= DIRECT_UPLOAD_MAX_SIZE && !needsResize) {
     console.log(`📹 [video-upload] direct upload (${(file.size / 1024 / 1024).toFixed(1)}MB, ${width}x${height})`);
@@ -114,6 +127,8 @@ export async function processVideoUpload(
 
     const fps = 30;
     const durationInFrames = Math.max(1, Math.round(fps * duration));
+    const videoBitrate = calcUploadVideoBitrate(duration);
+    console.log(`📹 [video-upload] target bitrate ${(videoBitrate / 1_000_000).toFixed(1)}Mbps for Storage limit`);
 
     const result = await renderMediaOnWeb({
       composition: {
@@ -129,12 +144,17 @@ export async function processVideoUpload(
       inputProps: {},
       videoCodec: 'h264',
       container: 'mp4',
+      videoBitrate,
+      audioBitrate: AUDIO_BITRATE,
       onProgress: (p) => onProgress?.(p.progress),
       delayRenderTimeoutInMilliseconds: 30000,
     });
 
     const videoBlob = await result.getBlob();
     console.log(`📹 [video-upload] transcode done: ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB`);
+    if (videoBlob.size > STORAGE_UPLOAD_MAX_SIZE) {
+      throw new Error(`Video upload too large after processing (${Math.round(videoBlob.size / 1024 / 1024)}MB). Maximum ${Math.round(STORAGE_UPLOAD_MAX_SIZE / 1024 / 1024)}MB.`);
+    }
 
     return { videoBlob, duration, width: out.width, height: out.height };
   } finally {
@@ -200,4 +220,3 @@ export async function uploadVideoToStorage(
 
   return { videoUrl, duration: result.duration, width: result.width, height: result.height };
 }
-

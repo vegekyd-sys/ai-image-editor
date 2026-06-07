@@ -1,0 +1,144 @@
+[
+  {
+    "kind": "ad",
+    "item": {
+      "id": "861620969768701",
+      "pageName": "Glam AI: AI Content Maker",
+      "text": "{{product.brand}}",
+      "cta": "Download",
+      "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Glam%20AI%20K-pop%20idol&search_type=keyword_unordered",
+      "videoUrl": "https://video-sjc6-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQOGYUo825RFYxGIaRPb5ejbT_OZ8nw3tFET0XuDfuDZbBNiDSGy_qPpXlx5sj9L9Yg0197wYpXYQ2LiTrAjFEwmtcpvlqtFdvasVEgTERITJQ.mp4?_nc_cat=109&_nc_sid=5e9851&_nc_ht=video-sjc6-1.xx.fbcdn.net&_nc_ohc=UP9PpzA88YgQ7kNvwHpeNB1&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjgzODg5MTAyNTUxMzA1OCwiYXNzZXRfYWdlX2RheXMiOjQsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjoxMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=52500cd927b42473&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9CMzRGRkEyOUU5M0EwODYwRDVEMjE5OUQ1REU4NjNCRl9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzMwNDE4QkQwNTI1MUY5Njk1RUJEOUZDM0ZDRDk1QzgwX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbE6aWZ8b39AhUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af5-Kxg8RmxPTZc-d0DR9QejsP9w7BjL2im2f7FTtil5uA&oe=6A1EFFC3",
+      "localVideoPath": "docs/meta-swipe-runs/2026-05-29T04-59-33-407Z-assets/7-glam-ai-ai-content-maker-video.mp4",
+      "priority": 0
+    },
+    "analysis": {
+      "one_line_summary": "A fast-paced montage showcasing an AI transformation that turns ordinary selfies into high-quality K-pop idol stage visuals.",
+      "target_viewer": "Gen Z and Millennial women interested in K-pop culture, social media trends, and AI photo editing.",
+      "first_2_seconds": "A blonde woman's selfie instantly transforms into a glamorous K-pop idol performing on a massive stadium screen.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Blonde woman in a white tank top transitions to a high-glamour K-pop stage version of herself on a LED screen.",
+          "motion": "Quick cut transition from raw selfie to edited video.",
+          "text_or_ui": "Turn your selfie into a kpop idol ❤️",
+          "why_it_hooks": "Immediate visual payoff. It shows the 'before' and 'after' instantly, satisfying curiosity about the result."
+        },
+        {
+          "time": "2-5s",
+          "visual": "A brunette woman's selfie transitions to her K-pop idol version with heavy makeup and stage lighting.",
+          "motion": "Smooth cross-fade transition.",
+          "text_or_ui": "this trend is going viral right now",
+          "why_it_hooks": "Uses social proof ('viral trend') to create FOMO and encourage participation."
+        },
+        {
+          "time": "5-7s",
+          "visual": "Glam AI app interface showing the 'Pick a Video' and 'Camera' options.",
+          "motion": "UI interaction (tapping a photo).",
+          "text_or_ui": "Glam AI App UI",
+          "why_it_hooks": "Demystifies the process by showing how easy it is to use the app."
+        },
+        {
+          "time": "7-10s",
+          "visual": "A Black woman's selfie is selected and transforms into a stunning K-pop idol visual.",
+          "motion": "Selection to result transition.",
+          "text_or_ui": "Try it now",
+          "why_it_hooks": "Demonstrates the AI's versatility across different ethnicities and hair types."
+        },
+        {
+          "time": "10-13s",
+          "visual": "Glam logo animation with App Store and Google Play badges.",
+          "motion": "Pulsing logo animation.",
+          "text_or_ui": "Glam AI PHOTO & VIDEO EDITOR",
+          "why_it_hooks": "Clear call to action and brand reinforcement."
+        }
+      ],
+      "creative_mechanic": "before_after",
+      "visual_style": [
+        "High-contrast",
+        "Vibrant stage lighting",
+        "UGC-style selfies",
+        "Cinematic K-pop aesthetic"
+      ],
+      "hook_strength_1_to_10": 9,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "AI Style Transfer / Face Swap",
+      "what_to_copy_as_pattern_not_asset": "The 'Viral Trend' framing combined with a rapid-fire sequence of different people to show the tool works for everyone.",
+      "what_to_change_for_makaron": "Replace the Glam UI with Makaron's 'AI Style' or 'Template' interface. Use Makaron's specific K-pop or 'Idol' filters to show unique output quality.",
+      "recommended_ad_hook": "POV: You just debuted in the hottest K-pop group of the year. 🎤✨",
+      "recommended_first_2s_remake": "Start with a split-screen: Left side is a casual selfie, right side is the K-pop stage version, with a 'Scan' line moving across to reveal the transformation."
+    }
+  },
+  {
+    "kind": "ad",
+    "item": {
+      "id": "1919603845414979",
+      "pageName": "Glam AI: AI Content Maker",
+      "text": "{{product.brand}}",
+      "cta": "Download",
+      "linkUrl": "https://getglam.app/pautosimple_trends_newpx/",
+      "inputUrl": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Glam%20AI%20K-pop%20idol&search_type=keyword_unordered",
+      "videoUrl": "https://video-sjc3-1.xx.fbcdn.net/o1/v/t2/f2/m366/AQPFMAj9_qrHd8zXR7HTCP5kcZuXGoHzVRVVP0EeBrONFBeRQ5lOoG3IwyOd8cZtcbhG8qBbt_TXtIVYX_vxFJAo1FUD22v7nFVp_hiPy1Ad7Q.mp4?_nc_cat=103&_nc_sid=5e9851&_nc_ht=video-sjc3-1.xx.fbcdn.net&_nc_ohc=OBKW7ajrD9MQ7kNvwGiaxRf&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjEzOTcxMzIzNjU1NjE3MTEsImFzc2V0X2FnZV9kYXlzIjo0LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6MTMsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=df51876b5c9fc329&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC8zMzRDNkUwMTM3MDYwM0YxNzhCQkFFMDE5RkQyRUM4QV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzI3NEM0RUU5NEMxQ0ZEMjM5OEVCQUNGNkNDNkQxQjgxX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbe_dOl56v7BBUCKAJDMywXQCrdsi0OVgQYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=WXL3MLWxuublUscRurYbeQ&_nc_ss=72289&_nc_zt=28&oh=00_Af4pkw0iZaR5STcU_agk6hSJGlIabcmtGvyxda2m_qaRdQ&oe=6A1EF8F9",
+      "localVideoPath": "docs/meta-swipe-runs/2026-05-29T04-59-33-407Z-assets/8-glam-ai-ai-content-maker-video.mp4",
+      "priority": 0
+    },
+    "analysis": {
+      "one_line_summary": "A high-energy UGC-style ad demonstrating an AI filter that transforms ordinary selfies into professional-looking K-pop idol stage performances.",
+      "target_viewer": "Gen Z and Millennial social media users interested in K-pop, viral trends, and AI-powered photo/video editing.",
+      "first_2_seconds": "A blonde woman's selfie instantly transitions into a high-quality video of her performing on a K-pop stage with a headset mic.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Split-second 'Before' selfie of a blonde woman in a grey top, followed by an 'After' video of her as a K-pop idol on stage.",
+          "motion": "Fast transition from static image to dynamic video.",
+          "text_or_ui": "Text overlay: 'Turn your selfie into a kpop idol ❤️'",
+          "why_it_hooks": "The 'Before vs. After' contrast is visually stunning and taps into the massive global popularity of K-pop aesthetics."
+        },
+        {
+          "time": "2-5s",
+          "visual": "A second example featuring a different woman (blonde, plus-size) showing her selfie and then her K-pop idol transformation.",
+          "motion": "Smooth transition between the two states.",
+          "text_or_ui": "Text: 'this trend is going viral right now', 'make your own version too'",
+          "why_it_hooks": "Demonstrates inclusivity and social proof by mentioning the 'viral trend' aspect."
+        },
+        {
+          "time": "5-8s",
+          "visual": "Screen recording of the Glam AI app interface showing the 'Pick a Video' and 'Camera' buttons, then selecting a photo.",
+          "motion": "UI navigation/tutorial.",
+          "text_or_ui": "App UI: 'Pick a Video', 'Camera', 'Recents'.",
+          "why_it_hooks": "Lowers the barrier to entry by showing exactly how easy and fast the process is (the 'how-to' element)."
+        },
+        {
+          "time": "8-10s",
+          "visual": "A third example (brunette woman) showing the final K-pop idol result.",
+          "motion": "Dynamic stage performance video.",
+          "text_or_ui": "Text: 'and turn it into the trend. Try it now.'",
+          "why_it_hooks": "Reinforces the quality and variety of the AI output one last time before the CTA."
+        },
+        {
+          "time": "10-13s",
+          "visual": "Glam AI logo animation with App Store and Google Play badges.",
+          "motion": "Logo pulse/animation.",
+          "text_or_ui": "Glam AI PHOTO & VIDEO EDITOR, Download on the App Store, Get it on Google Play.",
+          "why_it_hooks": "Clear branding and direct call to action."
+        }
+      ],
+      "creative_mechanic": "before_after",
+      "visual_style": [
+        "UGC",
+        "Vibrant",
+        "High-Production AI",
+        "Fast-paced"
+      ],
+      "hook_strength_1_to_10": 9,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 9,
+      "best_makaron_skill_match": "AI Video Face Swap / AI Template Transformation",
+      "what_to_copy_as_pattern_not_asset": "The 'Before/After' hook using a trending cultural niche (K-pop), the use of diverse models to show versatility, and the quick UI walkthrough to prove ease of use.",
+      "what_to_change_for_makaron": "Replace the Glam UI with Makaron's interface. Use Makaron's specific AI styles (e.g., Anime, Cyberpunk, or 3D Cartoon) if K-pop isn't the primary focus, but keep the 'viral trend' framing.",
+      "recommended_ad_hook": "Stop scrolling! See yourself as a K-pop star in 3 seconds. ✨",
+      "recommended_first_2s_remake": "Start with a very relatable, 'messy' home selfie that instantly snaps into a high-glamour, neon-lit K-pop music video scene with synchronized dancing."
+    }
+  }
+]

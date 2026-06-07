@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { CREDIT_TIERS } from '@/lib/billing/tiers';
 import { useLocale } from '@/lib/i18n';
+import { getAttributionForRequest } from '@/lib/marketing/attribution';
+import { trackCheckoutStart, trackCheckoutSuccessFromUrl } from '@/lib/marketing/meta-pixel';
 
 const PLANS = [
   { id: 'basic', name: 'Basic', monthlyPrice: 990, credits: 1200 },
@@ -61,6 +63,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     if (!autoDetectPayment || typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (!params.get('topped_up') && !params.get('payment') && !params.get('subscription')) return;
+    trackCheckoutSuccessFromUrl(params);
     window.history.replaceState({}, '', window.location.pathname);
     setAutoOpen(true);
     setAutoWaiting(true);
@@ -132,10 +135,21 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   const handleCheckout = async (tier: string) => {
     setLoading(tier);
     try {
+      const tierConfig = CREDIT_TIERS.find(c => c.id === tier);
+      const metaEventId = trackCheckoutStart('topup', {
+        content_name: tier,
+        value: tierConfig ? tierConfig.price / 100 : undefined,
+        currency: 'USD',
+      });
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier, returnPath: projectId ? `/projects/${projectId}` : (typeof window !== 'undefined' ? window.location.pathname : undefined) }),
+        body: JSON.stringify({
+          tier,
+          returnPath: projectId ? `/projects/${projectId}` : (typeof window !== 'undefined' ? window.location.pathname : undefined),
+          metaEventId,
+          attribution: getAttributionForRequest(),
+        }),
       });
       const data = await res.json();
       if (data.url) {
@@ -150,10 +164,22 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   const handleSubscribe = async (planId: string) => {
     setLoading(`sub-${planId}`);
     try {
+      const plan = PLANS.find(p => p.id === planId);
+      const metaEventId = trackCheckoutStart('subscription', {
+        content_name: planId,
+        value: plan ? plan.monthlyPrice / 100 : undefined,
+        currency: 'USD',
+      });
       const res = await fetch('/api/billing/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId, interval: 'month', returnPath: projectId ? `/projects/${projectId}` : (typeof window !== 'undefined' ? window.location.pathname : undefined) }),
+        body: JSON.stringify({
+          planId,
+          interval: 'month',
+          returnPath: projectId ? `/projects/${projectId}` : (typeof window !== 'undefined' ? window.location.pathname : undefined),
+          metaEventId,
+          attribution: getAttributionForRequest(),
+        }),
       });
       const data = await res.json();
       if (data.url) {

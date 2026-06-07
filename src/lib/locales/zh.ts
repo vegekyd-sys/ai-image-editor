@@ -94,7 +94,7 @@ const zh = {
 
   // Agent chat
   'chat.currentImage': '当前图（编辑基础）',
-  'chat.originalImage': '原图（人脸参考）',
+  'chat.referenceImage': '参考图',
   'chat.promptCard': '发给 nano banana 2 的 prompt',
   'chat.expand': '展开 ▼',
   'chat.collapse': '收起 ▲',
@@ -116,7 +116,7 @@ const zh = {
   'video.confirmAbandon': '确认放弃',
   'video.cancel': '取消',
   'video.retry': '重试',
-  'video.invalidParamsHint': '可能原因：参考视频分辨率过高（最大 1080p）或时长过长（最大 15s）。请重新上传较小的视频。',
+  'video.invalidParamsHint': '可能原因：参考视频分辨率过高（最大 1080p）或时长过长（最长 15s）。请重新上传较小的视频。',
   'video.tooLong': '视频过长（{duration}s），最长 {max}s',
   'video.detail': '详情',
   'video.count': (n: number) => `视频 · ${n} 个`,

@@ -129,7 +129,35 @@ export interface DbMessage {
   created_at: string;
 }
 
-export type VideoModel = 'kling' | 'seedance' | 'upload'
+export type VideoModel = string
+
+export interface TranscriptWord {
+  text: string;
+  startMs: number | null;
+  endMs: number | null;
+  confidence?: number | null;
+}
+
+export interface TranscriptUtterance {
+  text: string;
+  startMs: number | null;
+  endMs: number | null;
+  speaker?: string;
+  words?: TranscriptWord[];
+}
+
+export interface VideoTranscript {
+  provider: string;
+  model: string;
+  resourceId?: string;
+  requestId?: string;
+  text: string;
+  durationMs: number | null;
+  utterances: TranscriptUtterance[];
+  sourceUrl?: string;
+  extractedAudio?: boolean;
+  createdAt?: string;
+}
 
 export interface VideoMeta {
   taskId: string | null;
@@ -148,6 +176,7 @@ export interface VideoMeta {
   height?: number;
   creditsCharged?: number;
   refunded?: boolean;
+  transcript?: VideoTranscript;
 }
 
 

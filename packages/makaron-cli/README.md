@@ -61,14 +61,14 @@ Share the `claim_url` with a human. They log in and the API key gets linked to t
 # One-shot: create project + upload image + submit prompt — all in one command
 RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video")
 
-# Watch until all artifacts are ready
-npx makaron-cli responses watch $RUN_ID --jsonl
+# Wait for the final customer-ready result
+npx makaron-cli responses get $RUN_ID --wait --json
 ```
 
 Or with an existing project:
 ```bash
 RUN_ID=$(npx makaron-cli chat --project $PROJECT_ID -b "make a 5s video")
-npx makaron-cli responses watch $RUN_ID --jsonl
+npx makaron-cli responses get $RUN_ID --wait --json
 ```
 
 ## Primary: `chat` (Agent-driven creative work)
@@ -97,6 +97,16 @@ Returns immediately:
 npx makaron-cli chat --project <id> --image ref1.jpg --image ref2.jpg -b "use these as style reference"
 ```
 
+### Inspect existing timeline media
+
+Before starting a follow-up run on an existing project, list the current timeline media so you know what assets are available and which `<<<media_N>>>` references to use:
+
+```bash
+npx makaron-cli project media <projectId> --json
+```
+
+This is project-scoped. `responses get <runId> --pick output` only returns artifacts from one run; `project media` returns the whole project timeline: original uploads, references, generated images, video snapshots, and editable compositions.
+
 ### With video input (MP4/MOV/WebM)
 
 ```bash
@@ -110,8 +120,9 @@ npx makaron-cli chat --project <id> --video party.mp4 --image kid.jpg -b "make t
 npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "splice these into one seamless video"
 ```
 
-Video files are uploaded via signed URL (no size limit up to 200MB). Supported formats: `.mp4`, `.mov`, `.webm`.
-The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos.
+Video files are uploaded via signed URL. CLI local video uploads support `.mp4`, `.mov`, or `.webm`, max 50MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits.
+The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
+Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct `video create` is standalone and does not write timeline entries.
 
 ### Check status (single query)
 
@@ -119,7 +130,7 @@ The agent understands video content natively — it can analyze scenes, edit, ex
 npx makaron-cli responses get <runId> --json
 ```
 
-### Watch until done (streaming events)
+### Advanced: stream incremental events
 
 ```bash
 npx makaron-cli responses watch <runId> --jsonl
@@ -169,20 +180,35 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 
 Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
 
-### `video` — Video generation (3 steps)
+### `video` — Standalone video tools (no project timeline)
 
 ```bash
 # 1. Write script from images
 npx makaron-cli video script --image img1.jpg "cinematic story"
 
-# 2. Submit rendering (images must be public URLs from step 1 or uploaded)
+# 2. Analyze a video (standalone, no timeline write)
+npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
+
+# 3a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --model kling
 
-# 3. Check status
+# 3b. Edit a video from a local file or public URL
+npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance
+npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance
+
+# 4. Check status
 npx makaron-cli video status <taskId>
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--duration 3|5|7|10|15`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`
+For project/timeline video editing, use:
+
+```bash
+npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
+```
+
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s.
+
+Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s.
 
 ### `music` — Music generation
 
@@ -262,38 +288,33 @@ RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinem
 PROJECT_URL=$(npx makaron-cli responses get $RUN_ID --pick project_url)
 send_message "Project created: $PROJECT_URL"
 
-# 4. Watch and send each artifact as it appears
-npx makaron-cli responses watch $RUN_ID --jsonl | while read -r line; do
-  EVENT=$(echo "$line" | jq -r '.event')
-  TYPE=$(echo "$line" | jq -r '.item.type // empty')
-  URL=$(echo "$line" | jq -r '.item.url // empty')
-  STATUS=$(echo "$line" | jq -r '.item.status // empty')
+# 4. Wait for the final customer-ready result
+RESULT=$(npx makaron-cli responses get $RUN_ID --wait --json)
+IMAGE_URLS=$(echo "$RESULT" | jq -r '[.result.images[]?.imageUrl, .output[]? | select(.type == "image") | .url] | map(select(. != null)) | unique | .[]')
+VIDEO_URLS=$(echo "$RESULT" | jq -r '[.result.videos[]?.videoUrl, .output[]? | select(.type == "video") | .url] | map(select(. != null)) | unique | .[]')
 
-  if [ "$EVENT" = "output.added" ] && [ "$TYPE" = "image" ]; then
-    # Send image immediately as media (not just link)
-    send_image "$URL"
-  elif [ "$EVENT" = "output.updated" ] && [ "$TYPE" = "video" ] && [ "$STATUS" = "completed" ]; then
-    # Video ready — send as media
-    send_video "$URL"
-  elif [ "$EVENT" = "done" ]; then
-    send_message "All done!"
-  fi
+for URL in $IMAGE_URLS; do
+  send_image "$URL"
 done
+for URL in $VIDEO_URLS; do
+  send_video "$URL"
+done
+send_message "All done!"
 ```
 
 **Key principles for service agents:**
-- **Proactive, not reactive**: Don't wait for the full run to finish. Send progress messages and artifacts as they appear.
+- **Proactive, not silent**: Acknowledge immediately, send the project link early, then send the final customer-ready media when the run completes.
 - **Media over links**: When possible, send images/videos as native media in the chat (download URL and upload as attachment), not just paste the URL.
 - **Immediate acknowledgment**: Reply within 1 second of receiving user request. Don't make users wait for project creation.
 - **Project link early**: Send the project URL right after creation so users can check anytime.
-- **Stream artifacts**: Use `watch --jsonl` to push each artifact the moment it's ready. An image at 15s should reach the user at 15s, not after the video finishes at 5 minutes.
+- **Use `get --wait --json` as the default service path**: reserve `watch --jsonl` for advanced streaming or debugging integrations that explicitly need incremental events.
 
 ## Important Notes
 
 - One project = one conversation thread. All history is preserved.
 - One run at a time per project. New message interrupts previous run.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Videos take 2-5 minutes to render. Use `watch` to get URL when ready.
+- Videos take 2-5 minutes to render. Use `responses get <runId> --wait --json` for the default customer-service path.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.

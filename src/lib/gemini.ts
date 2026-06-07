@@ -655,7 +655,7 @@ export async function generatePreviewImageOpenRouter(
 }
 
 // ── Multi-Reference Image Generation ────────────────────────────
-// Used by agent when originalImage is available alongside currentImage.
+// Used when an edit needs multiple explicit input images.
 // Each image gets a labeled role so Gemini knows what to do with each.
 
 export interface ImageReference {
@@ -686,7 +686,6 @@ export async function generateImageWithReferences(
     return result.image;
   }
   // Fallback: if multi-image failed, use single-image on the first image (edit base = images[0])
-  // NOTE: images[0] is currentImage (edit base), images[last] is originalImage (reference only)
   console.warn('⚠️ [generateImageWithReferences] multi-image failed, falling back to single image');
   const base = images[0].url;
   const fallback = PROVIDER === 'openrouter'

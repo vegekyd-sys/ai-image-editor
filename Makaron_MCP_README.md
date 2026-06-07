@@ -8,9 +8,11 @@ Makaron 的 AI 图片编辑和视频生成能力通过 [MCP (Model Context Proto
 - `makaron_edit_image` — AI 图片编辑/生成
 - `makaron_rotate_camera` — 3D 视角旋转
 
-**视频生成（3 个）：**
+**视频（5 个）：**
 - `makaron_write_video_script` — 根据图片生成视频脚本
 - `makaron_create_video` — 提交视频渲染任务
+- `makaron_edit_video` — 编辑/参考已有视频
+- `makaron_analyze_video` — 分析视频内容
 - `makaron_get_video_status` — 查询视频任务状态
 
 ### `makaron_edit_image`
@@ -25,9 +27,7 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 | `editPrompt` | string | ✅ | 英文编辑指令 |
 | `skill` | string | | `enhance` / `creative` / `wild` / `captions` |
 | `model` | string | | 指定生图模型：`gemini`（默认）/ `qwen` / `pony` / `wai` / `openai`，见下方说明 |
-| `originalImage` | string | | 原图（人脸修复参考） |
-| `referenceImages` | string[] | | 参考图数组（最多 3 张） |
-| `useOriginalAsReference` | boolean | | 是否用原图做参考 |
+| `referenceImages` | string[] | | 参考图数组（最多 3 张）；需要按原图修复时，把原图放这里 |
 | `aspectRatio` | string | | 目标比例，如 `"4:5"` |
 
 **Skill 说明：**
@@ -140,6 +140,40 @@ const result = await client.callTool({
 });
 // 提取 Task ID: result.content[0].text 包含 "Task ID: abc123xyz"
 ```
+
+### `makaron_edit_video`
+
+编辑已有视频，返回 Task ID，用 `makaron_get_video_status` 轮询。
+
+**关键限制：**
+- `videoUrl` 必须是公开可访问 URL。
+- 推荐与前端上传流程一致：MP4/MOV/WebM，≤200MB，目标 ≤15s（允许少量 metadata 误差），≤1080p / 2,086,876 frame pixels。
+- `videoModel: "kling"` 支持 `referType: "base"` 直接编辑。
+- `videoModel: "seedance"` 支持目标 ≤15s 视频的 reference-video 编辑，使用 `referType: "feature"`；不支持 Kling 那种 base/direct edit。少量 metadata/audio padding 会被接受，输出时长仍钳到 15s。
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `videoUrl` | string | ✅ | 要编辑/参考的视频 URL |
+| `editPrompt` | string | ✅ | 编辑要求 |
+| `images` | string[] | | 可选参考图公开 URL |
+| `duration` | number | | 输出时长：3/5/7/10/15 秒 |
+| `aspectRatio` | string | | 宽高比 |
+| `videoModel` | string | | `kling`（默认）/ `seedance` |
+| `referType` | string | | `base` / `feature`；Seedance 默认 `feature` |
+| `keepOriginalSound` | boolean | | 是否保留原视频声音 |
+
+### `makaron_analyze_video`
+
+独立视频分析工具，等价于 Agent 内部的 `analyze_video`。只分析，不创建 timeline。
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `videoUrl` | string | ✅ | 公开可访问的视频 URL |
+| `question` | string | | 可选关注点，例如 `"describe pacing"` |
 
 ### `makaron_get_video_status`
 

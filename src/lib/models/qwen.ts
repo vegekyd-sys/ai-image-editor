@@ -2,25 +2,31 @@
  * Qwen model backend — wraps existing comfyui-qwen.ts
  */
 import type { ModelBackend, GenerateImageRequest } from './types';
+import { isQwenAvailable } from '../comfyui-qwen';
 
 export const qwenBackend: ModelBackend = {
   id: 'qwen',
 
-  canHandle(_req: GenerateImageRequest): boolean {
-    return !!process.env.COMFYUI_QWEN_URL;
+  canHandle(): boolean {
+    return isQwenAvailable();
   },
 
   async generate(req: GenerateImageRequest): Promise<{ image: string | null }> {
-    if (!process.env.COMFYUI_QWEN_URL) return { image: null };
+    if (!isQwenAvailable()) return { image: null };
 
-    // Multi-reference path (useOriginalAsReference or referenceImages)
+    // Multi-reference path
     if (req.references?.length) {
       const { generateWithQwenMulti } = await import('../comfyui-qwen');
       return { image: await generateWithQwenMulti(req.references, req.prompt) };
     }
 
+    // Text-to-image
+    if (!req.image) {
+      const { generateWithQwenText } = await import('../comfyui-qwen');
+      return { image: await generateWithQwenText(req.prompt, req.aspectRatio) };
+    }
+
     // Single image (img2img)
-    if (!req.image) return { image: null };
     const { generateWithQwen } = await import('../comfyui-qwen');
     return { image: await generateWithQwen(req.image, req.prompt) };
   },

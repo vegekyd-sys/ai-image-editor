@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -19,7 +19,7 @@ import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
-import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
 import { downloadAsset } from '@/lib/editor/download';
@@ -43,6 +43,8 @@ import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
+import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
+import { formatVideoMediaSpec } from '@/lib/media-aspect';
 
 export type { AnimationState } from '@/lib/editor/types';
 
@@ -186,8 +188,8 @@ export default function Editor({
   const [preferredModel, setPreferredModel] = useState<PreferredModel>('auto');
   const preferredModelRef = useRef<PreferredModel>('auto');
   useEffect(() => { preferredModelRef.current = preferredModel; }, [preferredModel]);
-  const [videoModel, setVideoModel] = useState<'kling' | 'seedance'>('kling');
-  const videoModelRef = useRef<'kling' | 'seedance'>('kling');
+  const [videoModel, setVideoModel] = useState<VideoModel>(() => getDefaultVideoModelId());
+  const videoModelRef = useRef<VideoModel>(getDefaultVideoModelId());
   useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
@@ -507,6 +509,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const currentDisplayImage = isViewingVideo
     ? (currentSnap?.image || currentSnap?.imageUrl || timeline[viewIndex] || '')
     : (timeline[viewIndex] || '');
+  const hasRenderableCurrentDesign = !!((isAtDraftSlot ? draftDesign : null) || designsMap.get(viewIndex));
+  const showCanvasPlaceholder = shouldShowCanvasPlaceholder({
+    timeline,
+    viewIndex,
+    isViewingVideoV2,
+    hasRenderableDesign: hasRenderableCurrentDesign,
+  });
   const currentDisplayImageRef = useRef(currentDisplayImage);
   useEffect(() => { currentDisplayImageRef.current = currentDisplayImage; }, [currentDisplayImage]);
 
@@ -1474,11 +1483,6 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // UI state flags — server-side buildPromptContext handles all project context
     const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
 
-    // Always pass the original snapshot (index 0) as reference for face/person preservation
-    const originalSnapshot = snapshotsRef.current[0];
-    const rawOriginal = originalSnapshot ? getImageForApi(originalSnapshot) : undefined;
-    const originalImageBase64 = rawOriginal?.startsWith('data:') ? await compressBase64Image(rawOriginal, 3_000_000) : rawOriginal;
-
     // Snapshot images for API: prefer Storage URLs (tiny payload).
     // base64 fallback only for the current image (needed for vision); others skip if no URL yet.
     // Wait briefly for image uploads to complete (up to 5s) if any snapshot lacks a URL
@@ -1571,7 +1575,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, originalImage: originalImageBase64, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
+        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1739,6 +1743,14 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
   const animPromptInFlightRef = useRef(false);
+  const normalizeLegacyCompositionDescription = useCallback((description: string | undefined, fallback: string) => {
+    if (!description) return fallback;
+    const trimmed = description.trim();
+    if (trimmed === '[design]' || trimmed === '[design/video]') return fallback;
+    if (trimmed === 'still design') return 'still composition';
+    return description;
+  }, []);
+
   const generateAnimationPrompt = useCallback(async (overrideImageUrls?: string[]) => {
     const imageUrls = overrideImageUrls || animationStateRef.current?.imageUrls;
     if (!projectId || !imageUrls?.length) return;
@@ -1753,12 +1765,16 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // Build Media Index with descriptions so Agent can pick items intelligently
     const mediaIndex = snapshotsRef.current.map((s, i) => {
       const isVid = s.type === 'video';
-      const typeLabel = isVid ? 'video' : 'image';
+      const isComposition = !!s.design && !isVid;
+      const videoSpec = isVid ? formatVideoMediaSpec(s.videoMeta) : '';
+      const typeLabel = isVid ? (videoSpec ? `video, ${videoSpec}` : 'video') : isComposition ? 'composition' : 'image';
       const desc = isVid
         ? (s.description || s.videoMeta?.prompt?.split('\n')[0]?.slice(0, 60) || '[video]')
-        : i === 0
-          ? (s.description || 'Original upload')
-          : (s.description || '(no description)');
+        : isComposition
+          ? normalizeLegacyCompositionDescription(s.description, '[composition]')
+          : i === 0
+            ? (s.description || 'Original upload')
+            : (s.description || '(no description)');
       return `<<<media_${i + 1}>>> [${typeLabel}] — ${desc}`;
     }).join('\n');
 
@@ -1842,7 +1858,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setIsAgentActive(false);
       animPromptInFlightRef.current = false;
     }
-  }, [projectId, onSaveMessage, locale, t]);
+  }, [projectId, onSaveMessage, locale, t, normalizeLegacyCompositionDescription]);
 
   // Commit draft: finalize the virtual draft as a real snapshot
   const commitDraft = useCallback(() => {
@@ -2171,10 +2187,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     } catch (err) {
       console.error('Video upload error:', err);
       const msg = err instanceof Error ? err.message : String(err);
-      const tooLongMatch = msg.match(/Video too long \((\d+)s\)/);
-      setAgentStatus(tooLongMatch
-        ? t('video.tooLong').replace('{duration}', tooLongMatch[1]).replace('{max}', msg.match(/Maximum (\d+)s/)?.[1] || '16')
-        : `视频上传失败: ${msg}`);
+      const tooLongMatch = msg.match(/Video too long \((\d+(?:\.\d+)?)s\)/);
+      if (tooLongMatch) {
+        alert(t('video.tooLong').replace('{duration}', tooLongMatch[1]).replace('{max}', msg.match(/Maximum (\d+)s/)?.[1] || '15'));
+        setAgentStatus(t('editor.greeting'));
+        setSnapshots(prev => prev.filter(s => s.id !== snapId));
+        return null;
+      }
+      setAgentStatus(`视频上传失败: ${msg}`);
       setSnapshots(prev => prev.map(s =>
         s.id === snapId ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
       ));
@@ -2798,7 +2818,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       body: JSON.stringify({ audioUrl: track.audioUrl, projectId }),
     }).catch(() => {});
     const audioUrl = track.audioUrl;
-    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current design via run_code patch. If no active design, read the latest code from workspace first.`;
+    const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current Remotion composition via run_code patch with runtime: "composition". If no active composition, read the latest composition code from workspace first.`;
     handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
@@ -3126,7 +3146,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             className="flex-1 relative min-h-0 overflow-hidden"
             style={heroAnim ? { opacity: 0 } : undefined}
           >
-            {timeline.length === 0 || (timeline.length === 1 && !timeline[0] && !isViewingVideoV2) ? (
+            {showCanvasPlaceholder ? (
               (isAgentActive || (timeline.length === 1 && !timeline[0])) ? (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3">
@@ -3568,7 +3588,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         const res = await fetch('/api/video-snapshot', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || 'kling' }),
+                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId() }),
                         });
                         const json = await res.json();
                         if (!res.ok) throw new Error(json.error || 'Retry failed');
@@ -3601,7 +3621,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         error: null,
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
-                        videoModel: (anim.videoModel === 'kling' || anim.videoModel === 'seedance') ? anim.videoModel : videoModel,
+                        videoModel: anim.videoModel && anim.videoModel !== 'upload' ? anim.videoModel : videoModel,
                       });
                     }}
                     isDesktop={isDesktop}
@@ -3909,7 +3929,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               image: posterImage, // poster already captured — all existing code works
               tips: [],
               messageId: msgId,
-              description: designDesc || '[design]',
+              description: designDesc || '[composition]',
               design: currentDesign,
             };
             setSnapshots(prev => {

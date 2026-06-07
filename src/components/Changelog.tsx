@@ -8,6 +8,70 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-05',
+    en: { title: 'AI Search & Growth Readiness', items: [
+      'Makaron is now easier for search engines and AI agents to understand, recommend, and route to.',
+      'New public pages explain Makaron, key use cases, and indexable skill outcomes without changing the creation flow.',
+      'Skill SEO pages now live under /skill/{skillId}, while /home/{skillId} stays focused on the product experience.',
+      'llms.txt gives coding agents a clear map for when to use makaron-cli for images, videos, music, and creative assets.',
+      'First-party marketing events now track the funnel from skill views to project creation, signup, checkout, and purchase.',
+    ]},
+    zh: { title: 'AI 搜索与增长准备', items: [
+      'Makaron 现在更容易被搜索引擎和 AI Agent 理解、推荐和路由。',
+      '新增公开页面，讲清 Makaron、核心 use case 和可索引的 skill 效果，同时不打断创作流程。',
+      'Skill SEO 页迁到 /skill/{skillId}，/home/{skillId} 继续专注真实产品体验。',
+      'llms.txt 为 coding agent 提供清晰地图，知道什么时候该用 makaron-cli 生成图片、视频、音乐和创意素材。',
+      '第一方 marketing events 开始记录从 skill 浏览到创建项目、注册、checkout 和购买的漏斗。',
+    ]},
+  },
+  {
+    date: '2026-06-04',
+    en: { title: 'Video Agent — From Generation to Editing', items: [
+      'Makaron can now edit videos, not just generate them.',
+      'Upload longer videos up to 120 seconds.',
+      'Split, trim, caption, and combine clips by chatting.',
+      'Finished edits go straight onto the timeline.',
+      'Agent remembers files, previews, and results across turns.',
+    ]},
+    zh: { title: 'Video Agent — 从生成到剪辑', items: [
+      'Makaron 现在不只是生成视频，也能剪视频。',
+      '支持更长素材，最长可上传 120 秒。',
+      '分段、裁剪、字幕、拼接，都可以聊天完成。',
+      '剪好的结果会直接出现在时间线上。',
+      'Agent 会记住文件、预览和结果，下一轮接着做。',
+    ]},
+  },
+  {
+    date: '2026-06-02',
+    en: { title: 'Long Story Skill', items: [
+      'Makaron now supports video creation beyond the 15-second limit.',
+      'The new long story skill helps turn one idea into a longer, multi-segment video with a more continuous narrative.',
+      'Before rendering, you can review anchors, storyboards, and the script step by step.',
+    ]},
+    zh: { title: 'Long Story Skill', items: [
+      'Makaron 现在支持超过 15 秒的视频生成。',
+      '新的 long story skill 可以把一个想法扩展成更长、分段连续的故事视频。',
+      '在正式生成前，用户可以逐步查看并确认锚定物、分镜和脚本。',
+    ]},
+  },
+  {
+    date: '2026-05-31',
+    en: { title: 'Agent Prompt Rebuild', items: [
+      'Much faster first response: Agent now starts from a compact router prompt instead of eagerly loading every skill file.',
+      'Cleaner media modes: image, video, design, music, and run_code have clearer routing instead of one long patched prompt.',
+      'Smarter image editing: direct edits go straight to generation; image analysis is only used when it changes the decision.',
+      'Skills stay powerful but lighter: Agent discovers skills first, then reads the full SKILL.md only when needed.',
+      'Video intent respected: scripts still have a review gate by default, but explicit "submit now" requests can render immediately.',
+    ]},
+    zh: { title: 'Agent Prompt 重构', items: [
+      '首字更快：Agent 现在从简洁 router prompt 启动，不再提前加载所有 skill 文件。',
+      '模式更清晰：图片、视频、Design、音乐、run_code 各自分流，不再像在长 prompt 上打补丁。',
+      '图片编辑更直接：明确修图会直接生成，只有真正需要判断时才分析图片。',
+      'Skill 更轻但能力保留：Agent 先发现 skill，只有要用时才读取完整 SKILL.md。',
+      '视频更懂意图：默认仍先确认脚本，但用户明确说“直接提交渲染”时可以立即生成。',
+    ]},
+  },
+  {
     date: '2026-05-21',
     en: { title: 'AI Video Editing — As Easy As Chatting', items: [
       '"Put this kid into that birthday party" — just say it, and it happens. 15-second video, any idea.',

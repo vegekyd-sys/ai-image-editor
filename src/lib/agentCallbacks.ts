@@ -1,7 +1,8 @@
 import type { AgentStreamCallbacks } from './agentStream';
-import type { Snapshot, Tip, ProjectAnimation } from '@/types';
+import type { Snapshot, Tip, ProjectAnimation, VideoModel } from '@/types';
 import type { DesignPayload } from '@/types';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 
 /**
  * Context for creating unified agent callbacks.
@@ -30,7 +31,7 @@ export interface AgentCallbackContext {
   lastEditInputImagesRef: { current: string[] | null };
   pendingDesignMsgIdRef: { current: string };
   pendingDesignSnapIdRef: { current: string };
-  codeStreamRef: { current: { msgId: string; code: string; shown: number } | null };
+  codeStreamRef: { current: { msgId: string; code: string; shown: number; pendingText?: string; pendingRaf?: number } | null };
   agentRunIdRef: { current: string | null };
   agentTimerRef: { current: { phase: string } | null };
   autoFetchTriggered: { current: boolean };
@@ -276,20 +277,20 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (!stream) return;
       if (done) {
         // Flush any pending text before closing
-        const pending = (stream as any).__pendingText || '';
-        if ((stream as any).__pendingRaf) cancelAnimationFrame((stream as any).__pendingRaf);
+        const pending = stream.pendingText || '';
+        if (stream.pendingRaf) cancelAnimationFrame(stream.pendingRaf);
         ctx.setMessages(prev => prev.map(m =>
           m.id === stream.msgId ? { ...m, content: (m.content || '') + pending + '\n```\n' } : m,
         ));
         ctx.codeStreamRef.current = null;
       } else {
         // Batch code chunks — accumulate in ref, flush via rAF (prevents "maximum update depth exceeded")
-        (stream as any).__pendingText = ((stream as any).__pendingText || '') + text;
-        if (!(stream as any).__pendingRaf) {
-          (stream as any).__pendingRaf = requestAnimationFrame(() => {
-            const flush = (stream as any).__pendingText || '';
-            (stream as any).__pendingText = '';
-            (stream as any).__pendingRaf = 0;
+        stream.pendingText = (stream.pendingText || '') + text;
+        if (!stream.pendingRaf) {
+          stream.pendingRaf = requestAnimationFrame(() => {
+            const flush = stream.pendingText || '';
+            stream.pendingText = '';
+            stream.pendingRaf = 0;
             if (flush) {
               ctx.setMessages(prev => prev.map(m =>
                 m.id === stream.msgId ? { ...m, content: (m.content || '') + flush } : m,
@@ -304,7 +305,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const urls = imageUrls?.length
         ? imageUrls
         : ctx.snapshotsRef.current.filter(s => s.imageUrl).map(s => s.imageUrl!).slice(0, 7);
-      const videoModel = (model as 'kling' | 'seedance') || 'kling';
+      const videoModel = (model as VideoModel) || getDefaultVideoModelId();
       const newAnim: ProjectAnimation = {
         id: taskId,
         projectId: ctx.projectId,
@@ -334,7 +335,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     },
 
     onVideoSnapshot: (snapshotId, _taskId, videoMeta) => {
-      const newSnap: import('@/types').Snapshot = {
+      const newSnap: Snapshot = {
         id: snapshotId,
         image: VIDEO_PLACEHOLDER_IMAGE,
         tips: [],
@@ -342,7 +343,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         type: 'video',
         videoMeta,
       };
-      ctx.setSnapshots(prev => [...prev, newSnap]);
+      ctx.setSnapshots(prev => prev.some(s => s.id === snapshotId) ? prev : [...prev, newSnap]);
       if (ctx.pendingNavigateToVideoRef) ctx.pendingNavigateToVideoRef.current = true;
     },
 
@@ -351,7 +352,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       ctx.onMusicTaskCreated?.(taskId);
     },
 
-    onCaptureFrame: (frame, uploadPath, _captureId) => {
+    onCaptureFrame: (frame, uploadPath) => {
       // Frontend captures the frame and uploads — fire and forget
       ctx.captureDesignFrame?.(frame, uploadPath).catch(err => {
         console.warn('⚠️ [agent] captureDesignFrame failed:', err);

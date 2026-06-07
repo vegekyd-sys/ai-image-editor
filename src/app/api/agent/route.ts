@@ -1,26 +1,40 @@
 import { NextRequest } from 'next/server';
+import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
+import { AgentPerf } from '@/lib/agent-perf';
 
 export const maxDuration = 800;
 
 export async function POST(req: NextRequest) {
+  const perf = new AgentPerf('agent-api', { route: '/api/agent' });
   try {
+    const endAuth = perf.span('authenticate');
     const authResult = await authenticateRequest(req);
+    endAuth({ ok: !('error' in authResult) });
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
 
     // Pre-flight credit check
+    const endCreditCheck = perf.span('credit_check', { userId });
     const creditCheck = await requireCredits(userId, 5);
+    endCreditCheck({ ok: creditCheck.ok });
     if (!creditCheck.ok) return creditCheck.response;
 
-    const { prompt, image, originalImage, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
+    const endReadBody = perf.span('read_body');
+    const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
-            musicReady, musicAudioUrl, currentDesign, videoModel,
+            musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel,
             headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = await req.json();
+    endReadBody({
+      projectId: projectId || null,
+      promptChars: typeof prompt === 'string' ? prompt.length : 0,
+      hasImage: !!image,
+      headless: !!headless,
+    });
     const locale = req.cookies.get('locale')?.value ?? 'zh';
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
@@ -41,12 +55,15 @@ export async function POST(req: NextRequest) {
     const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly;
 
     // Query timeline version for video-in-timeline support
+    const endProjectLoad = perf.span('load_project', { projectId });
     const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
+    endProjectLoad({ timelineVersion: (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1 });
     const timelineVersion: number = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
 
     let runId: string | null = null;
     let firstMessageId: string | null = null;
     if (isNormalMode) {
+      const endRunCreate = perf.span('create_agent_run', { projectId, userId });
       // Mark any stale running runs as failed before creating a new one
       await supabase.from('agent_runs')
         .update({ status: 'failed', ended_at: new Date().toISOString() })
@@ -62,11 +79,21 @@ export async function POST(req: NextRequest) {
         metadata: { locale, preferredModel, isNsfw, analysisOnly },
       }).select('id').single();
       runId = run?.id ?? null;
+      endRunCreate({ runId: runId || null });
     }
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        perf.mark('stream_start', { projectId, runId: runId || null });
+        const enqueue = (event: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        };
+        enqueue({
+          type: 'status',
+          text: locale === 'en' ? 'Starting...' : '开始处理...',
+        });
+        perf.mark('first_sse_sent', { eventType: 'status' });
         // Track token usage for billing
         let usageEvent: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; model: string } | null = null;
 
@@ -139,10 +166,10 @@ export async function POST(req: NextRequest) {
             return;
           }
 
-          // musicReady: background music generation completed — agent injects <Audio> into design
+          // musicReady: background music generation completed — agent injects <Audio> into the composition
           if (musicReady && musicAudioUrl) {
             const musicPrompt = withLocale(
-              `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest design code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code to render the updated version with music.`,
+              `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest Remotion composition code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code with runtime: "composition" to render the updated version with music.`,
               locale,
             );
             await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {
@@ -167,33 +194,63 @@ export async function POST(req: NextRequest) {
             return;
           }
 
-          // Load user skills from workspace
-          const { getAllSkills } = await import('@/lib/workspace');
-          const allSkills = await getAllSkills(supabase, userId);
-          const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
-
-          // Unified context: both frontend and headless use buildPromptContext
-          const { buildPromptContext } = await import('@/lib/agent-context');
-          const ctx = await buildPromptContext(projectId, supabase, userId, {
-            userMessage: prompt ?? '',
-            currentSnapshotIndex,
-            hasAnnotation,
-            isDraft,
-            referenceImageCount: referenceImageCount || undefined,
-            uploadedVideoCount: uploadedVideoCount || undefined,
+          // Do not load user skills in the route. The full agent prompt builds
+          // its manifest once inside buildSystemPrompt; analysis-only skips it
+          // entirely. Loading here caused duplicate 10s+ SKILL.md fetches before
+          // the first visible token.
+          perf.mark('load_user_skills_skipped', {
+            reason: analysisOnly ? 'analysisOnly' : 'deferred_to_system_prompt_manifest',
           });
 
-          let agentPrompt = ctx.fullPrompt;
-          // Frontend may pass images directly (new uploads not yet in DB)
-          let agentImage = image || ctx.snapshotImages[ctx.currentSnapshotIndex] || '';
-          let agentOriginalImage = originalImage || ctx.originalImage;
-          let agentSnapshotImages = snapshotImages?.length ? snapshotImages : ctx.snapshotImages;
-          let agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
-          let agentCurrentDesign = currentDesign || ctx.currentDesign;
-          let agentHistory = ctx.history;
+          const needsPromptContext = !analysisOnly || (!image && !(snapshotImages?.length));
+          let agentPrompt = prompt ?? '';
+          let agentImage = image || (snapshotImages?.[currentSnapshotIndex ?? 0]) || '';
+          let agentSnapshotImages = snapshotImages?.length ? snapshotImages : (agentImage ? [agentImage] : []);
+          let agentCurrentSnapshotIndex = currentSnapshotIndex ?? Math.max(agentSnapshotImages.length - 1, 0);
+          let agentCurrentDesign = currentDesign;
+          let agentCurrentDesignPath = typeof currentDesignPath === 'string' ? currentDesignPath : undefined;
+          let agentHistory: ModelMessage[] = [];
+
+          if (needsPromptContext) {
+            // Unified context: both frontend and headless use buildPromptContext.
+            // Analysis-only usually has the uploaded/current image in the request,
+            // so it can skip this DB/history pass too.
+            const endContext = perf.span('build_prompt_context', { projectId });
+            const { buildPromptContext } = await import('@/lib/agent-context');
+            const ctx = await buildPromptContext(projectId, supabase, userId, {
+              userMessage: prompt ?? '',
+              currentSnapshotIndex,
+              hasAnnotation,
+              isDraft,
+              referenceImageCount: referenceImageCount || undefined,
+              uploadedVideoCount: uploadedVideoCount || undefined,
+            });
+            endContext({
+              promptChars: ctx.fullPrompt.length,
+              historyTurns: ctx.history.length,
+              mediaCount: ctx.snapshotImages.length,
+              hasCurrentDesign: !!ctx.currentDesign,
+              currentDesignPath: ctx.currentDesignPath || null,
+            });
+
+            agentPrompt = ctx.fullPrompt;
+            // Frontend may pass images directly (new uploads not yet in DB)
+            agentImage = image || ctx.snapshotImages[ctx.currentSnapshotIndex] || '';
+            agentSnapshotImages = snapshotImages?.length ? snapshotImages : ctx.snapshotImages;
+            agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
+            agentCurrentDesign = currentDesign || ctx.currentDesign;
+            agentCurrentDesignPath = agentCurrentDesignPath || ctx.currentDesignPath;
+            agentHistory = ctx.history;
+          } else {
+            perf.mark('build_prompt_context_skipped', {
+              reason: 'analysisOnly_request_has_media',
+              mediaCount: agentSnapshotImages.length,
+            });
+          }
 
           if (headless) {
             // Write user message to DB (frontend does this itself)
+            const endHeadlessMessage = perf.span('headless_user_message_insert', { projectId });
             await supabase.from('messages').insert({
               id: crypto.randomUUID(),
               project_id: projectId,
@@ -201,6 +258,7 @@ export async function POST(req: NextRequest) {
               content: prompt ?? '',
               has_image: false,
             });
+            endHeadlessMessage();
           }
 
           // Normal agent request — SSE heartbeat every 10s to prevent proxy idle timeout
@@ -216,18 +274,23 @@ export async function POST(req: NextRequest) {
           };
 
           try {
-            for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, userSkills: userSkills.length ? userSkills : undefined, supabase, userId: userId, currentDesign: agentCurrentDesign, history: agentHistory, timelineVersion })) {
-              if (event.type === 'usage') { usageEvent = event; continue; }
-              if (writer) {
-                await writer.processAndEnqueue(event);
-              } else {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
+            try {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
+                if (event.type === 'usage') { usageEvent = event; continue; }
+                if (writer) {
+                  await writer.processAndEnqueue(event);
+                } else {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+                }
+                // Check abort after processing event
+                if (await isAborted()) {
+                  console.log('[agent] Run aborted by user');
+                  break;
+                }
               }
-              // Check abort after processing event
-              if (await isAborted()) {
-                console.log('[agent] Run aborted by user');
-                break;
-              }
+            } finally {
+              endAgentStream();
             }
           } finally {
             clearInterval(heartbeat);
@@ -255,18 +318,29 @@ export async function POST(req: NextRequest) {
         } finally {
           // Deduct credits based on token usage (fire-and-forget)
           if (usageEvent) {
+            const endBilling = perf.span('billing_deduct', { projectId, model: usageEvent.model });
             deductByTokens(
               userId, 'agent', usageEvent.model,
               usageEvent.inputTokens, usageEvent.outputTokens,
               undefined, undefined,
               { cacheRead: usageEvent.cacheReadTokens ?? 0, cacheWrite: usageEvent.cacheWriteTokens ?? 0 },
-            ).catch(e => console.error('[billing] agent deduct error:', e));
+            )
+              .then(() => endBilling({ ok: true }))
+              .catch(e => {
+                endBilling({ ok: false });
+                console.error('[billing] agent deduct error:', e);
+              });
           }
 
-          if (writer) await writer.flush();
+          if (writer) {
+            const endWriterFlush = perf.span('writer_flush', { projectId, runId: runId || null });
+            await writer.flush();
+            endWriterFlush();
+          }
           // Mark run as completed
           if (runId) {
             try {
+              const endRunComplete = perf.span('complete_agent_run', { projectId, runId });
               const { data: run } = await supabase.from('agent_runs')
                 .select('status').eq('id', runId).single();
               if (run?.status === 'running') {
@@ -275,6 +349,7 @@ export async function POST(req: NextRequest) {
                   ended_at: new Date().toISOString(),
                 }).eq('id', runId);
               }
+              endRunComplete({ status: run?.status || null });
             } catch { /* best effort */ }
           }
           // Headless: auto-name project if still "Untitled"
@@ -293,6 +368,7 @@ export async function POST(req: NextRequest) {
               }
             } catch { /* best effort */ }
           }
+          perf.mark('stream_close', { projectId, runId: runId || null });
           controller.close();
         }
       },
