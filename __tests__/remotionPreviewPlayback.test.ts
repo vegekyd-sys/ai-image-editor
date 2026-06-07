@@ -59,8 +59,10 @@ describe('Remotion preview playback contract', () => {
     expect(sandboxSource).toContain("const preferred = ['Composition', 'Design', 'AgentDesign', 'DevLog', 'App', 'Main', 'Scene']")
     expect(sandboxSource).toContain("return names[names.length - 1] || 'Design'")
 
-    expect(serverSource).toContain('prepareRemotionCodeForSandbox(resolvedDesign.code)')
-    expect(serverSource).toContain('resolveRemoteImagesForSandbox(design)')
+    expect(serverSource).toContain('prepareRemotionCodeForSandbox(design.code)')
+    expect(serverSource).toContain('designProps: design.props || {}')
+    expect(serverSource).not.toContain('remoteImageToDataUrl')
+    expect(serverSource).not.toContain('resolveRemoteImagesForSandbox')
   })
 
   it('wraps helper-first code for the existing sandbox snapshot evaluator', () => {
