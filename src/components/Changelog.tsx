@@ -8,6 +8,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-07',
+    en: { title: 'Voice Writing & Video Cuts', items: [
+      'Makaron can now draft from spoken video: it listens to uploaded clips and turns speech into editing context.',
+      'Turn a raw talking-head clip into a cleaner draft by asking Agent to tighten pauses, breaths, and dead air.',
+      'Ask for the strongest lines, then cut around those moments to shape a sharper short video.',
+      'Video edits, previews, and analysis results stay on the timeline, so the next prompt can keep building from the same material.',
+    ]},
+    zh: { title: '语音撰写与视频剪辑', items: [
+      'Makaron 现在可以用视频里的口播来写稿：先听懂语音，再把逐字稿和时间点交给 Agent。',
+      '可以直接让 Agent 收紧停顿、气口和废话，把一段原始口播剪成更干净的初稿。',
+      '也可以让 Agent 找出金句，再围绕这些高光时刻剪出更有重点的短视频。',
+      '剪好的视频、预览和分析结果都会留在时间线上，下一轮可以接着同一份素材继续改。',
+    ]},
+  },
+  {
     date: '2026-06-05',
     en: { title: 'AI Search & Growth Readiness', items: [
       'Makaron is now easier for search engines and AI agents to understand, recommend, and route to.',
