@@ -395,8 +395,12 @@ describe('iOS App Store readiness guardrails', () => {
     const handledByComposition = new Set([
       'src/app/agent/page.tsx',
       'src/app/home/page.tsx',
+      'src/app/makaron/page.tsx',
       'src/app/projects/page.tsx',
       'src/app/projects/[id]/page.tsx',
+      'src/app/skill/[skillId]/page.tsx',
+      'src/app/use-cases/page.tsx',
+      'src/app/use-cases/[slug]/page.tsx',
     ]);
     const redirectsOnly = new Set([
       'src/app/page.tsx',

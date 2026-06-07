@@ -27,10 +27,18 @@ const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJFN2YYaWaQjABUKLqxQcA_fhxPLFDY';
 
-const MAX_VIDEO_FILE_SIZE = 200 * 1024 * 1024;
-const MAX_VIDEO_DURATION = 15;
-const MAX_VIDEO_DURATION_TOLERANCE = 0.5;
+const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50;
+const MAX_VIDEO_UPLOAD_FILE_SIZE = MAX_VIDEO_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
+const MAX_VIDEO_UPLOAD_DURATION = 120;
+const MAX_VIDEO_UPLOAD_DURATION_TOLERANCE = 1;
+const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15;
+const MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE = 0.5;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
+const SEEDANCE_MIN_VIDEO_FRAME_PIXELS = 409_600;
+const SEEDANCE_MIN_VIDEO_SIDE = 300;
+const SEEDANCE_MAX_VIDEO_SIDE = 6000;
+const SEEDANCE_MIN_VIDEO_ASPECT = 0.4;
+const SEEDANCE_MAX_VIDEO_ASPECT = 2.5;
 
 function getCliVersion() {
   try {
@@ -583,6 +591,34 @@ async function listProjects(baseUrl, headers) {
   console.log('');
 }
 
+async function listProjectMedia(baseUrl, headers, projectId, opts = {}) {
+  const res = await fetch(`${baseUrl}/api/projects/${projectId}/media`, { headers });
+  if (!res.ok) { console.error('Project media failed:', await res.text()); process.exit(1); }
+  const data = await res.json();
+  if (opts.json) {
+    console.log(JSON.stringify(data, null, 2));
+    return data;
+  }
+
+  console.log(`🎞️  ${data.title || 'Untitled'}`);
+  console.log(`   Project: ${data.projectUrl || `${APP_URL}/projects/${projectId}`}`);
+  const media = data.media || [];
+  if (!media.length) {
+    console.log('   No timeline media yet.');
+    return data;
+  }
+  for (const item of media) {
+    const ref = item.ref || `<<<media_${item.index}>>>`;
+    const status = item.status && item.status !== 'completed' ? ` ${item.status}` : '';
+    const duration = typeof item.duration === 'number' ? ` ${item.duration}s` : '';
+    const dimensions = item.width && item.height ? ` ${item.width}x${item.height}` : '';
+    const description = item.description ? ` — ${item.description}` : '';
+    const url = item.url ? `\n      ${item.url}` : '';
+    console.log(`  ${String(item.index).padStart(2)}. ${ref} [${item.type}${status}${duration}${dimensions}]${description}${url}`);
+  }
+  return data;
+}
+
 function timeSince(date) {
   const s = Math.floor((Date.now() - date.getTime()) / 1000);
   if (s < 60) return 'just now';
@@ -734,13 +770,20 @@ function probeLocalVideo(videoPath) {
   return probeVideoWithFfprobe(videoPath) || probeVideoWithFfmpeg(videoPath);
 }
 
-function validateVideoFile(videoPath) {
+function validateVideoFile(videoPath, options = {}) {
+  const maxDuration = options.maxDuration ?? MAX_VIDEO_UPLOAD_DURATION;
+  const durationTolerance = options.durationTolerance ?? MAX_VIDEO_UPLOAD_DURATION_TOLERANCE;
+  const minFramePixels = options.minFramePixels ?? 0;
+  const minSide = options.minSide ?? 0;
+  const maxSide = options.maxSide ?? Infinity;
+  const minAspect = options.minAspect ?? 0;
+  const maxAspect = options.maxAspect ?? Infinity;
   if (!fs.existsSync(videoPath)) {
     return { ok: false, error: `Video file not found: ${videoPath}` };
   }
   const stat = fs.statSync(videoPath);
-  if (stat.size > MAX_VIDEO_FILE_SIZE) {
-    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max 200MB)` };
+  if (stat.size > MAX_VIDEO_UPLOAD_FILE_SIZE) {
+    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB). The CLI uploads directly to Storage; use the frontend to transcode larger videos first.` };
   }
   const ext = path.extname(videoPath).slice(1).toLowerCase();
   if (!['mp4', 'mov', 'webm'].includes(ext)) {
@@ -750,11 +793,24 @@ function validateVideoFile(videoPath) {
   if (!meta) {
     return { ok: false, error: 'Cannot read video duration/resolution. Install ffmpeg/ffprobe or use the normal frontend upload flow.' };
   }
-  if (meta.duration > MAX_VIDEO_DURATION + MAX_VIDEO_DURATION_TOLERANCE) {
-    return { ok: false, error: `Video too long: ${formatSeconds(meta.duration)}s (max ${MAX_VIDEO_DURATION}s, with ${MAX_VIDEO_DURATION_TOLERANCE}s metadata tolerance)` };
+  if (meta.duration > maxDuration + durationTolerance) {
+    return { ok: false, error: `Video too long: ${formatSeconds(meta.duration)}s (max ${maxDuration}s, with ${durationTolerance}s metadata tolerance)` };
   }
   if (meta.width * meta.height > MAX_VIDEO_FRAME_PIXELS) {
     return { ok: false, error: `Video resolution too high: ${meta.width}x${meta.height} (${meta.width * meta.height} px). Max is <=1080p (${MAX_VIDEO_FRAME_PIXELS} px). Re-upload through the frontend to transcode, or export a smaller video.` };
+  }
+  const framePixels = meta.width * meta.height;
+  const aspect = meta.width / meta.height;
+  if (
+    framePixels < minFramePixels ||
+    meta.width < minSide ||
+    meta.height < minSide ||
+    meta.width > maxSide ||
+    meta.height > maxSide ||
+    aspect < minAspect ||
+    aspect > maxAspect
+  ) {
+    return { ok: false, error: `Video size does not meet provider limits: ${meta.width}x${meta.height} (${framePixels} px, aspect ${aspect.toFixed(2)}). Required: frame pixels >=${minFramePixels}, sides ${minSide}-${Number.isFinite(maxSide) ? maxSide : '∞'}px, aspect ${minAspect}-${Number.isFinite(maxAspect) ? maxAspect : '∞'}. Resize/pad with FFmpeg before submitting.` };
   }
   const mime = ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4';
   return { ok: true, mime, meta };
@@ -768,8 +824,8 @@ function validateVideoFileForAnalysis(videoPath) {
   if (stat.size === 0) {
     return { ok: false, error: `Video file is empty: ${videoPath}` };
   }
-  if (stat.size > MAX_VIDEO_FILE_SIZE) {
-    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max 200MB)` };
+  if (stat.size > MAX_VIDEO_UPLOAD_FILE_SIZE) {
+    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB). The CLI uploads directly to Storage; use the frontend to transcode larger videos first.` };
   }
   const ext = path.extname(videoPath).slice(1).toLowerCase();
   if (!['mp4', 'mov', 'webm'].includes(ext)) {
@@ -955,7 +1011,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
     const uploadedVideoUrls = [...prevalidatedVideoUrlList];
     const uploadedVideoMetas = prevalidatedVideoUrlList.map(() => null);
     if (prevalidatedVideoUrlList.length) {
-      process.stderr.write(`📹 Assuming public video URL(s) already match Makaron upload limits: ≤${MAX_VIDEO_DURATION}s, ≤200MB, ≤1080p.\n`);
+      process.stderr.write(`📹 Assuming public video URL(s) already match Makaron upload limits: ≤${MAX_VIDEO_UPLOAD_DURATION}s, ≤${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB, ≤1080p.\n`);
     }
     for (const videoPath of prevalidatedVideoFileList) {
       process.stderr.write(`📹 Uploading ${path.basename(videoPath)} (${(fs.statSync(videoPath).size/1024/1024).toFixed(1)}MB)...\n`);
@@ -971,7 +1027,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
 
     // Add videos to project via projects/create (same as images)
     if (uploadedVideoUrls.length === 0) {
-      process.stderr.write(`❌ No valid videos were uploaded. Local videos must be MP4/MOV/WebM, ≤${MAX_VIDEO_DURATION}s, ≤200MB, and ≤1080p.\n`);
+      process.stderr.write(`❌ No valid videos were uploaded. Local videos must be MP4/MOV/WebM, ≤${MAX_VIDEO_UPLOAD_DURATION}s, ≤${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB, and ≤1080p.\n`);
       process.exit(1);
     }
 
@@ -1090,6 +1146,19 @@ if (command === '--version' || command === '-v' || command === 'version') {
 } else if (command === 'list' || command === 'ls') {
   const { headers, baseUrl } = getAuth();
   await listProjects(baseUrl, headers);
+} else if (command === 'project' || command === 'projects') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+  if (sub === 'media') {
+    const projectId = args[2];
+    if (!projectId) { console.error('Usage: makaron project media <projectId> [--json]'); process.exit(1); }
+    const jsonOutput = args.includes('--json');
+    await listProjectMedia(baseUrl, headers, projectId, { json: jsonOutput });
+  } else {
+    console.log(`Project commands:
+  project media <projectId> --json      List timeline media for a project
+`);
+  }
 } else if (command === 'abort') {
   const { headers, baseUrl } = getAuth();
   const runId = args[1];
@@ -1190,11 +1259,22 @@ if (command === '--version' || command === '-v' || command === 'version') {
 
     let videoUrl = isHttpUrl(video) ? video : null;
     let inputVideoMeta = null;
+    const selectedVideoModel = videoModel || 'kling';
     if (videoUrl) {
-      process.stderr.write(`📹 Assuming public video URL already matches Makaron upload limits: ≤${MAX_VIDEO_DURATION}s, ≤200MB, ≤1080p.\n`);
+      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K.\n`);
     }
     if (video && !videoUrl) {
-      const valid = validateVideoFile(video);
+      const valid = validateVideoFile(video, {
+        maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION,
+        durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
+        ...(selectedVideoModel === 'seedance' ? {
+          minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
+          minSide: SEEDANCE_MIN_VIDEO_SIDE,
+          maxSide: SEEDANCE_MAX_VIDEO_SIDE,
+          minAspect: SEEDANCE_MIN_VIDEO_ASPECT,
+          maxAspect: SEEDANCE_MAX_VIDEO_ASPECT,
+        } : {}),
+      });
       if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
       inputVideoMeta = valid.meta;
       process.stderr.write(`📹 Uploading ${path.basename(video)} (${(fs.statSync(video).size/1024/1024).toFixed(1)}MB)...\n`);
@@ -1205,9 +1285,9 @@ if (command === '--version' || command === '-v' || command === 'version') {
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
     const vArgs = videoUrl
-      ? { videoUrl, editPrompt: script, images, videoModel: videoModel || 'kling', referType: (videoModel || 'kling') === 'seedance' ? 'feature' : 'base' }
+      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, referType: selectedVideoModel === 'seedance' ? 'feature' : 'base' }
       : { script, images };
-    const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
+    const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (videoModel && !videoUrl) vArgs.videoModel = videoModel;
@@ -1508,6 +1588,7 @@ Commands:
   claim                              Get claim URL for human to link account
   login                              Log in to Makaron (human interactive)
   list (ls)                          List all projects
+  project media <projectId> --json    List timeline media for a project
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   create --title "name"              Create empty project (text-to-image)

@@ -15,11 +15,24 @@ describe('agent prompt policy guards', () => {
 
     expect(agent).toContain('Default tool: `generate_image`')
     expect(agent).toContain('Static charts, infographics, posters, and marketing images go to `generate_image`')
-    expect(agentTs).toContain('Use ONLY for video/animation or when user explicitly requests an editable template')
+    expect(agentTs).toContain('\\`runtime: "composition"\\`: Remotion/editable composition draft')
+    expect(agentTs).toContain('\\`runtime: "design"\\` or omitted: legacy alias for \\`runtime: "composition"\\`')
+    expect(agentTs).toContain('\\`runtime: "node"\\`: open backend Node with FFmpeg/FFprobe')
+  })
+
+  it('keeps preview_frame as one public tool with Remotion and FFmpeg engines', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg')
+    expect(agentTs).toContain('For raw video snapshots: use timestamp')
+    expect(agentTs).toContain("source: 'video'")
+    expect(agentTs).toContain("source: 'composition'")
+    expect(agentTs).not.toContain('extract_video_frame: tool')
   })
 
   it('keeps built-in image skill triggers visible before the image guide is read', () => {
     const agent = read('src/lib/prompts/agent.md')
+    const agentTs = read('src/lib/agent.ts')
     const tool = read('src/lib/prompts/generate_image_tool.md')
     const image = read('src/lib/prompts/image.md')
 
@@ -36,6 +49,8 @@ describe('agent prompt policy guards', () => {
     expect(tool).toContain('Do not read `prompts/image.md` just to route the skill')
     expect(tool).not.toContain('prompts/enhance.md')
     expect(image).toContain('backend no longer injects the full template automatically')
+    expect(agentTs).not.toContain('template rules are auto-injected')
+    expect(agentTs).toContain('you must have read and internalized that skill prompt once')
   })
 
   it('requires script confirmation before video provider submission unless direct-submit is explicit', () => {
@@ -54,12 +69,14 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('直接提交渲染')
   })
 
-  it('keeps single video generation capped at 15s and routes longer requests to the director skill', () => {
+  it('keeps single video generation in the model duration range and routes longer requests to the director skill', () => {
     const agent = read('src/lib/prompts/agent.md')
     const animate = read('src/lib/prompts/animate.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('a single video-generation script/call must be 15 seconds or less')
+    expect(agent).toContain('a single SeeDance video-generation script/call must be 4 to 15 seconds')
+    expect(agent).toContain("SeeDance's minimum output duration is 4 seconds")
+    expect(agent).toContain('set `duration: 4`')
     expect(agent).toContain('if the user provides or approves a complete video script whose total duration is 15 seconds or less')
     expect(agent).toContain('Put the entire title + all `Shot N (Xs):` lines + `Style:` line into the same `story_prompt`')
     expect(agent).toContain('Do not submit only one shot, the first shot, or one line from the script')
@@ -69,23 +86,47 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('[Active skill: long-video-director]')
     expect(agent).toContain('if an existing timeline/reference video is longer than 15 seconds')
     expect(agent).toContain('do not compress the whole source into one 5s or 15s edit')
+    expect(agent).toContain('add together the durations of all uploaded/timeline/reference videos')
+    expect(agent).toContain('The combined source duration must be 15 seconds or less')
+    expect(agent).toContain('width and height each 300-6000px')
+    expect(agent).toContain('frame pixels width*height between 409,600 and 2,086,876')
+    expect(agent).toContain('tiny videos below 409,600 frame pixels must be resized/padded before submission')
+    expect(agent).toContain('Kling reference video size is less specific')
+    expect(agent).toContain('keep the output duration aligned with the combined source duration shown in Media Index')
+    expect(agent).toContain('clamp it to the SeeDance model range: minimum 4s, maximum 15s')
 
-    expect(animate).toContain('Every normal script sent to a video generation model must be **15 seconds or less**')
+    expect(animate).toContain('Every normal SeeDance script sent to a video generation model must be **4 to 15 seconds**')
+    expect(animate).toContain("SeeDance's minimum output duration is 4 seconds")
     expect(animate).toContain('keep it as **one video generation script**')
+    expect(animate).toContain('If the script totals less than 4s, extend it to a compact 4s script instead of submitting a shorter duration')
     expect(animate).toContain('The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together')
     expect(animate).toContain('Do not submit only a single shot or a single line from the script')
     expect(animate).toContain('Multiple shots are normal inside one 15s video')
     expect(animate).toContain('do **not** write one long script')
     expect(animate).toContain('If the source/reference video itself is longer than 15s')
     expect(animate).toContain('For longer source videos, use the long-video-director workflow instead of one short compressed edit')
+    expect(animate).toContain('their **combined source duration must be 15 seconds or less** for a single SeeDance generation')
+    expect(animate).toContain('This is an input limit, not a creative long-video workflow')
+    expect(animate).toContain('frame pixels width*height between 409,600 and 2,086,876')
+    expect(animate).toContain('Kling docs do not state a video resolution lower bound')
+    expect(animate).toContain('Never write or submit a SeeDance generated video duration below 4s')
 
-    expect(agentTs).toContain('Single-call total duration: 5-15 seconds')
+    expect(agentTs).toContain('SeeDance is 4-15 seconds')
+    expect(agentTs).toContain('4s minimum output, 5s default/common preset')
+    expect(agentTs).toContain('Kling is 5-15 seconds')
+    expect(agentTs).toContain('set \\`duration: 4\\`')
     expect(agentTs).toContain('If a complete script totals 15 seconds or less, submit it as one video generation call')
     expect(agentTs).toContain('Put the whole title, every \\`Shot N (Xs):\\` line, and the \\`Style:\\` line into the same \\`story_prompt\\`')
     expect(agentTs).toContain('Do not submit only one shot, the first shot, or one line from the script')
     expect(agentTs).toContain('Total duration must be 15 seconds or less')
     expect(agentTs).toContain('Long source video rule')
     expect(agentTs).toContain('if a timeline/reference video is longer than 15 seconds')
+    expect(agentTs).toContain('the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less')
+    expect(agentTs).toContain('frame pixels width*height between 409,600 and 2,086,876')
+    expect(agentTs).toContain('Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented')
+    expect(agentTs).toContain('set this to the combined source video duration from Media Index clamped to the selected model range')
+    expect(agentTs).not.toContain('Duration in seconds: 3, 5, 7, 10, or 15')
+    expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")
   })
 
   it('keeps Seedance as the default video model unless user or app selects Kling', () => {
@@ -94,8 +135,26 @@ describe('agent prompt policy guards', () => {
 
     expect(agent).toContain('usually SeeDance')
     expect(agent).toContain('prefer Kling')
-    expect(agentTs).toContain("ctx.videoModel || 'seedance'")
-    expect(agentTs).toContain('Default: seedance')
+    expect(agentTs).toContain('normalizeVideoModelId(model || (ctx as any).videoModel)')
+    expect(agentTs).toContain('Default follows the app selection (usually seedance)')
+  })
+
+  it('uses path-based composition patching instead of full currentDesign code injection', () => {
+    const agentTs = read('src/lib/agent.ts')
+    const coding = read('src/lib/prompts/agent-coding.md')
+    const context = read('src/lib/agent-context.ts')
+
+    expect(agentTs).toContain('[Current composition pointer]')
+    expect(agentTs).toContain('currentDesignPath')
+    expect(agentTs).toContain('code_path')
+    expect(agentTs).not.toContain('[Current Remotion composition code')
+    expect(agentTs).not.toContain('__lastDesignPayload = options.currentDesign')
+
+    expect(coding).toContain('include that exact path as `code_path`')
+    expect(coding).toContain('Do not rely on implicit remembered composition code across turns')
+    expect(context).toContain('[Current Composition]')
+    expect(context).toContain('code_path')
+    expect(context).not.toContain('[Current Design]')
   })
 
   it('routes long video work through the long-video-director skill before short video scripts', () => {

@@ -1,0 +1,26 @@
+{
+  "startUrls": [
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Glam%20AI&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=EPIK%20AI&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=BeautyPlus&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Hypic&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=CapCut%20template&search_type=keyword_unordered"
+    }
+  ],
+  "resultsLimit": 5,
+  "includeAboutPage": true,
+  "isDetailsPerAd": false,
+  "activeStatus": "active"
+}

@@ -9,7 +9,7 @@ export interface KlingTaskInput {
   duration?: number       // 5 or 10
   aspect_ratio?: string   // '9:16' | '16:9' | '1:1'
   // Video editing (video_list)
-  videoUrl?: string                    // Reference video URL (MP4/MOV, ≥3s, 720-2160px, ≤200MB)
+  videoUrl?: string                    // Reference video URL (MP4/MOV, ≤200MB, ≤2K; no documented video resolution lower bound)
   videoReferType?: 'base' | 'feature'  // 'base' = video to edit, 'feature' = feature reference (default: 'base')
   keepOriginalSound?: boolean          // Keep original video sound (default: false)
 }

@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
@@ -23,10 +24,10 @@ export async function POST(req: NextRequest) {
     if (!creditCheck.ok) return creditCheck.response;
 
     const endReadBody = perf.span('read_body');
-    const { prompt, image, originalImage, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
+    const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
-            musicReady, musicAudioUrl, currentDesign, videoModel,
+            musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel,
             headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = await req.json();
     endReadBody({
       projectId: projectId || null,
@@ -165,10 +166,10 @@ export async function POST(req: NextRequest) {
             return;
           }
 
-          // musicReady: background music generation completed — agent injects <Audio> into design
+          // musicReady: background music generation completed — agent injects <Audio> into the composition
           if (musicReady && musicAudioUrl) {
             const musicPrompt = withLocale(
-              `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest design code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code to render the updated version with music.`,
+              `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest Remotion composition code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code with runtime: "composition" to render the updated version with music.`,
               locale,
             );
             await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {
@@ -204,11 +205,11 @@ export async function POST(req: NextRequest) {
           const needsPromptContext = !analysisOnly || (!image && !(snapshotImages?.length));
           let agentPrompt = prompt ?? '';
           let agentImage = image || (snapshotImages?.[currentSnapshotIndex ?? 0]) || '';
-          let agentOriginalImage = originalImage || image || '';
           let agentSnapshotImages = snapshotImages?.length ? snapshotImages : (agentImage ? [agentImage] : []);
           let agentCurrentSnapshotIndex = currentSnapshotIndex ?? Math.max(agentSnapshotImages.length - 1, 0);
           let agentCurrentDesign = currentDesign;
-          let agentHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+          let agentCurrentDesignPath = typeof currentDesignPath === 'string' ? currentDesignPath : undefined;
+          let agentHistory: ModelMessage[] = [];
 
           if (needsPromptContext) {
             // Unified context: both frontend and headless use buildPromptContext.
@@ -229,15 +230,16 @@ export async function POST(req: NextRequest) {
               historyTurns: ctx.history.length,
               mediaCount: ctx.snapshotImages.length,
               hasCurrentDesign: !!ctx.currentDesign,
+              currentDesignPath: ctx.currentDesignPath || null,
             });
 
             agentPrompt = ctx.fullPrompt;
             // Frontend may pass images directly (new uploads not yet in DB)
             agentImage = image || ctx.snapshotImages[ctx.currentSnapshotIndex] || '';
-            agentOriginalImage = originalImage || ctx.originalImage;
             agentSnapshotImages = snapshotImages?.length ? snapshotImages : ctx.snapshotImages;
             agentCurrentSnapshotIndex = ctx.currentSnapshotIndex;
             agentCurrentDesign = currentDesign || ctx.currentDesign;
+            agentCurrentDesignPath = agentCurrentDesignPath || ctx.currentDesignPath;
             agentHistory = ctx.history;
           } else {
             perf.mark('build_prompt_context_skipped', {
@@ -274,7 +276,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, originalImage: agentOriginalImage, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, history: agentHistory, timelineVersion, perf })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
                 if (event.type === 'usage') { usageEvent = event; continue; }
                 if (writer) {
                   await writer.processAndEnqueue(event);

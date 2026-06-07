@@ -7,7 +7,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
 import RollingTagline from '@/components/RollingTagline'
-import { MakaronSpark } from '@/components/MakaronLogo'
+import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
+import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
@@ -212,6 +213,7 @@ export default function LoginPage() {
 
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
+        trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
         let returnUrl = localStorage.getItem('mkr_return_url') || ''
         localStorage.removeItem('mkr_return_url')
         // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
@@ -355,7 +357,7 @@ export default function LoginPage() {
         {/* Wordmark */}
         <div className="flex items-center justify-center gap-3 mb-1">
           <MakaronSpark size={30} />
-          <div style={{ fontWeight: 800, fontSize: 'clamp(2.2rem, 10vw, 3.2rem)', letterSpacing: '-0.04em', color: '#fff', lineHeight: 1 }}>
+          <div style={{ ...MAKARON_WORDMARK_STYLE, fontSize: 'clamp(2.2rem, 10vw, 3.2rem)' }}>
             Makaron
           </div>
         </div>

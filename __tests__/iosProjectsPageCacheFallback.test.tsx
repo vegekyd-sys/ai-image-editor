@@ -117,6 +117,7 @@ vi.mock('@/components/RollingTagline', () => ({
 
 vi.mock('@/components/MakaronLogo', () => ({
   MakaronSpark: () => <span>*</span>,
+  MAKARON_WORDMARK_STYLE: {},
 }));
 
 vi.mock('@/components/CreateInputBox', () => ({

@@ -6,6 +6,8 @@ import { CREDIT_TIERS } from '@/lib/billing/tiers'
 import CreditPopup from '@/components/CreditPopup'
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 import { navigateBackInIOSApp } from '@/lib/native-navigation'
+import { getAttributionForRequest } from '@/lib/marketing/attribution'
+import { trackCheckoutStart } from '@/lib/marketing/meta-pixel'
 
 interface ApiKey {
   id: string
@@ -138,10 +140,16 @@ function DashboardInner() {
   const handleCheckout = async (tier: string) => {
     setCheckingOut(tier)
     try {
+      const tierConfig = CREDIT_TIERS.find(t => t.id === tier)
+      const metaEventId = trackCheckoutStart('topup', {
+        content_name: tier,
+        value: tierConfig ? tierConfig.price / 100 : undefined,
+        currency: 'USD',
+      })
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier, returnPath: '/dashboard' }),
+        body: JSON.stringify({ tier, returnPath: '/dashboard', metaEventId, attribution: getAttributionForRequest() }),
       })
       const data = await res.json()
       if (data.url) window.location.href = data.url
@@ -153,10 +161,16 @@ function DashboardInner() {
   const handleSubscribe = async (planId: string) => {
     setSubscribing(planId)
     try {
+      const plan = PLANS.find(p => p.id === planId)
+      const metaEventId = trackCheckoutStart('subscription', {
+        content_name: planId,
+        value: plan ? (billingInterval === 'month' ? plan.monthlyPrice : plan.annualPrice) / 100 : undefined,
+        currency: 'USD',
+      })
       const res = await fetch('/api/billing/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId, interval: billingInterval, returnPath: '/dashboard' }),
+        body: JSON.stringify({ planId, interval: billingInterval, returnPath: '/dashboard', metaEventId, attribution: getAttributionForRequest() }),
       })
       const data = await res.json()
       if (data.url) window.location.href = data.url

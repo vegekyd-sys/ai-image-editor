@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -102,6 +103,18 @@ export async function GET(request: NextRequest) {
   }
 
   const redirectUrl = isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`
+  if (isNewUser) {
+    const attribution = readAttributionCookie(request.cookies.get('mkr_attribution')?.value)
+    await sendMetaCapiEvent({
+      eventName: 'CompleteRegistration',
+      eventId: `registration.${user.id}`,
+      userId: user.id,
+      email: user.email,
+      request,
+      eventSourceUrl: `${origin}/home`,
+      customData: attribution,
+    })
+  }
   return buildRedirectPage(redirectUrl, cookiesToSetOnResponse)
 }
 

@@ -1,0 +1,26 @@
+{
+  "startUrls": [
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Remini%20AI%20Photobooth&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Glam%20AI%20K-pop%20idol&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=AI%20kiss%20cam&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=Hypic%202016%20camera%20effect&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=AI%20mugshot%20trend&search_type=keyword_unordered"
+    },
+    {
+      "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q=AI%20pet%20video&search_type=keyword_unordered"
+    }
+  ],
+  "resultsLimit": 5,
+  "includeAboutPage": true,
+  "isDetailsPerAd": false,
+  "activeStatus": "active"
+}

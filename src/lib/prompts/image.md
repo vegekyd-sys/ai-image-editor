@@ -10,7 +10,7 @@ Never re-analyze images you have already seen. If you called `analyze_image` ear
 
 ## Snapshot Index
 
-General Media Index rules live in `agent.md` and apply to images, videos, design, and node media work.
+General Media Index rules live in `agent.md` and apply to images, videos, Remotion compositions, and node media work.
 
 Image-specific reminder: `media_index` selects the edit base and becomes Image 1 for the model. `reference_media_indices` adds extra timeline snapshots and they become Image 2, Image 3, and so on.
 
@@ -53,26 +53,27 @@ When to use each skill:
 
 ### Default Single Image Mode
 
-By default, `useOriginalAsReference=false`, only the current photo is sent to Gemini.
+By default, only the selected snapshot is sent to the image model.
 
-This is the correct mode for all standard edits. Gemini will edit the image in-place.
+This is the correct mode for all standard edits. The model will edit the selected image in-place.
 
-### When to Use useOriginalAsReference=true
+### Restore From Original Snapshot
 
-Set this to true when you judge that having the original photo as a reference would produce a better result. Use your judgment. If the current image has drifted from what the user wants, or if the user wants to restore any aspect from the original, set this to true.
+If the user wants to restore details from the original photo, use timeline references explicitly.
 
 Common triggers:
 
 - User says "人脸变了" / "脸不对" / "跟原图不一样" / "恢复人脸": face needs restoring.
 - User says "颜色偏了" / "背景变了" / "恢复原来的XX": some element has drifted.
 - User says "重新做" / "从原图开始" / "参考原图": user wants to reference original.
-- After many edits, composition or identity has significantly drifted from original.
-- Any time you think: "the original had better X, I should reference it."
 
-When `useOriginalAsReference=true`, Gemini receives:
+Use the current snapshot as the edit base and pass the original snapshot, usually `<<<media_1>>>`, through `reference_media_indices`.
 
-- Image 1 equals current version, the edit base. Use this for composition, layout, recent changes.
-- Image 2 equals original photo, the reference. Use this to restore any elements that have drifted: face, colors, background, and so on.
+Example: the current edited image is `<<<media_4>>>` and the user says "脸恢复成原图".
+
+- `media_index: 4`, edit base equals current image equals Image 1.
+- `reference_media_indices: [1]`, original photo equals Image 2.
+- `editPrompt: "Restore each person's appearance to exactly match Image 2 (the original photo), while keeping the current composition and recent non-face edits from Image 1. Preserve..."`
 
 ### Red Annotations
 
@@ -149,13 +150,13 @@ When people are present, always include one of these:
 
 - Large people, greater than 10 percent of frame: "Keep every person's appearance pixel-identical to the original photo — no reshaping, smoothing, or altering."
 - Small people, less than 10 percent of frame: "People are small in this frame. Apply all edits only to background, environment, and overall color grading."
-- Restoring, when `useOriginalAsReference=true`: "Restore each person's appearance to exactly match Image 2 (original). Copy all details from Image 2."
+- Restoring from an original reference image: "Restore each person's appearance to exactly match Image 2 (the original photo). Copy facial identity details from Image 2."
 
 ### Edit
 
 Describe what to actually change in specific detail.
 
-When `useOriginalAsReference=true`, describe explicitly which elements should reference Image 2.
+When using `reference_media_indices`, describe explicitly which elements should reference Image 2, Image 3, and so on.
 
 ### Preserve
 

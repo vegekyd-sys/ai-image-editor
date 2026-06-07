@@ -1,0 +1,590 @@
+[
+  {
+    "kind": "internal",
+    "item": {
+      "id": "73b1ed94-84b1-4e24-964e-720bd4c60308",
+      "name": "Photo to Video",
+      "prompt": "Turn my photo into a video",
+      "videoUrl": "https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/covers/photo-to-video.mp4",
+      "inputCount": 1,
+      "beforeCount": 1,
+      "sortOrder": 0,
+      "priority": 0
+    },
+    "analysis": {
+      "one_line_summary": "A woman takes a photo of a Toy Story alien, which magically transforms into a lively video where she gains glowing eyes and more toys appear.",
+      "target_viewer": "Creative social media users, Toy Story fans, and mobile photographers looking for magical video effects.",
+      "first_2_seconds": "A close-up of a Toy Story alien toy with glowing eyes, with a woman's reflection taking a photo.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Close-up of a Toy Story alien toy. A woman is visible in the background taking a photo with her phone.",
+          "motion": "Subtle movement of the toy's eyes and the woman's phone.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The glowing eyes of the toy and the 'behind-the-scenes' feel of taking a photo create immediate curiosity."
+        },
+        {
+          "time": "2-4s",
+          "visual": "The scene transitions to the woman at her desk. Her eyes are now glowing green like the alien's.",
+          "motion": "Smooth transition from the toy to the woman's face.",
+          "text_or_ui": "Chinese text appears briefly.",
+          "why_it_hooks": "The 'human-to-toy' eye effect is a strong visual hook that signals a magical transformation."
+        },
+        {
+          "time": "4-15s",
+          "visual": "The woman interacts with multiple Toy Story characters (Rex, Hamm, Slinky) that appear on her desk.",
+          "motion": "Stop-motion style animation of the toys appearing and moving.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The playful interaction and the 'pop-up' effect of the toys keep the viewer engaged with the fantasy."
+        }
+      ],
+      "creative_mechanic": "fantasy_scene",
+      "visual_style": [
+        "Vibrant",
+        "Playful",
+        "Cinematic Lighting",
+        "Pop-culture themed"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 9,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "Photo to Video",
+      "what_to_copy_as_pattern_not_asset": "The transition from a static 'taking a photo' moment to a high-energy, magical video reality.",
+      "what_to_change_for_makaron": "Add a clear 'Before' and 'After' label or show the Makaron app interface during the transition to emphasize the tool used.",
+      "recommended_ad_hook": "Stop taking boring photos. Bring them to life with Makaron!",
+      "recommended_first_2s_remake": "Start with a split screen: a static photo on the left and the glowing-eye video on the right to immediately show the 'Photo to Video' value proposition."
+    }
+  },
+  {
+    "kind": "internal",
+    "item": {
+      "id": "a0f78216-8dbc-472a-83b2-9fb6a8a213c9",
+      "name": "Fun Vlog",
+      "prompt": "Make a fun vlog",
+      "videoUrl": "https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/covers/fun-vlog.mp4",
+      "inputCount": 3,
+      "beforeCount": 2,
+      "sortOrder": 1,
+      "priority": 1
+    },
+    "analysis": {
+      "one_line_summary": "A high-energy, gamified vlog featuring a child exploring Super Nintendo World with video-game-style overlays and UI elements.",
+      "target_viewer": "Parents, Nintendo fans, and travel enthusiasts looking for creative ways to document family trips.",
+      "first_2_seconds": "A high-energy intro with a 'BOSS DETECTED!' alert and a child wearing a Bowser Jr. hat at Universal Studios Osaka.",
+      "shot_breakdown": [
+        {
+          "time": "0-3s",
+          "visual": "A child in a Bowser Jr. hat posing in front of a Bowser statue.",
+          "motion": "Static shot with dynamic text overlays appearing.",
+          "text_or_ui": "BOWSER JR. GOES WILD!, BOSS DETECTED!, SOLO MISSION: ACCEPT!",
+          "why_it_hooks": "Uses recognizable Nintendo IP and high-energy 'game start' aesthetics to grab immediate attention."
+        },
+        {
+          "time": "3-6s",
+          "visual": "Close-up of the child rapidly hitting a yellow block.",
+          "motion": "Fast-paced repetitive motion.",
+          "text_or_ui": "MISSION: SMASH THE BLOCK!, Attack Power bar, COMBO!! x88",
+          "why_it_hooks": "Gamification of real-life actions makes the content engaging and satisfying to watch."
+        },
+        {
+          "time": "6-9s",
+          "visual": "The child looking up at a giant glowing '?' block.",
+          "motion": "Slight camera tilt upwards to show scale.",
+          "text_or_ui": "???, Dad: Uhhh what is this?",
+          "why_it_hooks": "Creates a moment of wonder and curiosity, showing the scale of the park."
+        },
+        {
+          "time": "9-11s",
+          "visual": "A wide shot of Mario and Luigi mascots interacting with a crowd.",
+          "motion": "Panning shot.",
+          "text_or_ui": "MARIO & LUIGI",
+          "why_it_hooks": "Provides the 'payoff' by showing the iconic characters everyone recognizes."
+        }
+      ],
+      "creative_mechanic": "character_action",
+      "visual_style": [
+        "Vibrant",
+        "Gamified",
+        "Vlog-style",
+        "High-contrast text"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 9,
+      "makaron_relevance_1_to_10": 7,
+      "best_makaron_skill_match": "Fun Vlog",
+      "what_to_copy_as_pattern_not_asset": "The use of video game UI elements (health bars, combo counters, mission prompts) to narrate real-life footage.",
+      "what_to_change_for_makaron": "Replace generic overlays with Makaron-specific animated stickers and 'Game UI' templates to demonstrate the app's editing capabilities.",
+      "recommended_ad_hook": "Turn your family vacation into a real-life video game with just one tap!",
+      "recommended_first_2s_remake": "Start directly with the 'COMBO x88' action shot to lead with high energy and movement, then cut to the 'Boss Detected' intro."
+    }
+  },
+  {
+    "kind": "internal",
+    "item": {
+      "id": "7ef2c391-a7e4-4519-ac06-62ec3acff2ac",
+      "name": "Broadcast Candid",
+      "prompt": "上传自拍，把你放进棒球比赛的直播画面里",
+      "videoUrl": "https://cdn.makaron.app/storage/v1/object/public/images/marketplace/covers/kbo-broadcast-candid-v2.mp4",
+      "inputCount": 1,
+      "beforeCount": 1,
+      "sortOrder": 66,
+      "priority": 2
+    },
+    "analysis": {
+      "one_line_summary": "A realistic TV broadcast-style clip of a fan reacting enthusiastically at a baseball game, perfect for 'main character' face-swaps.",
+      "target_viewer": "Baseball fans and social media users who enjoy 'candid' or 'viral' moments and want to see themselves on TV.",
+      "first_2_seconds": "A young woman in a baseball cap looks down at her phone, then suddenly looks up with a shocked, wide-eyed expression.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Close-up of a woman in an LG Twins jersey and red cap looking at her phone. She looks up at the field with a dramatic 'gasp' expression.",
+          "motion": "Subtle head movement from phone to field; eyes widen significantly.",
+          "text_or_ui": "Scoreboard UI (LG 3, Lotte 1), SPOTV LIVE logo.",
+          "why_it_hooks": "The sudden, genuine-looking reaction of surprise creates immediate curiosity about what she is seeing."
+        },
+        {
+          "time": "2-7s",
+          "visual": "The woman breaks into a huge smile, cheers, and raises her arms in excitement while looking off-camera.",
+          "motion": "High-energy cheering and arm-waving.",
+          "text_or_ui": "Same broadcast UI elements remain static.",
+          "why_it_hooks": "The high energy and 'main character' energy make it a highly desirable scene for users to insert themselves into."
+        }
+      ],
+      "creative_mechanic": "fantasy_scene",
+      "visual_style": [
+        "Broadcast TV",
+        "Candid",
+        "High-energy",
+        "Realistic"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 9,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "Broadcast Candid",
+      "what_to_copy_as_pattern_not_asset": "The use of authentic broadcast UI (scoreboard, channel logo) to make the scene feel like a real TV moment rather than a filtered video.",
+      "what_to_change_for_makaron": "Replace the fan's face with the user's selfie while maintaining the realistic lighting and the 'surprised-to-cheering' emotional arc.",
+      "recommended_ad_hook": "POV: You're the fan everyone's talking about on the live broadcast! ⚾️✨",
+      "recommended_first_2s_remake": "Show a split screen: on the left, a user takes a quick selfie; on the right, that selfie is instantly transformed into the woman in the stadium looking up from her phone."
+    }
+  },
+  {
+    "kind": "internal",
+    "item": {
+      "id": "9db4bfb9-2e52-46e0-a59d-500f12e9f262",
+      "name": "One-Take",
+      "prompt": "化身爱豆，置身打歌舞台",
+      "videoUrl": "https://cdn.makaron.app/storage/v1/object/public/images/marketplace/covers/one-take.mp4",
+      "inputCount": 1,
+      "beforeCount": 0,
+      "sortOrder": 67,
+      "priority": 3
+    },
+    "analysis": {
+      "one_line_summary": "A high-production K-pop idol stage simulation featuring a pink-haired dancer performing a dynamic 'One-Take' music video routine.",
+      "target_viewer": "Gen Z and Millennials interested in K-pop culture, dance challenges, and high-end AI video editing.",
+      "first_2_seconds": "A dramatic close-up of the performer's face transitioning into a wide shot of a professional-looking stage with backup dancers.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Close-up of the performer walking towards the camera, followed by a quick zoom-out to reveal the full stage.",
+          "motion": "Forward walk to wide-angle zoom.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The 'idol' aesthetic is instantly recognizable and high-quality, creating immediate visual interest."
+        },
+        {
+          "time": "2-6s",
+          "visual": "Medium-wide shot of the choreography with backup dancers and flashing stage lights.",
+          "motion": "Synchronized dance movements with dynamic camera panning.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The professional lighting and backup dancers make the scene feel like a real music video, not just a filter."
+        },
+        {
+          "time": "6-10s",
+          "visual": "Close-up shots during key dance moves, focusing on facial expressions.",
+          "motion": "Fast cuts and camera shakes to match the beat.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Maintains high energy and emphasizes the 'star' quality of the performer."
+        },
+        {
+          "time": "10-15s",
+          "visual": "The performer walks forward confidently as the stage lights change, ending with a final pose.",
+          "motion": "Steady forward tracking shot.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The 'ending fairy' trope common in K-pop music shows provides a satisfying conclusion."
+        }
+      ],
+      "creative_mechanic": "fantasy_scene",
+      "visual_style": [
+        "K-pop Aesthetic",
+        "Stage Lighting",
+        "Vibrant Colors",
+        "Dynamic Camera Movement"
+      ],
+      "hook_strength_1_to_10": 9,
+      "clarity_1_to_10": 9,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "One-Take / Idol Stage",
+      "what_to_copy_as_pattern_not_asset": "The dynamic camera work that stays locked on the subject while the background and lighting shift to create a high-budget music video feel.",
+      "what_to_change_for_makaron": "Add a 'Before' clip showing the user in a mundane environment (like a bedroom) to emphasize the AI transformation power.",
+      "recommended_ad_hook": "Turn your bedroom into a K-pop stage in one take! 🎤✨",
+      "recommended_first_2s_remake": "A quick 'Before vs. After' flash: 0.5s of the user in a plain room, then 1.5s of the explosive stage reveal with the 'One-Take' effect."
+    }
+  },
+  {
+    "kind": "internal",
+    "item": {
+      "id": "2b9885b1-3a25-43ed-a54b-de80298d01e1",
+      "name": "Character Select",
+      "prompt": "上传照片，自动生成游戏风格的角色选择动画短片",
+      "videoUrl": "https://cdn.makaron.app/storage/v1/object/public/images/marketplace/covers/character-select.mp4",
+      "inputCount": 1,
+      "beforeCount": 1,
+      "sortOrder": 69,
+      "priority": 4
+    },
+    "analysis": {
+      "one_line_summary": "A high-fidelity cyberpunk character selection animation featuring a futuristic bounty hunter with dynamic combat VFX and game-style UI.",
+      "target_viewer": "Gamers, sci-fi enthusiasts, and creators looking for high-end AI character transformations.",
+      "first_2_seconds": "The character aims a futuristic handgun directly at the camera with a sharp zoom-in effect.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Full shot of a cyberpunk character in a neon city, zooming into a close-up as he aims a gun.",
+          "motion": "Rapid zoom and arm movement towards the lens.",
+          "text_or_ui": "NEXUS: 2099 logo in the top left.",
+          "why_it_hooks": "Direct eye contact and aggressive action create immediate engagement."
+        },
+        {
+          "time": "2-4s",
+          "visual": "Extreme close-up of the gun barrel glowing and firing a bright orange energy blast.",
+          "motion": "High-speed muzzle flash and light bloom effects.",
+          "text_or_ui": "None.",
+          "why_it_hooks": "High-quality VFX and sensory stimulation (light/flash)."
+        },
+        {
+          "time": "4-6s",
+          "visual": "Side profile of the character firing into the distance with background explosions.",
+          "motion": "Camera shake and particle effects (sparks, smoke).",
+          "text_or_ui": "None.",
+          "why_it_hooks": "Shows the character in a dynamic, 'playable' environment."
+        },
+        {
+          "time": "6-10s",
+          "visual": "Character returns to a neutral pose; a futuristic blue UI panel appears with stats.",
+          "motion": "UI elements slide in; character has subtle breathing/idle animation.",
+          "text_or_ui": "Shadowedge, Bounty Class-S, Weapon: ARC-9 Plasma, Status: Active.",
+          "why_it_hooks": "Satisfying 'game-ready' aesthetic that makes the user want to 'select' the character."
+        }
+      ],
+      "creative_mechanic": "character_action",
+      "visual_style": [
+        "Cyberpunk",
+        "Neon-noir",
+        "High-fidelity 3D",
+        "Futuristic UI"
+      ],
+      "hook_strength_1_to_10": 9,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "Character Select / Game Style Transformation",
+      "what_to_copy_as_pattern_not_asset": "The sequence of 'Action Hook' -> 'VFX Showcase' -> 'UI/Stat Reveal' to simulate a professional game menu.",
+      "what_to_change_for_makaron": "Include a 'Before' photo of a real person to demonstrate the AI transformation capability of the app.",
+      "recommended_ad_hook": "Stop playing games and start being in them. Turn your selfie into a Cyberpunk legend.",
+      "recommended_first_2s_remake": "Start with a split-screen: A casual selfie on the left and the character aiming the gun on the right, syncing the head tilt."
+    }
+  },
+  {
+    "kind": "internal",
+    "item": {
+      "id": "75457f73-f29f-451e-83b3-d6ec709a850e",
+      "name": "Pet Mugshot",
+      "prompt": "上传宠物照片，生成警局 mugshot 风格的搞笑犯罪档案",
+      "videoUrl": "https://cdn.makaron.app/storage/v1/object/public/images/marketplace/covers/pet-mugshot.mp4",
+      "inputCount": 1,
+      "beforeCount": 1,
+      "sortOrder": 63,
+      "priority": 5
+    },
+    "analysis": {
+      "one_line_summary": "A dramatic and humorous video featuring a husky 'caught' with snacks, transitioning into a stylized police mugshot profile.",
+      "target_viewer": "Pet owners and animal lovers who enjoy humorous, relatable content and creative photo editing templates.",
+      "first_2_seconds": "A husky sits intensely behind a table filled with snack bags, looking directly at the camera.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Husky dog sitting behind a table with various snack bags. Dark, moody background.",
+          "motion": "Slow zoom in on the dog's face.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Relatable 'guilty pet' scenario combined with high-quality, dramatic lighting creates instant curiosity."
+        },
+        {
+          "time": "2-3s",
+          "visual": "Extreme close-up of the husky's bright blue eye.",
+          "motion": "Rapid zoom-in transition.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The fast-paced zoom creates a cinematic 'reveal' effect, building tension for the punchline."
+        },
+        {
+          "time": "3-5s",
+          "visual": "The dog is now in a police mugshot setting with a height chart background and a case file overlay.",
+          "motion": "Static image with text appearing.",
+          "text_or_ui": "CASE NO: 2024-HSKY-0428, CRIME: 偷吃零食罪 (Stealing Snacks), DATE: 2024-03-15",
+          "why_it_hooks": "The humorous payoff of the 'criminal' pet trope is highly shareable and satisfying."
+        }
+      ],
+      "creative_mechanic": "before_after",
+      "visual_style": [
+        "Cinematic lighting",
+        "High contrast",
+        "Dramatic zoom",
+        "Mugshot aesthetic"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "Pet Mugshot / AI Pet Portrait",
+      "what_to_copy_as_pattern_not_asset": "The 'crime and punishment' narrative flow: show the 'crime' (pet with food/mess), use a dramatic zoom transition, and reveal the 'mugshot' result.",
+      "what_to_change_for_makaron": "Add a 'Before' and 'After' label or a UI overlay showing the Makaron template selection to make it clear this is a feature users can use.",
+      "recommended_ad_hook": "Caught red-handed! 🐾 Turn your pet's 'crimes' into hilarious mugshots with one tap.",
+      "recommended_first_2s_remake": "Start with a 1-second clip of a pet actually knocking over a treat jar or chewing a shoe, then cut to the intense husky stare to heighten the 'guilty' vibe."
+    }
+  },
+  {
+    "kind": "internal",
+    "item": {
+      "id": "a4739aaf-d7cc-49bd-b5d4-580f2f900ecd",
+      "name": "Pet Action Movie",
+      "prompt": "上传宠物照片，生成宠物动作大片",
+      "videoUrl": "https://cdn.makaron.app/storage/v1/object/public/images/covers/pet-action-movie-v2.mp4",
+      "inputCount": 1,
+      "beforeCount": 1,
+      "sortOrder": 64,
+      "priority": 6
+    },
+    "analysis": {
+      "one_line_summary": "A high-octane cinematic action sequence featuring anthropomorphic cats in suits engaged in a secret agent heist and fight.",
+      "target_viewer": "Pet owners and social media users who enjoy humorous, high-quality AI-generated content and want to see their pets in creative scenarios.",
+      "first_2_seconds": "A fluffy cat wearing a suit and a headset opens a high-tech door, whispering 'Target is inside'.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Close-up from behind of a fluffy cat in a black suit and headset opening a modern door with a digital lock.",
+          "motion": "The cat reaches for the handle and pushes the door open.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The absurdity of a cat in a professional suit acting like a secret agent immediately grabs attention."
+        },
+        {
+          "time": "2-4s",
+          "visual": "The cat enters a luxury hotel room and spots another cat (black) in a suit by an open safe.",
+          "motion": "Camera follows the cat into the room; the black cat turns around in a defensive stance.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Establishes a clear narrative conflict and high production value."
+        },
+        {
+          "time": "4-10s",
+          "visual": "A fast-paced martial arts fight sequence between the two cats in the middle of the room.",
+          "motion": "Dynamic camera movements, punches, blocks, and a final takedown where the fluffy cat pins the black cat.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The high-quality animation of the fight scene is impressive and keeps the viewer engaged to see the outcome."
+        }
+      ],
+      "creative_mechanic": "character_action",
+      "visual_style": [
+        "Cinematic",
+        "Hyper-realistic AI",
+        "Anthropomorphic",
+        "Action-thriller"
+      ],
+      "hook_strength_1_to_10": 9,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "Pet Action Movie",
+      "what_to_copy_as_pattern_not_asset": "The concept of placing pets in highly detailed, human-like professional or action roles (e.g., secret agents, chefs, athletes) with cinematic lighting.",
+      "what_to_change_for_makaron": "Include a 'Before' shot of a static pet photo to demonstrate the transformation power of the Makaron skill.",
+      "recommended_ad_hook": "Ever wondered what your cat does when you're not home? Turn them into a Hollywood action star!",
+      "recommended_first_2s_remake": "Start with a split-screen: on the left, a regular photo of a cat; on the right, the cat in the suit opening the door."
+    }
+  },
+  {
+    "kind": "internal",
+    "item": {
+      "id": "22d34123-3cde-40cf-8bfe-7ca3c45fd4f7",
+      "name": "Map Tap Transition",
+      "prompt": "上传全身照+目的地，生成地图手指点击转场旅行视频",
+      "videoUrl": "https://cdn.makaron.app/storage/v1/object/public/images/covers/map-tap-transition-v3.mp4",
+      "inputCount": 1,
+      "beforeCount": 1,
+      "sortOrder": 62,
+      "priority": 7
+    },
+    "analysis": {
+      "one_line_summary": "A magical vintage map transition that transports users to iconic global landmarks with a single tap.",
+      "target_viewer": "Travel enthusiasts, social media influencers, and users looking for creative ways to showcase vacation photos.",
+      "first_2_seconds": "A hand taps a 'Milan' pin on a vintage map, triggering a glowing portal that reveals a woman in front of the Milan Cathedral.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Vintage map with pins for Paris, Milan, Beijing. A hand taps Milan.",
+          "motion": "Hand movement followed by a circular golden glow expansion.",
+          "text_or_ui": "Pins labeled 'Paris', 'Milan', 'Beijing', 'India', etc.",
+          "why_it_hooks": "The tactile interaction with the map creates immediate curiosity about the destination."
+        },
+        {
+          "time": "2-4s",
+          "visual": "Transition to a full-body shot of a woman in Milan, then back to the map.",
+          "motion": "Smooth cross-fade transition from the glow to the location photo.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Shows the 'result' of the interaction, proving the creative value of the effect."
+        },
+        {
+          "time": "4-7s",
+          "visual": "Hand taps 'Paris' on the map, revealing a woman at the Eiffel Tower.",
+          "motion": "Repeat of the tap-and-glow mechanic.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Demonstrates versatility and encourages users to think about multiple travel memories."
+        }
+      ],
+      "creative_mechanic": "template_reveal",
+      "visual_style": [
+        "Vintage",
+        "Magical",
+        "Travel-aesthetic",
+        "Cinematic"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 10,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "Map Tap Transition",
+      "what_to_copy_as_pattern_not_asset": "The 'interactive framing' device—using a physical object (the map) to trigger a digital transition to a photo.",
+      "what_to_change_for_makaron": "Include a UI overlay showing the 'Upload Photo' step to make it feel like a reachable tool rather than just a finished video.",
+      "recommended_ad_hook": "Turn your travel photos into a magical journey with just one tap! 🌍✨",
+      "recommended_first_2s_remake": "Start with a split screen: on the left, a folder of travel photos; on the right, the hand tapping the map to instantly 'organize' them into this video."
+    }
+  },
+  {
+    "kind": "internal",
+    "item": {
+      "id": "71836fc7-affe-4082-85c9-6c730cd8f7c6",
+      "name": "Seamless and silky transition",
+      "prompt": "上传照片，生成丝滑无缝转场视频",
+      "videoUrl": "https://cdn.makaron.app/storage/v1/object/public/images/covers/creative-transition-v2.mp4",
+      "inputCount": 1,
+      "beforeCount": 1,
+      "sortOrder": 65,
+      "priority": 8
+    },
+    "analysis": {
+      "one_line_summary": "A seamless zoom transition morphing latte art into a vast desert landscape at sunset.",
+      "target_viewer": "Social media content creators, travel enthusiasts, and video editing hobbyists looking for 'wow' effects.",
+      "first_2_seconds": "A tight close-up of a coffee cup with latte art, rapidly zooming into the center swirl.",
+      "shot_breakdown": [
+        {
+          "time": "0-1s",
+          "visual": "Close-up of a cup of coffee with a heart-shaped latte art pattern.",
+          "motion": "Rapid digital zoom into the center of the foam.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The familiar image of coffee combined with aggressive motion creates immediate curiosity about where the camera is going."
+        },
+        {
+          "time": "1-2s",
+          "visual": "The brown and white textures of the coffee foam blur and morph into the ridges of sand dunes.",
+          "motion": "Continuous smooth zoom-out/transition motion.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The 'seamless' nature of the transition is visually satisfying and keeps the viewer engaged to see the final reveal."
+        },
+        {
+          "time": "2-4s",
+          "visual": "A wide shot of a desert at sunset with footprints leading into the distance.",
+          "motion": "Slow panning/revealing motion of the landscape.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The contrast between a small cup of coffee and a vast landscape provides a strong emotional 'escape' payoff."
+        }
+      ],
+      "creative_mechanic": "fantasy_scene",
+      "visual_style": [
+        "Cinematic",
+        "Warm Tones",
+        "Minimalist",
+        "High-Contrast"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 9,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "Seamless and silky transition",
+      "what_to_copy_as_pattern_not_asset": "The 'Texture Match' technique: using the color and shape of a small object (coffee foam) to transition into a large-scale environment (sand dunes).",
+      "what_to_change_for_makaron": "Add a 'Before' and 'After' UI overlay or a screen recording of the Makaron interface to show how easily the user can upload two photos to generate this result.",
+      "recommended_ad_hook": "Stop scrolling and start creating magic. Turn your everyday photos into cinematic transitions with Makaron.",
+      "recommended_first_2s_remake": "Show a hand holding the coffee cup in a normal kitchen setting, then suddenly zoom into the cup to start the transition, making the 'magic' feel more grounded in reality."
+    }
+  },
+  {
+    "kind": "internal",
+    "item": {
+      "id": "c69a4dc8-d597-4ccc-961a-7831fb7d238b",
+      "name": "Corridor Breakout",
+      "prompt": "Turn my photo into this 15-second action clip",
+      "videoUrl": "https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/covers/corridor-breakout.mp4",
+      "inputCount": 1,
+      "beforeCount": 1,
+      "sortOrder": 2,
+      "priority": 9
+    },
+    "analysis": {
+      "one_line_summary": "A high-intensity cinematic action sequence featuring a female protagonist fighting through a dark industrial corridor.",
+      "target_viewer": "Action movie enthusiasts, gamers, and social media creators looking for high-production value video templates.",
+      "first_2_seconds": "A tense moment of a woman leaning against a wall followed by a sudden, athletic leap to grab a ceiling pipe.",
+      "shot_breakdown": [
+        {
+          "time": "0-2s",
+          "visual": "Woman leaning against a wall in a dark corridor, then jumping up to grab a pipe.",
+          "motion": "Sudden vertical leap and swing.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The sudden transition from stillness to explosive movement creates immediate engagement."
+        },
+        {
+          "time": "2-5s",
+          "visual": "Fast-paced combat with a tactical guard using a metal pipe.",
+          "motion": "Rapid cuts, strikes, and blocks.",
+          "text_or_ui": "None",
+          "why_it_hooks": "High-energy choreography and impactful sound design maintain viewer attention."
+        },
+        {
+          "time": "5-6s",
+          "visual": "Close-up of a hand gripping a pipe with water/steam spraying in the background.",
+          "motion": "Static close-up with environmental movement.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Adds cinematic texture and a 'hero' feel to the weapon."
+        },
+        {
+          "time": "6-10s",
+          "visual": "Final struggle pinning the guard against a sparking control panel.",
+          "motion": "Aggressive pushing and sparks flying.",
+          "text_or_ui": "None",
+          "why_it_hooks": "Visual effects (sparks) and high stakes provide a satisfying climax to the fight."
+        },
+        {
+          "time": "10-15s",
+          "visual": "Hero shot of the woman with blood on her face, breathing heavily, walking away.",
+          "motion": "Slow zoom and walking away from camera.",
+          "text_or_ui": "None",
+          "why_it_hooks": "The 'cool factor' of the protagonist's victory provides an emotional payoff for the viewer."
+        }
+      ],
+      "creative_mechanic": "character_action",
+      "visual_style": [
+        "Industrial",
+        "Cinematic",
+        "High-contrast lighting",
+        "Gritty"
+      ],
+      "hook_strength_1_to_10": 8,
+      "clarity_1_to_10": 9,
+      "makaron_relevance_1_to_10": 10,
+      "best_makaron_skill_match": "Corridor Breakout",
+      "what_to_copy_as_pattern_not_asset": "The 'calm before the storm' opening followed by rapid-fire action and a slow, triumphant ending.",
+      "what_to_change_for_makaron": "Insert a 'Before' photo of a regular person at the 0:00 mark with a transition effect to show the transformation into the action hero.",
+      "recommended_ad_hook": "Stop posting boring selfies. Turn yourself into a Hollywood action hero in one tap.",
+      "recommended_first_2s_remake": "Start with a split-screen: on the left, a static selfie; on the right, the woman jumping from the wall, with a 'Processing...' UI overlay."
+    }
+  }
+]

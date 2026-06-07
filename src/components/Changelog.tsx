@@ -10,6 +10,40 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-05',
+    en: { title: 'AI Search & Growth Readiness', items: [
+      'Makaron is now easier for search engines and AI agents to understand, recommend, and route to.',
+      'New public pages explain Makaron, key use cases, and indexable skill outcomes without changing the creation flow.',
+      'Skill SEO pages now live under /skill/{skillId}, while /home/{skillId} stays focused on the product experience.',
+      'llms.txt gives coding agents a clear map for when to use makaron-cli for images, videos, music, and creative assets.',
+      'First-party marketing events now track the funnel from skill views to project creation, signup, checkout, and purchase.',
+    ]},
+    zh: { title: 'AI 搜索与增长准备', items: [
+      'Makaron 现在更容易被搜索引擎和 AI Agent 理解、推荐和路由。',
+      '新增公开页面，讲清 Makaron、核心 use case 和可索引的 skill 效果，同时不打断创作流程。',
+      'Skill SEO 页迁到 /skill/{skillId}，/home/{skillId} 继续专注真实产品体验。',
+      'llms.txt 为 coding agent 提供清晰地图，知道什么时候该用 makaron-cli 生成图片、视频、音乐和创意素材。',
+      '第一方 marketing events 开始记录从 skill 浏览到创建项目、注册、checkout 和购买的漏斗。',
+    ]},
+  },
+  {
+    date: '2026-06-04',
+    en: { title: 'Video Agent — From Generation to Editing', items: [
+      'Makaron can now edit videos, not just generate them.',
+      'Upload longer videos up to 120 seconds.',
+      'Split, trim, caption, and combine clips by chatting.',
+      'Finished edits go straight onto the timeline.',
+      'Agent remembers files, previews, and results across turns.',
+    ]},
+    zh: { title: 'Video Agent — 从生成到剪辑', items: [
+      'Makaron 现在不只是生成视频，也能剪视频。',
+      '支持更长素材，最长可上传 120 秒。',
+      '分段、裁剪、字幕、拼接，都可以聊天完成。',
+      '剪好的结果会直接出现在时间线上。',
+      'Agent 会记住文件、预览和结果，下一轮接着做。',
+    ]},
+  },
+  {
     date: '2026-06-02',
     en: { title: 'Long Story Skill', items: [
       'Makaron now supports video creation beyond the 15-second limit.',

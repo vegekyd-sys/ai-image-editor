@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
 
 /**
  * POST /api/auth/activate
  * Authenticated. Activates user + grants welcome credits if first time.
  * Called by home page on ?welcome=1 after new user registration.
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -62,6 +64,27 @@ export async function POST() {
   }
 
   const response = NextResponse.json({ activated: true, isNew: true, credits })
+  const attribution = readAttributionCookie(req.cookies.get('mkr_attribution')?.value)
+  await sendMetaCapiEvent({
+    eventName: 'CompleteRegistration',
+    eventId: `registration.${user.id}`,
+    userId: user.id,
+    email: user.email,
+    request: req,
+    eventSourceUrl: 'https://www.makaron.app/home',
+    customData: attribution,
+  })
+  if (credits > 0) {
+    await sendMetaCapiEvent({
+      eventName: 'StartTrial',
+      eventId: `starttrial.${user.id}`,
+      userId: user.id,
+      email: user.email,
+      request: req,
+      eventSourceUrl: 'https://www.makaron.app/home',
+      customData: { credits, ...attribution },
+    })
+  }
   response.cookies.set('mkr_activated', '1', {
     path: '/',
     maxAge: 365 * 24 * 60 * 60,

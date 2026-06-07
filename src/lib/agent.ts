@@ -1,4 +1,5 @@
 import { streamText, tool, stepCountIs } from 'ai';
+import type { ModelMessage } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
@@ -9,7 +10,9 @@ import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
+import { normalizeVideoModelId, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
 import { createMusic } from './skills/create-music';
+import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -17,10 +20,13 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import animatePrompt from './prompts/animate.md';
-import type { Tip, VideoModel } from '@/types';
+import type { Tip, VideoMeta, VideoModel } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
+import { formatAspectRatio } from './media-aspect';
+
+const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Model
@@ -39,7 +45,6 @@ const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-sonnet-4-6
 
 interface AgentContext {
   currentImage: string;       // base64 data URL – updated after each generation
-  originalImage?: string;     // base64 data URL – the very first image, never changes
   referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,6 +68,9 @@ interface AgentContext {
   animationModel?: string;
   /** Video snapshot pending emit (v2) */
   pendingVideoSnapshot?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta };
+  pendingVideoSnapshots?: { snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta }[];
+  /** Workspace image snapshots already inserted into DB; emit so live timeline matches refresh state. */
+  pendingImageSnapshots?: { snapshotId: string; imageUrl: string; description?: string }[];
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<media_1>>> */
   snapshotImages: string[];
   /** 0-based index of the snapshot the user is currently viewing */
@@ -75,12 +83,24 @@ interface AgentContext {
   timelineVersion?: number;
 }
 
+interface WorkspaceMediaOutputDraft {
+  path?: string;
+  storageUrl: string;
+  contentType: string;
+  description?: string;
+  duration?: number | null;
+  width?: number;
+  height?: number;
+  updatedAt?: string;
+}
+
 export type AgentStreamEvent =
   | { type: 'status'; text: string }
   | { type: 'content'; text: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
-  | { type: 'image'; image: string; usedModel?: string }
-  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[] }
+  | { type: 'image'; image: string; usedModel?: string; snapshotId?: string; imageUrl?: string; description?: string }
+  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
+  | { type: 'tool_result'; tool: string; toolCallId?: string; step?: number; output?: unknown }
   | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }
   | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta }
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
@@ -115,6 +135,203 @@ function validateImageIndex(snapshotImages: string[], index: number): { idx: num
   }
   if (!snapshotImages[idx]) return { idx: -1, error: 'No image at this index' };
   return { idx };
+}
+
+function resolveMediaMarkersInString(value: string, snapshotImages: string[]): string {
+  return value.replace(/<<<media_(\d+)>>>/g, (marker, rawIndex) => {
+    const media = snapshotImages[Number(rawIndex) - 1];
+    return media || marker;
+  });
+}
+
+function resolveMediaMarkersInValue(value: unknown, snapshotImages: string[]): unknown {
+  if (typeof value === 'string') return resolveMediaMarkersInString(value, snapshotImages);
+  if (Array.isArray(value)) return value.map(item => resolveMediaMarkersInValue(item, snapshotImages));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([key, item]) => [key, resolveMediaMarkersInValue(item, snapshotImages)])
+    );
+  }
+  return value;
+}
+
+function inferCompositionTotalFrames(code: string): number | null {
+  let maxFrame = 0;
+  let found = false;
+  const sequencePattern = /<Sequence\b([^>]*)>/g;
+  for (const match of code.matchAll(sequencePattern)) {
+    const attrs = match[1] || '';
+    const from = Number(attrs.match(/\bfrom=\{?(\d+)\}?/)?.[1] || 0);
+    const duration = Number(attrs.match(/\bdurationInFrames=\{?(\d+)\}?/)?.[1] || 0);
+    if (!Number.isFinite(from) || !Number.isFinite(duration) || duration <= 0) continue;
+    found = true;
+    maxFrame = Math.max(maxFrame, from + duration);
+  }
+  return found ? maxFrame : null;
+}
+
+function normalizeCompositionAnimation(
+  code: string,
+  animation: { fps?: number; durationInSeconds?: number; format?: string } | undefined
+): { fps: number; durationInSeconds: number; format?: string } | undefined {
+  if (!animation) return undefined;
+  const fps = Number(animation.fps) || 30;
+  const inferredFrames = inferCompositionTotalFrames(code);
+  if (!inferredFrames) {
+    return { ...animation, fps, durationInSeconds: Number(animation.durationInSeconds) || 5 };
+  }
+  const inferredSeconds = Number((inferredFrames / fps).toFixed(3));
+  const currentSeconds = Number(animation.durationInSeconds) || inferredSeconds;
+  if (Math.abs(currentSeconds - inferredSeconds) > 0.05) {
+    return { ...animation, fps, durationInSeconds: inferredSeconds };
+  }
+  return { ...animation, fps, durationInSeconds: currentSeconds };
+}
+
+function formatMs(ms: number | null | undefined): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '?';
+  return (ms / 1000).toFixed(2).replace(/\.00$/, '');
+}
+
+function formatTranscriptWords(words: TranscriptWord[] | undefined, maxChars: number): string {
+  if (!words?.length || maxChars <= 0) return '';
+  let out = '';
+  for (const word of words) {
+    const next = `${out ? ' | ' : ''}${formatMs(word.startMs)}-${formatMs(word.endMs)} ${word.text}`;
+    if (out.length + next.length > maxChars) return `${out} | ...`;
+    out += next;
+  }
+  return out;
+}
+
+function formatTranscriptForModel(transcript: VolcengineAsrTranscript): string {
+  const lines: string[] = [
+    `Transcript (${transcript.provider}/${transcript.model}, ${transcript.durationMs ? `${formatMs(transcript.durationMs)}s` : 'duration unknown'}):`,
+    transcript.text || '(empty transcript)',
+    '',
+    'Utterance timecodes:',
+  ];
+
+  let charBudget = 24_000;
+  for (const [idx, utterance] of transcript.utterances.entries()) {
+    const line = `${idx + 1}. [${formatMs(utterance.startMs)}s-${formatMs(utterance.endMs)}s]${utterance.speaker ? ` speaker ${utterance.speaker}` : ''} ${utterance.text}`;
+    if (charBudget - line.length < 0) {
+      lines.push('[transcript truncated]');
+      break;
+    }
+    lines.push(line);
+    charBudget -= line.length;
+    const words = formatTranscriptWords(utterance.words, Math.min(1200, charBudget));
+    if (words) {
+      const wordLine = `   words: ${words}`;
+      if (charBudget - wordLine.length < 0) {
+        lines.push('   words: [truncated]');
+        break;
+      }
+      lines.push(wordLine);
+      charBudget -= wordLine.length;
+    }
+  }
+
+  return lines.join('\n');
+}
+
+async function validateCompositionMediaAspect(
+  ctx: AgentContext,
+  result: { code: string; props?: Record<string, unknown>; width?: number; height?: number },
+): Promise<string | null> {
+  const outputWidth = Number(result.width || 1080);
+  const outputHeight = Number(result.height || 1350);
+  if (!Number.isFinite(outputWidth) || !Number.isFinite(outputHeight) || outputWidth <= 0 || outputHeight <= 0) {
+    return null;
+  }
+  if (!ctx.supabase || !ctx.projectId) return null;
+
+  try {
+    const { data: rows } = await ctx.supabase
+      .from('snapshots')
+      .select('id, video_meta')
+      .eq('project_id', ctx.projectId)
+      .eq('type', 'video');
+
+    const haystack = JSON.stringify({ code: result.code, props: result.props ?? {} });
+    const videoRows = (rows ?? []) as Array<{ id?: string; video_meta?: Record<string, unknown> | null }>;
+    const matched: Array<{ url: string; width: number; height: number }> = [];
+
+    for (const row of videoRows) {
+      const meta = row.video_meta;
+      if (!meta) continue;
+      const url = typeof meta.videoUrl === 'string' ? meta.videoUrl : '';
+      if (!url || !haystack.includes(url)) continue;
+
+      let width = Number(meta.width);
+      let height = Number(meta.height);
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        const probed = await probeTimelineVideoDimensions(url);
+        if (probed) {
+          width = probed.width;
+          height = probed.height;
+          if (row.id) {
+            const nextMeta = { ...meta, width, height };
+            const { error } = await ctx.supabase
+              .from('snapshots')
+              .update({ video_meta: nextMeta })
+              .eq('id', row.id);
+            if (error) console.warn('[composition-aspect] failed to cache probed dimensions:', error.message);
+          }
+        }
+      }
+
+      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+        matched.push({ url, width, height });
+      }
+    }
+
+    if (!matched.length) return null;
+
+    const sourceRatios = matched.map(item => item.width / item.height);
+    const minRatio = Math.min(...sourceRatios);
+    const maxRatio = Math.max(...sourceRatios);
+    const sourceRatio = sourceRatios.reduce((sum, ratio) => sum + ratio, 0) / sourceRatios.length;
+    const outputRatio = outputWidth / outputHeight;
+
+    // Only hard-reject when selected videos clearly share one aspect. Mixed-ratio
+    // timelines may intentionally use a platform canvas with contain/background.
+    if ((maxRatio - minRatio) / sourceRatio > 0.03) return null;
+    if (Math.abs(outputRatio / sourceRatio - 1) <= 0.05) return null;
+
+    const first = matched[0];
+    const sourceAspect = formatAspectRatio(first.width, first.height) || `${first.width}:${first.height}`;
+    const outputAspect = formatAspectRatio(outputWidth, outputHeight) || `${outputWidth}:${outputHeight}`;
+    const dims = matched.map(item => `${Math.round(item.width)}x${Math.round(item.height)}`).join(', ');
+    const recommended = first.width < first.height
+      ? '1080x1920'
+      : first.width > first.height
+        ? '1920x1080'
+        : '1080x1080';
+
+    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition".`;
+  } catch {
+    return null;
+  }
+}
+
+async function probeTimelineVideoDimensions(url: string): Promise<{ width: number; height: number } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const length = Number(res.headers.get('content-length') || 0);
+    if (length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
+
+    const buffer = new Uint8Array(await res.arrayBuffer());
+    if (buffer.length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
+
+    const { probeMP4Dimensions } = await import('./mp4-probe');
+    return probeMP4Dimensions(buffer);
+  } catch {
+    return null;
+  }
 }
 
 /** Fetch an image source (URL or base64 data URL) into a JPEG Buffer.
@@ -152,7 +369,10 @@ async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
     for (let i = 0; i < Math.min(dbSnaps.length, ctx.snapshotImages.length); i++) {
       const snap = dbSnaps[i];
       if (snap.type === 'video') {
-        if (snap.image_url && !snap.image_url.endsWith('.mp4') && !ctx.snapshotImages[i]?.startsWith('http')) {
+        const videoUrl = typeof snap.video_meta?.videoUrl === 'string' ? snap.video_meta.videoUrl : '';
+        if (videoUrl) {
+          ctx.snapshotImages[i] = videoUrl;
+        } else if (snap.image_url && !ctx.snapshotImages[i]?.startsWith('http')) {
           ctx.snapshotImages[i] = snap.image_url;
         }
         continue;
@@ -164,12 +384,325 @@ async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
   } catch { /* best effort */ }
 }
 
+function isVideoUrl(url?: string): boolean {
+  return /\.(mp4|mov|webm)(?:\?|$)/i.test(url || '');
+}
+
+async function resolveVideoUrlForMediaIndex(ctx: AgentContext, mediaIndex: number): Promise<{
+  idx: number;
+  videoUrl?: string;
+  duration?: number;
+  fps?: number;
+  error?: string;
+}> {
+  const v = validateImageIndex(ctx.snapshotImages, mediaIndex);
+  if (v.error) return { idx: -1, error: v.error };
+
+  const directUrl = ctx.snapshotImages[v.idx];
+  if (isVideoUrl(directUrl)) return { idx: v.idx, videoUrl: directUrl };
+
+  if (!ctx.supabase || !ctx.userId) {
+    return { idx: v.idx, error: `No video file found at <<<media_${mediaIndex}>>>. Use analyze_image for still images/posters, or preview_frame for Remotion compositions.` };
+  }
+
+  try {
+    const { data: snaps, error: snapErr } = await ctx.supabase
+      .from('snapshots')
+      .select('type, image_url, video_meta')
+      .eq('project_id', ctx.projectId)
+      .order('sort_order', { ascending: true });
+    if (snapErr) console.error('[resolveVideoUrlForMediaIndex] DB query error:', snapErr.message);
+
+    const snap = snaps?.[v.idx] as { type?: string; image_url?: string; video_meta?: Record<string, unknown> } | undefined;
+    const meta = snap?.video_meta;
+    const videoUrl = typeof meta?.videoUrl === 'string' ? meta.videoUrl : '';
+    const posterOrFallback = typeof snap?.image_url === 'string' ? snap.image_url : directUrl;
+    const fallbackVideoUrl = isVideoUrl(posterOrFallback) ? posterOrFallback : '';
+    const duration = Number(meta?.duration);
+    const fps = Number(meta?.fps);
+
+    if (videoUrl || fallbackVideoUrl) {
+      return {
+        idx: v.idx,
+        videoUrl: videoUrl || fallbackVideoUrl,
+        duration: Number.isFinite(duration) ? duration : undefined,
+        fps: Number.isFinite(fps) ? fps : undefined,
+      };
+    }
+  } catch (e) {
+    console.error('[resolveVideoUrlForMediaIndex] exception:', e);
+  }
+
+  return { idx: v.idx, error: `No real video file found at <<<media_${mediaIndex}>>>. Use preview_frame only for Remotion compositions with design_path.` };
+}
+
+function isImageContentType(contentType?: string): boolean {
+  return !!contentType?.startsWith('image/');
+}
+
+function isVideoContentType(contentType?: string): boolean {
+  return !!contentType?.startsWith('video/');
+}
+
+function mediaKindMatches(contentType: string | undefined, mediaType: 'image' | 'video' | 'all'): boolean {
+  if (mediaType === 'all') return isImageContentType(contentType) || isVideoContentType(contentType);
+  if (mediaType === 'image') return isImageContentType(contentType);
+  return isVideoContentType(contentType);
+}
+
+async function validatePublishableMediaUrl(output: WorkspaceMediaOutputDraft): Promise<string | null> {
+  if (!output.storageUrl) return 'Missing storage URL.';
+  try {
+    const res = await fetch(output.storageUrl, { method: 'HEAD', cache: 'no-store' });
+    if (!res.ok) {
+      return `URL is not reachable (${res.status}): ${output.storageUrl}`;
+    }
+    const actualType = res.headers.get('content-type') || '';
+    if (isImageContentType(output.contentType) && actualType && !actualType.startsWith('image/')) {
+      return `Expected image but URL returned ${actualType}: ${output.storageUrl}`;
+    }
+    if (isVideoContentType(output.contentType) && actualType && !actualType.startsWith('video/') && !actualType.includes('octet-stream')) {
+      return `Expected video but URL returned ${actualType}: ${output.storageUrl}`;
+    }
+  } catch (err) {
+    return `URL validation failed: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  return null;
+}
+
+function getWorkspaceMediaOutputs(ctx: AgentContext): WorkspaceMediaOutputDraft[] {
+  return ((ctx as any).__workspaceMediaOutputs || []) as WorkspaceMediaOutputDraft[];
+}
+
+function rememberWorkspaceMediaOutputs(ctx: AgentContext, outputs: WorkspaceMediaOutputDraft[]): void {
+  if (!outputs.length) return;
+  const existing = getWorkspaceMediaOutputs(ctx);
+  const seen = new Set(existing.map(o => o.path || o.storageUrl));
+  const merged = [...existing];
+  for (const output of outputs) {
+    const key = output.path || output.storageUrl;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(output);
+  }
+  (ctx as any).__workspaceMediaOutputs = merged.slice(-30);
+}
+
+function cleanMediaDescription(description: string): string {
+  return description
+    .replace(/\s*:\s*(?:undefined|null|NaN)s?\s*$/i, '')
+    .replace(/\b(?:undefined|null|NaN)s?\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function outputDisplayName(output: WorkspaceMediaOutputDraft, fallback: string): string {
+  if (output.description) {
+    const cleaned = cleanMediaDescription(output.description);
+    if (cleaned) return cleaned;
+  }
+  const path = output.path || output.storageUrl;
+  const file = path.split('/').pop()?.replace(/\.[a-z0-9]+$/i, '') || fallback;
+  return file.replace(/[-_]+/g, ' ').trim() || fallback;
+}
+
+async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
+  workspacePaths?: string[];
+  limit?: number;
+  mediaType?: 'image' | 'video' | 'all';
+  name?: string;
+}): Promise<{ success: boolean; message: string; published: Array<{ snapshotId: string; type: 'image' | 'video'; url: string; path?: string }> }> {
+  if (!ctx.supabase || !ctx.userId) {
+    return { success: false, message: 'Workspace not available (no Supabase connection).', published: [] };
+  }
+
+  const mediaType = options.mediaType || 'all';
+  const requestedPaths = (options.workspacePaths || []).filter(Boolean);
+  const limit = Math.max(1, Math.min(options.limit || requestedPaths.length || 10, 20));
+  const remembered = getWorkspaceMediaOutputs(ctx);
+  const rememberedByPath = new Map(remembered.filter(o => o.path).map(o => [o.path!, o]));
+  const rememberedByUrl = new Map(remembered.map(o => [o.storageUrl, o]));
+
+  let candidates: WorkspaceMediaOutputDraft[] = [];
+
+  if (requestedPaths.length > 0) {
+    const pathSet = new Set(requestedPaths);
+    candidates.push(...remembered.filter(o => (o.path && pathSet.has(o.path)) || pathSet.has(o.storageUrl)));
+
+    const workspaceOnlyPaths = requestedPaths.filter(p => !/^https?:\/\//i.test(p));
+    if (workspaceOnlyPaths.length > 0) {
+      const { data, error } = await ctx.supabase
+        .from('workspace_files')
+        .select('path, content_type, storage_url, updated_at')
+        .eq('user_id', ctx.userId)
+        .in('path', workspaceOnlyPaths);
+      if (error) return { success: false, message: `Workspace lookup failed: ${error.message}`, published: [] };
+      candidates.push(...(data || []).map((row: Record<string, string>) => ({
+        path: row.path,
+        storageUrl: toPublicStorageUrl(row.storage_url),
+        contentType: row.content_type,
+        updatedAt: row.updated_at,
+        ...rememberedByPath.get(row.path),
+      })));
+    }
+
+    candidates.push(...requestedPaths
+      .filter(p => /^https?:\/\//i.test(p))
+      .map(url => rememberedByUrl.get(url) || {
+        storageUrl: toPublicStorageUrl(url),
+        contentType: /\.(mp4|mov|webm)(?:\?|$)/i.test(url) ? 'video/mp4' : 'image/jpeg',
+      } satisfies WorkspaceMediaOutputDraft));
+
+    const order = new Map(requestedPaths.map((p, i) => [p, i]));
+    candidates.sort((a, b) => (order.get(a.path || a.storageUrl) ?? 999) - (order.get(b.path || b.storageUrl) ?? 999));
+  } else {
+    candidates.push(...remembered.filter(o => mediaKindMatches(o.contentType, mediaType)).slice(-limit));
+
+    const lookupPrefixes = [
+      `${ctx.projectId}/media/%`,
+      ...(mediaType !== 'video' ? [`${ctx.projectId}/drafts/%`] : []),
+    ];
+    const workspaceRows: Array<Record<string, string>> = [];
+    for (const prefix of lookupPrefixes) {
+      const { data, error } = await ctx.supabase
+        .from('workspace_files')
+        .select('path, content_type, storage_url, updated_at')
+        .eq('user_id', ctx.userId)
+        .like('path', prefix)
+        .order('updated_at', { ascending: false })
+        .limit(Math.max(limit * 3, 20));
+      if (error) return { success: false, message: `Workspace lookup failed: ${error.message}`, published: [] };
+      workspaceRows.push(...((data || []) as Array<Record<string, string>>));
+    }
+
+    const rows: WorkspaceMediaOutputDraft[] = workspaceRows
+      .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
+      .map((row: Record<string, string>) => ({
+        path: row.path,
+        storageUrl: toPublicStorageUrl(row.storage_url),
+        contentType: row.content_type,
+        updatedAt: row.updated_at,
+        ...rememberedByPath.get(row.path),
+      }))
+      .filter((o: WorkspaceMediaOutputDraft) => mediaKindMatches(o.contentType, mediaType))
+      .slice(0, limit)
+      .reverse();
+    candidates.push(...rows);
+  }
+
+  const unique = new Map<string, WorkspaceMediaOutputDraft>();
+  for (const candidate of candidates) {
+    if (!candidate.storageUrl || !mediaKindMatches(candidate.contentType, mediaType)) continue;
+    unique.set(candidate.path || candidate.storageUrl, candidate);
+  }
+  const outputs = [...unique.values()].slice(-limit);
+  if (!outputs.length) {
+    const typeLabel = mediaType === 'all' ? 'image/video' : mediaType;
+    return { success: false, message: `No recent workspace ${typeLabel} outputs found for this project.`, published: [] };
+  }
+
+  for (const output of outputs) {
+    const validationError = await validatePublishableMediaUrl(output);
+    if (validationError) {
+      return {
+        success: false,
+        message: `Cannot publish workspace media: ${validationError}\nUse a real workspace output returned by run_code/list_files, or re-run the media export so the file is saved before publishing.`,
+        published: [],
+      };
+    }
+  }
+
+  const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
+  const published: Array<{ snapshotId: string; type: 'image' | 'video'; url: string; path?: string }> = [];
+
+  for (const [index, output] of outputs.entries()) {
+    const snapshotId = crypto.randomUUID();
+    const sortResult = await ctx.supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
+    const sortOrder = sortResult.data ?? Date.now();
+    const description = outputDisplayName(output, `${options.name || 'workspace output'} ${index + 1}`);
+
+    if (isVideoContentType(output.contentType)) {
+      const taskId = `workspace-${snapshotId}`;
+      const videoMeta: VideoMeta = {
+        taskId,
+        videoUrl: output.storageUrl,
+        providerUrl: output.storageUrl,
+        videoPath: output.path,
+        prompt: description,
+        sourceSnapshotIds: [],
+        sourceUrls: [output.storageUrl],
+        status: 'completed',
+        duration: typeof output.duration === 'number' ? output.duration : null,
+        model: 'upload',
+        createdAt: new Date().toISOString(),
+        width: output.width,
+        height: output.height,
+      };
+      const { error } = await ctx.supabase.from('snapshots').insert({
+        id: snapshotId,
+        project_id: ctx.projectId,
+        image_url: VIDEO_PLACEHOLDER_IMAGE,
+        tips: [],
+        message_id: '',
+        sort_order: sortOrder,
+        type: 'video',
+        video_meta: videoMeta,
+        description,
+      });
+      if (error) return { success: false, message: `Video publish failed: ${error.message}`, published };
+
+      ctx.snapshotImages.push(output.storageUrl);
+      ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+      if (!ctx.pendingVideoSnapshots) ctx.pendingVideoSnapshots = [];
+      ctx.pendingVideoSnapshots.push({ snapshotId, taskId, videoMeta });
+      published.push({ snapshotId, type: 'video', url: output.storageUrl, path: output.path });
+    } else if (isImageContentType(output.contentType)) {
+      const { error } = await ctx.supabase.from('snapshots').insert({
+        id: snapshotId,
+        project_id: ctx.projectId,
+        image_url: output.storageUrl,
+        tips: [],
+        message_id: '',
+        sort_order: sortOrder,
+        description,
+      });
+      if (error) return { success: false, message: `Image publish failed: ${error.message}`, published };
+
+      ctx.snapshotImages.push(output.storageUrl);
+      ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+      if (!ctx.pendingImageSnapshots) ctx.pendingImageSnapshots = [];
+      ctx.pendingImageSnapshots.push({ snapshotId, imageUrl: output.storageUrl, description });
+      published.push({ snapshotId, type: 'image', url: output.storageUrl, path: output.path });
+    }
+  }
+
+  return {
+    success: true,
+    message: `Published ${published.length} workspace media output${published.length === 1 ? '' : 's'} to timeline:\n${published.map((p, i) => `${i + 1}. ${p.type}: ${p.url}`).join('\n')}`,
+    published,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // System prompt (bundled via webpack asset/source)
 // ---------------------------------------------------------------------------
 
 function getAgentSystemPrompt(): string {
   return agentPrompt;
+}
+
+function* flushPendingImageSnapshots(ctx: AgentContext): Generator<AgentStreamEvent> {
+  if (!ctx.pendingImageSnapshots?.length) return;
+  for (const pending of ctx.pendingImageSnapshots) {
+    yield {
+      type: 'image',
+      image: pending.imageUrl,
+      imageUrl: pending.imageUrl,
+      snapshotId: pending.snapshotId,
+      description: pending.description,
+    };
+  }
+  ctx.pendingImageSnapshots = undefined;
 }
 
 /** Rough token estimate — 1 token ≈ 4 chars for English, ~1.5-2 for CJK. Use 3.5 as middle ground. */
@@ -201,12 +734,14 @@ Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_cod
 
 ### File organization
 - **User-level** (shared across projects): \`skills/\`, \`memory/\`
-- **Project-level** (current project): \`${projectPath}code/\`${projectId ? ` — save design code here` : ''}
+- **Project-level** (current project): \`${projectPath}code/\`${projectId ? ` — save composition/code files here` : ''}
 - **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
 
 ### run_code
-Execute JavaScript with design mode (React/CSS) and image utilities (sharp).
-Use ONLY for video/animation or when user explicitly requests an editable template. For all image tasks (posters, e-commerce, infographics, marketing) use \`generate_image\` instead.
+Execute JavaScript in two modes:
+- \`runtime: "composition"\` for Remotion/editable composition drafts, animated templates, overlays, and sharp utilities. \`runtime: "design"\` is a legacy alias.
+- \`runtime: "node"\` for real file-level MP4 work with FFmpeg/FFprobe: split, exact trim/export, transcode, extract frames, mux audio, long-video preparation, and final assembly of generated chunks.
+For finished single images, posters, infographics, and marketing graphics, use \`generate_image\` instead unless the user asks for editable or animated code.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills
@@ -274,15 +809,14 @@ function createTools(ctx: AgentContext) {
     generate_image: tool({
       description: generateImageToolPrompt,
       inputSchema: z.object({
-        editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, write only the direction — template rules are auto-injected.'),
+        editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.enum(['gemini', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
-        useOriginalAsReference: z.boolean().optional().describe('Set true when you judge that the original photo would help as a reference — e.g. face has drifted, colors changed, user wants to restore something, or after many edits. Default false = single image edit.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit for text-to-image (no photo sent). For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, useOriginalAsReference, aspectRatio, media_index, reference_media_indices }) => {
+      execute: async ({ editPrompt, skill, model, aspectRatio, media_index, reference_media_indices }) => {
         // Resolve which image to edit — agent must pass media_index to include a photo
         let editTarget: string | undefined;
         if (media_index !== undefined) {
@@ -307,8 +841,8 @@ function createTools(ctx: AgentContext) {
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
-          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, useOriginalAsReference, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
-          { currentImage: editTarget, originalImage: editTarget ? ctx.originalImage : undefined, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
+          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { currentImage: editTarget, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
         );
         // Bill for image generation (separate from Agent LLM tokens)
         if (skillResult.usage) {
@@ -346,23 +880,29 @@ Use this tool after the user has confirmed a video script that is already visibl
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
-Hard constraints (apply even before reading the guide):
+Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
-- To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. Works for both Kling and SeeDance.
-- Single-call total duration: 5-15 seconds. If the user wants 30s, 60s, 1-2 minutes, or anything longer than 15s, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments of 15s or less.
+- To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
+- Works for both Kling and SeeDance, but respect capability limits and tool errors.
+- Single-call total duration: SeeDance is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. If the user wants 30s, 60s, 1-2 minutes, or anything longer than 15s, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments of 15s or less.
 - If a complete script totals 15 seconds or less, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
+- If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
+- Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
 - Long source video rule: if a timeline/reference video is longer than 15 seconds, do not shrink the whole source into one 5s or 15s edit. Use \`skills/long-video-director/SKILL.md\`, analyze/split it into self-contained segments of 15s or less, and submit one script per segment after approval.
-- Video edit duration lock: when editing a timeline video up to 15 seconds, output duration should match that source video's duration from Media Index; never fall back to 5s unless the user explicitly asks to shorten it.
+- Reference video input limit: for one SeeDance generation, the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less. This is a single-generation input limit; do not submit videos whose combined duration is longer than 15s together in one call.
+- Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. Tiny videos below 409,600 frame pixels must be resized/padded before submission. For Kling, use one .mp4/.mov reference video, <=200MB, resolution <=2K; no explicit Kling video resolution lower bound is documented.
+- Video edit duration lock: when editing timeline videos up to 15 seconds total, output duration should match the combined source duration from Media Index, clamped to the selected model range. For SeeDance, clamp to 4-15s; if combined source duration is under 4s, set \`duration: 4\`. For long-video pipelines, duration lock applies per FFmpeg chunk.
+- Default model follows app selection, usually SeeDance. If the user asks for cheaper, prefer Kling only when capability and duration allow it.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos. Total duration must be 15 seconds or less.'),
-        duration: z.number().optional().describe('Duration in seconds: 3, 5, 7, 10, or 15. For timeline video edits up to 15s, set this to the source video duration from Media Index. For longer source videos, split through long-video-director first. Omit for smart mode only when generating from photos.'),
+        duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling accepts 5-15s. Never pass below the selected model minimum. For timeline video edits up to 15s total, set this to the combined source video duration from Media Index clamped to the selected model range. Do not submit multiple reference videos together if their combined source duration exceeds 15s. Omit for smart mode only when generating from photos.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
-        model: z.enum(['kling', 'seedance']).optional().describe('Video model. kling = Kling v3 (fast, built-in dialogue voice synthesis). seedance = SeeDance 2.0 (best visual quality, supports real faces). Default: seedance unless the app selection or user asks for Kling.'),
+        model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance). Use exact ids from the video model selector or skill instructions.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
@@ -383,7 +923,7 @@ Hard constraints (apply even before reading the guide):
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
-          const videoModel = model || ctx.videoModel || 'seedance';
+          const videoModel = normalizeVideoModelId(model || (ctx as any).videoModel);
 
           // Video harness: validate before calling API
           const { validateVideoScript } = await import('./video-harness');
@@ -396,6 +936,7 @@ Hard constraints (apply even before reading the guide):
             videoRefType: video_ref_type,
             model: videoModel,
             motionControl: motion_control,
+            duration,
           });
           if (harnessError) {
             return { success: false as const, message: harnessError };
@@ -407,6 +948,7 @@ Hard constraints (apply even before reading the guide):
           // Auto-route video references: query DB for snapshot types
           const autoVideoUrls: string[] = [];
           let totalVideoRefDuration = 0;
+          const referenceVideoMetas: Array<{ width?: number | null; height?: number | null }> = [];
           if (ctx.supabase && ctx.projectId) {
             const { data: dbSnaps } = await ctx.supabase
               .from('snapshots')
@@ -423,6 +965,10 @@ Hard constraints (apply even before reading the guide):
                 const videoUrl = meta?.videoUrl as string | undefined;
                 if (snap?.type === 'video' && videoUrl) {
                   autoVideoUrls.push(videoUrl);
+                  referenceVideoMetas.push({
+                    width: Number.isFinite(Number(meta?.width)) ? Number(meta?.width) : null,
+                    height: Number.isFinite(Number(meta?.height)) ? Number(meta?.height) : null,
+                  });
                   totalVideoRefDuration += (meta?.duration as number) || 0;
                   imageUrls[ref - 1] = '';
                 }
@@ -430,14 +976,25 @@ Hard constraints (apply even before reading the guide):
             }
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
-          const referenceVideoDuration = totalVideoRefDuration > 0 ? Math.min(15, Math.round(totalVideoRefDuration)) : undefined;
-          const clampedDuration = duration != null && allVideoUrls.length > 0 && duration > 15 && duration <= 15.5 ? 15 : duration;
-          const effectiveDuration = clampedDuration ?? referenceVideoDuration;
-
-          // SeeDance accepts tiny metadata/audio padding over 15s; output duration stays clamped to 15s.
-          if (videoModel === 'seedance' && allVideoUrls.length > 0 && totalVideoRefDuration > 15.5) {
-            return { success: false as const, message: `SeeDance requires total reference video duration around 15 seconds or less, but the referenced videos total ${totalVideoRefDuration.toFixed(1).replace(/\\.0$/, '')}s. Try using fewer or shorter video references, or switch to Kling model.` };
+          const referenceVideoDuration = totalVideoRefDuration > 0 ? totalVideoRefDuration : undefined;
+          const modelError = validateVideoModelRequest({
+            model: videoModel,
+            outputDuration: duration,
+            referenceVideoDuration,
+            referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
+            hasVideoReference: allVideoUrls.length > 0,
+          });
+          if (modelError) {
+            return {
+              success: false as const,
+              message: modelError,
+            };
           }
+          const effectiveDuration = resolveVideoOutputDuration({
+            requestedDuration: duration,
+            referenceVideoDuration,
+            model: videoModel,
+          });
 
           const skillResult = await createVideo({
             script: story_prompt,
@@ -449,6 +1006,7 @@ Hard constraints (apply even before reading the guide):
             videoReferType: video_ref_type,
             videoUrls: allVideoUrls.length ? allVideoUrls : undefined,
             referenceVideoDuration,
+            referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             keepOriginalSound: keep_original_sound,
             motionControl: motion_control,
             characterOrientation: character_orientation,
@@ -565,7 +1123,7 @@ Hard constraints (apply even before reading the guide):
     }),
 
     analyze_video: tool({
-      description: 'Analyze video content using Gemini vision. Returns scene descriptions, actions, pacing, audio cues. Use for understanding what happens in a video. For checking a specific frame visually, use preview_frame instead.',
+      description: 'Analyze video content using Gemini vision. Returns scene descriptions, actions, pacing, audio cues. Use for understanding what happens in a video. For checking a specific raw video or Remotion frame visually, use preview_frame with timestamp/frame instead.',
       inputSchema: z.object({
         media_index: z.number().describe('1-based snapshot index of the video to analyze (<<<media_1>>> = 1)'),
         question: z.string().optional().describe('Specific aspect to focus on (e.g. "what happens at 5s?", "describe the pacing", "what audio/dialogue is there?")'),
@@ -577,8 +1135,8 @@ Hard constraints (apply even before reading the guide):
         // Get video URL: first check snapshotImages (may already contain video URL), then DB fallback
         let videoUrl: string | undefined;
         const mediaUrl = ctx.snapshotImages[v.idx];
-        console.log(`[analyze_video] media_index=${media_index} idx=${v.idx} mediaUrl=${mediaUrl?.substring(0, 80)} isVideo=${/\.(mp4|webm|mov)/i.test(mediaUrl || '')}`);
-        if (mediaUrl && /\.(mp4|webm|mov)/i.test(mediaUrl)) {
+        console.log(`[analyze_video] media_index=${media_index} idx=${v.idx} mediaUrl=${mediaUrl?.substring(0, 80)} isVideo=${isVideoUrl(mediaUrl)}`);
+        if (isVideoUrl(mediaUrl)) {
           videoUrl = mediaUrl;
         } else if (ctx.supabase && ctx.userId) {
           try {
@@ -598,7 +1156,7 @@ Hard constraints (apply even before reading the guide):
         }
 
         if (!videoUrl) {
-          return { error: `No video found at <<<media_${media_index}>>>. This snapshot may not be a video, or video is still processing. Use analyze_image to see the poster, or preview_frame for design frames.` };
+          return { error: `No video found at <<<media_${media_index}>>>. This snapshot may not be a video, or video is still processing. Use analyze_image to see the poster, or preview_frame for specific raw-video/composition frames.` };
         }
 
         try {
@@ -621,33 +1179,123 @@ Hard constraints (apply even before reading the guide):
       },
     }),
 
+    transcribe_audio: tool({
+      description: `Transcribe audio or a timeline video with Volcengine ASR and return dialogue/subtitle timecodes.
+
+Use this when the user asks for transcript, subtitles, dialogue, spoken words, lyrics-like speech timing, or time-based editing such as "cut the part where they say X", "remove this sentence", "剪掉这句话", "按逐字稿剪", or "find the timestamp for ...".
+
+For timeline videos, pass media_index. For external audio/video URLs, pass media_url. Results are cached into the video snapshot's video_meta.transcript when media_index is used. Use analyze_video instead for visual scene/action understanding.`,
+      inputSchema: z.object({
+        media_index: z.number().optional().describe('1-based Media Index index of the video to transcribe (<<<media_1>>> = 1). Preferred for timeline videos.'),
+        media_url: z.string().optional().describe('External public audio/video URL to transcribe. Use only when the media is not in Media Index.'),
+        language: z.string().optional().describe('Optional ASR language code such as zh-CN, en-US, ja-JP, ko-KR, id-ID. Omit for auto/default.'),
+        force_refresh: z.boolean().optional().describe('Set true to ignore cached transcript and call ASR again. Default false.'),
+      }),
+      execute: async ({ media_index, media_url, language, force_refresh }) => {
+        let resolvedUrl = media_url;
+        let snapshotId: string | undefined;
+        let videoMeta: Record<string, unknown> | undefined;
+
+        if (!resolvedUrl && media_index !== undefined) {
+          const v = validateImageIndex(ctx.snapshotImages, media_index);
+          if (v.error) return { error: v.error };
+
+          const mediaUrl = ctx.snapshotImages[v.idx];
+          if (mediaUrl && /\.(mp4|webm|mov|mp3|wav|ogg|opus)(?:\?|$)/i.test(mediaUrl)) {
+            resolvedUrl = mediaUrl;
+          }
+
+          if (ctx.supabase && ctx.userId) {
+            const { data: snaps, error: snapErr } = await ctx.supabase
+              .from('snapshots')
+              .select('id, video_meta')
+              .eq('project_id', ctx.projectId)
+              .order('sort_order', { ascending: true });
+            if (snapErr) console.error('[transcribe_audio] DB query error:', snapErr.message);
+            const snap = snaps?.[v.idx];
+            snapshotId = snap?.id as string | undefined;
+            videoMeta = snap?.video_meta as Record<string, unknown> | undefined;
+            const cached = videoMeta?.transcript as VolcengineAsrTranscript | undefined;
+            if (cached?.text && !force_refresh) {
+              return { transcript: cached, cached: true, media_index, videoUrl: cached.sourceUrl || resolvedUrl };
+            }
+            resolvedUrl = resolvedUrl || (videoMeta?.videoUrl as string | undefined);
+          }
+        }
+
+        if (!resolvedUrl || !/^https?:\/\//i.test(resolvedUrl)) {
+          return { error: 'transcribe_audio requires a public audio/video URL or a valid video media_index.' };
+        }
+
+        try {
+          const transcript = await transcribeWithVolcengineAsr({
+            mediaUrl: resolvedUrl,
+            uid: ctx.userId || 'makaron-agent',
+            language,
+          });
+
+          if (ctx.supabase && snapshotId && videoMeta) {
+            const nextMeta = { ...videoMeta, transcript };
+            const { error: updateError } = await ctx.supabase
+              .from('snapshots')
+              .update({ video_meta: nextMeta })
+              .eq('id', snapshotId);
+            if (updateError) console.error('[transcribe_audio] transcript cache update failed:', updateError.message);
+          }
+
+          return { transcript, cached: false, media_index, videoUrl: resolvedUrl };
+        } catch (err) {
+          return { error: `ASR transcription failed: ${err instanceof Error ? err.message : String(err)}` };
+        }
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toModelOutput({ output }: { output: any }) {
+        if (output.error) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        const transcript = output.transcript as VolcengineAsrTranscript | undefined;
+        if (!transcript) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: 'No transcript returned.' }] };
+        }
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}`,
+          }],
+        };
+      },
+    }),
+
     preview_frame: tool({
-      description: `Capture a screenshot of a design at a specific frame or time.
-Use media_index to target any snapshot with a design (including video snapshots).
-For video snapshots: use timestamp to see specific moments in the video.
+      description: `Capture a visual frame at a specific frame number or timestamp.
+Use media_index to target any timeline snapshot. Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg.
+For raw video snapshots: use timestamp to see specific moments in the actual MP4/MOV/WebM.
 For understanding video content (what happens, scenes, pacing), use analyze_video instead.
-Omit media_index to use the current (last edited) design.
+Omit media_index to use the current (last edited) composition.
 Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
-        media_index: z.number().optional().describe('1-based snapshot index (<<<media_1>>> = 1). Target any snapshot that has a design/video. Omit to use current design.'),
+        media_index: z.number().optional().describe('1-based snapshot index (<<<media_1>>> = 1). Target a Remotion composition or raw video. Omit to use current composition.'),
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
       }),
       execute: async ({ media_index, frame, timestamp, question }) => {
         let design = (ctx as any).__lastDesignPayload;
+        let rawVideo: { url: string; duration?: number; fps?: number } | null = null;
+        const targetMediaIndex = media_index ?? (!design ? ctx.currentSnapshotIndex + 1 : undefined);
 
-        // Load design from specific snapshot if media_index provided
-        if (media_index !== undefined && ctx.supabase && ctx.userId) {
-          const v = validateImageIndex(ctx.snapshotImages, media_index);
+        // Load composition payload from a specific snapshot if media_index provided.
+        if (targetMediaIndex !== undefined && ctx.supabase && ctx.userId) {
+          const v = validateImageIndex(ctx.snapshotImages, targetMediaIndex);
           if (v.error) return { error: v.error };
           try {
             const { data: snaps } = await ctx.supabase
               .from('snapshots')
-              .select('design_path')
+              .select('type, image_url, design_path, video_meta')
               .eq('project_id', ctx.projectId)
               .order('sort_order', { ascending: true });
-            const snap = snaps?.[v.idx];
+            const snap = snaps?.[v.idx] as { type?: string; image_url?: string; design_path?: string; video_meta?: Record<string, unknown> } | undefined;
             if (snap?.design_path) {
               const storagePath = `${ctx.userId}/workspace/${snap.design_path}`;
               const { data: urlData } = ctx.supabase.storage.from('images').getPublicUrl(storagePath);
@@ -655,13 +1303,91 @@ Returns the rendered image so you can see it with your vision.`,
                 const res = await fetch(`${urlData.publicUrl}?t=${Date.now()}`);
                 if (res.ok) design = await res.json();
               }
+            } else {
+              const meta = snap?.video_meta;
+              const videoUrl = typeof meta?.videoUrl === 'string' ? meta.videoUrl : '';
+              const fallbackUrl = isVideoUrl(ctx.snapshotImages[v.idx]) ? ctx.snapshotImages[v.idx] : (isVideoUrl(snap?.image_url) ? snap?.image_url || '' : '');
+              const duration = Number(meta?.duration);
+              const fps = Number(meta?.fps);
+              if (snap?.type === 'video' || videoUrl || fallbackUrl) {
+                rawVideo = {
+                  url: videoUrl || fallbackUrl,
+                  duration: Number.isFinite(duration) ? duration : undefined,
+                  fps: Number.isFinite(fps) ? fps : undefined,
+                };
+              }
             }
           } catch (e) {
-            console.warn(`[preview_frame] failed to load design for media_index=${media_index}:`, e);
+            console.warn(`[preview_frame] failed to load design for media_index=${targetMediaIndex}:`, e);
+          }
+        } else if (targetMediaIndex !== undefined) {
+          const resolved = await resolveVideoUrlForMediaIndex(ctx, targetMediaIndex);
+          if (resolved.videoUrl) {
+            rawVideo = { url: resolved.videoUrl, duration: resolved.duration, fps: resolved.fps };
           }
         }
 
-        if (!design) return { error: 'No design found. Use run_code first, or specify media_index of a snapshot with a design/video.' };
+        if (targetMediaIndex !== undefined && !design && !rawVideo) {
+          const resolved = await resolveVideoUrlForMediaIndex(ctx, targetMediaIndex);
+          if (resolved.videoUrl) {
+            rawVideo = { url: resolved.videoUrl, duration: resolved.duration, fps: resolved.fps };
+          }
+        }
+
+        if (rawVideo) {
+          if (!rawVideo.url) return { error: `No video URL found at <<<media_${targetMediaIndex}>>>.` };
+          const videoFps = rawVideo.fps || 30;
+          const maxTimestamp = rawVideo.duration && rawVideo.duration > 0 ? Math.max(0, rawVideo.duration - (1 / videoFps)) : undefined;
+          const targetTimestamp = timestamp !== undefined
+            ? timestamp
+            : frame !== undefined
+              ? frame / videoFps
+              : 0.5;
+          const clampedTimestamp = Math.max(0, maxTimestamp !== undefined ? Math.min(targetTimestamp, maxTimestamp) : targetTimestamp);
+          const targetFrame = Math.max(0, Math.round(clampedTimestamp * videoFps));
+          const totalFrames = rawVideo.duration && rawVideo.duration > 0 ? Math.max(1, Math.round(rawVideo.duration * videoFps)) : undefined;
+
+          try {
+            const { extractVideoFrame } = await import('./video-frame');
+            const jpegBuffer = await extractVideoFrame(rawVideo.url, { timestamp: clampedTimestamp });
+
+            let wsUrl = '';
+            const wsPath = `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-t${clampedTimestamp.toFixed(2).replace('.', '-')}-${Date.now()}.jpg`;
+            if (ctx.supabase && ctx.userId) {
+              const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+              if (ws.storageUrl) {
+                wsUrl = toPublicStorageUrl(ws.storageUrl);
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: wsPath,
+                  storageUrl: wsUrl,
+                  contentType: 'image/jpeg',
+                  description: `video frame at ${clampedTimestamp.toFixed(2)}s`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              }
+            }
+
+            console.log(`🖼️ [agent] preview_frame: raw video t=${clampedTimestamp.toFixed(2)}s, ${(jpegBuffer.length / 1024).toFixed(0)} KB (ffmpeg)`);
+            return {
+              base64Data: jpegBuffer.toString('base64'),
+              mimeType: 'image/jpeg',
+              source: 'video',
+              timestamp: clampedTimestamp,
+              frame: targetFrame,
+              totalFrames,
+              fps: videoFps,
+              question,
+              workspaceUrl: wsUrl,
+              workspacePath: wsPath,
+            };
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`⚠️ [agent] preview_frame video extraction failed: ${msg}`);
+            return { error: `Failed to extract video frame at ${clampedTimestamp.toFixed(2)}s: ${msg}` };
+          }
+        }
+
+        if (!design) return { error: 'No composition or raw video found. Use run_code first, or specify media_index of a Remotion composition/raw video snapshot.' };
 
         const fps = design.animation?.fps || 30;
         const dur = design.animation?.durationInSeconds || 0;
@@ -691,8 +1417,15 @@ Returns the rendered image so you can see it with your vision.`,
           if (ctx.supabase && ctx.userId) {
             const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
             if (ws.storageUrl) {
-              wsUrl = ws.storageUrl;
+              wsUrl = toPublicStorageUrl(ws.storageUrl);
               if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
+              rememberWorkspaceMediaOutputs(ctx, [{
+                path: wsPath,
+                storageUrl: wsUrl,
+                contentType: 'image/jpeg',
+                description: `composition frame ${targetFrame}`,
+                updatedAt: new Date().toISOString(),
+              }]);
             }
           }
 
@@ -700,6 +1433,7 @@ Returns the rendered image so you can see it with your vision.`,
           return {
             base64Data: jpegBuffer.toString('base64'),
             mimeType: 'image/jpeg',
+            source: 'composition',
             frame: targetFrame,
             totalFrames,
             fps,
@@ -825,18 +1559,36 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-Set fromLastRunCode=true to save the last run_code output. By default this also PUBLISHES to the timeline. Set publish=false to save code to workspace WITHOUT publishing — useful for saving work-in-progress before you're ready to show the user.
-Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provide a short name.`,
+Set fromLastRunCode=true to save the last run_code output.
+Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
+Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file. Do not use node/FFmpeg as a fallback for ordinary editable timeline splicing of existing videos; patch or publish the Remotion composition instead.
+Set fromWorkspaceOutputs=true to publish recent workspace image/video outputs to the timeline. Use this immediately after direct FFmpeg deliverables, or later when the user says "publish the videos/images you just exported"; do not re-run FFmpeg.
+Path is auto-generated from the current project and output type. Just provide a short name.`,
       inputSchema: z.object({
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output (design or image). By default also publishes to timeline. Set publish=false to save only.'),
-        publish: z.boolean().optional().describe('Whether to publish to timeline. Default true. Set false to save code to workspace without creating a Snapshot.'),
+        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Composition drafts can publish to timeline; node media chunks should usually be save-only until the final MP4.'),
+        fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns. Only pass exact workspacePaths/storageUrl values returned by run_code/list_files; never guess a workspace URL from a file name.'),
+        workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths or storage URLs to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
+        mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
+        limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
+        publish: z.boolean().optional().describe('Whether to publish to timeline. Default true. Set false to save workspace output without creating a Snapshot.'),
       }),
-      execute: async ({ path: filePath, name, content, fromLastRunCode, publish: shouldPublish }) => {
+      execute: async ({ path: filePath, name, content, fromLastRunCode, fromWorkspaceOutputs, workspacePaths, mediaType, limit, publish: shouldPublish }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, message: 'Workspace not available (no Supabase connection).' };
+        }
+        if (fromWorkspaceOutputs) {
+          if (shouldPublish === false) {
+            return { success: false, message: 'fromWorkspaceOutputs is for publishing existing workspace media to the timeline. Omit publish:false.' };
+          }
+          return publishWorkspaceMediaOutputs(ctx, {
+            workspacePaths,
+            mediaType: mediaType || 'all',
+            limit,
+            name,
+          });
         }
         let fileContent = content || '';
         let savePath = filePath || '';
@@ -846,11 +1598,22 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
             return { success: false, message: 'No run_code output to save. Call run_code first.' };
           }
           fileContent = lastCode;
-          // Auto-generate path: {projectId}/code/snapshot-{N}-{name}.json
+          const draftsForPath = (ctx as any).__runCodeDrafts || [];
+          const lastDraftForPath = draftsForPath[draftsForPath.length - 1];
+          if (savePath && /\.(mp4|mov|webm|m4v|jpg|jpeg|png|webp|gif|mp3|wav|m4a|aac)$/i.test(savePath)) {
+            return {
+              success: false,
+              message: 'write_file({ fromLastRunCode: true }) saves the run_code source/publishable draft, not individual binary outputs from type:"files". Use the storageUrl links returned by run_code, or return a single type:"video" final MP4 and publish that.',
+            };
+          }
+          // Auto-generate path. Node/FFmpeg runs save the executable JS; composition runs save JSON payload.
           if (!savePath) {
             const snapshotIdx = ctx.snapshotImages.length;
-            const slug = (name || 'design').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
-            savePath = `${ctx.projectId}/code/snapshot-${snapshotIdx}-${slug}.json`;
+            const slug = (name || 'composition').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+            const isVideoCode = lastDraftForPath?.type === 'video';
+            savePath = isVideoCode
+              ? `${ctx.projectId}/media-code/snapshot-${snapshotIdx}-${slug}.js`
+              : `${ctx.projectId}/code/snapshot-${snapshotIdx}-${slug}.json`;
           }
         }
         if (!savePath) {
@@ -892,10 +1655,57 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
             ctx.generatedImages.push(imageData);
 
             console.log(`📌 [agent] image published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
+          } else if (lastDraft?.type === 'video') {
+            const videoUrl = lastDraft.videoUrl as string | undefined;
+            if (!videoUrl) {
+              return { success: false, message: 'Video draft has no videoUrl. Re-run node media code and return a video output.' };
+            }
+
+            const { getSupabaseAdmin } = await import('@/lib/supabase/service');
+            const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
+            const admin = getSupabaseAdmin();
+            const snapshotId = crypto.randomUUID();
+            const taskId = `ffmpeg-${snapshotId}`;
+            const videoMeta: VideoMeta = {
+              taskId,
+              videoUrl,
+              providerUrl: videoUrl,
+              videoPath: lastDraft.workspacePath,
+              prompt: cleanMediaDescription(lastDraft.description || name || 'FFmpeg video') || name || 'FFmpeg video',
+              sourceSnapshotIds: [],
+              sourceUrls: [videoUrl],
+              status: 'completed',
+              duration: typeof lastDraft.duration === 'number' ? lastDraft.duration : null,
+              model: 'upload',
+              createdAt: new Date().toISOString(),
+              width: typeof lastDraft.width === 'number' ? lastDraft.width : undefined,
+              height: typeof lastDraft.height === 'number' ? lastDraft.height : undefined,
+            };
+            const { data: sortData } = await admin.rpc('next_sort_order', { p_project_id: ctx.projectId });
+            const { error: insertError } = await admin.from('snapshots').insert({
+              id: snapshotId,
+              project_id: ctx.projectId,
+              image_url: VIDEO_PLACEHOLDER_IMAGE,
+              tips: [],
+              message_id: '',
+              sort_order: sortData ?? 0,
+              type: 'video',
+              video_meta: videoMeta,
+              description: cleanMediaDescription(lastDraft.description || name || 'FFmpeg video') || name || 'FFmpeg video',
+            });
+            if (insertError) {
+              return { success: false, message: `Video publish failed: ${insertError.message}` };
+            }
+
+            ctx.snapshotImages.push(videoUrl);
+            ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+            ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
+
+            console.log(`📌 [agent] video published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
           }
         }
 
-        return { success: true, message: `Saved: ${savePath}`, storageUrl: toPublicStorageUrl(result.storageUrl || '') };
+        return { success: true, message: `Saved: ${savePath}`, path: savePath, storageUrl: toPublicStorageUrl(result.storageUrl || '') };
       },
     }),
 
@@ -918,43 +1728,34 @@ Path is auto-generated as {projectId}/code/snapshot-{N}-{name}.json. Just provid
     }),
 
     run_code: tool({
-      description: `Execute JavaScript for design output (React/Remotion) or image utilities (sharp). Used for video/animation, editable templates, or image processing.
+      description: `Execute JavaScript.
 
-**BEFORE YOUR FIRST run_code CALL in a conversation**: call \`read_file('prompts/agent-coding.md')\` to load the full coding guide (render vs patch, editable fields, video workflow, composition patterns, cross-platform effects). The guide already includes \`[Current design code]\` injected into your prompt when patching — no need to re-read it. **Do not re-read agent-coding.md if it already appears in this conversation's tool-result history.**
+Before first use, read \`prompts/agent-coding.md\`. For Remotion/editable compositions, also read \`prompts/remotion-composition.md\`. For real file-level MP4 splitting, exact trimming/export, transcode, frames, audio muxing, long-video preparation, or final assembly of generated chunks, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
 
-## Hard constraints (apply even before reading the guide)
+Runtimes:
+- \`runtime: "composition"\`: Remotion/editable composition draft, animated template, overlay, sharp utility.
+- \`runtime: "design"\` or omitted: legacy alias for \`runtime: "composition"\`.
+- \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real file-level media operations. Never use node as a fallback for ordinary editable timeline splicing of existing videos.
 
-Return shape — exactly one of:
-- \`{ type: 'render', code, width, height, editables?: [...], props?: {...}, animation?: { fps, durationInSeconds } }\` — first time, or when overall layout changes.
-- \`{ type: 'patch', edits: [{ old, new }], props?: {...}, code_path?: '...' }\` — **default for subsequent edits**. Each \`old\` must match exactly once.
-- \`{ type: 'image', data: base64, mimeType }\` — sharp output.
-- \`{ type: 'text', content }\` — computation/data result.
-- \`{ type: 'error', message }\` — failure.
+Return exactly one supported shape:
+- \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
+- \`{ type: 'patch', edits, props?, code_path? }\`
+- \`{ type: 'image', data, mimeType }\`
+- \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
+- \`{ type: 'files', outputs: [{ path, contentType, description? }] }\`
+- \`{ type: 'text', content }\`
+- \`{ type: 'error', message }\`
 
-Critical design rules:
-- Use \`<Img>\` (Remotion), never plain \`<img>\` — blank screenshots on mobile otherwise.
-- \`render\` MUST declare \`editables: [{ id, type:'text', label, propKey }]\` for every user-facing text (titles, captions). Editable elements need \`display: block | inline-block\`.
-- CJK text: system fonts only (\`PingFang SC\`, \`Noto Sans SC\`) — Google CJK Fonts break on iOS.
-- iOS: keep simultaneous \`<Img>\` ≤ 3; avoid CSS \`filter: blur(...)\` on \`<Img>\` (use CSS gradient instead).
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
 
-## Available in your code
-
-React scope: React, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Series, Img, AbsoluteFill, Audio, evolvePath/getLength/getPointAtLength/interpolatePath/parsePath/resetPath/cutPath (@remotion/paths), noise2D/noise3D (@remotion/noise).
-
-Node scope: \`sharp\`, \`JSZip\`, \`saveToWorkspace(path, content, contentType?)\` → { success, storageUrl }, \`fetch\`, Buffer/JSON/Math/Date.
-
-Context:
-- \`images\` — Buffers pre-fetched from the \`media_refs\` input (sharp ops only, never base64 into design props).
-- \`ctx.snapshotImages\` — array of snapshot URLs (index 0 = <<<media_1>>>). Embed directly via template literal \`\${ctx.snapshotImages[0]}\` inside design \`code\`.
-- \`ctx.projectId\`, \`ctx.userId\`.
-
-Before jumping into code, check if visual assets (stickers, illustrations, objects) would be better generated with \`generate_image\` (sticker-maker skill for transparent PNGs) than drawn with CSS.`,
+Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; then read \`inputFiles[0].inputPath\`. Do not hardcode Media Index URLs for FFmpeg inputs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
-        description: z.string().optional().describe('Brief description of what this code does. For designs/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
-        media_refs: z.array(z.number()).optional().describe('1-based snapshot indices to pre-fetch as Buffers (e.g. [2, 3] for <<<media_2>>> and <<<media_3>>>). Available in code as images[0], images[1], ... (Buffer order matches this array).'),
+        description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
+        media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the files are downloaded and exposed as inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
+        runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }),
-      execute: async ({ code, description: desc, media_refs }) => {
+      execute: async ({ code, description: desc, media_refs, runtime }) => {
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         // Store raw code for write_file({ fromLastRunCode: true })
@@ -967,6 +1768,85 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
           } catch (e) {
             console.warn('⚠️ [run_code] failed to refresh snapshot URLs:', e);
           }
+        }
+
+        if (runtime === 'node') {
+          if (!ctx.supabase || !ctx.userId) {
+            return { type: 'text' as const, content: 'Node media runtime requires workspace access. Please try again after the project finishes loading.' };
+          }
+          const { buildMediaItems, runNodeMediaCode } = await import('./media-sandbox');
+          const mediaItems = await buildMediaItems({
+            snapshotImages: ctx.snapshotImages,
+            projectId: ctx.projectId,
+            supabase: ctx.supabase,
+          });
+          const mediaResult = await runNodeMediaCode({
+            code,
+            description: desc,
+            mediaRefs: media_refs,
+            mediaItems,
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            supabase: ctx.supabase,
+          });
+
+	          if (mediaResult.type === 'error') {
+	            return { type: 'text' as const, content: `Node media runtime error: ${mediaResult.content || 'unknown error'}` };
+	          }
+
+	          rememberWorkspaceMediaOutputs(ctx, mediaResult.outputs
+	            .filter(o => o.storageUrl && (isImageContentType(o.contentType) || isVideoContentType(o.contentType)))
+	            .map(o => ({
+	              path: o.workspacePath,
+	              storageUrl: o.storageUrl!,
+	              contentType: o.contentType || 'application/octet-stream',
+	              description: o.description || desc,
+	              duration: o.duration ?? o.probe?.duration ?? null,
+	              width: o.width ?? o.probe?.width,
+	              height: o.height ?? o.probe?.height,
+	            })));
+
+	          const primary = mediaResult.primaryOutput;
+          if (mediaResult.type === 'video' && primary?.contentType?.startsWith('video/') && primary.storageUrl) {
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+            (ctx as any).__runCodeDrafts.push({
+              type: 'video',
+              videoUrl: primary.storageUrl,
+              workspacePath: primary.workspacePath,
+              description: primary.description || desc || 'FFmpeg video',
+              duration: primary.duration ?? primary.probe?.duration ?? null,
+              width: primary.width ?? primary.probe?.width,
+              height: primary.height ?? primary.probe?.height,
+              outputs: mediaResult.outputs,
+            });
+            const draftIdx = (ctx as any).__runCodeDrafts.length;
+            const dur = typeof primary.duration === 'number' ? `, ${primary.duration.toFixed(1)}s` : '';
+            return {
+              type: 'text' as const,
+              content: `Node media run complete — final video output ${draftIdx} saved to workspace${dur}: ${primary.storageUrl}\nIf this MP4 is the user-facing result, immediately publish it with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }) before telling the user it is done. If it is only an intermediate model-prep chunk, keep it in workspace.`,
+            };
+          }
+
+          if (primary?.contentType?.startsWith('image/') && primary.storageUrl) {
+            if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
+            (ctx as any).__runCodeDrafts.push({
+              type: 'image',
+              imageBase64: primary.storageUrl,
+              previewUrl: primary.storageUrl,
+              outputs: mediaResult.outputs,
+            });
+          }
+
+          const outputLinks = mediaResult.outputs
+            .map((o, i) => `${i + 1}. ${o.description ? `${o.description}: ` : ''}${o.storageUrl || o.workspacePath || o.path || '(no path)'}`)
+            .join('\n') || '(none)';
+          const outputMessage = `Workspace outputs:\n${outputLinks}`;
+          return {
+            type: 'text' as const,
+            content: mediaResult.content
+              ? `${mediaResult.content}\n\n${outputMessage}\n\nIf these are user-facing MP4 deliverables, immediately publish them with write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: ${mediaResult.outputs.length || 1} }) before telling the user it is done. Keep them as workspace outputs only for intermediate model-preparation chunks or when the user explicitly says not to publish.`
+              : `Node media run complete. Workspace outputs are ready.\n${outputMessage}\n\nIf these are user-facing MP4 deliverables, immediately publish them with write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: ${mediaResult.outputs.length || 1} }) before telling the user it is done. Keep them as workspace outputs only for intermediate model-preparation chunks or when the user explicitly says not to publish.`,
+          };
         }
 
         // Debug: log snapshot image URLs available to run_code
@@ -1058,7 +1938,7 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             }
           };
 
-          // { type: 'patch', edits: [...] } — Incremental search & replace on last design or a specific design via code_path
+          // { type: 'patch', edits: [...] } — Incremental search & replace on last composition or a specific composition via code_path
           if (result?.type === 'patch' && Array.isArray(result.edits)) {
             let baseDesign = (ctx as any).__lastDesignPayload;
 
@@ -1076,7 +1956,7 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             }
 
             if (!baseDesign) {
-              return { type: 'text' as const, content: 'No active design to patch. Use type: "render" to create a design first, or provide code_path to patch a specific design.' };
+              return { type: 'text' as const, content: 'Patch failed: no base composition. Provide code_path in the patch result, e.g. return { type: "patch", code_path: "code/...", edits: [...] }. Do not fall back to render unless the user asked for a new composition.' };
             }
             let code = baseDesign.code;
             for (const edit of result.edits) {
@@ -1089,7 +1969,12 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
               code = code.replace(edit.old, edit.new);
             }
             const mergedProps = result.props ? { ...(baseDesign.props || {}), ...result.props } : baseDesign.props;
-            const patched = { ...baseDesign, code, props: mergedProps };
+            const patched = {
+              ...baseDesign,
+              code: resolveMediaMarkersInString(code, ctx.snapshotImages),
+              props: resolveMediaMarkersInValue(mergedProps, ctx.snapshotImages) as Record<string, unknown> | undefined,
+            };
+            patched.animation = normalizeCompositionAnimation(patched.code, patched.animation);
             if (result.editables) patched.editables = result.editables;
 
             const harnessError = validateDesign({ code: patched.code, props: patched.props });
@@ -1112,7 +1997,8 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             }
 
             const draftIdx = drafts.length;
-            return { type: 'text' as const, content: `Patched — draft ${draftIdx} updated. Use preview_frame to verify key frames. Publish: write_file({ fromLastRunCode: true, name: "slug" })` };
+            const patchSource = result.code_path ? ` from ${result.code_path}` : '';
+            return { type: 'text' as const, content: `Patched${patchSource} — draft ${draftIdx} updated. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "slug", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "slug" }).` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -1125,26 +2011,38 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
                 durationInSeconds: result.durationInSeconds || result.duration || 5,
               };
             }
-            // ── Design harness: compile + image reference checks ──
-            const harnessError = validateDesign({ code: result.code, props: result.props });
+            // ── Composition harness: compile + image reference checks ──
+            const resolvedCode = resolveMediaMarkersInString(result.code, ctx.snapshotImages);
+            const resolvedProps = resolveMediaMarkersInValue(result.props, ctx.snapshotImages) as Record<string, unknown> | undefined;
+            const harnessError = validateDesign({ code: resolvedCode, props: resolvedProps });
             if (harnessError) {
               return { type: 'text' as const, content: harnessError };
             }
+            const aspectError = await validateCompositionMediaAspect(ctx, {
+              code: resolvedCode,
+              props: resolvedProps,
+              width: result.width,
+              height: result.height,
+            });
+            if (aspectError) {
+              return { type: 'text' as const, content: aspectError };
+            }
 
-            // ── Harness passed — store design ──
+            // ── Harness passed — store composition ──
             // Auto-generate description if Agent didn't provide one
             const autoDesc = desc || (() => {
-              const type = animation ? `${animation.durationInSeconds}s video` : 'still design';
+              const type = animation ? `${animation.durationInSeconds}s video` : 'still composition';
               // Extract text content from code (string literals in JSX)
               const textMatches = result.code.match(/>([^<>{}\n]{3,60})</g)?.slice(0, 5).map((m: string) => m.slice(1).trim()).filter(Boolean);
               const textHint = textMatches?.length ? `: "${textMatches.slice(0, 3).join('", "')}"` : '';
               return `${type} (${result.width || 1080}x${result.height || 1350})${textHint}`;
             })();
+            animation = normalizeCompositionAnimation(resolvedCode, animation);
             const designPayload = {
-              code: result.code,
+              code: resolvedCode,
               width: result.width || 1080,
               height: result.height || 1350,
-              props: result.props,
+              props: resolvedProps,
               animation,
               description: autoDesc,
               ...(result.editables ? { editables: result.editables } : {}),
@@ -1162,7 +2060,7 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
             (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, content: `Design ready — draft ${draftIdx}. Use preview_frame to check key frames, then publish: write_file({ fromLastRunCode: true, name: "<descriptive-slug>" })` };
+            return { type: 'text' as const, content: `Composition ready — draft ${draftIdx}. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "<descriptive-slug>", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).` };
           }
 
           // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
@@ -1232,7 +2130,7 @@ Before jumping into code, check if visual assets (stickers, illustrations, objec
       // Cache point marker — cache all tools preceding this one (PR #8137 patch).
       // Must stay on the LAST tool in this map so the whole tools block is cached.
       providerOptions: { bedrock: { cachePoint: { type: 'default' } } },
-      description: `Generate background music for the current design/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
+      description: `Generate background music for the current composition/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
@@ -1311,12 +2209,11 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; originalImage?: string; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; history?: Array<{ role: 'user' | 'assistant'; content: string }>; timelineVersion?: number; perf?: AgentPerf },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
   const ctx: AgentContext = {
     currentImage,
-    originalImage: options?.originalImage,
     referenceImages: options?.referenceImages,
     projectId,
     generatedImages: [],
@@ -1332,17 +2229,13 @@ export async function* runMakaronAgent(
     timelineVersion: options?.timelineVersion,
   };
 
-  // Pre-load design for patch support across sessions
-  if (options?.currentDesign?.code) {
-    (ctx as any).__lastDesignPayload = options.currentDesign;
-  }
-
   const allTools = createTools(ctx);
   perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
   let stepCount = 0;
   let toolCallStartTime = 0;
   let toolCallName = '';
+  let activeToolCallId: string | undefined;
   const agentStartTime = Date.now();
 
   const analysisOnly = options?.analysisOnly ?? false;
@@ -1379,9 +2272,12 @@ export async function* runMakaronAgent(
       ),
     ];
   } else {
-    // Inject current design code into prompt so Agent can patch without read_file
-    const designInjection = options?.currentDesign?.code
-      ? `[Current design code — modify with run_code patch mode, no need to read_file]\n\`\`\`json\n${JSON.stringify({ code: options.currentDesign.code, width: options.currentDesign.width, height: options.currentDesign.height, animation: options.currentDesign.animation })}\n\`\`\`\n\n`
+    // Inject only the pointer/metadata, never full composition code. The agent
+    // must pass code_path explicitly in run_code patch mode for persisted compositions.
+    const promptHasCompositionPointer = typeof prompt === 'string'
+      && (prompt.includes('[Current Composition]') || prompt.includes('[Current composition pointer]'));
+    const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
+      ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } and runtime: "composition". Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
     userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
   }
@@ -1409,9 +2305,10 @@ export async function* runMakaronAgent(
   const userImagesCount = Array.isArray(userContent)
     ? userContent.filter((p: { type?: string }) => p?.type === 'image').length
     : 0;
-  // analysis / tipReaction / animation modes intentionally skip history to keep
-  // the request single-turn (matches prior behavior). Normal chat sends it.
-  const sendHistory = !analysisOnly && !tipReactionOnly && !(animImages?.length);
+  // analysis / tipReaction modes intentionally skip history to keep
+  // the request single-turn (matches prior behavior). Normal chat and video
+  // requests send it so read_file/tool results can be reused cross-turn.
+  const sendHistory = !analysisOnly && !tipReactionOnly;
   const history = sendHistory ? (options?.history ?? []) : [];
   console.log(
     `[agent-req] systemChars=${systemPrompt.length} toolsChars=${toolsChars} userChars=${userContentChars} images=${userImagesCount} historyTurns=${history.length} mode=${tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal'}`
@@ -1451,14 +2348,16 @@ export async function* runMakaronAgent(
 
   let firstContentAt = 0;
 
-  // B7: cache the conversation history up through the last assistant turn.
+  // B7: cache the conversation history up through the last non-user turn.
+  // Tool-aware history can end with a `tool` message, so include it in the
+  // cache point; otherwise expensive tool results sit outside cached prefix.
   // Only worth the cacheWrite cost when the conversation has real history
-  // (≥ 2 prior turns including at least one assistant). Short sessions skip.
-  const msgs: Array<{ role: 'user' | 'assistant'; content: unknown; providerOptions?: Record<string, unknown> }> =
-    [...history, { role: 'user', content: userContent }];
+  // (≥ 2 prior turns including at least one model/tool response). Short sessions skip.
+  const msgs: Array<ModelMessage & { providerOptions?: Record<string, unknown> }> =
+    [...history, { role: 'user', content: userContent } as ModelMessage];
   if (history.length >= 2) {
     for (let i = msgs.length - 2; i >= 0; i--) {
-      if (msgs[i].role === 'assistant') {
+      if (msgs[i].role === 'assistant' || msgs[i].role === 'tool') {
         msgs[i].providerOptions = { bedrock: { cachePoint: { type: 'default' } } };
         break;
       }
@@ -1594,6 +2493,7 @@ export async function* runMakaronAgent(
       if (event.type === 'tool-call') {
         toolCallStartTime = Date.now();
         toolCallName = event.toolName;
+        activeToolCallId = (event as { toolCallId?: string }).toolCallId || crypto.randomUUID();
         console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
         perf?.mark('tool_call', {
           tool: event.toolName,
@@ -1611,6 +2511,8 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: isEnLocale
             ? (q ? `Analyzing video: ${q.slice(0, 50)}` : 'Analyzing video')
             : (q ? `分析视频：${q.slice(0, 40)}` : '分析视频') };
+        } else if (event.toolName === 'transcribe_audio') {
+          yield { type: 'status', text: isEnLocale ? 'Transcribing audio...' : '转写音频中...' };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number };
           const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
@@ -1634,7 +2536,7 @@ export async function* runMakaronAgent(
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
-          const inp = event.input as { useOriginalAsReference?: boolean; media_index?: number; reference_media_indices?: number[]; media_refs?: string[] };
+          const inp = event.input as { media_index?: number; reference_media_indices?: number[]; media_refs?: string[] };
           // Resolve the actual edit target (respects media_index; omit = text-to-image)
           let displayTarget: string | undefined;
           if (inp.media_index !== undefined) {
@@ -1658,10 +2560,8 @@ export async function* runMakaronAgent(
           const extraRefs: string[] = [];
           if (inp.media_refs?.length) extraRefs.push(...inp.media_refs);
           if (displayTarget || extraRefs.length) {
-            const twoImageMode = displayTarget && inp.useOriginalAsReference && ctx.originalImage && ctx.originalImage !== displayTarget;
             toolCallImages = [
               ...(displayTarget ? [displayTarget] : []),
-              ...(twoImageMode ? [ctx.originalImage!] : []),
               ...(ctx.referenceImages ?? []),
               ...snapshotRefs,
             ];
@@ -1673,6 +2573,8 @@ export async function* runMakaronAgent(
         yield {
           type: 'tool_call',
           tool: event.toolName,
+          toolCallId: activeToolCallId,
+          step: stepCount,
           input: isRunCode
             ? { ...toolInput, code: ((toolInput.code as string)).slice(0, 100) + `... (${(toolInput.code as string).length} chars)` }
             : toolInput,
@@ -1695,6 +2597,8 @@ export async function* runMakaronAgent(
       if (event.type === 'tool-result') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const toolName = (event as any).toolName as string | undefined;
+        const toolCallId = ((event as any).toolCallId as string | undefined) || activeToolCallId;
+        const toolOutput = ((event as any).output ?? (event as any).result) as unknown;
         const toolDuration = toolCallStartTime ? ((Date.now() - toolCallStartTime) / 1000).toFixed(1) : '?';
         console.log(`⏱️ [agent] tool-result "${toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (tool took ${toolDuration}s)`);
         perf?.mark('tool_result', {
@@ -1706,6 +2610,10 @@ export async function* runMakaronAgent(
         // Reset status after tool completes so stale status doesn't linger during thinking
         const isEnLocale = options?.locale === 'en';
         yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
+        if (toolName) {
+          yield { type: 'tool_result', tool: toolName, toolCallId, step: stepCount, output: toolOutput };
+        }
+        activeToolCallId = undefined;
 
         // Emit image_analyzed event so frontend can save the description
         if (toolName === 'analyze_image' || toolName === 'analyze_video') {
@@ -1761,12 +2669,19 @@ export async function* runMakaronAgent(
           yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel };
           imagesSent++;
         }
+        yield* flushPendingImageSnapshots(ctx);
         if (ctx.animationTaskId) {
           yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '', imageUrls: ctx.animationImageUrls_, model: ctx.animationModel };
           ctx.animationTaskId = undefined;
           ctx.animationPrompt = undefined;
           ctx.animationImageUrls_ = undefined;
           ctx.animationModel = undefined;
+        }
+        if (ctx.pendingVideoSnapshots?.length) {
+          for (const pending of ctx.pendingVideoSnapshots) {
+            yield { type: 'video_snapshot', ...pending };
+          }
+          ctx.pendingVideoSnapshots = undefined;
         }
         if (ctx.pendingVideoSnapshot) {
           yield { type: 'video_snapshot', ...ctx.pendingVideoSnapshot };
@@ -1799,6 +2714,7 @@ export async function* runMakaronAgent(
       yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel };
       imagesSent++;
     }
+    yield* flushPendingImageSnapshots(ctx);
 
     console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
     perf?.mark('agent_done', {

@@ -35,7 +35,7 @@ export function useProject(projectId: string, userId: string) {
   const loadProject = useCallback(async (): Promise<LoadedProject> => {
     const supabase = getSupabase()
 
-    const [snapshotsRes, messagesRes, projectRes] = await Promise.all([
+    const [snapshotsRes, messagesRes, projectRes, previewFramesRes] = await Promise.all([
       supabase
         .from('snapshots')
         .select('*')
@@ -51,6 +51,12 @@ export function useProject(projectId: string, userId: string) {
         .select('title, timeline_version, user_id')
         .eq('id', projectId)
         .single(),
+      supabase
+        .from('agent_events')
+        .select('data, created_at')
+        .eq('project_id', projectId)
+        .eq('type', 'preview_frame_captured')
+        .order('created_at', { ascending: true }),
     ])
 
     const timelineVersion: number = (projectRes.data as Record<string, unknown>)?.timeline_version as number ?? 1
@@ -67,6 +73,17 @@ export function useProject(projectId: string, userId: string) {
 
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
     const dbMessages: DbMessage[] = messagesRes.data ?? []
+    const previewImagesByMessage = new Map<string, string[]>()
+    for (const event of previewFramesRes.data ?? []) {
+      const data = event.data as Record<string, unknown> | null
+      const messageId = typeof data?.messageId === 'string' ? data.messageId : ''
+      const workspaceUrl = typeof data?.workspaceUrl === 'string' ? data.workspaceUrl : ''
+      if (!messageId || !workspaceUrl) continue
+      previewImagesByMessage.set(messageId, [
+        ...(previewImagesByMessage.get(messageId) ?? []),
+        workspaceUrl,
+      ])
+    }
 
     const snapshots: Snapshot[] = dbSnapshots.map((s) => {
       const imageUrl = s.image_url || (s.type === 'video' ? VIDEO_PLACEHOLDER_IMAGE : '')
@@ -160,6 +177,7 @@ export function useProject(projectId: string, userId: string) {
         timestamp: new Date(m.created_at).getTime(),
         projectId: m.project_id,
         ...(linkedSnapshot ? { image: linkedSnapshot.image } : {}),
+        ...(previewImagesByMessage.has(m.id) ? { images: previewImagesByMessage.get(m.id) } : {}),
         ...(linkedSnapshot?.design ? { design: linkedSnapshot.design } : {}),
       }
     })

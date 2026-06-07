@@ -92,9 +92,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       editPrompt: z.string().describe('English editing instructions describing what to change'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
       model: z.enum(['gemini', 'qwen', 'pony', 'wai', 'openai']).nullish().describe('NEVER set unless user literally names a model. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
-      originalImage: z.string().nullish().describe('Original photo URL/base64 for face restoration reference'),
-      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3)'),
-      useOriginalAsReference: z.boolean().nullish().describe('Use originalImage as reference for face/color restoration'),
+      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
     },
     async (params) => {
@@ -110,7 +108,6 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
 
         const ctx = {
           currentImage: image,
-          originalImage: params.originalImage ? resolveImage(params.originalImage) : undefined,
           referenceImages: params.referenceImages?.map(resolveImage),
         };
 
@@ -119,7 +116,6 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
             editPrompt: wrappedPrompt,
             skill: params.skill ?? undefined,
             preferredModel: params.model ?? undefined,
-            useOriginalAsReference: params.useOriginalAsReference ?? undefined,
             aspectRatio: params.aspectRatio ?? undefined,
           },
           ctx,
@@ -238,7 +234,7 @@ IMPORTANT:
 - images must be publicly accessible URLs (not base64). Upload to storage first.
 - script should use <<<media_N>>> format (from makaron_write_video_script output)
 - Video rendering takes 3-5 minutes. Use makaron_get_video_status to poll.
-- Duration: omit for smart mode (AI decides 3-15s based on script).
+- Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s.
 
 Models:
 - kling (default) — Kling v3-omni, general purpose, $0.112/s
@@ -251,7 +247,7 @@ Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
       images: z.array(z.string().url()).min(1).max(7).describe('Publicly accessible image URLs'),
-      duration: z.number().optional().describe('Duration: 3, 5, 7, 10, or 15 seconds. Omit for smart mode.'),
+      duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s. Omit for smart mode.'),
       aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
       videoModel: z.enum(['kling', 'seedance']).optional().describe('Video model: kling (default) or seedance (real faces, premium)'),
     },
@@ -305,7 +301,7 @@ Example: Edit a video to add cinematic color grading:
       videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤1080p, ≤200MB)'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
-      duration: z.number().optional().describe('Output duration: 3, 5, 7, 10, or 15 seconds. Omit for smart mode.'),
+      duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s. Omit for smart mode.'),
       aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
       videoModel: z.enum(['kling', 'seedance']).optional().describe('Video model: kling (base/direct edit) or seedance (reference-video edit for target ≤15s clips)'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),

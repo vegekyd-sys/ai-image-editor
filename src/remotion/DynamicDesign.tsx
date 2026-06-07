@@ -11,7 +11,7 @@ import * as RemotionNoise from '@remotion/noise';
 import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 
-const { Sequence, useVideoConfig, delayRender, continueRender, AbsoluteFill } = Remotion;
+const { Sequence, useVideoConfig, delayRender, continueRender } = Remotion;
 
 // Sequence wrapper: auto-inject premountFor={fps} for smooth video cuts
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,15 +35,44 @@ const REMOTION_SCOPE: Record<string, unknown> = {
 delete REMOTION_SCOPE['default'];
 delete REMOTION_SCOPE['__esModule'];
 
+function normalizeRemotionScopeDeclarations(code: string): string {
+  return code
+    .trim()
+    .replace(/^\s*(?:const|let|var)\s*\{[^}]*\}\s*=\s*(?:window\.)?Remotion\s*;?\s*$/gm, '')
+    .replace(/^\s*(?:const|let|var)\s+Remotion\s*=\s*window\.Remotion\s*;?\s*$/gm, '')
+    .replace(/\bwindow\.Remotion\./g, '')
+    .replace(/\bRemotion\./g, '')
+    .trim();
+}
+
+function pickRemotionComponentName(code: string): string {
+  const names = [
+    ...Array.from(code.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g), m => m[1]),
+    ...Array.from(code.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/g), m => m[1]),
+  ];
+
+  const preferred = ['Composition', 'Design', 'AgentDesign', 'DevLog', 'App', 'Main', 'Scene'];
+  for (const name of preferred) {
+    if (names.includes(name)) return name;
+  }
+
+  const descriptive = [...names].reverse().find(name =>
+    /(?:Composition|Design)$/i.test(name) &&
+    !/(?:Caption|Badge|Label|Title|Subtitle|Overlay)$/i.test(name)
+  );
+  if (descriptive) return descriptive;
+
+  return names[names.length - 1] || 'Design';
+}
+
 function compileAndEval(code: string): React.ComponentType<Record<string, unknown>> | null {
   try {
-    const src = code.trim();
+    const src = normalizeRemotionScopeDeclarations(code);
     const { code: compiled } = sucraseTransform(src, {
       transforms: ['typescript', 'jsx'],
       jsxRuntime: 'classic',
     });
-    const fnMatch = src.match(/function\s+(\w+)/);
-    const fnName = fnMatch?.[1] || 'Design';
+    const fnName = pickRemotionComponentName(src);
     const execCode = `${compiled}\nreturn ${fnName};`;
     const scopeKeys = Object.keys(REMOTION_SCOPE);
     const scopeValues = Object.values(REMOTION_SCOPE);
@@ -154,11 +183,7 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
   }, [codeStr, allText]);
 
   if (!Component) {
-    return (
-      <AbsoluteFill style={{ background: '#1a1a2e', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontSize: 14 }}>
-        Failed to compile design code
-      </AbsoluteFill>
-    );
+    throw new Error('Failed to compile design code');
   }
   // Always render Component so <Img> can register its own delayRender for image loading.
   // Font delayRender runs in parallel — Remotion waits for ALL handles before capturing.

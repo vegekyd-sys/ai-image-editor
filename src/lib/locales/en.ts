@@ -96,7 +96,7 @@ const en = {
 
   // Agent chat
   'chat.currentImage': 'Current image (edit base)',
-  'chat.originalImage': 'Original (face reference)',
+  'chat.referenceImage': 'Reference image',
   'chat.promptCard': 'Prompt sent to nano banana 2',
   'chat.expand': 'Expand ▼',
   'chat.collapse': 'Collapse ▲',

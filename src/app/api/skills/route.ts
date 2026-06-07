@@ -4,6 +4,14 @@ import { parseSkillMd } from '@/lib/skill-registry';
 import { getAllSkills, installSkill, deleteFile, listFiles, type SkillAsset } from '@/lib/workspace';
 import JSZip from 'jszip';
 
+const INVALID_ZIP_MESSAGE = 'Invalid skill archive. Please upload a .zip file containing SKILL.md.';
+
+function isLikelyZip(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 4) return false;
+  const bytes = new Uint8Array(buffer, 0, 4);
+  return bytes[0] === 0x50 && bytes[1] === 0x4b; // "PK"
+}
+
 // GET — list built-in + user skills (via workspace)
 export async function GET() {
   try {
@@ -51,7 +59,14 @@ async function installFromZip(
     }
   }
 
-  const zip = await JSZip.loadAsync(buffer);
+  if (!isLikelyZip(buffer)) return { success: false, error: INVALID_ZIP_MESSAGE };
+
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(buffer);
+  } catch {
+    return { success: false, error: INVALID_ZIP_MESSAGE };
+  }
 
   let skillMdContent: string | null = null;
   let skillMdPath = '';
@@ -113,6 +128,9 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      return NextResponse.json({ error: INVALID_ZIP_MESSAGE }, { status: 400 });
+    }
 
     const buffer = await file.arrayBuffer();
     const result = await installFromZip(buffer, supabase, user.id);
