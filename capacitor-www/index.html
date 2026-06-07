@@ -73,13 +73,13 @@
     <div class="panel">
       <div class="mark"></div>
       <div class="brand">Makaron</div>
-      <div id="status" class="status">Connecting to local iOS dev server...</div>
+      <div id="status" class="status">Opening Makaron...</div>
       <div class="actions">
         <button id="retry">Retry</button>
       </div>
     </div>
     <script>
-      const url = 'http://192.168.1.10:3001/home';
+      const url = 'https://www.makaron.app/home';
       const statusEl = document.getElementById('status');
       const connect = async () => {
         statusEl.textContent = 'Connecting to ' + url + ' ...';
@@ -87,7 +87,7 @@
           await fetch(url, { method: 'HEAD', cache: 'no-store' });
           window.location.replace(url);
         } catch (error) {
-          statusEl.textContent = 'Cannot reach the local dev server. Keep the Mac awake and make sure port 3001 is running.';
+          statusEl.textContent = 'Cannot reach Makaron. Check your connection and try again.';
         } finally {
           window.Capacitor?.Plugins?.SplashScreen?.hide?.().catch?.(() => {});
         }

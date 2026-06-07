@@ -40,13 +40,13 @@ describe('iOS App Store readiness guardrails', () => {
     expect(plan).toContain('StoreKit');
   });
 
-  it('bundles a local fallback shell that makes iOS debug black screens diagnosable', () => {
+  it('bundles a production launch shell that makes iOS black screens diagnosable', () => {
     const shell = fs.readFileSync(path.join(root, 'capacitor-www/index.html'), 'utf8');
     expect(shell).toContain('viewport-fit=cover');
     expect(shell).toContain('SplashScreen');
-    expect(shell).toContain('Connecting to local iOS dev server');
-    expect(shell).toMatch(/http:\/\/(?:localhost|127\.0\.0\.1|(?:\d{1,3}\.){3}\d{1,3}):3001\/home/);
-    expect(shell).toContain('Cannot reach the local dev server');
+    expect(shell).toContain('Opening Makaron');
+    expect(shell).toContain('https://www.makaron.app/home');
+    expect(shell).toContain('Cannot reach Makaron');
   });
 
   it('declares iOS permission purpose strings and portrait-only full-screen orientation', () => {
