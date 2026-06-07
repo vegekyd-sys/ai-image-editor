@@ -20,6 +20,7 @@ const config: CapacitorConfig = {
       'www.makaron.app',
       'makaron.app',
       'cdn.makaron.app',
+      'ai-image-editor-rawit330k-vegekyd-sys-projects.vercel.app',
     ],
     errorPath: 'index.html',
   },

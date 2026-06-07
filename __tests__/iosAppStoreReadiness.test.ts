@@ -10,6 +10,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(config.webDir).toBe('capacitor-www');
     expect(config.server?.url).toBeUndefined();
     expect(config.server?.allowNavigation).toContain('www.makaron.app');
+    expect(config.server?.allowNavigation).toContain('ai-image-editor-rawit330k-vegekyd-sys-projects.vercel.app');
   });
 
   it('keeps the native iOS webview locked to app-like viewport behavior', () => {
@@ -40,12 +41,12 @@ describe('iOS App Store readiness guardrails', () => {
     expect(plan).toContain('StoreKit');
   });
 
-  it('bundles a production launch shell that makes iOS black screens diagnosable', () => {
+  it('bundles a remote launch shell that makes iOS black screens diagnosable', () => {
     const shell = fs.readFileSync(path.join(root, 'capacitor-www/index.html'), 'utf8');
     expect(shell).toContain('viewport-fit=cover');
     expect(shell).toContain('SplashScreen');
     expect(shell).toContain('Opening Makaron');
-    expect(shell).toContain('https://www.makaron.app/home');
+    expect(shell).toContain('https://ai-image-editor-rawit330k-vegekyd-sys-projects.vercel.app/home');
     expect(shell).toContain('Cannot reach Makaron');
   });
 
