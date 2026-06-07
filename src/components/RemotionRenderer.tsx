@@ -33,6 +33,53 @@ async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: 
   return { code: resolved, blobUrls };
 }
 
+function isImageUrl(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^https?:\/\//i.test(value)
+    && (
+      /\.(?:jpg|jpeg|png|webp|gif)(?:[?#].*)?$/i.test(value)
+      || (/\/storage\/v1\/object\/public\//i.test(value) && !/\.(?:mp3|wav|m4a|aac|ogg|mp4|webm|mov)(?:[?#].*)?$/i.test(value))
+    );
+}
+
+async function resolveImageUrlsInValue(value: unknown, blobUrls: string[]): Promise<unknown> {
+  if (isImageUrl(value)) {
+    try {
+      const res = await fetch(value);
+      if (!res.ok) throw new Error(`Image fetch failed: ${res.status}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrls.push(blobUrl);
+      return blobUrl;
+    } catch {
+      return value;
+    }
+  }
+  if (Array.isArray(value)) {
+    return Promise.all(value.map(item => resolveImageUrlsInValue(item, blobUrls)));
+  }
+  if (value && typeof value === 'object') {
+    const entries = await Promise.all(
+      Object.entries(value as Record<string, unknown>).map(async ([key, child]) => [
+        key,
+        await resolveImageUrlsInValue(child, blobUrls),
+      ] as const),
+    );
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+async function resolveDesignImageUrls(
+  design: DesignPayload,
+  code: string,
+): Promise<{ code: string; props: Record<string, unknown>; blobUrls: string[] }> {
+  const { code: resolvedCode, blobUrls: codeBlobUrls } = await resolveCodeUrls(code);
+  const propBlobUrls: string[] = [];
+  const props = await resolveImageUrlsInValue(design.props || {}, propBlobUrls) as Record<string, unknown>;
+  return { code: resolvedCode, props, blobUrls: [...codeBlobUrls, ...propBlobUrls] };
+}
+
 // ─── Google Fonts auto-loading from code (same approach as server DynamicDesign.tsx) ──
 
 import { getAvailableFonts } from '@remotion/google-fonts';
@@ -84,8 +131,8 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
     await preloadBabel().catch(() => {});
     // Resolve video URLs first (mp4/webm → blob for same-origin access)
     const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
-    // Then resolve image URLs
-    const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
+    // Then resolve image URLs in both code literals and editable props.
+    const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
     allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
     await loadGoogleFontsFromCode(resolvedCode);
     const comp = evalRemotionJSX(resolvedCode);
@@ -107,7 +154,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
       },
       frame: Math.min(30, durationInFrames - 1),
       imageFormat: 'jpeg',
-      inputProps: (design.props || {}) as Record<string, unknown>,
+      inputProps: resolvedProps,
       delayRenderTimeoutInMilliseconds: 30000,
     });
 
@@ -135,7 +182,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
   try {
     await preloadBabel().catch(() => {});
     const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
-    const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
+    const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
     allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
     await loadGoogleFontsFromCode(resolvedCode);
     const comp = evalRemotionJSX(resolvedCode);
@@ -156,7 +203,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
       },
       frame: Math.min(frame, durationInFrames - 1),
       imageFormat: 'jpeg',
-      inputProps: (design.props || {}) as Record<string, unknown>,
+      inputProps: resolvedProps,
       delayRenderTimeoutInMilliseconds: 30000,
     });
 
@@ -212,6 +259,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const onPlayerRefRef = useRef(onPlayerRef);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
+  const [inputProps, setInputProps] = useState<Record<string, unknown>>({});
   const [compileError, setCompileError] = useState<string | null>(null);
 
   const isStill = !design.animation;
@@ -221,15 +269,20 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     : 1;
   useEffect(() => {
     let cancelled = false;
+    const blobUrls: string[] = [];
     onLoading?.(true);
     (async () => {
       try {
         await preloadBabel().catch(() => {});
-        const { code: videoResolved } = await resolveVideoUrls(design.code);
-        if (cancelled) return;
-        await loadGoogleFontsFromCode(videoResolved);
-        if (cancelled) return;
-        const comp = evalRemotionJSX(videoResolved);
+        const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
+        blobUrls.push(...videoBlobUrls);
+        if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
+        const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
+        blobUrls.push(...imageBlobUrls);
+        if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
+        await loadGoogleFontsFromCode(resolvedCode);
+        if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
+        const comp = evalRemotionJSX(resolvedCode);
         if (!comp) {
           setCompileError('Failed to compile design code');
           onError?.('Failed to compile design code');
@@ -238,6 +291,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         }
         setCompileError(null);
         setComponent(() => comp);
+        setInputProps(resolvedProps);
         onLoading?.(false);
       } catch (e) {
         if (cancelled) return;
@@ -248,9 +302,12 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         onLoading?.(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      blobUrls.forEach(url => URL.revokeObjectURL(url));
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [design.code]);
+  }, [design.code, design.props]);
 
   // Expose container and player refs to parent
   useEffect(() => {
@@ -298,7 +355,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         <Player
           ref={playerRef}
           component={Component}
-          inputProps={design.props || {}}
+          inputProps={inputProps}
           compositionWidth={design.width}
           compositionHeight={design.height}
           durationInFrames={durationInFrames}
@@ -436,7 +493,7 @@ export async function exportDesignVideo(
   // Pre-fetch remote video URLs → blob URLs (renderMediaOnWeb requires same-origin)
   const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
   // Pre-fetch remote image URLs → blob URLs (same-origin, native browser handling)
-  const { code: imageResolved, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
+  const { code: imageResolved, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
   const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
   await loadGoogleFontsFromCode(resolvedCode);
@@ -457,7 +514,7 @@ export async function exportDesignVideo(
         id: 'agent-design-export',
         calculateMetadata: null, defaultProps: {},
       },
-      inputProps: (design.props || {}) as Record<string, unknown>,
+      inputProps: resolvedProps,
       videoCodec: 'h264', container: 'mp4',
       scale: 2,
       // Skip first/last 3 frames (~100ms each) to avoid black frames from fade-in/out animations

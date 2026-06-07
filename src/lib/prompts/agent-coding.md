@@ -60,6 +60,7 @@ Composition runtime:
 - `write_file({ fromLastRunCode: true, name: "slug", publish: false })` saves code to workspace without creating a timeline snapshot.
 - `write_file({ fromLastRunCode: true, name: "slug" })` saves and publishes the composition to the timeline.
 - `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: 3 })` publishes recent exported workspace videos to the timeline. Use this immediately after direct FFmpeg requests that create user-facing MP4s, such as "split this into three videos", "cut out this part", "trim/export this clip", or "transcode this video".
+- When using a workspace output in later code, copy the exact `storageUrl` returned by `run_code` or `list_files`. Do not guess a workspace URL from the local filename; node runtime auto-generates timestamped workspace paths.
 
 Node media runtime:
 - `type: "files"` outputs are already saved workspace files. For direct user-facing MP4 requests such as "split this video into two videos", "split into three 10s videos", exact trim/export, transcode, or extracted preview clips, immediately publish the exported MP4s with `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })` before telling the user it is done.

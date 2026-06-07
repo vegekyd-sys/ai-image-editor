@@ -450,6 +450,26 @@ function mediaKindMatches(contentType: string | undefined, mediaType: 'image' | 
   return isVideoContentType(contentType);
 }
 
+async function validatePublishableMediaUrl(output: WorkspaceMediaOutputDraft): Promise<string | null> {
+  if (!output.storageUrl) return 'Missing storage URL.';
+  try {
+    const res = await fetch(output.storageUrl, { method: 'HEAD', cache: 'no-store' });
+    if (!res.ok) {
+      return `URL is not reachable (${res.status}): ${output.storageUrl}`;
+    }
+    const actualType = res.headers.get('content-type') || '';
+    if (isImageContentType(output.contentType) && actualType && !actualType.startsWith('image/')) {
+      return `Expected image but URL returned ${actualType}: ${output.storageUrl}`;
+    }
+    if (isVideoContentType(output.contentType) && actualType && !actualType.startsWith('video/') && !actualType.includes('octet-stream')) {
+      return `Expected video but URL returned ${actualType}: ${output.storageUrl}`;
+    }
+  } catch (err) {
+    return `URL validation failed: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  return null;
+}
+
 function getWorkspaceMediaOutputs(ctx: AgentContext): WorkspaceMediaOutputDraft[] {
   return ((ctx as any).__workspaceMediaOutputs || []) as WorkspaceMediaOutputDraft[];
 }
@@ -579,6 +599,17 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
   if (!outputs.length) {
     const typeLabel = mediaType === 'all' ? 'image/video' : mediaType;
     return { success: false, message: `No recent workspace ${typeLabel} outputs found for this project.`, published: [] };
+  }
+
+  for (const output of outputs) {
+    const validationError = await validatePublishableMediaUrl(output);
+    if (validationError) {
+      return {
+        success: false,
+        message: `Cannot publish workspace media: ${validationError}\nUse a real workspace output returned by run_code/list_files, or re-run the media export so the file is saved before publishing.`,
+        published: [],
+      };
+    }
   }
 
   const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
@@ -1538,7 +1569,7 @@ Path is auto-generated from the current project and output type. Just provide a 
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
         fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Composition drafts can publish to timeline; node media chunks should usually be save-only until the final MP4.'),
-        fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns.'),
+        fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns. Only pass exact workspacePaths/storageUrl values returned by run_code/list_files; never guess a workspace URL from a file name.'),
         workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths or storage URLs to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
         limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),

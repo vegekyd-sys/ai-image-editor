@@ -22,7 +22,8 @@ describe('Remotion preview playback contract', () => {
     expect(evalSource).toContain('pickRemotionComponentName(src)')
 
     expect(rendererSource).toContain('player?.pause()')
-    expect(rendererSource).toContain('evalRemotionJSX(videoResolved)')
+    expect(rendererSource).toContain('evalRemotionJSX(resolvedCode)')
+    expect(rendererSource).toContain('resolveDesignImageUrls(design, videoResolved)')
     expect(uploadSource).toContain('evalRemotionJSX(code)')
   })
 
@@ -58,7 +59,8 @@ describe('Remotion preview playback contract', () => {
     expect(sandboxSource).toContain("const preferred = ['Composition', 'Design', 'AgentDesign', 'DevLog', 'App', 'Main', 'Scene']")
     expect(sandboxSource).toContain("return names[names.length - 1] || 'Design'")
 
-    expect(serverSource).toContain('prepareRemotionCodeForSandbox(design.code)')
+    expect(serverSource).toContain('prepareRemotionCodeForSandbox(resolvedDesign.code)')
+    expect(serverSource).toContain('resolveRemoteImagesForSandbox(design)')
   })
 
   it('wraps helper-first code for the existing sandbox snapshot evaluator', () => {

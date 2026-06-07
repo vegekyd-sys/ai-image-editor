@@ -10,6 +10,8 @@ Do not fall back to FFmpeg/node for ordinary timeline splicing just because a pr
 
 For timeline media, use actual Media Index URLs in props or code. Do not leave `<<<media_N>>>` placeholders inside `props.clipA`, `<Video src>`, or saved composition code. `<<<media_N>>>` is only a conversational reference; Remotion preview/export needs a real URL.
 
+Generated image URLs and timeline image URLs are valid Remotion media sources. Put them in `props` or code and render them with `<Img src={...}>`; do not claim that generated images cannot be used by the Remotion sandbox. If an image overlay fails, first check syntax, quoting, URL truncation, `<Img>` usage, and prop wiring, then patch the composition.
+
 Do not use this prompt for static posters, infographics, e-commerce pages, or ordinary layout images unless the user explicitly asks for editable code or animation.
 
 ## Canvas Aspect Contract
