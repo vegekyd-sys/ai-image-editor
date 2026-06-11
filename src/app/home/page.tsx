@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRequireAuth } from '@/hooks/useRequireAuth'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile } from '@/lib/imageUtils'
@@ -63,6 +63,7 @@ function HomePageInner() {
   const { t, locale } = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const isDesktop = useIsDesktop()
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
@@ -104,6 +105,9 @@ function HomePageInner() {
   selectedDetailRef.current = selectedDetail
   const homeSkillsRef = useRef(homeSkills)
   homeSkillsRef.current = homeSkills
+  const pathSkillId = pathname?.startsWith('/home/') ? pathname.split('/')[2] : null
+  const activeSkillId = selectedDetail?.id || searchParams.get('skill') || pathSkillId || null
+  const activeSkill = selectedDetail || (activeSkillId ? homeSkills.find(s => s.id === activeSkillId) || null : null)
 
   const placeholders = locale === 'zh' ? [
     '把这些图片做个 vlog',
@@ -512,10 +516,14 @@ function HomePageInner() {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
     if (files.length === 0) return
+    if (!user && selectedDetail) {
+      createInput.addFiles(files)
+      return
+    }
     const authedUser = await requireAuth()
     if (!authedUser) return
     createInput.addFiles(files)
-  }, [createInput, requireAuth])
+  }, [createInput, requireAuth, selectedDetail, user])
 
   const renderUploadSlots = useCallback((template: { image_count?: number; before_images?: string[] }, isActive: boolean) => {
     const minSlots = template.image_count ?? 1
@@ -528,7 +536,15 @@ function HomePageInner() {
           const isDragTarget = slotDragOver === i
           return (
             <div key={i}
-              onClick={async () => { const u = await requireAuth(); if (!u) return; if (isActive && !createInput.previews[i] && !createInput.creating) createInput.fileInputRef.current?.click() }}
+              onClick={async () => {
+                if (!isActive || createInput.previews[i] || createInput.creating) return
+                if (!user && selectedDetail) {
+                  createInput.fileInputRef.current?.click()
+                  return
+                }
+                const u = await requireAuth()
+                if (u) createInput.fileInputRef.current?.click()
+              }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
               onDragLeave={() => setSlotDragOver(-1)}
@@ -605,7 +621,67 @@ function HomePageInner() {
         )}
       </div>
     )
-  }, [createInput, handleSlotDrop, slotDragOver])
+  }, [createInput, handleSlotDrop, requireAuth, selectedDetail, slotDragOver, user])
+
+  const guestSkillCreateLabel = selectedDetail && !user
+    ? createInput.files.length > 0
+      ? (locale === 'zh' ? '生成免费预览' : 'Create free preview')
+      : (locale === 'zh' ? '上传照片' : 'Upload photo')
+    : !user
+      ? (locale === 'zh' ? '免费试用' : 'Try free')
+      : 'Create'
+
+  const requiredPhotoCount = Math.max(1, activeSkill?.image_count ?? 1)
+  const selectedPhotoCount = createInput.files.length
+  const remainingPhotoCount = Math.max(requiredPhotoCount - selectedPhotoCount, 0)
+  const hasEnoughPhotos = remainingPhotoCount === 0
+  const isGuestSkillAction = !user && !!activeSkill
+  const formatPhotoCount = (count: number) => locale === 'zh'
+    ? `${count} 张照片`
+    : `${count} photo${count === 1 ? '' : 's'}`
+
+  const skillActionCreateLabel = isGuestSkillAction
+    ? hasEnoughPhotos
+      ? (locale === 'zh' ? '免费预览' : 'Preview free')
+      : (locale === 'zh' ? '免费试用' : 'Try free')
+    : guestSkillCreateLabel
+
+  const skillActionTitle = isGuestSkillAction
+    ? hasEnoughPhotos
+      ? (locale === 'zh' ? '看看你的版本' : 'See your version')
+      : selectedPhotoCount > 0
+        ? (locale === 'zh' ? '快好了' : 'Almost ready')
+        : (locale === 'zh' ? '免费试试这个风格' : 'Try this style free')
+    : undefined
+
+  const skillActionSubtitle = isGuestSkillAction
+    ? hasEnoughPhotos
+      ? (locale === 'zh' ? '一键生成预览，无需信用卡。' : 'Generate a preview. No credit card.')
+      : selectedPhotoCount > 0
+        ? (locale === 'zh' ? `再补 ${formatPhotoCount(remainingPhotoCount)}，即可免费预览。` : `Add ${formatPhotoCount(remainingPhotoCount)} to preview free.`)
+        : (locale === 'zh' ? '无需信用卡。先看看效果。' : 'No credit card. See the result first.')
+    : undefined
+
+  const skillActionMeta = isGuestSkillAction && activeSkill
+    ? (activeSkill.labels[locale] || activeSkill.labels.en || null)
+    : null
+
+  const handleCreateOrUpload = useCallback(() => {
+    if (isGuestSkillAction && createInput.files.length < requiredPhotoCount) {
+      createInput.fileInputRef.current?.click()
+      return
+    }
+    handleCreate()
+  }, [createInput.fileInputRef, createInput.files.length, handleCreate, isGuestSkillAction, requiredPhotoCount])
+
+  const handleInputSlotClick = useCallback(async () => {
+    if (!user && selectedDetail) {
+      createInput.fileInputRef.current?.click()
+      return
+    }
+    const u = await requireAuth()
+    if (u) createInput.fileInputRef.current?.click()
+  }, [createInput.fileInputRef, requireAuth, selectedDetail, user])
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
@@ -820,10 +896,19 @@ function HomePageInner() {
               textareaRef={inlineTextareaRef}
               swipeRef={inlineCardSwipeRef}
               placeholder={placeholders[placeholderIdx]}
-              createLabel={!user ? (locale === 'zh' ? '免费试用' : 'Try free') : 'Create'}
+              createLabel={skillActionCreateLabel}
+              actionMode={isGuestSkillAction}
+              actionEyebrow={isGuestSkillAction ? (locale === 'zh' ? '免费预览' : 'Free preview') : undefined}
+              actionTitle={skillActionTitle}
+              actionSubtitle={skillActionSubtitle}
+              actionMeta={skillActionMeta || undefined}
+              actionIdleNote={locale === 'zh' ? `需要 ${formatPhotoCount(requiredPhotoCount)}` : `${formatPhotoCount(requiredPhotoCount)} needed`}
+              actionSelectedNote={hasEnoughPhotos
+                ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
+                : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
               showLoginIcon={!user}
-              onSubmit={handleCreate}
-              onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
+              onSubmit={handleCreateOrUpload}
+              onSlotClick={handleInputSlotClick}
               onTextareaFocus={() => setTextareaFocused(true)}
               onTextareaBlur={() => setTextareaFocused(false)}
               skills={availableSkills}
@@ -974,10 +1059,19 @@ function HomePageInner() {
               textareaRef={textareaRef}
               swipeRef={cardSwipeRef}
               placeholder={placeholders[placeholderIdx]}
-              createLabel={!user ? (locale === 'zh' ? '免费试用' : 'Try free') : 'Create'}
+              createLabel={skillActionCreateLabel}
+              actionMode={isGuestSkillAction}
+              actionEyebrow={isGuestSkillAction ? (locale === 'zh' ? '免费预览' : 'Free preview') : undefined}
+              actionTitle={skillActionTitle}
+              actionSubtitle={skillActionSubtitle}
+              actionMeta={skillActionMeta || undefined}
+              actionIdleNote={locale === 'zh' ? `需要 ${formatPhotoCount(requiredPhotoCount)}` : `${formatPhotoCount(requiredPhotoCount)} needed`}
+              actionSelectedNote={hasEnoughPhotos
+                ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
+                : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
               showLoginIcon={!user}
-              onSubmit={handleCreate}
-              onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
+              onSubmit={handleCreateOrUpload}
+              onSlotClick={handleInputSlotClick}
               onTextareaFocus={() => setTextareaFocused(true)}
               onTextareaBlur={() => setTextareaFocused(false)}
               skills={availableSkills}
