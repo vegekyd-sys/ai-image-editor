@@ -890,7 +890,7 @@ function HomePageInner() {
               input={createInput}
               slotWidth={inlineBoxHeight > 0 ? inlineBoxHeight : 52}
               isInline={true}
-              collapseSlot={false}
+              collapseSlot={isGuestSkillAction}
               isDesktop={isDesktop}
               boxRef={inlineBoxRef}
               textareaRef={inlineTextareaRef}
@@ -1053,7 +1053,7 @@ function HomePageInner() {
               input={createInput}
               slotWidth={photoSlotWidth}
               isInline={false}
-              collapseSlot={!isDesktop && !!selectedDetail}
+              collapseSlot={isGuestSkillAction || (!isDesktop && !!selectedDetail)}
               isDesktop={isDesktop}
               boxRef={inputBoxRef}
               textareaRef={textareaRef}

@@ -291,7 +291,7 @@ export default function CreateInputBox({
           gap: collapseSlot ? 8 : 10,
           padding: isDesktop ? '14px 14px 12px' : '12px 12px 10px',
         }}>
-          {(!collapseSlot || isDesktop) && (
+          {!collapseSlot && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             {actionEyebrow && (
               <span style={{
