@@ -99,6 +99,14 @@ export default function CreateInputBox({
   } = input;
 
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null);
+  const mobileSwipeElRef = useRef<HTMLDivElement | null>(null);
+
+  const setMobileSwipeRef = useCallback((el: HTMLDivElement | null) => {
+    mobileSwipeElRef.current = el;
+    if (swipeRef) {
+      (swipeRef as { current: HTMLDivElement | null }).current = el;
+    }
+  }, [swipeRef]);
 
   const registerSwipe = useCallback((el: HTMLDivElement | null) => {
     if (!el) return () => {};
@@ -120,10 +128,11 @@ export default function CreateInputBox({
   }, [setCardDragX]);
 
   useEffect(() => {
-    if (!swipeRef?.current) return;
-    const cleanup = registerSwipe(swipeRef.current);
+    const el = mobileSwipeElRef.current;
+    if (!el || isDesktop || files.length < 2) return;
+    const cleanup = registerSwipe(el);
     return cleanup;
-  }, [files.length, registerSwipe, swipeRef]);
+  }, [files.length, isDesktop, registerSwipe]);
 
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const taRef = externalTextareaRef || internalTextareaRef;
@@ -489,7 +498,8 @@ export default function CreateInputBox({
               </div>
             ) : (
               <div
-                ref={swipeRef}
+                ref={setMobileSwipeRef}
+                data-testid="mobile-upload-swipe-stack"
                 data-idx={Math.min(cardIndex, files.length - 1)}
                 data-count={files.length}
                 style={{ position: 'absolute', inset: 6 }}
