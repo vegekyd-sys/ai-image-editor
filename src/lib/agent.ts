@@ -450,6 +450,66 @@ function mediaKindMatches(contentType: string | undefined, mediaType: 'image' | 
   return isVideoContentType(contentType);
 }
 
+function inferWorkspaceContentType(filePathOrUrl: string): string {
+  const clean = filePathOrUrl.split('?')[0] || filePathOrUrl;
+  if (/\.(mp4|m4v)$/i.test(clean)) return 'video/mp4';
+  if (/\.mov$/i.test(clean)) return 'video/quicktime';
+  if (/\.webm$/i.test(clean)) return 'video/webm';
+  if (/\.(jpg|jpeg)$/i.test(clean)) return 'image/jpeg';
+  if (/\.png$/i.test(clean)) return 'image/png';
+  if (/\.webp$/i.test(clean)) return 'image/webp';
+  if (/\.gif$/i.test(clean)) return 'image/gif';
+  return 'application/octet-stream';
+}
+
+async function ensureWorkspaceFileIndex(ctx: AgentContext, output: WorkspaceMediaOutputDraft): Promise<void> {
+  if (!ctx.supabase || !ctx.userId || !output.path || !output.storageUrl) return;
+  const { data: existing, error: lookupError } = await ctx.supabase
+    .from('workspace_files')
+    .select('path')
+    .eq('user_id', ctx.userId)
+    .eq('path', output.path)
+    .maybeSingle();
+  if (!lookupError && existing?.path) return;
+
+  const { error } = await ctx.supabase.from('workspace_files').upsert({
+    user_id: ctx.userId,
+    path: output.path,
+    content_type: output.contentType || inferWorkspaceContentType(output.path || output.storageUrl),
+    size_bytes: null,
+    storage_url: toPublicStorageUrl(output.storageUrl),
+    updated_at: output.updatedAt || new Date().toISOString(),
+  }, { onConflict: 'user_id,path' });
+  if (error) {
+    console.warn('[agent] failed to ensure workspace file index:', output.path, error.message);
+    return;
+  }
+  workspace.clearWorkspaceCache();
+}
+
+async function recoverWorkspaceMediaPath(ctx: AgentContext, filePath: string): Promise<WorkspaceMediaOutputDraft | null> {
+  if (!ctx.supabase || !ctx.userId || /^https?:\/\//i.test(filePath)) return null;
+  const contentType = inferWorkspaceContentType(filePath);
+  if (!mediaKindMatches(contentType, 'all')) return null;
+
+  const storagePath = `${ctx.userId}/workspace/${filePath}`;
+  const { data } = ctx.supabase.storage.from('images').getPublicUrl(storagePath);
+  const storageUrl = toPublicStorageUrl(data?.publicUrl || '');
+  if (!storageUrl) return null;
+
+  const recovered: WorkspaceMediaOutputDraft = {
+    path: filePath,
+    storageUrl,
+    contentType,
+    updatedAt: new Date().toISOString(),
+  };
+  const validationError = await validatePublishableMediaUrl(recovered);
+  if (validationError) return null;
+
+  await ensureWorkspaceFileIndex(ctx, recovered);
+  return recovered;
+}
+
 async function validatePublishableMediaUrl(output: WorkspaceMediaOutputDraft): Promise<string | null> {
   if (!output.storageUrl) return 'Missing storage URL.';
   try {
@@ -523,7 +583,7 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
   const rememberedByPath = new Map(remembered.filter(o => o.path).map(o => [o.path!, o]));
   const rememberedByUrl = new Map(remembered.map(o => [o.storageUrl, o]));
 
-  let candidates: WorkspaceMediaOutputDraft[] = [];
+  const candidates: WorkspaceMediaOutputDraft[] = [];
 
   if (requestedPaths.length > 0) {
     const pathSet = new Set(requestedPaths);
@@ -544,6 +604,13 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
         updatedAt: row.updated_at,
         ...rememberedByPath.get(row.path),
       })));
+
+      const foundPaths = new Set((data || []).map((row: Record<string, string>) => row.path));
+      const missingPaths = workspaceOnlyPaths.filter(p => !foundPaths.has(p));
+      for (const missingPath of missingPaths) {
+        const recovered = await recoverWorkspaceMediaPath(ctx, missingPath);
+        if (recovered) candidates.push(recovered);
+      }
     }
 
     candidates.push(...requestedPaths
@@ -598,6 +665,13 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
   const outputs = [...unique.values()].slice(-limit);
   if (!outputs.length) {
     const typeLabel = mediaType === 'all' ? 'image/video' : mediaType;
+    if (requestedPaths.length > 0) {
+      return {
+        success: false,
+        message: `No publishable workspace ${typeLabel} outputs found for requested path(s): ${requestedPaths.join(', ')}. The file must exist in workspace_files or at storage path {userId}/workspace/{path}.`,
+        published: [],
+      };
+    }
     return { success: false, message: `No recent workspace ${typeLabel} outputs found for this project.`, published: [] };
   }
 
@@ -1794,17 +1868,21 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
 	            return { type: 'text' as const, content: `Node media runtime error: ${mediaResult.content || 'unknown error'}` };
 	          }
 
-	          rememberWorkspaceMediaOutputs(ctx, mediaResult.outputs
+	          const workspaceOutputs = mediaResult.outputs
 	            .filter(o => o.storageUrl && (isImageContentType(o.contentType) || isVideoContentType(o.contentType)))
 	            .map(o => ({
 	              path: o.workspacePath,
 	              storageUrl: o.storageUrl!,
-	              contentType: o.contentType || 'application/octet-stream',
+	              contentType: o.contentType || inferWorkspaceContentType(o.workspacePath || o.storageUrl || ''),
 	              description: o.description || desc,
 	              duration: o.duration ?? o.probe?.duration ?? null,
 	              width: o.width ?? o.probe?.width,
 	              height: o.height ?? o.probe?.height,
-	            })));
+	            }));
+	          for (const output of workspaceOutputs) {
+	            await ensureWorkspaceFileIndex(ctx, output);
+	          }
+	          rememberWorkspaceMediaOutputs(ctx, workspaceOutputs);
 
 	          const primary = mediaResult.primaryOutput;
           if (mediaResult.type === 'video' && primary?.contentType?.startsWith('video/') && primary.storageUrl) {

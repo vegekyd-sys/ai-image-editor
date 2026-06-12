@@ -15,6 +15,8 @@ const { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } = fsPromises
 const { existsSync } = fs
 const { tmpdir } = os
 const { pathToFileURL } = url
+const INPUT_DOWNLOAD_CONCURRENCY = 2
+const INPUT_DOWNLOAD_TIMEOUT_MS = 180_000
 
 type SupabaseClient = any
 
@@ -85,14 +87,43 @@ function slugify(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'media'
 }
 
-async function downloadFile(url: string, filePath: string): Promise<{ filePath: string; contentType: string; size: number }> {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`Failed to download ${url.slice(0, 80)}: ${res.status}`)
-  const contentType = res.headers.get('content-type') || guessContentType(url)
-  const buffer = Buffer.from(await res.arrayBuffer())
-  await mkdir(path.dirname(filePath), { recursive: true })
-  await writeFile(filePath, buffer)
-  return { filePath, contentType, size: buffer.length }
+async function downloadFile(url: string, filePath: string, timeoutMs = INPUT_DOWNLOAD_TIMEOUT_MS): Promise<{ filePath: string; contentType: string; size: number }> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, { signal: controller.signal })
+    if (!res.ok) throw new Error(`Failed to download ${url.slice(0, 80)}: ${res.status}`)
+    const contentType = res.headers.get('content-type') || guessContentType(url)
+    const buffer = Buffer.from(await res.arrayBuffer())
+    await mkdir(path.dirname(filePath), { recursive: true })
+    await writeFile(filePath, buffer)
+    return { filePath, contentType, size: buffer.length }
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(`Download timed out after ${timeoutMs}ms: ${url.slice(0, 120)}`)
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let nextIndex = 0
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      results[currentIndex] = await worker(items[currentIndex], currentIndex)
+    }
+  })
+  await Promise.all(workers)
+  return results
 }
 
 async function listFilesRecursive(dir: string): Promise<string[]> {
@@ -246,7 +277,7 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
   const inputFiles: MediaInputFile[] = []
 
   try {
-    for (const ref of selectedRefs) {
+    const downloadedInputs = await mapWithConcurrency(selectedRefs, INPUT_DOWNLOAD_CONCURRENCY, async (ref) => {
       const item = options.mediaItems[ref - 1]
       if (!item?.url) throw new Error(`No media found at <<<media_${ref}>>>`)
       const cleanUrl = item.url.split('?')[0] || item.url
@@ -254,13 +285,14 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       const fileName = `media_${ref}${ext}`
       const targetPath = path.join(inputDir, fileName)
       const downloaded = await downloadFile(item.url, targetPath)
-      inputFiles.push({
+      return {
         ...item,
         inputPath: downloaded.filePath,
         fileName,
         contentType: downloaded.contentType || guessContentType(fileName),
-      })
-    }
+      }
+    })
+    inputFiles.push(...downloadedInputs)
 
     const saveToWorkspace = async (workspacePath: string, content: string | Buffer, contentType?: string) => {
       if (!options.supabase || !options.userId) return { success: false, error: 'No Supabase connection' }
