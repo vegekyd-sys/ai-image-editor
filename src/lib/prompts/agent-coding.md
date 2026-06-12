@@ -28,25 +28,9 @@ Return exactly one supported object:
 
 Use `type: "render"` for a new composition draft, `type: "patch"` for subsequent composition edits, `type: "files"` for file batches or intermediate media, and `type: "video"` for one final MP4.
 
-## Editable Composition Contract
+## Editable Boundary
 
-Editable fields belong to the Remotion composition path only: `runtime: "composition"` / legacy `runtime: "design"` with `type: "render"` or `type: "patch"`. Do not add editable burden to `generate_image`, external video generation, node/FFmpeg exports, or sharp image outputs.
-
-Make these editable:
-- User-facing text: titles, subtitles, captions, labels, CTAs.
-- Primary image layers the user may select, move, or resize.
-- Primary video layers the user may select, move, resize, or trim.
-
-Do not mark tiny decorative icons, static copyright text, purely structural wrappers, gradients, glows, or borders as editable.
-
-Rules:
-- Put `data-editable="fieldId"` on the visible measurable wrapper, not on a decorative parent. The wrapper needs explicit `width`+`height`, four edges/inset, or another stable measurable box, and should render as `block` or `inline-block`.
-- Text content must live in `props`; JSX must read `props[propKey]` or `props['propKey']`. Never hardcode visible text in arrays or JSX when it is declared editable.
-- Declare `editables` entries like `{ id, type: 'text' | 'image' | 'video', label, propKey }`.
-- Image/video sources should read from `props[propKey]`; place `data-editable` on a wrapper around `<Img>` / `<Video>` so Moveable can resize the wrapper.
-- Decorative layers above image/video editables must use `pointerEvents: 'none'`.
-- Video trim editables must declare `trimBeforePropKey` and `trimAfterPropKey`, and wire those props to `<Video trimBefore={props.startFrame} trimAfter={props.endFrame}>` or equivalent prop keys.
-- If a patch adds or removes visible editable text/image/video layers, return the complete updated `editables` array alongside the patch.
+Editable fields belong only to the Remotion composition path: `runtime: "composition"` / legacy `runtime: "design"` with `type: "render"` or `type: "patch"`. `render` and `patch` may return `editables`; if a patch adds or removes editable layers, include the complete updated `editables` array. Do not add editable burden to `generate_image`, external video generation, node/FFmpeg exports, or sharp image outputs. For the full text/image/video/trim rules, read `prompts/remotion-composition.md`.
 
 ## Patch Rules
 

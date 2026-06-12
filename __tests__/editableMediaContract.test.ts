@@ -2,6 +2,62 @@ import { describe, expect, it } from 'vitest';
 import { validateDesign } from '@/lib/design-harness';
 
 describe('editable media contract', () => {
+  it('accepts a generated Remotion composition with text, image, and trim-ready video editables', () => {
+    const result = validateDesign({
+      code: `function Composition(props) {
+        return (
+          <AbsoluteFill>
+            <div
+              data-editable="heroVideo"
+              style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, display: 'block' }}
+            >
+              <Video
+                src={props.heroVideo}
+                trimBefore={props.heroStartFrame}
+                trimAfter={props.heroEndFrame}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            </div>
+            <div
+              data-editable="cover"
+              style={{ position: 'absolute', left: 64, top: 108, width: 280, height: 360, display: 'block' }}
+            >
+              <Img src={props.coverImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+            <div style={{ pointerEvents: 'none', position: 'absolute', inset: 0, background: 'linear-gradient(transparent, rgba(0,0,0,.48))' }} />
+            <div
+              data-editable="title"
+              style={{ position: 'absolute', left: 72, right: 72, bottom: 160, minHeight: 96, display: 'block' }}
+            >
+              {props.title}
+            </div>
+          </AbsoluteFill>
+        );
+      }`,
+      props: {
+        title: 'Launch day',
+        coverImage: 'https://example.com/cover.jpg',
+        heroVideo: 'https://example.com/clip.mp4',
+        heroStartFrame: 30,
+        heroEndFrame: 180,
+      },
+      editables: [
+        { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
+        { id: 'cover', type: 'image', label: 'Cover image', propKey: 'coverImage' },
+        {
+          id: 'heroVideo',
+          type: 'video',
+          label: 'Hero video',
+          propKey: 'heroVideo',
+          trimBeforePropKey: 'heroStartFrame',
+          trimAfterPropKey: 'heroEndFrame',
+        },
+      ],
+    });
+
+    expect(result).toBeNull();
+  });
+
   it('accepts image editables when the wrapper has a measurable box', () => {
     const result = validateDesign({
       code: `function Design(props) {

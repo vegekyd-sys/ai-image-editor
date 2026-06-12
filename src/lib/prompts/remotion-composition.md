@@ -109,17 +109,19 @@ return (
 );
 ```
 
-## Editable Fields
+## Editable Composition Contract
 
-Every user-facing text field should be editable.
+Every user-facing text field should be editable. Primary image and video layers that the user may select, move, resize, or trim should also be editable. Do not mark tiny decorative icons, static copyright text, gradients, glows, borders, or structural-only wrappers as editable.
 
 Required connections:
-- `props`: stores the editable value.
-- JSX reads from props: `{props.title}`.
-- `data-editable="title"` is on a block or inline-block wrapper.
-- `editables`: maps the field id to `propKey`.
+- `props`: stores the editable value or media URL.
+- JSX reads from props: `{props.title}`, `props.coverImage`, `props.clipUrl`, etc.
+- `data-editable="fieldId"` sits on the visible measurable wrapper, not on a decorative parent.
+- The editable wrapper has an explicit box: `width`+`height`, four edges/inset, or another stable measurable box, and renders as `block` or `inline-block`.
+- `editables`: maps each field id to `{ id, type: 'text' | 'image' | 'video', label, propKey }`.
+- If a patch adds or removes visible editable text/image/video layers, return the complete updated `editables` array alongside the patch.
 
-Correct pattern:
+Text pattern:
 
 ```jsx
 return {
@@ -142,6 +144,74 @@ return {
 ```
 
 Do not hardcode user-visible text in JSX after declaring it in props. For per-character kinetic text, put `data-editable` on the parent and split `props.title`.
+
+Image pattern:
+
+```jsx
+return {
+  type: 'render',
+  code: `function Composition(props) {
+    return (
+      <AbsoluteFill>
+        <div
+          data-editable="cover"
+          style={{ position: 'absolute', left: 80, top: 120, width: 420, height: 520, display: 'block' }}
+        >
+          <Img src={props.coverImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+      </AbsoluteFill>
+    );
+  }`,
+  props: { coverImage: 'https://example.com/cover.jpg' },
+  editables: [{ id: 'cover', type: 'image', label: 'Cover image', propKey: 'coverImage' }],
+  width: 1080,
+  height: 1920
+}
+```
+
+Video trim pattern:
+
+```jsx
+return {
+  type: 'render',
+  code: `function Composition(props) {
+    return (
+      <AbsoluteFill>
+        <div
+          data-editable="heroVideo"
+          style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, display: 'block' }}
+        >
+          <Video
+            src={props.heroVideo}
+            trimBefore={props.heroStartFrame}
+            trimAfter={props.heroEndFrame}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </div>
+        <div style={{ pointerEvents: 'none', position: 'absolute', inset: 0, background: 'linear-gradient(transparent, rgba(0,0,0,.45))' }} />
+      </AbsoluteFill>
+    );
+  }`,
+  props: {
+    heroVideo: 'https://example.com/clip.mp4',
+    heroStartFrame: 30,
+    heroEndFrame: 180
+  },
+  editables: [{
+    id: 'heroVideo',
+    type: 'video',
+    label: 'Hero video',
+    propKey: 'heroVideo',
+    trimBeforePropKey: 'heroStartFrame',
+    trimAfterPropKey: 'heroEndFrame'
+  }],
+  width: 1080,
+  height: 1920,
+  animation: { fps: 30, durationInSeconds: 5 }
+}
+```
+
+Decorative layers above image/video editables must use `pointerEvents: 'none'` so canvas selection, drag, resize, and trim handle interactions still reach the editable wrapper.
 
 ## Composition Quality
 
