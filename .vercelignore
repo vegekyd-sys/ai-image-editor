@@ -22,3 +22,6 @@ vitest.config.ts
 .playwright-mcp/
 .claude/
 test-output/
+tmp/
+output/
+.playwright-cli/

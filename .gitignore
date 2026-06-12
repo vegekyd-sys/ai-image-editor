@@ -68,6 +68,11 @@ test-kling.mjs
 # Screenshots (Playwright / Chrome DevTools)
 /screenshots/
 
+# local generated artifacts
+/tmp/
+/output/
+/.playwright-cli/
+
 # workspace agent runtime data
 .workspace/
 .agents/
