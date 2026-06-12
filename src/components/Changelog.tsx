@@ -8,6 +8,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-12',
+    en: { title: 'Editable Image & Video Layers', items: [
+      'AI-made visual results are no longer flat previews: text, photos, and video clips can stay editable after they are created.',
+      'Click a layer on the canvas, then move or resize it directly — no need to ask Agent to regenerate the whole result.',
+      'Video clips now have a trim strip with playback, scrubber, start/end handles, and range dragging.',
+      'Tall poster-style projects are easier to refine: selection boxes stay aligned while you scroll.',
+    ]},
+    zh: { title: '图片和视频图层可编辑', items: [
+      'AI 生成的视觉结果不再只是扁平预览图：文字、照片和视频片段都可以继续编辑。',
+      '在画布上点选图层，就能直接移动和缩放，不用为了小调整重新让 Agent 生成整张图。',
+      '视频片段新增 trim 条：支持播放、拖动时间戳、拖起止把手，以及整体移动裁剪区间。',
+      '长海报类项目更好改了：上下滚动时，选中框会持续跟住内容。',
+    ]},
+  },
+  {
     date: '2026-06-05',
     en: { title: 'AI Search & Growth Readiness', items: [
       'Makaron is now easier for search engines and AI agents to understand, recommend, and route to.',
