@@ -146,9 +146,19 @@ function HomePageInner() {
         fetch('/api/auth/activate', { method: 'POST' })
           .then(r => r.json())
           .then(d => {
-            if (d.isNew) trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
+            if (d.isNew) {
+              trackMetaEvent(
+                'CompleteRegistration',
+                {},
+                d.metaEvents?.CompleteRegistration || createMetaEventId('registration'),
+              )
+            }
             if (d.credits > 0) {
-              trackMetaEvent('StartTrial', { credits: d.credits }, createMetaEventId('starttrial'))
+              trackMetaEvent(
+                'StartTrial',
+                { credits: d.credits },
+                d.metaEvents?.StartTrial || createMetaEventId('starttrial'),
+              )
               setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
             } else if (d.isNew === false) {
