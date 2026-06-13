@@ -535,6 +535,19 @@ function HomePageInner() {
     createInput.addFiles(files)
   }, [createInput, requireAuth, selectedDetail, user])
 
+  const trackUploadIntentEvent = useCallback((source: string) => {
+    if (user || !activeSkill) return
+    const skillLabel = activeSkill.labels[locale] || activeSkill.labels.en || activeSkill.id
+    trackMetaEvent('UploadIntent', {
+      content_type: 'skill',
+      content_name: skillLabel,
+      skill_id: activeSkill.id,
+      required_photo_count: Math.max(1, activeSkill.image_count ?? 1),
+      selected_photo_count: createInput.files.length,
+      source,
+    }, createMetaEventId('upload.intent'))
+  }, [activeSkill, createInput.files.length, locale, user])
+
   const renderUploadSlots = useCallback((template: { image_count?: number; before_images?: string[] }, isActive: boolean) => {
     const minSlots = template.image_count ?? 1
     const count = Math.max(minSlots, createInput.files.length + 1)
@@ -549,11 +562,15 @@ function HomePageInner() {
               onClick={async () => {
                 if (!isActive || createInput.previews[i] || createInput.creating) return
                 if (!user && selectedDetail) {
+                  trackUploadIntentEvent('upload_slot')
                   createInput.fileInputRef.current?.click()
                   return
                 }
                 const u = await requireAuth()
-                if (u) createInput.fileInputRef.current?.click()
+                if (u) {
+                  trackUploadIntentEvent('upload_slot')
+                  createInput.fileInputRef.current?.click()
+                }
               }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
@@ -631,7 +648,7 @@ function HomePageInner() {
         )}
       </div>
     )
-  }, [createInput, handleSlotDrop, requireAuth, selectedDetail, slotDragOver, user])
+  }, [createInput, handleSlotDrop, requireAuth, selectedDetail, slotDragOver, trackUploadIntentEvent, user])
 
   const guestSkillCreateLabel = selectedDetail && !user
     ? createInput.files.length > 0
@@ -653,7 +670,7 @@ function HomePageInner() {
   const skillActionCreateLabel = isGuestSkillAction
     ? hasEnoughPhotos
       ? (locale === 'zh' ? '免费预览' : 'Preview free')
-      : (locale === 'zh' ? '免费试用' : 'Try free')
+      : (locale === 'zh' ? '上传照片' : 'Upload photo')
     : guestSkillCreateLabel
 
   const skillActionTitle = isGuestSkillAction
@@ -661,7 +678,7 @@ function HomePageInner() {
       ? (locale === 'zh' ? '看看你的版本' : 'See your version')
       : selectedPhotoCount > 0
         ? (locale === 'zh' ? '快好了' : 'Almost ready')
-        : (locale === 'zh' ? '免费试试这个风格' : 'Try this style free')
+        : (locale === 'zh' ? '上传一张照片' : 'Upload one photo')
     : undefined
 
   const skillActionSubtitle = isGuestSkillAction
@@ -669,29 +686,59 @@ function HomePageInner() {
       ? (locale === 'zh' ? '一键生成预览，无需信用卡。' : 'Generate a preview. No credit card.')
       : selectedPhotoCount > 0
         ? (locale === 'zh' ? `再补 ${formatPhotoCount(remainingPhotoCount)}，即可免费预览。` : `Add ${formatPhotoCount(remainingPhotoCount)} to preview free.`)
-        : (locale === 'zh' ? '无需信用卡。先看看效果。' : 'No credit card. See the result first.')
+        : (locale === 'zh' ? '免费生成预览，无需信用卡。' : 'Get a free preview. No credit card.')
     : undefined
 
   const skillActionMeta = isGuestSkillAction && activeSkill
     ? (activeSkill.labels[locale] || activeSkill.labels.en || null)
     : null
 
+  const trackUploadIntent = useCallback((source: string) => {
+    if (!isGuestSkillAction) return
+    trackMetaEvent('UploadIntent', {
+      content_type: 'skill',
+      content_name: skillActionMeta || activeSkill?.id || 'skill',
+      skill_id: activeSkill?.id,
+      required_photo_count: requiredPhotoCount,
+      selected_photo_count: createInput.files.length,
+      source,
+    }, createMetaEventId('upload.intent'))
+  }, [activeSkill?.id, createInput.files.length, isGuestSkillAction, requiredPhotoCount, skillActionMeta])
+
+  const trackFileSelected = useCallback((files: File[], source: string) => {
+    if (!isGuestSkillAction || files.length === 0) return
+    trackMetaEvent('FileSelected', {
+      content_type: 'skill',
+      content_name: skillActionMeta || activeSkill?.id || 'skill',
+      skill_id: activeSkill?.id,
+      file_count: files.length,
+      image_count: files.filter(file => file.type.startsWith('image/') || isHeicFile(file)).length,
+      video_count: files.filter(file => file.type.startsWith('video/')).length,
+      source,
+    }, createMetaEventId('file.selected'))
+  }, [activeSkill?.id, isGuestSkillAction, skillActionMeta])
+
   const handleCreateOrUpload = useCallback(() => {
     if (isGuestSkillAction && createInput.files.length < requiredPhotoCount) {
+      trackUploadIntent('primary_action')
       createInput.fileInputRef.current?.click()
       return
     }
     handleCreate()
-  }, [createInput.fileInputRef, createInput.files.length, handleCreate, isGuestSkillAction, requiredPhotoCount])
+  }, [createInput.fileInputRef, createInput.files.length, handleCreate, isGuestSkillAction, requiredPhotoCount, trackUploadIntent])
 
   const handleInputSlotClick = useCallback(async () => {
     if (!user && selectedDetail) {
+      trackUploadIntent('slot')
       createInput.fileInputRef.current?.click()
       return
     }
     const u = await requireAuth()
-    if (u) createInput.fileInputRef.current?.click()
-  }, [createInput.fileInputRef, requireAuth, selectedDetail, user])
+    if (u) {
+      trackUploadIntent('slot')
+      createInput.fileInputRef.current?.click()
+    }
+  }, [createInput.fileInputRef, requireAuth, selectedDetail, trackUploadIntent, user])
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
@@ -919,6 +966,7 @@ function HomePageInner() {
               showLoginIcon={!user}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
+              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
               onTextareaFocus={() => setTextareaFocused(true)}
               onTextareaBlur={() => setTextareaFocused(false)}
               skills={availableSkills}
@@ -1082,6 +1130,7 @@ function HomePageInner() {
               showLoginIcon={!user}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
+              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
               onTextareaFocus={() => setTextareaFocused(true)}
               onTextareaBlur={() => setTextareaFocused(false)}
               skills={availableSkills}

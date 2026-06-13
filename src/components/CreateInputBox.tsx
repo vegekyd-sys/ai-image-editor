@@ -35,6 +35,7 @@ export interface CreateInputBoxProps {
   showLoginIcon?: boolean;
   onSubmit: () => void;
   onSlotClick?: () => void;
+  onFilesSelected?: (files: File[]) => void;
   onTextareaFocus?: () => void;
   onTextareaBlur?: () => void;
   // Skill selector props
@@ -76,6 +77,7 @@ export default function CreateInputBox({
   showLoginIcon = false,
   onSubmit,
   onSlotClick,
+  onFilesSelected,
   onTextareaFocus,
   onTextareaBlur,
   skills,
@@ -152,7 +154,14 @@ export default function CreateInputBox({
       accept="image/*,video/*,.heic,.heif"
       multiple
       style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
-      onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) addFiles(f); }}
+      onChange={(e) => {
+        const f = Array.from(e.target.files ?? []);
+        e.target.value = '';
+        if (f.length) {
+          onFilesSelected?.(f);
+          addFiles(f);
+        }
+      }}
     />
   );
 
