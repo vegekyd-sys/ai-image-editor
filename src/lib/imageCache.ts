@@ -2,6 +2,8 @@ const DB_NAME = 'makaron-images'
 const STORE = 'images'
 const PROJECT_STORE = 'project-data'
 const PROJECTS_LIST_STORE = 'projects-list'
+const CREATE_DRAFT_STORE = 'create-drafts'
+const ACTIVE_CREATE_DRAFT_KEY = 'active'
 const TTL_MS = 30 * 24 * 60 * 60 * 1000  // 30 days
 
 interface CacheEntry {
@@ -27,10 +29,22 @@ interface ProjectsListCacheEntry {
   cachedAt: number
 }
 
+export interface CreateDraftEntry {
+  key: string
+  images: string[]
+  metadata?: unknown
+  prompt?: string
+  selectedSkill?: string
+  homeSkillId?: string
+  returnPath?: string
+  cachedAt: number
+}
+
 // In-memory layer: synchronous, survives client-side navigation within the same tab session
 const memoryCache = new Map<string, string>()
 const projectMemCache = new Map<string, ProjectCacheEntry>()
 let projectsListMemCache: ProjectsListCacheEntry | null = null
+let createDraftMemCache: CreateDraftEntry | null = null
 
 // IDB layer: persistent across tab close/reopen
 let dbPromise: Promise<IDBDatabase | null> | null = null
@@ -39,7 +53,7 @@ function getDB(): Promise<IDBDatabase | null> {
   if (typeof window === 'undefined') return Promise.resolve(null)
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 4)
+      const req = indexedDB.open(DB_NAME, 5)
       req.onupgradeneeded = () => {
         const db = req.result
         if (!db.objectStoreNames.contains(STORE)) {
@@ -50,6 +64,9 @@ function getDB(): Promise<IDBDatabase | null> {
         }
         if (!db.objectStoreNames.contains(PROJECTS_LIST_STORE)) {
           db.createObjectStore(PROJECTS_LIST_STORE, { keyPath: 'userId' })
+        }
+        if (!db.objectStoreNames.contains(CREATE_DRAFT_STORE)) {
+          db.createObjectStore(CREATE_DRAFT_STORE, { keyPath: 'key' })
         }
       }
       req.onsuccess = () => resolve(req.result)
@@ -252,6 +269,70 @@ async function writeProjectsListToIDB(entry: ProjectsListCacheEntry): Promise<vo
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(PROJECTS_LIST_STORE, 'readwrite')
       tx.objectStore(PROJECTS_LIST_STORE).put(entry)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch {
+    // IDB failures are non-critical
+  }
+}
+
+export function cacheCreateDraft(
+  draft: Omit<CreateDraftEntry, 'key' | 'cachedAt'>,
+): void {
+  const entry: CreateDraftEntry = {
+    key: ACTIVE_CREATE_DRAFT_KEY,
+    cachedAt: Date.now(),
+    ...draft,
+  }
+  createDraftMemCache = entry
+  void writeCreateDraftToIDB(entry)
+}
+
+export async function getCreateDraft(): Promise<CreateDraftEntry | null> {
+  const mem = createDraftMemCache
+  if (mem && Date.now() - mem.cachedAt < TTL_MS) return mem
+
+  try {
+    const db = await getDB()
+    if (!db) return null
+    const entry = await new Promise<CreateDraftEntry | null>((resolve) => {
+      const tx = db.transaction(CREATE_DRAFT_STORE, 'readonly')
+      const req = tx.objectStore(CREATE_DRAFT_STORE).get(ACTIVE_CREATE_DRAFT_KEY)
+      req.onsuccess = () => resolve(req.result as CreateDraftEntry | null ?? null)
+      req.onerror = () => resolve(null)
+    })
+    if (!entry || Date.now() - entry.cachedAt > TTL_MS) return null
+    createDraftMemCache = entry
+    return entry
+  } catch {
+    return null
+  }
+}
+
+export async function clearCreateDraft(): Promise<void> {
+  createDraftMemCache = null
+  try {
+    const db = await getDB()
+    if (!db) return
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(CREATE_DRAFT_STORE, 'readwrite')
+      tx.objectStore(CREATE_DRAFT_STORE).delete(ACTIVE_CREATE_DRAFT_KEY)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => resolve()
+    })
+  } catch {
+    // IDB failures are non-critical
+  }
+}
+
+async function writeCreateDraftToIDB(entry: CreateDraftEntry): Promise<void> {
+  try {
+    const db = await getDB()
+    if (!db) return
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(CREATE_DRAFT_STORE, 'readwrite')
+      tx.objectStore(CREATE_DRAFT_STORE).put(entry)
       tx.oncomplete = () => resolve()
       tx.onerror = () => reject(tx.error)
     })

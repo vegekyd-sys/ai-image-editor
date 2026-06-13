@@ -9,7 +9,7 @@ function isVideoFile(file: File): boolean {
   return file.type.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(file.name)
 }
 
-async function compressFile(file: File): Promise<string> {
+export async function compressCreateImageFile(file: File): Promise<string> {
   try {
     return await compressImageFile(file, 2048, 0.92)
   } catch {
@@ -86,7 +86,7 @@ export async function createProject(
   // Single image (no videos): compress + metadata + DB insert in parallel
   if (imageFiles.length <= 1 && videoFiles.length === 0) {
     const [base64, metadata, projectId] = await Promise.all([
-      compressFile(imageFiles[0]),
+      compressCreateImageFile(imageFiles[0]),
       preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : extractPhotoMetadata(imageFiles[0]),
       createProjectShell('Untitled', marketing),
     ]);
@@ -101,7 +101,7 @@ export async function createProject(
   const [projectId, metadata, imagePayloads] = await Promise.all([
     createProjectShell('Untitled', marketing),
     preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : (!isVideoFile(firstImage) ? extractPhotoMetadata(firstImage) : Promise.resolve(undefined)),
-    Promise.all(imageFiles.map(file => compressFile(file))),
+    Promise.all(imageFiles.map(file => compressCreateImageFile(file))),
   ]);
 
   if (imagePayloads.length) sessionStorage.setItem('pendingImages', JSON.stringify(imagePayloads));
@@ -117,4 +117,31 @@ export async function createProject(
 
   trackProjectCreated(projectId, { ...options, eventId: metaEventId });
   return { projectId, metadata };
+}
+
+export async function createProjectFromStagedMedia(
+  _supabase: SupabaseClient,
+  _userId: string,
+  staged: {
+    images?: string[]
+    metadata?: PhotoMetadata
+    prompt?: string
+    skill?: string
+  },
+): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
+  if (staged.prompt) sessionStorage.setItem('pendingPrompt', staged.prompt)
+  if (staged.skill) sessionStorage.setItem('pendingSkill', staged.skill)
+  if (staged.images?.length) sessionStorage.setItem('pendingImages', JSON.stringify(staged.images))
+  if (staged.metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(staged.metadata))
+
+  const attribution = getMarketingAttribution()
+  const metaEventId = createMetaEventId('project.create')
+  const marketing = {
+    metaEventId,
+    skillId: staged.skill || attribution.skill_id,
+    hasPrompt: Boolean(staged.prompt),
+  }
+  const projectId = await createProjectShell('Untitled', marketing)
+  trackProjectCreated(projectId, { prompt: staged.prompt, skill: staged.skill, eventId: metaEventId })
+  return { projectId, metadata: staged.metadata }
 }

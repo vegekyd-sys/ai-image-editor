@@ -139,6 +139,8 @@ function buildRedirectPage(
 var r=sessionStorage.getItem('mkr_return_url')||localStorage.getItem('mkr_return_url');
 sessionStorage.removeItem('mkr_return_url');
 localStorage.removeItem('mkr_return_url');
+var skillMatch=r&&r.match(/^\\/home\\/([^/?]+)/);
+if(skillMatch){r='/home?skill='+encodeURIComponent(skillMatch[1]);}
 var welcome="${redirectUrl}".includes('welcome=1');
 if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(welcome?sep+'welcome=1':'');}
 else{window.location.href="${redirectUrl}";}

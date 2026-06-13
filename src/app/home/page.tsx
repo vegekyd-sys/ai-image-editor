@@ -7,8 +7,11 @@ import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile } from '@/lib/imageUtils'
 import { useLocale } from '@/lib/i18n'
-import { createProject } from '@/lib/createProject'
+import { compressCreateImageFile, createProject, createProjectFromStagedMedia } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
+import { cacheCreateDraft, clearCreateDraft, getCreateDraft } from '@/lib/imageCache'
+import { extractPhotoMetadata } from '@/lib/image/metadata'
+import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
@@ -258,6 +261,26 @@ function HomePageInner() {
     setInstallingSkill(false)
   }, [])
 
+  const installHomeSkill = useCallback(async (skill: HomeSkill): Promise<string | undefined> => {
+    if (!skill.skill_path) return undefined
+    setInstallingSkill(true)
+    try {
+      const installRes = await fetch('/api/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skillPath: skill.skill_path, homeSkillId: skill.id }),
+      })
+      const installData = await installRes.json()
+      if (installData.skillName) {
+        setSelectedSkill(installData.skillName)
+        return installData.skillName as string
+      }
+    } finally {
+      setInstallingSkill(false)
+    }
+    return undefined
+  }, [])
+
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
@@ -452,34 +475,54 @@ function HomePageInner() {
 
   const saveContextBeforeLogin = useCallback(() => {
     if (createInput.text.trim()) localStorage.setItem('mkr_return_text', createInput.text)
-    if (selectedDetail?.id) localStorage.setItem('mkr_return_skill', selectedDetail.id)
-  }, [createInput.text, selectedDetail])
+    if (activeSkill?.id) localStorage.setItem('mkr_return_skill', activeSkill.id)
+  }, [activeSkill, createInput.text])
+
+  const saveCreateDraftBeforeLogin = useCallback(async (files: File[], prompt?: string) => {
+    const homeSkill = selectedDetail || activeSkill
+    const imageFiles = files.filter(file => file.type.startsWith('image/') || isHeicFile(file))
+    const [images, metadata] = await Promise.all([
+      Promise.all(imageFiles.map(file => compressCreateImageFile(file))),
+      imageFiles[0]
+        ? extractPhotoMetadata(imageFiles[0]).catch(() => undefined)
+        : Promise.resolve(undefined),
+    ])
+    cacheCreateDraft({
+      images,
+      metadata,
+      prompt,
+      selectedSkill: homeSkill?.skill_path ? undefined : (selectedSkill ?? undefined),
+      homeSkillId: homeSkill?.id,
+      returnPath: homeSkill?.id ? `/home/${homeSkill.id}` : window.location.pathname + window.location.search,
+    })
+    const returnPath = homeSkill?.id ? `/home/${homeSkill.id}` : window.location.pathname + window.location.search
+    localStorage.setItem('mkr_return_url', returnPath)
+    sessionStorage.setItem('mkr_return_url', returnPath)
+  }, [activeSkill, selectedDetail, selectedSkill])
 
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
-    saveContextBeforeLogin()
-    const authedUser = await requireAuth()
-    if (!authedUser) return
     if (createInput.creating || (files.length === 0 && !prompt)) return
+    saveContextBeforeLogin()
+    let authedUser = user
+    if (!authedUser) {
+      createInput.setCreating(true)
+      try {
+        await saveCreateDraftBeforeLogin(files, prompt)
+      } catch (err) {
+        console.error('Save create draft error:', err)
+        createInput.setCreating(false)
+        return
+      }
+      authedUser = await requireAuth()
+      if (!authedUser) return
+    }
     createInput.setCreating(true)
     try {
       const supabase = createClient()
       let skillName: string | undefined
-      if (selectedDetail?.skill_path) {
-        setInstallingSkill(true)
-        try {
-          const installRes = await fetch('/api/skills', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ skillPath: selectedDetail.skill_path, homeSkillId: selectedDetail.id }),
-          })
-          const installData = await installRes.json()
-          if (installData.skillName) {
-            skillName = installData.skillName
-            setSelectedSkill(installData.skillName)
-          }
-        } finally {
-          setInstallingSkill(false)
-        }
+      const homeSkill = selectedDetail || activeSkill
+      if (homeSkill?.skill_path) {
+        skillName = await installHomeSkill(homeSkill)
       } else if (selectedSkill) {
         skillName = selectedSkill
       }
@@ -488,6 +531,7 @@ function HomePageInner() {
       if (skillName) opts.skill = skillName
       const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
+      void clearCreateDraft()
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('Create project error:', err)
@@ -498,7 +542,53 @@ function HomePageInner() {
       }
       createInput.setCreating(false)
     }
-  }, [requireAuth, saveContextBeforeLogin, createInput, router, selectedDetail, selectedSkill, t])
+  }, [activeSkill, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
+
+  const consumeDraftRef = useRef(false)
+  useEffect(() => {
+    if (!user || consumeDraftRef.current) return
+    let cancelled = false
+    const consume = async () => {
+      const draft = await getCreateDraft()
+      if (!draft || cancelled) return
+      if (draft.homeSkillId && homeSkills.length === 0) return
+      if (draft.images.length === 0 && !draft.prompt) {
+        await clearCreateDraft()
+        return
+      }
+
+      consumeDraftRef.current = true
+      createInput.restoreDraftImages(draft.images)
+      if (draft.prompt) createInput.setText(draft.prompt)
+      createInput.setCreating(true)
+      try {
+        const supabase = createClient()
+        let skillName = draft.selectedSkill
+        const homeSkill = draft.homeSkillId ? homeSkills.find(skill => skill.id === draft.homeSkillId) : null
+        if (homeSkill?.skill_path) {
+          skillName = await installHomeSkill(homeSkill)
+        }
+        const result = await createProjectFromStagedMedia(supabase, user.id, {
+          images: draft.images,
+          metadata: draft.metadata as PhotoMetadata | undefined,
+          prompt: draft.prompt,
+          skill: skillName,
+        })
+        if (!result) throw new Error('Failed to create project from draft')
+        await clearCreateDraft()
+        localStorage.removeItem('mkr_return_text')
+        localStorage.removeItem('mkr_return_skill')
+        localStorage.removeItem('mkr_return_url')
+        router.replace(`/projects/${result.projectId}`)
+      } catch (err) {
+        console.error('Resume create draft error:', err)
+        consumeDraftRef.current = false
+        createInput.setCreating(false)
+      }
+    }
+    void consume()
+    return () => { cancelled = true }
+  }, [createInput, homeSkills, installHomeSkill, router, user])
 
   const handleCreate = useCallback(async () => {
     const hasText = createInput.text.trim()
@@ -597,8 +687,10 @@ function HomePageInner() {
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={createInput.previews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div onClick={(e) => { e.stopPropagation(); createInput.removeFile(i) }}
-                    style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>&#x2715;</div>
+                  {!createInput.creating && (
+                    <div onClick={(e) => { e.stopPropagation(); createInput.removeFile(i) }}
+                      style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>&#x2715;</div>
+                  )}
                 </>
               ) : (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>

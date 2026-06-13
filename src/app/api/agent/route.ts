@@ -5,6 +5,7 @@ import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
+import { getRequestLocale } from '@/lib/server-locale';
 
 export const maxDuration = 800;
 
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
       hasImage: !!image,
       headless: !!headless,
     });
-    const locale = req.cookies.get('locale')?.value ?? 'zh';
+    const locale = getRequestLocale(req);
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
       return new Response(
@@ -45,10 +46,10 @@ export async function POST(req: NextRequest) {
     }
 
     const MOCK_TEXTS = {
-      tipsTeaser: '试试把它变成微缩模型？特别适合这种场景。',
-      tipReaction: '效果很棒！新图很自然。',
-      nameProject: '咖啡下午茶',
-      previewsReady: '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
+      tipsTeaser: locale === 'en' ? 'Try turning it into a miniature scene.' : '试试把它变成微缩模型？特别适合这种场景。',
+      tipReaction: locale === 'en' ? 'Nice, that edit feels natural.' : '效果很棒！新图很自然。',
+      nameProject: locale === 'en' ? 'Coffee Afternoon' : '咖啡下午茶',
+      previewsReady: locale === 'en' ? 'Your previews are ready. The playful one is worth a look.' : '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
     };
 
     // Only dual-write for normal agent flow (not lightweight teaser/name/reaction/analysis branches)

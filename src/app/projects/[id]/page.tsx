@@ -124,7 +124,7 @@ export default function ProjectPage() {
     }
   }, [authLoading, isPublicProject, user, projectOwnerId, router])
 
-  const isOwner = user?.id === projectOwnerId
+  const isOwner = isNewProject ? Boolean(user) : user?.id === projectOwnerId
   const readOnly = !isOwner
 
   // Helper: patch missing images from IndexedDB image cache
