@@ -101,6 +101,7 @@ function HomePageInner() {
   const [showFixedInput, setShowFixedInput] = useState(false)
   const [shareToast, setShareToast] = useState(false)
   const openedFromUrlRef = useRef(false)
+  const lastUploadIntentRef = useRef<{ at: number; key: string } | null>(null)
   const selectedDetailRef = useRef(selectedDetail)
   selectedDetailRef.current = selectedDetail
   const homeSkillsRef = useRef(homeSkills)
@@ -537,6 +538,10 @@ function HomePageInner() {
 
   const trackUploadIntentEvent = useCallback((source: string) => {
     if (user || !activeSkill) return
+    const dedupeKey = `${activeSkill.id}:${source}:${createInput.files.length}`
+    const now = Date.now()
+    if (lastUploadIntentRef.current?.key === dedupeKey && now - lastUploadIntentRef.current.at < 700) return
+    lastUploadIntentRef.current = { at: now, key: dedupeKey }
     const skillLabel = activeSkill.labels[locale] || activeSkill.labels.en || activeSkill.id
     trackMetaEvent('UploadIntent', {
       content_type: 'skill',
@@ -695,6 +700,10 @@ function HomePageInner() {
 
   const trackUploadIntent = useCallback((source: string) => {
     if (!isGuestSkillAction) return
+    const dedupeKey = `${activeSkill?.id || 'skill'}:${source}:${createInput.files.length}`
+    const now = Date.now()
+    if (lastUploadIntentRef.current?.key === dedupeKey && now - lastUploadIntentRef.current.at < 700) return
+    lastUploadIntentRef.current = { at: now, key: dedupeKey }
     trackMetaEvent('UploadIntent', {
       content_type: 'skill',
       content_name: skillActionMeta || activeSkill?.id || 'skill',
