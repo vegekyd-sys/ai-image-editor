@@ -77,7 +77,7 @@ async function recordServerMarketingEvent(input: MetaCapiInput, customData: Reco
       page_path: pagePath,
       user_agent: cleanText(req?.headers.get('user-agent')),
       fbp: cleanText(input.fbp || req?.cookies.get('_fbp')?.value, 512),
-      fbc: cleanText(input.fbc || req?.cookies.get('_fbc')?.value, 512),
+      fbc: cleanText(input.fbc || req?.cookies.get('_fbc')?.value || customData.fbc, 512),
       utm_source: cleanText(customData.utm_source, 512),
       utm_medium: cleanText(customData.utm_medium, 512),
       utm_campaign: cleanText(customData.utm_campaign, 512),
@@ -100,7 +100,7 @@ async function recordServerMarketingEvent(input: MetaCapiInput, customData: Reco
 }
 
 export async function sendMetaCapiEvent(input: MetaCapiInput): Promise<void> {
-  const customData = {
+  const customData: Record<string, unknown> = {
     ...input.customData,
     ...(input.value !== undefined ? { value: input.value } : {}),
     ...(input.currency ? { currency: input.currency } : {}),
@@ -118,7 +118,7 @@ export async function sendMetaCapiEvent(input: MetaCapiInput): Promise<void> {
   if (email) userData.em = [sha256(email)]
   if (input.userId) userData.external_id = [sha256(input.userId)]
   const fbp = input.fbp || req?.cookies.get('_fbp')?.value
-  const fbc = input.fbc || req?.cookies.get('_fbc')?.value
+  const fbc = input.fbc || req?.cookies.get('_fbc')?.value || cleanText(customData.fbc, 512) || undefined
   if (fbp) userData.fbp = fbp
   if (fbc) userData.fbc = fbc
 

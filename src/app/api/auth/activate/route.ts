@@ -75,13 +75,19 @@ export async function POST(req: NextRequest) {
     },
   })
   const attribution = readAttributionCookie(req.cookies.get('mkr_attribution')?.value)
+  let eventSourceUrl = `${req.nextUrl.origin}/home`
+  if (typeof attribution.landing_path === 'string') {
+    try {
+      eventSourceUrl = new URL(attribution.landing_path, req.nextUrl.origin).toString()
+    } catch {}
+  }
   await sendMetaCapiEvent({
     eventName: 'CompleteRegistration',
     eventId: registrationEventId,
     userId: user.id,
     email: user.email,
     request: req,
-    eventSourceUrl: 'https://www.makaron.app/home',
+    eventSourceUrl,
     customData: attribution,
   })
   if (credits > 0) {
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       email: user.email,
       request: req,
-      eventSourceUrl: 'https://www.makaron.app/home',
+      eventSourceUrl,
       customData: { credits, ...attribution },
     })
   }
