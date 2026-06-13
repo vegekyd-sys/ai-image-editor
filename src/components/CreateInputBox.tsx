@@ -667,7 +667,14 @@ export default function CreateInputBox({
           <button
             className="mkr-create-btn"
             data-testid="create-project"
-            onClick={() => { if (text.trim() || files.length > 0) { onSubmit(); } else { onSlotClick ? onSlotClick() : fileInputRef.current?.click(); } }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (text.trim() || files.length > 0) {
+                onSubmit();
+              } else {
+                onSlotClick ? onSlotClick() : fileInputRef.current?.click();
+              }
+            }}
             disabled={creating}
             style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
           >
