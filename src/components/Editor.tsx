@@ -148,7 +148,10 @@ export default function Editor({
 
   // Fetch credit balance + subscription info on mount
   useEffect(() => {
-    fetch('/api/billing/credits').then(r => r.json()).then(data => {
+    fetch('/api/billing/credits').then(r => {
+      if (!r.ok) throw new Error('Failed to load credits');
+      return r.json();
+    }).then(data => {
       setCreditBalance(data.balance ?? 0);
       setCreditSubscription(data.subscription ?? null);
     }).catch(() => {});

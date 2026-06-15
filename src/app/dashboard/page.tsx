@@ -36,6 +36,20 @@ interface SubscriptionInfo {
   cancelAtPeriodEnd: boolean
 }
 
+interface InvoiceRecord {
+  id: string
+  number: string | null
+  type: 'subscription' | 'topup' | 'invoice'
+  status: string | null
+  currency: string
+  amountPaid: number
+  amountDue: number
+  credits: number | null
+  created: number
+  hostedInvoiceUrl: string | null
+  invoicePdf: string | null
+}
+
 interface Balance {
   balance: number
   lifetimePurchased: number
@@ -49,12 +63,25 @@ const PLANS = [
   { id: 'business', name: 'Business', monthlyPrice: 4990, annualPrice: 47900, credits: 10000 },
 ] as const
 
+function formatMoney(cents: number, currency: string) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency.toUpperCase(),
+  }).format(cents / 100)
+}
+
+function formatInvoiceType(type: InvoiceRecord['type']) {
+  if (type === 'subscription') return 'Subscription'
+  if (type === 'topup') return 'Top Up'
+  return 'Invoice'
+}
+
 export default function DashboardPage() {
   return <Suspense><DashboardInner /></Suspense>
 }
 
-type TabType = 'subscribe' | 'topup' | 'keys' | 'usage'
-const VALID_TABS: TabType[] = ['subscribe', 'topup', 'keys', 'usage']
+type TabType = 'subscribe' | 'topup' | 'keys' | 'usage' | 'invoices'
+const VALID_TABS: TabType[] = ['subscribe', 'topup', 'keys', 'usage', 'invoices']
 
 function DashboardInner() {
   const searchParams = useSearchParams()
@@ -70,6 +97,8 @@ function DashboardInner() {
   const [balance, setBalance] = useState<Balance | null>(null)
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [usage, setUsage] = useState<UsageLog[]>([])
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>([])
+  const [invoicesLoading, setInvoicesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [newKeyName, setNewKeyName] = useState('')
   const [createdKey, setCreatedKey] = useState<string | null>(null)
@@ -89,10 +118,27 @@ function DashboardInner() {
     }
   }, [])
 
+  const fetchInvoices = useCallback(async () => {
+    setInvoicesLoading(true)
+    try {
+      const res = await fetch('/api/billing/invoices')
+      if (res.ok) {
+        const data = await res.json()
+        setInvoices(data.invoices || [])
+      }
+    } finally {
+      setInvoicesLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     setLoading(true)
     fetchDashboard().finally(() => setLoading(false))
   }, [fetchDashboard])
+
+  useEffect(() => {
+    if (tab === 'invoices') fetchInvoices()
+  }, [tab, fetchInvoices])
 
   const handleCreateKey = async () => {
     setCreating(true)
@@ -219,7 +265,7 @@ function DashboardInner() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-white/5 rounded-lg p-1">
-        {(['subscribe', 'topup', 'keys', 'usage'] as const).map(t => (
+        {(['subscribe', 'topup', 'keys', 'usage', 'invoices'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -227,7 +273,7 @@ function DashboardInner() {
               tab === t ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
             }`}
           >
-            {t === 'subscribe' ? 'Plan' : t === 'topup' ? 'Top Up' : t === 'keys' ? 'API Keys' : 'Usage'}
+            {t === 'subscribe' ? 'Plan' : t === 'topup' ? 'Top Up' : t === 'keys' ? 'API Keys' : t === 'usage' ? 'Usage' : 'Invoices'}
           </button>
         ))}
       </div>
@@ -433,6 +479,99 @@ function DashboardInner() {
             </div>
           ) : (
             <p className="text-white/30 text-sm text-center py-12">No usage yet.</p>
+          )}
+        </>
+      )}
+
+      {/* ══════ INVOICES TAB ══════ */}
+      {tab === 'invoices' && (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="font-medium">Billing History</div>
+              <div className="text-white/35 text-sm mt-1">Paid invoices and receipts from Stripe.</div>
+            </div>
+            <button
+              onClick={handleManageSubscription}
+              disabled={managingSubscription}
+              className="px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/15 disabled:opacity-40 transition-all"
+            >
+              {managingSubscription ? '...' : 'Billing Portal'}
+            </button>
+          </div>
+
+          {invoicesLoading ? (
+            <div className="flex justify-center py-12">
+              <svg className="animate-spin h-5 w-5 text-fuchsia-500" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            </div>
+          ) : invoices.length > 0 ? (
+            <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/50 text-xs">
+                    <th className="text-left px-4 py-3 font-medium">Invoice</th>
+                    <th className="text-left px-4 py-3 font-medium">Type</th>
+                    <th className="text-right px-4 py-3 font-medium">Amount</th>
+                    <th className="text-right px-4 py-3 font-medium">Date</th>
+                    <th className="text-right px-4 py-3 font-medium">Files</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.map(invoice => {
+                    const amount = invoice.amountPaid || invoice.amountDue
+                    return (
+                      <tr key={invoice.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                        <td className="px-4 py-3">
+                          <div className="font-mono text-xs">{invoice.number || invoice.id}</div>
+                          <div className="text-white/30 text-xs mt-0.5 capitalize">
+                            {invoice.status || 'unknown'}{invoice.credits != null ? ` · ${invoice.credits.toLocaleString()} credits` : ''}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-white/60">{formatInvoiceType(invoice.type)}</td>
+                        <td className="px-4 py-3 text-right text-fuchsia-400 font-medium">
+                          {formatMoney(amount, invoice.currency)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-white/30 text-xs">
+                          {new Date(invoice.created * 1000).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            {invoice.hostedInvoiceUrl && (
+                              <a
+                                href={invoice.hostedInvoiceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-1 rounded bg-white/10 text-white/70 text-xs hover:bg-white/15 hover:text-white transition-all"
+                              >
+                                View
+                              </a>
+                            )}
+                            {invoice.invoicePdf && (
+                              <a
+                                href={invoice.invoicePdf}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-1 rounded bg-fuchsia-600/80 text-white text-xs hover:bg-fuchsia-500 transition-all"
+                              >
+                                PDF
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="bg-white/[0.03] rounded-xl border border-white/10 p-8 text-center">
+              <p className="text-white/35 text-sm">No invoices yet.</p>
+              <p className="text-white/20 text-xs mt-2">Your paid subscription and top-up invoices will appear here.</p>
+            </div>
           )}
         </>
       )}

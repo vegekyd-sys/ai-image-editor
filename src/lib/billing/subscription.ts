@@ -51,6 +51,20 @@ export async function getUserPlan(userId: string): Promise<'free' | 'basic' | 'p
 }
 
 /**
+ * Get a previously-created Stripe Customer ID without creating a new one.
+ */
+export async function getStripeCustomerId(userId: string): Promise<string | null> {
+  const admin = getSupabaseAdmin()
+  const { data } = await admin
+    .from('credit_balances')
+    .select('stripe_customer_id')
+    .eq('user_id', userId)
+    .single()
+
+  return data?.stripe_customer_id ?? null
+}
+
+/**
  * Get or create a Stripe Customer for the user.
  * Stores stripe_customer_id in credit_balances table.
  */
