@@ -430,14 +430,11 @@ export async function generateWithQwenMulti(
       }),
     );
 
-    // Build base workflow with first image
     const workflow = buildWorkflow(uploadedNames[0], prompt);
 
-    // Inject extra LoadImage nodes and wire image2/image3 into KSampler
     for (let i = 1; i < uploadedNames.length; i++) {
-      const nodeId = String(10 + i); // 11, 12, ...
+      const nodeId = String(10 + i);
       workflow[nodeId] = { class_type: 'LoadImage', inputs: { image: uploadedNames[i] } };
-      // Wire into KSampler node '5' as image2, image3, etc.
       const ksampler = workflow['5'] as { inputs: Record<string, unknown> };
       ksampler.inputs[`image${i + 1}`] = [nodeId, 0];
     }
