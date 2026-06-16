@@ -107,6 +107,7 @@ function DashboardInner() {
   const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month')
   const [subscribing, setSubscribing] = useState<string | null>(null)
   const [managingSubscription, setManagingSubscription] = useState(false)
+  const [billingActionError, setBillingActionError] = useState<string | null>(null)
 
   const fetchDashboard = useCallback(async () => {
     const res = await fetch('/api/billing/dashboard')
@@ -212,10 +213,16 @@ function DashboardInner() {
 
   const handleManageSubscription = async () => {
     setManagingSubscription(true)
+    setBillingActionError(null)
     try {
       const res = await fetch('/api/billing/manage', { method: 'POST' })
-      const data = await res.json()
+      const text = await res.text()
+      const data = text ? JSON.parse(text) : {}
       if (data.url) window.location.href = data.url
+      else setBillingActionError(data.error || 'Unable to open billing portal.')
+    } catch (error) {
+      console.error('[dashboard] billing portal failed:', error)
+      setBillingActionError('Unable to open billing portal.')
     } finally {
       setManagingSubscription(false)
     }
@@ -303,6 +310,9 @@ function DashboardInner() {
                   {managingSubscription ? '...' : 'Manage'}
                 </button>
               </div>
+              {billingActionError && (
+                <div className="text-red-400/70 text-xs mt-3">{billingActionError}</div>
+              )}
             </div>
           ) : (
             <>
@@ -499,6 +509,9 @@ function DashboardInner() {
               {managingSubscription ? '...' : 'Billing Portal'}
             </button>
           </div>
+          {billingActionError && (
+            <div className="text-red-400/70 text-xs mb-4">{billingActionError}</div>
+          )}
 
           {invoicesLoading ? (
             <div className="flex justify-center py-12">

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe } from '@/lib/billing/stripe'
-import { getStripeCustomerId } from '@/lib/billing/subscription'
+import { getOrCreateStripeCustomer } from '@/lib/billing/subscription'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import type Stripe from 'stripe'
 
@@ -21,14 +21,18 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const customerId = await getStripeCustomerId(user.id)
-  if (!customerId) return NextResponse.json({ invoices: [] })
-
   const stripe = getStripe()
-  const invoiceList = await stripe.invoices.list({
-    customer: customerId,
-    limit: 50,
-  })
+  let invoiceList: Stripe.ApiList<Stripe.Invoice>
+  try {
+    const customerId = await getOrCreateStripeCustomer(user.id, user.email!)
+    invoiceList = await stripe.invoices.list({
+      customer: customerId,
+      limit: 50,
+    })
+  } catch (error) {
+    console.error('[billing/invoices] failed to list invoices:', error)
+    return NextResponse.json({ invoices: [], error: 'Unable to load invoices' }, { status: 500 })
+  }
 
   const invoiceIds = invoiceList.data.map(invoice => invoice.id).filter(Boolean)
   const purchasesByInvoice = new Map<string, PurchaseRow>()
