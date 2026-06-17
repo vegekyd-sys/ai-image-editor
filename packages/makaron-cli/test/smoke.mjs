@@ -141,10 +141,54 @@ async function expectSuccess(args, options) {
   return result;
 }
 
+async function expectHelp(args, expectedText) {
+  const requestCount = requests.length;
+  const result = await expectSuccess(args, { apiKey: false });
+  assert.match(result.stdout, expectedText, `${args.join(' ')} did not print expected help\nstdout:\n${result.stdout}`);
+  assert.equal(result.stderr, '', `${args.join(' ')} should not print auth or execution errors\nstderr:\n${result.stderr}`);
+  assert.equal(requests.length, requestCount, `${args.join(' ')} should not make HTTP requests`);
+  return result;
+}
+
 try {
   {
     const result = await expectSuccess(['--version']);
     assert.equal(result.stdout.trim(), pkg.version);
+  }
+
+  for (const [helpArgs, expectedText] of [
+    [[], /Makaron CLI/],
+    [['--help'], /Makaron CLI/],
+    [['login', '--help'], /Usage: makaron login/],
+    [['create', '--help'], /Usage: makaron create/],
+    [['chat', '--help'], /Usage: makaron chat/],
+    [['responses', '--help'], /Responses commands:/],
+    [['responses', 'get', '--help'], /Usage: makaron responses get/],
+    [['responses', 'watch', '--help'], /Usage: makaron responses watch/],
+    [['responses', 'list', '--help'], /Usage: makaron responses list/],
+    [['list', '--help'], /Usage: makaron list/],
+    [['project', '--help'], /Project commands:/],
+    [['project', 'media', '--help'], /Usage: makaron project media/],
+    [['abort', '--help'], /Usage: makaron abort/],
+    [['edit', '--help'], /Usage: makaron edit/],
+    [['analyze', '--help'], /Usage: makaron analyze/],
+    [['video', '--help'], /Video commands:/],
+    [['video', 'script', '--help'], /Usage: makaron video script/],
+    [['video', 'create', '--help'], /Usage: makaron video create/],
+    [['video', 'status', '--help'], /Usage: makaron video status/],
+    [['music', '--help'], /Music commands:/],
+    [['music', 'create', '--help'], /Usage: makaron music create/],
+    [['music', 'status', '--help'], /Usage: makaron music status/],
+    [['admin', '--help'], /Admin commands:/],
+    [['admin', 'skills', '--help'], /Usage: makaron admin skills/],
+    [['admin', 'upload', '--help'], /Usage: makaron admin upload/],
+    [['admin', 'fetch-skill', '--help'], /Usage: makaron admin fetch-skill/],
+    [['admin', 'set-admin', '--help'], /Usage: makaron admin set-admin/],
+    [['register', '--help'], /Usage: makaron register/],
+    [['register', '--verify', '--help'], /Usage: makaron register --verify/],
+    [['claim', '--help'], /Usage: makaron claim/],
+  ]) {
+    await expectHelp(helpArgs, expectedText);
   }
 
   {

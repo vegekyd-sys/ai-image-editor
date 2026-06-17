@@ -1,6 +1,6 @@
 {
   "name": "makaron-cli",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "Talk to Makaron Agent from the terminal — create projects, edit images, generate videos",
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "test:live": "MAKARON_LIVE=1 node test/live-smoke.mjs"
   },
   "bin": {
-    "makaron": "./bin/makaron.mjs"
+    "makaron": "bin/makaron.mjs"
   },
   "files": [
     "bin/",
@@ -30,6 +30,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/vegekyd/ai-image-editor"
+    "url": "git+https://github.com/vegekyd/ai-image-editor.git"
   }
 }

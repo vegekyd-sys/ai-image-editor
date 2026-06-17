@@ -873,12 +873,133 @@ async function analyzeVideoCli(baseUrl, headers, rawVideo, questionParts) {
   if (text) console.log(text);
 }
 
+// ─── Help ───────────────────────────────────────────────────────────────────
+
+function hasHelpFlag(values) {
+  return values.includes('--help') || values.includes('-h');
+}
+
+function printRootHelp() {
+  console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
+
+Commands:
+  register --json                    Get challenge for agent self-registration
+  register --verify --challenge-id <id> --answer <n>  Verify and save API key
+  claim                              Get claim URL for human to link account
+  login                              Log in to Makaron (human interactive)
+  list (ls)                          List all projects
+  project media <projectId> --json    List timeline media for a project
+  create --image <file>              Create project from local image
+  create --image-url <url>           Create project from URL
+  create --title "name"              Create empty project (text-to-image)
+
+  chat --project <id> "message"      Chat (non-blocking, polls for result)
+  chat --project <id> --video <file> Attach video to conversation
+  chat --project <id> -b "message"   Background: submit and print runId
+  chat --project <id> --stream "msg" Legacy: stream SSE in real-time
+  chat --project <id> --json "msg"   Output structured JSON result
+
+  responses get <runId>              Get run status and results
+  responses get <runId> --wait       Poll until completed
+  responses list --project <id>      List runs for a project
+  abort <runId>                      Abort a running Agent
+
+  edit [--image <file>] "prompt"     AI image edit / text-to-image
+  analyze --video <file|url>         Analyze video content
+  video script|create|status         Video generation
+  music create|status                Music generation
+
+  admin                              Admin commands (skills, upload, set-admin)
+
+Environment:
+  MAKARON_API_KEY  API key (mk_live_xxx) — recommended for agents
+  MAKARON_URL      API base (default: ${DEFAULT_URL})
+`);
+}
+
+function printHelp(topic, subtopic) {
+  if (topic === 'login') {
+    console.log('Usage: makaron login');
+  } else if (topic === 'create') {
+    console.log('Usage: makaron create --image <file> [--image <file2>] | --image-url <url> | --title "name"');
+  } else if (topic === 'chat') {
+    console.log('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--stream] [--background|-b] [--json] "your message"');
+  } else if (topic === 'responses' || topic === 'run') {
+    if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]');
+    else if (subtopic === 'watch') console.log('Usage: makaron responses watch <runId> [--jsonl] [--interval <ms>]');
+    else if (subtopic === 'list') console.log('Usage: makaron responses list --project <id>');
+    else console.log(`Responses commands:
+  responses get <runId>                  Get status and output (JSON)
+  responses get <runId> --wait           Poll until completed
+  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses watch <runId> --jsonl        Watch until done (incremental events)
+  responses list --project <id>          List runs for a project
+`);
+  } else if (topic === 'list' || topic === 'ls') {
+    console.log('Usage: makaron list');
+  } else if (topic === 'project' || topic === 'projects') {
+    if (subtopic === 'media') console.log('Usage: makaron project media <projectId> [--json]');
+    else console.log(`Project commands:
+  project media <projectId> --json      List timeline media for a project
+`);
+  } else if (topic === 'abort') {
+    console.log('Usage: makaron abort <runId>');
+  } else if (topic === 'edit') {
+    console.log('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
+  } else if (topic === 'analyze') {
+    console.log('Usage: makaron analyze --video <file|url> ["question"]');
+  } else if (topic === 'video') {
+    if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model kling|seedance] [--keep-original-sound]');
+    else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
+    else console.log(`Video commands:
+  video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --image <url> [--duration 10]  Submit video task
+  video create --script "..." --video <public-url> [--model kling|seedance]  Edit a video (standalone)
+  video status <taskId>                                      Check video status
+  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
+`);
+  } else if (topic === 'music') {
+    if (subtopic === 'create') console.log('Usage: makaron music create [--vocals] [--style "genre"] "description"');
+    else if (subtopic === 'status') console.log('Usage: makaron music status <taskId>');
+    else console.log(`Music commands:
+  music create [--vocals] [--style "genre"] "description"    Generate music
+  music status <taskId>                                      Check music status
+`);
+  } else if (topic === 'admin') {
+    if (subtopic === 'skills') console.log('Usage: makaron admin skills [add|update|delete] ...');
+    else if (subtopic === 'upload') console.log('Usage: makaron admin upload <local-file> <storage-path>');
+    else if (subtopic === 'fetch-skill') console.log('Usage: makaron admin fetch-skill <share-code|url>');
+    else if (subtopic === 'set-admin') console.log('Usage: makaron admin set-admin <email>');
+    else console.log(`Admin commands:
+  admin skills                         List all marketplace skills
+  admin skills add '<json>'            Add a new skill
+  admin skills update <id> '<json>'    Update a skill
+  admin skills delete <id>             Delete a skill
+  admin upload <file> <storage-path>   Upload file to Storage
+  admin fetch-skill <code|url>         Download skill from share link
+  admin set-admin <email>              Grant admin access to a user
+`);
+  } else if (topic === 'register') {
+    if (subtopic === '--verify') console.log('Usage: makaron register --verify --challenge-id <id> --answer <number>');
+    else console.log('Usage: makaron register --json | makaron register --verify --challenge-id <id> --answer <number>');
+  } else if (topic === 'claim') {
+    console.log('Usage: makaron claim');
+  } else {
+    printRootHelp();
+  }
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const command = args[0];
 
-if (command === '--version' || command === '-v' || command === 'version') {
+if (!command || command === '--help' || command === '-h' || command === 'help') {
+  printRootHelp();
+} else if (hasHelpFlag(args)) {
+  printHelp(command, args[1]);
+} else if (command === '--version' || command === '-v' || command === 'version') {
   console.log(getCliVersion());
 } else if (command === 'login') {
   await login();
@@ -909,11 +1030,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
   let videoModel = undefined;
   let preferredModel = undefined;
   for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--help' || args[i] === '-h') {
-      console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--stream] [--background|-b] [--json] "your message"');
-      process.exit(0);
-    }
-    else if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
+    if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else if (args[i] === '--video' && args[i + 1]) chatVideos.push(args[++i]);
     else if (args[i] === '--stream') useStream = true;
@@ -1580,39 +1697,5 @@ if (command === '--version' || command === '-v' || command === 'version') {
   console.log(JSON.stringify(data));
   console.error(`🔗 Share this link with a human: ${data.claim_url}`);
 } else {
-  console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
-
-Commands:
-  register --json                    Get challenge for agent self-registration
-  register --verify --challenge-id <id> --answer <n>  Verify and save API key
-  claim                              Get claim URL for human to link account
-  login                              Log in to Makaron (human interactive)
-  list (ls)                          List all projects
-  project media <projectId> --json    List timeline media for a project
-  create --image <file>              Create project from local image
-  create --image-url <url>           Create project from URL
-  create --title "name"              Create empty project (text-to-image)
-
-  chat --project <id> "message"      Chat (non-blocking, polls for result)
-  chat --project <id> --video <file> Attach video to conversation
-  chat --project <id> -b "message"   Background: submit and print runId
-  chat --project <id> --stream "msg" Legacy: stream SSE in real-time
-  chat --project <id> --json "msg"   Output structured JSON result
-
-  responses get <runId>              Get run status and results
-  responses get <runId> --wait       Poll until completed
-  responses list --project <id>      List runs for a project
-  abort <runId>                      Abort a running Agent
-
-  edit [--image <file>] "prompt"     AI image edit / text-to-image
-  analyze --video <file|url>         Analyze video content
-  video script|create|status         Video generation
-  music create|status                Music generation
-
-  admin                              Admin commands (skills, upload, set-admin)
-
-Environment:
-  MAKARON_API_KEY  API key (mk_live_xxx) — recommended for agents
-  MAKARON_URL      API base (default: ${DEFAULT_URL})
-`);
+  printRootHelp();
 }
