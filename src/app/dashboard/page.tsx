@@ -8,14 +8,12 @@ import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cach
 import { navigateBackInIOSApp } from '@/lib/native-navigation'
 import { getAttributionForRequest } from '@/lib/marketing/attribution'
 import { trackCheckoutStart } from '@/lib/marketing/meta-pixel'
+import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing'
 import {
   finishNativeAppleTransaction,
-  getNativeAppleProducts,
-  isNativeApplePurchaseAvailable,
   purchaseNativeAppleProduct,
   purchaseNativeAppleSubscription,
   restoreNativeApplePurchases,
-  type NativeAppleProduct,
 } from '@/lib/native-purchases'
 
 interface ApiKey {
@@ -45,17 +43,6 @@ interface SubscriptionInfo {
   billingInterval: 'month' | 'year'
   currentPeriodEnd: string | null
   cancelAtPeriodEnd: boolean
-}
-
-interface AppleBillingProduct {
-  kind: 'subscription' | 'topup'
-  planId?: string
-  tierId?: string
-  name: string
-  interval?: 'month' | 'year'
-  productId: string
-  credits: number
-  price: number
 }
 
 interface Balance {
@@ -108,34 +95,8 @@ function DashboardInner() {
   const [subscribing, setSubscribing] = useState<string | null>(null)
   const [managingSubscription, setManagingSubscription] = useState(false)
   const [billingActionError, setBillingActionError] = useState<string | null>(null)
-  const [appleBillingAvailable, setAppleBillingAvailable] = useState(false)
-  const [appleProducts, setAppleProducts] = useState<AppleBillingProduct[]>([])
-  const [nativeAppleProducts, setNativeAppleProducts] = useState<Record<string, NativeAppleProduct>>({})
-  const [appAccountToken, setAppAccountToken] = useState<string | undefined>()
-
-  useEffect(() => {
-    setAppleBillingAvailable(isNativeApplePurchaseAvailable())
-  }, [])
-
-  useEffect(() => {
-    if (!appleBillingAvailable) return
-    let cancelled = false
-    fetch('/api/billing/apple/products')
-      .then(r => r.json())
-      .then(async data => {
-        if (cancelled) return
-        const products = (data.products || []) as AppleBillingProduct[]
-        setAppleProducts(products)
-        setAppAccountToken(data.appAccountToken)
-        const nativeProducts = await getNativeAppleProducts(products.map(product => product.productId))
-        if (!cancelled) setNativeAppleProducts(Object.fromEntries(nativeProducts.map(product => [product.productId, product])))
-      })
-      .catch(error => {
-        console.error('[dashboard/apple] products failed:', error)
-        if (!cancelled) setBillingActionError('Apple purchases are not ready yet.')
-      })
-    return () => { cancelled = true }
-  }, [appleBillingAvailable])
+  const appleBilling = useAppleBillingProducts({ enabled: true })
+  const appleBillingAvailable = appleBilling.available
 
   const fetchDashboard = useCallback(async () => {
     const res = await fetch('/api/billing/dashboard')
@@ -206,9 +167,10 @@ function DashboardInner() {
         currency: 'USD',
       })
       if (appleBillingAvailable) {
-        const appleProduct = appleProducts.find(product => product.kind === 'topup' && product.tierId === tier)
+        const appleProduct = appleBilling.findTopup(tier)
         if (!appleProduct) throw new Error('Apple top-up product is not configured.')
-        const transaction = await purchaseNativeAppleProduct(appleProduct.productId, appAccountToken)
+        if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple top-up product is still loading.')
+        const transaction = await purchaseNativeAppleProduct(appleProduct.productId, appleBilling.appAccountToken)
         const res = await fetch('/api/billing/apple/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -242,9 +204,10 @@ function DashboardInner() {
     setBillingActionError(null)
     try {
       if (appleBillingAvailable) {
-        const appleProduct = appleProducts.find(product => product.kind === 'subscription' && product.planId === planId && product.interval === billingInterval)
+        const appleProduct = appleBilling.findSubscription(planId, billingInterval)
         if (!appleProduct) throw new Error('Apple subscription product is not configured.')
-        const transaction = await purchaseNativeAppleSubscription(appleProduct.productId, appAccountToken)
+        if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple subscription product is still loading.')
+        const transaction = await purchaseNativeAppleSubscription(appleProduct.productId, appleBilling.appAccountToken)
         const res = await fetch('/api/billing/apple/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -365,6 +328,15 @@ function DashboardInner() {
         </div>
       </div>
 
+      {appleBillingAvailable && (
+        <div className="mb-6 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+          <div className="text-sm font-semibold text-white/75">Apple In-App Purchase</div>
+          <div className={`mt-1 text-xs ${appleBilling.error ? 'text-red-400/75' : 'text-white/40'}`}>
+            {appleBilling.error || (appleBilling.loading ? 'Loading Apple prices...' : 'Plan changes and top-ups are billed through Apple on iOS.')}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-white/5 rounded-lg p-1">
         {visibleTabs.map(t => (
@@ -427,8 +399,20 @@ function DashboardInner() {
                 {PLANS.map(plan => {
                   const price = billingInterval === 'month' ? plan.monthlyPrice : plan.annualPrice
                   const perMonth = billingInterval === 'year' ? Math.round(plan.annualPrice / 12) : plan.monthlyPrice
-                  const appleProduct = appleProducts.find(product => product.kind === 'subscription' && product.planId === plan.id && product.interval === billingInterval)
-                  const displayPrice = appleProduct ? nativeAppleProducts[appleProduct.productId]?.displayPrice : undefined
+                  const appleProduct = appleBilling.findSubscription(plan.id, billingInterval)
+                  const nativeProduct = appleBilling.nativeProductFor(appleProduct)
+                  const displayPrice = nativeProduct?.displayPrice
+                  const appleReady = !appleBillingAvailable || !!nativeProduct
+                  const disabled = !!subscribing || (appleBillingAvailable && (appleBilling.loading || !!appleBilling.error || !appleReady))
+                  const buttonLabel = subscribing === plan.id
+                    ? '...'
+                    : appleBillingAvailable
+                      ? appleBilling.loading
+                        ? 'Loading...'
+                        : appleReady
+                          ? `Apple · ${displayPrice}`
+                          : 'Unavailable'
+                      : `$${(price / 100).toFixed(2)}${billingInterval === 'year' ? '/yr' : '/mo'}`
                   return (
                     <div key={plan.id} className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
                       <div>
@@ -444,10 +428,10 @@ function DashboardInner() {
                       </div>
                       <button
                         onClick={() => handleSubscribe(plan.id)}
-                        disabled={!!subscribing}
+                        disabled={disabled}
                         className="px-5 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-40 transition-all"
                       >
-                        {subscribing === plan.id ? '...' : displayPrice || `$${(price / 100).toFixed(2)}${billingInterval === 'year' ? '/yr' : '/mo'}`}
+                        {buttonLabel}
                       </button>
                     </div>
                   )
@@ -495,8 +479,20 @@ function DashboardInner() {
       {tab === 'topup' && (
         <div className="grid gap-3">
           {CREDIT_TIERS.map(tier => {
-            const appleProduct = appleProducts.find(product => product.kind === 'topup' && product.tierId === tier.id)
-            const displayPrice = appleProduct ? nativeAppleProducts[appleProduct.productId]?.displayPrice : undefined
+            const appleProduct = appleBilling.findTopup(tier.id)
+            const nativeProduct = appleBilling.nativeProductFor(appleProduct)
+            const displayPrice = nativeProduct?.displayPrice
+            const appleReady = !appleBillingAvailable || !!nativeProduct
+            const disabled = !!checkingOut || (appleBillingAvailable && (appleBilling.loading || !!appleBilling.error || !appleReady))
+            const buttonLabel = checkingOut === tier.id
+              ? '...'
+              : appleBillingAvailable
+                ? appleBilling.loading
+                  ? 'Loading...'
+                  : appleReady
+                    ? `Apple · ${displayPrice}`
+                    : 'Unavailable'
+                : `$${(tier.price / 100).toFixed(0)}`
             return (
               <div key={tier.id} className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
                 <div>
@@ -507,10 +503,10 @@ function DashboardInner() {
                 </div>
                 <button
                   onClick={() => handleCheckout(tier.id)}
-                  disabled={!!checkingOut}
+                  disabled={disabled}
                   className="px-5 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-40 transition-all"
                 >
-                  {checkingOut === tier.id ? '...' : displayPrice || `$${(tier.price / 100).toFixed(0)}`}
+                  {buttonLabel}
                 </button>
               </div>
             )

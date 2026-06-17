@@ -7,14 +7,12 @@ import { shouldSuppressWebBilling } from '@/lib/native-app';
 import { writeNativeJSONCache } from '@/lib/native-app-cache';
 import { getAttributionForRequest } from '@/lib/marketing/attribution';
 import { trackCheckoutStart, trackCheckoutSuccessFromUrl } from '@/lib/marketing/meta-pixel';
+import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing';
 import {
   finishNativeAppleTransaction,
-  getNativeAppleProducts,
-  isNativeApplePurchaseAvailable,
   purchaseNativeAppleProduct,
   purchaseNativeAppleSubscription,
   restoreNativeApplePurchases,
-  type NativeAppleProduct,
 } from '@/lib/native-purchases';
 
 const PLANS = [
@@ -22,17 +20,6 @@ const PLANS = [
   { id: 'pro', name: 'Pro', monthlyPrice: 1990, annualPrice: 19100, credits: 3000 },
   { id: 'business', name: 'Business', monthlyPrice: 4990, annualPrice: 47900, credits: 10000 },
 ] as const;
-
-interface AppleBillingProduct {
-  kind: 'subscription' | 'topup';
-  planId?: string;
-  tierId?: string;
-  name: string;
-  interval?: 'month' | 'year';
-  productId: string;
-  credits: number;
-  price: number;
-}
 
 interface CreditPopupProps {
   open: boolean;
@@ -58,10 +45,6 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   const [selectedPlan, setSelectedPlan] = useState<string>('basic');
   const [selectedBillingInterval, setSelectedBillingInterval] = useState<'month' | 'year'>('month');
   const [animatedBalance, setAnimatedBalance] = useState(0);
-  const [appleBillingAvailable, setAppleBillingAvailable] = useState(false);
-  const [appleProducts, setAppleProducts] = useState<AppleBillingProduct[]>([]);
-  const [nativeAppleProducts, setNativeAppleProducts] = useState<Record<string, NativeAppleProduct>>({});
-  const [appAccountToken, setAppAccountToken] = useState<string | undefined>();
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const animatingRef = useRef(false);
 
@@ -78,6 +61,8 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   const balance = autoSuccess ? autoBalance : externalBalance;
   const subscription = autoSubscription || externalSubscription;
   const suppressWebBilling = shouldSuppressWebBilling();
+  const appleBilling = useAppleBillingProducts({ enabled: open });
+  const appleBillingAvailable = appleBilling.available;
 
   const onClose = () => {
     setAutoOpen(false);
@@ -127,30 +112,6 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   const hasSubscription = !!(subscription && subscription.status !== 'canceled');
 
   const [tab, setTab] = useState<'subscribe' | 'topup'>('topup');
-
-  useEffect(() => {
-    setAppleBillingAvailable(isNativeApplePurchaseAvailable());
-  }, []);
-
-  useEffect(() => {
-    if (!open || !appleBillingAvailable) return;
-    let cancelled = false;
-    fetch('/api/billing/apple/products')
-      .then(r => r.json())
-      .then(async data => {
-        if (cancelled) return;
-        const products = (data.products || []) as AppleBillingProduct[];
-        setAppleProducts(products);
-        setAppAccountToken(data.appAccountToken);
-        const nativeProducts = await getNativeAppleProducts(products.map(product => product.productId));
-        if (!cancelled) setNativeAppleProducts(Object.fromEntries(nativeProducts.map(product => [product.productId, product])));
-      })
-      .catch(error => {
-        console.error('[billing/apple] product load failed:', error);
-        if (!cancelled) setPaymentError('Apple purchases are not ready yet.');
-      });
-    return () => { cancelled = true; };
-  }, [open, appleBillingAvailable]);
 
   // Sync tab when subscription status changes (async fetch)
   useEffect(() => {
@@ -205,10 +166,11 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         currency: 'USD',
       });
       if (appleBillingAvailable) {
-        const appleProduct = appleProducts.find(product => product.kind === 'topup' && product.tierId === tier);
+        const appleProduct = appleBilling.findTopup(tier);
         if (!appleProduct) throw new Error('Apple top-up product is not configured');
+        if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple top-up product is still loading');
         sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-        const transaction = await purchaseNativeAppleProduct(appleProduct.productId, appAccountToken);
+        const transaction = await purchaseNativeAppleProduct(appleProduct.productId, appleBilling.appAccountToken);
         const res = await fetch('/api/billing/apple/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -256,10 +218,11 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     setPaymentError(null);
     try {
       if (appleBillingAvailable) {
-        const appleProduct = appleProducts.find(product => product.kind === 'subscription' && product.planId === planId && product.interval === selectedBillingInterval);
+        const appleProduct = appleBilling.findSubscription(planId, selectedBillingInterval);
         if (!appleProduct) throw new Error('Apple subscription product is not configured');
+        if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple subscription product is still loading');
         sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-        const transaction = await purchaseNativeAppleSubscription(appleProduct.productId, appAccountToken);
+        const transaction = await purchaseNativeAppleSubscription(appleProduct.productId, appleBilling.appAccountToken);
         const res = await fetch('/api/billing/apple/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -340,6 +303,38 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
       setLoading(null);
     }
   };
+
+  const selectedTopupCredits = CREDIT_TIERS.find(c => c.id === selectedTier)?.credits ?? 0;
+  const selectedAppleTopupProduct = appleBilling.findTopup(selectedTier);
+  const selectedAppleTopupReady = !appleBillingAvailable || !!appleBilling.nativeProductFor(selectedAppleTopupProduct);
+  const selectedAppleSubscriptionProduct = appleBilling.findSubscription(selectedPlan, selectedBillingInterval);
+  const selectedAppleSubscriptionReady = !appleBillingAvailable || !!appleBilling.nativeProductFor(selectedAppleSubscriptionProduct);
+  const applePurchaseBlocked = appleBillingAvailable && (appleBilling.loading || !!appleBilling.error);
+  const subscribeDisabled = !!loading
+    || !!(hasSubscription && subscription!.planId === selectedPlan)
+    || applePurchaseBlocked
+    || !selectedAppleSubscriptionReady;
+  const topupDisabled = !!loading || applePurchaseBlocked || !selectedAppleTopupReady;
+  const subscribeButtonLabel = (() => {
+    if (loading?.startsWith('sub-')) return '...';
+    if (appleBillingAvailable) {
+      if (appleBilling.loading) return 'Loading Apple prices...';
+      if (!selectedAppleSubscriptionReady) return 'Apple product unavailable';
+      const nativeProduct = appleBilling.nativeProductFor(selectedAppleSubscriptionProduct);
+      return `Subscribe with Apple · ${nativeProduct?.displayPrice || (selectedBillingInterval === 'year' ? 'Annual' : 'Monthly')}`;
+    }
+    if (hasSubscription) return `${t('billing.upgradeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`;
+    return `${t('billing.subscribeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`;
+  })();
+  const topupButtonLabel = (() => {
+    if (loading === selectedTier) return '...';
+    if (appleBillingAvailable) {
+      if (appleBilling.loading) return 'Loading Apple prices...';
+      if (!selectedAppleTopupReady) return 'Apple product unavailable';
+      return `Buy with Apple · ${selectedTopupCredits.toLocaleString()} ${t('billing.credits')}`;
+    }
+    return `${t('billing.topUp')} ${selectedTopupCredits.toLocaleString()} ${t('billing.credits')}`;
+  })();
 
   return (
     <>
@@ -603,8 +598,13 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
             </div>
 
             {appleBillingAvailable && (
-              <div style={{ margin: '10px 24px 0', padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>
-                Purchases are billed through Apple.
+              <div data-testid="apple-billing-banner" style={{ margin: '10px 24px 0', padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <div style={{ color: 'rgba(255,255,255,0.74)', fontSize: 12, fontWeight: 700 }}>
+                  Apple In-App Purchase
+                </div>
+                <div style={{ color: appleBilling.error ? '#f87171' : 'rgba(255,255,255,0.42)', fontSize: 12, marginTop: 3, lineHeight: 1.35 }}>
+                  {appleBilling.error || (appleBilling.loading ? 'Loading Apple prices...' : 'Subscriptions and top-ups are billed through Apple on iOS.')}
+                </div>
               </div>
             )}
 
@@ -636,10 +636,13 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                       const isCurrent = hasSubscription && subscription!.planId === plan.id;
                       const isDowngrade = hasSubscription && idx < currentPlanIndex;
                       const isSelected = selectedPlan === plan.id;
-                      const appleProduct = appleProducts.find(product => product.kind === 'subscription' && product.planId === plan.id && product.interval === selectedBillingInterval);
-                      const displayPrice = appleProduct ? nativeAppleProducts[appleProduct.productId]?.displayPrice : undefined;
+                      const appleProduct = appleBilling.findSubscription(plan.id, selectedBillingInterval);
+                      const displayPrice = appleProduct ? appleBilling.nativeProductFor(appleProduct)?.displayPrice : undefined;
                       const fallbackPrice = selectedBillingInterval === 'year' ? plan.annualPrice : plan.monthlyPrice;
                       const credits = selectedBillingInterval === 'year' ? plan.credits * 12 : plan.credits;
+                      const priceLabel = appleBillingAvailable
+                        ? displayPrice || (appleBilling.loading ? '...' : 'Unavailable')
+                        : `$${(fallbackPrice / 100).toFixed(2)}`;
                       return (
                         <button
                           key={plan.id}
@@ -684,7 +687,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                             </div>
                           </div>
                           <div style={{ fontSize: 16, fontWeight: 700, color: isSelected && !isCurrent ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
-                            {displayPrice || `$${(fallbackPrice / 100).toFixed(2)}`}<span style={{ fontSize: 11, fontWeight: 400 }}>{selectedBillingInterval === 'year' ? '/yr' : '/mo'}</span>
+                            {priceLabel}{!appleBillingAvailable && <span style={{ fontSize: 11, fontWeight: 400 }}>{selectedBillingInterval === 'year' ? '/yr' : '/mo'}</span>}
                           </div>
                         </button>
                       );
@@ -693,24 +696,18 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
 
                   <button
                     onClick={() => handleSubscribe(selectedPlan)}
-                    disabled={!!loading || !!(hasSubscription && subscription!.planId === selectedPlan)}
+                    disabled={subscribeDisabled}
                     style={{
                       width: '100%', marginTop: 16,
                       padding: 14, borderRadius: 14, border: 'none',
                       background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
                       color: '#fff', fontSize: 14, fontWeight: 600,
-                      cursor: loading ? 'wait' : 'pointer',
-                      opacity: loading || (hasSubscription && subscription!.planId === selectedPlan) ? 0.4 : 1,
+                      cursor: subscribeDisabled ? 'wait' : 'pointer',
+                      opacity: subscribeDisabled ? 0.4 : 1,
                       boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
                     }}
                   >
-                    {loading?.startsWith('sub-')
-                      ? '...'
-                      : appleBillingAvailable
-                        ? `Subscribe with Apple ${selectedBillingInterval === 'year' ? 'Annual' : 'Monthly'}`
-                        : hasSubscription
-                        ? `${t('billing.upgradeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`
-                        : `${t('billing.subscribeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`}
+                    {subscribeButtonLabel}
                   </button>
 
                   {appleBillingAvailable && (
@@ -736,8 +733,11 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {CREDIT_TIERS.map(tier => {
-                      const appleProduct = appleProducts.find(product => product.kind === 'topup' && product.tierId === tier.id);
-                      const displayPrice = appleProduct ? nativeAppleProducts[appleProduct.productId]?.displayPrice : undefined;
+                      const appleProduct = appleBilling.findTopup(tier.id);
+                      const displayPrice = appleProduct ? appleBilling.nativeProductFor(appleProduct)?.displayPrice : undefined;
+                      const priceLabel = appleBillingAvailable
+                        ? displayPrice || (appleBilling.loading ? '...' : 'Unavailable')
+                        : `$${(tier.price / 100).toFixed(0)}`;
                       return (
                         <button
                           key={tier.id}
@@ -766,7 +766,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                             </div>
                           </div>
                           <div style={{ fontSize: 16, fontWeight: 700, color: selectedTier === tier.id ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
-                            {displayPrice || `$${(tier.price / 100).toFixed(0)}`}
+                            {priceLabel}
                           </div>
                         </button>
                       );
@@ -775,20 +775,18 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
 
                   <button
                     onClick={() => handleCheckout(selectedTier)}
-                    disabled={!!loading}
+                    disabled={topupDisabled}
                     style={{
                       width: '100%', marginTop: 16,
                       padding: 14, borderRadius: 14, border: 'none',
                       background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
                       color: '#fff', fontSize: 14, fontWeight: 600,
-                      cursor: loading ? 'wait' : 'pointer',
-                      opacity: loading ? 0.5 : 1,
+                      cursor: topupDisabled ? 'wait' : 'pointer',
+                      opacity: topupDisabled ? 0.5 : 1,
                       boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
                     }}
                   >
-                    {loading === selectedTier
-                      ? '...'
-                      : `${t('billing.topUp')} ${CREDIT_TIERS.find(c => c.id === selectedTier)?.credits.toLocaleString()} ${t('billing.credits')}`}
+                    {topupButtonLabel}
                   </button>
                 </>
               )}
