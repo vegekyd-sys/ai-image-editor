@@ -10,7 +10,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(config.webDir).toBe('capacitor-www');
     expect(config.server?.url).toBeUndefined();
     expect(config.server?.allowNavigation).toContain('www.makaron.app');
-    expect(config.server?.allowNavigation).toContain('ai-image-editor-rawit330k-vegekyd-sys-projects.vercel.app');
+    expect(config.server?.allowNavigation).toContain('ai-image-editor-o5g5vq7ad-vegekyd-sys-projects.vercel.app');
   });
 
   it('keeps the native iOS webview locked to app-like viewport behavior', () => {
@@ -46,7 +46,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(shell).toContain('viewport-fit=cover');
     expect(shell).toContain('SplashScreen');
     expect(shell).toContain('Opening Makaron');
-    expect(shell).toContain('https://ai-image-editor-rawit330k-vegekyd-sys-projects.vercel.app/home');
+    expect(shell).toContain('https://ai-image-editor-o5g5vq7ad-vegekyd-sys-projects.vercel.app/home');
     expect(shell).toContain('Cannot reach Makaron');
   });
 

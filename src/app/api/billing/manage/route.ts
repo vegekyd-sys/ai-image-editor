@@ -12,6 +12,12 @@ export async function POST() {
   if (!sub) {
     return NextResponse.json({ error: 'No active subscription' }, { status: 400 })
   }
+  if (sub.provider === 'apple') {
+    return NextResponse.json({ error: 'Manage Apple subscriptions in the App Store' }, { status: 400 })
+  }
+  if (!sub.stripeCustomerId) {
+    return NextResponse.json({ error: 'No Stripe customer for this subscription' }, { status: 400 })
+  }
 
   const stripe = getStripe()
   const session = await stripe.billingPortal.sessions.create({

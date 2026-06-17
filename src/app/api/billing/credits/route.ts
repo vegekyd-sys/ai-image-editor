@@ -18,6 +18,7 @@ export async function GET() {
   return NextResponse.json({
     ...balance,
     subscription: subscription ? {
+      provider: subscription.provider,
       planId: subscription.planId,
       status: subscription.status,
       billingInterval: subscription.billingInterval,

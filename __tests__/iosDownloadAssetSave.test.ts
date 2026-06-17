@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { downloadAsset } from '@/lib/editor/download';
+import type { LocaleContextValue } from '@/lib/i18n';
 import {
   saveBlobToNativePhotoLibrary,
   saveUrlToNativePhotoLibrary,
@@ -15,6 +16,7 @@ vi.mock('@/lib/native-media', () => ({
 }));
 
 function makeParams(overrides: Partial<Parameters<typeof downloadAsset>[0]> = {}): Parameters<typeof downloadAsset>[0] {
+  const t = ((key: string) => key) as LocaleContextValue['t'];
   return {
     timeline: ['https://cdn.makaron.app/image.jpg'],
     viewIndex: 0,
@@ -26,7 +28,7 @@ function makeParams(overrides: Partial<Parameters<typeof downloadAsset>[0]> = {}
     setIsSaving: vi.fn(),
     setAgentStatus: vi.fn(),
     showSaveToast: vi.fn(),
-    t: vi.fn((key: string) => key),
+    t,
     projectTitle: 'My Project',
     ...overrides,
   };

@@ -6,26 +6,8 @@ import {
   saveUrlToNativePhotoLibrary,
 } from '@/lib/native-media';
 
-type NativeMessage = {
-  id: string;
-  action: string;
-  mediaType?: string;
-  filename?: string;
-  url?: string;
-  allowVideo?: boolean;
-};
-
-declare global {
-  interface Window {
-    webkit?: {
-      messageHandlers?: {
-        makaronNative?: {
-          postMessage: (message: NativeMessage) => void;
-        };
-      };
-    };
-  }
-}
+type NativeBridge = NonNullable<NonNullable<NonNullable<Window['webkit']>['messageHandlers']>['makaronNative']>;
+type NativeMessage = Parameters<NativeBridge['postMessage']>[0];
 
 function installNativeBridgeMock() {
   const messages: NativeMessage[] = [];

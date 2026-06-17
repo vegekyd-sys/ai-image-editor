@@ -1,6 +1,7 @@
 import Capacitor
 import Photos
 import PhotosUI
+import StoreKit
 import UniformTypeIdentifiers
 import UIKit
 import WebKit
@@ -48,9 +49,183 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             handleSaveToPhotos(id: id, body: body)
         case "pickMedia":
             handlePickMedia(id: id, body: body)
+        case "getProducts":
+            handleGetProducts(id: id, body: body)
+        case "purchaseSubscription":
+            handlePurchaseProduct(id: id, body: body)
+        case "purchaseProduct":
+            handlePurchaseProduct(id: id, body: body)
+        case "restorePurchases":
+            handleRestorePurchases(id: id)
+        case "finishTransaction":
+            handleFinishTransaction(id: id, body: body)
         default:
             sendNativeResponse(id: id, ok: false, error: "Unsupported native action")
         }
+    }
+
+    private func handleGetProducts(id: String, body: [String: Any]) {
+        guard #available(iOS 15.0, *) else {
+            sendNativeResponse(id: id, ok: false, error: "Apple subscriptions require iOS 15 or later")
+            return
+        }
+
+        let productIds = body["productIds"] as? [String] ?? []
+        guard !productIds.isEmpty else {
+            sendNativeResponse(id: id, ok: true, error: nil, extra: ["products": []])
+            return
+        }
+
+        Task {
+            do {
+                let products = try await Product.products(for: productIds)
+                let payload = products.map { product in
+                    [
+                        "productId": product.id,
+                        "displayName": product.displayName,
+                        "description": product.description,
+                        "displayPrice": product.displayPrice,
+                        "type": String(describing: product.type)
+                    ]
+                }
+                sendNativeResponse(id: id, ok: true, error: nil, extra: ["products": payload])
+            } catch {
+                sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    private func handlePurchaseProduct(id: String, body: [String: Any]) {
+        guard #available(iOS 15.0, *) else {
+            sendNativeResponse(id: id, ok: false, error: "Apple purchases require iOS 15 or later")
+            return
+        }
+
+        guard let productId = body["productId"] as? String, !productId.isEmpty else {
+            sendNativeResponse(id: id, ok: false, error: "Missing Apple product ID")
+            return
+        }
+
+        Task {
+            do {
+                let products = try await Product.products(for: [productId])
+                guard let product = products.first else {
+                    sendNativeResponse(id: id, ok: false, error: "Apple product not found")
+                    return
+                }
+
+                var options: Set<Product.PurchaseOption> = []
+                if let token = body["appAccountToken"] as? String, let uuid = UUID(uuidString: token) {
+                    options.insert(.appAccountToken(uuid))
+                }
+
+                let result = try await product.purchase(options: options)
+                switch result {
+                case .success(let verification):
+                    let transaction = try checkVerified(verification)
+                    let signedTransactionInfo = verification.jwsRepresentation
+                    sendTransactionResponse(id: id, transaction: transaction, signedTransactionInfo: signedTransactionInfo)
+                case .userCancelled:
+                    sendNativeResponse(id: id, ok: false, error: "Purchase cancelled")
+                case .pending:
+                    sendNativeResponse(id: id, ok: false, error: "Purchase pending")
+                @unknown default:
+                    sendNativeResponse(id: id, ok: false, error: "Unknown purchase result")
+                }
+            } catch {
+                sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    private func handleRestorePurchases(id: String) {
+        guard #available(iOS 15.0, *) else {
+            sendNativeResponse(id: id, ok: false, error: "Apple subscriptions require iOS 15 or later")
+            return
+        }
+
+        Task {
+            do {
+                try await AppStore.sync()
+                var transactions: [[String: Any]] = []
+                var seenTransactionIds = Set<String>()
+
+                for await unfinished in Transaction.unfinished {
+                    let transaction = try checkVerified(unfinished)
+                    let transactionId = String(transaction.id)
+                    guard transaction.revocationDate == nil else { continue }
+                    guard !seenTransactionIds.contains(transactionId) else { continue }
+                    seenTransactionIds.insert(transactionId)
+                    transactions.append(transactionPayload(transaction, signedTransactionInfo: unfinished.jwsRepresentation))
+                }
+
+                for await entitlement in Transaction.currentEntitlements {
+                    let transaction = try checkVerified(entitlement)
+                    let transactionId = String(transaction.id)
+                    guard transaction.revocationDate == nil else { continue }
+                    guard transaction.productType == .autoRenewable else { continue }
+                    guard !seenTransactionIds.contains(transactionId) else { continue }
+                    seenTransactionIds.insert(transactionId)
+                    transactions.append(transactionPayload(transaction, signedTransactionInfo: entitlement.jwsRepresentation))
+                }
+                sendNativeResponse(id: id, ok: true, error: nil, extra: ["transactions": transactions])
+            } catch {
+                sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    private func handleFinishTransaction(id: String, body: [String: Any]) {
+        guard #available(iOS 15.0, *) else {
+            sendNativeResponse(id: id, ok: false, error: "Apple purchases require iOS 15 or later")
+            return
+        }
+
+        guard let transactionId = body["transactionId"] as? String, !transactionId.isEmpty else {
+            sendNativeResponse(id: id, ok: false, error: "Missing Apple transaction ID")
+            return
+        }
+
+        Task {
+            do {
+                for await unfinished in Transaction.unfinished {
+                    let transaction = try checkVerified(unfinished)
+                    if String(transaction.id) == transactionId {
+                        await transaction.finish()
+                        sendNativeResponse(id: id, ok: true, error: nil, extra: ["transactionId": transactionId])
+                        return
+                    }
+                }
+                sendNativeResponse(id: id, ok: false, error: "Apple transaction is not pending")
+            } catch {
+                sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    @available(iOS 15.0, *)
+    private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+        switch result {
+        case .unverified(_, let error):
+            throw error
+        case .verified(let safe):
+            return safe
+        }
+    }
+
+    @available(iOS 15.0, *)
+    private func transactionPayload(_ transaction: Transaction, signedTransactionInfo: String) -> [String: Any] {
+        [
+            "productId": transaction.productID,
+            "transactionId": String(transaction.id),
+            "originalTransactionId": String(transaction.originalID),
+            "signedTransactionInfo": signedTransactionInfo
+        ]
+    }
+
+    @available(iOS 15.0, *)
+    private func sendTransactionResponse(id: String, transaction: Transaction, signedTransactionInfo: String) {
+        sendNativeResponse(id: id, ok: true, error: nil, extra: transactionPayload(transaction, signedTransactionInfo: signedTransactionInfo))
     }
 
     private func handlePickMedia(id: String, body: [String: Any]) {
