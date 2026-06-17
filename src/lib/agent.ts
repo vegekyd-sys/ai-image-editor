@@ -436,6 +436,36 @@ async function resolveVideoUrlForMediaIndex(ctx: AgentContext, mediaIndex: numbe
   return { idx: v.idx, error: `No real video file found at <<<media_${mediaIndex}>>>. Use preview_frame only for Remotion compositions with design_path.` };
 }
 
+async function resolveImageForAnalysis(ctx: AgentContext, options: {
+  imageUrl?: string;
+  imageMediaIndex?: number;
+  workspacePath?: string;
+}): Promise<{ image?: string; source?: string; error?: string }> {
+  if (options.imageUrl) {
+    if (/^(https?:\/\/|data:image\/)/i.test(options.imageUrl)) {
+      return { image: options.imageUrl, source: options.imageUrl.startsWith('data:') ? 'data-url' : 'image_url' };
+    }
+    return { error: 'image_url must be an http(s) URL or data:image URL.' };
+  }
+
+  if (options.workspacePath) {
+    const result = await workspace.readFile(options.workspacePath, ctx.supabase, ctx.userId);
+    if (!result) return { error: `Workspace image not found: ${options.workspacePath}` };
+    if (!result.contentType.startsWith('image/')) return { error: `Workspace file is not an image: ${options.workspacePath}` };
+    return { image: result.storageUrl || result.content, source: options.workspacePath };
+  }
+
+  if (options.imageMediaIndex !== undefined) {
+    const v = validateImageIndex(ctx.snapshotImages, options.imageMediaIndex);
+    if (v.error) return { error: v.error };
+    const image = ctx.snapshotImages[v.idx];
+    if (isVideoUrl(image)) return { error: `<<<media_${options.imageMediaIndex}>>> is a video. Use an image snapshot, screenshot URL, or workspace_path as the frame anchor.` };
+    return { image, source: `<<<media_${options.imageMediaIndex}>>>` };
+  }
+
+  return { error: 'locate_frame requires image_url, image_media_index, or workspace_path.' };
+}
+
 function isImageContentType(contentType?: string): boolean {
   return !!contentType?.startsWith('image/');
 }
@@ -1050,6 +1080,12 @@ Hard constraints:
             }
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
+          if (video_ref_url && autoVideoUrls.length > 0) {
+            return {
+              success: false as const,
+              message: 'Do not mix video_ref_url with timeline video markers in one generation. For a local segment edit, pass only the extracted segment as video_ref_url and remove any <<<media_N>>> markers that point to timeline videos.',
+            };
+          }
           const referenceVideoDuration = totalVideoRefDuration > 0 ? totalVideoRefDuration : undefined;
           const modelError = validateVideoModelRequest({
             model: videoModel,
@@ -1078,7 +1114,7 @@ Hard constraints:
             videoModel,
             videoUrl: video_ref_url,
             videoReferType: video_ref_type,
-            videoUrls: allVideoUrls.length ? allVideoUrls : undefined,
+            videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
             referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             keepOriginalSound: keep_original_sound,
@@ -1197,12 +1233,20 @@ Hard constraints:
     }),
 
     analyze_video: tool({
-      description: 'Analyze video content using Gemini vision. Returns scene descriptions, actions, pacing, audio cues. Use for understanding what happens in a video. For checking a specific raw video or Remotion frame visually, use preview_frame with timestamp/frame instead.',
+      description: `Analyze video content using Gemini vision.
+
+Default mode describes scenes/actions/pacing/audio cues in a timeline video.
+
+Use mode="locate_frame" when the user provides a screenshot/frame and you need to find where that frame appears in a video. This is the primary locator for screenshot-based local video edits. Provide the video as media_index and the screenshot as image_url, image_media_index, or workspace_path. For checking a known timestamp visually, use preview_frame instead.`,
       inputSchema: z.object({
         media_index: z.number().describe('1-based snapshot index of the video to analyze (<<<media_1>>> = 1)'),
-        question: z.string().optional().describe('Specific aspect to focus on (e.g. "what happens at 5s?", "describe the pacing", "what audio/dialogue is there?")'),
+        question: z.string().optional().describe('Specific aspect to focus on. In locate_frame mode, use this for the user note about what is wrong in the screenshot.'),
+        mode: z.enum(['describe', 'locate_frame']).optional().describe('describe = normal video analysis. locate_frame = locate a screenshot inside this video. Default describe.'),
+        image_url: z.string().optional().describe('For locate_frame: screenshot/frame image URL or data:image URL.'),
+        image_media_index: z.number().optional().describe('For locate_frame: 1-based Media Index image snapshot to use as the screenshot/frame anchor.'),
+        workspace_path: z.string().optional().describe('For locate_frame: workspace image path from preview_frame/read_file/list_files, e.g. project/drafts/frame.jpg.'),
       }),
-      execute: async ({ media_index, question }) => {
+      execute: async ({ media_index, question, mode, image_url, image_media_index, workspace_path }) => {
         const v = validateImageIndex(ctx.snapshotImages, media_index);
         if (v.error) return { error: v.error };
 
@@ -1234,9 +1278,28 @@ Hard constraints:
         }
 
         try {
+          if (mode === 'locate_frame') {
+            const image = await resolveImageForAnalysis(ctx, {
+              imageUrl: image_url,
+              imageMediaIndex: image_media_index,
+              workspacePath: workspace_path,
+            });
+            if (image.error || !image.image) return { error: image.error || 'No screenshot image provided for locate_frame.' };
+
+            const { locateFrameInVideoContent } = await import('./gemini');
+            const location = await locateFrameInVideoContent(videoUrl, image.image, question, ctx.userId);
+            return {
+              mode: 'locate_frame',
+              location,
+              media_index,
+              videoUrl,
+              imageSource: image.source,
+            };
+          }
+
           const { analyzeVideoContent } = await import('./gemini');
           const analysis = await analyzeVideoContent(videoUrl, question, ctx.userId);
-          return { analysis, media_index, videoUrl };
+          return { mode: 'describe', analysis, media_index, videoUrl };
         } catch (err) {
           return { error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
         }
@@ -1245,6 +1308,15 @@ Hard constraints:
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        if (output.mode === 'locate_frame') {
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: `Frame location for <<<media_${output.media_index}>>> using ${output.imageSource || 'screenshot'}:\n\n${JSON.stringify(output.location, null, 2)}`,
+            }],
+          };
         }
         return {
           type: 'content' as const,

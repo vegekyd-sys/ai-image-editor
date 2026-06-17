@@ -49,6 +49,8 @@ Do not call `analyze_image` before direct edits; `generate_image` already receiv
 
 Default tool: `generate_animation`, after script confirmation or explicit direct-submit authorization.
 
+For screenshot/frame-based local video repair, read `skills/video-segment-edit/SKILL.md` first. Use it when the user provides a screenshot/frame for a video, says a frame or moment looks wrong, or says casual things like "这个画面修一下", "这里有点怪", "这帧不对", "第 7 秒附近有问题", "fix this frame", or "change this moment". In that workflow, locate the screenshot with `analyze_video({ mode: "locate_frame" })` first; FFmpeg frame extraction is only the fallback for low confidence.
+
 For dialogue, subtitles, transcript, or time-based editing by spoken words, call `transcribe_audio` first. Use its utterance/word timestamps to decide edit points. Use `analyze_video` for visual scenes/actions, not for exact speech timing.
 
 For long videos, multi-part videos, 15s+ output, 1-2 minute videos, visual anchors, or generated-clip transitions, read `skills/long-video-director/SKILL.md` first. That workflow is staged review: story → anchors → director beat board → storyboard image per segment → scripts/preflight. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
