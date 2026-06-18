@@ -9,7 +9,7 @@ Core contract:
 - `media_index` selects the timeline snapshot to edit. When editing a photo, pass it explicitly.
 - `reference_media_indices` sends extra timeline snapshots. Use it whenever the `editPrompt` mentions Image 2, Image 3, another `<<<media_N>>>`, a source background, a source person, or a style reference from the timeline.
 - Omit `media_index` for pure text-to-image generation.
-- `image_refs` is only for external workspace URLs, not timeline snapshots.
+- `image_refs` is only for workspace asset provider URLs, not timeline snapshots.
 - `skill` may be `enhance`, `creative`, `wild`, `captions`, or a user skill. Use it for general style intent; omit it for precise manual instructions.
 - To restore details from the original photo, edit the current snapshot with `media_index` and pass the original timeline snapshot, usually `<<<media_1>>>`, through `reference_media_indices`.
 - `model` is optional. Use `qwen` for NSFW-risk requests. Use `openai` for accurate text rendering, face identity complaints, layout/mockup images, and director storyboard images required by `long-video-director`.
