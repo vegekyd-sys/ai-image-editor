@@ -264,8 +264,15 @@ type MakaronOutput =
   | { id: string; type: "text"; status: "completed"; content: string }
   | { id: string; type: "image"; status: "completed"; url: string; snapshot_id: string }
   | { id: string; type: "design"; status: "completed"; url: string; width: number; height: number; animated: boolean; duration?: number }
-  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
+  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; snapshot_id?: string; url?: string; elapsed_seconds?: number; width?: number; height?: number; error?: string; completion_actions?: CompletionAction[] }
   | { id: string; type: "music"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
+
+type CompletionAction = {
+  label: string
+  prompt: string
+  description?: string
+  policy?: "confirm" | "auto"
+}
 ```
 
 ## Polling Rules
@@ -274,6 +281,7 @@ type MakaronOutput =
 2. Use `next_poll_after_ms` as interval (default 5000ms)
 3. Stop when `status` is `"completed"`, `"failed"`, or `"aborted"`
 4. Top-level `status: "completed"` means ALL artifacts are ready (including rendered videos)
+5. If an async video fails, top-level `status` is `"failed"` and the failed video may include `completion_actions` for a safe retry or diagnosis. Agents can surface these as the next user-confirmed step.
 
 ## Exit Codes
 

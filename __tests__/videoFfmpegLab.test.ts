@@ -20,7 +20,7 @@ describe('Agent FFmpeg video lab', () => {
   it('keeps Makaron CLI upload and provider video limits separate', () => {
     const cli = readFileSync(join(process.cwd(), 'packages/makaron-cli/bin/makaron.mjs'), 'utf8')
     const readme = readFileSync(join(process.cwd(), 'packages/makaron-cli/README.md'), 'utf8')
-    const skill = readFileSync(join(process.cwd(), 'packages/makaron-cli/SKILL.md'), 'utf8')
+    const skill = readFileSync(join(process.cwd(), 'packages/makaron-cli/skills/makaron/SKILL.md'), 'utf8')
 
     expect(cli).toContain('const MAX_VIDEO_UPLOAD_DURATION = 120')
     expect(cli).toContain('const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50')

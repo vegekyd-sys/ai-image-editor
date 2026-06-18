@@ -2487,9 +2487,22 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               return [...prev, videoMsg];
             });
           } else if (data.status === 'failed') {
+            const actionLines = serializeCompletionActions(data.completionActions);
+            const reason = data.error ? `\n${data.error}` : '';
+            const failMsg: Message = {
+              id: generateId(),
+              role: 'assistant',
+              content: `⚠️ ${t('status.videoFailed')}${reason}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
+              timestamp: Date.now(),
+            };
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const, error: data.error || undefined } } : s
             ));
+            setMessages(prev => {
+              if (prev.some(m => m.content?.includes(`snap:${snap.id}`) && m.content?.includes(t('status.videoFailed')))) return prev;
+              onSaveMessage?.(failMsg);
+              return [...prev, failMsg];
+            });
           }
         } catch { /* ignore */ }
       }

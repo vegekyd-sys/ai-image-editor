@@ -46,6 +46,40 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_failed_video') {
+    sendJson(200, {
+      id: 'run_failed_video',
+      project_id: 'project-auto-1',
+      status: 'failed',
+      incomplete: false,
+      output: [{
+        id: 'out_video_failed',
+        type: 'video',
+        status: 'failed',
+        task_id: 'task-unified-blocked',
+        error: 'Content policy blocked the request',
+        completion_actions: [{
+          label: '改安全点重试',
+          description: '换成更容易通过审核的版本',
+          prompt: '刚才这个视频生成失败了，帮我改安全一点再试。',
+          policy: 'confirm',
+        }],
+      }],
+      result: {
+        videos: [{
+          taskId: 'task-unified-blocked',
+          status: 'failed',
+          completionActions: [{
+            label: '改安全点重试',
+            description: '换成更容易通过审核的版本',
+            prompt: '刚才这个视频生成失败了，帮我改安全一点再试。',
+          }],
+        }],
+      },
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/projects/project-auto-1/media') {
     sendJson(200, {
       projectId: 'project-auto-1',
@@ -142,6 +176,12 @@ async function expectSuccess(args, options) {
   return result;
 }
 
+async function expectFailure(args, options) {
+  const result = await runCli(args, options);
+  assert.notEqual(result.code, 0, `${args.join(' ')} unexpectedly succeeded\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  return result;
+}
+
 try {
   {
     const result = await expectSuccess(['--version']);
@@ -203,6 +243,31 @@ try {
     assert.equal(lines[0].event, 'output.added');
     assert.equal(lines.at(-1).event, 'done');
     assert.equal(lines.at(-1).status, 'completed');
+  }
+
+  {
+    const result = await expectFailure(['responses', 'get', 'run_failed_video', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.status, 'failed');
+    assert.equal(data.output[0].status, 'failed');
+    assert.equal(data.output[0].completion_actions[0].label, '改安全点重试');
+  }
+
+  {
+    const result = await expectFailure(['responses', 'get', 'run_failed_video', '--pick', 'next_steps']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data[0].label, '改安全点重试');
+    assert.equal(data[0].source, 'out_video_failed');
+  }
+
+  {
+    const result = await expectFailure(['responses', 'watch', 'run_failed_video', '--jsonl', '--interval', '1']);
+    const lines = result.stdout.trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(lines[0].event, 'output.added');
+    assert.equal(lines[0].item.status, 'failed');
+    assert.equal(lines[0].item.completion_actions[0].label, '改安全点重试');
+    assert.equal(lines.at(-1).event, 'done');
+    assert.equal(lines.at(-1).status, 'failed');
   }
 
   {

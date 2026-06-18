@@ -6,6 +6,7 @@ import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
+import { buildVideoFailureActions } from '@/lib/artifact-actions'
 
 export const maxDuration = 60
 
@@ -56,6 +57,15 @@ export async function GET(
       }
       // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
       return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
+    }
+    if (videoMeta.status === 'failed') {
+      return NextResponse.json({
+        status: 'failed',
+        snapshotId,
+        imageUrl: snap.image_url || undefined,
+        error: videoMeta.error,
+        completionActions: buildVideoFailureActions(videoMeta),
+      })
     }
 
     if (!videoMeta.taskId) {
@@ -151,6 +161,13 @@ export async function GET(
     if (result.status === 'failed') {
       const { handleVideoFailure } = await import('@/lib/video-lifecycle')
       await handleVideoFailure(snapshotId, result.error)
+      return NextResponse.json({
+        status: 'failed',
+        snapshotId,
+        imageUrl: snap.image_url || undefined,
+        error: result.error,
+        completionActions: buildVideoFailureActions({ ...videoMeta, status: 'failed', error: result.error }),
+      })
     }
 
     return NextResponse.json({ status: result.status, snapshotId, imageUrl: snap.image_url || undefined, error: result.error })

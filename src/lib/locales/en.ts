@@ -82,6 +82,7 @@ const en = {
   'status.videoRendering': 'Video rendering',
   'status.videoRenderingEllipsis': 'Video rendering...',
   'status.videoDone': 'Video generated',
+  'status.videoFailed': 'Video generation failed',
   'status.scriptDone': 'Script ready',
   'status.scriptFailed': 'Script generation failed',
   'status.scriptFailedRetry': 'Script generation failed, please retry',

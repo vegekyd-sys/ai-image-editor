@@ -3,6 +3,7 @@ import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 import { isPermanentUrl } from '@/lib/supabase/storage';
+import { buildVideoFailureActions } from '@/lib/artifact-actions';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
 
@@ -271,6 +272,7 @@ export async function GET(
             } else if (videoMeta.status === 'failed') {
               v.status = 'failed';
               v.error = videoMeta.error;
+              v.completion_actions = buildVideoFailureActions(videoMeta);
             } else if (videoMeta.status === 'processing' && videoMeta.taskId) {
               // Actively poll provider API
               try {
@@ -330,6 +332,7 @@ export async function GET(
                   await handleVideoFailure(v.snapshot_id, pollResult.error);
                   v.status = 'failed';
                   v.error = pollResult.error;
+                  v.completion_actions = buildVideoFailureActions({ ...videoMeta, status: 'failed', error: pollResult.error });
                 } else {
                   v.status = 'rendering';
                   if (videoMeta.createdAt) {
@@ -346,6 +349,9 @@ export async function GET(
               v.status = videoMeta.status === 'processing' ? 'rendering' : videoMeta.status;
               if (Array.isArray(videoMeta.completionActions) && videoMeta.completionActions.length) {
                 v.completion_actions = videoMeta.completionActions;
+              }
+              if (videoMeta.status === 'failed') {
+                v.completion_actions = buildVideoFailureActions(videoMeta);
               }
             }
             return;
@@ -468,7 +474,12 @@ export async function GET(
     const hasPendingArtifacts = [...videoItems, ...musicItems].some(
       o => o.status === 'queued' || o.status === 'rendering'
     );
-    const effectiveStatus = (agentDone && hasPendingArtifacts) ? 'in_progress' : run.status;
+    const hasFailedArtifacts = [...videoItems, ...musicItems].some(
+      o => o.status === 'failed'
+    );
+    const effectiveStatus = agentDone && hasPendingArtifacts
+      ? 'in_progress'
+      : (agentDone && run.status === 'completed' && hasFailedArtifacts ? 'failed' : run.status);
     const incomplete = effectiveStatus === 'in_progress' || effectiveStatus === 'queued';
 
     // Suggest poll interval based on state

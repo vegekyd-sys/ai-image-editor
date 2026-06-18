@@ -9,7 +9,7 @@ import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
 import { createProject } from '@/lib/createProject'
 import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
-import { serializeCompletionActions } from '@/lib/artifact-actions'
+import { buildVideoFailureActions, serializeCompletionActions } from '@/lib/artifact-actions'
 import { dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe'
 
 export default function ProjectPage() {
@@ -232,6 +232,22 @@ export default function ProjectPage() {
           id: `video-action-${snap.id}`,
           role: 'assistant',
           content: `🎬 视频已生成\n${snap.videoMeta!.videoUrl}\nsnap:${snap.id}\n${actionLines}`,
+          timestamp: Date.now(),
+        })
+      }
+
+      const failedVideos = snapshots.filter(s =>
+        s.type === 'video' &&
+        s.videoMeta?.status === 'failed'
+      )
+      for (const snap of failedVideos) {
+        if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
+        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta))
+        const reason = snap.videoMeta?.error ? `\n${snap.videoMeta.error}` : ''
+        messages.push({
+          id: `video-failed-${snap.id}`,
+          role: 'assistant',
+          content: `⚠️ 视频生成失败${reason}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
           timestamp: Date.now(),
         })
       }
