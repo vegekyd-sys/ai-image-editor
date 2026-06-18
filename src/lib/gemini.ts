@@ -1483,6 +1483,9 @@ Important:
 - If there are multiple plausible places, say multiple_candidates and include the strongest window.
 - If the match is weak, say uncertain instead of pretending.
 - Ground your answer in concrete visual evidence: subject pose, object positions, background layout, camera angle, lighting, and motion state.
+- Some videos reuse very similar visual layouts across time. Do not locate using static appearance alone.
+- Compare time-specific details: motion phase, object positions, animation progress, camera movement, subject pose, lighting changes, and any visible timeline/player time if present.
+- Do not choose the opening frame or 0s just because the broad scene matches. If repeated visuals make the exact moment ambiguous, return multiple_candidates or lower confidence.
 - Use natural visual judgment. Do not overfit to accidental compression noise.
 ${userHint}
 

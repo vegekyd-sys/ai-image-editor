@@ -76,26 +76,49 @@ For a frame captured by `preview_frame`:
 
 Interpret the result:
 
-- `located` with confidence >= 0.65: proceed.
+- `located` with confidence >= 0.65: proceed only after the evidence includes
+  time-specific details, not just broad scene similarity.
 - `multiple_candidates`: use the strongest timestamp/window, then verify with
   `preview_frame`.
 - `uncertain` or confidence < 0.65: use the FFmpeg fallback below.
 - `not_found`: ask for a clearer screenshot or confirm the source video.
 
-## Step 3 - FFmpeg Fallback for Low Confidence
+High confidence is not enough when several moments look broadly similar. If the
+evidence sounds generic, if the returned timestamp is near 0s for a later-looking
+frame, or if the video reuses similar layouts across time, run the local visual
+cross-check below.
 
-Use this only when `analyze_video(mode:"locate_frame")` is weak or ambiguous.
+## Step 3 - Local Visual Cross-Check
+
+Use this when `analyze_video(mode:"locate_frame")` is weak, ambiguous, or
+overconfident on visually similar moments.
 
 Read `skills/video-ffmpeg-lab/SKILL.md` before the first `run_code` call.
 
 Use `run_code({ runtime: "node", media_refs: [media_index] })` to:
 
 - probe the video,
-- extract candidate frames every 0.5s or 1s,
+- extract candidate frames every 0.5s, or every 0.25s around a likely window,
+- compare the screenshot against candidate frames when it is an exact or near
+  exact frame capture,
 - optionally build a contact sheet,
 - save the contact sheet or candidate frames to workspace outputs.
 
-Then compare the screenshot with those candidates visually, or call
+Decision rule:
+
+- If the screenshot is a real frame capture and the best visual match is strong,
+  isolated in time, and disagrees with `analyze_video`, prefer that timestamp
+  even when `analyze_video` returned high confidence.
+- A low visual distance is not enough by itself. If many near-identical matches
+  span several seconds or more, treat the visual match as ambiguous; use it only
+  as support evidence and ask for confirmation or keep the AI/user timestamp.
+- If the screenshot includes player controls or UI chrome, crop/ignore the UI
+  before comparing when possible. If not, use the visual search only as support
+  evidence and rely on `preview_frame` for final confirmation.
+- If the best visual match strongly disagrees with `analyze_video`, use the
+  visual match timestamp and verify it with `preview_frame`.
+
+Then compare the screenshot with the best candidates visually, or call
 `analyze_video(mode:"locate_frame")` again on a smaller candidate segment.
 
 Do not spend many turns on perfect matching. If two candidates are plausible,
@@ -103,7 +126,8 @@ ask the user which one is the frame they meant.
 
 ## Step 4 - Build the Edit Window
 
-Start from the located timestamp.
+Start from the verified timestamp: the `analyze_video` timestamp, unless the
+local visual cross-check overrode it.
 
 Default window:
 
@@ -111,9 +135,11 @@ Default window:
 - Kling: at least 5 seconds, centered on the timestamp when possible
 - clamp to the source video boundaries
 
-If the returned `window` is usable, treat it as the visual evidence window, then
-expand it to the selected model minimum before generation. Keep it small after
-that; for local repair, 4-5 seconds is usually enough.
+If the returned `window` is usable and agrees with the verified timestamp, treat
+it as the visual evidence window, then expand it to the selected model minimum
+before generation. If the local visual cross-check overrode the timestamp, ignore
+the old `analyze_video.window` and center the window on the verified timestamp.
+Keep it small after that; for local repair, 4-5 seconds is usually enough.
 
 If the screenshot is near a hard scene cut, keep the window inside that scene.
 Use `preview_frame` at the middle of the proposed window to verify it contains
@@ -156,6 +182,10 @@ Use the `segment.mp4` workspace output as the single video reference:
   replacement duration. If the generated patch is longer than the window, trim it
   to the replacement duration before concatenating. Never append the full patch
   clip after `before.mp4`; the final duration should match the original video.
+- Prefer source media markers over workspace URLs in the action prompt. Say
+  `原视频 <<<media_N>>>`, `replaceStart`, `replaceEnd`, and
+  `replacementDuration`. Do not say only "`before.mp4` URL is ..."; that makes
+  the next agent rediscover the source and often causes retries.
 
 Example action:
 
@@ -178,9 +208,20 @@ and rewrite the call so that only the segment clip is passed.
 
 ## Step 7 - Assemble Back Into the Full Video
 
-When the patch clip finishes, use `run_code({ runtime: "node" })` to concatenate:
+When the patch clip finishes, use one `run_code({ runtime: "node" })` call with
+`media_refs` for the original source video and the generated patch video.
 
-`before.mp4 + patch.mp4 + after.mp4`
+Preferred assembly graph:
+
+- cut original `0 -> replaceStart`,
+- trim/fit patch to `replacementDuration`,
+- cut original `replaceEnd -> sourceEnd`,
+- concatenate `before + fittedPatch + after`,
+- preserve the original audio bed unless the user asked for new audio.
+
+Do not rely on `before.mp4` / `after.mp4` filenames from an earlier turn unless
+they are exact workspace outputs returned in the current tool history. The stable
+handoff is original media index + patch media index + numeric replace window.
 
 Do not directly stream-copy concatenate provider output. First normalize every
 video leg to the original video's width, height, fps, SAR, and pixel format. A
@@ -198,6 +239,11 @@ Export H.264/AAC/yuv420p with `-movflags +faststart`.
 Publish only the final full MP4 to the timeline:
 
 `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: 1 })`
+
+Do not call both `write_file({ fromLastRunCode: true })` and
+`write_file({ fromWorkspaceOutputs: true })` for the same final MP4. Pick one
+publish path, preferably `fromWorkspaceOutputs` for FFmpeg outputs, so the same
+video is not added twice.
 
 Do not publish intermediate chunks unless the user asks.
 
