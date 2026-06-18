@@ -51,7 +51,7 @@
          </BuildableReference>
       </BuildableProductRunnable>
       <StoreKitConfigurationFileReference
-         identifier = "../App/MakaronLocal.storekit">
+         identifier = "../../../App/MakaronLocal.storekit">
       </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction
