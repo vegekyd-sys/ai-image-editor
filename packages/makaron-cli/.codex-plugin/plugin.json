@@ -1,6 +1,6 @@
 {
   "name": "makaron-cli",
-  "version": "0.7.3",
+  "version": "0.9.0",
   "description": "AI image editing, video generation, and music creation via CLI. Agents can self-register, create projects, and produce creative media.",
   "displayName": "Makaron",
   "shortDescription": "AI image/video/music creation from the terminal",
