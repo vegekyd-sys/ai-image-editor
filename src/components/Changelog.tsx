@@ -8,6 +8,23 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-18',
+    en: { title: 'Fix Just One Moment in a Video', items: [
+      'See one awkward shot in an otherwise good video? Send a screenshot and tell Makaron what should change.',
+      'Makaron will focus on that moment instead of asking you to regenerate the whole clip from scratch.',
+      'You can say things like "make this frame Paris" or "the hand looks wrong here" — no exact timestamp required.',
+      'After the new piece is ready, Makaron shows the next step to place it back into the full video.',
+      'This makes video revision feel closer to photo editing: point at the problem, fix only that part, keep the rest.',
+    ]},
+    zh: { title: '只修视频里不满意的那一瞬间', items: [
+      '一条视频整体都不错，只是某个画面不对？现在可以直接发截屏，告诉 Makaron 想怎么改。',
+      '不用整条视频从头生成；Makaron 会把注意力放在这个画面附近，只重做这一小段。',
+      '你可以像平时说话一样描述："这帧换成巴黎"、"这里手有点怪"、"大概这一秒不对"。',
+      '新片段生成完成后，Makaron 会继续提示如何把它放回完整视频里。',
+      '视频修改开始更像修图：指出问题，只改局部，保留其他已经满意的部分。',
+    ]},
+  },
+  {
     date: '2026-06-07',
     en: { title: 'Voice Writing & Video Cuts', items: [
       'Makaron can now draft from spoken video: it listens to uploaded clips and turns speech into editing context.',
