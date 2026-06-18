@@ -941,16 +941,18 @@ if (command === '--version' || command === '-v' || command === 'version') {
   let useStream = false;
   let background = false;
   let jsonOutput = false;
+  let activeSkill = undefined;
   let videoModel = undefined;
   let preferredModel = undefined;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--help' || args[i] === '-h') {
-      console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--stream] [--background|-b] [--json] "your message"');
+      console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--skill <name>] [--stream] [--background|-b] [--json] "your message"');
       process.exit(0);
     }
     else if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else if (args[i] === '--video' && args[i + 1]) chatVideos.push(args[++i]);
+    else if (args[i] === '--skill' && args[i + 1]) activeSkill = args[++i];
     else if (args[i] === '--stream') useStream = true;
     else if (args[i] === '--background' || args[i] === '-b') background = true;
     else if (args[i] === '--json') jsonOutput = true;
@@ -960,7 +962,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
   }
   const prompt = promptParts.join(' ');
   if (!prompt) {
-    console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--stream] [--background|-b] [--json] "your message"');
+    console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--skill <name>] [--stream] [--background|-b] [--json] "your message"');
     process.exit(1);
   }
   // Split images into URLs vs local files
@@ -1040,7 +1042,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
   }
 
   // Upload videos to project timeline (via /api/projects/create with videoUrls)
-  let finalPrompt = prompt;
+  let finalPrompt = activeSkill ? `[Active skill: ${activeSkill}]\n${prompt}` : prompt;
   if (chatVideos.length > 0) {
     // Upload local files via signed URL (no size limit, works with API key auth)
     const uploadedVideoUrls = [...prevalidatedVideoUrlList];
@@ -1084,7 +1086,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
 
     // Inject hint so Agent knows videos are available
     const hint = `[User uploaded ${chatVideos.length === 1 ? 'a video' : `${chatVideos.length} videos`}. Use analyze_video to understand the content.]`;
-    finalPrompt = `${prompt}\n\n${hint}`;
+    finalPrompt = `${finalPrompt}\n\n${hint}`;
   }
 
   if (useStream) {

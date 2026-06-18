@@ -89,6 +89,9 @@ The Agent streams its response in real-time:
 ```bash
 # Add extra reference images to the project before chatting
 npx makaron-cli chat --project <id> --image ref.jpg "use this style"
+
+# Guide Agent with a specific built-in skill
+npx makaron-cli chat --project <id> --image screenshot.png --skill video-segment-edit "fix the moment shown in this screenshot"
 ```
 
 After the Agent finishes, the CLI automatically polls for any pending video/music tasks until they complete.
@@ -151,8 +154,22 @@ npx makaron-cli list   # verify it works
 | Text-to-image | "generate a cyberpunk cityscape" (on empty project) |
 | Video from image | "create a 5 second video" |
 | Video with script | "make a video: camera slowly zooms in while leaves fall" |
+| Screenshot-guided video repair | `--skill video-segment-edit "this frame looks wrong; fix only this moment"` |
 | Background music | "add calm piano music" |
 | Design/motion graphics | "create an Instagram story with animated text" |
+
+### Screenshot-guided video repair
+
+Use the `video-segment-edit` skill when a video is mostly good but one moment needs a local fix. Attach the screenshot as an image and point to the source video already on the project timeline:
+
+```bash
+npx makaron-cli chat --project <id> \
+  --image screenshot.png \
+  --skill video-segment-edit \
+  "@4 this frame should be Paris, keep the same style and only fix this moment"
+```
+
+If the repair creates a replacement clip, the CLI prints a `Next steps` command for putting it back into the full video.
 
 ### Output parsing
 

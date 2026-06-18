@@ -50,6 +50,20 @@ If the source video is ambiguous, ask one short question: "是要改 @几 这个
 If the screenshot is missing and the user only says "这里", ask for the screenshot
 or timestamp.
 
+## CLI / Headless Guidance
+
+In CLI usage, users may call:
+
+`makaron chat --project <id> --image screenshot.png --skill video-segment-edit "@4 这帧换成巴黎，只改这一小段"`
+
+Treat `--skill video-segment-edit` as equivalent to the CUI skill picker. Do not
+explain the skill mechanism to the user. If the screenshot is missing, say:
+"把那一帧截图作为 --image 传进来，或者告诉我具体秒数。"
+
+When a generated patch clip finishes, rely on `completion_actions` so the CLI can
+print the exact next `makaron chat --project ...` command. Keep that action
+human-readable and include the original media marker plus numeric replace window.
+
 ## Step 1 - Resolve the Frame Anchor
 
 If the user provides a screenshot image, use it as the anchor directly.
