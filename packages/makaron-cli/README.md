@@ -348,6 +348,7 @@ send_message "All done!"
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.
 - Always use `chat` as the primary interface — even for single image edits.
 - `edit`/`video`/`music` are fallback tools for when `chat` is unavailable or you need raw model access without project context.
+- The CLI checks npm for updates at most once per day and prints update notices to stderr. Set `MAKARON_DISABLE_UPDATE_CHECK=1` to disable it.
 
 ## Admin: Skill Marketplace Operations
 

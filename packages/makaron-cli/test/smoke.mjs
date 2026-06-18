@@ -123,6 +123,7 @@ function runCli(args, options = {}) {
         MAKARON_URL: baseUrl,
         MAKARON_APP_URL: 'https://app.example',
         MAKARON_API_KEY: options.apiKey === false ? '' : 'mk_test_smoke',
+        MAKARON_DISABLE_UPDATE_CHECK: '1',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });

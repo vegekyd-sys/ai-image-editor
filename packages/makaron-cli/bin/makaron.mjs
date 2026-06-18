@@ -19,9 +19,13 @@ import { execFileSync } from 'child_process';
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const AUTH_FILE = path.join(process.env.HOME || '~', '.makaron', 'auth.json');
+const UPDATE_CHECK_FILE = path.join(process.env.HOME || '~', '.makaron', 'update-check.json');
 const DEFAULT_URL = 'https://www.makaron.app';
 const BASE_URL = process.env.MAKARON_URL || DEFAULT_URL;
 const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
+const NPM_PACKAGE_NAME = 'makaron-cli';
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_CHECK_TIMEOUT_MS = 400;
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -47,6 +51,84 @@ function getCliVersion() {
   } catch {
     return '0.0.0';
   }
+}
+
+function compareVersions(a, b) {
+  const parse = (version) => String(version || '')
+    .split('-')[0]
+    .split('.')
+    .map(part => Number.parseInt(part, 10) || 0);
+  const left = parse(a);
+  const right = parse(b);
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const diff = (left[i] || 0) - (right[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+function readUpdateCache() {
+  try {
+    return JSON.parse(fs.readFileSync(UPDATE_CHECK_FILE, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeUpdateCache(data) {
+  try {
+    const dir = path.dirname(UPDATE_CHECK_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(UPDATE_CHECK_FILE, JSON.stringify(data, null, 2));
+  } catch { /* best effort */ }
+}
+
+function shouldCheckForUpdates(command, args) {
+  if (!command || command === '--version' || command === '-v' || command === 'version') return false;
+  if (args.includes('--help') || args.includes('-h')) return false;
+  if (args.includes('--json') || args.includes('--jsonl') || args.includes('--pick')) return false;
+  if (process.env.CI || process.env.NO_UPDATE_NOTIFIER || process.env.MAKARON_DISABLE_UPDATE_CHECK) return false;
+  return true;
+}
+
+async function maybeNotifyUpdate(command, args) {
+  if (!shouldCheckForUpdates(command, args)) return;
+  const currentVersion = getCliVersion();
+  const now = Date.now();
+  const cache = readUpdateCache();
+  if (cache?.checkedAt && now - cache.checkedAt < UPDATE_CHECK_INTERVAL_MS) {
+    if (cache.latestVersion && compareVersions(cache.latestVersion, currentVersion) > 0) {
+      printUpdateNotice(currentVersion, cache.latestVersion);
+    }
+    return;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPDATE_CHECK_TIMEOUT_MS);
+  try {
+    const res = await fetch(`https://registry.npmjs.org/${NPM_PACKAGE_NAME}/latest`, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const latestVersion = data?.version;
+    if (!latestVersion) return;
+    writeUpdateCache({ checkedAt: now, latestVersion });
+    if (compareVersions(latestVersion, currentVersion) > 0) {
+      printUpdateNotice(currentVersion, latestVersion);
+    }
+  } catch {
+    writeUpdateCache({ checkedAt: now, latestVersion: cache?.latestVersion || currentVersion });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function printUpdateNotice(currentVersion, latestVersion) {
+  process.stderr.write(`\nUpdate available: makaron-cli ${currentVersion} -> ${latestVersion}\n`);
+  process.stderr.write('Run: npm install -g makaron-cli@latest\n');
+  process.stderr.write('Or:  npx makaron-cli@latest ...\n\n');
 }
 
 function formatSeconds(seconds) {
@@ -958,6 +1040,8 @@ async function analyzeVideoCli(baseUrl, headers, rawVideo, questionParts) {
 
 const args = process.argv.slice(2);
 const command = args[0];
+
+await maybeNotifyUpdate(command, args);
 
 if (command === '--version' || command === '-v' || command === 'version') {
   console.log(getCliVersion());
