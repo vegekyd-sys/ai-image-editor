@@ -153,6 +153,34 @@ function normalizeRunResponse(data) {
   return data;
 }
 
+function collectCompletionActions(data) {
+  const items = [];
+  const add = (action, source) => {
+    if (!action?.label || !action?.prompt) return;
+    const key = `${action.label}\n${action.prompt}`;
+    if (items.some(i => i.key === key)) return;
+    items.push({ key, label: action.label, prompt: action.prompt, description: action.description, source });
+  };
+  for (const out of data.output || []) {
+    for (const action of out.completion_actions || out.completionActions || []) add(action, out.id || out.task_id);
+  }
+  for (const video of data.result?.videos || []) {
+    for (const action of video.completion_actions || video.completionActions || []) add(action, video.taskId);
+  }
+  return items;
+}
+
+function printCompletionActions(data) {
+  const projectId = data.projectId || data.project_id;
+  const actions = collectCompletionActions(data);
+  if (!projectId || actions.length === 0) return;
+  process.stderr.write('\nNext steps:\n');
+  for (const action of actions) {
+    process.stderr.write(`• ${action.label}${action.description ? ` — ${action.description}` : ''}\n`);
+    process.stderr.write(`  makaron chat --project ${projectId} ${JSON.stringify(action.prompt)}\n`);
+  }
+}
+
 // ─── SSE Consumer ────────────────────────────────────────────────────────────
 
 async function abortRun(baseUrl, headers, runId) {
@@ -399,6 +427,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
             else if (v.status === 'failed') process.stderr.write(`🎬  Video ${v.taskId}: failed${v.error ? ` — ${v.error}` : ''}\n`);
             else process.stderr.write(`🎬  Video ${v.taskId}: ${v.status || 'submitted'}\n`);
           }
+          printCompletionActions(data);
           for (const m of data.result.music || []) {
             if (m.audioUrl) process.stderr.write(`🎵  Music: ${m.audioUrl}\n`);
             else process.stderr.write(`🎵  Music ${m.taskId}: ${m.status || 'submitted'}\n`);
@@ -426,6 +455,12 @@ function applyPick(data, field) {
     case 'design_urls': return (data.output || []).filter(o => o.type === 'design' && o.url).map(o => o.url);
     case 'first_music_url': return data.output?.find(o => o.type === 'music' && o.url)?.url || null;
     case 'music_urls': return (data.output || []).filter(o => o.type === 'music' && o.url).map(o => o.url);
+    case 'next_steps': return collectCompletionActions(data).map(action => ({
+      label: action.label,
+      prompt: action.prompt,
+      description: action.description,
+      source: action.source,
+    }));
     case 'project_url': return data.project_url || data.projectUrl || null;
     case 'output': return data.output || [];
     case 'text': return data.output?.find(o => o.type === 'text')?.content || null;

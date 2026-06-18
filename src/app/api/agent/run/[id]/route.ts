@@ -97,7 +97,7 @@ export async function GET(
     // Legacy result (backward compat)
     const legacyImages: { snapshotId: string; imageUrl: string }[] = [];
     const legacyDesigns: Record<string, unknown>[] = [];
-    const legacyVideos: { taskId: string; prompt?: string; status?: string; videoUrl?: string }[] = [];
+    const legacyVideos: { taskId: string; prompt?: string; status?: string; videoUrl?: string; completionActions?: unknown }[] = [];
     const legacyMusic: { taskId: string; status?: string; audioUrl?: string }[] = [];
 
     for (const e of rawEvents ?? []) {
@@ -222,6 +222,9 @@ export async function GET(
                 v.url = videoMeta.videoUrl;
                 if (videoMeta.width) v.width = videoMeta.width;
                 if (videoMeta.height) v.height = videoMeta.height;
+                if (Array.isArray(videoMeta.completionActions) && videoMeta.completionActions.length) {
+                  v.completion_actions = videoMeta.completionActions;
+                }
               } else {
                 // Still persisting to Storage — tell CLI to keep polling
                 v.status = 'rendering';
@@ -305,6 +308,9 @@ export async function GET(
               }
             } else {
               v.status = videoMeta.status === 'processing' ? 'rendering' : videoMeta.status;
+              if (Array.isArray(videoMeta.completionActions) && videoMeta.completionActions.length) {
+                v.completion_actions = videoMeta.completionActions;
+              }
             }
             return;
           }
@@ -409,6 +415,7 @@ export async function GET(
       if (lv) {
         if (v.status) lv.status = v.status as string;
         if (v.url) lv.videoUrl = v.url as string;
+        if (v.completion_actions) lv.completionActions = v.completion_actions;
       }
     }
     for (const m of musicItems) {

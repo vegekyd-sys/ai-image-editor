@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -43,9 +43,12 @@ import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 import { formatVideoMediaSpec } from '@/lib/media-aspect';
+import { serializeCompletionActions } from '@/lib/artifact-actions';
+import { appendSnapshotDedupeVideo, dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe';
 
 export type { AnimationState } from '@/lib/editor/types';
 
+type EditorCompletionAction = ArtifactCompletionAction;
 
 interface EditorProps {
   projectId?: string;
@@ -111,7 +114,7 @@ export default function Editor({
   const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
-  const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>(dedupeVideoSnapshots(initialSnapshots ?? []));
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEditing, setIsEditing] = useState(false);
@@ -263,17 +266,18 @@ export default function Editor({
     if (!initialSnapshots?.length) return;
     setSnapshots(prev => {
       const existingIds = new Set(prev.map(s => s.id));
-      const newItems = initialSnapshots.filter(s => !existingIds.has(s.id));
+      const incomingSnapshots = dedupeVideoSnapshots(initialSnapshots);
+      const newItems = incomingSnapshots.filter(s => !existingIds.has(s.id));
 
       if (newItems.length > 0) {
         // New snapshots found
-        if (isAgentActive) return [...prev, ...newItems];
-        return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
+        if (isAgentActive) return dedupeVideoSnapshots([...prev, ...newItems]);
+        return incomingSnapshots.length > prev.length ? incomingSnapshots : dedupeVideoSnapshots([...prev, ...newItems]);
       }
 
       // Same IDs — merge updates from Supabase into cached snapshots.
       // This handles: cache shows stale data, then Supabase loads fresh values.
-      const incoming = new Map(initialSnapshots.map(s => [s.id, s]));
+      const incoming = new Map(incomingSnapshots.map(s => [s.id, s]));
       let changed = false;
       const merged = prev.map(s => {
         const fresh = incoming.get(s.id);
@@ -292,9 +296,13 @@ export default function Editor({
           updated = { ...updated, design: fresh.design };
           changed = true;
         }
+        if (fresh.videoMeta && JSON.stringify(fresh.videoMeta) !== JSON.stringify(updated.videoMeta)) {
+          updated = { ...updated, videoMeta: fresh.videoMeta };
+          changed = true;
+        }
         return updated;
       });
-      return changed ? merged : prev;
+      return changed ? dedupeVideoSnapshots(merged) : prev;
     });
   }, [initialSnapshots, isAgentActive]);
 
@@ -2466,10 +2474,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               : prev
             );
             // Add CUI message for completed video (dedup against latest state)
+            const actionLines = serializeCompletionActions(snap.videoMeta?.completionActions);
             const videoMsg: Message = {
               id: generateId(),
               role: 'assistant',
-              content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}`,
+              content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
               timestamp: Date.now(),
             };
             setMessages(prev => {
@@ -2652,7 +2661,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             createdAt: new Date().toISOString(),
           },
         };
-        setSnapshots(prev => [...prev, newSnap]);
+        setSnapshots(prev => appendSnapshotDedupeVideo(prev, newSnap));
       }
       // Close the creation card
 
@@ -2841,6 +2850,16 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     const audioUrl = track.audioUrl;
     const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current Remotion composition via run_code patch with runtime: "composition". If no active composition, read the latest composition code from workspace first.`;
     handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
+  }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
+
+  const handleArtifactAction = useCallback((action: EditorCompletionAction) => {
+    if (!projectId) { console.warn('artifact action skipped: no projectId'); return; }
+    if (isAgentActive) { console.warn('artifact action skipped: agent busy'); return; }
+    if (!action.prompt) return;
+    console.log(`▶️ [artifact-action] ${action.label}`);
+    addMessage('user', action.label);
+    handleAgentRequest(action.prompt, undefined, undefined, { silent: true })
+      .catch(e => console.warn('Artifact action failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
@@ -3049,6 +3068,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     },
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
+    onArtifactAction: handleArtifactAction,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
     skills: availableSkills,
     selectedSkill,

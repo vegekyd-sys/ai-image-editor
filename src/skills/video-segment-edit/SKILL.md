@@ -148,6 +148,18 @@ Use the `segment.mp4` workspace output as the single video reference:
 - If the project already contains the original video as `<<<media_N>>>`, do not
   include that marker in the generation script for the patch. It will route the
   full video into the model again.
+- Add `completion_actions` to the `generate_animation` call so the finished
+  patch clip shows a clear next step in CUI/CLI. The default action should tell
+  the agent to merge the generated patch back into the source video at the edit
+  window, preserving original audio and publishing the full MP4.
+- The action prompt must include the exact replace start, replace end, and
+  replacement duration. If the generated patch is longer than the window, trim it
+  to the replacement duration before concatenating. Never append the full patch
+  clip after `before.mp4`; the final duration should match the original video.
+
+Example action:
+
+`completion_actions: [{ label: "拼回完整视频", description: "替换 7.5-12.5 秒，输出仍是原视频时长", prompt: "把刚生成的新片段作为 patch，拼回原视频 <<<media_2>>> 的 7.5-12.5 秒。replaceStart=7.5，replaceEnd=12.5，replacementDuration=5.0。先把 patch 精确裁/对齐到 5.0 秒，再用 FFmpeg 替换原视频这一段；保留原视频音频和前后内容，最终 MP4 总时长必须等于原视频时长，不要把 patch 直接追加到 before.mp4 后面。", policy: "confirm" }]`
 
 Script style:
 

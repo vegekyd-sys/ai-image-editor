@@ -155,6 +155,13 @@ export interface VideoTranscript {
   createdAt?: string;
 }
 
+export interface ArtifactCompletionAction {
+  label: string;
+  prompt: string;
+  description?: string;
+  policy?: 'confirm' | 'auto';
+}
+
 export interface VideoMeta {
   taskId: string | null;
   videoUrl: string | null;
@@ -173,6 +180,7 @@ export interface VideoMeta {
   creditsCharged?: number;
   refunded?: boolean;
   transcript?: VideoTranscript;
+  completionActions?: ArtifactCompletionAction[];
 }
 
 
