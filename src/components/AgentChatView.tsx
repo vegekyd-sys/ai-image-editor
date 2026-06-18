@@ -185,7 +185,6 @@ function CompletionActionCard({ actions, disabled, onAction }: {
           ))}
         </div>
       </div>
-      <div style={{ height: 2, background: 'rgba(192,38,211,0.35)' }} />
     </div>
   );
 }
