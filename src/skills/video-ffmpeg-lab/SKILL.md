@@ -20,13 +20,14 @@ This is intentionally a recipe skill, not a narrow tool. You have a full Node ba
 - `require('fs')`, `require('path')`, `require('child_process')`
 - `ffmpegPath`
 - `ffprobePath` may be empty in deployment. Prefer `probeVideo(path)` instead of calling ffprobe directly.
-- `inputFiles` from `media_refs`
-- `ctx.media` with real `.mp4` URLs for video snapshots
+- `workspaceDir`
+- `inputFiles` from `media_refs` and `workspace_paths`, already resolved to local files
+- `ctx.media` with video metadata for timeline snapshots
 - `outputDir` for generated files
 - `saveOutput(localPath, workspacePath?, contentType?)`
 - `probeVideo(path)`
 
-Tool call rule: when FFmpeg work references timeline media such as `<<<media_1>>>`, `<<<media_2>>>`, or "current video", the `run_code` tool call must include those 1-based indices as `media_refs`. Example: split `<<<media_1>>>` → `media_refs: [1]`. Inside code, use `inputFiles[N].inputPath`. Do not start by hardcoding `ctx.media[N].url`; use it only for metadata or diagnostics. If the task is simply cutting two existing timeline videos together, stop and use Remotion composition instead.
+Tool call rule: when FFmpeg work references timeline media such as `<<<media_1>>>`, `<<<media_2>>>`, or "current video", the `run_code` tool call must include those 1-based indices as `media_refs`. Example: split `<<<media_1>>>` → `media_refs: [1]`. When FFmpeg work references files from workspace, pass exact paths as `workspace_paths`. Inside code, use `inputFiles[N].inputPath`. Do not download or hardcode `ctx.media[N].url`; use it only for metadata or diagnostics. If the task is simply cutting two existing timeline videos together, stop and use Remotion composition instead.
 
 Transcript rule: when the requested cut point depends on spoken words, subtitles, dialogue, or "the part where they say ...", call `transcribe_audio` before `run_code`. Use the returned utterance/word timestamps as the segment plan; do not guess speech timing from `analyze_video`.
 
@@ -124,7 +125,7 @@ return { type: 'files', outputs };
 
 After a split run, treat the returned files as a manifest. Do not run the same split again unless the source video, model limit, or requested cut points changed.
 
-For direct split/trim/export requests, `type: "files"` contains the MP4 deliverables. Do not stop at workspace URLs: immediately publish those exported MP4s to the timeline with one `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })` call so the user can see them. Do not start a second `run_code` just to re-open a file from the previous temp directory.
+For direct split/trim/export requests, `type: "files"` contains the MP4 deliverables. Do not stop at workspace paths: immediately publish those exported MP4s to the timeline with one `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })` call so the user can see them. Do not start a second `run_code` just to re-open a file from the previous temp directory; reuse workspace paths with `workspace_paths` when more assembly is needed.
 
 ## Final file assembly pattern
 

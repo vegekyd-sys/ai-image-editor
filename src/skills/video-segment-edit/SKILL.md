@@ -178,7 +178,9 @@ Call `generate_animation` on the segment clip only.
 
 Use the `segment.mp4` workspace output as the single video reference:
 
-- Prefer `video_ref_url: "<segment.mp4 storageUrl>"` and
+- For `generate_animation`, use the provider URL returned next to the
+  `segment.mp4` workspace path as `video_ref_url`; this URL is only for the
+  external video model, not for FFmpeg or workspace reuse. Use
   `video_ref_type: "feature"`.
 - The script should say "参考刚裁出的 segment.mp4 这一段..." in normal language.
 - Do not reference the original full video, `before.mp4`, or `after.mp4` in
@@ -196,7 +198,7 @@ Use the `segment.mp4` workspace output as the single video reference:
   replacement duration. If the generated patch is longer than the window, trim it
   to the replacement duration before concatenating. Never append the full patch
   clip after `before.mp4`; the final duration should match the original video.
-- Prefer source media markers over workspace URLs in the action prompt. Say
+- Prefer source media markers and workspace paths over raw URLs in the action prompt. Say
   `原视频 <<<media_N>>>`, `replaceStart`, `replaceEnd`, and
   `replacementDuration`. Do not say only "`before.mp4` URL is ..."; that makes
   the next agent rediscover the source and often causes retries.

@@ -65,7 +65,7 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain("read_file('prompts/image.md')")
     expect(generateImageTool).toContain('media_index')
     expect(generateImageTool).toContain('reference_media_indices')
-    expect(generateImageTool).toContain('`image_refs` is only for external workspace URLs')
+    expect(generateImageTool).toContain('`image_refs` is only for workspace asset provider URLs')
     expect(generateImageTool).toContain("Context Mode for `model='openai'`")
   })
 

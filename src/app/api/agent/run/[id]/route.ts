@@ -6,6 +6,42 @@ import { isPermanentUrl } from '@/lib/supabase/storage';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
 
+function normalizeMediaIdentity(value?: string | null): string | null {
+  if (!value) return null;
+  return value.split('#')[0].split('?')[0];
+}
+
+function dedupeVideoOutputs<T extends Record<string, unknown>>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (item.type !== 'video') {
+      result.push(item);
+      continue;
+    }
+    const url = normalizeMediaIdentity(typeof item.url === 'string' ? item.url : undefined);
+    const taskId = typeof item.task_id === 'string' ? item.task_id : undefined;
+    const key = url ? `url:${url}` : (taskId ? `task:${taskId}` : '');
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+function dedupeLegacyVideos<T extends { videoUrl?: string; taskId?: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    const url = normalizeMediaIdentity(item.videoUrl);
+    const key = url ? `url:${url}` : (item.taskId ? `task:${item.taskId}` : '');
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
 async function pollVideoProvider(taskId: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
   const isEvolink = taskId.startsWith('task-unified-');
   const isSeedance = taskId.startsWith('cgt-');
@@ -443,10 +479,13 @@ export async function GET(
     }
 
     // Legacy result
+    const finalOutput = dedupeVideoOutputs(output);
+    const finalLegacyVideos = dedupeLegacyVideos(legacyVideos);
+
     const result = {
       images: legacyImages,
       designs: legacyDesigns,
-      videos: legacyVideos,
+      videos: finalLegacyVideos,
       music: legacyMusic,
       text: textContent.trim(),
       ...(errorMsg ? { error: errorMsg } : {}),
@@ -481,7 +520,7 @@ export async function GET(
       completed_at: run.ended_at,
       ...(nextPollAfterMs ? { next_poll_after_ms: nextPollAfterMs } : {}),
       ...(agentDone && hasPendingArtifacts ? { agent_status: 'completed' } : {}),
-      output,
+      output: finalOutput,
       eventCount: eventCount ?? 0,
       result, // legacy
       ...(errorMsg ? { error: { code: 'agent_error', message: errorMsg } } : {}),

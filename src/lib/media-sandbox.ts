@@ -24,6 +24,8 @@ export interface MediaItem {
   index: number
   kind: 'image' | 'video'
   url: string
+  workspacePath?: string
+  localPath?: string
   posterUrl?: string
   description?: string
   duration?: number | null
@@ -36,6 +38,7 @@ export interface MediaInputFile extends MediaItem {
   inputPath: string
   fileName: string
   contentType: string
+  source: 'workspace' | 'cache' | 'data-url' | 'remote'
 }
 
 export interface MediaSandboxOutput {
@@ -62,6 +65,7 @@ interface RunNodeMediaCodeOptions {
   code: string
   description?: string
   mediaRefs?: number[]
+  workspacePaths?: string[]
   mediaItems: MediaItem[]
   projectId: string
   userId: string
@@ -105,6 +109,99 @@ async function downloadFile(url: string, filePath: string, timeoutMs = INPUT_DOW
     throw e
   } finally {
     clearTimeout(timer)
+  }
+}
+
+function urlCacheKey(input: string): string {
+  return crypto.createHash('sha1').update(input).digest('hex').slice(0, 16)
+}
+
+function mediaExtension(item: MediaItem): string {
+  if (item.url.startsWith('data:')) return item.kind === 'video' ? '.mp4' : '.jpg'
+  const cleanUrl = item.url.split('?')[0] || item.url
+  const ext = path.extname(cleanUrl)
+  if (ext) return ext
+  return item.kind === 'video' ? '.mp4' : '.jpg'
+}
+
+async function resolveMediaInputFile(options: {
+  item: MediaItem
+  ref: number
+  projectId: string
+  userId: string
+  supabase?: SupabaseClient
+}): Promise<MediaInputFile> {
+  const { item, ref } = options
+  const ext = mediaExtension(item)
+  const fileName = `media_${ref}${ext}`
+
+  if (item.workspacePath && options.supabase) {
+    const handle = await workspace.resolveWorkspaceFile(item.workspacePath, options.supabase, options.userId, { hydrate: true })
+    if (handle?.localPath && handle.localAvailable) {
+      console.log(`[media-sandbox] input <<<media_${ref}>>> workspace local ${item.workspacePath}`)
+      return {
+        ...item,
+        inputPath: handle.localPath,
+        localPath: handle.localPath,
+        fileName,
+        contentType: handle.contentType || guessContentType(fileName),
+        source: 'workspace',
+      }
+    }
+  }
+
+  const cachePath = `${options.projectId}/media-inputs/${fileName.replace(ext, '')}-${urlCacheKey(item.url)}${ext}`
+  const targetPath = workspace.getLocalWorkspacePath(options.userId, cachePath)
+  if (existsSync(targetPath)) {
+    console.log(`[media-sandbox] input <<<media_${ref}>>> cache local ${cachePath}`)
+    return {
+      ...item,
+      inputPath: targetPath,
+      localPath: targetPath,
+      workspacePath: item.workspacePath || cachePath,
+      fileName,
+      contentType: guessContentType(fileName),
+      source: item.url.startsWith('data:') ? 'data-url' : 'cache',
+    }
+  }
+
+  const downloaded = await downloadFile(item.url, targetPath)
+  console.log(`[media-sandbox] input <<<media_${ref}>>> hydrated ${cachePath}`)
+  return {
+    ...item,
+    inputPath: downloaded.filePath,
+    localPath: downloaded.filePath,
+    workspacePath: item.workspacePath || cachePath,
+    fileName,
+    contentType: downloaded.contentType || guessContentType(fileName),
+    source: item.url.startsWith('data:') ? 'data-url' : 'remote',
+  }
+}
+
+async function resolveWorkspaceInputFile(options: {
+  workspacePath: string
+  index: number
+  userId: string
+  supabase?: SupabaseClient
+}): Promise<MediaInputFile> {
+  if (!options.supabase) throw new Error('Workspace file inputs require workspace access.')
+  const handle = await workspace.resolveWorkspaceFile(options.workspacePath, options.supabase, options.userId, { hydrate: true })
+  if (!handle?.localPath || !handle.localAvailable) {
+    throw new Error(`Workspace file is not available: ${options.workspacePath}`)
+  }
+  const fileName = path.basename(options.workspacePath)
+  const kind = handle.contentType.startsWith('video/') ? 'video' : 'image'
+  console.log(`[media-sandbox] input workspace local ${options.workspacePath}`)
+  return {
+    index: options.index,
+    kind,
+    url: handle.storageUrl || '',
+    workspacePath: handle.path,
+    localPath: handle.localPath,
+    inputPath: handle.localPath,
+    fileName,
+    contentType: handle.contentType,
+    source: 'workspace',
   }
 }
 
@@ -243,11 +340,13 @@ export async function buildMediaItems(options: {
       const videoMeta = snap.video_meta as Record<string, unknown> | null
       const isVideo = snap.type === 'video'
       const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : ''
+      const videoPath = typeof videoMeta?.videoPath === 'string' ? videoMeta.videoPath : undefined
       const imageUrl = typeof snap.image_url === 'string' ? snap.image_url : fallback[i]?.url || ''
       return {
         index: i + 1,
         kind: isVideo ? 'video' : 'image',
         url: isVideo ? (videoUrl || imageUrl) : imageUrl,
+        workspacePath: isVideo ? videoPath : undefined,
         posterUrl: isVideo ? imageUrl : undefined,
         description: typeof snap.description === 'string' ? snap.description : undefined,
         duration: typeof videoMeta?.duration === 'number' ? videoMeta.duration : undefined,
@@ -266,33 +365,42 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
   const ffmpegPath = await findFfmpeg()
   const ffprobePath = await findFfprobe().catch(() => '')
   const workDir = await mkdtemp(path.join(tmpdir(), 'makaron-media-'))
+  const workspaceDir = workspace.getLocalWorkspaceRoot(options.userId)
   const inputDir = path.join(workDir, 'inputs')
   const outputDir = path.join(workDir, 'outputs')
   await mkdir(inputDir, { recursive: true })
   await mkdir(outputDir, { recursive: true })
+  await mkdir(workspaceDir, { recursive: true })
 
   const selectedRefs = options.mediaRefs?.length
     ? options.mediaRefs
     : []
+  const selectedWorkspacePaths = options.workspacePaths?.length ? options.workspacePaths : []
   const inputFiles: MediaInputFile[] = []
 
   try {
-    const downloadedInputs = await mapWithConcurrency(selectedRefs, INPUT_DOWNLOAD_CONCURRENCY, async (ref) => {
+    const resolvedInputs = await mapWithConcurrency(selectedRefs, INPUT_DOWNLOAD_CONCURRENCY, async (ref) => {
       const item = options.mediaItems[ref - 1]
       if (!item?.url) throw new Error(`No media found at <<<media_${ref}>>>`)
-      const cleanUrl = item.url.split('?')[0] || item.url
-      const ext = path.extname(cleanUrl) || (item.kind === 'video' ? '.mp4' : '.jpg')
-      const fileName = `media_${ref}${ext}`
-      const targetPath = path.join(inputDir, fileName)
-      const downloaded = await downloadFile(item.url, targetPath)
-      return {
-        ...item,
-        inputPath: downloaded.filePath,
-        fileName,
-        contentType: downloaded.contentType || guessContentType(fileName),
-      }
+      return resolveMediaInputFile({
+        item,
+        ref,
+        projectId: options.projectId,
+        userId: options.userId,
+        supabase: options.supabase,
+      })
     })
-    inputFiles.push(...downloadedInputs)
+    inputFiles.push(...resolvedInputs)
+
+    const resolvedWorkspaceInputs = await mapWithConcurrency(selectedWorkspacePaths, INPUT_DOWNLOAD_CONCURRENCY, async (workspacePath, index) => {
+      return resolveWorkspaceInputFile({
+        workspacePath,
+        index: selectedRefs.length + index + 1,
+        userId: options.userId,
+        supabase: options.supabase,
+      })
+    })
+    inputFiles.push(...resolvedWorkspaceInputs)
 
     const saveToWorkspace = async (workspacePath: string, content: string | Buffer, contentType?: string) => {
       if (!options.supabase || !options.userId) return { success: false, error: 'No Supabase connection' }
@@ -315,8 +423,10 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       description: options.description || '',
       media: options.mediaItems,
       mediaRefs: selectedRefs,
+      workspacePaths: selectedWorkspacePaths,
       inputFiles,
-      paths: { workDir, inputDir, outputDir },
+      paths: { workDir, inputDir, outputDir, workspaceDir },
+      workspaceDir,
       ffmpegPath,
       ffprobePath,
     }
@@ -335,6 +445,7 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       'outputDir',
       'inputDir',
       'workDir',
+      'workspaceDir',
       'ffmpegPath',
       'ffprobePath',
       'downloadFile',
@@ -359,6 +470,7 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
         outputDir,
         inputDir,
         workDir,
+        workspaceDir,
         ffmpegPath,
         ffprobePath,
         downloadFile,
