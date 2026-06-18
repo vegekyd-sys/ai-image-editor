@@ -14,6 +14,8 @@ import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
+import { splitCompletionActions } from '@/lib/artifact-actions';
+import type { ArtifactCompletionAction as CompletionAction } from '@/types';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
 const videoArCache = new Map<string, string>();
@@ -142,6 +144,47 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function CompletionActionCard({ actions, disabled, onAction }: {
+  actions: CompletionAction[];
+  disabled?: boolean;
+  onAction?: (action: CompletionAction) => void;
+}) {
+  if (!actions.length) return null;
+  return (
+    <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.055)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="px-3.5 py-3">
+        <div className="text-[11px] font-medium mb-1" style={{ color: 'rgba(255,255,255,0.42)' }}>
+          下一步
+        </div>
+        <div className="flex flex-col gap-2">
+          {actions.map((action, idx) => (
+            <div key={`${action.label}-${idx}`} className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.82)' }}>
+                  {action.label}
+                </div>
+                {action.description && (
+                  <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.34)' }}>
+                    {action.description}
+                  </div>
+                )}
+              </div>
+              <button
+                disabled={disabled}
+                onClick={() => onAction?.(action)}
+                className="px-3 py-1.5 rounded-full flex-shrink-0 active:scale-95 transition-transform text-[11px] font-semibold disabled:opacity-40"
+                style={{ background: 'rgba(192,38,211,0.20)', color: '#f0abfc', border: '1px solid rgba(192,38,211,0.28)' }}
+              >
+                继续
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -479,6 +522,8 @@ interface AgentChatViewProps {
   onDesignPoster?: (messageId: string, posterDataUrl: string) => void;
   /** User selected a music track from MusicCard */
   onMusicSelect?: (track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }) => void;
+  /** User selected a next-step action from an artifact card */
+  onArtifactAction?: (action: CompletionAction) => void;
   /** Background task running (music generation, video rendering) — show status even when agent is idle */
   hasBackgroundTask?: boolean;
   /** Open CreditPopup when credits are exhausted */
@@ -522,6 +567,7 @@ export default function AgentChatView({
   onVideoTap,
   onDesignPoster,
   onMusicSelect,
+  onArtifactAction,
   hasBackgroundTask = false,
   onOpenCreditPopup,
   projectId,
@@ -1146,35 +1192,43 @@ export default function AgentChatView({
                         </div>
                       </details>
                     ))}
-                    {msg.content && !msg.content.startsWith('[CREDITS_EXHAUSTED:') && (
-                      <div className="markdown-body">
-                        <MarkdownBlock
-                          key={msg.id}
-                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
-                          isPanel={isPanel}
-                          snapshots={snapshots}
-                          onNavigateToSnapshot={onNavigateToSnapshot}
-                          onViewFile={setViewingFile}
-                        />
-                        {/* Inline video — natural aspect ratio, play button, tap to navigate */}
-                        {(() => {
-                          if (msg.design || msg.image) return null;
-                          if (msg.content.includes('```')) return null;
-                          const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
-                          if (!mp4Match) return null;
-                          const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
-                          const snapIdMatch = msg.content.match(/snap:([a-f0-9-]+)/);
-                          const navId = snapIdMatch?.[1] || animIdMatch?.[1];
-                          const videoSnap = navId ? snapshots.find(s => s.id === navId) : null;
-                          const vw = videoSnap?.videoMeta?.width || 0;
-                          const vh = videoSnap?.videoMeta?.height || 0;
-                          const videoAR = vw && vh ? `${vw}/${vh}` : '9/16';
-                          const posterUrl = videoSnap?.imageUrl || videoSnap?.image || undefined;
-                          const snapIdx = videoSnap ? snapshots.indexOf(videoSnap) + 1 : undefined;
-                          return <InlineCuiVideo url={mp4Match[0]} aspectRatio={videoAR} posterUrl={posterUrl} snapIndex={snapIdx} isDesktop={isPanel} onNavigate={(e, time) => handleInlineVideoClick(e, mp4Match[0], navId, time)} />;
-                        })()}
-                      </div>
-                    )}
+                    {msg.content && !msg.content.startsWith('[CREDITS_EXHAUSTED:') && (() => {
+                      const { text: visibleText, actions } = splitCompletionActions(msg.content);
+                      return (
+                        <div className="markdown-body">
+                          <MarkdownBlock
+                            key={msg.id}
+                            text={fixMarkdownDelimiters(visibleText.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
+                            isPanel={isPanel}
+                            snapshots={snapshots}
+                            onNavigateToSnapshot={onNavigateToSnapshot}
+                            onViewFile={setViewingFile}
+                          />
+                          {/* Inline video — natural aspect ratio, play button, tap to navigate */}
+                          {(() => {
+                            if (msg.design || msg.image) return null;
+                            if (msg.content.includes('```')) return null;
+                            const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
+                            if (!mp4Match) return null;
+                            const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
+                            const snapIdMatch = msg.content.match(/snap:([a-f0-9-]+)/);
+                            const navId = snapIdMatch?.[1] || animIdMatch?.[1];
+                            const videoSnap = navId ? snapshots.find(s => s.id === navId) : null;
+                            const vw = videoSnap?.videoMeta?.width || 0;
+                            const vh = videoSnap?.videoMeta?.height || 0;
+                            const videoAR = vw && vh ? `${vw}/${vh}` : '9/16';
+                            const posterUrl = videoSnap?.imageUrl || videoSnap?.image || undefined;
+                            const snapIdx = videoSnap ? snapshots.indexOf(videoSnap) + 1 : undefined;
+                            return <InlineCuiVideo url={mp4Match[0]} aspectRatio={videoAR} posterUrl={posterUrl} snapIndex={snapIdx} isDesktop={isPanel} onNavigate={(e, time) => handleInlineVideoClick(e, mp4Match[0], navId, time)} />;
+                          })()}
+                          <CompletionActionCard
+                            actions={actions}
+                            disabled={readOnly || isAgentActive}
+                            onAction={onArtifactAction}
+                          />
+                        </div>
+                      );
+                    })()}
 
                     {/* Typing dots — show when active, last message, no content yet */}
                     {!msg.content && isAgentActive && idx === messages.length - 1 && (

@@ -9,6 +9,8 @@ import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
 import { createProject } from '@/lib/createProject'
 import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
+import { buildVideoFailureActions, serializeCompletionActions } from '@/lib/artifact-actions'
+import { dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe'
 
 export default function ProjectPage() {
   const { user, loading: authLoading } = useAuth()
@@ -27,7 +29,7 @@ export default function ProjectPage() {
   // Sync cache for instant render (snapshots + messages from IDB/memory)
   const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
-    return sync ? sync.snapshots as Snapshot[] : null
+    return sync ? dedupeVideoSnapshots(sync.snapshots as Snapshot[]) : null
   })
   const [initialMessages, setInitialMessages] = useState<Message[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
@@ -160,7 +162,7 @@ export default function ProjectPage() {
       const patched = await patchFromImageCache(cached.snapshots as Snapshot[])
       if (cancelled || shownRef.current) return
       shownRef.current = true
-      setInitialSnapshots(patched)
+      setInitialSnapshots(dedupeVideoSnapshots(patched))
       setInitialMessages(cached.messages as Message[])
       setInitialTitle(cached.title)
       setLoaded(true)
@@ -216,12 +218,46 @@ export default function ProjectPage() {
         }
       }
 
-      console.log(`⏱️ [page] music query done: ${(performance.now() - pageT0).toFixed(0)}ms`)
+      const completedActionVideos = snapshots.filter(s =>
+        s.type === 'video' &&
+        s.videoMeta?.status === 'completed' &&
+        s.videoMeta.videoUrl &&
+        s.videoMeta.completionActions?.length
+      )
+      for (const snap of completedActionVideos) {
+        if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
+        const actionLines = serializeCompletionActions(snap.videoMeta?.completionActions)
+        if (!actionLines) continue
+        messages.push({
+          id: `video-action-${snap.id}`,
+          role: 'assistant',
+          content: `🎬 视频已生成\n${snap.videoMeta!.videoUrl}\nsnap:${snap.id}\n${actionLines}`,
+          timestamp: Date.now(),
+        })
+      }
+
+      const failedVideos = snapshots.filter(s =>
+        s.type === 'video' &&
+        s.videoMeta?.status === 'failed'
+      )
+      for (const snap of failedVideos) {
+        if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
+        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta))
+        const reason = snap.videoMeta?.error ? `\n${snap.videoMeta.error}` : ''
+        messages.push({
+          id: `video-failed-${snap.id}`,
+          role: 'assistant',
+          content: `⚠️ 视频生成失败${reason}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
+          timestamp: Date.now(),
+        })
+      }
+
+      console.log(`⏱️ [page] music/video restore done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       const patched = await patchFromImageCache(snapshots)
       console.log(`⏱️ [page] patchFromImageCache done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       shownRef.current = true
-      setInitialSnapshots(patched)
+      setInitialSnapshots(dedupeVideoSnapshots(patched))
       setInitialMessages(messages)
       setInitialTitle(title)
       setLoaded(true)

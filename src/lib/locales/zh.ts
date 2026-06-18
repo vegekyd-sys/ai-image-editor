@@ -82,6 +82,7 @@ const zh = {
   'status.videoRendering': '视频渲染中',
   'status.videoRenderingEllipsis': '视频渲染中...',
   'status.videoDone': '视频已生成',
+  'status.videoFailed': '视频生成失败',
   'status.scriptDone': '脚本已就绪',
   'status.scriptFailed': '脚本生成失败',
   'status.scriptFailedRetry': '脚本生成失败，请重试',

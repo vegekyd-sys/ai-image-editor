@@ -3,8 +3,45 @@ import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 import { isPermanentUrl } from '@/lib/supabase/storage';
+import { buildVideoFailureActions } from '@/lib/artifact-actions';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
+
+function normalizeMediaIdentity(value?: string | null): string | null {
+  if (!value) return null;
+  return value.split('#')[0].split('?')[0];
+}
+
+function dedupeVideoOutputs<T extends Record<string, unknown>>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (item.type !== 'video') {
+      result.push(item);
+      continue;
+    }
+    const url = normalizeMediaIdentity(typeof item.url === 'string' ? item.url : undefined);
+    const taskId = typeof item.task_id === 'string' ? item.task_id : undefined;
+    const key = url ? `url:${url}` : (taskId ? `task:${taskId}` : '');
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+function dedupeLegacyVideos<T extends { videoUrl?: string; taskId?: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    const url = normalizeMediaIdentity(item.videoUrl);
+    const key = url ? `url:${url}` : (item.taskId ? `task:${item.taskId}` : '');
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
 
 async function pollVideoProvider(taskId: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
   const isEvolink = taskId.startsWith('task-unified-');
@@ -97,7 +134,7 @@ export async function GET(
     // Legacy result (backward compat)
     const legacyImages: { snapshotId: string; imageUrl: string }[] = [];
     const legacyDesigns: Record<string, unknown>[] = [];
-    const legacyVideos: { taskId: string; prompt?: string; status?: string; videoUrl?: string }[] = [];
+    const legacyVideos: { taskId: string; prompt?: string; status?: string; videoUrl?: string; completionActions?: unknown }[] = [];
     const legacyMusic: { taskId: string; status?: string; audioUrl?: string }[] = [];
 
     for (const e of rawEvents ?? []) {
@@ -222,6 +259,9 @@ export async function GET(
                 v.url = videoMeta.videoUrl;
                 if (videoMeta.width) v.width = videoMeta.width;
                 if (videoMeta.height) v.height = videoMeta.height;
+                if (Array.isArray(videoMeta.completionActions) && videoMeta.completionActions.length) {
+                  v.completion_actions = videoMeta.completionActions;
+                }
               } else {
                 // Still persisting to Storage — tell CLI to keep polling
                 v.status = 'rendering';
@@ -232,6 +272,7 @@ export async function GET(
             } else if (videoMeta.status === 'failed') {
               v.status = 'failed';
               v.error = videoMeta.error;
+              v.completion_actions = buildVideoFailureActions(videoMeta);
             } else if (videoMeta.status === 'processing' && videoMeta.taskId) {
               // Actively poll provider API
               try {
@@ -291,6 +332,7 @@ export async function GET(
                   await handleVideoFailure(v.snapshot_id, pollResult.error);
                   v.status = 'failed';
                   v.error = pollResult.error;
+                  v.completion_actions = buildVideoFailureActions({ ...videoMeta, status: 'failed', error: pollResult.error });
                 } else {
                   v.status = 'rendering';
                   if (videoMeta.createdAt) {
@@ -305,6 +347,12 @@ export async function GET(
               }
             } else {
               v.status = videoMeta.status === 'processing' ? 'rendering' : videoMeta.status;
+              if (Array.isArray(videoMeta.completionActions) && videoMeta.completionActions.length) {
+                v.completion_actions = videoMeta.completionActions;
+              }
+              if (videoMeta.status === 'failed') {
+                v.completion_actions = buildVideoFailureActions(videoMeta);
+              }
             }
             return;
           }
@@ -409,6 +457,7 @@ export async function GET(
       if (lv) {
         if (v.status) lv.status = v.status as string;
         if (v.url) lv.videoUrl = v.url as string;
+        if (v.completion_actions) lv.completionActions = v.completion_actions;
       }
     }
     for (const m of musicItems) {
@@ -425,7 +474,12 @@ export async function GET(
     const hasPendingArtifacts = [...videoItems, ...musicItems].some(
       o => o.status === 'queued' || o.status === 'rendering'
     );
-    const effectiveStatus = (agentDone && hasPendingArtifacts) ? 'in_progress' : run.status;
+    const hasFailedArtifacts = [...videoItems, ...musicItems].some(
+      o => o.status === 'failed'
+    );
+    const effectiveStatus = agentDone && hasPendingArtifacts
+      ? 'in_progress'
+      : (agentDone && run.status === 'completed' && hasFailedArtifacts ? 'failed' : run.status);
     const incomplete = effectiveStatus === 'in_progress' || effectiveStatus === 'queued';
 
     // Suggest poll interval based on state
@@ -436,10 +490,13 @@ export async function GET(
     }
 
     // Legacy result
+    const finalOutput = dedupeVideoOutputs(output);
+    const finalLegacyVideos = dedupeLegacyVideos(legacyVideos);
+
     const result = {
       images: legacyImages,
       designs: legacyDesigns,
-      videos: legacyVideos,
+      videos: finalLegacyVideos,
       music: legacyMusic,
       text: textContent.trim(),
       ...(errorMsg ? { error: errorMsg } : {}),
@@ -474,7 +531,7 @@ export async function GET(
       completed_at: run.ended_at,
       ...(nextPollAfterMs ? { next_poll_after_ms: nextPollAfterMs } : {}),
       ...(agentDone && hasPendingArtifacts ? { agent_status: 'completed' } : {}),
-      output,
+      output: finalOutput,
       eventCount: eventCount ?? 0,
       result, // legacy
       ...(errorMsg ? { error: { code: 'agent_error', message: errorMsg } } : {}),

@@ -25,6 +25,7 @@ import { toPublicStorageUrl } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
+import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -436,6 +437,36 @@ async function resolveVideoUrlForMediaIndex(ctx: AgentContext, mediaIndex: numbe
   return { idx: v.idx, error: `No real video file found at <<<media_${mediaIndex}>>>. Use preview_frame only for Remotion compositions with design_path.` };
 }
 
+async function resolveImageForAnalysis(ctx: AgentContext, options: {
+  imageUrl?: string;
+  imageMediaIndex?: number;
+  workspacePath?: string;
+}): Promise<{ image?: string; source?: string; error?: string }> {
+  if (options.imageUrl) {
+    if (/^(https?:\/\/|data:image\/)/i.test(options.imageUrl)) {
+      return { image: options.imageUrl, source: options.imageUrl.startsWith('data:') ? 'data-url' : 'image_url' };
+    }
+    return { error: 'image_url must be an http(s) URL or data:image URL.' };
+  }
+
+  if (options.workspacePath) {
+    const result = await workspace.readFile(options.workspacePath, ctx.supabase, ctx.userId);
+    if (!result) return { error: `Workspace image not found: ${options.workspacePath}` };
+    if (!result.contentType.startsWith('image/')) return { error: `Workspace file is not an image: ${options.workspacePath}` };
+    return { image: result.storageUrl || result.content, source: options.workspacePath };
+  }
+
+  if (options.imageMediaIndex !== undefined) {
+    const v = validateImageIndex(ctx.snapshotImages, options.imageMediaIndex);
+    if (v.error) return { error: v.error };
+    const image = ctx.snapshotImages[v.idx];
+    if (isVideoUrl(image)) return { error: `<<<media_${options.imageMediaIndex}>>> is a video. Use an image snapshot, screenshot URL, or workspace_path as the frame anchor.` };
+    return { image, source: `<<<media_${options.imageMediaIndex}>>>` };
+  }
+
+  return { error: 'locate_frame requires image_url, image_media_index, or workspace_path.' };
+}
+
 function isImageContentType(contentType?: string): boolean {
   return !!contentType?.startsWith('image/');
 }
@@ -566,6 +597,11 @@ function outputDisplayName(output: WorkspaceMediaOutputDraft, fallback: string):
   return file.replace(/[-_]+/g, ' ').trim() || fallback;
 }
 
+function normalizeMediaIdentity(value?: string | null): string | null {
+  if (!value) return null;
+  return value.split('#')[0].split('?')[0];
+}
+
 async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
   workspacePaths?: string[];
   limit?: number;
@@ -688,6 +724,19 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
 
   const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
   const published: Array<{ snapshotId: string; type: 'image' | 'video'; url: string; path?: string }> = [];
+  const { data: existingVideoSnaps } = await ctx.supabase
+    .from('snapshots')
+    .select('id, video_meta')
+    .eq('project_id', ctx.projectId)
+    .eq('type', 'video');
+  const existingVideoIdentities = new Map<string, string>();
+  for (const snap of existingVideoSnaps || []) {
+    const meta = (snap as { id: string; video_meta?: { videoUrl?: string; videoPath?: string } }).video_meta;
+    const urlKey = normalizeMediaIdentity(meta?.videoUrl);
+    const pathKey = normalizeMediaIdentity(meta?.videoPath);
+    if (urlKey) existingVideoIdentities.set(`url:${urlKey}`, (snap as { id: string }).id);
+    if (pathKey) existingVideoIdentities.set(`path:${pathKey}`, (snap as { id: string }).id);
+  }
 
   for (const [index, output] of outputs.entries()) {
     const snapshotId = crypto.randomUUID();
@@ -696,6 +745,14 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
     const description = outputDisplayName(output, `${options.name || 'workspace output'} ${index + 1}`);
 
     if (isVideoContentType(output.contentType)) {
+      const urlKey = normalizeMediaIdentity(output.storageUrl);
+      const pathKey = normalizeMediaIdentity(output.path);
+      const duplicateSnapshotId = (urlKey && existingVideoIdentities.get(`url:${urlKey}`)) || (pathKey && existingVideoIdentities.get(`path:${pathKey}`));
+      if (duplicateSnapshotId) {
+        published.push({ snapshotId: duplicateSnapshotId, type: 'video', url: output.storageUrl, path: output.path });
+        continue;
+      }
+
       const taskId = `workspace-${snapshotId}`;
       const videoMeta: VideoMeta = {
         taskId,
@@ -730,6 +787,8 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
       if (!ctx.pendingVideoSnapshots) ctx.pendingVideoSnapshots = [];
       ctx.pendingVideoSnapshots.push({ snapshotId, taskId, videoMeta });
       published.push({ snapshotId, type: 'video', url: output.storageUrl, path: output.path });
+      if (urlKey) existingVideoIdentities.set(`url:${urlKey}`, snapshotId);
+      if (pathKey) existingVideoIdentities.set(`path:${pathKey}`, snapshotId);
     } else if (isImageContentType(output.contentType)) {
       const { error } = await ctx.supabase.from('snapshots').insert({
         id: snapshotId,
@@ -969,6 +1028,7 @@ Hard constraints:
 - Video edit duration lock: when editing timeline videos up to 15 seconds total, output duration should match the combined source duration from Media Index, clamped to the selected model range. For SeeDance, clamp to 4-15s; if combined source duration is under 4s, set \`duration: 4\`. For long-video pipelines, duration lock applies per FFmpeg chunk.
 - Default model follows app selection, usually SeeDance. If the user asks for cheaper, prefer Kling only when capability and duration allow it.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
+- If the generated video is an intermediate artifact, pass \`completion_actions\` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos. Total duration must be 15 seconds or less.'),
@@ -981,8 +1041,14 @@ Hard constraints:
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
         character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),
+        completion_actions: z.array(z.object({
+          label: z.string().describe('Short button label shown when the video finishes, e.g. "合入原视频" or "加入剪辑".'),
+          prompt: z.string().describe('Natural-language instruction to send back to the agent if the user chooses this action. Include concrete media refs/timing when known. For video segment replacement, include replaceStart, replaceEnd, replacementDuration, and require trimming/fitting the patch before FFmpeg merge so the final duration matches the original.'),
+          description: z.string().optional().describe('One short line explaining what this action will do.'),
+          policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
+        })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, media_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, media_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, completion_actions }) => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1050,6 +1116,12 @@ Hard constraints:
             }
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
+          if (video_ref_url && autoVideoUrls.length > 0) {
+            return {
+              success: false as const,
+              message: 'Do not mix video_ref_url with timeline video markers in one generation. For a local segment edit, pass only the extracted segment as video_ref_url and remove any <<<media_N>>> markers that point to timeline videos.',
+            };
+          }
           const referenceVideoDuration = totalVideoRefDuration > 0 ? totalVideoRefDuration : undefined;
           const modelError = validateVideoModelRequest({
             model: videoModel,
@@ -1078,7 +1150,7 @@ Hard constraints:
             videoModel,
             videoUrl: video_ref_url,
             videoReferType: video_ref_type,
-            videoUrls: allVideoUrls.length ? allVideoUrls : undefined,
+            videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
             referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             keepOriginalSound: keep_original_sound,
@@ -1112,6 +1184,14 @@ Hard constraints:
             duration: effectiveDuration || null,
             model: videoModel as import('@/types').VideoModel,
             createdAt: new Date().toISOString(),
+            ...(completion_actions?.length ? {
+              completionActions: completion_actions.slice(0, 4).map(action => ({
+                label: action.label,
+                prompt: action.prompt,
+                ...(action.description ? { description: action.description } : {}),
+                policy: action.policy || 'confirm',
+              })),
+            } : {}),
           };
 
           const { data: sortData } = await supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
@@ -1197,12 +1277,20 @@ Hard constraints:
     }),
 
     analyze_video: tool({
-      description: 'Analyze video content using Gemini vision. Returns scene descriptions, actions, pacing, audio cues. Use for understanding what happens in a video. For checking a specific raw video or Remotion frame visually, use preview_frame with timestamp/frame instead.',
+      description: `Analyze video content using Gemini vision.
+
+Default mode describes scenes/actions/pacing/audio cues in a timeline video.
+
+Use mode="locate_frame" when the user provides a screenshot/frame and you need to find where that frame appears in a video. This is the primary locator for screenshot-based local video edits. Provide the video as media_index and the screenshot as image_url, image_media_index, or workspace_path. For checking a known timestamp visually, use preview_frame instead.`,
       inputSchema: z.object({
         media_index: z.number().describe('1-based snapshot index of the video to analyze (<<<media_1>>> = 1)'),
-        question: z.string().optional().describe('Specific aspect to focus on (e.g. "what happens at 5s?", "describe the pacing", "what audio/dialogue is there?")'),
+        question: z.string().optional().describe('Specific aspect to focus on. In locate_frame mode, use this for the user note about what is wrong in the screenshot.'),
+        mode: z.enum(['describe', 'locate_frame']).optional().describe('describe = normal video analysis. locate_frame = locate a screenshot inside this video. Default describe.'),
+        image_url: z.string().optional().describe('For locate_frame: screenshot/frame image URL or data:image URL.'),
+        image_media_index: z.number().optional().describe('For locate_frame: 1-based Media Index image snapshot to use as the screenshot/frame anchor.'),
+        workspace_path: z.string().optional().describe('For locate_frame: workspace image path from preview_frame/read_file/list_files, e.g. project/drafts/frame.jpg.'),
       }),
-      execute: async ({ media_index, question }) => {
+      execute: async ({ media_index, question, mode, image_url, image_media_index, workspace_path }) => {
         const v = validateImageIndex(ctx.snapshotImages, media_index);
         if (v.error) return { error: v.error };
 
@@ -1234,9 +1322,28 @@ Hard constraints:
         }
 
         try {
+          if (mode === 'locate_frame') {
+            const image = await resolveImageForAnalysis(ctx, {
+              imageUrl: image_url,
+              imageMediaIndex: image_media_index,
+              workspacePath: workspace_path,
+            });
+            if (image.error || !image.image) return { error: image.error || 'No screenshot image provided for locate_frame.' };
+
+            const { locateFrameInVideoContent } = await import('./gemini');
+            const location = await locateFrameInVideoContent(videoUrl, image.image, question, ctx.userId);
+            return {
+              mode: 'locate_frame',
+              location,
+              media_index,
+              videoUrl,
+              imageSource: image.source,
+            };
+          }
+
           const { analyzeVideoContent } = await import('./gemini');
           const analysis = await analyzeVideoContent(videoUrl, question, ctx.userId);
-          return { analysis, media_index, videoUrl };
+          return { mode: 'describe', analysis, media_index, videoUrl };
         } catch (err) {
           return { error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
         }
@@ -1245,6 +1352,15 @@ Hard constraints:
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        if (output.mode === 'locate_frame') {
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: `Frame location for <<<media_${output.media_index}>>> using ${output.imageSource || 'screenshot'}:\n\n${JSON.stringify(output.location, null, 2)}`,
+            }],
+          };
         }
         return {
           type: 'content' as const,
@@ -1574,17 +1690,21 @@ Parameters:
 
     list_files: tool({
       description: `List files in your workspace. Discover available skills and reference images.
-Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a specific skill.`,
+By default, this lists current-project files plus user-level/built-in files. Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a specific skill, or "<projectId>/media/*" for project media.`,
       inputSchema: z.object({
         pattern: z.string().optional().describe('Glob-like filter: "skills/*", "skills/*/assets/*"'),
       }),
       execute: async ({ pattern }) => {
         const files = await workspace.listFiles(pattern, ctx.supabase, ctx.userId);
+        const scopedFiles = filterWorkspaceFilesForAgentScope(files, ctx.projectId, pattern);
 
-        const result = files.map(f => ({
+        const result = scopedFiles.map(f => ({
           path: f.path,
           type: f.contentType,
           size: f.size,
+          local: f.localAvailable || false,
+          localPath: f.localPath,
+          providerUrl: f.storageUrl,
           builtIn: f.isBuiltIn || false,
         }));
 
@@ -1594,11 +1714,24 @@ Use pattern to filter: "skills/*" for all skills, "skills/enhance/*" for a speci
 
     read_file: tool({
       description: `Read a file from your workspace. For .md files, returns text content. For images, returns the image so you can view it.
-Use this to read skill instructions (SKILL.md), reference images, or your memory.`,
+Use this to read skill instructions (SKILL.md), reference images, or your memory. For videos/audio, returns metadata and a local workspace path; do not read media bytes unless you are explicitly inspecting content.`,
       inputSchema: z.object({
         path: z.string().describe('File path from list_files, e.g. "skills/enhance/SKILL.md" or "skills/makaron-mascot/assets/character-sheet.jpg"'),
       }),
       execute: async ({ path: filePath }) => {
+        const handle = await workspace.resolveWorkspaceFile(filePath, ctx.supabase, ctx.userId, { hydrate: true });
+        if (handle && (handle.contentType.startsWith('video/') || handle.contentType.startsWith('audio/'))) {
+          return {
+            path: handle.path,
+            type: handle.contentType,
+            size: handle.size,
+            storageUrl: handle.storageUrl,
+            localPath: handle.localPath,
+            local: handle.localAvailable,
+            hydrated: handle.hydrated || false,
+          };
+        }
+
         const result = await workspace.readFile(filePath, ctx.supabase, ctx.userId);
         if (!result) return { error: `File not found: ${filePath}` };
 
@@ -1624,6 +1757,13 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
             ],
           };
         }
+        if (output.localPath && (String(output.type || '').startsWith('video/') || String(output.type || '').startsWith('audio/'))) {
+          const status = output.local ? 'available locally' : 'not available locally';
+          return {
+            type: 'content' as const,
+            value: [{ type: 'text' as const, text: `Workspace media: ${output.path}\nType: ${output.type}\nSize: ${output.size ?? 'unknown'} bytes\nLocal path: ${output.localPath || '(none)'}\nStatus: ${status}` }],
+          };
+        }
         return {
           type: 'content' as const,
           value: [{ type: 'text' as const, text: `[${output.path}]\n\n${output.content}` }],
@@ -1643,8 +1783,8 @@ Path is auto-generated from the current project and output type. Just provide a 
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
         fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Composition drafts can publish to timeline; node media chunks should usually be save-only until the final MP4.'),
-        fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns. Only pass exact workspacePaths/storageUrl values returned by run_code/list_files; never guess a workspace URL from a file name.'),
-        workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths or storage URLs to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
+        fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns. Prefer exact workspace paths returned by run_code/list_files; never guess a workspace URL from a file name.'),
+        workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
         limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
         publish: z.boolean().optional().describe('Whether to publish to timeline. Default true. Set false to save workspace output without creating a Snapshot.'),
@@ -1677,7 +1817,7 @@ Path is auto-generated from the current project and output type. Just provide a 
           if (savePath && /\.(mp4|mov|webm|m4v|jpg|jpeg|png|webp|gif|mp3|wav|m4a|aac)$/i.test(savePath)) {
             return {
               success: false,
-              message: 'write_file({ fromLastRunCode: true }) saves the run_code source/publishable draft, not individual binary outputs from type:"files". Use the storageUrl links returned by run_code, or return a single type:"video" final MP4 and publish that.',
+              message: 'write_file({ fromLastRunCode: true }) saves the run_code source/publishable draft, not individual binary outputs from type:"files". Use the workspace paths returned by run_code, or return a single type:"video" final MP4 and publish that.',
             };
           }
           // Auto-generate path. Node/FFmpeg runs save the executable JS; composition runs save JSON payload.
@@ -1822,14 +1962,15 @@ Return exactly one supported shape:
 
 Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
 
-Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; then read \`inputFiles[0].inputPath\`. Do not hardcode Media Index URLs for FFmpeg inputs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
+Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
-        media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the files are downloaded and exposed as inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
+        media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
+        workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }),
-      execute: async ({ code, description: desc, media_refs, runtime }) => {
+      execute: async ({ code, description: desc, media_refs, workspace_paths, runtime }) => {
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         // Store raw code for write_file({ fromLastRunCode: true })
@@ -1858,6 +1999,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             code,
             description: desc,
             mediaRefs: media_refs,
+            workspacePaths: workspace_paths,
             mediaItems,
             projectId: ctx.projectId,
             userId: ctx.userId,
@@ -1899,9 +2041,11 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
             const dur = typeof primary.duration === 'number' ? `, ${primary.duration.toFixed(1)}s` : '';
+            const location = primary.workspacePath || '(workspace path unavailable)';
+            const provider = primary.storageUrl ? `\nProvider URL for model tools only: ${primary.storageUrl}` : '';
             return {
               type: 'text' as const,
-              content: `Node media run complete — final video output ${draftIdx} saved to workspace${dur}: ${primary.storageUrl}\nIf this MP4 is the user-facing result, immediately publish it with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }) before telling the user it is done. If it is only an intermediate model-prep chunk, keep it in workspace.`,
+              content: `Node media run complete — final video output ${draftIdx} saved to workspace${dur}: ${location}${provider}\nIf this MP4 is the user-facing result, immediately publish it with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }) before telling the user it is done. If it is only an intermediate model-prep chunk, keep it in workspace and reuse the workspace path directly for FFmpeg.`,
             };
           }
 
@@ -1916,7 +2060,10 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           }
 
           const outputLinks = mediaResult.outputs
-            .map((o, i) => `${i + 1}. ${o.description ? `${o.description}: ` : ''}${o.storageUrl || o.workspacePath || o.path || '(no path)'}`)
+            .map((o, i) => {
+              const provider = o.storageUrl ? ` (provider URL: ${o.storageUrl})` : '';
+              return `${i + 1}. ${o.description ? `${o.description}: ` : ''}${o.workspacePath || o.path || '(no path)'}${provider}`;
+            })
             .join('\n') || '(none)';
           const outputMessage = `Workspace outputs:\n${outputLinks}`;
           return {

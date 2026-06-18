@@ -19,9 +19,13 @@ import { execFileSync } from 'child_process';
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const AUTH_FILE = path.join(process.env.HOME || '~', '.makaron', 'auth.json');
+const UPDATE_CHECK_FILE = path.join(process.env.HOME || '~', '.makaron', 'update-check.json');
 const DEFAULT_URL = 'https://www.makaron.app';
 const BASE_URL = process.env.MAKARON_URL || DEFAULT_URL;
 const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
+const NPM_PACKAGE_NAME = 'makaron-cli';
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_CHECK_TIMEOUT_MS = 400;
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -47,6 +51,84 @@ function getCliVersion() {
   } catch {
     return '0.0.0';
   }
+}
+
+function compareVersions(a, b) {
+  const parse = (version) => String(version || '')
+    .split('-')[0]
+    .split('.')
+    .map(part => Number.parseInt(part, 10) || 0);
+  const left = parse(a);
+  const right = parse(b);
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const diff = (left[i] || 0) - (right[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+function readUpdateCache() {
+  try {
+    return JSON.parse(fs.readFileSync(UPDATE_CHECK_FILE, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeUpdateCache(data) {
+  try {
+    const dir = path.dirname(UPDATE_CHECK_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(UPDATE_CHECK_FILE, JSON.stringify(data, null, 2));
+  } catch { /* best effort */ }
+}
+
+function shouldCheckForUpdates(command, args) {
+  if (!command || command === '--version' || command === '-v' || command === 'version') return false;
+  if (args.includes('--help') || args.includes('-h')) return false;
+  if (args.includes('--json') || args.includes('--jsonl') || args.includes('--pick')) return false;
+  if (process.env.CI || process.env.NO_UPDATE_NOTIFIER || process.env.MAKARON_DISABLE_UPDATE_CHECK) return false;
+  return true;
+}
+
+async function maybeNotifyUpdate(command, args) {
+  if (!shouldCheckForUpdates(command, args)) return;
+  const currentVersion = getCliVersion();
+  const now = Date.now();
+  const cache = readUpdateCache();
+  if (cache?.checkedAt && now - cache.checkedAt < UPDATE_CHECK_INTERVAL_MS) {
+    if (cache.latestVersion && compareVersions(cache.latestVersion, currentVersion) > 0) {
+      printUpdateNotice(currentVersion, cache.latestVersion);
+    }
+    return;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPDATE_CHECK_TIMEOUT_MS);
+  try {
+    const res = await fetch(`https://registry.npmjs.org/${NPM_PACKAGE_NAME}/latest`, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const latestVersion = data?.version;
+    if (!latestVersion) return;
+    writeUpdateCache({ checkedAt: now, latestVersion });
+    if (compareVersions(latestVersion, currentVersion) > 0) {
+      printUpdateNotice(currentVersion, latestVersion);
+    }
+  } catch {
+    writeUpdateCache({ checkedAt: now, latestVersion: cache?.latestVersion || currentVersion });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function printUpdateNotice(currentVersion, latestVersion) {
+  process.stderr.write(`\nUpdate available: makaron-cli ${currentVersion} -> ${latestVersion}\n`);
+  process.stderr.write('Run: npm install -g makaron-cli@latest\n');
+  process.stderr.write('Or:  npx makaron-cli@latest ...\n\n');
 }
 
 function formatSeconds(seconds) {
@@ -151,6 +233,80 @@ function normalizeRunResponse(data) {
     data.projectUrl = `${APP_URL}/projects/${projectId}`;
   }
   return data;
+}
+
+function collectCompletionActions(data) {
+  const items = [];
+  const add = (action, source) => {
+    if (!action?.label || !action?.prompt) return;
+    const key = `${action.label}\n${action.prompt}`;
+    if (items.some(i => i.key === key)) return;
+    items.push({ key, label: action.label, prompt: action.prompt, description: action.description, source });
+  };
+  for (const out of data.output || []) {
+    for (const action of out.completion_actions || out.completionActions || []) add(action, out.id || out.task_id);
+  }
+  for (const video of data.result?.videos || []) {
+    for (const action of video.completion_actions || video.completionActions || []) add(action, video.taskId);
+  }
+  return items;
+}
+
+function printCompletionActions(data) {
+  const projectId = data.projectId || data.project_id;
+  const actions = collectCompletionActions(data);
+  if (!projectId || actions.length === 0) return;
+  process.stderr.write('\nNext steps:\n');
+  for (const action of actions) {
+    process.stderr.write(`• ${action.label}${action.description ? ` — ${action.description}` : ''}\n`);
+    process.stderr.write(`  makaron chat --project ${projectId} ${JSON.stringify(action.prompt)}\n`);
+  }
+}
+
+function printChatHelp() {
+  console.log(`Makaron chat — create and edit with Makaron Agent
+
+Usage:
+  makaron chat --project <id|auto> [options] "your message"
+
+Options:
+  --project <id|auto>       Project to work in. Use "auto" to create one.
+  --image <file|url>        Attach a reference image or screenshot. Repeatable.
+  --video <file|url>        Attach a video to the project timeline. Repeatable.
+  --model <name>            Preferred image/model route.
+  --video-model <name>      Preferred video model.
+  --background, -b          Submit and print a runId.
+  --json                    Output structured JSON.
+  --stream                  Legacy live SSE stream.
+  --help, -h                Show this help.
+
+What you can ask:
+  Image edit
+    makaron chat --project <id> --image photo.jpg "remove the person in the background"
+
+  Image generation
+    makaron chat --project auto "generate a cinematic poster of a rainy Tokyo alley"
+
+  Video from image or timeline
+    makaron chat --project <id> "make this into a 5 second cinematic video"
+
+  Fix one video moment from a screenshot
+    makaron chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"
+
+  Video cuts and assembly
+    makaron chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"
+
+  Music
+    makaron chat --project <id> "add calm piano background music"
+
+  Motion design
+    makaron chat --project <id> "make an animated Instagram story with this image"
+
+After async generation:
+  The CLI waits for video/music tasks. If the result has a natural next step, it prints:
+    Next steps:
+      makaron chat --project <id> "..."
+`);
 }
 
 // ─── SSE Consumer ────────────────────────────────────────────────────────────
@@ -399,6 +555,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
             else if (v.status === 'failed') process.stderr.write(`🎬  Video ${v.taskId}: failed${v.error ? ` — ${v.error}` : ''}\n`);
             else process.stderr.write(`🎬  Video ${v.taskId}: ${v.status || 'submitted'}\n`);
           }
+          printCompletionActions(data);
           for (const m of data.result.music || []) {
             if (m.audioUrl) process.stderr.write(`🎵  Music: ${m.audioUrl}\n`);
             else process.stderr.write(`🎵  Music ${m.taskId}: ${m.status || 'submitted'}\n`);
@@ -426,6 +583,12 @@ function applyPick(data, field) {
     case 'design_urls': return (data.output || []).filter(o => o.type === 'design' && o.url).map(o => o.url);
     case 'first_music_url': return data.output?.find(o => o.type === 'music' && o.url)?.url || null;
     case 'music_urls': return (data.output || []).filter(o => o.type === 'music' && o.url).map(o => o.url);
+    case 'next_steps': return collectCompletionActions(data).map(action => ({
+      label: action.label,
+      prompt: action.prompt,
+      description: action.description,
+      source: action.source,
+    }));
     case 'project_url': return data.project_url || data.projectUrl || null;
     case 'output': return data.output || [];
     case 'text': return data.output?.find(o => o.type === 'text')?.content || null;
@@ -995,6 +1158,8 @@ function printHelp(topic, subtopic) {
 const args = process.argv.slice(2);
 const command = args[0];
 
+await maybeNotifyUpdate(command, args);
+
 if (!command || command === '--help' || command === '-h' || command === 'help') {
   printRootHelp();
 } else if (hasHelpFlag(args)) {
@@ -1019,7 +1184,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   }
   await createProject(baseUrl, headers, opts);
 } else if (command === 'chat') {
-  const { headers, baseUrl } = getAuth();
+  if (args.includes('--help') || args.includes('-h')) {
+    printChatHelp();
+    process.exit(0);
+  }
   let projectId = null;
   const chatImages = [];
   const chatVideos = [];
@@ -1027,12 +1195,14 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let useStream = false;
   let background = false;
   let jsonOutput = false;
+  let activeSkill = undefined;
   let videoModel = undefined;
   let preferredModel = undefined;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else if (args[i] === '--video' && args[i + 1]) chatVideos.push(args[++i]);
+    else if (args[i] === '--skill' && args[i + 1]) activeSkill = args[++i];
     else if (args[i] === '--stream') useStream = true;
     else if (args[i] === '--background' || args[i] === '-b') background = true;
     else if (args[i] === '--json') jsonOutput = true;
@@ -1042,9 +1212,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   }
   const prompt = promptParts.join(' ');
   if (!prompt) {
-    console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--stream] [--background|-b] [--json] "your message"');
+    console.error('Usage: makaron chat --project <id|auto> [options] "your message"');
+    console.error('Run: makaron chat --help');
     process.exit(1);
   }
+  const { headers, baseUrl } = getAuth();
   // Split images into URLs vs local files
   const imageUrlList = chatImages.filter(p => p.startsWith('http://') || p.startsWith('https://'));
   const imageFileList = chatImages.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
@@ -1122,7 +1294,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   }
 
   // Upload videos to project timeline (via /api/projects/create with videoUrls)
-  let finalPrompt = prompt;
+  let finalPrompt = activeSkill ? `[Active skill: ${activeSkill}]\n${prompt}` : prompt;
   if (chatVideos.length > 0) {
     // Upload local files via signed URL (no size limit, works with API key auth)
     const uploadedVideoUrls = [...prevalidatedVideoUrlList];
@@ -1166,7 +1338,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
     // Inject hint so Agent knows videos are available
     const hint = `[User uploaded ${chatVideos.length === 1 ? 'a video' : `${chatVideos.length} videos`}. Use analyze_video to understand the content.]`;
-    finalPrompt = `${prompt}\n\n${hint}`;
+    finalPrompt = `${finalPrompt}\n\n${hint}`;
   }
 
   if (useStream) {
@@ -1311,7 +1483,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);

@@ -3,6 +3,7 @@ import type { Snapshot, Tip, ProjectAnimation, VideoModel } from '@/types';
 import type { DesignPayload } from '@/types';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
+import { appendSnapshotDedupeVideo } from '@/lib/video-snapshot-dedupe';
 
 /**
  * Context for creating unified agent callbacks.
@@ -349,7 +350,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         type: 'video',
         videoMeta,
       };
-      ctx.setSnapshots(prev => prev.some(s => s.id === snapshotId) ? prev : [...prev, newSnap]);
+      ctx.setSnapshots(prev => appendSnapshotDedupeVideo(prev, newSnap));
       if (ctx.pendingNavigateToVideoRef) ctx.pendingNavigateToVideoRef.current = true;
     },
 

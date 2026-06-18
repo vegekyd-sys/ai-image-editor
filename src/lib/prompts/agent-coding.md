@@ -60,14 +60,14 @@ Composition runtime:
 - `write_file({ fromLastRunCode: true, name: "slug", publish: false })` saves code to workspace without creating a timeline snapshot.
 - `write_file({ fromLastRunCode: true, name: "slug" })` saves and publishes the composition to the timeline.
 - `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: 3 })` publishes recent exported workspace videos to the timeline. Use this immediately after direct FFmpeg requests that create user-facing MP4s, such as "split this into three videos", "cut out this part", "trim/export this clip", or "transcode this video".
-- When using a workspace output in later code, copy the exact `storageUrl` returned by `run_code` or `list_files`. Do not guess a workspace URL from the local filename; node runtime auto-generates timestamped workspace paths.
+- When using a workspace output in later code, pass its exact workspace `path` via `workspace_paths`. Do not copy, download, or reconstruct Storage URLs; node runtime resolves workspace paths to local `inputFiles`.
 
 Node media runtime:
 - `type: "files"` outputs are already saved workspace files. For direct user-facing MP4 requests such as "split this video into two videos", "split into three 10s videos", exact trim/export, transcode, or extracted preview clips, immediately publish the exported MP4s with `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })` before telling the user it is done.
 - Intermediate chunks for long-video model-preparation workflows stay as workspace outputs, not timeline snapshots, unless the user explicitly asks to see those chunks on the timeline.
 - Publish only the final user-facing MP4 with `write_file({ fromLastRunCode: true, name: "slug" })`.
 - If there are multiple exported workspace files and the user asks to put them on the timeline later, publish the existing workspace outputs with `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: N })`; do not cut them again.
-- If the user references timeline media such as `<<<media_1>>>` or `<<<media_2>>>`, pass those 1-based indices in the `run_code` tool input as `media_refs` (for example `media_refs: [1, 2]`). In node code, use `inputFiles`, not direct timeline URLs.
+- If the user references timeline media such as `<<<media_1>>>` or `<<<media_2>>>`, pass those 1-based indices in the `run_code` tool input as `media_refs` (for example `media_refs: [1, 2]`). If the user references workspace files from `list_files`, pass them as `workspace_paths`. In node code, use `inputFiles`, not direct timeline or Storage URLs.
 - Do not use a separate probe-only run for simple splits. In one node run, combine `probeVideo(input)` with fallbacks from `inputFiles[0].duration`, `ctx.media[0].duration`, or explicit user-stated cut points.
 - Do not use node/FFmpeg for ordinary editable timeline splicing of two existing videos. If the user says "put these two videos together", "剪在一起", "add transitions/subtitles", or wants a free-edit timeline, use `runtime: "composition"` with Remotion `<Sequence>` and `<Video>`.
 - Do not switch from composition to node/FFmpeg as a fallback for ordinary timeline splicing when preview is imperfect. Patch the Remotion composition or report the preview issue; keep the workflow editable.
@@ -80,9 +80,9 @@ Read `skills/video-ffmpeg-lab/SKILL.md` before real MP4 work.
 
 Available in `runtime: "node"`:
 - `require`, `process`, `Buffer`, `fetch`, and normal Node built-ins.
-- `ffmpegPath`, `workDir`, `inputDir`, `outputDir`.
+- `ffmpegPath`, `workDir`, `inputDir`, `outputDir`, `workspaceDir`.
 - `ffprobePath` may be empty in deployment. Prefer `probeVideo(path)` instead of calling ffprobe directly.
-- `inputFiles`: downloaded `media_refs` with `{ index, kind, url, inputPath, contentType, duration, width, height }`.
+- `inputFiles`: local files resolved from `media_refs` and `workspace_paths`, with `{ index, kind, inputPath, contentType, source, workspacePath, duration, width, height }`.
 - `ctx.media`: full Media Index.
 - `saveOutput(localPath, workspacePath?, contentType?)`.
 - `probeVideo(path)`.
@@ -91,10 +91,10 @@ Prefer H.264/AAC/yuv420p with `-movflags +faststart` for mobile-compatible final
 
 Node media call checklist:
 - Split one timeline video: `runtime: "node"`, `media_refs: [N]`, code reads `inputFiles[0].inputPath`.
-- Final file-level assembly of generated chunks: `runtime: "node"`, `media_refs` or workspace paths for the generated MP4s, then export one mobile-safe MP4.
+- Final file-level assembly of generated chunks: `runtime: "node"`, pass timeline media as `media_refs` and workspace MP4s as `workspace_paths`, then export one mobile-safe MP4.
 - Ordinary splice of two existing timeline videos: `runtime: "composition"`, not node.
 - Failed or imperfect Remotion preview for ordinary splice: patch composition, not node fallback.
-- If `inputFiles` is empty, stop and fix the tool call by adding `media_refs`; do not retry by hardcoding URLs.
+- If `inputFiles` is empty, stop and fix the tool call by adding `media_refs` or `workspace_paths`; do not retry by hardcoding URLs.
 
 ## Verification
 

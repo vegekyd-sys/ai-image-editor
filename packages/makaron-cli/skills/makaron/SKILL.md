@@ -1,6 +1,6 @@
 ---
 name: makaron
-description: Use Makaron CLI to generate AI images, videos, music, and motion designs. Trigger when user needs creative media production — photo editing, video generation, music composition, or design creation. Requires `npx makaron-cli` and MAKARON_API_KEY env var.
+description: Use Makaron CLI to generate AI images, videos, music, and motion designs. Trigger when user needs creative media production — photo editing, video generation, video editing, music composition, or design creation. Requires `npx makaron-cli` and MAKARON_API_KEY env var.
 ---
 
 # Makaron CLI — Agent Integration Skill
@@ -64,6 +64,10 @@ npx makaron-cli responses get $RUN_ID --wait --json
 
 Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
 
+```bash
+npx makaron-cli chat --help
+```
+
 ### Submit a request
 
 ```bash
@@ -79,6 +83,18 @@ Returns immediately:
 ```json
 {"runId": "xxx", "projectId": "...", "projectUrl": "https://www.makaron.app/projects/...", "status": "running"}
 ```
+
+### Common workflows
+
+| What you want | Example |
+|--------------|---------|
+| Edit an image | `npx makaron-cli chat --project <id> --image photo.jpg "remove the person in the background"` |
+| Generate an image | `npx makaron-cli chat --project auto "generate a cinematic poster of a rainy Tokyo alley"` |
+| Make a video from the current project | `npx makaron-cli chat --project <id> "make this into a 5 second cinematic video"` |
+| Fix one moment in a video from a screenshot | `npx makaron-cli chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"` |
+| Cut or assemble video | `npx makaron-cli chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"` |
+| Add music | `npx makaron-cli chat --project <id> "add calm piano background music"` |
+| Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
 
 ### With additional images (existing project)
 
@@ -115,6 +131,18 @@ npx makaron-cli chat --project auto --video https://example.com/dance.mp4 -b "ex
 Supported formats: MP4, MOV, WebM. CLI local video uploads support max 50MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits. Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
 
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct video commands are standalone raw-tool calls.
+
+### Fix one video moment from a screenshot
+
+When a video is mostly good but one moment needs a local fix, attach a screenshot of the problem frame and describe the correction in normal language:
+
+```bash
+npx makaron-cli chat --project <id> \
+  --image screenshot.png \
+  "@4 this frame should be Paris, keep the same style and only fix this moment"
+```
+
+Makaron can locate the screenshot in the video, regenerate only the nearby segment, and then print a `Next steps` command when the new clip should be stitched back into the full MP4.
 
 ### Check status (single query)
 
@@ -162,15 +190,14 @@ npx makaron-cli edit --image photo.jpg "add cinematic warm lighting"
 # Text-to-image (no input)
 npx makaron-cli edit "a cyberpunk cityscape at night"
 
-# With model/skill/reference
-npx makaron-cli edit --image photo.jpg --model openai --skill captions "add title"
+# With model/reference
 npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 
 # Output to file
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 ```
 
-Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
+Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
 
 ### `video` — Standalone video tools (no project timeline)
 
@@ -229,8 +256,15 @@ type MakaronOutput =
   | { id: string; type: "text"; status: "completed"; content: string }
   | { id: string; type: "image"; status: "completed"; url: string; snapshot_id: string }
   | { id: string; type: "design"; status: "completed"; url: string; width: number; height: number; animated: boolean; duration?: number }
-  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; snapshot_id?: string; url?: string; elapsed_seconds?: number; width?: number; height?: number }
+  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; snapshot_id?: string; url?: string; elapsed_seconds?: number; width?: number; height?: number; error?: string; completion_actions?: CompletionAction[] }
   | { id: string; type: "music"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
+
+type CompletionAction = {
+  label: string
+  prompt: string
+  description?: string
+  policy?: "confirm" | "auto"
+}
 ```
 
 ## Polling Rules
@@ -239,6 +273,7 @@ type MakaronOutput =
 2. Use `next_poll_after_ms` as interval (default 5000ms)
 3. Stop when `status` is `"completed"`, `"failed"`, or `"aborted"`
 4. Top-level `status: "completed"` means ALL artifacts are ready (including rendered videos)
+5. If an async video fails, top-level `status` is `"failed"` and the failed video may include `completion_actions` for a safe retry or diagnosis. Agents can surface these as the next user-confirmed step.
 
 ## Exit Codes
 
@@ -258,6 +293,7 @@ type MakaronOutput =
 | Text-to-image | "generate a cyberpunk cityscape" |
 | Video from image | "create a 5 second video of her walking" |
 | Video with model | "use seedance model, make a 5s video" |
+| Real MP4 edits | `--video clip.mp4 "trim this to the best 20 seconds and preserve audio"` |
 | Background music | "add calm piano music" |
 | Motion design | "create an Instagram story with animated text" |
 | Multi-step | "edit the photo then make a video from it" |
