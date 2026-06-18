@@ -181,6 +181,52 @@ function printCompletionActions(data) {
   }
 }
 
+function printChatHelp() {
+  console.log(`Makaron chat — create and edit with Makaron Agent
+
+Usage:
+  makaron chat --project <id|auto> [options] "your message"
+
+Options:
+  --project <id|auto>       Project to work in. Use "auto" to create one.
+  --image <file|url>        Attach a reference image or screenshot. Repeatable.
+  --video <file|url>        Attach a video to the project timeline. Repeatable.
+  --model <name>            Preferred image/model route.
+  --video-model <name>      Preferred video model.
+  --background, -b          Submit and print a runId.
+  --json                    Output structured JSON.
+  --stream                  Legacy live SSE stream.
+  --help, -h                Show this help.
+
+What you can ask:
+  Image edit
+    makaron chat --project <id> --image photo.jpg "remove the person in the background"
+
+  Image generation
+    makaron chat --project auto "generate a cinematic poster of a rainy Tokyo alley"
+
+  Video from image or timeline
+    makaron chat --project <id> "make this into a 5 second cinematic video"
+
+  Fix one video moment from a screenshot
+    makaron chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"
+
+  Video cuts and assembly
+    makaron chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"
+
+  Music
+    makaron chat --project <id> "add calm piano background music"
+
+  Motion design
+    makaron chat --project <id> "make an animated Instagram story with this image"
+
+After async generation:
+  The CLI waits for video/music tasks. If the result has a natural next step, it prints:
+    Next steps:
+      makaron chat --project <id> "..."
+`);
+}
+
 // ─── SSE Consumer ────────────────────────────────────────────────────────────
 
 async function abortRun(baseUrl, headers, runId) {
@@ -933,7 +979,10 @@ if (command === '--version' || command === '-v' || command === 'version') {
   }
   await createProject(baseUrl, headers, opts);
 } else if (command === 'chat') {
-  const { headers, baseUrl } = getAuth();
+  if (args.includes('--help') || args.includes('-h')) {
+    printChatHelp();
+    process.exit(0);
+  }
   let projectId = null;
   const chatImages = [];
   const chatVideos = [];
@@ -945,11 +994,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
   let videoModel = undefined;
   let preferredModel = undefined;
   for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--help' || args[i] === '-h') {
-      console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--skill <name>] [--stream] [--background|-b] [--json] "your message"');
-      process.exit(0);
-    }
-    else if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
+    if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else if (args[i] === '--video' && args[i + 1]) chatVideos.push(args[++i]);
     else if (args[i] === '--skill' && args[i + 1]) activeSkill = args[++i];
@@ -962,9 +1007,11 @@ if (command === '--version' || command === '-v' || command === 'version') {
   }
   const prompt = promptParts.join(' ');
   if (!prompt) {
-    console.error('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--skill <name>] [--stream] [--background|-b] [--json] "your message"');
+    console.error('Usage: makaron chat --project <id|auto> [options] "your message"');
+    console.error('Run: makaron chat --help');
     process.exit(1);
   }
+  const { headers, baseUrl } = getAuth();
   // Split images into URLs vs local files
   const imageUrlList = chatImages.filter(p => p.startsWith('http://') || p.startsWith('https://'));
   const imageFileList = chatImages.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
@@ -1231,7 +1278,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
@@ -1631,6 +1678,7 @@ Commands:
   create --title "name"              Create empty project (text-to-image)
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
+  chat --help                        Show chat capabilities and examples
   chat --project <id> --video <file> Attach video to conversation
   chat --project <id> -b "message"   Background: submit and print runId
   chat --project <id> --stream "msg" Legacy: stream SSE in real-time
