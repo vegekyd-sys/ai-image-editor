@@ -9,22 +9,24 @@ interface ChangelogEntry {
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-06-18',
-    en: { title: 'Fix Just One Moment in a Video', items: [
+    en: { title: 'Local Video Repair & Agent Workspace', items: [
       'See one awkward shot in an otherwise good video? Send a screenshot and tell Makaron what should change.',
       'Makaron will focus on that moment instead of asking you to regenerate the whole clip from scratch.',
       'You can say things like "make this frame Paris" or "the hand looks wrong here" — no exact timestamp required.',
       'After the new piece is ready, Makaron shows a clear next step to place it back into the full video.',
       'The final merge keeps the original video length, so a repaired 15-second clip stays a 15-second clip.',
-      'Agent can reuse project files and generated segments directly, making follow-up edits faster and less manual.',
+      'Agent workspace has been rebuilt so project files, generated clips, and intermediate outputs can be reused directly across follow-up steps.',
+      'This means fewer manual file handoffs, faster FFmpeg-style edits, and a smoother path from one generated result to the next.',
       'This makes video revision feel closer to photo editing: point at the problem, fix only that part, keep the rest.',
     ]},
-    zh: { title: '只修视频里不满意的那一瞬间', items: [
+    zh: { title: '局部修视频 & Agent 工作区升级', items: [
       '一条视频整体都不错，只是某个画面不对？现在可以直接发截屏，告诉 Makaron 想怎么改。',
       '不用整条视频从头生成；Makaron 会把注意力放在这个画面附近，只重做这一小段。',
       '你可以像平时说话一样描述："这帧换成巴黎"、"这里手有点怪"、"大概这一秒不对"。',
       '新片段生成完成后，Makaron 会继续给出清晰的下一步，把它放回完整视频里。',
       '最终合回会保持原视频时长，15 秒的视频修完还是 15 秒，不会莫名其妙变长。',
-      'Agent 可以直接复用项目里的素材和刚生成的片段，后续修改更快，也少了手动找文件。',
+      'Agent 工作区完成了一次重写：项目素材、生成片段和中间文件都可以在后续步骤里直接复用。',
+      '这会减少手动找文件和传文件的步骤，让 FFmpeg 这类合成、裁剪、拼接任务更快接上下一步。',
       '视频修改开始更像修图：指出问题，只改局部，保留其他已经满意的部分。',
     ]},
   },
