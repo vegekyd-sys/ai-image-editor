@@ -1,6 +1,6 @@
 ---
 name: makaron
-description: Use Makaron CLI to generate AI images, videos, music, and motion designs. Trigger when user needs creative media production — photo editing, video generation, music composition, or design creation. Requires `npx makaron-cli` and MAKARON_API_KEY env var.
+description: Use Makaron CLI to generate AI images, videos, music, and motion designs. Trigger when user needs creative media production — photo editing, video generation, video editing, music composition, or design creation. Requires `npx makaron-cli` and MAKARON_API_KEY env var.
 ---
 
 # Makaron CLI — Agent Integration Skill
@@ -64,6 +64,10 @@ npx makaron-cli responses get $RUN_ID --wait --json
 
 Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
 
+```bash
+npx makaron-cli chat --help
+```
+
 ### Submit a request
 
 ```bash
@@ -79,6 +83,18 @@ Returns immediately:
 ```json
 {"runId": "xxx", "projectId": "...", "projectUrl": "https://www.makaron.app/projects/...", "status": "running"}
 ```
+
+### Common workflows
+
+| What you want | Example |
+|--------------|---------|
+| Edit an image | `npx makaron-cli chat --project <id> --image photo.jpg "remove the person in the background"` |
+| Generate an image | `npx makaron-cli chat --project auto "generate a cinematic poster of a rainy Tokyo alley"` |
+| Make a video from the current project | `npx makaron-cli chat --project <id> "make this into a 5 second cinematic video"` |
+| Fix one moment in a video from a screenshot | `npx makaron-cli chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"` |
+| Cut or assemble video | `npx makaron-cli chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"` |
+| Add music | `npx makaron-cli chat --project <id> "add calm piano background music"` |
+| Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
 
 ### With additional images (existing project)
 
@@ -115,6 +131,18 @@ npx makaron-cli chat --project auto --video https://example.com/dance.mp4 -b "ex
 Supported formats: MP4, MOV, WebM. CLI local video uploads support max 50MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits. Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
 
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct video commands are standalone raw-tool calls.
+
+### Screenshot-guided video repair
+
+When a video is mostly good but one moment needs a local fix, attach a screenshot of the problem frame and describe the correction in normal language:
+
+```bash
+npx makaron-cli chat --project <id> \
+  --image screenshot.png \
+  "@4 this frame should be Paris, keep the same style and only fix this moment"
+```
+
+Makaron can locate the screenshot in the video, regenerate only the nearby segment, and then print a `Next steps` command when the repaired clip should be stitched back into the full MP4.
 
 ### Check status (single query)
 
@@ -258,6 +286,8 @@ type MakaronOutput =
 | Text-to-image | "generate a cyberpunk cityscape" |
 | Video from image | "create a 5 second video of her walking" |
 | Video with model | "use seedance model, make a 5s video" |
+| Screenshot-guided video repair | `--image screenshot.png "this frame looks wrong; fix only this moment"` |
+| Real MP4 edits | `--video clip.mp4 "trim this to the best 20 seconds and preserve audio"` |
 | Background music | "add calm piano music" |
 | Motion design | "create an Instagram story with animated text" |
 | Multi-step | "edit the photo then make a video from it" |
