@@ -55,7 +55,7 @@ function formatResult(image: string, message: string, prefix: string) {
 
 export interface McpServerOptions {
   /** Called after each tool completes successfully. Used for billing. */
-  onToolComplete?: (toolName: string, model?: string, durationMs?: number, usage?: { inputTokens: number; outputTokens: number; modelId: string }, meta?: { videoDurationSec?: number }) => void | Promise<void>;
+  onToolComplete?: (toolName: string, model?: string, durationMs?: number, usage?: { inputTokens: number; outputTokens: number; modelId: string }, meta?: { videoDurationSec?: number; imageCount?: number; videoModel?: string }) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
   onToolStart?: (toolName: string) => Promise<{ allowed: boolean; message?: string }>;
 }
@@ -268,7 +268,11 @@ Style: Cinematic, warm golden light.`,
         });
 
         if (result.success) {
-          await options?.onToolComplete?.('makaron_create_video', undefined, Date.now() - t0, undefined, { videoDurationSec: params.duration });
+          await options?.onToolComplete?.('makaron_create_video', params.videoModel, Date.now() - t0, undefined, {
+            videoDurationSec: params.duration,
+            imageCount: params.images.length,
+            videoModel: params.videoModel,
+          });
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}`
@@ -329,7 +333,11 @@ Example: Edit a video to add cinematic color grading:
         });
 
         if (result.success) {
-          await options?.onToolComplete?.('makaron_edit_video', undefined, Date.now() - t0, undefined, { videoDurationSec: params.duration });
+          await options?.onToolComplete?.('makaron_edit_video', resolvedModel, Date.now() - t0, undefined, {
+            videoDurationSec: params.duration,
+            imageCount: params.images?.length ?? 0,
+            videoModel: resolvedModel,
+          });
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}`
