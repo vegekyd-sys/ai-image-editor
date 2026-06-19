@@ -71,6 +71,7 @@ test-kling.mjs
 # local generated artifacts
 /tmp/
 /output/
+/outputs/
 /.playwright-cli/
 
 # workspace agent runtime data
