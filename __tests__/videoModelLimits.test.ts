@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance', () => {
@@ -136,5 +136,10 @@ describe('video model reference limits', () => {
     expect(result.success).toBe(false)
     expect(result.message).toContain('No video provider adapter')
     expect(result.message).toContain('future-video-model')
+  })
+
+  it('estimates Grok credits without floating-point overcharging', () => {
+    expect(estimateVideoCredits({ model: 'grok', durationSec: 1, imageCount: 1 })).toBe(30)
+    expect(estimateVideoCredits({ model: 'grok', durationSec: 4, imageCount: 1 })).toBe(114)
   })
 })

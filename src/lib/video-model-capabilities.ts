@@ -162,7 +162,7 @@ export function estimateVideoCredits(options: {
 }): number | undefined {
   const costUsd = estimateVideoProviderCostUsd(options)
   if (costUsd == null) return undefined
-  return Math.ceil(costUsd * 100 * (options.markup ?? 2))
+  return Math.ceil(costUsd * 100 * (options.markup ?? 2) - 1e-9)
 }
 
 export function resolveVideoOutputDuration(options: {
