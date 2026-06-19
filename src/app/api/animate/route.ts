@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
-import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities'
 
 export const maxDuration = 30
 
@@ -108,11 +108,19 @@ export async function POST(req: NextRequest) {
     // Deduct credits for video generation (fire-and-forget)
     // Per-second billing: 22 credits/s ($0.11/s × 2x markup), default 10s if smart mode
     const videoSec = effectiveDuration || 10
-    const toolName = selectedVideoModel === 'seedance' ? 'create_video_seedance' : 'create_video_kling'
+    const toolName = selectedVideoModel === 'seedance'
+      ? 'create_video_seedance'
+      : selectedVideoModel === 'grok'
+        ? 'create_video_grok'
+        : 'create_video_kling'
     const { getToolPrice } = await import('@/lib/billing/pricing')
     const price = await getToolPrice(toolName)
+    const grokCredits = selectedVideoModel === 'grok'
+      ? estimateVideoCredits({ model: selectedVideoModel, durationSec: videoSec, imageCount: filteredImages.length })
+      : undefined
     const creditsPerSec = price?.credits ?? 22
-    deductFixedCredits(user.id, Math.ceil(videoSec * creditsPerSec), toolName, selectedVideoModel, undefined)
+    const credits = grokCredits ?? Math.ceil(videoSec * creditsPerSec)
+    deductFixedCredits(user.id, credits, toolName, selectedVideoModel, undefined)
       .catch(e => console.error('[billing] animate deduct error:', e))
 
     return NextResponse.json({ animationId: animation.id, taskId })

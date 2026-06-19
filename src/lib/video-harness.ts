@@ -49,6 +49,9 @@ export function validateVideoScript(opts: {
   if (duration != null && duration < capability.minOutputDuration) {
     return `${capability.label} video generation duration must be at least ${capability.minOutputDuration} seconds, but duration=${duration}. Use duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`
   }
+  if (duration != null && duration > capability.maxOutputDuration) {
+    return `${capability.label} video generation duration must be ${capability.maxOutputDuration} seconds or less, but duration=${duration}.`
+  }
 
   // 1. Image reference check: prompt has images available but doesn't reference any
   // Skip when video_ref_url is provided (video editing doesn't require image references)
@@ -58,6 +61,13 @@ export function validateVideoScript(opts: {
 
   if (refs.length === 0 && imageCount > 0 && !videoRefUrl) {
     return `Your script doesn't reference any media with <<<media_N>>> format, but ${imageCount} items are available. You MUST use <<<media_1>>>${imageCount > 1 ? ` through <<<media_${imageCount}>>>` : ''} in your prompt to reference them. The video model needs these markers to know which image to use where.`
+  }
+
+  if (
+    capability.maxImageReferences != null &&
+    refs.length > capability.maxImageReferences
+  ) {
+    return `${capability.label} supports at most ${capability.maxImageReferences} reference image${capability.maxImageReferences === 1 ? '' : 's'} per request. Choose a model with multi-image support or rewrite the script to use fewer image references.`
   }
 
   // 2. Image index out of bounds

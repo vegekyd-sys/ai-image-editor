@@ -291,4 +291,20 @@ describe('video script harness old and new scenarios', () => {
       model: 'kling',
     })).toBeNull()
   })
+
+  it('new Grok video scenario accepts one image and rejects multi-image references', () => {
+    expect(validateVideoScript({
+      prompt: 'Shot 1 (1s): Animate <<<media_1>>> with a slow push-in.',
+      imageCount: 1,
+      model: 'grok',
+      duration: 1,
+    })).toBeNull()
+
+    expect(validateVideoScript({
+      prompt: 'Shot 1 (1s): Blend <<<media_1>>> and <<<media_2>>>.',
+      imageCount: 2,
+      model: 'grok',
+      duration: 1,
+    })).toContain('supports at most 1 reference image')
+  })
 })

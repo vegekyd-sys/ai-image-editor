@@ -9,6 +9,8 @@ export interface VideoModelCapability {
   supportsBaseVideoEdit: boolean
   longVideoChunkSeconds: number
   estimatedCostPerSecondUsd?: number
+  estimatedInputCostUsdPerImage?: number
+  maxImageReferences?: number
 }
 
 export interface VideoReferenceSizeCapability {
@@ -72,6 +74,19 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.161,
   },
+  grok: {
+    id: 'grok',
+    label: 'Grok Video 1.5',
+    minOutputDuration: 1,
+    maxOutputDuration: 15,
+    maxReferenceVideoDuration: 0,
+    supportsVideoReference: false,
+    supportsBaseVideoEdit: false,
+    longVideoChunkSeconds: 10,
+    estimatedCostPerSecondUsd: 0.14,
+    estimatedInputCostUsdPerImage: 0.01,
+    maxImageReferences: 1,
+  },
   piapi: {
     id: 'piapi',
     label: 'PiAPI Kling',
@@ -125,6 +140,31 @@ export function listVideoModelCapabilities(): VideoModelCapability[] {
   return Object.values(MODEL_CAPABILITIES)
 }
 
+export function estimateVideoProviderCostUsd(options: {
+  model?: string | null
+  durationSec: number
+  imageCount?: number
+}): number | undefined {
+  const capability = getVideoModelCapability(options.model)
+  const perSecond = capability.estimatedCostPerSecondUsd
+  if (perSecond == null) return undefined
+  const billableImages = capability.maxImageReferences != null
+    ? Math.min(options.imageCount ?? 0, capability.maxImageReferences)
+    : (options.imageCount ?? 0)
+  return options.durationSec * perSecond + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
+}
+
+export function estimateVideoCredits(options: {
+  model?: string | null
+  durationSec: number
+  imageCount?: number
+  markup?: number
+}): number | undefined {
+  const costUsd = estimateVideoProviderCostUsd(options)
+  if (costUsd == null) return undefined
+  return Math.ceil(costUsd * 100 * (options.markup ?? 2))
+}
+
 export function resolveVideoOutputDuration(options: {
   requestedDuration?: number
   referenceVideoDuration?: number
@@ -144,6 +184,7 @@ export function validateVideoModelRequest(options: {
   referenceVideoDuration?: number
   referenceVideoMetas?: VideoReferenceMeta[]
   hasVideoReference?: boolean
+  imageReferenceCount?: number
 }): string | null {
   const capability = getVideoModelCapability(options.model)
 
@@ -157,6 +198,14 @@ export function validateVideoModelRequest(options: {
 
   if (options.hasVideoReference && !capability.supportsVideoReference) {
     return `${capability.label} does not support reference videos. Choose a model with video-reference support, or use run_code runtime="node" for non-generative MP4 processing.`
+  }
+
+  if (
+    options.imageReferenceCount != null &&
+    capability.maxImageReferences != null &&
+    options.imageReferenceCount > capability.maxImageReferences
+  ) {
+    return `${capability.label} supports at most ${capability.maxImageReferences} reference images per request.`
   }
 
   if (options.referenceVideoDuration != null && options.referenceVideoDuration > capability.maxReferenceVideoDuration) {

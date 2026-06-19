@@ -6,7 +6,7 @@ import type { AnimationState } from '@/components/Editor';
 import { useLocale } from '@/lib/i18n';
 import MediaRefText from '@/components/MediaRefText';
 import { getModelInfo, getVideoModels } from '@/lib/model-registry';
-import { getDefaultVideoModelId, getVideoModelCapability } from '@/lib/video-model-capabilities';
+import { estimateVideoProviderCostUsd, getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 
 interface AnimateSheetProps {
   snapshots: Snapshot[];
@@ -556,8 +556,8 @@ export default function AnimateSheet({
                     }}>
                       {duration != null
                         ? (() => {
-                          const costPerSecond = getVideoModelCapability(videoModel).estimatedCostPerSecondUsd;
-                          return costPerSecond != null ? `~$${(duration * costPerSecond).toFixed(2)}` : t('animate.costByDuration');
+                          const cost = estimateVideoProviderCostUsd({ model: videoModel, durationSec: duration, imageCount: activeUrls.length });
+                          return cost != null ? `~$${cost.toFixed(2)}` : t('animate.costByDuration');
                         })()
                         : t('animate.costByDuration')}
                     </div>

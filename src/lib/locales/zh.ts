@@ -282,6 +282,8 @@ const zh = {
   'model.kling.desc': '支持真人脸，速度快，内置音效。',
   'model.seedance.name': 'SeeDance 2.0',
   'model.seedance.desc': '最高画质，支持真人脸，不支持 IP 角色。价格较贵。',
+  'model.grok.name': 'Grok 1.5',
+  'model.grok.desc': '最快，原生音频，单图起始帧。',
   'model.autoTips': '自动预览 Tips',
   'model.autoTips.desc': '自动生成编辑建议的预览图',
 } as const;

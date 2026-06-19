@@ -102,6 +102,16 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       model: provider,
     }) ?? parseTotalDuration(finalPrompt);
 
+    const filteredModelError = validateVideoModelRequest({
+      model: provider,
+      outputDuration: resolvedDuration,
+      referenceVideoDuration,
+      referenceVideoMetas,
+      hasVideoReference,
+      imageReferenceCount: filteredImages.length,
+    });
+    if (filteredModelError) return { success: false, message: filteredModelError };
+
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
     console.log(`\n🎬 [create_video] provider=${provider}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
@@ -133,6 +143,15 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         videoUrls: seedanceVideoUrls.length ? seedanceVideoUrls : undefined,
       });
       console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
+    } else if (provider === 'grok') {
+      const { createXaiVideoTask } = await import('../xai-video');
+      taskId = await createXaiVideoTask({
+        prompt: finalPrompt,
+        images: filteredImages,
+        duration: resolvedDuration != null ? resolvedDuration : undefined,
+        aspectRatio,
+      });
+      console.log(`✅ [create_video] Grok Video task created: ${taskId}`);
     } else if (provider === 'piapi') {
       const { createKlingTask: createKlingTaskPiAPI } = await import('../piapi');
       taskId = await createKlingTaskPiAPI({
@@ -171,7 +190,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     return {
       success: true,
       taskId,
-      message: `Video rendering task created. Task ID: ${taskId}. Rendering takes 3-5 minutes. Use makaron_get_video_status to poll.`,
+      message: `Video rendering task created. Task ID: ${taskId}. Rendering time depends on the selected model. Use makaron_get_video_status to poll.`,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

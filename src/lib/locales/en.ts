@@ -282,6 +282,8 @@ const en = {
   'model.kling.desc': 'Supports real faces, fast, with built-in sound.',
   'model.seedance.name': 'SeeDance 2.0',
   'model.seedance.desc': 'Best quality. Real faces OK, no IP characters. Pricier.',
+  'model.grok.name': 'Grok 1.5',
+  'model.grok.desc': 'Fastest, native audio, single starting image.',
   'model.autoTips': 'Auto Tips Previews',
   'model.autoTips.desc': 'Auto-generate preview images',
 } as const;

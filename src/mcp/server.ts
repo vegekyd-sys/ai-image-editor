@@ -234,11 +234,12 @@ IMPORTANT:
 - images must be publicly accessible URLs (not base64). Upload to storage first.
 - script should use <<<media_N>>> format (from makaron_write_video_script output)
 - Video rendering takes 3-5 minutes. Use makaron_get_video_status to poll.
-- Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s.
+- Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for single-image.
 
 Models:
 - kling (default) — Kling v3-omni, general purpose, $0.112/s
 - seedance — SeeDance 2.0 via Evolink, supports real human faces, $0.161/s
+- grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, $0.14/s at 720p + $0.01/input image
 
 Example script format:
 Shot 1 (2s): Wide shot, <<<media_1>>> ...
@@ -247,9 +248,9 @@ Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
       images: z.array(z.string().url()).min(1).max(7).describe('Publicly accessible image URLs'),
-      duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s. Omit for smart mode.'),
+      duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image. Omit for smart mode.'),
       aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
-      videoModel: z.enum(['kling', 'seedance']).optional().describe('Video model: kling (default) or seedance (real faces, premium)'),
+      videoModel: z.enum(['kling', 'seedance', 'grok']).optional().describe('Video model: kling (default), seedance (real faces, premium), or grok (fastest single-image-to-video with native audio)'),
     },
     async (params) => {
       try {
@@ -301,9 +302,9 @@ Example: Edit a video to add cinematic color grading:
       videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤1080p, ≤200MB)'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
-      duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s. Omit for smart mode.'),
+      duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image but does not edit/reference videos. Omit for smart mode.'),
       aspectRatio: z.string().optional().describe('Aspect ratio: "9:16", "16:9", "1:1"'),
-      videoModel: z.enum(['kling', 'seedance']).optional().describe('Video model: kling (base/direct edit) or seedance (reference-video edit for target ≤15s clips)'),
+      videoModel: z.enum(['kling', 'seedance', 'grok']).optional().describe('Video model: kling (base/direct edit), seedance (reference-video edit for target <=15s clips), or grok (single-image only; no video edit)'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
     },

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateRequest } from '@/lib/api-auth'
 import { createVideo } from '@/lib/skills/create-video'
+import { filterAndRemapImages } from '@/lib/kling'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 30
@@ -139,11 +140,16 @@ export async function POST(req: NextRequest) {
 
     // Deduct credits — store amount in videoMeta for refund on failure
     const videoSec = effectiveDuration || 10
-    const creditsCharged = Math.ceil(videoSec * 22)
+    const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls)
+    const estimatedCredits = selectedVideoModel === 'grok'
+      ? estimateVideoCredits({ model: selectedVideoModel, durationSec: videoSec, imageCount: filteredImages.length })
+      : undefined
+    const creditsCharged = estimatedCredits ?? Math.ceil(videoSec * 22)
     videoMeta.creditsCharged = creditsCharged
     supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId).then(() => {})
 
-    deductFixedCredits(userId, creditsCharged, 'create_video', undefined, undefined)
+    const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
+    deductFixedCredits(userId, creditsCharged, toolName, selectedVideoModel, undefined)
       .catch(e => console.error('[billing] video-snapshot deduct error:', e))
 
     return NextResponse.json({ snapshotId, taskId, videoMeta })

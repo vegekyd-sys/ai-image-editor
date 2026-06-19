@@ -16,6 +16,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   // Video
   { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '~180s' },
   { id: 'seedance', nameKey: 'model.seedance.name', descKey: 'model.seedance.desc', category: 'video', speedLabel: '~300s $$$' },
+  { id: 'grok', nameKey: 'model.grok.name', descKey: 'model.grok.desc', category: 'video', speedLabel: '~25s' },
 ];
 
 export function getImageModels(): ModelInfo[] {
