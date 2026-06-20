@@ -40,6 +40,8 @@ export async function streamAgent(
     previewsReady?: boolean; readyTips?: object[];
     musicReady?: boolean; musicAudioUrl?: string;
     preferredModel?: string;
+    videoModel?: string;
+    videoResolution?: string;
     snapshotImages?: string[];
     currentSnapshotIndex?: number;
     isNsfw?: boolean;

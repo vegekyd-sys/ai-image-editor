@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
-import { estimateVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 
 export const maxDuration = 30
 
@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
     const user = session?.user
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel } = await req.json()
+    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution } = await req.json()
     const selectedVideoModel = normalizeVideoModelId(videoModel)
+    const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
 
     if (!projectId || !imageUrls?.length || !prompt) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
       duration: effectiveDuration,
       aspectRatio,
       videoModel: selectedVideoModel,
+      videoResolution: videoRoute.resolution,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
       referenceVideoDuration,
       referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
@@ -108,18 +110,16 @@ export async function POST(req: NextRequest) {
     // Deduct credits for video generation (fire-and-forget)
     // Per-second billing: 22 credits/s ($0.11/s × 2x markup), default 10s if smart mode
     const videoSec = effectiveDuration || 10
-    const toolName = selectedVideoModel === 'seedance'
-      ? 'create_video_seedance'
-      : selectedVideoModel === 'grok'
+    const toolName = selectedVideoModel === 'grok'
         ? 'create_video_grok'
-        : 'create_video_kling'
-    const { getToolPrice } = await import('@/lib/billing/pricing')
-    const price = await getToolPrice(toolName)
-    const grokCredits = selectedVideoModel === 'grok'
-      ? estimateVideoCredits({ model: selectedVideoModel, durationSec: videoSec, imageCount: filteredImages.length })
-      : undefined
-    const creditsPerSec = price?.credits ?? 22
-    const credits = grokCredits ?? Math.ceil(videoSec * creditsPerSec)
+        : 'create_video'
+    const estimatedCredits = estimateVideoCredits({
+      model: selectedVideoModel,
+      resolution: videoRoute.resolution,
+      durationSec: videoSec,
+      imageCount: filteredImages.length,
+    })
+    const credits = estimatedCredits ?? Math.ceil(videoSec * 22)
     deductFixedCredits(user.id, credits, toolName, selectedVideoModel, undefined)
       .catch(e => console.error('[billing] animate deduct error:', e))
 

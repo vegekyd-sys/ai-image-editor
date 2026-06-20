@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel, type ArtifactCompletionAction } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -195,6 +195,9 @@ export default function Editor({
   const [videoModel, setVideoModel] = useState<VideoModel>(() => getDefaultVideoModelId());
   const videoModelRef = useRef<VideoModel>(getDefaultVideoModelId());
   useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
+  const [videoResolution, setVideoResolution] = useState<VideoResolution>('auto');
+  const videoResolutionRef = useRef<VideoResolution>('auto');
+  useEffect(() => { videoResolutionRef.current = videoResolution; }, [videoResolution]);
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const skillFileRef = useRef<HTMLInputElement>(null);
@@ -1584,7 +1587,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
+        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -2652,6 +2655,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         createdAt: new Date().toISOString(),
         duration: animationState.duration ?? null,
         videoModel: animationState.videoModel,
+        videoResolution: animationState.videoResolution,
       };
       setAnimations(prev => [newAnim, ...prev]);
       // v2: add video snapshot to snapshots array for polling
@@ -2671,6 +2675,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             status: 'processing',
             duration: animationState.duration,
             model: animationState.videoModel,
+            resolution: animationState.videoResolution,
             createdAt: new Date().toISOString(),
           },
         };
@@ -3077,7 +3082,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     onVideoModelChange: (m: import('@/types').VideoModel) => {
       if (m === 'upload') return;
       setVideoModel(m);
-      setAnimationState(prev => prev ? { ...prev, videoModel: m } : prev);
+      setVideoResolution('auto');
+      setAnimationState(prev => prev ? { ...prev, videoModel: m, videoResolution: 'auto' } : prev);
+    },
+    videoResolution,
+    onVideoResolutionChange: (resolution: import('@/types').VideoResolution) => {
+      setVideoResolution(resolution);
+      setAnimationState(prev => prev ? { ...prev, videoResolution: resolution } : prev);
     },
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
@@ -3564,6 +3575,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       duration: currentSnap.videoMeta.duration,
                       createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
                       videoModel: currentSnap.videoMeta.model,
+                      videoResolution: currentSnap.videoMeta.resolution,
                       error: currentSnap.videoMeta.error,
                     }] : animations}
                     selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
@@ -3586,7 +3598,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         const res = await fetch('/api/video-snapshot', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId() }),
+                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId(), videoResolution: anim.videoResolution || 'auto' }),
                         });
                         const json = await res.json();
                         if (!res.ok) throw new Error(json.error || 'Retry failed');
@@ -3620,6 +3632,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
                         videoModel: anim.videoModel && anim.videoModel !== 'upload' ? anim.videoModel : videoModel,
+                        videoResolution: anim.videoResolution || 'auto',
                       });
                     }}
                     isDesktop={isDesktop}

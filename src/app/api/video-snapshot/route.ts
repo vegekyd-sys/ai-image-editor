@@ -4,7 +4,7 @@ import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { estimateVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 30
@@ -22,12 +22,14 @@ export async function POST(req: NextRequest) {
       duration,
       aspectRatio,
       videoModel,
+      videoResolution,
       sourceSnapshotIds,
       videoUrl,
       videoReferType,
       keepOriginalSound,
     } = await req.json()
     const selectedVideoModel = normalizeVideoModelId(videoModel)
+    const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
     const inputVideoUrl = typeof videoUrl === 'string' && videoUrl.startsWith('http') ? videoUrl : undefined
 
@@ -93,6 +95,7 @@ export async function POST(req: NextRequest) {
       duration: effectiveDuration,
       aspectRatio,
       videoModel: selectedVideoModel,
+      videoResolution: videoRoute.resolution,
       videoUrl: inputVideoUrl,
       videoReferType,
       videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
@@ -118,6 +121,9 @@ export async function POST(req: NextRequest) {
       status: 'processing',
       duration: effectiveDuration || null,
       model: selectedVideoModel,
+      resolution: videoRoute.resolution,
+      providerModel: videoRoute.providerModel,
+      providerMode: videoRoute.providerMode,
       createdAt: new Date().toISOString(),
     }
 
@@ -141,11 +147,18 @@ export async function POST(req: NextRequest) {
     // Deduct credits — store amount in videoMeta for refund on failure
     const videoSec = effectiveDuration || 10
     const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls)
-    const estimatedCredits = selectedVideoModel === 'grok'
-      ? estimateVideoCredits({ model: selectedVideoModel, durationSec: videoSec, imageCount: filteredImages.length })
-      : undefined
+    const estimatedCredits = estimateVideoCredits({
+      model: selectedVideoModel,
+      resolution: videoRoute.resolution,
+      durationSec: videoSec,
+      imageCount: filteredImages.length,
+    })
     const creditsCharged = estimatedCredits ?? Math.ceil(videoSec * 22)
     videoMeta.creditsCharged = creditsCharged
+    const providerCostUsd = videoRoute.estimatedCostPerSecondUsd != null
+      ? videoSec * videoRoute.estimatedCostPerSecondUsd + filteredImages.length * (videoRoute.estimatedInputCostUsdPerImage ?? 0)
+      : undefined
+    if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd
     supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId).then(() => {})
 
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'

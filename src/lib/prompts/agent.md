@@ -75,7 +75,7 @@ Direct-submit exception: if the current request says "直接提交渲染", "不�
 
 When editing existing video snapshots up to 15 seconds total, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it, but clamp it to the SeeDance model range: minimum 4s, maximum 15s. If under 4s, set `duration: 4`.
 
-Default video model follows the app selection, usually SeeDance. If cheaper, prefer Kling when valid. If user says "用 Grok 生成", "use grok", "用 grok 做", fastest, or native audio from one image, use model `grok`.
+Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`). Treat SeeDance 2.0 Fast and SeeDance 2.0 standard as different models: use `seedance-fast` for the default fast path, and `seedance` only when the user asks for standard/full SeeDance or 1080p. If the user asks for cheaper/faster/draft/480p, set `video_resolution: "480p"` when supported. If user says "用 Grok 生成", "use grok", "用 grok 做", fastest, or native audio from one image, use model `grok`.
 
 ### Real MP4 Editing and Long Video Preparation
 

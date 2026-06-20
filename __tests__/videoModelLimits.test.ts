@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
-  it('defaults video generation to SeeDance', () => {
-    expect(getDefaultVideoModelId()).toBe('seedance')
-    expect(normalizeVideoModelId()).toBe('seedance')
+  it('defaults video generation to SeeDance 2.0 Fast', () => {
+    expect(getDefaultVideoModelId()).toBe('seedance-fast')
+    expect(normalizeVideoModelId()).toBe('seedance-fast')
+    expect(normalizeVideoModelId('seedance')).toBe('seedance')
+    expect(normalizeVideoModelId('seedance-fast')).toBe('seedance-fast')
+    expect(normalizeVideoResolution('seedance-fast', 'auto')).toBe('720p')
   })
 
   it('fails fast before calling Kling with a reference video longer than 10s', async () => {
@@ -51,7 +54,7 @@ describe('video model reference limits', () => {
     })
 
     expect(result.success).toBe(false)
-    expect(result.message).toContain('SeeDance reference video size')
+    expect(result.message).toContain('SeeDance 2.0 reference video size')
     expect(result.message).toContain('320x320')
     expect(result.message).toContain('409,600-2,086,876')
     expect(result.message).toContain('resize/pad')
@@ -141,5 +144,6 @@ describe('video model reference limits', () => {
   it('estimates Grok credits without floating-point overcharging', () => {
     expect(estimateVideoCredits({ model: 'grok', durationSec: 1, imageCount: 1 })).toBe(30)
     expect(estimateVideoCredits({ model: 'grok', durationSec: 4, imageCount: 1 })).toBe(114)
+    expect(estimateVideoCredits({ model: 'grok', resolution: '480p', durationSec: 1, imageCount: 1 })).toBe(18)
   })
 })

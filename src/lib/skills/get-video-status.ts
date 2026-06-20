@@ -98,7 +98,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
       };
     }
 
-    // Fallback: piapi or kling (default)
+    // Fallback: piapi/kling-style task ids.
     const provider = process.env.ANIMATE_PROVIDER || 'kling';
 
     if (provider === 'piapi') {

@@ -1,5 +1,5 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
-import { getVideoModelCapability, normalizeVideoModelId, resolveVideoOutputDuration, validateVideoModelRequest, type VideoReferenceMeta } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 
 export interface CreateVideoInput {
   script: string;
@@ -7,6 +7,7 @@ export interface CreateVideoInput {
   duration?: number;         // 3, 5, 7, 10, or 15 seconds. Omit for smart mode
   aspectRatio?: string;      // '9:16', '16:9', '1:1'
   videoModel?: string;       // video provider/model id, e.g. 'kling' or 'seedance'
+  videoResolution?: VideoResolutionInput;
   // Video editing (Kling only)
   videoUrl?: string;                    // Reference video URL (explicit from agent)
   videoReferType?: 'base' | 'feature';  // default: 'base'
@@ -26,12 +27,14 @@ export interface CreateVideoResult {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoUrl, videoReferType, videoUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length;
   const provider = normalizeVideoModelId(videoModel);
+  const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const capability = getVideoModelCapability(provider);
   const modelError = validateVideoModelRequest({
     model: provider,
+    resolution: route.resolution,
     outputDuration: duration,
     referenceVideoDuration,
     referenceVideoMetas,
@@ -104,6 +107,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     const filteredModelError = validateVideoModelRequest({
       model: provider,
+      resolution: route.resolution,
       outputDuration: resolvedDuration,
       referenceVideoDuration,
       referenceVideoMetas,
@@ -113,7 +117,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (filteredModelError) return { success: false, message: filteredModelError };
 
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
-    console.log(`\n🎬 [create_video] provider=${provider}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}`);
+    console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
     let taskId: string;
@@ -131,7 +135,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       };
     }
 
-    if (provider === 'seedance') {
+    if (route.provider === 'seedance') {
       const { createEvolinkTask } = await import('../evolink');
       const seedanceVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
       taskId = await createEvolinkTask({
@@ -139,20 +143,22 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         images: filteredImages,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
         aspectRatio: aspectRatio || 'adaptive',
-        quality: '720p',
+        quality: route.resolution,
+        model: route.providerModel,
         videoUrls: seedanceVideoUrls.length ? seedanceVideoUrls : undefined,
       });
       console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
-    } else if (provider === 'grok') {
+    } else if (route.provider === 'grok') {
       const { createXaiVideoTask } = await import('../xai-video');
       taskId = await createXaiVideoTask({
         prompt: finalPrompt,
         images: filteredImages,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
         aspectRatio,
+        resolution: route.resolution as '480p' | '720p',
       });
       console.log(`✅ [create_video] Grok Video task created: ${taskId}`);
-    } else if (provider === 'piapi') {
+    } else if (route.provider === 'piapi') {
       const { createKlingTask: createKlingTaskPiAPI } = await import('../piapi');
       taskId = await createKlingTaskPiAPI({
         prompt: finalPrompt.replace(/<<<(?:image|media)_(\d+)>>>/g, '@image_$1'), // PiAPI format
@@ -163,7 +169,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         version: '3.0',
       });
       console.log(`✅ [create_video] PiAPI task created: ${taskId}`);
-    } else if (provider === 'kling') {
+    } else if (route.provider === 'kling') {
       const { createKlingTask, detectAspectRatio } = await import('../kling');
       const ratioSourceImage = filteredImages[0] || images[0];
       const resolvedRatio = aspectRatio || (ratioSourceImage ? await detectAspectRatio(ratioSourceImage) : undefined);
@@ -173,6 +179,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       taskId = await createKlingTask({
         prompt: finalPrompt,
         images: filteredImages,
+        mode: route.providerMode,
         duration: resolvedDuration,
         aspect_ratio: resolvedRatio,
         videoUrl: effectiveVideoUrl,

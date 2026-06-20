@@ -2,16 +2,18 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { PreferredModel } from './AgentChatView';
-import type { VideoModel } from '@/types';
-import { getImageModels, getVideoModels, getModelInfo, type ModelInfo } from '@/lib/model-registry';
+import type { VideoModel, VideoResolution } from '@/types';
+import { getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
 import { useLocale } from '@/lib/i18n';
-import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
+import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
 
 interface ModelSelectorProps {
   preferredModel: PreferredModel;
   onModelChange: (model: PreferredModel) => void;
   videoModel?: VideoModel;
   onVideoModelChange?: (model: VideoModel) => void;
+  videoResolution?: VideoResolution;
+  onVideoResolutionChange?: (resolution: VideoResolution) => void;
   onOpenChange?: (open: boolean) => void;
 }
 
@@ -183,6 +185,8 @@ export default function ModelSelector({
   onModelChange,
   videoModel = getDefaultVideoModelId(),
   onVideoModelChange,
+  videoResolution = 'auto',
+  onVideoResolutionChange,
   onOpenChange,
 }: ModelSelectorProps) {
   const { t } = useLocale();
@@ -245,7 +249,8 @@ export default function ModelSelector({
 
   const handleVideoSelect = useCallback((id: string) => {
     onVideoModelChange?.(id as VideoModel);
-  }, [onVideoModelChange]);
+    onVideoResolutionChange?.('auto');
+  }, [onVideoModelChange, onVideoResolutionChange]);
 
   const handleAutoTipsToggle = useCallback((on: boolean) => {
     setAutoTips(on);
@@ -256,6 +261,11 @@ export default function ModelSelector({
   const videoModels = getVideoModels();
   const models = activeTab === 'image' ? imageModels : videoModels;
   const selectedId = activeTab === 'image' ? (isAuto ? null : preferredModel) : videoModel;
+  const selectedVideoCapability = getVideoModelCapability(videoModel);
+  const selectedVideoResolution = videoResolution === 'auto'
+    ? selectedVideoCapability.defaultResolution
+    : normalizeVideoResolution(videoModel, videoResolution);
+  const resolutionOptions = selectedVideoCapability.supportedResolutions ?? [];
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
@@ -368,6 +378,41 @@ export default function ModelSelector({
               />
             ))}
           </div>
+
+          {activeTab === 'video' && resolutionOptions.length > 0 && (
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 8, padding: '10px 6px 4px' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.38)', marginBottom: 7 }}>
+                {t('model.resolution')}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(['auto', ...resolutionOptions] as VideoResolution[]).map(resolution => {
+                  const active = resolution === 'auto' ? videoResolution === 'auto' : videoResolution !== 'auto' && selectedVideoResolution === resolution;
+                  const label = resolution === 'auto'
+                    ? `${t('model.resolution.auto')} ${selectedVideoCapability.defaultResolution ?? ''}`.trim()
+                    : resolution.toUpperCase();
+                  return (
+                    <button
+                      key={resolution}
+                      onClick={() => onVideoResolutionChange?.(resolution)}
+                      style={{
+                        height: 28,
+                        padding: '0 10px',
+                        borderRadius: 8,
+                        border: `1px solid ${active ? 'rgba(232,121,249,0.42)' : 'rgba(255,255,255,0.08)'}`,
+                        background: active ? 'rgba(232,121,249,0.10)' : 'rgba(255,255,255,0.04)',
+                        color: active ? '#e879f9' : 'rgba(255,255,255,0.48)',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Auto Tips Previews — same style as model rows */}
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 6, paddingTop: 6 }}>

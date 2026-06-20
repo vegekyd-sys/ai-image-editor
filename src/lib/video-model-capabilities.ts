@@ -11,6 +11,25 @@ export interface VideoModelCapability {
   estimatedCostPerSecondUsd?: number
   estimatedInputCostUsdPerImage?: number
   maxImageReferences?: number
+  supportedResolutions?: VideoResolution[]
+  defaultResolution?: VideoResolution
+  estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
+  provider?: 'kling' | 'seedance' | 'grok' | 'piapi'
+  providerModel?: string
+}
+
+export type VideoResolution = '480p' | '720p' | '1080p' | '4k'
+export type VideoResolutionInput = VideoResolution | 'auto' | null | undefined
+
+export interface VideoGenerationRoute {
+  model: string
+  label: string
+  provider: 'kling' | 'seedance' | 'grok' | 'piapi' | string
+  providerModel?: string
+  providerMode?: 'std' | 'pro' | '4k'
+  resolution: VideoResolution
+  estimatedCostPerSecondUsd?: number
+  estimatedInputCostUsdPerImage?: number
 }
 
 export interface VideoReferenceSizeCapability {
@@ -32,7 +51,7 @@ export interface VideoReferenceMeta {
   fileSizeBytes?: number | null
 }
 
-const DEFAULT_MODEL_ID = 'seedance'
+const DEFAULT_MODEL_ID = 'seedance-fast'
 
 const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   kling: {
@@ -50,10 +69,19 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsBaseVideoEdit: true,
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.112,
+    estimatedCostPerSecondUsdByResolution: {
+      '720p': 0.112,
+      '1080p': 0.14,
+      '4k': 0.42,
+    },
+    supportedResolutions: ['720p', '1080p', '4k'],
+    defaultResolution: '720p',
+    provider: 'kling',
+    providerModel: 'kling-v3-omni',
   },
-  seedance: {
-    id: 'seedance',
-    label: 'SeeDance',
+  'seedance-fast': {
+    id: 'seedance-fast',
+    label: 'SeeDance 2.0 Fast',
     minOutputDuration: 4,
     maxOutputDuration: 15,
     maxReferenceVideoDuration: 15.5,
@@ -73,6 +101,46 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsBaseVideoEdit: false,
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.161,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.074,
+      '720p': 0.161,
+    },
+    supportedResolutions: ['480p', '720p'],
+    defaultResolution: '720p',
+    provider: 'seedance',
+    providerModel: 'seedance-2.0-fast-reference-to-video',
+  },
+  seedance: {
+    id: 'seedance',
+    label: 'SeeDance 2.0',
+    minOutputDuration: 4,
+    maxOutputDuration: 15,
+    maxReferenceVideoDuration: 15.5,
+    referenceVideoSize: {
+      maxFileSizeMb: 50,
+      minWidth: 300,
+      maxWidth: 6000,
+      minHeight: 300,
+      maxHeight: 6000,
+      minAspectRatio: 0.4,
+      maxAspectRatio: 2.5,
+      minFramePixels: 409_600,
+      maxFramePixels: 2_086_876,
+      description: '<=50MB, width/height 300-6000px, aspect 0.4-2.5, frame pixels 409,600-2,086,876',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: false,
+    longVideoChunkSeconds: 15,
+    estimatedCostPerSecondUsd: 0.199,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.092,
+      '720p': 0.199,
+      '1080p': 0.496,
+    },
+    supportedResolutions: ['480p', '720p', '1080p'],
+    defaultResolution: '720p',
+    provider: 'seedance',
+    providerModel: 'seedance-2.0-reference-to-video',
   },
   grok: {
     id: 'grok',
@@ -84,8 +152,16 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsBaseVideoEdit: false,
     longVideoChunkSeconds: 10,
     estimatedCostPerSecondUsd: 0.14,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.08,
+      '720p': 0.14,
+    },
     estimatedInputCostUsdPerImage: 0.01,
     maxImageReferences: 1,
+    supportedResolutions: ['480p', '720p'],
+    defaultResolution: '720p',
+    provider: 'grok',
+    providerModel: 'grok-imagine-video-1.5',
   },
   piapi: {
     id: 'piapi',
@@ -97,6 +173,9 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsBaseVideoEdit: false,
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.112,
+    supportedResolutions: ['720p', '1080p'],
+    defaultResolution: '720p',
+    provider: 'piapi',
   },
 }
 
@@ -124,7 +203,15 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
 }
 
 export function normalizeVideoModelId(model?: string | null): string {
-  return model || process.env.ANIMATE_PROVIDER || DEFAULT_MODEL_ID
+  if (!model) return DEFAULT_MODEL_ID
+  const normalized = String(model).trim().toLowerCase()
+  if (normalized === 'seedance2-fast' || normalized === 'seedance-2.0-fast' || normalized === 'seedance_fast') {
+    return 'seedance-fast'
+  }
+  if (normalized === 'seedance2' || normalized === 'seedance-2.0' || normalized === 'seedance-standard') {
+    return 'seedance'
+  }
+  return normalized
 }
 
 export function getDefaultVideoModelId(): string {
@@ -140,13 +227,68 @@ export function listVideoModelCapabilities(): VideoModelCapability[] {
   return Object.values(MODEL_CAPABILITIES)
 }
 
+export function normalizeVideoResolution(
+  model?: string | null,
+  resolution?: VideoResolutionInput,
+): VideoResolution {
+  const capability = getVideoModelCapability(model)
+  if (!resolution || resolution === 'auto') return capability.defaultResolution ?? '720p'
+  return resolution
+}
+
+export function resolveVideoGenerationRoute(options: {
+  model?: string | null
+  resolution?: VideoResolutionInput
+}): VideoGenerationRoute {
+  const model = normalizeVideoModelId(options.model)
+  const capability = getVideoModelCapability(model)
+  const resolution = normalizeVideoResolution(model, options.resolution)
+  const perSecond = capability.estimatedCostPerSecondUsdByResolution?.[resolution] ?? capability.estimatedCostPerSecondUsd
+  const provider = capability.provider ?? model
+  const providerMode =
+    provider === 'kling'
+      ? resolution === '4k'
+        ? '4k'
+        : resolution === '1080p'
+          ? 'pro'
+          : 'std'
+      : undefined
+
+  return {
+    model,
+    label: capability.label,
+    provider,
+    providerModel: capability.providerModel,
+    providerMode,
+    resolution,
+    estimatedCostPerSecondUsd: perSecond,
+    estimatedInputCostUsdPerImage: capability.estimatedInputCostUsdPerImage,
+  }
+}
+
+export function validateVideoResolutionRequest(options: {
+  model?: string | null
+  resolution?: VideoResolutionInput
+}): string | null {
+  const capability = getVideoModelCapability(options.model)
+  const resolution = normalizeVideoResolution(options.model, options.resolution)
+  if (capability.supportedResolutions?.length && !capability.supportedResolutions.includes(resolution)) {
+    return `${capability.label} does not support ${resolution}. Supported resolutions: ${capability.supportedResolutions.join(', ')}.`
+  }
+  return null
+}
+
 export function estimateVideoProviderCostUsd(options: {
   model?: string | null
   durationSec: number
   imageCount?: number
+  resolution?: VideoResolutionInput
 }): number | undefined {
   const capability = getVideoModelCapability(options.model)
-  const perSecond = capability.estimatedCostPerSecondUsd
+  const perSecond = resolveVideoGenerationRoute({
+    model: options.model,
+    resolution: options.resolution,
+  }).estimatedCostPerSecondUsd
   if (perSecond == null) return undefined
   const billableImages = capability.maxImageReferences != null
     ? Math.min(options.imageCount ?? 0, capability.maxImageReferences)
@@ -158,6 +300,7 @@ export function estimateVideoCredits(options: {
   model?: string | null
   durationSec: number
   imageCount?: number
+  resolution?: VideoResolutionInput
   markup?: number
 }): number | undefined {
   const costUsd = estimateVideoProviderCostUsd(options)
@@ -180,6 +323,7 @@ export function resolveVideoOutputDuration(options: {
 
 export function validateVideoModelRequest(options: {
   model?: string | null
+  resolution?: VideoResolutionInput
   outputDuration?: number
   referenceVideoDuration?: number
   referenceVideoMetas?: VideoReferenceMeta[]
@@ -187,6 +331,11 @@ export function validateVideoModelRequest(options: {
   imageReferenceCount?: number
 }): string | null {
   const capability = getVideoModelCapability(options.model)
+  const resolutionError = validateVideoResolutionRequest({
+    model: options.model,
+    resolution: options.resolution,
+  })
+  if (resolutionError) return resolutionError
 
   if (options.outputDuration != null && options.outputDuration < capability.minOutputDuration) {
     return `${capability.label} duration must be ${capability.minOutputDuration} seconds or more.`

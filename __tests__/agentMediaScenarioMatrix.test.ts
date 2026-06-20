@@ -69,10 +69,10 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain("Context Mode for `model='openai'`")
   })
 
-  it('keeps video generation default on SeeDance while allowing cheaper Kling', () => {
-    expect(agent).toContain('Default video model follows the app selection, usually SeeDance')
-    expect(animate).toContain('usually SeeDance')
-    expect(animate).toContain('prefer Kling only when duration and capability allow it')
+  it('keeps video generation default on SeeDance Fast while separating standard SeeDance', () => {
+    expect(agent).toContain('Default video model follows the app selection, usually SeeDance 2.0 Fast')
+    expect(animate).toContain('usually SeeDance 2.0 Fast')
+    expect(animate).toContain('Treat `seedance-fast` and standard `seedance` as separate models')
     expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px')
     expect(ffmpegSkill).toContain('Default video model, higher quality')
     expect(ffmpegSkill).toContain('| Kling | 15s | 10.5s | <=200MB; resolution <=2K')

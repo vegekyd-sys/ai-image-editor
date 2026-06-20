@@ -126,6 +126,7 @@ export interface DbMessage {
 }
 
 export type VideoModel = string
+export type VideoResolution = '480p' | '720p' | '1080p' | '4k' | 'auto'
 
 export interface TranscriptWord {
   text: string;
@@ -173,6 +174,10 @@ export interface VideoMeta {
   status: 'processing' | 'completed' | 'failed' | 'abandoned';
   duration: number | null;
   model: VideoModel;
+  resolution?: VideoResolution;
+  providerModel?: string;
+  providerMode?: string;
+  providerCostUsd?: number;
   createdAt?: string;
   error?: string;
   width?: number;
@@ -196,5 +201,6 @@ export interface ProjectAnimation {
   duration?: number | null;
   createdAt: string;
   videoModel?: VideoModel;
+  videoResolution?: VideoResolution;
   error?: string;
 }

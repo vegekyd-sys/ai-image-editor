@@ -76,6 +76,7 @@ async function handleMcp(req: Request): Promise<Response> {
         const videoModel = normalizeVideoModelId(meta.videoModel || model);
         const videoCredits = estimateVideoCredits({
           model: videoModel,
+          resolution: meta.videoResolution as any,
           durationSec: meta.videoDurationSec,
           imageCount: meta.imageCount ?? 0,
         }) ?? Math.ceil(meta.videoDurationSec * 22);
