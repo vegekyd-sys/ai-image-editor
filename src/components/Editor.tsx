@@ -50,6 +50,12 @@ export type { AnimationState } from '@/lib/editor/types';
 
 type EditorCompletionAction = ArtifactCompletionAction;
 
+function formatFrameEditTime(seconds: number) {
+  if (!seconds || !isFinite(seconds)) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  return `${mins}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
+}
+
 interface EditorProps {
   projectId?: string;
   initialSnapshots?: Snapshot[];
@@ -260,6 +266,11 @@ export default function Editor({
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
   const isAgentActiveRef = useRef(false);
+  const [videoGuiTime, setVideoGuiTime] = useState(0);
+  const [videoGuiDuration, setVideoGuiDuration] = useState(0);
+  const [videoFrameCaptureRequest, setVideoFrameCaptureRequest] = useState(0);
+  const [cuiDraftText, setCuiDraftText] = useState('');
+  const pendingFrameEditRef = useRef<{ anim: ProjectAnimation; time: number; mediaIndex: number; prompt: string } | null>(null);
 
   // Sync state when initialSnapshots/Messages props change (Supabase fetch or cache)
   useEffect(() => {
@@ -1693,6 +1704,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // CUI send: if annotations exist, merge them; otherwise normal chat
   const handleCuiSend = async (text: string, imgs?: string[], videos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => {
     if (gateInteraction()) return;
+    setCuiDraftText('');
     if (annotationMode && annotationEntries.length > 0) {
       await sendWithAnnotations(text);
       return;
@@ -2875,6 +2887,80 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       .catch(e => console.warn('Artifact action failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
+  const handleVideoFrameEdit = useCallback((anim: ProjectAnimation, time: number) => {
+    if (gateInteraction()) return;
+    if (!projectId) { console.warn('video frame edit skipped: no projectId'); return; }
+    if (isAgentActive) { console.warn('video frame edit skipped: agent busy'); return; }
+
+    const duration = videoGuiDuration || anim.duration || 0;
+    const safeTime = Math.max(0, Math.min(Number.isFinite(duration) && duration > 0 ? duration : time, Number.isFinite(time) ? time : 0));
+    const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
+    const mediaIndex = snapIndex >= 0 ? snapIndex + 1 : Math.max(1, viewIndexRef.current + 1);
+    const timeLabel = formatFrameEditTime(safeTime);
+    const prompt = locale === 'en'
+      ? `@${mediaIndex} ${timeLabel} edit this video starting from this frame`
+      : `@${mediaIndex} ${timeLabel} 从这一帧开始修改这个视频`;
+
+    pendingFrameEditRef.current = { anim, time: safeTime, mediaIndex, prompt };
+    setCuiDraftText(prompt);
+    setVideoFrameCaptureRequest(v => v + 1);
+  }, [gateInteraction, projectId, isAgentActive, videoGuiDuration, locale]);
+
+  const handleVideoFrameCaptured = useCallback((dataUrl: string, time: number) => {
+    const pending = pendingFrameEditRef.current;
+    if (!pending || !projectId) return;
+    pendingFrameEditRef.current = null;
+
+    const timeLabel = formatFrameEditTime(time);
+    const msg: Message = {
+      id: generateId(),
+      role: 'assistant',
+      content: t('video.frameCaptured', timeLabel),
+      images: [dataUrl],
+      imageCaptions: [timeLabel],
+      timestamp: Date.now(),
+    };
+    setMessages(prev => [...prev, msg]);
+    onSaveMessage?.(msg);
+    if (!isDesktop) setViewMode('cui');
+
+    Promise.resolve().then(async () => {
+      try {
+        const supabase = createBrowserSupabase();
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData.user?.id;
+        if (!uid) return;
+        const blob = await fetch(dataUrl).then(r => r.blob());
+        const path = `${uid}/${projectId}/frames/frame-edit-${msg.id}.jpg`;
+        await supabase.storage.from('images').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+        const { data: urlData } = supabase.storage.from('images').getPublicUrl(path);
+        const publicUrl = urlData?.publicUrl;
+        if (!publicUrl) return;
+
+        setMessages(prev => prev.map(m => m.id === msg.id
+          ? { ...m, images: [publicUrl], imageCaptions: [timeLabel] }
+          : m
+        ));
+        await supabase.from('agent_events').insert({
+          run_id: `gui-frame-edit-${msg.id}`,
+          project_id: projectId,
+          type: 'preview_frame_captured',
+          data: {
+            workspaceUrl: publicUrl,
+            messageId: msg.id,
+            caption: timeLabel,
+            source: 'gui_video_frame_edit',
+            mediaIndex: pending.mediaIndex,
+            timestamp: time,
+          },
+          seq: 0,
+        });
+      } catch (e) {
+        console.warn('[video-frame-edit] persist captured frame failed:', e);
+      }
+    });
+  }, [projectId, onSaveMessage, t, isDesktop]);
+
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
     // Update message image
@@ -3038,7 +3124,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         // before the next line, giving Safari no chance to show stale frames.
         flushSync(() => setViewMode('gui'));
         // Force layout reflow + repaint so Safari's compositor picks up the new DOM
-        document.body.offsetHeight;           // force reflow
+        void document.body.offsetHeight;      // force reflow
         document.body.style.opacity = '0.999';
         requestAnimationFrame(() => {
           document.body.style.opacity = '';
@@ -3082,6 +3168,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
     onArtifactAction: handleArtifactAction,
+    draftText: cuiDraftText,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
     skills: availableSkills,
     selectedSkill,
@@ -3273,6 +3360,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     }
                   });
                 }}
+                onVideoTimeUpdate={(time, duration) => {
+                  setVideoGuiTime(time);
+                  if (duration && Number.isFinite(duration)) setVideoGuiDuration(duration);
+                }}
+                videoFrameCaptureRequest={videoFrameCaptureRequest}
+                onVideoFrameCaptured={handleVideoFrameCaptured}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
@@ -3622,6 +3715,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         videoModel: anim.videoModel && anim.videoModel !== 'upload' ? anim.videoModel : videoModel,
                       });
                     }}
+                    onFrameEdit={handleVideoFrameEdit}
+                    currentTime={videoGuiTime}
+                    currentDuration={videoGuiDuration}
                     isDesktop={isDesktop}
                   />
                 ) : isViewingDesign ? (

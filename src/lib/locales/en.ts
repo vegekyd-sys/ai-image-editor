@@ -121,6 +121,9 @@ const en = {
   'video.tooLong': 'Video too long ({duration}s). Maximum {max}s.',
   'video.detail': 'Detail',
   'video.count': (n: number) => `${n} video${n !== 1 ? 's' : ''}`,
+  'video.frameEdit': 'Edit this frame',
+  'video.frameEditHint': (time: string) => `Current ${time}`,
+  'video.frameCaptured': (time: string) => `I captured the frame at ${time}. Check it, then tell me what to change.`,
 
   // Animate sheet
   'animate.title': 'Generate video',

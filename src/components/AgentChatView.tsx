@@ -15,6 +15,7 @@ import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import { splitCompletionActions } from '@/lib/artifact-actions';
+import { removeAllInlineVideoUrls, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
 import type { ArtifactCompletionAction as CompletionAction } from '@/types';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
@@ -533,6 +534,7 @@ interface AgentChatViewProps {
   /** Skills for skill picker */
   skills?: SkillItem[];
   selectedSkill?: string | null;
+  draftText?: string;
   onSkillChange?: (skill: string | null) => void;
   onDeleteSkill?: (name: string) => void;
   onUploadSkill?: () => void;
@@ -573,6 +575,7 @@ export default function AgentChatView({
   projectId,
   skills,
   selectedSkill,
+  draftText,
   onSkillChange,
   onDeleteSkill,
   onUploadSkill,
@@ -589,6 +592,7 @@ export default function AgentChatView({
   }, [snapshots]);
 
   const [input, setInput] = useState('');
+  const lastDraftTextRef = useRef<string | undefined>(undefined);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   // Unified attachment system: images + videos in one array
   interface Attachment {
@@ -636,6 +640,14 @@ export default function AgentChatView({
     vv.addEventListener('scroll', update);
     return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
   }, []);
+
+  useEffect(() => {
+    if (draftText === lastDraftTextRef.current) return;
+    lastDraftTextRef.current = draftText;
+    if (!draftText) return;
+    setInput(draftText);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [draftText]);
 
   // ── PiP drag state ──────────────────────────────────────────────
   type PipCorner = 'tl' | 'tr' | 'ml' | 'mr' | 'bl' | 'br';
@@ -1194,11 +1206,17 @@ export default function AgentChatView({
                     ))}
                     {msg.content && !msg.content.startsWith('[CREDITS_EXHAUSTED:') && (() => {
                       const { text: visibleText, actions } = splitCompletionActions(msg.content);
+                      const inlineVideo = msg.design || msg.image || msg.content.includes('```')
+                        ? null
+                        : resolveInlineVideoCandidate(msg.content, snapshots);
+                      const visibleWithoutVideoUrls = inlineVideo
+                        ? removeAllInlineVideoUrls(visibleText)
+                        : removeRenderableInlineVideoUrls(visibleText);
                       return (
                         <div className="markdown-body">
                           <MarkdownBlock
                             key={msg.id}
-                            text={fixMarkdownDelimiters(visibleText.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
+                            text={fixMarkdownDelimiters(visibleWithoutVideoUrls.replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
                             isPanel={isPanel}
                             snapshots={snapshots}
                             onNavigateToSnapshot={onNavigateToSnapshot}
@@ -1206,20 +1224,14 @@ export default function AgentChatView({
                           />
                           {/* Inline video — natural aspect ratio, play button, tap to navigate */}
                           {(() => {
-                            if (msg.design || msg.image) return null;
-                            if (msg.content.includes('```')) return null;
-                            const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
-                            if (!mp4Match) return null;
-                            const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
-                            const snapIdMatch = msg.content.match(/snap:([a-f0-9-]+)/);
-                            const navId = snapIdMatch?.[1] || animIdMatch?.[1];
-                            const videoSnap = navId ? snapshots.find(s => s.id === navId) : null;
+                            if (!inlineVideo) return null;
+                            const { url: videoUrl, navId, videoSnap } = inlineVideo;
                             const vw = videoSnap?.videoMeta?.width || 0;
                             const vh = videoSnap?.videoMeta?.height || 0;
                             const videoAR = vw && vh ? `${vw}/${vh}` : '9/16';
                             const posterUrl = videoSnap?.imageUrl || videoSnap?.image || undefined;
                             const snapIdx = videoSnap ? snapshots.indexOf(videoSnap) + 1 : undefined;
-                            return <InlineCuiVideo url={mp4Match[0]} aspectRatio={videoAR} posterUrl={posterUrl} snapIndex={snapIdx} isDesktop={isPanel} onNavigate={(e, time) => handleInlineVideoClick(e, mp4Match[0], navId, time)} />;
+                            return <InlineCuiVideo url={videoUrl} aspectRatio={videoAR} posterUrl={posterUrl} snapIndex={snapIdx} isDesktop={isPanel} onNavigate={(e, time) => handleInlineVideoClick(e, videoUrl, navId, time)} />;
                           })()}
                           <CompletionActionCard
                             actions={actions}
@@ -1280,7 +1292,7 @@ export default function AgentChatView({
                               style={{ border: '1px solid rgba(255,255,255,0.08)', height: 160, width: 'auto' }}
                             />
                             <span className="absolute bottom-1.5 left-1.5 bg-black/60 backdrop-blur text-white text-[10px] font-medium px-1.5 py-0.5 rounded-md">
-                              {i + 1}/{msg.images!.length}
+                              {msg.imageCaptions?.[i] || `${i + 1}/${msg.images!.length}`}
                             </span>
                           </button>
                         ))}

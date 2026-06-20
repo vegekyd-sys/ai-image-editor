@@ -20,6 +20,7 @@ export interface Message {
   content: string;
   image?: string;        // base64 data URL (single image, e.g. generate_image result)
   images?: string[];     // multiple images (e.g. preview_frame captures)
+  imageCaptions?: string[]; // optional labels for images, e.g. captured video frame time
   editPrompt?: string;   // the English editPrompt sent to generate_image (for transparency)
   editModel?: string;    // which model generated the image ('gemini' | 'qwen')
   editInputImages?: string[]; // images passed to Gemini as input (1 = normal, 2 = face restoration)

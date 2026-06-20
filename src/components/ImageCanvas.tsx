@@ -81,6 +81,12 @@ interface ImageCanvasProps {
   videoTimelineIndices?: Set<number>;
   /** Called once when the video element loads data — captures a poster frame at 0.5s */
   onVideoPosterCapture?: (dataUrl: string) => void;
+  /** Called as the current video playback position changes. */
+  onVideoTimeUpdate?: (time: number, duration: number) => void;
+  /** Incrementing token from parent to request a current-frame capture. */
+  videoFrameCaptureRequest?: number;
+  /** Called after the current video frame is captured from the playing element. */
+  onVideoFrameCaptured?: (dataUrl: string, time: number, duration: number) => void;
 }
 
 export default function ImageCanvas({
@@ -105,6 +111,9 @@ export default function ImageCanvas({
   onVisibleEditableFields,
   videoTimelineIndices,
   onVideoPosterCapture,
+  onVideoTimeUpdate,
+  videoFrameCaptureRequest,
+  onVideoFrameCaptured,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const touchStartX = useRef(0);
@@ -178,6 +187,7 @@ export default function ImageCanvas({
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
+  const lastCaptureRequestRef = useRef<number | undefined>(undefined);
   const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDragging = useRef(false);
@@ -214,6 +224,30 @@ export default function ImageCanvas({
     ro.observe(container);
     return () => ro.disconnect();
   }, [updateImageRect]);
+
+  useEffect(() => {
+    if (videoFrameCaptureRequest === undefined) return;
+    if (lastCaptureRequestRef.current === videoFrameCaptureRequest) return;
+    lastCaptureRequestRef.current = videoFrameCaptureRequest;
+
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) return;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      onVideoFrameCaptured?.(
+        canvas.toDataURL('image/jpeg', 0.92),
+        video.currentTime || videoCurrentTime,
+        Number.isFinite(video.duration) ? video.duration : videoDuration,
+      );
+    } catch (e) {
+      console.warn('[ImageCanvas] current video frame capture failed:', e);
+    }
+  }, [videoFrameCaptureRequest, onVideoFrameCaptured, videoCurrentTime, videoDuration]);
 
   const SWIPE_THRESHOLD = 40;
 
@@ -929,7 +963,10 @@ export default function ImageCanvas({
               onError={() => setVideoError(true)}
               onTimeUpdate={() => {
                 const v = videoRef.current;
-                if (v) setVideoCurrentTime(v.currentTime);
+                if (v) {
+                  setVideoCurrentTime(v.currentTime);
+                  onVideoTimeUpdate?.(v.currentTime, Number.isFinite(v.duration) ? v.duration : videoDuration);
+                }
               }}
               onLoadedData={() => {
                 setVideoFrameLoadedUrl(videoUrl ?? null);
@@ -953,7 +990,10 @@ export default function ImageCanvas({
               }}
               onLoadedMetadata={() => {
                 const v = videoRef.current;
-                if (v && isFinite(v.duration)) setVideoDuration(v.duration);
+                if (v && isFinite(v.duration)) {
+                  setVideoDuration(v.duration);
+                  onVideoTimeUpdate?.(v.currentTime || 0, v.duration);
+                }
               }}
               onProgress={() => {
                 const v = videoRef.current;

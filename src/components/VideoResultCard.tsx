@@ -30,12 +30,15 @@ interface VideoResultCardProps {
   onCreateNew: () => void;
   onAbandon: (taskId: string) => void;
   onRetry?: (anim: ProjectAnimation) => void;
+  onFrameEdit?: (anim: ProjectAnimation, time: number) => void;
   onViewDetail: (anim: ProjectAnimation) => void;
+  currentTime?: number;
+  currentDuration?: number;
   isDesktop?: boolean;
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onRetry, onViewDetail, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onRetry, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
@@ -55,6 +58,7 @@ export default function VideoResultCard({
 
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
+  const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -66,6 +70,18 @@ export default function VideoResultCard({
       {t('video.count', all.length)}
     </span>
   );
+
+  function formatTime(seconds: number) {
+    if (!seconds || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    return `${mins}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
+  }
+
+  function clampTime(seconds: number) {
+    if (!isFinite(seconds)) return 0;
+    const max = currentDuration && isFinite(currentDuration) ? currentDuration : seconds;
+    return Math.max(0, Math.min(max, seconds));
+  }
 
   return (
     <>
@@ -197,6 +213,49 @@ export default function VideoResultCard({
             style={{ background: 'rgba(255,255,255,0.02)' }}
           >
             {t('video.noVideos')}
+          </div>
+        )}
+
+        {frameEditAnim && onFrameEdit && (
+          <div
+            data-testid="video-frame-edit-pill"
+            className="flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
+            style={{ background: 'rgba(217,70,239,0.06)', height: thumbSize }}
+          >
+            <button
+              onClick={() => onFrameEdit(frameEditAnim, clampTime(currentTime))}
+              className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
+              style={{
+                width: cardWidth + (isDesktop ? 40 : 44),
+                transition: 'filter 0.15s, transform 0.1s',
+                background: 'transparent',
+                border: 'none',
+              }}
+            >
+              <div className="h-full flex">
+                <div
+                  className="flex-shrink-0 bg-white/5 relative overflow-hidden flex items-center justify-center"
+                  style={{ width: thumbSize, height: thumbSize }}
+                >
+                  <svg
+                    width="17" height="17" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"
+                    className="text-white/45"
+                  >
+                    <path d="M4 7h3l1.5-2h7L17 7h3v12H4z" />
+                    <circle cx="12" cy="13" r="3.5" />
+                  </svg>
+                </div>
+                <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
+                  <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
+                    {t('video.frameEdit')}
+                  </div>
+                  <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
+                    {t('video.frameEditHint', formatTime(currentTime))}
+                  </div>
+                </div>
+              </div>
+            </button>
           </div>
         )}
       </PillCarousel>

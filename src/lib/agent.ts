@@ -1330,11 +1330,59 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
             });
             if (image.error || !image.image) return { error: image.error || 'No screenshot image provided for locate_frame.' };
 
-            const { locateFrameInVideoContent } = await import('./gemini');
-            const location = await locateFrameInVideoContent(videoUrl, image.image, question, ctx.userId);
+            const { locateFrameInVideoContent, verifyFrameImageMatch } = await import('./gemini');
+            let location = await locateFrameInVideoContent(videoUrl, image.image, question, ctx.userId);
+            let verification: Record<string, unknown> | undefined;
+
+            if ((location.verdict === 'located' || location.verdict === 'multiple_candidates') && typeof location.timestamp === 'number') {
+              try {
+                const { extractVideoFrame } = await import('./video-frame');
+                const frameBuffer = await extractVideoFrame(videoUrl, { timestamp: location.timestamp });
+                const candidateImage = `data:image/jpeg;base64,${frameBuffer.toString('base64')}`;
+                const match = await verifyFrameImageMatch(image.image, candidateImage, question, ctx.userId);
+
+                let candidateFrameUrl = '';
+                let candidateFramePath = '';
+                if (ctx.supabase && ctx.userId) {
+                  candidateFramePath = `${ctx.projectId}/drafts/locate-verify-media${media_index}-t${location.timestamp.toFixed(2).replace('.', '-')}-${Date.now()}.jpg`;
+                  const ws = await workspace.writeFile(candidateFramePath, frameBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+                  if (ws.storageUrl) candidateFrameUrl = toPublicStorageUrl(ws.storageUrl);
+                }
+
+                const verificationDetails = {
+                  ...match,
+                  candidateFramePath,
+                  candidateFrameUrl,
+                };
+                verification = verificationDetails;
+                location = { ...location, verification: verificationDetails };
+
+                if (match.verdict !== 'match' || match.confidence < 0.72) {
+                  location = {
+                    ...location,
+                    verdict: 'uncertain',
+                    confidence: Math.min(location.confidence, match.confidence),
+                    concerns: [
+                      ...location.concerns,
+                      `Verification failed: candidate frame did not confidently match the screenshot (${match.verdict}, ${match.confidence.toFixed(2)}).`,
+                      ...match.concerns,
+                    ].slice(0, 8),
+                  };
+                }
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                location = {
+                  ...location,
+                  verdict: 'uncertain',
+                  confidence: Math.min(location.confidence, 0.4),
+                  concerns: [...location.concerns, `Verification could not run: ${msg}`].slice(0, 8),
+                };
+              }
+            }
             return {
               mode: 'locate_frame',
               location,
+              verification,
               media_index,
               videoUrl,
               imageSource: image.source,
