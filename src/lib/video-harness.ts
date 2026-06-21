@@ -3,7 +3,7 @@
  * Returns null if OK, or an error string to send back to the Agent for retry.
  */
 
-import { getVideoModelCapability, validateVideoResolutionRequest, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, validateVideoAspectRatioRequest, validateVideoResolutionRequest, type VideoAspectRatioInput, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 import { parseTotalDuration } from './kling';
 
 const MAX_VIDEO_DURATION = 15;
@@ -26,10 +26,11 @@ export function validateVideoScript(opts: {
   videoRefType?: string
   model?: string
   resolution?: VideoResolutionInput
+  aspectRatio?: VideoAspectRatioInput
   motionControl?: boolean
   duration?: number
 }): string | null {
-  const { prompt, imageCount, videoRefUrl, videoRefType, model, resolution, motionControl, duration } = opts
+  const { prompt, imageCount, videoRefUrl, videoRefType, model, resolution, aspectRatio, motionControl, duration } = opts
 
   // Motion control: only need video_ref_url, skip image reference checks
   if (motionControl) {
@@ -42,6 +43,8 @@ export function validateVideoScript(opts: {
   const capability = getVideoModelCapability(model)
   const resolutionError = validateVideoResolutionRequest({ model, resolution })
   if (resolutionError) return resolutionError
+  const aspectRatioError = validateVideoAspectRatioRequest({ model, aspectRatio })
+  if (aspectRatioError) return aspectRatioError
   const parsedDuration = parseTotalDuration(prompt)
   if (parsedDuration != null && parsedDuration < capability.minOutputDuration) {
     return `A single ${capability.label} video generation script must be at least ${capability.minOutputDuration} seconds, but this script totals ${parsedDuration}s. Extend it to a compact ${capability.minOutputDuration}s script and set duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`

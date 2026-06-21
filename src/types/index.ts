@@ -127,6 +127,7 @@ export interface DbMessage {
 
 export type VideoModel = string
 export type VideoResolution = '480p' | '720p' | '1080p' | '4k' | 'auto'
+export type VideoAspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
 
 export interface TranscriptWord {
   text: string;
@@ -175,6 +176,7 @@ export interface VideoMeta {
   duration: number | null;
   model: VideoModel;
   resolution?: VideoResolution;
+  aspectRatio?: VideoAspectRatio;
   providerModel?: string;
   providerMode?: string;
   providerCostUsd?: number;
@@ -202,5 +204,6 @@ export interface ProjectAnimation {
   createdAt: string;
   videoModel?: VideoModel;
   videoResolution?: VideoResolution;
+  videoAspectRatio?: VideoAspectRatio;
   error?: string;
 }

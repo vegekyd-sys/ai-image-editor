@@ -143,6 +143,12 @@ export default function AnimateSheet({
     : (detailAnimation?.snapshotUrls ?? []);
   const detailPrompt = detailAnimation?.prompt ?? '';
   const detailDuration = detailAnimation?.duration;
+  const detailResolution = detailAnimation?.videoModel && detailAnimation.videoModel !== 'upload'
+    ? normalizeVideoResolution(detailAnimation.videoModel, detailAnimation.videoResolution ?? 'auto')
+    : null;
+  const detailAspectRatio = detailAnimation?.videoAspectRatio && detailAnimation.videoAspectRatio !== 'auto'
+    ? detailAnimation.videoAspectRatio
+    : null;
 
   const getBottomButton = () => {
     if (status === 'submitting') {
@@ -269,6 +275,26 @@ export default function AnimateSheet({
                 }}>
                   {detailDuration != null ? t('animate.seconds', Math.round(detailDuration)) : t('animate.smart')}
                 </div>
+                {detailResolution && (
+                <div style={{
+                  padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
+                  borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
+                  fontWeight: 600,
+                }}>
+                  {detailResolution.toUpperCase()}
+                </div>
+                )}
+                {detailAspectRatio && (
+                <div style={{
+                  padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
+                  borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
+                  fontWeight: 600,
+                }}>
+                  {detailAspectRatio}
+                </div>
+                )}
                 <div style={{
                   padding: '6px 12px', borderRadius: 8,
                   border: '1px solid',

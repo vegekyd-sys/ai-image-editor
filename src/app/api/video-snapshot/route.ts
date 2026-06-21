@@ -122,6 +122,7 @@ export async function POST(req: NextRequest) {
       duration: effectiveDuration || null,
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
+      aspectRatio,
       providerModel: videoRoute.providerModel,
       providerMode: videoRoute.providerMode,
       createdAt: new Date().toISOString(),

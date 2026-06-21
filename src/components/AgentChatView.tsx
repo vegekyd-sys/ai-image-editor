@@ -512,6 +512,8 @@ interface AgentChatViewProps {
   currentSnapshotIndex?: number;
   preferredModel?: PreferredModel;
   onModelChange?: (model: PreferredModel) => void;
+  videoAuto?: boolean;
+  onVideoAutoChange?: (auto: boolean) => void;
   videoModel?: import('@/types').VideoModel;
   onVideoModelChange?: (model: import('@/types').VideoModel) => void;
   videoResolution?: import('@/types').VideoResolution;
@@ -563,6 +565,8 @@ export default function AgentChatView({
   currentSnapshotIndex,
   preferredModel = 'auto',
   onModelChange,
+  videoAuto = true,
+  onVideoAutoChange,
   videoModel = getDefaultVideoModelId(),
   onVideoModelChange,
   videoResolution = 'auto',
@@ -1472,6 +1476,8 @@ export default function AgentChatView({
               <ModelSelector
                 preferredModel={preferredModel}
                 onModelChange={onModelChange}
+                videoAuto={videoAuto}
+                onVideoAutoChange={onVideoAutoChange}
                 videoModel={videoModel}
                 onVideoModelChange={onVideoModelChange}
                 videoResolution={videoResolution}

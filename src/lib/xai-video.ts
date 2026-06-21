@@ -1,6 +1,6 @@
 const XAI_BASE_URL = process.env.XAI_API_BASE || 'https://api.x.ai'
 const XAI_VIDEO_MODEL = 'grok-imagine-video-1.5'
-const XAI_DEFAULT_RESOLUTION = (process.env.XAI_VIDEO_RESOLUTION || '720p') as '480p' | '720p'
+const XAI_DEFAULT_RESOLUTION = (process.env.XAI_VIDEO_RESOLUTION || '480p') as '480p' | '720p'
 
 export interface XaiVideoTaskInput {
   prompt: string
@@ -80,7 +80,8 @@ export async function createXaiVideoTask(input: XaiVideoTaskInput): Promise<stri
     resolution,
   }
 
-  if (input.aspectRatio) body.aspect_ratio = input.aspectRatio
+  // Do not send aspect_ratio for xAI image-to-video. xAI documents that forcing
+  // a ratio different from the source image stretches the image content.
 
   const res = await fetch(`${XAI_BASE_URL}/v1/videos/generations`, {
     method: 'POST',

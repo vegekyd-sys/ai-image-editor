@@ -13,6 +13,7 @@ export interface VideoModelCapability {
   maxImageReferences?: number
   supportedResolutions?: VideoResolution[]
   defaultResolution?: VideoResolution
+  supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
   provider?: 'kling' | 'seedance' | 'grok' | 'piapi'
   providerModel?: string
@@ -20,6 +21,8 @@ export interface VideoModelCapability {
 
 export type VideoResolution = '480p' | '720p' | '1080p' | '4k'
 export type VideoResolutionInput = VideoResolution | 'auto' | null | undefined
+export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
+export type VideoAspectRatioInput = VideoAspectRatio | 'auto' | null | undefined
 
 export interface VideoGenerationRoute {
   model: string
@@ -76,6 +79,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportedResolutions: ['720p', '1080p', '4k'],
     defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
     provider: 'kling',
     providerModel: 'kling-v3-omni',
   },
@@ -107,6 +111,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportedResolutions: ['480p', '720p'],
     defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     provider: 'seedance',
     providerModel: 'seedance-2.0-fast-reference-to-video',
   },
@@ -139,6 +144,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportedResolutions: ['480p', '720p', '1080p'],
     defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     provider: 'seedance',
     providerModel: 'seedance-2.0-reference-to-video',
   },
@@ -159,7 +165,8 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     estimatedInputCostUsdPerImage: 0.01,
     maxImageReferences: 1,
     supportedResolutions: ['480p', '720p'],
-    defaultResolution: '720p',
+    defaultResolution: '480p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3'],
     provider: 'grok',
     providerModel: 'grok-imagine-video-1.5',
   },
@@ -175,6 +182,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     estimatedCostPerSecondUsd: 0.112,
     supportedResolutions: ['720p', '1080p'],
     defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
     provider: 'piapi',
   },
 }
@@ -236,6 +244,25 @@ export function normalizeVideoResolution(
   return resolution
 }
 
+export function resolveAgentVideoSelection(options: {
+  appModel?: string | null
+  appResolution?: VideoResolutionInput
+  appAuto?: boolean | null
+  toolModel?: string | null
+  toolResolution?: VideoResolutionInput
+}): { model: string; resolution: VideoResolutionInput; locked: boolean } {
+  const appModel = normalizeVideoModelId(options.appModel)
+  const appResolution = options.appResolution ?? 'auto'
+  const appAuto = options.appAuto ?? (appModel === DEFAULT_MODEL_ID && appResolution === 'auto')
+  const locked = !appAuto
+
+  return {
+    model: locked ? appModel : normalizeVideoModelId(options.toolModel || appModel),
+    resolution: locked ? appResolution : (options.toolResolution ?? appResolution),
+    locked,
+  }
+}
+
 export function resolveVideoGenerationRoute(options: {
   model?: string | null
   resolution?: VideoResolutionInput
@@ -278,6 +305,32 @@ export function validateVideoResolutionRequest(options: {
   return null
 }
 
+export function validateVideoAspectRatioRequest(options: {
+  model?: string | null
+  aspectRatio?: VideoAspectRatioInput
+}): string | null {
+  if (!options.aspectRatio || options.aspectRatio === 'auto') return null
+  const capability = getVideoModelCapability(options.model)
+  if (capability.supportedAspectRatios?.length && !capability.supportedAspectRatios.includes(options.aspectRatio)) {
+    return `${capability.label} does not support ${options.aspectRatio}. Supported aspect ratios: ${capability.supportedAspectRatios.join(', ')}.`
+  }
+  return null
+}
+
+export function resolveVideoProviderAspectRatio(
+  model?: string | null,
+  aspectRatio?: VideoAspectRatioInput,
+): string | undefined {
+  const route = resolveVideoGenerationRoute({ model })
+  // xAI stretches the source image when image-to-video receives a forced
+  // aspect_ratio. Grok in Makaron is single-image-to-video, so keep source AR.
+  if (route.provider === 'grok') return undefined
+  if (!aspectRatio || aspectRatio === 'auto') {
+    return route.provider === 'seedance' ? 'adaptive' : undefined
+  }
+  return aspectRatio
+}
+
 export function estimateVideoProviderCostUsd(options: {
   model?: string | null
   durationSec: number
@@ -308,6 +361,10 @@ export function estimateVideoCredits(options: {
   return Math.ceil(costUsd * 100 * (options.markup ?? 2) - 1e-9)
 }
 
+export function isFastVideoRenderModel(model?: string | null): boolean {
+  return normalizeVideoModelId(model) === 'grok'
+}
+
 export function resolveVideoOutputDuration(options: {
   requestedDuration?: number
   referenceVideoDuration?: number
@@ -324,6 +381,7 @@ export function resolveVideoOutputDuration(options: {
 export function validateVideoModelRequest(options: {
   model?: string | null
   resolution?: VideoResolutionInput
+  aspectRatio?: VideoAspectRatioInput
   outputDuration?: number
   referenceVideoDuration?: number
   referenceVideoMetas?: VideoReferenceMeta[]
@@ -336,6 +394,11 @@ export function validateVideoModelRequest(options: {
     resolution: options.resolution,
   })
   if (resolutionError) return resolutionError
+  const aspectRatioError = validateVideoAspectRatioRequest({
+    model: options.model,
+    aspectRatio: options.aspectRatio,
+  })
+  if (aspectRatioError) return aspectRatioError
 
   if (options.outputDuration != null && options.outputDuration < capability.minOutputDuration) {
     return `${capability.label} duration must be ${capability.minOutputDuration} seconds or more.`

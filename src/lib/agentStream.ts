@@ -42,6 +42,7 @@ export async function streamAgent(
     preferredModel?: string;
     videoModel?: string;
     videoResolution?: string;
+    videoAuto?: boolean;
     snapshotImages?: string[];
     currentSnapshotIndex?: number;
     isNsfw?: boolean;

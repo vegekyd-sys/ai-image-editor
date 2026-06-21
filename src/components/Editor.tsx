@@ -41,7 +41,7 @@ import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
-import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
+import { getDefaultVideoModelId, isFastVideoRenderModel, normalizeVideoResolution } from '@/lib/video-model-capabilities';
 import { formatVideoMediaSpec } from '@/lib/media-aspect';
 import { serializeCompletionActions } from '@/lib/artifact-actions';
 import { appendSnapshotDedupeVideo, dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe';
@@ -198,6 +198,9 @@ export default function Editor({
   const [videoResolution, setVideoResolution] = useState<VideoResolution>('auto');
   const videoResolutionRef = useRef<VideoResolution>('auto');
   useEffect(() => { videoResolutionRef.current = videoResolution; }, [videoResolution]);
+  const [videoAuto, setVideoAuto] = useState(true);
+  const videoAutoRef = useRef(true);
+  useEffect(() => { videoAutoRef.current = videoAuto; }, [videoAuto]);
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const skillFileRef = useRef<HTMLInputElement>(null);
@@ -1587,7 +1590,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
+        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -2739,7 +2742,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [animations, messages, onSaveMessage, isV2]);
 
   // Update StatusBar with video rendering progress
+  const processingVideoModel = snapshots.find(s => s.type === 'video' && s.videoMeta?.status === 'processing')?.videoMeta?.model
+    ?? animations.find(a => a.status === 'processing')?.videoModel
+    ?? animationState?.videoModel
+    ?? null;
   const videoProcessing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
+  const videoRenderingStatus = isFastVideoRenderModel(processingVideoModel)
+    ? t('status.videoRenderingFast')
+    : t('status.videoRenderingEllipsis');
   useEffect(() => {
     if (animationState?.status === 'generating_prompt') {
       setAgentStatus(t('status.writingScript'));
@@ -2749,12 +2759,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setAgentStatus(t('status.videoDone'));
     } else if (animationState?.status === 'polling' || videoProcessing) {
       if (!isAgentActive && !musicTaskId) {
-        setAgentStatus(t('status.videoRenderingEllipsis'));
+        setAgentStatus(videoRenderingStatus);
       }
     } else if (!isAgentActive && !musicTaskId) {
       setAgentStatus(t('editor.greeting'));
     }
-  }, [animationState?.status, videoProcessing, isAgentActive, musicTaskId]);
+  }, [animationState?.status, videoProcessing, isAgentActive, musicTaskId, t, videoRenderingStatus]);
 
   // Update StatusBar with music generation progress (same pattern as video)
   useEffect(() => {
@@ -3078,15 +3088,34 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     currentSnapshotIndex: isViewingVideo ? (currentSnapIndex + 1) : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
     preferredModel: preferredModel as PreferredModel,
     onModelChange: setPreferredModel,
+    videoAuto,
+    onVideoAutoChange: (auto: boolean) => {
+      setVideoAuto(auto);
+      if (auto) {
+        const defaultModel = getDefaultVideoModelId();
+        setVideoModel(defaultModel);
+        setVideoResolution('auto');
+        setAnimationState(prev => prev ? { ...prev, videoModel: defaultModel, videoResolution: 'auto' } : prev);
+      } else {
+        const defaultModel = getDefaultVideoModelId();
+        const defaultResolution = normalizeVideoResolution(defaultModel, 'auto');
+        setVideoModel(defaultModel);
+        setVideoResolution(defaultResolution);
+        setAnimationState(prev => prev ? { ...prev, videoModel: defaultModel, videoResolution: defaultResolution } : prev);
+      }
+    },
     videoModel,
     onVideoModelChange: (m: import('@/types').VideoModel) => {
       if (m === 'upload') return;
+      setVideoAuto(false);
       setVideoModel(m);
-      setVideoResolution('auto');
-      setAnimationState(prev => prev ? { ...prev, videoModel: m, videoResolution: 'auto' } : prev);
+      const defaultResolution = normalizeVideoResolution(m, 'auto');
+      setVideoResolution(defaultResolution);
+      setAnimationState(prev => prev ? { ...prev, videoModel: m, videoResolution: defaultResolution } : prev);
     },
     videoResolution,
     onVideoResolutionChange: (resolution: import('@/types').VideoResolution) => {
+      setVideoAuto(false);
       setVideoResolution(resolution);
       setAnimationState(prev => prev ? { ...prev, videoResolution: resolution } : prev);
     },
@@ -3259,6 +3288,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   ? (currentSnap?.videoMeta?.status === 'processing')
                   : (isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing'))}
                 videoFailed={isViewingVideoV2 ? (currentSnap?.videoMeta?.status === 'failed') : false}
+                videoModel={isViewingVideoV2
+                  ? (currentSnap?.videoMeta?.model ?? null)
+                  : (currentVideo?.videoModel ?? null)}
                 videoPosterImage={isViewingVideoV2
                   ? (currentSnap?.image || currentSnap?.imageUrl)
                   : snapshots[snapshots.length - 1]?.image}
@@ -3576,6 +3608,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
                       videoModel: currentSnap.videoMeta.model,
                       videoResolution: currentSnap.videoMeta.resolution,
+                      videoAspectRatio: currentSnap.videoMeta.aspectRatio,
                       error: currentSnap.videoMeta.error,
                     }] : animations}
                     selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
@@ -3598,7 +3631,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         const res = await fetch('/api/video-snapshot', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId(), videoResolution: anim.videoResolution || 'auto' }),
+                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId(), videoResolution: anim.videoResolution || 'auto', aspectRatio: anim.videoAspectRatio }),
                         });
                         const json = await res.json();
                         if (!res.ok) throw new Error(json.error || 'Retry failed');

@@ -10,6 +10,8 @@ import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResoluti
 interface ModelSelectorProps {
   preferredModel: PreferredModel;
   onModelChange: (model: PreferredModel) => void;
+  videoAuto?: boolean;
+  onVideoAutoChange?: (auto: boolean) => void;
   videoModel?: VideoModel;
   onVideoModelChange?: (model: VideoModel) => void;
   videoResolution?: VideoResolution;
@@ -180,9 +182,187 @@ function ModelRow({
   );
 }
 
+function ResolutionChips({
+  label,
+  options,
+  selectedVideoResolution,
+  onSelect,
+}: {
+  label: string;
+  options: VideoResolution[];
+  selectedVideoResolution?: VideoResolution;
+  onSelect: (resolution: VideoResolution) => void;
+}) {
+  return (
+    <div style={{ padding: '0 12px 12px 54px' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(232,121,249,0.55)', marginBottom: 6 }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {options.map(resolution => {
+          const active = selectedVideoResolution === resolution;
+          return (
+            <button
+              key={resolution}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(resolution);
+              }}
+              style={{
+                height: 28,
+                padding: '0 10px',
+                borderRadius: 8,
+                border: `1px solid ${active ? 'rgba(232,121,249,0.52)' : 'rgba(255,255,255,0.09)'}`,
+                background: active ? 'rgba(232,121,249,0.14)' : 'rgba(255,255,255,0.04)',
+                color: active ? '#e879f9' : 'rgba(255,255,255,0.48)',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {resolution.toUpperCase()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VideoModelRow({
+  model,
+  name,
+  desc,
+  selected,
+  onSelect,
+  resolutionLabel,
+  resolutionOptions,
+  selectedVideoResolution,
+  onResolutionSelect,
+}: {
+  model: ModelInfo;
+  name: string;
+  desc: string;
+  selected: boolean;
+  onSelect: () => void;
+  resolutionLabel: string;
+  resolutionOptions: VideoResolution[];
+  selectedVideoResolution?: VideoResolution;
+  onResolutionSelect?: (resolution: VideoResolution) => void;
+}) {
+  return (
+    <div
+      style={{
+        width: '100%',
+        borderRadius: 12,
+        background: selected ? 'rgba(232,121,249,0.08)' : 'transparent',
+        flexShrink: 0,
+        transition: 'background 0.15s',
+      }}
+    >
+      <button
+        onClick={onSelect}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          width: '100%',
+          height: ROW_HEIGHT,
+          padding: '0 12px',
+          borderRadius: 12,
+          border: 'none',
+          background: 'transparent',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            background: 'rgba(255,255,255,0.06)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            color: selected ? '#e879f9' : 'rgba(255,255,255,0.4)',
+          }}
+        >
+          <ModelIcon size={16} />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: selected ? '#e879f9' : 'rgba(255,255,255,0.85)',
+            }}>
+              {name}
+            </span>
+            {model.speedLabel && (
+              <span style={{
+                fontSize: 10,
+                padding: '1px 5px',
+                borderRadius: 4,
+                background: 'rgba(255,255,255,0.06)',
+                color: 'rgba(255,255,255,0.35)',
+              }}>
+                {model.speedLabel}
+              </span>
+            )}
+          </div>
+          <div style={{
+            fontSize: 11,
+            color: 'rgba(255,255,255,0.35)',
+            marginTop: 1,
+            lineHeight: 1.3,
+          }}>
+            {desc}
+          </div>
+        </div>
+
+        <div
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            border: `2px solid ${selected ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {selected && (
+            <div style={{
+              width: 10,
+              height: 10,
+              borderRadius: 5,
+              background: '#c026d3',
+            }} />
+          )}
+        </div>
+      </button>
+
+      {selected && resolutionOptions.length > 0 && onResolutionSelect && (
+        <ResolutionChips
+          label={resolutionLabel}
+          options={resolutionOptions}
+          selectedVideoResolution={selectedVideoResolution}
+          onSelect={onResolutionSelect}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function ModelSelector({
   preferredModel,
   onModelChange,
+  videoAuto = true,
+  onVideoAutoChange,
   videoModel = getDefaultVideoModelId(),
   onVideoModelChange,
   videoResolution = 'auto',
@@ -200,7 +380,8 @@ export default function ModelSelector({
     typeof window !== 'undefined' ? (localStorage.getItem('mkr_auto_tips') ?? 'auto') !== 'off' : true
   );
 
-  const isAuto = preferredModel === 'auto';
+  const imageAuto = preferredModel === 'auto';
+  const currentAuto = activeTab === 'image' ? imageAuto : videoAuto;
 
   useEffect(() => {
     if (!open) return;
@@ -236,21 +417,30 @@ export default function ModelSelector({
   }, [open]);
 
   const handleAutoToggle = useCallback((on: boolean) => {
+    if (activeTab === 'video') {
+      onVideoAutoChange?.(on);
+      return;
+    }
     if (on) {
       onModelChange('auto');
     } else {
       onModelChange('gemini');
     }
-  }, [onModelChange]);
+  }, [activeTab, onModelChange, onVideoAutoChange]);
 
   const handleImageSelect = useCallback((id: string) => {
     onModelChange(id as PreferredModel);
   }, [onModelChange]);
 
   const handleVideoSelect = useCallback((id: string) => {
+    onVideoAutoChange?.(false);
     onVideoModelChange?.(id as VideoModel);
-    onVideoResolutionChange?.('auto');
-  }, [onVideoModelChange, onVideoResolutionChange]);
+    onVideoResolutionChange?.(normalizeVideoResolution(id, 'auto'));
+  }, [onVideoAutoChange, onVideoModelChange, onVideoResolutionChange]);
+
+  const handleVideoResolutionSelect = useCallback((resolution: VideoResolution) => {
+    onVideoResolutionChange?.(resolution);
+  }, [onVideoResolutionChange]);
 
   const handleAutoTipsToggle = useCallback((on: boolean) => {
     setAutoTips(on);
@@ -260,7 +450,7 @@ export default function ModelSelector({
   const imageModels = getImageModels();
   const videoModels = getVideoModels();
   const models = activeTab === 'image' ? imageModels : videoModels;
-  const selectedId = activeTab === 'image' ? (isAuto ? null : preferredModel) : videoModel;
+  const selectedId = activeTab === 'image' ? (imageAuto ? null : preferredModel) : (videoAuto ? null : videoModel);
   const selectedVideoCapability = getVideoModelCapability(videoModel);
   const selectedVideoResolution = videoResolution === 'auto'
     ? selectedVideoCapability.defaultResolution
@@ -274,12 +464,13 @@ export default function ModelSelector({
         ref={triggerRef}
         data-testid="model-selector"
         data-current-model={preferredModel}
+        data-video-auto={videoAuto}
         aria-label={`Model: ${preferredModel}. Click to open selector.`}
         onClick={() => setOpen(v => !v)}
         className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
         style={{
-          background: !isAuto ? 'rgba(192,38,211,0.15)' : open ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.08)',
-          color: !isAuto ? 'rgba(192,38,211,0.85)' : open ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.35)',
+          background: (!imageAuto || !videoAuto) ? 'rgba(192,38,211,0.15)' : open ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.08)',
+          color: (!imageAuto || !videoAuto) ? 'rgba(192,38,211,0.85)' : open ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.35)',
         }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -317,7 +508,7 @@ export default function ModelSelector({
             <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
               {t('model.title')}
             </span>
-            <AutoToggle on={isAuto} onChange={handleAutoToggle} label={t('model.auto')} />
+            <AutoToggle on={currentAuto} onChange={handleAutoToggle} label={t('model.auto')} />
           </div>
 
           {/* Tabs */}
@@ -352,117 +543,95 @@ export default function ModelSelector({
             ))}
           </div>
 
-          {/* Model list — fixed height, scroll if > 3 rows */}
+          {/* Model list — video rows can expand to show resolution inline. */}
           <div style={{
-            height: LIST_HEIGHT,
-            overflowY: models.length > MAX_VISIBLE_ROWS ? 'auto' : 'hidden',
+            ...(activeTab === 'image' ? { height: LIST_HEIGHT } : { maxHeight: 360 }),
+            overflowY: activeTab === 'video' || models.length > MAX_VISIBLE_ROWS ? 'auto' : 'hidden',
             display: 'flex',
             flexDirection: 'column',
             gap: 2,
           }}>
-            {models.map(model => (
-              <ModelRow
-                key={model.id}
-                model={model}
-                name={t(model.nameKey as Parameters<typeof t>[0])}
-                desc={t(model.descKey as Parameters<typeof t>[0])}
-                selected={model.id === selectedId}
-                disabled={false}
-                onSelect={() => {
-                  if (activeTab === 'image') {
-                    handleImageSelect(model.id);
-                  } else {
-                    handleVideoSelect(model.id);
-                  }
-                }}
-              />
-            ))}
+            {models.map(model => {
+              if (activeTab === 'video') {
+                return (
+                  <VideoModelRow
+                    key={model.id}
+                    model={model}
+                    name={t(model.nameKey as Parameters<typeof t>[0])}
+                    desc={t(model.descKey as Parameters<typeof t>[0])}
+                    selected={model.id === selectedId}
+                    onSelect={() => handleVideoSelect(model.id)}
+                    resolutionLabel={t('model.resolution')}
+                    resolutionOptions={resolutionOptions}
+                    selectedVideoResolution={selectedVideoResolution}
+                    onResolutionSelect={handleVideoResolutionSelect}
+                  />
+                );
+              }
+              return (
+                <ModelRow
+                  key={model.id}
+                  model={model}
+                  name={t(model.nameKey as Parameters<typeof t>[0])}
+                  desc={t(model.descKey as Parameters<typeof t>[0])}
+                  selected={model.id === selectedId}
+                  disabled={false}
+                  onSelect={() => handleImageSelect(model.id)}
+                />
+              );
+            })}
           </div>
 
-          {activeTab === 'video' && resolutionOptions.length > 0 && (
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 8, padding: '10px 6px 4px' }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.38)', marginBottom: 7 }}>
-                {t('model.resolution')}
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {(['auto', ...resolutionOptions] as VideoResolution[]).map(resolution => {
-                  const active = resolution === 'auto' ? videoResolution === 'auto' : videoResolution !== 'auto' && selectedVideoResolution === resolution;
-                  const label = resolution === 'auto'
-                    ? `${t('model.resolution.auto')} ${selectedVideoCapability.defaultResolution ?? ''}`.trim()
-                    : resolution.toUpperCase();
-                  return (
-                    <button
-                      key={resolution}
-                      onClick={() => onVideoResolutionChange?.(resolution)}
-                      style={{
-                        height: 28,
-                        padding: '0 10px',
-                        borderRadius: 8,
-                        border: `1px solid ${active ? 'rgba(232,121,249,0.42)' : 'rgba(255,255,255,0.08)'}`,
-                        background: active ? 'rgba(232,121,249,0.10)' : 'rgba(255,255,255,0.04)',
-                        color: active ? '#e879f9' : 'rgba(255,255,255,0.48)',
-                        fontSize: 11,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
+          {activeTab === 'image' && (
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 6, paddingTop: 6 }}>
+              <button
+                onClick={() => handleAutoTipsToggle(!autoTips)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  width: '100%',
+                  height: ROW_HEIGHT,
+                  padding: '0 12px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: autoTips ? 'rgba(232,121,249,0.08)' : 'transparent',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  background: 'rgba(255,255,255,0.06)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                  color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.4)',
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="2" width="20" height="20" rx="2" />
+                    <path d="M7 12h10M12 7v10" />
+                  </svg>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.85)' }}>
+                    {t('model.autoTips')}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, lineHeight: 1.3 }}>
+                    {t('model.autoTips.desc')}
+                  </div>
+                </div>
+                <div style={{
+                  width: 18, height: 18, borderRadius: 9,
+                  border: `2px solid ${autoTips ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  {autoTips && <div style={{ width: 10, height: 10, borderRadius: 5, background: '#c026d3' }} />}
+                </div>
+              </button>
             </div>
           )}
-
-          {/* Auto Tips Previews — same style as model rows */}
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 6, paddingTop: 6 }}>
-            <button
-              onClick={() => handleAutoTipsToggle(!autoTips)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                width: '100%',
-                height: ROW_HEIGHT,
-                padding: '0 12px',
-                borderRadius: 12,
-                border: 'none',
-                background: autoTips ? 'rgba(232,121,249,0.08)' : 'transparent',
-                cursor: 'pointer',
-                transition: 'background 0.15s',
-                textAlign: 'left',
-              }}
-            >
-              <div style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: 'rgba(255,255,255,0.06)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-                color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.4)',
-              }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="2" width="20" height="20" rx="2" />
-                  <path d="M7 12h10M12 7v10" />
-                </svg>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.85)' }}>
-                  {t('model.autoTips')}
-                </div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, lineHeight: 1.3 }}>
-                  {t('model.autoTips.desc')}
-                </div>
-              </div>
-              <div style={{
-                width: 18, height: 18, borderRadius: 9,
-                border: `2px solid ${autoTips ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-              }}>
-                {autoTips && <div style={{ width: 10, height: 10, borderRadius: 5, background: '#c026d3' }} />}
-              </div>
-            </button>
-          </div>
         </div>
       )}
     </div>

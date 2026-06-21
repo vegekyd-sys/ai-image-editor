@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -142,8 +142,93 @@ describe('video model reference limits', () => {
   })
 
   it('estimates Grok credits without floating-point overcharging', () => {
-    expect(estimateVideoCredits({ model: 'grok', durationSec: 1, imageCount: 1 })).toBe(30)
-    expect(estimateVideoCredits({ model: 'grok', durationSec: 4, imageCount: 1 })).toBe(114)
+    expect(normalizeVideoResolution('grok', 'auto')).toBe('480p')
+    expect(estimateVideoCredits({ model: 'grok', durationSec: 1, imageCount: 1 })).toBe(18)
+    expect(estimateVideoCredits({ model: 'grok', durationSec: 4, imageCount: 1 })).toBe(66)
     expect(estimateVideoCredits({ model: 'grok', resolution: '480p', durationSec: 1, imageCount: 1 })).toBe(18)
+    expect(estimateVideoCredits({ model: 'grok', resolution: '720p', durationSec: 1, imageCount: 1 })).toBe(30)
+  })
+
+  it('locks explicit app video model and resolution over agent tool guesses', () => {
+    const selection = resolveAgentVideoSelection({
+      appModel: 'seedance',
+      appResolution: '1080p',
+      toolModel: 'kling',
+      toolResolution: '4k',
+    })
+
+    expect(selection).toEqual({ model: 'seedance', resolution: '1080p', locked: true })
+    expect(resolveVideoGenerationRoute({ model: selection.model, resolution: selection.resolution })).toMatchObject({
+      model: 'seedance',
+      resolution: '1080p',
+      provider: 'seedance',
+    })
+  })
+
+  it('allows tool routing only when the app video selector is still on default auto', () => {
+    expect(resolveAgentVideoSelection({
+      appModel: 'seedance-fast',
+      appResolution: 'auto',
+      appAuto: true,
+      toolModel: 'grok',
+      toolResolution: '480p',
+    })).toEqual({ model: 'grok', resolution: '480p', locked: false })
+
+    expect(resolveAgentVideoSelection({
+      appModel: 'seedance-fast',
+      appResolution: '720p',
+      appAuto: false,
+      toolModel: 'grok',
+      toolResolution: '480p',
+    })).toEqual({ model: 'seedance-fast', resolution: '720p', locked: true })
+  })
+
+  it('distinguishes video auto from explicit default SeedDance Fast 720p', () => {
+    expect(resolveAgentVideoSelection({
+      appModel: 'seedance-fast',
+      appResolution: 'auto',
+      appAuto: true,
+      toolModel: 'kling',
+      toolResolution: '4k',
+    })).toEqual({ model: 'kling', resolution: '4k', locked: false })
+
+    expect(resolveAgentVideoSelection({
+      appModel: 'seedance-fast',
+      appResolution: '720p',
+      appAuto: false,
+      toolModel: 'kling',
+      toolResolution: '4k',
+    })).toEqual({ model: 'seedance-fast', resolution: '720p', locked: true })
+  })
+
+  it('routes provider-specific video aspect ratio defaults', () => {
+    expect(resolveVideoProviderAspectRatio('seedance', 'auto')).toBe('adaptive')
+    expect(resolveVideoProviderAspectRatio('seedance', '21:9')).toBe('21:9')
+    expect(resolveVideoProviderAspectRatio('grok', 'auto')).toBeUndefined()
+    expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBeUndefined()
+    expect(resolveVideoProviderAspectRatio('kling', 'auto')).toBeUndefined()
+  })
+
+  it('validates model-specific video aspect ratios before provider submission', async () => {
+    const unsupported = await createVideo({
+      script: 'Wide Grok\n\nAnimate <<<media_1>>>.',
+      images: ['https://example.com/image.jpg'],
+      duration: 4,
+      videoModel: 'grok',
+      aspectRatio: '21:9',
+    })
+    expect(unsupported.success).toBe(false)
+    expect(unsupported.message).toContain('Grok Video 1.5 does not support 21:9')
+
+    const supported = await createVideo({
+      script: 'Wide Seedance\n\nAnimate <<<media_1>>>.',
+      images: ['https://example.com/image.jpg'],
+      duration: 4,
+      videoModel: 'seedance',
+      aspectRatio: '21:9',
+    })
+    expect(supported.success).toBe(false)
+    expect(supported.message).not.toContain('does not support 21:9')
+    expect(supported.message).toContain('EVOLINK_API_KEY')
   })
 })

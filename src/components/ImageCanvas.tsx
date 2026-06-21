@@ -9,6 +9,7 @@ import DesignOverlay from '@/components/DesignOverlay';
 import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { isFastVideoRenderModel } from '@/lib/video-model-capabilities';
 
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
@@ -38,6 +39,7 @@ interface ImageCanvasProps {
   videoUrl?: string | null;
   videoProcessing?: boolean; // true when rendering but no videoUrl yet
   videoFailed?: boolean;
+  videoModel?: string | null;
   videoPosterImage?: string; // last snapshot image to show while processing
   isDesktop?: boolean;
   annotationMode?: boolean;
@@ -86,7 +88,7 @@ interface ImageCanvasProps {
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
-  hasVideo, isVideoEntry, videoUrl, videoProcessing, videoFailed, videoPosterImage, isDesktop,
+  hasVideo, isVideoEntry, videoUrl, videoProcessing, videoFailed, videoModel, videoPosterImage, isDesktop,
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
@@ -107,6 +109,9 @@ export default function ImageCanvas({
   onVideoPosterCapture,
 }: ImageCanvasProps) {
   const { t } = useLocale();
+  const videoRenderTimeHint = isFastVideoRenderModel(videoModel)
+    ? t('canvas.grokUsuallyTakes')
+    : t('canvas.usuallyTakes');
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const swiping = useRef(false);
@@ -1119,7 +1124,7 @@ export default function ImageCanvas({
                     </div>
                     <div className="flex flex-col items-center gap-1.5">
                       <span className="text-white font-semibold tracking-wide" style={{ fontSize: '1rem' }}>{t('canvas.videoRendering')}</span>
-                      <span className="text-white/40 text-[12px]">{t('canvas.usuallyTakes')}</span>
+                      <span className="text-white/40 text-[12px]">{videoRenderTimeHint}</span>
                     </div>
                   </>
                 )}

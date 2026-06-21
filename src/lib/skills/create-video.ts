@@ -1,11 +1,11 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
-import { getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, validateVideoModelRequest, type VideoAspectRatioInput, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 
 export interface CreateVideoInput {
   script: string;
   images: string[];          // public URLs only (no base64)
   duration?: number;         // 3, 5, 7, 10, or 15 seconds. Omit for smart mode
-  aspectRatio?: string;      // '9:16', '16:9', '1:1'
+  aspectRatio?: VideoAspectRatioInput;
   videoModel?: string;       // video provider/model id, e.g. 'kling' or 'seedance'
   videoResolution?: VideoResolutionInput;
   // Video editing (Kling only)
@@ -35,6 +35,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const modelError = validateVideoModelRequest({
     model: provider,
     resolution: route.resolution,
+    aspectRatio,
     outputDuration: duration,
     referenceVideoDuration,
     referenceVideoMetas,
@@ -108,6 +109,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     const filteredModelError = validateVideoModelRequest({
       model: provider,
       resolution: route.resolution,
+      aspectRatio,
       outputDuration: resolvedDuration,
       referenceVideoDuration,
       referenceVideoMetas,
@@ -117,7 +119,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (filteredModelError) return { success: false, message: filteredModelError };
 
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
-    console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${aspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}`);
+    const providerAspectRatio = resolveVideoProviderAspectRatio(provider, aspectRatio);
+    console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
     let taskId: string;
@@ -142,7 +145,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         prompt: finalPrompt,
         images: filteredImages,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
-        aspectRatio: aspectRatio || 'adaptive',
+        aspectRatio: providerAspectRatio,
         quality: route.resolution,
         model: route.providerModel,
         videoUrls: seedanceVideoUrls.length ? seedanceVideoUrls : undefined,
@@ -154,7 +157,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         prompt: finalPrompt,
         images: filteredImages,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
-        aspectRatio,
+        aspectRatio: providerAspectRatio,
         resolution: route.resolution as '480p' | '720p',
       });
       console.log(`✅ [create_video] Grok Video task created: ${taskId}`);
@@ -164,7 +167,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         prompt: finalPrompt.replace(/<<<(?:image|media)_(\d+)>>>/g, '@image_$1'), // PiAPI format
         images: filteredImages,
         duration: resolvedDuration ?? 10,
-        aspect_ratio: aspectRatio ?? '9:16',
+        aspect_ratio: providerAspectRatio ?? '9:16',
         enable_audio: true,
         version: '3.0',
       });
@@ -172,7 +175,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     } else if (route.provider === 'kling') {
       const { createKlingTask, detectAspectRatio } = await import('../kling');
       const ratioSourceImage = filteredImages[0] || images[0];
-      const resolvedRatio = aspectRatio || (ratioSourceImage ? await detectAspectRatio(ratioSourceImage) : undefined);
+      const resolvedRatio = providerAspectRatio || (ratioSourceImage ? await detectAspectRatio(ratioSourceImage) : undefined);
       // Auto-routed videos: use first as feature reference if no explicit videoUrl
       const effectiveVideoUrl = videoUrl || (videoUrls?.length ? videoUrls[0] : undefined);
       const effectiveVideoReferType = videoUrl ? videoReferType : (effectiveVideoUrl ? 'feature' : undefined);

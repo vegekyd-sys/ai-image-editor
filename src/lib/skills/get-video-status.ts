@@ -34,7 +34,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
       let message: string;
       switch (result.status) {
         case 'pending': message = 'Grok video task is queued.'; break;
-        case 'processing': message = `Grok video is rendering${result.progress != null ? ` (${result.progress}%)` : ''}.`; break;
+        case 'processing': message = `Grok video is rendering${result.progress != null ? ` (${result.progress}%)` : ''}. It is usually around 30-40 seconds.`; break;
         case 'completed': message = `Grok video rendering completed${result.costUsd != null ? ` (reported cost $${result.costUsd.toFixed(4)})` : ''}!`; break;
         case 'failed': message = `Grok video rendering failed: ${result.error || 'Unknown error'}`; break;
       }
