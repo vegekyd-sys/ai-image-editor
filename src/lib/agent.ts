@@ -10,7 +10,7 @@ import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { normalizeVideoModelId, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
+import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
 import { createMusic } from './skills/create-music';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import agentPrompt from './prompts/agent.md';
@@ -59,8 +59,12 @@ interface AgentContext {
   preferredModel?: ModelId;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
-  /** User/app selected video model. Defaults to seedance when absent. */
+  /** User/app selected video model. Defaults to seedance-fast when absent. */
   videoModel?: VideoModel;
+  /** User/app selected video resolution. Defaults to auto. */
+  videoResolution?: import('@/types').VideoResolution;
+  /** True when the app video selector is in automatic mode. */
+  videoAuto?: boolean;
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event (v1) */
   // Legacy v1 fields — no longer set by generate_animation, but kept for SSE event type compat
   animationTaskId?: string;
@@ -1017,26 +1021,28 @@ Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
-- Works for both Kling and SeeDance, but respect capability limits and tool errors.
-- Single-call total duration: SeeDance is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. If the user wants 30s, 60s, 1-2 minutes, or anything longer than 15s, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments of 15s or less.
+- Works for Kling, SeeDance, and Grok, but respect capability limits and tool errors.
+- Single-call total duration: SeeDance is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. If the user wants 30s, 60s, 1-2 minutes, or anything longer than 15s, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments of 15s or less.
 - If a complete script totals 15 seconds or less, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
 - If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
 - Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
 - Long source video rule: if a timeline/reference video is longer than 15 seconds, do not shrink the whole source into one 5s or 15s edit. Use \`skills/long-video-director/SKILL.md\`, analyze/split it into self-contained segments of 15s or less, and submit one script per segment after approval.
 - Reference video input limit: for one SeeDance generation, the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less. This is a single-generation input limit; do not submit videos whose combined duration is longer than 15s together in one call.
-- Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. Tiny videos below 409,600 frame pixels must be resized/padded before submission. For Kling, use one .mp4/.mov reference video, <=200MB, resolution <=2K; no explicit Kling video resolution lower bound is documented.
+- Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. Tiny videos below 409,600 frame pixels must be resized/padded before submission. For Kling, use one .mp4/.mov reference video, <=200MB, resolution <=2K; no explicit Kling video resolution lower bound is documented. Grok 1.5 does not support video references or multi-image references in Makaron; use it only for single-image-to-video.
 - Video edit duration lock: when editing timeline videos up to 15 seconds total, output duration should match the combined source duration from Media Index, clamped to the selected model range. For SeeDance, clamp to 4-15s; if combined source duration is under 4s, set \`duration: 4\`. For long-video pipelines, duration lock applies per FFmpeg chunk.
-- Default model follows app selection, usually SeeDance. If the user asks for cheaper, prefer Kling only when capability and duration allow it.
+- Default model follows app selection, usually SeeDance 2.0 Fast (\`seedance-fast\`). If the app selector has an explicit non-default model or explicit resolution, the backend keeps that app selection even if this tool passes another model/resolution, so align the script with the selected route. If the user asks for standard/full SeeDance 2.0, use \`seedance\`. If the user asks for cheaper/faster/draft/480p, set \`video_resolution: "480p"\` when supported. If the user asks for 1080p/HD with SeeDance, use model \`seedance\` because \`seedance-fast\` does not support 1080p. If the user asks for Kling Pro/HD/1080p, use model \`kling\` with \`video_resolution: "1080p"\`; if they ask for Kling 4K, use model \`kling\` with \`video_resolution: "4k"\`. If the user asks for Grok by name ("用 Grok 生成", "use grok", "用 grok 做"), fastest generation, or native audio from one image, use model \`grok\` and write a single-image-to-video script.
+- Grok aspect-ratio rule: for Grok single-image-to-video, do not pass \`aspect_ratio\`. xAI stretches the source image when a forced ratio differs from the image. If the user asks for a different final shape, choose Seedance/Kling or first create/pad the source image to that target shape, then generate.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - If the generated video is an intermediate artifact, pass \`completion_actions\` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos. Total duration must be 15 seconds or less.'),
-        duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling accepts 5-15s. Never pass below the selected model minimum. For timeline video edits up to 15s total, set this to the combined source video duration from Media Index clamped to the selected model range. Do not submit multiple reference videos together if their combined source duration exceeds 15s. Omit for smart mode only when generating from photos.'),
-        aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).optional().describe('Output aspect ratio. Omit to auto-detect from first image.'),
-        model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance). Use exact ids from the video model selector or skill instructions.'),
+        duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling accepts 5-15s; Grok 1.5 accepts 1-15s for one image. Never pass below the selected model minimum. For timeline video edits up to 15s total, set this to the combined source video duration from Media Index clamped to the selected model range. Do not submit multiple reference videos together if their combined source duration exceeds 15s. Omit for smart mode only when generating from photos.'),
+        aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can safely honor it. For Grok single-image-to-video, omit this field because xAI stretches the source image when a forced ratio differs from the image. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive; Makaron intentionally does not pass forced ratios to Grok image-to-video.'),
+        model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance-fast). Supported ids include seedance-fast, seedance, kling, and grok.'),
+        video_resolution: z.enum(['480p', '720p', '1080p', '4k', 'auto']).optional().describe('Output resolution. Omit/auto follows the selected model default. seedance-fast supports 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; grok supports 480p/720p.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Grok does not support video references in Makaron yet.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
@@ -1048,7 +1054,7 @@ Hard constraints:
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, media_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, completion_actions }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, completion_actions }) => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1063,7 +1069,19 @@ Hard constraints:
           return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
         }
         try {
-          const videoModel = normalizeVideoModelId(model || (ctx as any).videoModel);
+          const videoSelection = resolveAgentVideoSelection({
+            appModel: (ctx as any).videoModel,
+            appResolution: (ctx as any).videoResolution,
+            appAuto: (ctx as any).videoAuto,
+            toolModel: model,
+            toolResolution: video_resolution,
+          });
+          const videoModel = videoSelection.model;
+          const videoRoute = resolveVideoGenerationRoute({
+            model: videoModel,
+            resolution: videoSelection.resolution,
+          });
+          const selectedAspectRatio = aspect_ratio;
 
           // Video harness: validate before calling API
           const { validateVideoScript } = await import('./video-harness');
@@ -1075,6 +1093,7 @@ Hard constraints:
             videoRefUrl: video_ref_url,
             videoRefType: video_ref_type,
             model: videoModel,
+            aspectRatio: selectedAspectRatio,
             motionControl: motion_control,
             duration,
           });
@@ -1125,6 +1144,8 @@ Hard constraints:
           const referenceVideoDuration = totalVideoRefDuration > 0 ? totalVideoRefDuration : undefined;
           const modelError = validateVideoModelRequest({
             model: videoModel,
+            resolution: videoRoute.resolution,
+            aspectRatio: selectedAspectRatio,
             outputDuration: duration,
             referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
@@ -1146,8 +1167,9 @@ Hard constraints:
             script: story_prompt,
             images: imageUrls,
             duration: effectiveDuration,
-            aspectRatio: aspect_ratio,
+            aspectRatio: selectedAspectRatio,
             videoModel,
+            videoResolution: videoRoute.resolution,
             videoUrl: video_ref_url,
             videoReferType: video_ref_type,
             videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
@@ -1183,6 +1205,10 @@ Hard constraints:
             status: 'processing',
             duration: effectiveDuration || null,
             model: videoModel as import('@/types').VideoModel,
+            resolution: videoRoute.resolution,
+            aspectRatio: selectedAspectRatio,
+            providerModel: videoRoute.providerModel,
+            providerMode: videoRoute.providerMode,
             createdAt: new Date().toISOString(),
             ...(completion_actions?.length ? {
               completionActions: completion_actions.slice(0, 4).map(action => ({
@@ -1213,18 +1239,34 @@ Hard constraints:
 
           // Bill for video generation (per-second) — store amount in videoMeta for refund on failure
           const videoSec = effectiveDuration || 10;
-          const creditsCharged = Math.ceil(videoSec * 22);
+          const creditsCharged = estimateVideoCredits({
+            model: videoModel,
+            resolution: videoRoute.resolution,
+            durationSec: videoSec,
+            imageCount: originalUrls.length,
+          }) ?? Math.ceil(videoSec * 22);
           videoMeta.creditsCharged = creditsCharged;
+          const providerCostUsd = videoRoute.estimatedCostPerSecondUsd != null
+            ? videoSec * videoRoute.estimatedCostPerSecondUsd + originalUrls.length * (videoRoute.estimatedInputCostUsdPerImage ?? 0)
+            : undefined;
+          if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd;
           await supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId);
 
           ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
 
           import('./billing/credits').then(({ deductFixedCredits }) =>
-            deductFixedCredits(ctx.userId ?? '', creditsCharged, 'create_video', undefined, undefined)
+            deductFixedCredits(ctx.userId ?? '', creditsCharged, videoModel === 'grok' ? 'create_video_grok' : 'create_video', videoModel, undefined)
               .catch(e => console.error('[billing] generate_animation deduct error:', e))
           );
 
-          return { success: true as const, taskId, message: 'Video generation task created! It takes about 3–5 minutes. The result will appear here when done.' };
+          const renderTimeMessage = videoModel === 'grok'
+            ? 'Grok is usually around 30-40 seconds.'
+            : 'Rendering usually takes 3-5 minutes.';
+          return {
+            success: true as const,
+            taskId,
+            message: `Video generation task created with ${videoRoute.label} ${videoRoute.resolution.toUpperCase()}. ${renderTimeMessage} The result will appear here when done.`,
+          };
         } catch (e) {
           return { success: false as const, message: String(e) };
         }
@@ -2434,7 +2476,7 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; videoResolution?: import('@/types').VideoResolution; videoAuto?: boolean; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
   const ctx: AgentContext = {
@@ -2444,6 +2486,8 @@ export async function* runMakaronAgent(
     generatedImages: [],
     animationImageUrls: options?.animationImageUrls,
     videoModel: options?.videoModel as VideoModel | undefined,
+    videoResolution: options?.videoResolution,
+    videoAuto: options?.videoAuto,
     preferredModel: options?.preferredModel,
     snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,

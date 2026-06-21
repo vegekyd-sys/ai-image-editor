@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Snapshot, ProjectAnimation } from '@/types';
+import { Snapshot, ProjectAnimation, type VideoResolution } from '@/types';
 import type { AnimationState } from '@/components/Editor';
 import { useLocale } from '@/lib/i18n';
 import MediaRefText from '@/components/MediaRefText';
 import { getModelInfo, getVideoModels } from '@/lib/model-registry';
-import { getDefaultVideoModelId, getVideoModelCapability } from '@/lib/video-model-capabilities';
+import { estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
 
 interface AnimateSheetProps {
   snapshots: Snapshot[];
@@ -31,8 +31,13 @@ export default function AnimateSheet({
 }: AnimateSheetProps) {
   const { t } = useLocale();
   const isDetail = mode === 'detail' && !!detailAnimation;
-  const { prompt, userHint, status, error, duration, videoModel = getDefaultVideoModelId() } = animationState;
+  const { prompt, userHint, status, error, duration, videoModel = getDefaultVideoModelId(), videoResolution = 'auto' } = animationState;
   const videoModels = getVideoModels();
+  const videoCapability = getVideoModelCapability(videoModel);
+  const resolutionOptions = videoCapability.supportedResolutions ?? [];
+  const resolvedResolution = videoResolution === 'auto'
+    ? videoCapability.defaultResolution
+    : normalizeVideoResolution(videoModel, videoResolution);
   const getVideoModelLabel = (id?: string | null) => {
     if (!id || id === 'upload') return '';
     const modelInfo = getModelInfo(id);
@@ -115,7 +120,7 @@ export default function AnimateSheet({
       const res = await fetch('/api/video-snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel }),
+        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel, videoResolution }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to create task');
@@ -127,7 +132,7 @@ export default function AnimateSheet({
         : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
       onStateChange({ error: friendly, status: 'error' });
     }
-  }, [prompt, projectId, activeUrls, duration, videoModel, onStateChange, t]);
+  }, [prompt, projectId, activeUrls, duration, videoModel, videoResolution, onStateChange, t]);
 
   const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1;
   const canGenerateScript = activeUrls.length >= 1 && (status === 'idle' || status === 'error' || status === 'ready');
@@ -138,6 +143,12 @@ export default function AnimateSheet({
     : (detailAnimation?.snapshotUrls ?? []);
   const detailPrompt = detailAnimation?.prompt ?? '';
   const detailDuration = detailAnimation?.duration;
+  const detailResolution = detailAnimation?.videoModel && detailAnimation.videoModel !== 'upload'
+    ? normalizeVideoResolution(detailAnimation.videoModel, detailAnimation.videoResolution ?? 'auto')
+    : null;
+  const detailAspectRatio = detailAnimation?.videoAspectRatio && detailAnimation.videoAspectRatio !== 'auto'
+    ? detailAnimation.videoAspectRatio
+    : null;
 
   const getBottomButton = () => {
     if (status === 'submitting') {
@@ -264,6 +275,26 @@ export default function AnimateSheet({
                 }}>
                   {detailDuration != null ? t('animate.seconds', Math.round(detailDuration)) : t('animate.smart')}
                 </div>
+                {detailResolution && (
+                <div style={{
+                  padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
+                  borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
+                  fontWeight: 600,
+                }}>
+                  {detailResolution.toUpperCase()}
+                </div>
+                )}
+                {detailAspectRatio && (
+                <div style={{
+                  padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
+                  borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
+                  fontWeight: 600,
+                }}>
+                  {detailAspectRatio}
+                </div>
+                )}
                 <div style={{
                   padding: '6px 12px', borderRadius: 8,
                   border: '1px solid',
@@ -501,7 +532,7 @@ export default function AnimateSheet({
                   }}>{t('animate.model')}</div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {videoModels.map(m => (
-                      <button key={m.id} onClick={() => onStateChange({ videoModel: m.id })}
+                      <button key={m.id} onClick={() => onStateChange({ videoModel: m.id, videoResolution: 'auto' })}
                         style={{
                           flex: 1, padding: '8px 12px', borderRadius: 10,
                           border: `1px solid ${videoModel === m.id ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
@@ -512,6 +543,38 @@ export default function AnimateSheet({
                         {t(m.nameKey as Parameters<typeof t>[0])}
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Resolution selector */}
+              {status !== 'submitting' && resolutionOptions.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{
+                    fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
+                    fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
+                  }}>{t('model.resolution')}</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {(['auto', ...resolutionOptions] as VideoResolution[]).map(resolution => {
+                      const active = resolution === 'auto'
+                        ? videoResolution === 'auto'
+                        : videoResolution !== 'auto' && resolvedResolution === resolution;
+                      const label = resolution === 'auto'
+                        ? `${t('model.resolution.auto')} ${videoCapability.defaultResolution ?? ''}`.trim()
+                        : resolution.toUpperCase();
+                      return (
+                        <button key={resolution} onClick={() => onStateChange({ videoResolution: resolution })}
+                          style={{
+                            padding: '7px 10px', borderRadius: 9,
+                            border: `1px solid ${active ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                            background: active ? 'rgba(232,121,249,0.1)' : 'rgba(255,255,255,0.04)',
+                            color: active ? '#e879f9' : 'rgba(255,255,255,0.5)',
+                            fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+                          }}>
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -556,8 +619,8 @@ export default function AnimateSheet({
                     }}>
                       {duration != null
                         ? (() => {
-                          const costPerSecond = getVideoModelCapability(videoModel).estimatedCostPerSecondUsd;
-                          return costPerSecond != null ? `~$${(duration * costPerSecond).toFixed(2)}` : t('animate.costByDuration');
+                          const cost = estimateVideoProviderCostUsd({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount: activeUrls.length });
+                          return cost != null ? `~$${cost.toFixed(2)}` : t('animate.costByDuration');
                         })()
                         : t('animate.costByDuration')}
                     </div>

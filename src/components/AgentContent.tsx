@@ -156,7 +156,7 @@ npx makaron-cli music status <taskId>`}
         <h2 className="text-lg text-fuchsia-400 mb-4">Important Notes</h2>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
           <li>One project = one conversation thread. All history preserved.</li>
-          <li>Videos take 2-5 minutes. Use <code className="text-fuchsia-300">watch</code> to get URL when ready.</li>
+          <li>Most videos take 3-5 minutes; Grok is usually around 30-40 seconds. Use <code className="text-fuchsia-300">watch</code> to get URL when ready.</li>
           <li>Music takes ~60 seconds. Images typically 15-30 seconds.</li>
           <li>Always use <code className="text-fuchsia-300">chat</code> as primary interface — even for single edits.</li>
           <li>stdout = machine-readable JSON/text. Human-friendly logs → stderr.</li>

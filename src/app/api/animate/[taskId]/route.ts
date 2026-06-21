@@ -31,10 +31,11 @@ export async function GET(
     }
 
     // Poll task — route by taskId prefix or env var
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, else = Kling
+    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, else = Kling
     const isEvolink = taskId.startsWith('task-unified-')
     const isSeedance = taskId.startsWith('cgt-')
     const isMotionControl = taskId.startsWith('mc-')
+    const isXai = taskId.startsWith('xai-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
@@ -49,6 +50,9 @@ export async function GET(
       const { getKlingMotionControlTask } = await import('@/lib/kling')
       result = await getKlingMotionControlTask(realTaskId)
       result.taskId = taskId // preserve mc- prefix for frontend
+    } else if (isXai) {
+      const { getXaiVideoTask } = await import('@/lib/xai-video')
+      result = await getXaiVideoTask(taskId)
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(taskId)
     } else {

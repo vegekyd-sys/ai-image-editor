@@ -47,6 +47,7 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
   const isEvolink = taskId.startsWith('task-unified-');
   const isSeedance = taskId.startsWith('cgt-');
   const isMotionControl = taskId.startsWith('mc-');
+  const isXai = taskId.startsWith('xai-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
   if (isEvolink) {
@@ -59,6 +60,9 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
     const { getKlingMotionControlTask } = await import('@/lib/kling');
     const result = await getKlingMotionControlTask(realTaskId);
     return { ...result, taskId };
+  } else if (isXai) {
+    const { getXaiVideoTask } = await import('@/lib/xai-video');
+    return getXaiVideoTask(taskId);
   } else {
     const { getKlingTask } = await import('@/lib/kling');
     return getKlingTask(taskId);

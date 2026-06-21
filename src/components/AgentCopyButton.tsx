@@ -84,7 +84,7 @@ npx makaron-cli music status <taskId>
 ## Important Notes
 
 - One project = one conversation thread. All history preserved.
-- Videos take 2-5 minutes. Use \`watch\` to get URL when ready.
+- Most videos take 3-5 minutes; Grok is usually around 30-40 seconds. Use \`watch\` to get URL when ready.
 - Music takes ~60 seconds. Images typically 15-30 seconds.
 - Always use \`chat\` as primary interface — even for single edits.
 - stdout = machine-readable JSON/text. Human-friendly logs → stderr.
