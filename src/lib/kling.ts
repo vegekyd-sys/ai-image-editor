@@ -5,7 +5,7 @@ const KLING_BASE = process.env.KLING_API_BASE || 'https://api-beijing.klingai.co
 export interface KlingTaskInput {
   prompt: string
   images: string[]        // Supabase public URLs or base64 (without data: prefix)
-  mode?: 'std' | 'pro'
+  mode?: 'std' | 'pro' | '4k'
   duration?: number       // 5 or 10
   aspect_ratio?: string   // '9:16' | '16:9' | '1:1'
   // Video editing (video_list)

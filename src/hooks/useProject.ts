@@ -191,8 +191,11 @@ export function useProject(projectId: string, userId: string) {
 
     const animations: ProjectAnimation[] = (animationRes.data ?? []).map((row: Record<string, unknown>) => {
       const taskId = (row.piapi_task_id as string) ?? null;
-      const videoModel: 'kling' | 'seedance' = taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
-        ? 'seedance' : 'kling';
+      const videoModel = taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
+        ? 'seedance'
+        : taskId?.startsWith('xai-')
+          ? 'grok'
+          : 'kling';
       return {
         id: row.id as string,
         projectId,

@@ -133,14 +133,17 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")
   })
 
-  it('keeps Seedance as the default video model unless user or app selects Kling', () => {
+  it('keeps SeeDance Fast as the default video model unless user or app selects another model', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('usually SeeDance')
-    expect(agent).toContain('prefer Kling')
-    expect(agentTs).toContain('normalizeVideoModelId(model || (ctx as any).videoModel)')
-    expect(agentTs).toContain('Default follows the app selection (usually seedance)')
+    expect(agent).toContain('usually SeeDance 2.0 Fast')
+    expect(agent).toContain('`seedance-fast`')
+    expect(agentTs).toContain('resolveAgentVideoSelection')
+    expect(agentTs).toContain('appAuto: (ctx as any).videoAuto')
+    expect(agentTs).toContain('toolModel: model')
+    expect(agentTs).toContain('toolResolution: video_resolution')
+    expect(agentTs).toContain('Default follows the app selection (usually seedance-fast)')
   })
 
   it('uses path-based composition patching instead of full currentDesign code injection', () => {

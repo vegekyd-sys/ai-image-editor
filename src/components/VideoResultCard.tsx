@@ -5,6 +5,7 @@ import { ProjectAnimation } from '@/types';
 import { useLocale } from '@/lib/i18n';
 import PillCarousel from '@/components/PillCarousel';
 import { getModelInfo } from '@/lib/model-registry';
+import type { TranslationKey } from '@/lib/locales/zh';
 
 function ElapsedTimer({ since }: { since: string }) {
   const sinceMs = new Date(since || undefined as unknown as string).getTime();
@@ -48,6 +49,12 @@ export default function VideoResultCard({
     const clean = firstLine.replace(/^[#*\->]+\s*/, '').replace(/<<<[^>]*>>>/g, '').trim();
     if (!clean) return t('video.title', index + 1);
     return clean.length > 14 ? clean.slice(0, 13) + '…' : clean;
+  }
+
+  function videoModelLabel(model?: string | null): string {
+    if (!model || model === 'upload') return '';
+    const modelInfo = getModelInfo(model);
+    return modelInfo ? t(modelInfo.nameKey as TranslationKey) : model;
   }
 
   const completed = animations.filter(a => a.status === 'completed' && a.videoUrl);
@@ -100,8 +107,7 @@ export default function VideoResultCard({
           const thumbUrl = anim.imageUrl;
           const title = videoTitle(anim.prompt, idx);
 
-          const modelInfo = anim.videoModel ? getModelInfo(anim.videoModel) : undefined;
-          const modelLabel = anim.videoModel === 'upload' ? '' : (modelInfo?.id || anim.videoModel || '').slice(0, 2).toUpperCase();
+          const modelLabel = videoModelLabel(anim.videoModel);
           const durationLabel = anim.duration ? `${Math.round(anim.duration)}s` : null;
           let statusText: React.ReactNode;
           if (isCompleted) {

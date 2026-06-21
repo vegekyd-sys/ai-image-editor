@@ -8,6 +8,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-21',
+    en: { title: 'Major Video Model Upgrade', items: [
+      'Grok 1.5 is here: turn a photo into video in about 30–40 seconds, with surprisingly strong results.',
+      'SeeDance 2.0 is now available as the high-quality option, separate from Fast. It costs more, but delivers SOTA-level video quality.',
+      'Kling O3 now supports 4K output, so you can create sharper, higher-end videos directly in Makaron.',
+    ]},
+    zh: { title: '视频模型重大升级', items: [
+      'Grok 1.5 上线：可以把照片迅速动起来，通常 30–40 秒完成，效果非常出色。',
+      'SeeDance 2.0 上线：这是区别于 Fast 的高画质版本，价格更高，但效果应该是目前 SOTA。',
+      'Kling O3 支持 4K：可以直接输出更清晰、更高规格的视频。',
+    ]},
+  },
+  {
     date: '2026-06-18',
     en: { title: 'Local Video Repair & Agent Workspace', items: [
       'See one awkward shot in an otherwise good video? Send a screenshot and tell Makaron what should change.',

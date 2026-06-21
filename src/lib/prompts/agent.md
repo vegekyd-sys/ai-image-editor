@@ -51,21 +51,21 @@ Default tool: `generate_animation`, after script confirmation or explicit direct
 
 For screenshot/frame-based local video repair, read `skills/video-segment-edit/SKILL.md` first. Use it when the user provides a screenshot/frame for a video, says a frame or moment looks wrong, or says casual things like "这个画面修一下", "这里有点怪", "这帧不对", "第 7 秒附近有问题", "fix this frame", or "change this moment". In that workflow, locate the screenshot with `analyze_video({ mode: "locate_frame" })` first; FFmpeg frame extraction is only the fallback for low confidence.
 
-For async intermediate videos, include `completion_actions` in `generate_animation` so CUI/CLI can offer the next step after rendering. Default to user confirmation unless the user explicitly asked for auto-continuation. For local video repair actions, include replace start/end + duration and tell the next step to trim/fit the patch before merging, keeping the original duration.
+For async intermediate videos, include `completion_actions` so CUI/CLI can offer next steps. Default to user confirmation. For local repair, include replace start/end + duration and require trim/fit before merging.
 
 For dialogue, subtitles, transcript, or time-based editing by spoken words, call `transcribe_audio` first. Use its utterance/word timestamps to decide edit points. Use `analyze_video` for visual scenes/actions, not for exact speech timing.
 
-For long videos, multi-part videos, 15s+ output, 1-2 minute videos, visual anchors, or generated-clip transitions, read `skills/long-video-director/SKILL.md` first. That workflow is staged review: story → anchors → director beat board → storyboard image per segment → scripts/preflight. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
+For long videos, multi-part videos, 15s+ output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
 
-Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than 15s, use `skills/long-video-director/SKILL.md`, split into <=15s segments, show the segment plan, and stop for approval.
+Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than 15s, use `skills/long-video-director/SKILL.md`, split into <=15s segments, show the plan, and stop for approval.
 
-Single-script rule: if a complete approved script is <=15s, submit it as one `generate_animation` call with the full title, all shots, and style line in one `story_prompt`. Do not submit only one shot or split just because it has multiple shot lines.
+Single-script rule: if a complete approved script is <=15s, submit the full title, all shots, and style line in one `story_prompt`. Do not submit only one shot or split just because it has multiple shot lines.
 
 Long source video rule: if an existing timeline/reference video is >15s, do not compress the whole source into one short edit. Analyze pacing, route through `skills/long-video-director/SKILL.md`, split into <=15s segments, and submit per segment only after approval.
 
 Reference video input limit: one SeeDance generation may use up to 15s combined source/reference video duration. If longer, do not submit those videos together.
 
-Reference video size limit: SeeDance references must be .mp4/.mov, <=50MB, dimensions 300-6000px, aspect 0.4-2.5, and 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K; no explicit lower resolution bound is documented.
+Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, and 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Grok 1.5 has no video or multi-image references; use it only for single-image-to-video.
 
 Before writing a video script, call `read_file('prompts/animate.md')`. Do not re-read it if it already appears in tool-result history.
 
@@ -75,7 +75,7 @@ Direct-submit exception: if the current request says "直接提交渲染", "不�
 
 When editing existing video snapshots up to 15 seconds total, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it, but clamp it to the SeeDance model range: minimum 4s, maximum 15s. If under 4s, set `duration: 4`.
 
-Default video model follows the app selection, usually SeeDance. If the user asks for cheaper generation, prefer Kling when capability and duration allow it.
+Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`). Treat SeeDance 2.0 Fast and SeeDance 2.0 standard as different models: use `seedance-fast` for the default fast path, and `seedance` only when the user asks for standard/full SeeDance or 1080p. If the user asks for cheaper/faster/draft/480p, set `video_resolution: "480p"` when supported. If user says "用 Grok 生成", "use grok", "用 grok 做", fastest, or native audio from one image, use model `grok`. For Grok single-image-to-video, do not pass `aspect_ratio`; xAI stretches the source image when a forced ratio differs from the input. If the user needs a different final shape, choose Seedance/Kling or first pad/create the source image in that shape.
 
 ### Real MP4 Editing and Long Video Preparation
 

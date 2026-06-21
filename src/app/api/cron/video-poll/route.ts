@@ -38,6 +38,9 @@ export async function GET(req: NextRequest) {
       } else if (vm.taskId.startsWith('mc-')) {
         const { getKlingMotionControlTask } = await import('@/lib/kling')
         result = await getKlingMotionControlTask(vm.taskId.slice(3))
+      } else if (vm.taskId.startsWith('xai-')) {
+        const { getXaiVideoTask } = await import('@/lib/xai-video')
+        result = await getXaiVideoTask(vm.taskId)
       } else {
         const { getKlingTask } = await import('@/lib/kling')
         result = await getKlingTask(vm.taskId)

@@ -513,8 +513,12 @@ interface AgentChatViewProps {
   currentSnapshotIndex?: number;
   preferredModel?: PreferredModel;
   onModelChange?: (model: PreferredModel) => void;
+  videoAuto?: boolean;
+  onVideoAutoChange?: (auto: boolean) => void;
   videoModel?: import('@/types').VideoModel;
   onVideoModelChange?: (model: import('@/types').VideoModel) => void;
+  videoResolution?: import('@/types').VideoResolution;
+  onVideoResolutionChange?: (resolution: import('@/types').VideoResolution) => void;
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
@@ -563,8 +567,12 @@ export default function AgentChatView({
   currentSnapshotIndex,
   preferredModel = 'auto',
   onModelChange,
+  videoAuto = true,
+  onVideoAutoChange,
   videoModel = getDefaultVideoModelId(),
   onVideoModelChange,
+  videoResolution = 'auto',
+  onVideoResolutionChange,
   onNavigateToSnapshot,
   onVideoTap,
   onDesignPoster,
@@ -1480,8 +1488,12 @@ export default function AgentChatView({
               <ModelSelector
                 preferredModel={preferredModel}
                 onModelChange={onModelChange}
+                videoAuto={videoAuto}
+                onVideoAutoChange={onVideoAutoChange}
                 videoModel={videoModel}
                 onVideoModelChange={onVideoModelChange}
+                videoResolution={videoResolution}
+                onVideoResolutionChange={onVideoResolutionChange}
                 onOpenChange={(isOpen) => setModelSelectorOpen(isOpen)}
               />
             )}
