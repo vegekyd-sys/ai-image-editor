@@ -66,7 +66,7 @@ export default function VideoResultCard({
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
   const detailWidth = isDesktop ? 40 : 44;
-  const frameEditWidth = cardWidth + detailWidth + (isDesktop ? 28 : 32);
+  const frameEditWidth = cardWidth + detailWidth;
   const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
@@ -231,9 +231,6 @@ export default function VideoResultCard({
             style={{
               background: 'rgba(217,70,239,0.06)',
               width: frameEditWidth,
-              height: thumbSize,
-              minHeight: thumbSize,
-              boxSizing: 'border-box',
             }}
           >
             <button
@@ -246,7 +243,7 @@ export default function VideoResultCard({
                 border: 'none',
               }}
             >
-              <div className="h-full flex">
+              <div className="flex">
                 <div
                   className="flex-shrink-0 bg-white/5 relative overflow-hidden flex items-center justify-center"
                   style={{ width: thumbSize, height: thumbSize }}
