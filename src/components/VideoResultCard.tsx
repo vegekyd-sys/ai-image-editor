@@ -65,6 +65,8 @@ export default function VideoResultCard({
 
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
+  const detailWidth = isDesktop ? 40 : 44;
+  const frameEditWidth = cardWidth + detailWidth + (isDesktop ? 28 : 32);
   const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
@@ -189,7 +191,7 @@ export default function VideoResultCard({
                 onClick={() => onViewDetail(anim)}
                 className="flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
                 style={{
-                  width: isDesktop ? 40 : 44,
+                  width: detailWidth,
                   background: 'rgba(255,255,255,0.03)',
                   borderLeft: '1px solid rgba(255,255,255,0.06)',
                   transition: 'transform 0.1s',
@@ -226,13 +228,19 @@ export default function VideoResultCard({
           <div
             data-testid="video-frame-edit-pill"
             className="flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
-            style={{ background: 'rgba(217,70,239,0.06)', height: thumbSize }}
+            style={{
+              background: 'rgba(217,70,239,0.06)',
+              width: frameEditWidth,
+              height: thumbSize,
+              minHeight: thumbSize,
+              boxSizing: 'border-box',
+            }}
           >
             <button
               onClick={() => onFrameEdit(frameEditAnim, clampTime(currentTime))}
               className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
               style={{
-                width: cardWidth + (isDesktop ? 40 : 44),
+                width: '100%',
                 transition: 'filter 0.15s, transform 0.1s',
                 background: 'transparent',
                 border: 'none',
@@ -252,7 +260,7 @@ export default function VideoResultCard({
                     <circle cx="12" cy="13" r="3.5" />
                   </svg>
                 </div>
-                <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
+                <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
                   <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
                     {t('video.frameEdit')}
                   </div>

@@ -89,6 +89,7 @@ describe('video frame edit GUI to CUI draft flow', () => {
     expect(editor).toContain("t('video.frameEditDraftPrompt', mediaIndex, timeLabel)");
     expect(editor).toContain("setCuiDraftAttachments([{ id: attachmentId, type: 'image', data: dataUrl, thumbnail: dataUrl }])");
     expect(editor).not.toContain("role: 'assistant',\\n      content: t('video.frameCaptured'");
+    expect(canvas).toContain('useRef<number | undefined>(videoFrameCaptureRequest)');
     expect(canvas).toContain('data-testid="video-frame-capture-feedback"');
     expect(canvas).toContain('window.setTimeout(() => {');
     expect(context).toContain('[Frame-anchored video edit]');

@@ -39,7 +39,7 @@ describe('VideoResultCard frame edit pill', () => {
 
     fireEvent.click(screen.getByTestId('video-frame-edit-pill').querySelector('button')!);
 
-    expect(screen.getByText(/修改这一帧|Edit this frame/)).toBeTruthy();
+    expect(screen.getByText(/从这帧改视频|Edit video here/)).toBeTruthy();
     expect(onFrameEdit).toHaveBeenCalledWith(anim, 8.7);
   });
 });

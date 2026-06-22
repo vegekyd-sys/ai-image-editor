@@ -192,7 +192,7 @@ export default function ImageCanvas({
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
-  const lastCaptureRequestRef = useRef<number | undefined>(undefined);
+  const lastCaptureRequestRef = useRef<number | undefined>(videoFrameCaptureRequest);
   const [frameCaptureFeedback, setFrameCaptureFeedback] = useState(false);
   const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
@@ -233,7 +233,7 @@ export default function ImageCanvas({
 
   useEffect(() => {
     if (videoFrameCaptureRequest === undefined) return;
-    if (videoFrameCaptureRequest === 0 && lastCaptureRequestRef.current === undefined) {
+    if (lastCaptureRequestRef.current === undefined) {
       lastCaptureRequestRef.current = videoFrameCaptureRequest;
       return;
     }
@@ -243,7 +243,7 @@ export default function ImageCanvas({
 
     const video = videoRef.current;
     if (!video) {
-      window.setTimeout(() => setFrameCaptureFeedback(false), 520);
+      window.setTimeout(() => setFrameCaptureFeedback(false), 760);
       return;
     }
     try {
@@ -255,7 +255,7 @@ export default function ImageCanvas({
       canvas.height = videoHeight;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        window.setTimeout(() => setFrameCaptureFeedback(false), 520);
+        window.setTimeout(() => setFrameCaptureFeedback(false), 760);
         return;
       }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -266,7 +266,7 @@ export default function ImageCanvas({
       window.setTimeout(() => {
         setFrameCaptureFeedback(false);
         onVideoFrameCaptured?.(dataUrl, capturedTime, capturedDuration);
-      }, 720);
+      }, 760);
     } catch (e) {
       console.warn('[ImageCanvas] current video frame capture failed:', e);
       setFrameCaptureFeedback(false);
@@ -1064,30 +1064,50 @@ export default function ImageCanvas({
                 data-capture-state="captured"
                 className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center"
                 style={{
-                  animation: 'frameCaptureFlash 720ms ease-out both',
-                  background: 'rgba(255,255,255,0.16)',
+                  animation: 'frameCaptureOverlay 760ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+                  background: 'rgba(0,0,0,0.16)',
+                  backdropFilter: 'saturate(1.06) brightness(1.04)',
                 }}
               >
                 <div
-                  className="rounded-[18px]"
+                  className="rounded-[20px]"
                   style={{
                     position: 'absolute',
-                    inset: 18,
-                    border: '2px solid rgba(255,255,255,0.78)',
-                    boxShadow: '0 0 0 999px rgba(0,0,0,0.18), 0 0 28px rgba(217,70,239,0.42)',
+                    inset: 20,
+                    border: '1px solid rgba(255,255,255,0.62)',
+                    boxShadow: 'inset 0 0 0 1px rgba(217,70,239,0.18), 0 0 36px rgba(217,70,239,0.28)',
+                    animation: 'frameCaptureReticle 760ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
                   }}
                 />
                 <div
-                  className="rounded-full px-4 py-2 text-sm font-semibold text-white"
-                  style={{ background: 'rgba(10,10,10,0.72)', backdropFilter: 'blur(10px)' }}
+                  className="rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-white"
+                  style={{
+                    background: 'rgba(10,10,10,0.68)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    boxShadow: '0 8px 28px rgba(0,0,0,0.24)',
+                    backdropFilter: 'blur(12px)',
+                    animation: 'frameCaptureBadge 760ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+                  }}
                 >
                   {t('video.frameCapturedShort')}
                 </div>
                 <style>{`
-                  @keyframes frameCaptureFlash {
-                    0% { opacity: 0; transform: scale(1.015); filter: brightness(1); }
-                    18% { opacity: 1; transform: scale(1); filter: brightness(1.25); }
-                    100% { opacity: 0; transform: scale(0.992); filter: brightness(1); }
+                  @keyframes frameCaptureOverlay {
+                    0% { opacity: 0; transform: scale(1.006); }
+                    18% { opacity: 1; transform: scale(1); }
+                    72% { opacity: 1; transform: scale(1); }
+                    100% { opacity: 0; transform: scale(0.996); }
+                  }
+                  @keyframes frameCaptureReticle {
+                    0% { opacity: 0; transform: scale(1.045); }
+                    22% { opacity: 1; transform: scale(1); }
+                    100% { opacity: 0; transform: scale(0.985); }
+                  }
+                  @keyframes frameCaptureBadge {
+                    0% { opacity: 0; transform: translateY(8px) scale(0.96); }
+                    22% { opacity: 1; transform: translateY(0) scale(1); }
+                    68% { opacity: 1; transform: translateY(0) scale(1); }
+                    100% { opacity: 0; transform: translateY(-4px) scale(0.98); }
                   }
                 `}</style>
               </div>
