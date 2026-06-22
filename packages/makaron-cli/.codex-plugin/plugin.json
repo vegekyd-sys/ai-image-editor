@@ -1,10 +1,10 @@
 {
   "name": "makaron-cli",
-  "version": "0.9.0",
-  "description": "AI image editing, video generation, and music creation via CLI. Agents can self-register, create projects, and produce creative media.",
+  "version": "0.11.0",
+  "description": "AI image editing, video generation, music creation, and marketplace skill workflows via CLI. Agents can self-register, install skills, create projects, and produce creative media.",
   "displayName": "Makaron",
   "shortDescription": "AI image/video/music creation from the terminal",
-  "longDescription": "makaron.app is for humans. makaron-cli is for AI agents. Talk to Makaron Agent from the terminal — create projects, edit images, generate videos, and compose music. Zero dependencies, single file, works with npx. Agents can self-register to get an API key without human intervention.",
+  "longDescription": "makaron.app is for humans. makaron-cli is for AI agents. Talk to Makaron Agent from the terminal — list, search, show, and install marketplace skills; create projects; edit images; generate videos; and compose music. Zero dependencies, single file, works with npx. Agents can self-register to get an API key without human intervention.",
   "author": {
     "name": "Makaron AI",
     "url": "https://www.makaron.app"
@@ -12,9 +12,9 @@
   "homepage": "https://www.makaron.app/agent",
   "repository": "https://github.com/vegekyd/ai-image-editor",
   "license": "MIT",
-  "keywords": ["ai", "image-editing", "video", "music", "agent", "creative"],
+  "keywords": ["ai", "image-editing", "video", "music", "agent", "creative", "skills"],
   "category": "Creative Tools",
-  "capabilities": ["image-editing", "video-generation", "music-creation", "text-to-image"],
+  "capabilities": ["image-editing", "video-generation", "music-creation", "text-to-image", "marketplace-skills"],
   "skills": "./skills/",
   "websiteURL": "https://www.makaron.app",
   "brandColor": "#d946ef"

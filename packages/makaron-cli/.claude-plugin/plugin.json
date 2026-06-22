@@ -1,7 +1,7 @@
 {
   "name": "makaron-cli",
-  "version": "0.9.0",
-  "description": "AI image editing, video generation, and music creation via CLI. Agents can self-register, create projects, and produce creative media.",
+  "version": "0.11.0",
+  "description": "AI image editing, video generation, music creation, and marketplace skill workflows via CLI. Agents can self-register, install skills, create projects, and produce creative media.",
   "author": {
     "name": "Makaron AI",
     "url": "https://www.makaron.app"

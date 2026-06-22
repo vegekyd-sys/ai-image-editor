@@ -4,6 +4,7 @@ import { validateApiKey } from '@/lib/billing/api-keys';
 import { checkBalance, deductCredits, deductByTokens } from '@/lib/billing/credits';
 import { resolveToolName } from '@/lib/billing/pricing';
 import { getTokenRate } from '@/lib/billing/token-rates';
+import { estimateVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities';
 
 export const maxDuration = 180;
 
@@ -72,10 +73,15 @@ async function handleMcp(req: Request): Promise<Response> {
         // Token-based billing — Gemini/OpenRouter tools that return usage
         await deductByTokens(auth.userId!, toolName, usage.modelId, usage.inputTokens, usage.outputTokens, durationMs, auth.keyId);
       } else if (meta?.videoDurationSec) {
-        // Video: per-second billing — 22 credits/s ($0.11/s × 2x markup)
-        const videoCredits = Math.ceil(meta.videoDurationSec * 22);
+        const videoModel = normalizeVideoModelId(meta.videoModel || model);
+        const videoCredits = estimateVideoCredits({
+          model: videoModel,
+          resolution: meta.videoResolution as any,
+          durationSec: meta.videoDurationSec,
+          imageCount: meta.imageCount ?? 0,
+        }) ?? Math.ceil(meta.videoDurationSec * 22);
         const { deductFixedCredits } = await import('@/lib/billing/credits');
-        await deductFixedCredits(auth.userId!, videoCredits, toolName, model, durationMs, auth.keyId);
+        await deductFixedCredits(auth.userId!, videoCredits, toolName, videoModel, durationMs, auth.keyId);
       } else {
         // Per-action billing — ComfyUI, Suno etc.
         await deductCredits(auth.userId!, auth.keyId!, toolName, model, durationMs);

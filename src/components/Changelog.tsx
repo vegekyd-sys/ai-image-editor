@@ -8,24 +8,31 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
-    date: '2026-06-18',
-    en: { title: 'Local Video Repair & Agent Workspace', items: [
-      'See one awkward shot in an otherwise good video? Send a screenshot and tell Makaron what should change.',
-      'Makaron will focus on that moment instead of asking you to regenerate the whole clip from scratch.',
-      'You can say things like "make this frame Paris" or "the hand looks wrong here" — no exact timestamp required.',
-      'After the new piece is ready, Makaron shows a clear next step to place it back into the full video.',
-      'Agent workspace has been rebuilt so project files, generated clips, and intermediate outputs can be reused directly across follow-up steps.',
-      'This means fewer manual file handoffs, faster FFmpeg-style edits, and a smoother path from one generated result to the next.',
-      'This makes video revision feel closer to photo editing: point at the problem, fix only that part, keep the rest.',
+    date: '2026-06-21',
+    en: { title: 'Major Video Model Upgrade', items: [
+      'Grok 1.5 is here: turn a photo into video in about 30–40 seconds, with surprisingly strong results.',
+      'SeeDance 2.0 is now available as the high-quality option, separate from Fast. It costs more, but delivers SOTA-level video quality.',
+      'Kling O3 now supports 4K output, so you can create sharper, higher-end videos directly in Makaron.',
     ]},
-    zh: { title: '局部修视频 & Agent 工作区升级', items: [
-      '一条视频整体都不错，只是某个画面不对？现在可以直接发截屏，告诉 Makaron 想怎么改。',
-      '不用整条视频从头生成；Makaron 会把注意力放在这个画面附近，只重做这一小段。',
-      '你可以像平时说话一样描述："这帧换成巴黎"、"这里手有点怪"、"大概这一秒不对"。',
-      '新片段生成完成后，Makaron 会继续给出清晰的下一步，把它放回完整视频里。',
-      'Agent 工作区完成了一次重写：项目素材、生成片段和中间文件都可以在后续步骤里直接复用。',
-      '这会减少手动找文件和传文件的步骤，让 FFmpeg 这类合成、裁剪、拼接任务更快接上下一步。',
-      '视频修改开始更像修图：指出问题，只改局部，保留其他已经满意的部分。',
+    zh: { title: '视频模型重大升级', items: [
+      'Grok 1.5 上线：可以把照片迅速动起来，通常 30–40 秒完成，效果非常出色。',
+      'SeeDance 2.0 上线：这是区别于 Fast 的高画质版本，价格更高，但效果应该是目前 SOTA。',
+      'Kling O3 支持 4K：可以直接输出更清晰、更高规格的视频。',
+    ]},
+  },
+  {
+    date: '2026-06-18',
+    en: { title: 'Frame-Based Video Repair', items: [
+      'When a video has one awkward moment, tap "Edit video here" to capture that frame and continue in chat with the screenshot already attached.',
+      'Tell Makaron what feels wrong — "make this frame Paris", "the hand looks weird here", or "around this second" — and it focuses on that moment instead of remaking the whole video.',
+      'Makaron locates the matching segment from the screenshot, prepares a local repair, and waits for your confirmation before rendering.',
+      'The rebuilt workspace keeps source videos, captured frames, segments, and generated clips reusable across follow-up steps.',
+    ]},
+    zh: { title: '按当前帧修视频', items: [
+      '视频里只有某一帧不对时，点“从这帧改视频”就能截下当前画面，并带着截图直接进入聊天。',
+      '像平时说话一样描述就行："这帧换成巴黎"、"这里手有点怪"、"大概这一秒不对"；Makaron 会聚焦这个画面附近，只重做这一小段。',
+      'Makaron 会根据截图找到对应片段，准备局部修复方案，并等你确认后再渲染。',
+      '新的工作区会复用源视频、截帧、裁剪片段和生成结果，后续继续修改不用来回找文件。',
     ]},
   },
   {

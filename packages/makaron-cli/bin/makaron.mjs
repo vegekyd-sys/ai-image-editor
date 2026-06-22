@@ -274,7 +274,8 @@ Options:
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --model <name>            Preferred image/model route.
-  --video-model <name>      Preferred video model.
+  --video-model <name>      Preferred video model: seedance-fast, seedance, kling, or grok.
+  --video-resolution <res>  Video resolution: auto, 480p, 720p, 1080p, or 4k.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
   --stream                  Legacy live SSE stream.
@@ -441,6 +442,7 @@ async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
   const body = { projectId, prompt };
   if (opts.preferredModel) body.preferredModel = opts.preferredModel;
   if (opts.videoModel) body.videoModel = opts.videoModel;
+  if (opts.videoResolution) body.videoResolution = opts.videoResolution;
   if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
   if (opts.isNsfw) body.isNsfw = opts.isNsfw;
 
@@ -790,6 +792,155 @@ function timeSince(date) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+// ─── Skill Marketplace ──────────────────────────────────────────────────────
+
+function getSkillLabel(skill) {
+  return skill.labels?.en || skill.labels?.zh || skill.label || skill.name || skill.id;
+}
+
+function slugifySkill(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function normalizeMarketplaceSkill(skill) {
+  return {
+    ...skill,
+    label: getSkillLabel(skill),
+    skillPath: skill.skillPath || skill.skill_path || null,
+    hasSkill: Boolean(skill.skillPath || skill.skill_path),
+  };
+}
+
+async function fetchMarketplaceSkills(baseUrl, opts = {}) {
+  let res;
+  try {
+    res = await fetch(`${baseUrl}/api/home-skills`);
+  } catch (err) {
+    if (opts.optional) return null;
+    process.stderr.write(`Failed to load marketplace skills: ${err.message || err}\n`);
+    process.exit(1);
+  }
+  if (!res.ok) {
+    if (opts.optional) return null;
+    process.stderr.write(`Error ${res.status}: ${await res.text()}\n`);
+    process.exit(1);
+  }
+  const data = await res.json();
+  const skills = Array.isArray(data) ? data : (data.skills || []);
+  return skills.map(normalizeMarketplaceSkill);
+}
+
+function marketplaceSearchText(skill) {
+  return [
+    skill.id,
+    skill.label,
+    skill.labels?.en,
+    skill.labels?.zh,
+    skill.prompt,
+    slugifySkill(skill.label),
+    slugifySkill(skill.labels?.en),
+    slugifySkill(skill.labels?.zh),
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function marketplaceSkillTokens(skill) {
+  return [
+    skill.id,
+    skill.label,
+    skill.labels?.en,
+    skill.labels?.zh,
+    skill.prompt,
+  ].filter(Boolean).map(value => String(value).toLowerCase());
+}
+
+function findMarketplaceSkill(skills, identifier) {
+  const raw = String(identifier || '').trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  const slug = slugifySkill(raw);
+  const exact = skills.filter(skill => {
+    const labels = Object.values(skill.labels || {}).map(v => String(v).toLowerCase());
+    const slugMatches = slug
+      ? slugifySkill(getSkillLabel(skill)) === slug ||
+        Object.values(skill.labels || {}).some(v => slugifySkill(v) === slug)
+      : false;
+    return skill.id === raw ||
+      skill.id?.toLowerCase() === lower ||
+      getSkillLabel(skill).toLowerCase() === lower ||
+      labels.includes(lower) ||
+      slugMatches;
+  });
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) {
+    process.stderr.write(`Multiple marketplace skills match "${raw}". Use an id:\n`);
+    exact.forEach(skill => process.stderr.write(`  ${skill.id}  ${skill.label}\n`));
+    process.exit(1);
+  }
+  const prefix = skills.filter(skill => skill.id?.startsWith(raw));
+  if (prefix.length === 1) return prefix[0];
+  return null;
+}
+
+function printMarketplaceSkills(skills) {
+  if (!skills.length) {
+    console.log('No marketplace skills found.');
+    return;
+  }
+  console.log(`📦 ${skills.length} marketplace skills\n`);
+  for (const skill of skills) {
+    const kind = skill.hasSkill ? 'skill' : 'prompt';
+    console.log(`  ${skill.id}  ${skill.label}  [${kind}]`);
+  }
+}
+
+function printMarketplaceSkill(skill) {
+  console.log(`${skill.label}`);
+  console.log(`ID: ${skill.id}`);
+  console.log(`Type: ${skill.hasSkill ? 'installable skill' : 'prompt template'}`);
+  if (skill.labels?.zh && skill.labels.zh !== skill.label) console.log(`ZH: ${skill.labels.zh}`);
+  if (skill.prompt) console.log(`Prompt: ${skill.prompt}`);
+  if (skill.image) console.log(`Cover: ${skill.image}`);
+  if (skill.hasSkill) console.log(`Install: makaron skills install ${skill.id}`);
+}
+
+async function installMarketplaceSkill(baseUrl, headers, skill, opts = {}) {
+  if (!skill.hasSkill) {
+    process.stderr.write(`"${skill.label}" is a prompt-only marketplace item and has no installable skill package.\n`);
+    process.exit(1);
+  }
+  if (!opts.quiet) process.stderr.write(`📦 Installing skill: ${skill.label}\n`);
+  const res = await fetch(`${baseUrl}/api/skills`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ skillPath: skill.skillPath, homeSkillId: skill.id }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    process.stderr.write(`Install failed: ${data.error || res.status}\n`);
+    process.exit(1);
+  }
+  if (!opts.quiet) {
+    const suffix = data.alreadyInstalled ? 'already installed' : 'installed';
+    process.stderr.write(`✅ Skill ${suffix}: ${data.skillName}\n`);
+  }
+  return data;
+}
+
+async function resolveChatSkill(baseUrl, headers, activeSkill) {
+  if (!activeSkill) return undefined;
+  const skills = await fetchMarketplaceSkills(baseUrl, { optional: true });
+  if (!skills) return activeSkill;
+  const marketplaceSkill = findMarketplaceSkill(skills, activeSkill);
+  if (!marketplaceSkill) return activeSkill;
+  const result = await installMarketplaceSkill(baseUrl, headers, marketplaceSkill);
+  return result.skillName;
+}
+
 // ─── MCP Tool Caller ─────────────────────────────────────────────────────────
 
 async function callMcpTool(baseUrl, headers, toolName, args) {
@@ -1066,6 +1217,7 @@ Commands:
   responses get <runId> --wait       Poll until completed
   responses list --project <id>      List runs for a project
   abort <runId>                      Abort a running Agent
+  skills list|search|show|install    Browse and install marketplace skills
 
   edit [--image <file>] "prompt"     AI image edit / text-to-image
   analyze --video <file|url>         Analyze video content
@@ -1107,18 +1259,32 @@ function printHelp(topic, subtopic) {
 `);
   } else if (topic === 'abort') {
     console.log('Usage: makaron abort <runId>');
+  } else if (topic === 'skills') {
+    if (subtopic === 'list') console.log('Usage: makaron skills list [--json]');
+    else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--json]');
+    else if (subtopic === 'show') console.log('Usage: makaron skills show <marketplace-id|label> [--json]');
+    else if (subtopic === 'install') console.log('Usage: makaron skills install <marketplace-id|label> [--json]');
+    else console.log(`Skill marketplace commands:
+  skills list                         List marketplace skills
+  skills search <query>               Search marketplace skills
+  skills show <id|label>              Show a marketplace skill
+  skills install <id|label>           Install a marketplace skill to your workspace
+
+Use with chat:
+  makaron chat --project auto --skill <id|label> "your request"
+`);
   } else if (topic === 'edit') {
     console.log('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
   } else if (topic === 'analyze') {
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model kling|seedance] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model kling|seedance]  Edit a video (standalone)
+  video create --script "..." --video <public-url> [--model seedance-fast|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
@@ -1197,16 +1363,19 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let jsonOutput = false;
   let activeSkill = undefined;
   let videoModel = undefined;
+  let videoResolution = undefined;
   let preferredModel = undefined;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else if (args[i] === '--video' && args[i + 1]) chatVideos.push(args[++i]);
     else if (args[i] === '--skill' && args[i + 1]) activeSkill = args[++i];
+    else if (args[i].startsWith('--skill=')) activeSkill = args[i].slice('--skill='.length);
     else if (args[i] === '--stream') useStream = true;
     else if (args[i] === '--background' || args[i] === '-b') background = true;
     else if (args[i] === '--json') jsonOutput = true;
     else if (args[i] === '--video-model' && args[i + 1]) videoModel = args[++i];
+    else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
     else if (args[i] === '--model' && args[i + 1]) preferredModel = args[++i];
     else promptParts.push(args[i]);
   }
@@ -1293,8 +1462,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
   }
 
+  const resolvedSkill = await resolveChatSkill(baseUrl, headers, activeSkill);
+
   // Upload videos to project timeline (via /api/projects/create with videoUrls)
-  let finalPrompt = activeSkill ? `[Active skill: ${activeSkill}]\n${prompt}` : prompt;
+  let finalPrompt = resolvedSkill ? `[Active skill: ${resolvedSkill}]\n${prompt}` : prompt;
   if (chatVideos.length > 0) {
     // Upload local files via signed URL (no size limit, works with API key auth)
     const uploadedVideoUrls = [...prevalidatedVideoUrlList];
@@ -1352,7 +1523,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
     // Default: fire-and-forget + poll
-    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, preferredModel });
+    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel });
     if (background) {
       // Just print runId and exit
       if (jsonOutput) {
@@ -1372,10 +1543,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   if (sub === 'get') {
     const runId = args[2];
     if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]'); process.exit(1); }
-    let wait = false, jsonOutput = false, pick = null;
+    let wait = false, pick = null;
     for (let i = 3; i < args.length; i++) {
       if (args[i] === '--wait') wait = true;
-      if (args[i] === '--json') jsonOutput = true;
       if (args[i] === '--pick' && args[i + 1]) pick = args[++i];
     }
 
@@ -1435,6 +1605,54 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 } else if (command === 'list' || command === 'ls') {
   const { headers, baseUrl } = getAuth();
   await listProjects(baseUrl, headers);
+} else if (command === 'skills') {
+  const sub = args[1] || 'list';
+  const baseUrl = process.env.MAKARON_URL || DEFAULT_URL;
+  const jsonOutput = args.includes('--json');
+
+  if (sub === 'list') {
+    const skills = await fetchMarketplaceSkills(baseUrl);
+    if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
+    else printMarketplaceSkills(skills);
+  } else if (sub === 'search') {
+    const query = args.filter((arg, index) => index > 1 && arg !== '--json').join(' ').trim();
+    if (!query) { console.error('Usage: makaron skills search <query> [--json]'); process.exit(1); }
+    const lowerQuery = query.toLowerCase();
+    const slugQuery = slugifySkill(query);
+    const skills = (await fetchMarketplaceSkills(baseUrl))
+      .filter(skill => {
+        const rawMatch = marketplaceSkillTokens(skill).some(token => token.includes(lowerQuery));
+        const slugMatch = slugQuery ? marketplaceSearchText(skill).includes(slugQuery) : false;
+        return rawMatch || slugMatch;
+      });
+    if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
+    else printMarketplaceSkills(skills);
+  } else if (sub === 'show') {
+    const identifier = args[2];
+    if (!identifier) { console.error('Usage: makaron skills show <marketplace-id|label> [--json]'); process.exit(1); }
+    const skills = await fetchMarketplaceSkills(baseUrl);
+    const skill = findMarketplaceSkill(skills, identifier);
+    if (!skill) { console.error(`Skill not found: ${identifier}`); process.exit(1); }
+    if (jsonOutput) console.log(JSON.stringify(skill, null, 2));
+    else printMarketplaceSkill(skill);
+  } else if (sub === 'install') {
+    const identifier = args[2];
+    if (!identifier) { console.error('Usage: makaron skills install <marketplace-id|label> [--json]'); process.exit(1); }
+    const { headers, baseUrl: authedBaseUrl } = getAuth();
+    const skills = await fetchMarketplaceSkills(authedBaseUrl);
+    const skill = findMarketplaceSkill(skills, identifier);
+    if (!skill) { console.error(`Skill not found: ${identifier}`); process.exit(1); }
+    const data = await installMarketplaceSkill(authedBaseUrl, headers, skill, { quiet: jsonOutput });
+    if (jsonOutput) console.log(JSON.stringify({ ...data, marketplaceId: skill.id, label: skill.label }, null, 2));
+    else console.log(data.skillName);
+  } else {
+    console.log(`Skill marketplace commands:
+  skills list                         List marketplace skills
+  skills search <query>               Search marketplace skills
+  skills show <id|label>              Show a marketplace skill
+  skills install <id|label>           Install a marketplace skill to your workspace
+`);
+  }
 } else if (command === 'project' || command === 'projects') {
   const { headers, baseUrl } = getAuth();
   const sub = args[1];
@@ -1519,7 +1737,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   } else if (sub === 'create') {
     const images = [];
-    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, wait = false;
+    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, wait = false;
     let video = null, keepOriginalSound = false;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
@@ -1529,6 +1747,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
       else if (args[i] === '--aspect' && args[i + 1]) aspectRatio = args[++i];
       else if (args[i] === '--model' && args[i + 1]) videoModel = args[++i];
+      else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
+      else if (args[i] === '--resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
       else if (args[i] === '--project') {
         console.error('Usage: video create no longer supports --project. Use: makaron chat --project <id> --video <file|url> "your request"');
@@ -1537,7 +1757,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--wait') wait = true;
     }
     if ((!images.length && !video) || !script) {
-      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model kling|seedance] [--keep-original-sound]');
+      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
       process.exit(1);
     }
 
@@ -1548,15 +1768,15 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
     let videoUrl = isHttpUrl(video) ? video : null;
     let inputVideoMeta = null;
-    const selectedVideoModel = videoModel || 'kling';
+    const selectedVideoModel = videoModel || 'seedance-fast';
     if (videoUrl) {
-      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K.\n`);
+      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K. Grok does not support video references.\n`);
     }
     if (video && !videoUrl) {
       const valid = validateVideoFile(video, {
         maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
-        ...(selectedVideoModel === 'seedance' ? {
+        ...(selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' ? {
           minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
           minSide: SEEDANCE_MIN_VIDEO_SIDE,
           maxSide: SEEDANCE_MAX_VIDEO_SIDE,
@@ -1574,12 +1794,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
     const vArgs = videoUrl
-      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, referType: selectedVideoModel === 'seedance' ? 'feature' : 'base' }
-      : { script, images };
+      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: (selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast') ? 'feature' : 'base' }
+      : { script, images, videoModel: selectedVideoModel, videoResolution };
     const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
-    if (videoModel && !videoUrl) vArgs.videoModel = videoModel;
     if (keepOriginalSound && videoUrl) vArgs.keepOriginalSound = true;
     const result = await callMcpTool(baseUrl, headers, videoUrl ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
@@ -1625,7 +1844,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model kling|seedance]  Edit a video (standalone)
+  video create --script "..." --video <public-url> [--model seedance-fast|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);

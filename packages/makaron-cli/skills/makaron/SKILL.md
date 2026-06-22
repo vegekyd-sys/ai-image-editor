@@ -96,6 +96,32 @@ Returns immediately:
 | Add music | `npx makaron-cli chat --project <id> "add calm piano background music"` |
 | Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
 
+### Marketplace skills
+
+Use marketplace skills when the user asks for a named Makaron effect, template, or skill such as "Football Captain", "足球队长", "World Cup MVP", or a marketplace UUID.
+
+External users only need `MAKARON_API_KEY`; no admin permissions are required for listing, searching, showing, installing, or using marketplace skills.
+
+```bash
+# Browse public marketplace skills
+npx makaron-cli skills list
+npx makaron-cli skills search "football"
+npx makaron-cli skills search "足球"
+npx makaron-cli skills show <marketplace-id-or-label>
+
+# Install a marketplace skill into the API key owner's workspace
+npx makaron-cli skills install <marketplace-id-or-label>
+
+# Use a marketplace skill. If the skill is not installed yet, chat auto-installs it,
+# then injects the installed skill name into the agent run.
+npx makaron-cli chat --project auto \
+  --image selfie.jpg \
+  --skill <marketplace-id-or-label> \
+  -b "make this with the selected skill"
+```
+
+`--skill` accepts an installed skill name, a marketplace UUID, or a unique marketplace label. If a marketplace skill is matched, the CLI installs or reuses it and sends `[Active skill: <installed-skill-name>]` to Makaron Agent. Do not call admin skill commands for ordinary users. There is intentionally no user-facing CLI delete command for marketplace skills.
+
 ### With additional images (existing project)
 
 ```bash
@@ -212,8 +238,8 @@ npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --model kling
 
 # 3b. Edit a video from a local file or public URL
-npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance
-npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance
+npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance-fast
+npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance --video-resolution 1080p
 
 # 4. Check status
 npx makaron-cli video status <taskId>
@@ -225,9 +251,9 @@ npx makaron-cli video status <taskId>
 npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s.
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--model seedance-fast|seedance|kling|grok`, `--video-resolution auto|480p|720p|1080p|4k`. Default model is `seedance-fast`. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s single-image-to-video only. For `--model grok`, forced `--aspect` is ignored to avoid xAI stretching the source image; pad/create the image at the target shape first or use another model.
 
-Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s.
+Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance-fast --video` or `--model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s. Grok does not support video references.
 
 ### `music` — Music generation
 
@@ -339,7 +365,7 @@ send_message "All done!"
 - One project = one conversation thread. All history is preserved.
 - One run at a time per project. New message interrupts previous run.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Videos take 2-5 minutes to render. Use `responses get <runId> --wait --json` for the default customer-service path.
+- Most videos take 3-5 minutes; Grok is usually around 30-40 seconds. Use `responses get <runId> --wait --json` for the default customer-service path.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.

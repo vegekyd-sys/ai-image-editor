@@ -3,7 +3,6 @@ import path from 'node:path';
 
 const root = process.cwd();
 const files = [
-  'packages/makaron-cli/SKILL.md',
   'packages/makaron-cli/skills/makaron/SKILL.md',
   'packages/makaron-cli/README.md',
 ].map(relative => path.join(root, relative));

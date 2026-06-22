@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
       preferredModel,
       isNsfw,
       videoModel,
+      videoResolution,
+      videoAuto,
     } = await req.json();
 
     if (!projectId || !prompt) {
@@ -123,6 +125,8 @@ export async function POST(req: NextRequest) {
           locale,
           preferredModel,
           videoModel,
+          videoResolution,
+          videoAuto,
           snapshotImages: ctx.snapshotImages,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,
