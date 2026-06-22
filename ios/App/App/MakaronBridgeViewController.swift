@@ -9,10 +9,16 @@ import WebKit
 class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandler, PHPickerViewControllerDelegate {
     private var nativeBridgeInstalled = false
     private var pendingPickerID: String?
+    private var transactionUpdatesTask: Task<Void, Never>?
+    private var pendingPurchaseResponseIdsByProductId: [String: String] = [:]
+    private var handledTransactionIds = Set<String>()
 
     override func viewDidLoad() {
         super.viewDidLoad()
         configureNativeWebView()
+        if #available(iOS 15.0, *) {
+            startTransactionUpdatesListener()
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -21,6 +27,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     }
 
     deinit {
+        transactionUpdatesTask?.cancel()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "makaronNative")
     }
 
@@ -106,33 +113,57 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             return
         }
 
-        Task {
+        NSLog("[Makaron] StoreKit purchase requested product=%@ response=%@", productId, id)
+        Task { @MainActor in
             do {
                 let products = try await Product.products(for: [productId])
                 guard let product = products.first else {
+                    NSLog("[Makaron] StoreKit product missing product=%@ response=%@", productId, id)
                     sendNativeResponse(id: id, ok: false, error: "Apple product not found")
                     return
                 }
+
+                pendingPurchaseResponseIdsByProductId[productId] = id
+                NSLog("[Makaron] StoreKit product ready product=%@ price=%@ response=%@", product.id, product.displayPrice, id)
 
                 var options: Set<Product.PurchaseOption> = []
                 if let token = body["appAccountToken"] as? String, let uuid = UUID(uuidString: token) {
                     options.insert(.appAccountToken(uuid))
                 }
 
+                NSLog("[Makaron] StoreKit purchase starting product=%@ response=%@", productId, id)
                 let result = try await product.purchase(options: options)
                 switch result {
                 case .success(let verification):
                     let transaction = try checkVerified(verification)
                     let signedTransactionInfo = verification.jwsRepresentation
+                    clearPendingPurchaseResponse(productId: productId, id: id)
+                    NSLog("[Makaron] StoreKit purchase success product=%@ transaction=%@ response=%@", productId, String(transaction.id), id)
                     sendTransactionResponse(id: id, transaction: transaction, signedTransactionInfo: signedTransactionInfo)
                 case .userCancelled:
-                    sendNativeResponse(id: id, ok: false, error: "Purchase cancelled")
+                    NSLog("[Makaron] StoreKit purchase returned userCancelled product=%@ response=%@", productId, id)
+                    if let recovered = try await unfinishedTransaction(for: productId) {
+                        clearPendingPurchaseResponse(productId: productId, id: id)
+                        NSLog("[Makaron] StoreKit recovered unfinished transaction product=%@ transaction=%@ response=%@", productId, String(recovered.transaction.id), id)
+                        sendTransactionResponse(id: id, transaction: recovered.transaction, signedTransactionInfo: recovered.signedTransactionInfo)
+                        return
+                    }
+                    if pendingPurchaseResponseIdsByProductId[productId] == id {
+                        clearPendingPurchaseResponse(productId: productId, id: id)
+                        sendNativeResponse(id: id, ok: false, error: "Purchase cancelled")
+                    }
                 case .pending:
+                    NSLog("[Makaron] StoreKit purchase pending product=%@ response=%@", productId, id)
+                    clearPendingPurchaseResponse(productId: productId, id: id)
                     sendNativeResponse(id: id, ok: false, error: "Purchase pending")
                 @unknown default:
+                    NSLog("[Makaron] StoreKit purchase unknown result product=%@ response=%@", productId, id)
+                    clearPendingPurchaseResponse(productId: productId, id: id)
                     sendNativeResponse(id: id, ok: false, error: "Unknown purchase result")
                 }
             } catch {
+                NSLog("[Makaron] StoreKit purchase failed product=%@ response=%@ error=%@", productId, id, error.localizedDescription)
+                clearPendingPurchaseResponse(productId: productId, id: id)
                 sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
             }
         }
@@ -210,6 +241,53 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             throw error
         case .verified(let safe):
             return safe
+        }
+    }
+
+    @available(iOS 15.0, *)
+    private func startTransactionUpdatesListener() {
+        guard transactionUpdatesTask == nil else { return }
+        transactionUpdatesTask = Task { [weak self] in
+            for await update in Transaction.updates {
+                guard let self else { return }
+                do {
+                    let transaction = try self.checkVerified(update)
+                    guard transaction.revocationDate == nil else { continue }
+                    let transactionId = String(transaction.id)
+                    let signedTransactionInfo = update.jwsRepresentation
+                    await MainActor.run {
+                        guard !self.handledTransactionIds.contains(transactionId) else { return }
+                        self.handledTransactionIds.insert(transactionId)
+                        guard let responseId = self.pendingPurchaseResponseIdsByProductId.removeValue(forKey: transaction.productID) else {
+                            NSLog("[Makaron] StoreKit transaction update without pending web response product=%@ transaction=%@", transaction.productID, transactionId)
+                            return
+                        }
+                        NSLog("[Makaron] StoreKit transaction update matched pending response product=%@ transaction=%@ response=%@", transaction.productID, transactionId, responseId)
+                        self.sendTransactionResponse(id: responseId, transaction: transaction, signedTransactionInfo: signedTransactionInfo)
+                    }
+                } catch {
+                    NSLog("[Makaron] StoreKit transaction update verification failed: %@", error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    @available(iOS 15.0, *)
+    private func unfinishedTransaction(for productId: String) async throws -> (transaction: Transaction, signedTransactionInfo: String)? {
+        for await unfinished in Transaction.unfinished {
+            let transaction = try checkVerified(unfinished)
+            guard transaction.revocationDate == nil else { continue }
+            guard transaction.productID == productId else { continue }
+            return (transaction, unfinished.jwsRepresentation)
+        }
+        NSLog("[Makaron] StoreKit no unfinished transaction product=%@", productId)
+        return nil
+    }
+
+    @MainActor
+    private func clearPendingPurchaseResponse(productId: String, id: String) {
+        if pendingPurchaseResponseIdsByProductId[productId] == id {
+            pendingPurchaseResponseIdsByProductId.removeValue(forKey: productId)
         }
     }
 

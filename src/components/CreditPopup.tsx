@@ -10,6 +10,8 @@ import { trackCheckoutStart, trackCheckoutSuccessFromUrl } from '@/lib/marketing
 import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing';
 import {
   finishNativeAppleTransaction,
+  getNativeApplePurchaseErrorMessage,
+  isNativeApplePurchaseCancellation,
   purchaseNativeAppleProduct,
   purchaseNativeAppleSubscription,
   restoreNativeApplePurchases,
@@ -206,8 +208,10 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         window.location.href = data.url;
       }
     } catch (error) {
-      console.error('[billing] top-up failed:', error);
-      setPaymentError(error instanceof Error ? error.message : 'Unable to start top-up.');
+      if (!isNativeApplePurchaseCancellation(error)) {
+        console.error('[billing] top-up failed:', error);
+      }
+      setPaymentError(getNativeApplePurchaseErrorMessage(error, 'Unable to start top-up.'));
     } finally {
       setLoading(null);
     }
@@ -265,8 +269,10 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         window.location.href = data.url;
       }
     } catch (error) {
-      console.error('[billing] subscribe failed:', error);
-      setPaymentError(error instanceof Error ? error.message : 'Unable to start subscription.');
+      if (!isNativeApplePurchaseCancellation(error)) {
+        console.error('[billing] subscribe failed:', error);
+      }
+      setPaymentError(getNativeApplePurchaseErrorMessage(error, 'Unable to start subscription.'));
     } finally {
       setLoading(null);
     }
@@ -608,6 +614,12 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
               </div>
             )}
 
+            {paymentError && (
+              <div data-testid="apple-purchase-error" style={{ margin: '10px 24px 0', padding: '10px 12px', borderRadius: 12, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(248,113,113,0.22)', color: '#fecaca', fontSize: 12, lineHeight: 1.45 }}>
+                {paymentError}
+              </div>
+            )}
+
             {/* Content */}
             <div style={{ padding: '16px 24px 24px' }}>
 
@@ -791,11 +803,6 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                 </>
               )}
 
-              {paymentError && (
-                <div style={{ marginTop: 12, color: '#f87171', fontSize: 12, lineHeight: 1.45 }}>
-                  {paymentError}
-                </div>
-              )}
             </div>
           </>
         )}

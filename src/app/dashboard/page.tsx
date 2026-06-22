@@ -11,6 +11,8 @@ import { trackCheckoutStart } from '@/lib/marketing/meta-pixel'
 import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing'
 import {
   finishNativeAppleTransaction,
+  getNativeApplePurchaseErrorMessage,
+  isNativeApplePurchaseCancellation,
   purchaseNativeAppleProduct,
   purchaseNativeAppleSubscription,
   restoreNativeApplePurchases,
@@ -192,8 +194,10 @@ function DashboardInner() {
       const data = await res.json()
       if (data.url) window.location.href = data.url
     } catch (error) {
-      console.error('[dashboard] top-up failed:', error)
-      setBillingActionError(error instanceof Error ? error.message : 'Unable to start top-up.')
+      if (!isNativeApplePurchaseCancellation(error)) {
+        console.error('[dashboard] top-up failed:', error)
+      }
+      setBillingActionError(getNativeApplePurchaseErrorMessage(error, 'Unable to start top-up.'))
     } finally {
       setCheckingOut(null)
     }
@@ -234,8 +238,10 @@ function DashboardInner() {
       const data = await res.json()
       if (data.url) window.location.href = data.url
     } catch (error) {
-      console.error('[dashboard] subscribe failed:', error)
-      setBillingActionError(error instanceof Error ? error.message : 'Unable to start subscription.')
+      if (!isNativeApplePurchaseCancellation(error)) {
+        console.error('[dashboard] subscribe failed:', error)
+      }
+      setBillingActionError(getNativeApplePurchaseErrorMessage(error, 'Unable to start subscription.'))
     } finally {
       setSubscribing(null)
     }
@@ -334,6 +340,12 @@ function DashboardInner() {
           <div className={`mt-1 text-xs ${appleBilling.error ? 'text-red-400/75' : 'text-white/40'}`}>
             {appleBilling.error || (appleBilling.loading ? 'Loading Apple prices...' : 'Plan changes and top-ups are billed through Apple on iOS.')}
           </div>
+        </div>
+      )}
+
+      {billingActionError && (
+        <div className="mb-6 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {billingActionError}
         </div>
       )}
 
@@ -468,9 +480,6 @@ function DashboardInner() {
                 </button>
               )}
             </>
-          )}
-          {billingActionError && (
-            <div className="text-red-400/70 text-xs mt-4">{billingActionError}</div>
           )}
         </>
       )}
