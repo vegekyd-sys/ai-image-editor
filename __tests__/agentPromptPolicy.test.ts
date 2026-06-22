@@ -224,6 +224,8 @@ describe('agent prompt policy guards', () => {
     expect(read('src/lib/prompts/generate_image_tool.md')).toContain('director storyboard images required by `long-video-director`')
     expect(skill).toContain('review')
     expect(skill).toContain('every approved asset is referenced where needed')
+    expect(skill).toContain('If a required storyboard or anchor ref is missing from the exact `story_prompt`, stop and rewrite')
+    expect(skill).toContain('The video provider only receives media refs that are present in the final tool submission')
     expect(skill).toContain('exact refs per segment')
     expect(skill).toContain('Segment Outline And Seam Plan')
     expect(skill).toContain('Fewer segments are better for consistency')
