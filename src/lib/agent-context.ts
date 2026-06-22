@@ -212,8 +212,13 @@ export async function buildPromptContext(
     ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the media index. Omit media_index to edit this draft directly.\n\n`
     : '';
 
-  const refContext = referenceImageCount
+  const isFrameAnchoredVideoEdit = !!(referenceImageCount && /@\d+/.test(userMessage) && /\b\d+:\d{2}\b/.test(userMessage));
+  const refContext = referenceImageCount && !isFrameAnchoredVideoEdit
     ? `[用户上传了 ${referenceImageCount} 张参考图，已自动传给 generate_image 工具使用]\n\n`
+    : '';
+
+  const frameAnchoredVideoEditContext = isFrameAnchoredVideoEdit
+    ? `[Frame-anchored video edit]\nThe user attached a screenshot/frame and referenced a video moment in the text. Treat the attached image as the visual anchor for local video repair: read skills/video-segment-edit/SKILL.md, locate the moment with analyze_video({ mode: "locate_frame" }) using the screenshot + referenced video, and do not call generate_animation until the user explicitly confirms generation.\n\n`
     : '';
 
   const videoUploadContext = uploadedVideoCount
@@ -225,7 +230,7 @@ export async function buildPromptContext(
     : '';
 
   // Assemble
-  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;

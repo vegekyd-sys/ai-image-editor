@@ -1421,6 +1421,14 @@ export interface LocateFrameInVideoResult {
   confidence: number;
   evidence: string[];
   concerns: string[];
+  verification?: FrameMatchVerification;
+}
+
+export interface FrameMatchVerification {
+  verdict: 'match' | 'not_match' | 'uncertain';
+  confidence: number;
+  evidence: string[];
+  concerns: string[];
 }
 
 function stripJsonFence(text: string): string {
@@ -1451,6 +1459,79 @@ function parseLocateFrameResult(text: string): LocateFrameInVideoResult {
       concerns: ['Model did not return valid JSON.'],
     };
   }
+}
+
+function parseFrameMatchVerification(text: string): FrameMatchVerification {
+  try {
+    const raw = JSON.parse(stripJsonFence(text)) as Partial<FrameMatchVerification>;
+    const verdicts = new Set(['match', 'not_match', 'uncertain']);
+    const verdict = verdicts.has(String(raw.verdict)) ? raw.verdict as FrameMatchVerification['verdict'] : 'uncertain';
+    return {
+      verdict,
+      confidence: Math.max(0, Math.min(1, Number.isFinite(Number(raw.confidence)) ? Number(raw.confidence) : 0)),
+      evidence: Array.isArray(raw.evidence) ? raw.evidence.map(String).slice(0, 6) : [],
+      concerns: Array.isArray(raw.concerns) ? raw.concerns.map(String).slice(0, 6) : [],
+    };
+  } catch {
+    return {
+      verdict: 'uncertain',
+      confidence: 0,
+      evidence: text ? [text.slice(0, 600)] : [],
+      concerns: ['Model did not return valid JSON.'],
+    };
+  }
+}
+
+export async function verifyFrameImageMatch(
+  screenshotImage: string,
+  candidateFrameImage: string,
+  question?: string,
+  userId?: string,
+): Promise<FrameMatchVerification> {
+  const ai = getAI();
+  const model = 'gemini-3-flash-preview';
+  const screenshot = await ensureBase64Server(screenshotImage);
+  const candidate = await ensureBase64Server(candidateFrameImage);
+  const screenshotMime = screenshot.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
+  const candidateMime = candidate.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
+  const screenshotBase64 = screenshot.replace(/^data:image\/\w+;base64,/, '');
+  const candidateBase64 = candidate.replace(/^data:image\/\w+;base64,/, '');
+  const userHint = question?.trim() ? `\nUser note: ${question.trim()}` : '';
+
+  const prompt = `You are verifying whether two images show the same underlying video moment.
+
+Input image A is the user's screenshot. It may include player UI, crop, compression, annotations, or a different scale.
+Input image B is a candidate frame extracted from the source video.
+
+Return "match" only when the underlying scene, subject/object positions, camera angle, pose, and motion phase clearly match.
+Return "not_match" when the broad scene may be similar but the time-specific details are different.
+Return "uncertain" if UI overlays, crop, blur, or repeated scene structure prevent a reliable decision.
+${userHint}
+
+Return strict JSON only:
+{
+  "verdict": "match" | "not_match" | "uncertain",
+  "confidence": 0.0-1.0,
+  "evidence": ["specific matching or mismatching visual details"],
+  "concerns": ["uncertainty notes"]
+}`;
+
+  const result = await ai.models.generateContent({
+    model,
+    contents: [{ role: 'user', parts: [
+      { inlineData: { mimeType: screenshotMime, data: screenshotBase64 } },
+      { inlineData: { mimeType: candidateMime, data: candidateBase64 } },
+      { text: prompt },
+    ] }],
+  });
+  const usage = result.usageMetadata;
+  if (usage && userId) {
+    import('./billing/credits').then(({ deductByTokens }) =>
+      deductByTokens(userId, 'analyze_video', model, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0)
+        .catch(e => console.error('[billing] frame verification deduct error:', e))
+    );
+  }
+  return parseFrameMatchVerification(result.text || '');
 }
 
 export async function locateFrameInVideoContent(

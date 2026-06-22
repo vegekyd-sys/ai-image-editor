@@ -7,7 +7,7 @@ import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimatio
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
-import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
+import AgentChatView, { type ComposerDraftAttachment, type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import CreditPopup from '@/components/CreditPopup';
 import ShareButton from '@/components/ShareButton';
@@ -49,6 +49,12 @@ import { appendSnapshotDedupeVideo, dedupeVideoSnapshots } from '@/lib/video-sna
 export type { AnimationState } from '@/lib/editor/types';
 
 type EditorCompletionAction = ArtifactCompletionAction;
+
+function formatFrameEditTime(seconds: number) {
+  if (!seconds || !isFinite(seconds)) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  return `${mins}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
+}
 
 interface EditorProps {
   projectId?: string;
@@ -266,6 +272,12 @@ export default function Editor({
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
   const isAgentActiveRef = useRef(false);
+  const [videoGuiTime, setVideoGuiTime] = useState(0);
+  const [videoGuiDuration, setVideoGuiDuration] = useState(0);
+  const [videoFrameCaptureRequest, setVideoFrameCaptureRequest] = useState(0);
+  const [cuiDraftText, setCuiDraftText] = useState('');
+  const [cuiDraftAttachments, setCuiDraftAttachments] = useState<ComposerDraftAttachment[]>([]);
+  const pendingFrameEditRef = useRef<{ anim: ProjectAnimation; time: number; mediaIndex: number; prompt: string } | null>(null);
 
   // Sync state when initialSnapshots/Messages props change (Supabase fetch or cache)
   useEffect(() => {
@@ -1699,6 +1711,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // CUI send: if annotations exist, merge them; otherwise normal chat
   const handleCuiSend = async (text: string, imgs?: string[], videos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => {
     if (gateInteraction()) return;
+    setCuiDraftText('');
+    setCuiDraftAttachments([]);
     if (annotationMode && annotationEntries.length > 0) {
       await sendWithAnnotations(text);
       return;
@@ -2890,6 +2904,35 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       .catch(e => console.warn('Artifact action failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
+  const handleVideoFrameEdit = useCallback((anim: ProjectAnimation, time: number) => {
+    if (gateInteraction()) return;
+    if (!projectId) { console.warn('video frame edit skipped: no projectId'); return; }
+    if (isAgentActive) { console.warn('video frame edit skipped: agent busy'); return; }
+
+    const duration = videoGuiDuration || anim.duration || 0;
+    const safeTime = Math.max(0, Math.min(Number.isFinite(duration) && duration > 0 ? duration : time, Number.isFinite(time) ? time : 0));
+    const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
+    const mediaIndex = snapIndex >= 0 ? snapIndex + 1 : Math.max(1, viewIndexRef.current + 1);
+    const timeLabel = formatFrameEditTime(safeTime);
+    const prompt = t('video.frameEditDraftPrompt', mediaIndex, timeLabel);
+
+    pendingFrameEditRef.current = { anim, time: safeTime, mediaIndex, prompt };
+    setVideoFrameCaptureRequest(v => v + 1);
+  }, [gateInteraction, projectId, isAgentActive, videoGuiDuration, t]);
+
+  const handleVideoFrameCaptured = useCallback((dataUrl: string, time: number) => {
+    const pending = pendingFrameEditRef.current;
+    if (!pending || !projectId) return;
+    pendingFrameEditRef.current = null;
+
+    const timeLabel = formatFrameEditTime(time);
+    const attachmentId = `frame-edit-${pending.anim.id}-${Math.round(time * 1000)}-${Date.now()}`;
+    setCuiDraftText('');
+    setCuiDraftAttachments([{ id: attachmentId, type: 'image', data: dataUrl, thumbnail: dataUrl }]);
+    requestAnimationFrame(() => setCuiDraftText(pending.prompt || t('video.frameEditDraftPrompt', pending.mediaIndex, timeLabel)));
+    setViewMode('cui');
+  }, [projectId, t]);
+
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
     // Update message image
@@ -3053,7 +3096,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         // before the next line, giving Safari no chance to show stale frames.
         flushSync(() => setViewMode('gui'));
         // Force layout reflow + repaint so Safari's compositor picks up the new DOM
-        document.body.offsetHeight;           // force reflow
+        void document.body.offsetHeight;      // force reflow
         document.body.style.opacity = '0.999';
         requestAnimationFrame(() => {
           document.body.style.opacity = '';
@@ -3122,6 +3165,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
     onArtifactAction: handleArtifactAction,
+    draftText: cuiDraftText,
+    draftAttachments: cuiDraftAttachments.length > 0 ? cuiDraftAttachments : undefined,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
     skills: availableSkills,
     selectedSkill,
@@ -3316,6 +3361,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     }
                   });
                 }}
+                onVideoTimeUpdate={(time, duration) => {
+                  setVideoGuiTime(time);
+                  if (duration && Number.isFinite(duration)) setVideoGuiDuration(duration);
+                }}
+                videoFrameCaptureRequest={videoFrameCaptureRequest}
+                onVideoFrameCaptured={handleVideoFrameCaptured}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
@@ -3668,6 +3719,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         videoResolution: anim.videoResolution || 'auto',
                       });
                     }}
+                    onFrameEdit={handleVideoFrameEdit}
+                    currentTime={videoGuiTime}
+                    currentDuration={videoGuiDuration}
                     isDesktop={isDesktop}
                   />
                 ) : isViewingDesign ? (

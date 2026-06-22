@@ -75,7 +75,7 @@ Direct-submit exception: if the current request says "直接提交渲染", "不�
 
 When editing existing video snapshots up to 15 seconds total, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it, but clamp it to the SeeDance model range: minimum 4s, maximum 15s. If under 4s, set `duration: 4`.
 
-Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`). Treat SeeDance 2.0 Fast and SeeDance 2.0 standard as different models: use `seedance-fast` for the default fast path, and `seedance` only when the user asks for standard/full SeeDance or 1080p. If the user asks for cheaper/faster/draft/480p, set `video_resolution: "480p"` when supported. If user says "用 Grok 生成", "use grok", "用 grok 做", fastest, or native audio from one image, use model `grok`. For Grok single-image-to-video, do not pass `aspect_ratio`; xAI stretches the source image when a forced ratio differs from the input. If the user needs a different final shape, choose Seedance/Kling or first pad/create the source image in that shape.
+Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`). Treat `seedance-fast` and standard `seedance` as separate models: use `seedance` only when the user asks for standard/full/1080p. Cheaper/faster/draft/480p -> set `video_resolution: "480p"` when supported. Grok/native-audio requests -> model `grok`; for Grok single-image-to-video, do not pass `aspect_ratio` unless the source image is already padded/shaped.
 
 ### Real MP4 Editing and Long Video Preparation
 

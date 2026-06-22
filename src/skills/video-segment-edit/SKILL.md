@@ -90,17 +90,24 @@ For a frame captured by `preview_frame`:
 
 Interpret the result:
 
-- `located` with confidence >= 0.65: proceed only after the evidence includes
-  time-specific details, not just broad scene similarity.
+- `located` with confidence >= 0.65: proceed only if `verification.verdict` is
+  `match` and `verification.confidence >= 0.72`.
 - `multiple_candidates`: use the strongest timestamp/window, then verify with
   `preview_frame`.
-- `uncertain` or confidence < 0.65: use the FFmpeg fallback below.
+- `uncertain`, confidence < 0.65, missing verification, or failed verification:
+  use the FFmpeg fallback below. Do not proceed to regeneration from an
+  unverified timestamp.
 - `not_found`: ask for a clearer screenshot or confirm the source video.
 
 High confidence is not enough when several moments look broadly similar. If the
 evidence sounds generic, if the returned timestamp is near 0s for a later-looking
 frame, or if the video reuses similar layouts across time, run the local visual
 cross-check below.
+
+Verification is a hard gate. If the candidate frame extracted at the located
+timestamp does not visually match the user's screenshot, say the frame could not
+be located confidently and ask for a clearer screenshot or timestamp. Do not
+continue just because the broad scene or skyline looks similar.
 
 ## Step 3 - Local Visual Cross-Check
 
@@ -120,6 +127,9 @@ Use `run_code({ runtime: "node", media_refs: [media_index] })` to:
 
 Decision rule:
 
+- Before choosing a timestamp, compare the user's screenshot with at least one
+  candidate frame image. The selected timestamp must be visually defensible as
+  the same underlying frame or moment.
 - If the screenshot is a real frame capture and the best visual match is strong,
   isolated in time, and disagrees with `analyze_video`, prefer that timestamp
   even when `analyze_video` returned high confidence.
