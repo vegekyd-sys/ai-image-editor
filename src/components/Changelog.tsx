@@ -23,15 +23,15 @@ const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-06-18',
     en: { title: 'Frame-Based Video Repair', items: [
-      'A new "Edit video here" pill lets you capture the current video frame directly from the GUI.',
-      'Makaron briefly shows a capture feedback animation, then opens chat with that frame attached and a timestamped prompt ready to edit.',
-      'The Agent treats the screenshot as a video anchor: it locates the matching moment, repairs only that segment, and waits for your confirmation before rendering.',
+      'When a video has one awkward moment, tap "Edit video here" to capture that frame and continue in chat with the screenshot already attached.',
+      'Tell Makaron what feels wrong — "make this frame Paris", "the hand looks weird here", or "around this second" — and it focuses on that moment instead of remaking the whole video.',
+      'Makaron locates the matching segment from the screenshot, prepares a local repair, and waits for your confirmation before rendering.',
       'The rebuilt workspace keeps source videos, captured frames, segments, and generated clips reusable across follow-up steps.',
     ]},
     zh: { title: '按当前帧修视频', items: [
-      '视频 GUI 里新增“从这帧改视频”入口，可以直接截取当前播放帧。',
-      '截屏会有明确反馈动画，随后进入聊天：截图已作为待发送附件放好，输入框自动带上视频引用和时间点。',
-      'Agent 会把这张截图当作视频定位锚点，先找到对应片段，只修改这一小段，并等你确认后再渲染。',
+      '视频里只有某一帧不对时，点“从这帧改视频”就能截下当前画面，并带着截图直接进入聊天。',
+      '像平时说话一样描述就行："这帧换成巴黎"、"这里手有点怪"、"大概这一秒不对"；Makaron 会聚焦这个画面附近，只重做这一小段。',
+      'Makaron 会根据截图找到对应片段，准备局部修复方案，并等你确认后再渲染。',
       '新的工作区会复用源视频、截帧、裁剪片段和生成结果，后续继续修改不用来回找文件。',
     ]},
   },
