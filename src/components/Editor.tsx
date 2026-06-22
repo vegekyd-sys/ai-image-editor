@@ -7,7 +7,7 @@ import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimatio
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
-import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
+import AgentChatView, { type ComposerDraftAttachment, type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import CreditPopup from '@/components/CreditPopup';
 import ShareButton from '@/components/ShareButton';
@@ -276,6 +276,7 @@ export default function Editor({
   const [videoGuiDuration, setVideoGuiDuration] = useState(0);
   const [videoFrameCaptureRequest, setVideoFrameCaptureRequest] = useState(0);
   const [cuiDraftText, setCuiDraftText] = useState('');
+  const [cuiDraftAttachments, setCuiDraftAttachments] = useState<ComposerDraftAttachment[]>([]);
   const pendingFrameEditRef = useRef<{ anim: ProjectAnimation; time: number; mediaIndex: number; prompt: string } | null>(null);
 
   // Sync state when initialSnapshots/Messages props change (Supabase fetch or cache)
@@ -1711,6 +1712,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const handleCuiSend = async (text: string, imgs?: string[], videos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => {
     if (gateInteraction()) return;
     setCuiDraftText('');
+    setCuiDraftAttachments([]);
     if (annotationMode && annotationEntries.length > 0) {
       await sendWithAnnotations(text);
       return;
@@ -2912,14 +2914,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
     const mediaIndex = snapIndex >= 0 ? snapIndex + 1 : Math.max(1, viewIndexRef.current + 1);
     const timeLabel = formatFrameEditTime(safeTime);
-    const prompt = locale === 'en'
-      ? `@${mediaIndex} ${timeLabel} edit this video starting from this frame`
-      : `@${mediaIndex} ${timeLabel} 从这一帧开始修改这个视频`;
+    const prompt = t('video.frameEditDraftPrompt', mediaIndex, timeLabel);
 
     pendingFrameEditRef.current = { anim, time: safeTime, mediaIndex, prompt };
-    setCuiDraftText(prompt);
     setVideoFrameCaptureRequest(v => v + 1);
-  }, [gateInteraction, projectId, isAgentActive, videoGuiDuration, locale]);
+  }, [gateInteraction, projectId, isAgentActive, videoGuiDuration, t]);
 
   const handleVideoFrameCaptured = useCallback((dataUrl: string, time: number) => {
     const pending = pendingFrameEditRef.current;
@@ -2927,54 +2926,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     pendingFrameEditRef.current = null;
 
     const timeLabel = formatFrameEditTime(time);
-    const msg: Message = {
-      id: generateId(),
-      role: 'assistant',
-      content: t('video.frameCaptured', timeLabel),
-      images: [dataUrl],
-      imageCaptions: [timeLabel],
-      timestamp: Date.now(),
-    };
-    setMessages(prev => [...prev, msg]);
-    onSaveMessage?.(msg);
-    if (!isDesktop) setViewMode('cui');
-
-    Promise.resolve().then(async () => {
-      try {
-        const supabase = createBrowserSupabase();
-        const { data: userData } = await supabase.auth.getUser();
-        const uid = userData.user?.id;
-        if (!uid) return;
-        const blob = await fetch(dataUrl).then(r => r.blob());
-        const path = `${uid}/${projectId}/frames/frame-edit-${msg.id}.jpg`;
-        await supabase.storage.from('images').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-        const { data: urlData } = supabase.storage.from('images').getPublicUrl(path);
-        const publicUrl = urlData?.publicUrl;
-        if (!publicUrl) return;
-
-        setMessages(prev => prev.map(m => m.id === msg.id
-          ? { ...m, images: [publicUrl], imageCaptions: [timeLabel] }
-          : m
-        ));
-        await supabase.from('agent_events').insert({
-          run_id: `gui-frame-edit-${msg.id}`,
-          project_id: projectId,
-          type: 'preview_frame_captured',
-          data: {
-            workspaceUrl: publicUrl,
-            messageId: msg.id,
-            caption: timeLabel,
-            source: 'gui_video_frame_edit',
-            mediaIndex: pending.mediaIndex,
-            timestamp: time,
-          },
-          seq: 0,
-        });
-      } catch (e) {
-        console.warn('[video-frame-edit] persist captured frame failed:', e);
-      }
-    });
-  }, [projectId, onSaveMessage, t, isDesktop]);
+    const attachmentId = `frame-edit-${pending.anim.id}-${Math.round(time * 1000)}-${Date.now()}`;
+    setCuiDraftText('');
+    setCuiDraftAttachments([{ id: attachmentId, type: 'image', data: dataUrl, thumbnail: dataUrl }]);
+    requestAnimationFrame(() => setCuiDraftText(pending.prompt || t('video.frameEditDraftPrompt', pending.mediaIndex, timeLabel)));
+    setViewMode('cui');
+  }, [projectId, t]);
 
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
@@ -3209,6 +3166,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     onMusicSelect: handleMusicSelect,
     onArtifactAction: handleArtifactAction,
     draftText: cuiDraftText,
+    draftAttachments: cuiDraftAttachments.length > 0 ? cuiDraftAttachments : undefined,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
     skills: availableSkills,
     selectedSkill,

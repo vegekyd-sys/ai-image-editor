@@ -492,6 +492,13 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
 
 export type PreferredModel = 'auto' | 'gemini' | 'qwen' | 'pony' | 'wai' | 'openai';
 
+export interface ComposerDraftAttachment {
+  id: string;
+  type: 'image';
+  data: string;
+  thumbnail?: string;
+}
+
 interface AgentChatViewProps {
   messages: Message[];
   isAgentActive: boolean;
@@ -539,6 +546,7 @@ interface AgentChatViewProps {
   skills?: SkillItem[];
   selectedSkill?: string | null;
   draftText?: string;
+  draftAttachments?: ComposerDraftAttachment[];
   onSkillChange?: (skill: string | null) => void;
   onDeleteSkill?: (name: string) => void;
   onUploadSkill?: () => void;
@@ -584,6 +592,7 @@ export default function AgentChatView({
   skills,
   selectedSkill,
   draftText,
+  draftAttachments,
   onSkillChange,
   onDeleteSkill,
   onUploadSkill,
@@ -654,8 +663,37 @@ export default function AgentChatView({
     lastDraftTextRef.current = draftText;
     if (!draftText) return;
     setInput(draftText);
-    requestAnimationFrame(() => inputRef.current?.focus());
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(draftText.length, draftText.length);
+    });
   }, [draftText]);
+
+  const lastDraftAttachmentsRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!draftAttachments?.length) return;
+    const key = draftAttachments.map(a => `${a.id}:${a.data.length}`).join('|');
+    if (key === lastDraftAttachmentsRef.current) return;
+    lastDraftAttachmentsRef.current = key;
+    setAttachments(prev => {
+      const withoutDraftDuplicates = prev.filter(att => !draftAttachments.some(d => d.id === att.id));
+      return [
+        ...withoutDraftDuplicates,
+        ...draftAttachments.map(att => ({
+          id: att.id,
+          type: att.type,
+          thumbnail: att.thumbnail || att.data,
+          status: 'ready' as const,
+          data: att.data,
+        })),
+      ];
+    });
+    requestAnimationFrame(() => {
+      const len = inputRef.current?.value.length ?? 0;
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(len, len);
+    });
+  }, [draftAttachments]);
 
   // ── PiP drag state ──────────────────────────────────────────────
   type PipCorner = 'tl' | 'tr' | 'ml' | 'mr' | 'bl' | 'br';
@@ -1502,7 +1540,12 @@ export default function AgentChatView({
             {attachments.length > 0 && (
               <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 2 }}>
                 {attachments.map((att) => (
-                  <div key={att.id} className="relative flex-shrink-0">
+                  <div
+                    key={att.id}
+                    className="relative flex-shrink-0"
+                    data-testid={att.type === 'image' ? 'chat-attachment-image' : 'chat-attachment-video'}
+                    data-attachment-status={att.status}
+                  >
                     {att.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={att.thumbnail} alt="" className="w-9 h-9 rounded-lg object-cover" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />

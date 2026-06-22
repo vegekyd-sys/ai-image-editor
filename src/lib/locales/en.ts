@@ -125,6 +125,8 @@ const en = {
   'video.frameEdit': 'Edit this frame',
   'video.frameEditHint': (time: string) => `Current ${time}`,
   'video.frameCaptured': (time: string) => `I captured the frame at ${time}. Check it, then tell me what to change.`,
+  'video.frameCapturedShort': 'Frame captured',
+  'video.frameEditDraftPrompt': (mediaIndex: number, time: string) => `@${mediaIndex} ${time} edit this video starting from this frame, `,
 
   // Animate sheet
   'animate.title': 'Generate video',

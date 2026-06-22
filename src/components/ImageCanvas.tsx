@@ -193,6 +193,7 @@ export default function ImageCanvas({
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
   const lastCaptureRequestRef = useRef<number | undefined>(undefined);
+  const [frameCaptureFeedback, setFrameCaptureFeedback] = useState(false);
   const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDragging = useRef(false);
@@ -232,27 +233,45 @@ export default function ImageCanvas({
 
   useEffect(() => {
     if (videoFrameCaptureRequest === undefined) return;
+    if (videoFrameCaptureRequest === 0 && lastCaptureRequestRef.current === undefined) {
+      lastCaptureRequestRef.current = videoFrameCaptureRequest;
+      return;
+    }
     if (lastCaptureRequestRef.current === videoFrameCaptureRequest) return;
     lastCaptureRequestRef.current = videoFrameCaptureRequest;
+    setFrameCaptureFeedback(true);
 
     const video = videoRef.current;
-    if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) return;
+    if (!video) {
+      window.setTimeout(() => setFrameCaptureFeedback(false), 520);
+      return;
+    }
     try {
+      video.pause();
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const videoWidth = video.videoWidth || naturalDims.w || 1280;
+      const videoHeight = video.videoHeight || naturalDims.h || 720;
+      canvas.width = videoWidth;
+      canvas.height = videoHeight;
       const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        window.setTimeout(() => setFrameCaptureFeedback(false), 520);
+        return;
+      }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      onVideoFrameCaptured?.(
-        canvas.toDataURL('image/jpeg', 0.92),
-        video.currentTime || videoCurrentTime,
-        Number.isFinite(video.duration) ? video.duration : videoDuration,
-      );
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      const capturedTime = video.currentTime || videoCurrentTime;
+      const capturedDuration = Number.isFinite(video.duration) ? video.duration : videoDuration;
+      setFrameCaptureFeedback(true);
+      window.setTimeout(() => {
+        setFrameCaptureFeedback(false);
+        onVideoFrameCaptured?.(dataUrl, capturedTime, capturedDuration);
+      }, 720);
     } catch (e) {
       console.warn('[ImageCanvas] current video frame capture failed:', e);
+      setFrameCaptureFeedback(false);
     }
-  }, [videoFrameCaptureRequest, onVideoFrameCaptured, videoCurrentTime, videoDuration]);
+  }, [videoFrameCaptureRequest, onVideoFrameCaptured, videoCurrentTime, videoDuration, naturalDims.w, naturalDims.h]);
 
   const SWIPE_THRESHOLD = 40;
 
@@ -1036,6 +1055,41 @@ export default function ImageCanvas({
                 <div className="bg-black/60 backdrop-blur-sm rounded-2xl px-6 py-4 text-center">
                   <p className="text-white/80 text-sm">{t('canvas.videoExpired')}</p>
                 </div>
+              </div>
+            )}
+
+            {frameCaptureFeedback && (
+              <div
+                data-testid="video-frame-capture-feedback"
+                data-capture-state="captured"
+                className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center"
+                style={{
+                  animation: 'frameCaptureFlash 720ms ease-out both',
+                  background: 'rgba(255,255,255,0.16)',
+                }}
+              >
+                <div
+                  className="rounded-[18px]"
+                  style={{
+                    position: 'absolute',
+                    inset: 18,
+                    border: '2px solid rgba(255,255,255,0.78)',
+                    boxShadow: '0 0 0 999px rgba(0,0,0,0.18), 0 0 28px rgba(217,70,239,0.42)',
+                  }}
+                />
+                <div
+                  className="rounded-full px-4 py-2 text-sm font-semibold text-white"
+                  style={{ background: 'rgba(10,10,10,0.72)', backdropFilter: 'blur(10px)' }}
+                >
+                  {t('video.frameCapturedShort')}
+                </div>
+                <style>{`
+                  @keyframes frameCaptureFlash {
+                    0% { opacity: 0; transform: scale(1.015); filter: brightness(1); }
+                    18% { opacity: 1; transform: scale(1); filter: brightness(1.25); }
+                    100% { opacity: 0; transform: scale(0.992); filter: brightness(1); }
+                  }
+                `}</style>
               </div>
             )}
 
