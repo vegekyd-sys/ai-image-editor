@@ -2,6 +2,8 @@
 
 import AgentCopyButton from './AgentCopyButton'
 
+const INSTALL_SKILL_COMMAND = 'npx makaron-cli setup'
+
 export default function AgentContent() {
   return (
     <div className="min-h-screen w-full bg-black text-gray-200 font-mono p-6 md:p-12 max-w-4xl mx-auto overflow-hidden">
@@ -25,10 +27,13 @@ export default function AgentContent() {
       {/* Install */}
       <section className="mb-12">
         <h2 className="text-lg text-fuchsia-400 mb-4">Install</h2>
+        <p className="text-sm text-gray-400 mb-4">
+          Ask your agent to install <code className="text-fuchsia-300">makaron-cli</code> globally and add the Makaron Agent Skill.
+        </p>
         <div className="bg-gray-900 rounded-lg p-4 flex items-center justify-between gap-3">
-          <code className="text-sm text-gray-200 whitespace-nowrap">npx makaron-cli</code>
+          <code className="min-w-0 text-sm text-gray-200 overflow-x-auto whitespace-pre">{INSTALL_SKILL_COMMAND}</code>
           <button
-            onClick={() => { navigator.clipboard?.writeText('npx makaron-cli').catch(() => {}); }}
+            onClick={() => { navigator.clipboard?.writeText(INSTALL_SKILL_COMMAND).catch(() => {}); }}
             className="shrink-0 px-3 py-1.5 rounded-md border border-gray-700 text-xs text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
           >
             Copy

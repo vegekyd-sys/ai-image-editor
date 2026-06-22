@@ -2,12 +2,14 @@ import type { Metadata } from 'next'
 import { buildPublicMetadata } from '@/lib/seo'
 
 export const metadata: Metadata = buildPublicMetadata({
-  title: 'makaron-cli for AI Agents',
+  title: 'Makaron Agent Skill for AI Agents',
   description:
-    'makaron.app is for humans. makaron-cli is for AI agents: talk to Makaron from the terminal to create persistent image, video, music, and animated design projects.',
+    'Install the Makaron Agent Skill from the makaron-cli npm package, then create images, videos, music, and animated designs from the terminal.',
   path: '/agent',
   image: '/landing/agent.jpg',
   keywords: [
+    'Makaron skill',
+    'Agent skill',
     'makaron-cli',
     'AI agent creative CLI',
     'AI agent image editing',

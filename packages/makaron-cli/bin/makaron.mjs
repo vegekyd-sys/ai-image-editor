@@ -15,6 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { createInterface } from 'readline';
 import { execFileSync } from 'child_process';
+import { fileURLToPath } from 'url';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -267,12 +268,13 @@ function printChatHelp() {
   console.log(`Makaron chat — create and edit with Makaron Agent
 
 Usage:
-  makaron chat --project <id|auto> [options] "your message"
+  makaron chat --project <id|auto> [options] [--skill <id|label|name>] "your message"
 
 Options:
   --project <id|auto>       Project to work in. Use "auto" to create one.
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
+  --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --model <name>            Preferred image/model route.
   --video-model <name>      Preferred video model: seedance-fast, seedance, kling, or grok.
   --video-resolution <res>  Video resolution: auto, 480p, 720p, 1080p, or 4k.
@@ -290,6 +292,9 @@ What you can ask:
 
   Video from image or timeline
     makaron chat --project <id> "make this into a 5 second cinematic video"
+
+  Marketplace skill
+    makaron chat --project auto --image selfie.jpg --skill "Football Captain" "make this cinematic"
 
   Fix one video moment from a screenshot
     makaron chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"
@@ -1197,6 +1202,8 @@ function printRootHelp() {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
 
 Commands:
+  setup                              Install makaron-cli globally and add the Agent Skill
+  install-skill                     Install Makaron Agent Skill into your coding agent
   register --json                    Get challenge for agent self-registration
   register --verify --challenge-id <id> --answer <n>  Verify and save API key
   claim                              Get claim URL for human to link account
@@ -1208,6 +1215,7 @@ Commands:
   create --title "name"              Create empty project (text-to-image)
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
+  chat --project <id> --skill <id>   Use or auto-install a marketplace skill
   chat --project <id> --video <file> Attach video to conversation
   chat --project <id> -b "message"   Background: submit and print runId
   chat --project <id> --stream "msg" Legacy: stream SSE in real-time
@@ -1232,13 +1240,56 @@ Environment:
 `);
 }
 
+function installAgentSkill(values = []) {
+  if (hasHelpFlag(values)) {
+    console.log('Usage: makaron install-skill [--global] [--agent <agent>] [--yes]');
+    return;
+  }
+
+  const skillDir = fileURLToPath(new URL('../skills/makaron', import.meta.url));
+  const skillFile = path.join(skillDir, 'SKILL.md');
+  if (!fs.existsSync(skillFile)) {
+    console.error(`Makaron Agent Skill not found at ${skillFile}`);
+    process.exit(1);
+  }
+
+  execFileSync('npx', [
+    '-y',
+    'skills',
+    'add',
+    skillDir,
+    '--skill',
+    'makaron',
+    '--copy',
+    ...values,
+  ], { stdio: 'inherit' });
+}
+
+function setupMakaron(values = []) {
+  if (hasHelpFlag(values)) {
+    console.log('Usage: makaron setup [--agent <agent>]');
+    return;
+  }
+
+  const version = getCliVersion();
+  console.error(`Installing ${NPM_PACKAGE_NAME}@${version} globally...`);
+  execFileSync('npm', ['install', '-g', `${NPM_PACKAGE_NAME}@${version}`], { stdio: 'inherit' });
+
+  const skillArgs = [...values];
+  if (!skillArgs.includes('--global') && !skillArgs.includes('-g')) skillArgs.unshift('--global');
+  if (!skillArgs.includes('--yes') && !skillArgs.includes('-y')) skillArgs.push('--yes');
+
+  console.error('Installing Makaron Agent Skill globally...');
+  installAgentSkill(skillArgs);
+}
+
 function printHelp(topic, subtopic) {
   if (topic === 'login') {
     console.log('Usage: makaron login');
   } else if (topic === 'create') {
     console.log('Usage: makaron create --image <file> [--image <file2>] | --image-url <url> | --title "name"');
   } else if (topic === 'chat') {
-    console.log('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--stream] [--background|-b] [--json] "your message"');
+    printChatHelp();
   } else if (topic === 'responses' || topic === 'run') {
     if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]');
     else if (subtopic === 'watch') console.log('Usage: makaron responses watch <runId> [--jsonl] [--interval <ms>]');
@@ -1259,6 +1310,10 @@ function printHelp(topic, subtopic) {
 `);
   } else if (topic === 'abort') {
     console.log('Usage: makaron abort <runId>');
+  } else if (topic === 'setup') {
+    console.log('Usage: makaron setup [--agent <agent>]');
+  } else if (topic === 'install-skill') {
+    console.log('Usage: makaron install-skill [--global] [--agent <agent>] [--yes]');
   } else if (topic === 'skills') {
     if (subtopic === 'list') console.log('Usage: makaron skills list [--json]');
     else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--json]');
@@ -1332,6 +1387,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   printHelp(command, args[1]);
 } else if (command === '--version' || command === '-v' || command === 'version') {
   console.log(getCliVersion());
+} else if (command === 'setup') {
+  setupMakaron(args.slice(1));
+} else if (command === 'install-skill') {
+  installAgentSkill(args.slice(1));
 } else if (command === 'login') {
   await login();
 } else if (command === 'create') {

@@ -7,8 +7,10 @@ Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, an
 ## Setup
 
 ```bash
-npm install -g makaron-cli
-# or use directly: npx makaron-cli
+# Install makaron-cli globally and add the Makaron Agent Skill.
+npx makaron-cli setup
+
+npx makaron-cli --help
 ```
 
 ### Get your API key
