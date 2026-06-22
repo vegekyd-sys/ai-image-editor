@@ -22,23 +22,17 @@ const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-06-18',
-    en: { title: 'Local Video Repair & Agent Workspace', items: [
-      'See one awkward shot in an otherwise good video? Send a screenshot and tell Makaron what should change.',
-      'Makaron will focus on that moment instead of asking you to regenerate the whole clip from scratch.',
-      'You can say things like "make this frame Paris" or "the hand looks wrong here" — no exact timestamp required.',
-      'After the new piece is ready, Makaron shows a clear next step to place it back into the full video.',
-      'Agent workspace has been rebuilt so project files, generated clips, and intermediate outputs can be reused directly across follow-up steps.',
-      'This means fewer manual file handoffs, faster FFmpeg-style edits, and a smoother path from one generated result to the next.',
-      'This makes video revision feel closer to photo editing: point at the problem, fix only that part, keep the rest.',
+    en: { title: 'Frame-Based Video Repair', items: [
+      'A new "Edit video here" pill lets you capture the current video frame directly from the GUI.',
+      'Makaron briefly shows a capture feedback animation, then opens chat with that frame attached and a timestamped prompt ready to edit.',
+      'The Agent treats the screenshot as a video anchor: it locates the matching moment, repairs only that segment, and waits for your confirmation before rendering.',
+      'The rebuilt workspace keeps source videos, captured frames, segments, and generated clips reusable across follow-up steps.',
     ]},
-    zh: { title: '局部修视频 & Agent 工作区升级', items: [
-      '一条视频整体都不错，只是某个画面不对？现在可以直接发截屏，告诉 Makaron 想怎么改。',
-      '不用整条视频从头生成；Makaron 会把注意力放在这个画面附近，只重做这一小段。',
-      '你可以像平时说话一样描述："这帧换成巴黎"、"这里手有点怪"、"大概这一秒不对"。',
-      '新片段生成完成后，Makaron 会继续给出清晰的下一步，把它放回完整视频里。',
-      'Agent 工作区完成了一次重写：项目素材、生成片段和中间文件都可以在后续步骤里直接复用。',
-      '这会减少手动找文件和传文件的步骤，让 FFmpeg 这类合成、裁剪、拼接任务更快接上下一步。',
-      '视频修改开始更像修图：指出问题，只改局部，保留其他已经满意的部分。',
+    zh: { title: '按当前帧修视频', items: [
+      '视频 GUI 里新增“从这帧改视频”入口，可以直接截取当前播放帧。',
+      '截屏会有明确反馈动画，随后进入聊天：截图已作为待发送附件放好，输入框自动带上视频引用和时间点。',
+      'Agent 会把这张截图当作视频定位锚点，先找到对应片段，只修改这一小段，并等你确认后再渲染。',
+      '新的工作区会复用源视频、截帧、裁剪片段和生成结果，后续继续修改不用来回找文件。',
     ]},
   },
   {
