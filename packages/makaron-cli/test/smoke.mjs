@@ -24,6 +24,40 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify(data));
   };
 
+  if (req.method === 'GET' && url.pathname === '/api/home-skills') {
+    sendJson(200, [
+      {
+        id: 'skill_market_1',
+        labels: { en: 'Diamond Bling', zh: '夜店钻石风' },
+        image: 'https://cdn.example/diamond.jpg',
+        prompt: 'Nightclub diamond bling portrait',
+        skill_path: 'https://cdn.example/diamond.zip',
+        image_count: 1,
+        sort_order: 1,
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'prompt_market_1',
+        labels: { en: 'Prompt Only' },
+        image: 'https://cdn.example/prompt.jpg',
+        prompt: 'A prompt-only marketplace item',
+        skill_path: null,
+        image_count: 1,
+        sort_order: 2,
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/skills') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    assert.equal(body.skillPath, 'https://cdn.example/diamond.zip');
+    assert.equal(body.homeSkillId, 'skill_market_1');
+    sendJson(200, { success: true, skillName: 'diamond-bling', assetsUploaded: 1 });
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/projects/create') {
     sendJson(200, { projectId: 'project-auto-1', snapshots: [] });
     return;
@@ -211,6 +245,11 @@ try {
     [['project', '--help'], /Project commands:/],
     [['project', 'media', '--help'], /Usage: makaron project media/],
     [['abort', '--help'], /Usage: makaron abort/],
+    [['skills', '--help'], /Skill marketplace commands:/],
+    [['skills', 'list', '--help'], /Usage: makaron skills list/],
+    [['skills', 'search', '--help'], /Usage: makaron skills search/],
+    [['skills', 'show', '--help'], /Usage: makaron skills show/],
+    [['skills', 'install', '--help'], /Usage: makaron skills install/],
     [['edit', '--help'], /Usage: makaron edit/],
     [['analyze', '--help'], /Usage: makaron analyze/],
     [['video', '--help'], /Video commands:/],
@@ -246,6 +285,53 @@ try {
     const runRequest = requests.find(req => req.pathname === '/api/agent/run');
     assert.equal(runRequest?.body?.projectId, 'project-auto-1');
     assert.equal(runRequest?.body?.prompt, 'make a compact image');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'list', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 2);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+    assert.equal(data.skills[0].label, 'Diamond Bling');
+    assert.equal(data.skills[0].hasSkill, true);
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'search', 'diamond', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 1);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'search', '夜店钻石风', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 1);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'show', 'Diamond Bling', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.id, 'skill_market_1');
+    assert.equal(data.skillPath, 'https://cdn.example/diamond.zip');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'install', 'skill_market_1', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.success, true);
+    assert.equal(data.skillName, 'diamond-bling');
+    assert.equal(data.marketplaceId, 'skill_market_1');
+  }
+
+  {
+    await expectSuccess(['chat', '--project', 'auto', '--skill', '夜店钻石风', '--json', '-b', 'make me shine']);
+    const runRequests = requests.filter(req => req.pathname === '/api/agent/run');
+    const runRequest = runRequests.at(-1);
+    assert.equal(runRequest?.body?.prompt, '[Active skill: diamond-bling]\nmake me shine');
+    const installRequests = requests.filter(req => req.pathname === '/api/skills');
+    assert.equal(installRequests.at(-1)?.body?.homeSkillId, 'skill_market_1');
   }
 
   {

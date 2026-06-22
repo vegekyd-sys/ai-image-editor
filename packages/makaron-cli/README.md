@@ -107,6 +107,23 @@ Returns immediately:
 | Add music | `npx makaron-cli chat --project <id> "add calm piano background music"` |
 | Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
 
+### Marketplace skills
+
+External users can browse, install, and use marketplace skills with only `MAKARON_API_KEY`:
+
+```bash
+npx makaron-cli skills list
+npx makaron-cli skills search "football"
+npx makaron-cli skills search "足球"
+npx makaron-cli skills show <marketplace-id-or-label>
+npx makaron-cli skills install <marketplace-id-or-label>
+
+# chat auto-installs matched marketplace skills before starting the run
+npx makaron-cli chat --project auto --image selfie.jpg --skill <marketplace-id-or-label> -b "make this with the selected skill"
+```
+
+`--skill` accepts an installed skill name, a marketplace UUID, or a unique marketplace label. If a marketplace skill is matched, the CLI installs or reuses it and sends `[Active skill: <installed-skill-name>]` to Makaron Agent. Ordinary users do not need admin commands, and the CLI intentionally does not expose skill deletion.
+
 ### With additional images (existing project)
 
 ```bash
