@@ -61,6 +61,10 @@ next-env.d.ts
 
 # dev scripts
 /scripts/
+!/scripts/
+/scripts/*
+!/scripts/makaron-release-check.mjs
+!/scripts/makaron-worktree-fastpath.mjs
 
 
 # claude code local settings
