@@ -75,7 +75,7 @@ Direct-submit exception: if the current request says "直接提交渲染", "不�
 
 When editing existing video snapshots up to 15 seconds total, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it, but clamp it to the SeeDance model range: minimum 4s, maximum 15s. If under 4s, set `duration: 4`.
 
-Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) at 720p. Treat `seedance-fast` and standard `seedance` as separate models: generic "HD"/"高清"/"high quality" requests still use `seedance-fast` 720p. Use standard `seedance` only when the user explicitly asks for 1080p, standard/full SeeDance, or premium/highest-resolution output. Cheaper/faster/draft/480p -> set `video_resolution: "480p"` when supported. Grok/native-audio requests -> model `grok`; for Grok single-image-to-video, do not pass `aspect_ratio` unless the source image is already padded/shaped.
+Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. Treat `seedance-fast` and standard `seedance` as separate models: generic "HD"/"高清"/"high quality" means `seedance-fast` 720p. Use `seedance` only for explicit 1080p, standard/full, or premium/highest-res. Cheaper/faster/draft/480p -> set `video_resolution: "480p"`. Grok/native-audio -> `grok`; omit Grok `aspect_ratio` unless source is padded.
 
 ### Real MP4 Editing and Long Video Preparation
 
