@@ -6,6 +6,7 @@ import { isMakaronIOSApp } from '@/lib/native-app';
 import {
   NATIVE_PAGE_STACK_BACK_EVENT,
   NATIVE_PAGE_STACK_PUSH_EVENT,
+  shouldUseNativePageStack,
 } from '@/lib/native-page-stack';
 
 const EDGE_PX = 32;
@@ -36,8 +37,34 @@ function normalizePath(path: string): string {
   }
 }
 
+function pathnameForStack(path: string): string {
+  return normalizePath(path).split('?')[0] || '/';
+}
+
+function isLoginStackPath(path: string): boolean {
+  return pathnameForStack(path) === '/login';
+}
+
+function isSameStackSurface(a: string, b: string): boolean {
+  if (isLoginStackPath(a) && isLoginStackPath(b)) return true;
+  return normalizePath(a) === normalizePath(b);
+}
+
+function collapseAdjacentDuplicateEntries(entries: StackEntry[]): StackEntry[] {
+  return entries.reduce<StackEntry[]>((collapsed, entry) => {
+    const previous = collapsed[collapsed.length - 1];
+    if (previous && isSameStackSurface(previous.path, entry.path)) {
+      collapsed[collapsed.length - 1] = entry;
+      return collapsed;
+    }
+    collapsed.push(entry);
+    return collapsed;
+  }, []);
+}
+
 function pathTitle(path: string): string {
   const pathname = path.split('?')[0];
+  if (pathname === '/login') return 'Sign in';
   if (pathname === '/dashboard') return 'Dashboard';
   if (pathname === '/profile') return 'Account';
   if (pathname === '/skills') return 'Skills';
@@ -48,10 +75,7 @@ function pathTitle(path: string): string {
 }
 
 function shouldUseNativeStack(path: string): boolean {
-  const pathname = path.split('?')[0];
-  if (pathname === '/' || pathname === '/home' || pathname === '/projects') return true;
-  if (pathname.startsWith('/home/') || pathname.startsWith('/projects/')) return false;
-  return true;
+  return shouldUseNativePageStack(path);
 }
 
 function isPrimaryNativeTabPath(path: string): boolean {
@@ -196,21 +220,23 @@ export default function NativeIOSPageStack({ children }: { children: ReactNode }
 
       const top = current[current.length - 1];
       if (top?.path === pathKey) {
-        return current.map((entry, index) => (
+        const updated = current.map((entry, index) => (
           index === current.length - 1
-            ? { ...entry, node: children, pending: false, frozen: false, phase: entry.phase === 'entering' ? 'entering' : 'active', x: entry.phase === 'entering' ? entry.x : 0 }
+            ? { ...entry, node: children, pending: false, frozen: false, phase: (entry.phase === 'entering' ? 'entering' : 'active') as StackPhase, x: entry.phase === 'entering' ? entry.x : 0 }
             : entry
         ));
+        return collapseAdjacentDuplicateEntries(updated);
       }
 
-      const previousIndex = current.findIndex((entry) => entry.path === pathKey);
+      const previousIndex = current.findIndex((entry) => isSameStackSurface(entry.path, pathKey));
       if (previousIndex >= 0) {
-        return current.slice(0, previousIndex + 1).map((entry, index, list) => (
-          index === list.length - 1 ? { ...entry, node: children, pending: false, frozen: false, phase: 'active', x: 0 } : entry
+        const updated = current.slice(0, previousIndex + 1).map((entry, index, list) => (
+          index === list.length - 1 ? { ...entry, node: children, pending: false, frozen: false, phase: 'active' as const, x: 0 } : entry
         ));
+        return collapseAdjacentDuplicateEntries(updated);
       }
 
-      return [...current, makeEntry(pathKey, children, 'entering')].slice(-MAX_RETAINED_ENTRIES);
+      return collapseAdjacentDuplicateEntries([...current, makeEntry(pathKey, children, 'entering')]).slice(-MAX_RETAINED_ENTRIES);
     });
   }, [children, isIOSApp, pathKey]);
 
@@ -244,14 +270,17 @@ export default function NativeIOSPageStack({ children }: { children: ReactNode }
       const frozenHtml = sanitizeFrozenHTMLForIOSStack(activeEntryRef.current?.innerHTML ?? '');
       setEntries((current) => {
         const top = current[current.length - 1];
-        if (top?.path === nextPath) return current;
+        if (top && isSameStackSurface(top.path, nextPath)) return current;
         const frozenCurrent = current.map((entry, index) => (
           index === current.length - 1 && frozenHtml
             ? { ...entry, node: <FrozenPage html={frozenHtml} />, frozen: true, pending: false, phase: 'active' as const, x: 0 }
             : entry
         ));
         const fallbackPath = top?.path ?? '/projects';
-        return [...frozenCurrent, makeEntry(nextPath, <PendingPageShell path={nextPath} fallbackPath={fallbackPath} />, 'entering', true)].slice(-MAX_RETAINED_ENTRIES);
+        return collapseAdjacentDuplicateEntries([
+          ...frozenCurrent,
+          makeEntry(nextPath, <PendingPageShell path={nextPath} fallbackPath={fallbackPath} />, 'entering', true),
+        ]).slice(-MAX_RETAINED_ENTRIES);
       });
     };
     window.addEventListener(NATIVE_PAGE_STACK_PUSH_EVENT, onPush);
@@ -295,7 +324,7 @@ export default function NativeIOSPageStack({ children }: { children: ReactNode }
     return () => window.removeEventListener(NATIVE_PAGE_STACK_BACK_EVENT, onBack);
   });
 
-  if (!isIOSApp) return <>{children}</>;
+  if (!isIOSApp || !shouldUseNativeStack(pathKey)) return <>{children}</>;
 
   const topEntry = entries[entries.length - 1];
   const canPanBack = entries.length > 1 && topEntry && shouldUseNativeStack(topEntry.path);

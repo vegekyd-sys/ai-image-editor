@@ -136,6 +136,57 @@ describe('NativeIOSPageStack', () => {
     expect(container.querySelector('[data-makaron-ios-stack-entry="under"]')?.textContent).not.toContain('Loading');
   });
 
+  it('keeps the previous page behind login while deduping repeated login routes', async () => {
+    const { rerender, container } = render(
+      <NativeIOSPageStack>
+        <main>Projects page</main>
+      </NativeIOSPageStack>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-makaron-ios-page-stack="true"]')).toBeTruthy();
+    });
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('makaron-ios-page-stack-push', {
+        detail: { path: '/login?next=%2Fdashboard' },
+      }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Sign in')).toBeTruthy();
+      expect(container.querySelector('[data-makaron-ios-stack-pending="true"]')).toBeTruthy();
+    });
+    expect(screen.getByText('Projects page')).toBeTruthy();
+
+    mocks.pathname = '/login';
+    mocks.search = 'next=%2Fdashboard';
+    rerender(
+      <NativeIOSPageStack>
+        <main>Login loaded</main>
+      </NativeIOSPageStack>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Login loaded')).toBeTruthy();
+      expect(container.querySelector('[data-makaron-ios-stack-pending="true"]')).toBeNull();
+    });
+    expect(container.querySelector('[data-makaron-ios-stack-entry="under"]')?.textContent).toContain('Projects page');
+    expect(container.querySelectorAll('[data-makaron-ios-stack-entry]').length).toBe(2);
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('makaron-ios-page-stack-push', {
+        detail: { path: '/login?next=%2Fprojects' },
+      }));
+    });
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('[data-makaron-ios-stack-entry]').length).toBe(2);
+    });
+    expect(container.querySelector('[data-makaron-ios-stack-entry="under"]')?.textContent).toContain('Projects page');
+    expect(screen.getByText('Login loaded')).toBeTruthy();
+  });
+
   it('does not preserve a stacked primary tab when switching between home and projects', async () => {
     mocks.pathname = '/home';
     const { rerender, container } = render(

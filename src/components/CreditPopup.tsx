@@ -327,7 +327,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
       if (appleBilling.loading) return 'Loading Apple prices...';
       if (!selectedAppleSubscriptionReady) return 'Apple product unavailable';
       const nativeProduct = appleBilling.nativeProductFor(selectedAppleSubscriptionProduct);
-      return `Subscribe with Apple · ${nativeProduct?.displayPrice || (selectedBillingInterval === 'year' ? 'Annual' : 'Monthly')}`;
+      return `Subscribe · ${nativeProduct?.displayPrice || (selectedBillingInterval === 'year' ? 'Annual' : 'Monthly')}`;
     }
     if (hasSubscription) return `${t('billing.upgradeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`;
     return `${t('billing.subscribeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`;
@@ -337,7 +337,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     if (appleBillingAvailable) {
       if (appleBilling.loading) return 'Loading Apple prices...';
       if (!selectedAppleTopupReady) return 'Apple product unavailable';
-      return `Buy with Apple · ${selectedTopupCredits.toLocaleString()} ${t('billing.credits')}`;
+      return `${t('billing.topUp')} ${selectedTopupCredits.toLocaleString()} ${t('billing.credits')}`;
     }
     return `${t('billing.topUp')} ${selectedTopupCredits.toLocaleString()} ${t('billing.credits')}`;
   })();

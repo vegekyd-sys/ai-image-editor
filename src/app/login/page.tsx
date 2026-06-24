@@ -51,9 +51,34 @@ export default function LoginPage() {
   const [resetSuccess, setResetSuccess] = useState(false)
 
   const supabaseRef = useRef<SupabaseClient | null>(null)
+  const pageRef = useRef<HTMLDivElement | null>(null)
   function getSupabase() {
     if (!supabaseRef.current) supabaseRef.current = createClient()
     return supabaseRef.current
+  }
+
+  const keepFocusedFieldVisible = (target: EventTarget | null) => {
+    const el = target instanceof HTMLElement ? target : null
+    if (!el) return
+    const adjust = () => {
+      const page = pageRef.current
+      const vv = window.visualViewport
+      el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+      if (!page || !vv) {
+        return
+      }
+
+      const rect = el.getBoundingClientRect()
+      const visibleTop = vv.offsetTop + 24
+      const visibleBottom = vv.offsetTop + vv.height - 24
+      if (rect.bottom > visibleBottom) {
+        page.scrollBy({ top: rect.bottom - visibleBottom, behavior: 'smooth' })
+      } else if (rect.top < visibleTop) {
+        page.scrollBy({ top: rect.top - visibleTop, behavior: 'smooth' })
+      }
+    }
+    window.setTimeout(adjust, 80)
+    window.setTimeout(adjust, 260)
   }
 
 
@@ -345,7 +370,14 @@ export default function LoginPage() {
       @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
       .mkr-handwrite { font-family: 'Caveat', cursive; }
     `}</style>
-    <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black flex items-center justify-center px-6 relative overflow-hidden">
+    <div
+      ref={pageRef}
+      className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black flex items-center justify-center px-6 relative overflow-y-auto overscroll-contain"
+      style={{
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px) + var(--makaron-native-keyboard-inset, 0px))',
+      }}
+    >
       <div className="absolute inset-0 pointer-events-none" style={{
         background: 'radial-gradient(ellipse 60% 40% at 50% 60%, rgba(217,70,239,0.06) 0%, transparent 70%)',
       }} />
@@ -353,7 +385,7 @@ export default function LoginPage() {
         <LocaleToggle />
       </div>
 
-      <div className="w-full max-w-sm relative z-10">
+      <div className="w-full max-w-sm relative z-10 py-10">
         {/* Wordmark */}
         <div className="flex items-center justify-center gap-3 mb-1">
           <MakaronSpark size={30} />
@@ -448,9 +480,9 @@ export default function LoginPage() {
 
 
             <form onSubmit={handleContinue} className="space-y-4">
-              <input type="email" placeholder={t('auth.email')} value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} required
+              <input type="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
-              <input type="password" placeholder={t('auth.password')} value={password} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
+              <input type="password" placeholder={t('auth.password')} value={password} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
 
               {error && <p className="text-red-400 text-sm text-center">{error}</p>}
@@ -499,6 +531,7 @@ export default function LoginPage() {
                   inputMode="numeric"
                   maxLength={1}
                   value={digit}
+                  onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)}
                   onChange={(e) => handleOtpChange(i, e.target.value)}
                   onKeyDown={(e) => handleOtpKeyDown(i, e)}
                   autoFocus={i === 0}
@@ -542,7 +575,7 @@ export default function LoginPage() {
           <div>
             <h2 className="text-white text-xl font-bold text-center mb-6">{t('auth.resetPassword.title')}</h2>
             <form onSubmit={handleForgotSubmit} className="space-y-4">
-              <input type="email" placeholder={t('auth.email')} value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} required
+              <input type="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
 
               {error && <p className="text-red-400 text-sm text-center">{error}</p>}
@@ -573,7 +606,7 @@ export default function LoginPage() {
               </div>
             ) : (
               <form onSubmit={handleResetPassword} className="space-y-4">
-                <input type="password" placeholder={t('auth.resetPassword.newPassword')} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6}
+                <input type="password" placeholder={t('auth.resetPassword.newPassword')} value={newPassword} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => setNewPassword(e.target.value)} required minLength={6}
                   className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
 
                 {error && <p className="text-red-400 text-sm text-center">{error}</p>}

@@ -422,7 +422,7 @@ function DashboardInner() {
                       ? appleBilling.loading
                         ? 'Loading...'
                         : appleReady
-                          ? `Apple · ${displayPrice}`
+                          ? displayPrice || 'Unavailable'
                           : 'Unavailable'
                       : `$${(price / 100).toFixed(2)}${billingInterval === 'year' ? '/yr' : '/mo'}`
                   return (
@@ -499,7 +499,7 @@ function DashboardInner() {
                 ? appleBilling.loading
                   ? 'Loading...'
                   : appleReady
-                    ? `Apple · ${displayPrice}`
+                    ? displayPrice || 'Unavailable'
                     : 'Unavailable'
                 : `$${(tier.price / 100).toFixed(0)}`
             return (

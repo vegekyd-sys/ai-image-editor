@@ -20,7 +20,7 @@ const config: CapacitorConfig = {
       'www.makaron.app',
       'makaron.app',
       'cdn.makaron.app',
-      'ai-image-editor-o5g5vq7ad-vegekyd-sys-projects.vercel.app',
+      'ai-image-editor-fdi797ko7-vegekyd-sys-projects.vercel.app',
     ],
     errorPath: 'index.html',
   },
