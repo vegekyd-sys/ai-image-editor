@@ -292,11 +292,25 @@ export default function NativeIOSPageStack({ children }: { children: ReactNode }
     const currentEntries = entriesRef.current;
     const canCloseStack = currentEntries.length > 1;
     if (!canCloseStack) {
-      if (window.history.length > 1) window.history.back();
-      else window.location.assign(fallbackPath);
+      // Login is usually reached via a hard navigation (e.g. sign-out does
+      // `window.location.href = '/login'`), which resets the SPA. In that case
+      // `window.history.back()` crosses the hard-nav boundary and triggers a
+      // full document reload of the previous page — the white-screen the user
+      // sees when swiping back from login. Always stay client-side here and
+      // land on the public home page so logged-out users don't bounce.
+      const topPath = pathnameForStack(currentEntries[currentEntries.length - 1]?.path ?? '');
+      if (topPath === '/login') {
+        router.replace('/home');
+      } else if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        router.replace(fallbackPath);
+      }
       return;
     }
     backInFlightRef.current = true;
+    // Path of the entry we're closing (captured before the slice).
+    const closingPath = pathnameForStack(currentEntries[currentEntries.length - 1]?.path ?? '');
     setEntries((current) => current.map((entry, index) => (
       index === current.length - 1 ? { ...entry, phase: 'exiting', x: 100 } : entry
     )));
@@ -305,7 +319,15 @@ export default function NativeIOSPageStack({ children }: { children: ReactNode }
         index === list.length - 1 ? { ...entry, phase: 'active', x: 0 } : entry
       )));
       const previousPath = entriesRef.current[entriesRef.current.length - 2]?.path ?? fallbackPath;
-      if (window.history.length > 1) {
+      // `/login` is commonly reached via `router.replace('/login')` (projects
+      // auth guard, useRequireAuth, editor leaveEditor). That replaces the
+      // history entry, so `window.history.back()` no longer points at the page
+      // shown underneath — it crosses into a stale/hard-nav entry and reloads
+      // the document (the white-screen on swipe-back). Navigate client-side to
+      // the revealed previous page instead, which never reloads.
+      if (closingPath === '/login') {
+        router.replace(previousPath);
+      } else if (window.history.length > 1) {
         window.history.back();
       } else {
         router.replace(previousPath);

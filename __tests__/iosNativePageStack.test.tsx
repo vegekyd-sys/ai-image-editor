@@ -1,5 +1,5 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NativeIOSPageStack, { sanitizeFrozenHTMLForIOSStack } from '@/components/NativeIOSPageStack';
 
 const mocks = vi.hoisted(() => ({
@@ -24,6 +24,12 @@ describe('NativeIOSPageStack', () => {
     mocks.pathname = '/projects';
     mocks.search = '';
     document.documentElement.dataset.nativePlatform = 'ios';
+  });
+
+  afterEach(() => {
+    // Unmount each stack so its native-back event listeners don't leak into
+    // the next test and trigger stray window.history.back() calls.
+    cleanup();
   });
 
   it('keeps the previous page mounted and shows a pending native page immediately on iOS pushes', async () => {
@@ -229,5 +235,74 @@ describe('NativeIOSPageStack', () => {
     expect(frozen).not.toContain('<iframe');
     expect(frozen).not.toContain('autoplay');
     expect(frozen).not.toContain('skill.mp4');
+  });
+
+  it('returns to a public page client-side instead of reloading when backing out of a standalone login', async () => {
+    mocks.pathname = '/login';
+    mocks.search = '';
+    const { container } = render(
+      <NativeIOSPageStack>
+        <main>Login loaded</main>
+      </NativeIOSPageStack>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-makaron-ios-page-stack="true"]')).toBeTruthy();
+    });
+
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    act(() => {
+      window.dispatchEvent(new CustomEvent('makaron-ios-page-stack-back', {
+        cancelable: true,
+        detail: { fallbackPath: '/projects' },
+      }));
+    });
+
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/home'));
+    expect(back).not.toHaveBeenCalled();
+    back.mockRestore();
+  });
+
+  it('reveals the stacked previous page client-side (no window.history.back) when backing out of login', async () => {
+    mocks.pathname = '/projects';
+    mocks.search = '';
+    const { rerender, container } = render(
+      <NativeIOSPageStack>
+        <main>Projects page</main>
+      </NativeIOSPageStack>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-makaron-ios-page-stack="true"]')).toBeTruthy();
+    });
+
+    mocks.pathname = '/login';
+    mocks.search = 'next=%2Fdashboard';
+    rerender(
+      <NativeIOSPageStack>
+        <main>Login loaded</main>
+      </NativeIOSPageStack>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('[data-makaron-ios-stack-entry]').length).toBe(2);
+    });
+
+    // Pretend there is deep browser history. Without the login fix the close
+    // path would call window.history.back() (which reloads across the
+    // router.replace('/login') boundary) and would NOT route via the client
+    // router — so asserting router.replace('/projects') proves the fix.
+    const lengthSpy = vi.spyOn(window.history, 'length', 'get').mockReturnValue(7);
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    act(() => {
+      window.dispatchEvent(new CustomEvent('makaron-ios-page-stack-back', {
+        cancelable: true,
+        detail: { fallbackPath: '/projects' },
+      }));
+    });
+
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/projects'));
+    back.mockRestore();
+    lengthSpy.mockRestore();
   });
 });
