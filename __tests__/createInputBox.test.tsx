@@ -1,0 +1,78 @@
+import { useEffect } from 'react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import CreateInputBox from '@/components/CreateInputBox'
+import { useCreateInput } from '@/hooks/useCreateInput'
+
+function touchMove(target: HTMLElement, x: number, y: number) {
+  const event = new Event('touchmove', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'touches', {
+    configurable: true,
+    value: [{ clientX: x, clientY: y }],
+  })
+  target.dispatchEvent(event)
+}
+
+function frontCard(el: HTMLElement) {
+  const card = Array.from(el.children).find((child) => (child as HTMLElement).style.zIndex === '3')
+  if (!card) throw new Error('front card not found')
+  return card as HTMLElement
+}
+
+function CreateInputHarness() {
+  const input = useCreateInput()
+
+  useEffect(() => {
+    void input.addFiles([
+      new File(['one'], 'one.jpg', { type: 'image/jpeg' }),
+      new File(['two'], 'two.jpg', { type: 'image/jpeg' }),
+      new File(['three'], 'three.jpg', { type: 'image/jpeg' }),
+    ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <CreateInputBox
+      input={input}
+      slotWidth={80}
+      isDesktop={false}
+      onSubmit={vi.fn()}
+      skills={[]}
+      selectedSkill={null}
+      onSkillChange={vi.fn()}
+    />
+  )
+}
+
+describe('CreateInputBox', () => {
+  beforeEach(() => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn((file: File) => `blob:${file.name}`),
+    })
+  })
+
+  it('keeps mobile multi-upload card swiping working without a parent swipeRef', async () => {
+    render(<CreateInputHarness />)
+
+    const stack = await waitFor(() => {
+      const el = screen.getByTestId('mobile-upload-swipe-stack')
+      expect(el.getAttribute('data-count')).toBe('3')
+      expect(el.getAttribute('data-idx')).toBe('2')
+      return el
+    })
+
+    fireEvent.touchStart(stack, { touches: [{ clientX: 160, clientY: 40 }] })
+    touchMove(stack, 70, 42)
+
+    await waitFor(() => {
+      expect(frontCard(stack).style.transform).toContain('translateX(-90px)')
+    })
+
+    fireEvent.touchEnd(stack)
+
+    await waitFor(() => {
+      expect(stack.getAttribute('data-idx')).toBe('0')
+    })
+  })
+})

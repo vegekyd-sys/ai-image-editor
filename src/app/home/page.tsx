@@ -7,8 +7,11 @@ import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile } from '@/lib/imageUtils'
 import { useLocale } from '@/lib/i18n'
-import { createProject } from '@/lib/createProject'
+import { compressCreateImageFile, createProject, createProjectFromStagedMedia } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
+import { cacheCreateDraft, clearCreateDraft, getCreateDraft } from '@/lib/imageCache'
+import { extractPhotoMetadata } from '@/lib/image/metadata'
+import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
@@ -177,10 +180,14 @@ function HomePageInner() {
     lastX: number
     startTime: number
   }>({ tracking: false, locked: false, startX: 0, startY: 0, lastX: 0, startTime: 0 })
+  const lastUploadIntentRef = useRef<{ at: number; key: string } | null>(null)
   const selectedDetailRef = useRef(selectedDetail)
   selectedDetailRef.current = selectedDetail
   const homeSkillsRef = useRef(homeSkills)
   homeSkillsRef.current = homeSkills
+  const pathSkillId = pathname?.startsWith('/home/') ? pathname.split('/')[2] : null
+  const activeSkillId = selectedDetail?.id || searchParams.get('skill') || pathSkillId || null
+  const activeSkill = selectedDetail || (activeSkillId ? homeSkills.find(s => s.id === activeSkillId) || null : null)
 
   const blurHomeComposers = useCallback(() => {
     textareaRef.current?.blur()
@@ -338,9 +345,19 @@ function HomePageInner() {
         fetch('/api/auth/activate', { method: 'POST' })
           .then(r => r.json())
           .then(d => {
-            if (d.isNew) trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
+            if (d.isNew) {
+              trackMetaEvent(
+                'CompleteRegistration',
+                {},
+                d.metaEvents?.CompleteRegistration || createMetaEventId('registration'),
+              )
+            }
             if (d.credits > 0) {
-              trackMetaEvent('StartTrial', { credits: d.credits }, createMetaEventId('starttrial'))
+              trackMetaEvent(
+                'StartTrial',
+                { credits: d.credits },
+                d.metaEvents?.StartTrial || createMetaEventId('starttrial'),
+              )
               setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
             } else if (d.isNew === false) {
@@ -441,6 +458,30 @@ function HomePageInner() {
     } catch {}
     setSkillUploading(false)
     setInstallingSkill(false)
+  }, [])
+
+  const installHomeSkill = useCallback(async (skill: HomeSkill): Promise<string | undefined> => {
+    if (!skill.skill_path) return undefined
+    setInstallingSkill(true)
+    try {
+      const installRes = await fetch('/api/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skillPath: skill.skill_path, homeSkillId: skill.id }),
+      })
+      const installData = await installRes.json()
+      if (installData.skillName) {
+        setSelectedSkill(installData.skillName)
+        fetch('/api/skills').then(r => r.json()).then(d => {
+          writeNativeJSONCache('/api/skills', d)
+          if (d.skills) setAvailableSkills(d.skills)
+        }).catch(() => {})
+        return installData.skillName as string
+      }
+    } finally {
+      setInstallingSkill(false)
+    }
+    return undefined
   }, [])
 
   useEffect(() => {
@@ -744,38 +785,54 @@ function HomePageInner() {
 
   const saveContextBeforeLogin = useCallback(() => {
     if (createInput.text.trim()) localStorage.setItem('mkr_return_text', createInput.text)
-    if (selectedDetail?.id) localStorage.setItem('mkr_return_skill', selectedDetail.id)
-  }, [createInput.text, selectedDetail])
+    if (activeSkill?.id) localStorage.setItem('mkr_return_skill', activeSkill.id)
+  }, [activeSkill, createInput.text])
+
+  const saveCreateDraftBeforeLogin = useCallback(async (files: File[], prompt?: string) => {
+    const homeSkill = selectedDetail || activeSkill
+    const imageFiles = files.filter(file => file.type.startsWith('image/') || isHeicFile(file))
+    const [images, metadata] = await Promise.all([
+      Promise.all(imageFiles.map(file => compressCreateImageFile(file))),
+      imageFiles[0]
+        ? extractPhotoMetadata(imageFiles[0]).catch(() => undefined)
+        : Promise.resolve(undefined),
+    ])
+    cacheCreateDraft({
+      images,
+      metadata,
+      prompt,
+      selectedSkill: homeSkill?.skill_path ? undefined : (selectedSkill ?? undefined),
+      homeSkillId: homeSkill?.id,
+      returnPath: homeSkill?.id ? `/home/${homeSkill.id}` : window.location.pathname + window.location.search,
+    })
+    const returnPath = homeSkill?.id ? `/home/${homeSkill.id}` : window.location.pathname + window.location.search
+    localStorage.setItem('mkr_return_url', returnPath)
+    sessionStorage.setItem('mkr_return_url', returnPath)
+  }, [activeSkill, selectedDetail, selectedSkill])
 
   const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
-    saveContextBeforeLogin()
-    const authedUser = await requireAuth()
-    if (!authedUser) return
     if (createInput.creating || (files.length === 0 && !prompt)) return
+    saveContextBeforeLogin()
+    let authedUser = user
+    if (!authedUser) {
+      createInput.setCreating(true)
+      try {
+        await saveCreateDraftBeforeLogin(files, prompt)
+      } catch (err) {
+        console.error('Save create draft error:', err)
+        createInput.setCreating(false)
+        return
+      }
+      authedUser = await requireAuth()
+      if (!authedUser) return
+    }
     createInput.setCreating(true)
     try {
       const supabase = createClient()
       let skillName: string | undefined
-      if (selectedDetail?.skill_path) {
-        setInstallingSkill(true)
-        try {
-          const installRes = await fetch('/api/skills', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ skillPath: selectedDetail.skill_path, homeSkillId: selectedDetail.id }),
-          })
-          const installData = await installRes.json()
-          if (installData.skillName) {
-            skillName = installData.skillName
-            setSelectedSkill(installData.skillName)
-            fetch('/api/skills').then(r => r.json()).then(d => {
-              writeNativeJSONCache('/api/skills', d)
-              if (d.skills) setAvailableSkills(d.skills)
-            }).catch(() => {})
-          }
-        } finally {
-          setInstallingSkill(false)
-        }
+      const homeSkill = selectedDetail || activeSkill
+      if (homeSkill?.skill_path) {
+        skillName = await installHomeSkill(homeSkill)
       } else if (selectedSkill) {
         skillName = selectedSkill
       }
@@ -784,6 +841,7 @@ function HomePageInner() {
       if (skillName) opts.skill = skillName
       const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
+      void clearCreateDraft()
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
       console.error('Create project error:', err)
@@ -794,7 +852,53 @@ function HomePageInner() {
       }
       createInput.setCreating(false)
     }
-  }, [requireAuth, saveContextBeforeLogin, createInput, router, selectedDetail, selectedSkill, t])
+  }, [activeSkill, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
+
+  const consumeDraftRef = useRef(false)
+  useEffect(() => {
+    if (!user || consumeDraftRef.current) return
+    let cancelled = false
+    const consume = async () => {
+      const draft = await getCreateDraft()
+      if (!draft || cancelled) return
+      if (draft.homeSkillId && homeSkills.length === 0) return
+      if (draft.images.length === 0 && !draft.prompt) {
+        await clearCreateDraft()
+        return
+      }
+
+      consumeDraftRef.current = true
+      createInput.restoreDraftImages(draft.images)
+      if (draft.prompt) createInput.setText(draft.prompt)
+      createInput.setCreating(true)
+      try {
+        const supabase = createClient()
+        let skillName = draft.selectedSkill
+        const homeSkill = draft.homeSkillId ? homeSkills.find(skill => skill.id === draft.homeSkillId) : null
+        if (homeSkill?.skill_path) {
+          skillName = await installHomeSkill(homeSkill)
+        }
+        const result = await createProjectFromStagedMedia(supabase, user.id, {
+          images: draft.images,
+          metadata: draft.metadata as PhotoMetadata | undefined,
+          prompt: draft.prompt,
+          skill: skillName,
+        })
+        if (!result) throw new Error('Failed to create project from draft')
+        await clearCreateDraft()
+        localStorage.removeItem('mkr_return_text')
+        localStorage.removeItem('mkr_return_skill')
+        localStorage.removeItem('mkr_return_url')
+        router.replace(`/projects/${result.projectId}`)
+      } catch (err) {
+        console.error('Resume create draft error:', err)
+        consumeDraftRef.current = false
+        createInput.setCreating(false)
+      }
+    }
+    void consume()
+    return () => { cancelled = true }
+  }, [createInput, homeSkills, installHomeSkill, router, user])
 
   const handleCreate = useCallback(async () => {
     const hasText = createInput.text.trim()
@@ -823,10 +927,31 @@ function HomePageInner() {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
     if (files.length === 0) return
+    if (!user && selectedDetail) {
+      createInput.addFiles(files)
+      return
+    }
     const authedUser = await requireAuth()
     if (!authedUser) return
     createInput.addFiles(files)
-  }, [createInput, requireAuth])
+  }, [createInput, requireAuth, selectedDetail, user])
+
+  const trackUploadIntentEvent = useCallback((source: string) => {
+    if (user || !activeSkill) return
+    const dedupeKey = `${activeSkill.id}:${source}:${createInput.files.length}`
+    const now = Date.now()
+    if (lastUploadIntentRef.current?.key === dedupeKey && now - lastUploadIntentRef.current.at < 700) return
+    lastUploadIntentRef.current = { at: now, key: dedupeKey }
+    const skillLabel = activeSkill.labels[locale] || activeSkill.labels.en || activeSkill.id
+    trackMetaEvent('UploadIntent', {
+      content_type: 'skill',
+      content_name: skillLabel,
+      skill_id: activeSkill.id,
+      required_photo_count: Math.max(1, activeSkill.image_count ?? 1),
+      selected_photo_count: createInput.files.length,
+      source,
+    }, createMetaEventId('upload.intent'))
+  }, [activeSkill, createInput.files.length, locale, user])
 
   const renderUploadSlots = useCallback((template: { image_count?: number; before_images?: string[] }, isActive: boolean) => {
     const minSlots = template.image_count ?? 1
@@ -839,7 +964,19 @@ function HomePageInner() {
           const isDragTarget = slotDragOver === i
           return (
             <div key={i}
-              onClick={async () => { const u = await requireAuth(); if (!u) return; if (isActive && !createInput.previews[i] && !createInput.creating) createInput.fileInputRef.current?.click() }}
+              onClick={async () => {
+                if (!isActive || createInput.previews[i] || createInput.creating) return
+                if (!user && selectedDetail) {
+                  trackUploadIntentEvent('upload_slot')
+                  createInput.fileInputRef.current?.click()
+                  return
+                }
+                const u = await requireAuth()
+                if (u) {
+                  trackUploadIntentEvent('upload_slot')
+                  createInput.fileInputRef.current?.click()
+                }
+              }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
               onDragLeave={() => setSlotDragOver(-1)}
@@ -860,8 +997,10 @@ function HomePageInner() {
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={createInput.previews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div onClick={(e) => { e.stopPropagation(); createInput.removeFile(i) }}
-                    style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>&#x2715;</div>
+                  {!createInput.creating && (
+                    <div onClick={(e) => { e.stopPropagation(); createInput.removeFile(i) }}
+                      style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', cursor: 'pointer' }}>&#x2715;</div>
+                  )}
                 </>
               ) : (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -916,7 +1055,101 @@ function HomePageInner() {
         )}
       </div>
     )
-  }, [createInput, handleSlotDrop, slotDragOver])
+  }, [createInput, handleSlotDrop, requireAuth, selectedDetail, slotDragOver, trackUploadIntentEvent, user])
+
+  const guestSkillCreateLabel = selectedDetail && !user
+    ? createInput.files.length > 0
+      ? (locale === 'zh' ? '生成免费预览' : 'Create free preview')
+      : (locale === 'zh' ? '上传照片' : 'Upload photo')
+    : !user
+      ? (locale === 'zh' ? '免费试用' : 'Try free')
+      : 'Create'
+
+  const requiredPhotoCount = Math.max(1, activeSkill?.image_count ?? 1)
+  const selectedPhotoCount = createInput.files.length
+  const remainingPhotoCount = Math.max(requiredPhotoCount - selectedPhotoCount, 0)
+  const hasEnoughPhotos = remainingPhotoCount === 0
+  const isGuestSkillAction = !user && !!activeSkill
+  const formatPhotoCount = (count: number) => locale === 'zh'
+    ? `${count} 张照片`
+    : `${count} photo${count === 1 ? '' : 's'}`
+
+  const skillActionCreateLabel = isGuestSkillAction
+    ? hasEnoughPhotos
+      ? (locale === 'zh' ? '免费预览' : 'Preview free')
+      : (locale === 'zh' ? '上传照片' : 'Upload photo')
+    : guestSkillCreateLabel
+
+  const skillActionTitle = isGuestSkillAction
+    ? hasEnoughPhotos
+      ? (locale === 'zh' ? '看看你的版本' : 'See your version')
+      : selectedPhotoCount > 0
+        ? (locale === 'zh' ? '快好了' : 'Almost ready')
+        : (locale === 'zh' ? '上传一张照片' : 'Upload one photo')
+    : undefined
+
+  const skillActionSubtitle = isGuestSkillAction
+    ? hasEnoughPhotos
+      ? (locale === 'zh' ? '一键生成预览，无需信用卡。' : 'Generate a preview. No credit card.')
+      : selectedPhotoCount > 0
+        ? (locale === 'zh' ? `再补 ${formatPhotoCount(remainingPhotoCount)}，即可免费预览。` : `Add ${formatPhotoCount(remainingPhotoCount)} to preview free.`)
+        : (locale === 'zh' ? '免费生成预览，无需信用卡。' : 'Get a free preview. No credit card.')
+    : undefined
+
+  const skillActionMeta = isGuestSkillAction && activeSkill
+    ? (activeSkill.labels[locale] || activeSkill.labels.en || null)
+    : null
+
+  const trackUploadIntent = useCallback((source: string) => {
+    if (!isGuestSkillAction) return
+    const dedupeKey = `${activeSkill?.id || 'skill'}:${source}:${createInput.files.length}`
+    const now = Date.now()
+    if (lastUploadIntentRef.current?.key === dedupeKey && now - lastUploadIntentRef.current.at < 700) return
+    lastUploadIntentRef.current = { at: now, key: dedupeKey }
+    trackMetaEvent('UploadIntent', {
+      content_type: 'skill',
+      content_name: skillActionMeta || activeSkill?.id || 'skill',
+      skill_id: activeSkill?.id,
+      required_photo_count: requiredPhotoCount,
+      selected_photo_count: createInput.files.length,
+      source,
+    }, createMetaEventId('upload.intent'))
+  }, [activeSkill?.id, createInput.files.length, isGuestSkillAction, requiredPhotoCount, skillActionMeta])
+
+  const trackFileSelected = useCallback((files: File[], source: string) => {
+    if (!isGuestSkillAction || files.length === 0) return
+    trackMetaEvent('FileSelected', {
+      content_type: 'skill',
+      content_name: skillActionMeta || activeSkill?.id || 'skill',
+      skill_id: activeSkill?.id,
+      file_count: files.length,
+      image_count: files.filter(file => file.type.startsWith('image/') || isHeicFile(file)).length,
+      video_count: files.filter(file => file.type.startsWith('video/')).length,
+      source,
+    }, createMetaEventId('file.selected'))
+  }, [activeSkill?.id, isGuestSkillAction, skillActionMeta])
+
+  const handleCreateOrUpload = useCallback(() => {
+    if (isGuestSkillAction && createInput.files.length < requiredPhotoCount) {
+      trackUploadIntent('primary_action')
+      createInput.fileInputRef.current?.click()
+      return
+    }
+    handleCreate()
+  }, [createInput.fileInputRef, createInput.files.length, handleCreate, isGuestSkillAction, requiredPhotoCount, trackUploadIntent])
+
+  const handleInputSlotClick = useCallback(async () => {
+    if (!user && selectedDetail) {
+      trackUploadIntent('slot')
+      createInput.fileInputRef.current?.click()
+      return
+    }
+    const u = await requireAuth()
+    if (u) {
+      trackUploadIntent('slot')
+      createInput.fileInputRef.current?.click()
+    }
+  }, [createInput.fileInputRef, requireAuth, selectedDetail, trackUploadIntent, user])
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
@@ -1126,16 +1359,26 @@ function HomePageInner() {
               input={createInput}
               slotWidth={inlineBoxHeight > 0 ? inlineBoxHeight : 52}
               isInline={true}
-              collapseSlot={false}
+              collapseSlot={isGuestSkillAction}
               isDesktop={isDesktop}
               boxRef={inlineBoxRef}
               textareaRef={inlineTextareaRef}
               swipeRef={inlineCardSwipeRef}
               placeholder={placeholders[placeholderIdx]}
-              createLabel={!user ? (locale === 'zh' ? '免费试用' : 'Try free') : 'Create'}
+              createLabel={skillActionCreateLabel}
+              actionMode={isGuestSkillAction}
+              actionEyebrow={isGuestSkillAction ? (locale === 'zh' ? '免费预览' : 'Free preview') : undefined}
+              actionTitle={skillActionTitle}
+              actionSubtitle={skillActionSubtitle}
+              actionMeta={skillActionMeta || undefined}
+              actionIdleNote={locale === 'zh' ? `需要 ${formatPhotoCount(requiredPhotoCount)}` : `${formatPhotoCount(requiredPhotoCount)} needed`}
+              actionSelectedNote={hasEnoughPhotos
+                ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
+                : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
               showLoginIcon={!user}
-              onSubmit={handleCreate}
-              onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
+              onSubmit={handleCreateOrUpload}
+              onSlotClick={handleInputSlotClick}
+              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
               onTextareaFocus={() => setTextareaFocused(true)}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
@@ -1287,16 +1530,26 @@ function HomePageInner() {
               input={createInput}
               slotWidth={photoSlotWidth}
               isInline={false}
-              collapseSlot={!isDesktop && !!selectedDetail}
+              collapseSlot={isGuestSkillAction || (!isDesktop && !!selectedDetail)}
               isDesktop={isDesktop}
               boxRef={inputBoxRef}
               textareaRef={textareaRef}
               swipeRef={cardSwipeRef}
               placeholder={placeholders[placeholderIdx]}
-              createLabel={!user ? (locale === 'zh' ? '免费试用' : 'Try free') : 'Create'}
+              createLabel={skillActionCreateLabel}
+              actionMode={isGuestSkillAction}
+              actionEyebrow={isGuestSkillAction ? (locale === 'zh' ? '免费预览' : 'Free preview') : undefined}
+              actionTitle={skillActionTitle}
+              actionSubtitle={skillActionSubtitle}
+              actionMeta={skillActionMeta || undefined}
+              actionIdleNote={locale === 'zh' ? `需要 ${formatPhotoCount(requiredPhotoCount)}` : `${formatPhotoCount(requiredPhotoCount)} needed`}
+              actionSelectedNote={hasEnoughPhotos
+                ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
+                : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
               showLoginIcon={!user}
-              onSubmit={handleCreate}
-              onSlotClick={async () => { const u = await requireAuth(); if (u) createInput.fileInputRef.current?.click() }}
+              onSubmit={handleCreateOrUpload}
+              onSlotClick={handleInputSlotClick}
+              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
               onTextareaFocus={() => setTextareaFocused(true)}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}

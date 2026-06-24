@@ -1,0 +1,123 @@
+[
+  {
+    "id": "for-long-frame-005s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 5.0,
+    "expectedTimestamp": 5.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-030s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 30.0,
+    "expectedTimestamp": 30.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-055s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 55.0,
+    "expectedTimestamp": 55.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-082s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 82.0,
+    "expectedTimestamp": 82.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-110s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 110.0,
+    "expectedTimestamp": 110.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-138s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 138.0,
+    "expectedTimestamp": 138.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-166s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 166.0,
+    "expectedTimestamp": 166.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-194s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 194.0,
+    "expectedTimestamp": 194.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-224s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 224.0,
+    "expectedTimestamp": 224.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-254s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 254.0,
+    "expectedTimestamp": 254.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  },
+  {
+    "id": "for-long-frame-274s",
+    "video": "~/Desktop/过程/for.m4v",
+    "captureTimestamp": 274.0,
+    "expectedTimestamp": 274.0,
+    "toleranceSeconds": 1.0,
+    "visualInterval": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the longer source video."
+  }
+]

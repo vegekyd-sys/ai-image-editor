@@ -1414,6 +1414,205 @@ async function* parseIncrementalTipsFromStream(
 
 // ─── Video Analysis via Gemini 3.0 Flash ──────────────────────────────────────
 
+export interface LocateFrameInVideoResult {
+  verdict: 'located' | 'multiple_candidates' | 'not_found' | 'uncertain';
+  timestamp: number | null;
+  window: [number, number] | null;
+  confidence: number;
+  evidence: string[];
+  concerns: string[];
+  verification?: FrameMatchVerification;
+}
+
+export interface FrameMatchVerification {
+  verdict: 'match' | 'not_match' | 'uncertain';
+  confidence: number;
+  evidence: string[];
+  concerns: string[];
+}
+
+function stripJsonFence(text: string): string {
+  return text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+}
+
+function parseLocateFrameResult(text: string): LocateFrameInVideoResult {
+  try {
+    const raw = JSON.parse(stripJsonFence(text)) as Partial<LocateFrameInVideoResult>;
+    const verdicts = new Set(['located', 'multiple_candidates', 'not_found', 'uncertain']);
+    const verdict = verdicts.has(String(raw.verdict)) ? raw.verdict as LocateFrameInVideoResult['verdict'] : 'uncertain';
+    const timestamp = Number.isFinite(Number(raw.timestamp)) ? Number(raw.timestamp) : null;
+    const windowRaw = Array.isArray(raw.window) ? raw.window : null;
+    const window = windowRaw && windowRaw.length >= 2 && Number.isFinite(Number(windowRaw[0])) && Number.isFinite(Number(windowRaw[1]))
+      ? [Number(windowRaw[0]), Number(windowRaw[1])] as [number, number]
+      : null;
+    const confidence = Math.max(0, Math.min(1, Number.isFinite(Number(raw.confidence)) ? Number(raw.confidence) : 0));
+    const evidence = Array.isArray(raw.evidence) ? raw.evidence.map(String).slice(0, 6) : [];
+    const concerns = Array.isArray(raw.concerns) ? raw.concerns.map(String).slice(0, 6) : [];
+    return { verdict, timestamp, window, confidence, evidence, concerns };
+  } catch {
+    return {
+      verdict: 'uncertain',
+      timestamp: null,
+      window: null,
+      confidence: 0,
+      evidence: text ? [text.slice(0, 600)] : [],
+      concerns: ['Model did not return valid JSON.'],
+    };
+  }
+}
+
+function parseFrameMatchVerification(text: string): FrameMatchVerification {
+  try {
+    const raw = JSON.parse(stripJsonFence(text)) as Partial<FrameMatchVerification>;
+    const verdicts = new Set(['match', 'not_match', 'uncertain']);
+    const verdict = verdicts.has(String(raw.verdict)) ? raw.verdict as FrameMatchVerification['verdict'] : 'uncertain';
+    return {
+      verdict,
+      confidence: Math.max(0, Math.min(1, Number.isFinite(Number(raw.confidence)) ? Number(raw.confidence) : 0)),
+      evidence: Array.isArray(raw.evidence) ? raw.evidence.map(String).slice(0, 6) : [],
+      concerns: Array.isArray(raw.concerns) ? raw.concerns.map(String).slice(0, 6) : [],
+    };
+  } catch {
+    return {
+      verdict: 'uncertain',
+      confidence: 0,
+      evidence: text ? [text.slice(0, 600)] : [],
+      concerns: ['Model did not return valid JSON.'],
+    };
+  }
+}
+
+export async function verifyFrameImageMatch(
+  screenshotImage: string,
+  candidateFrameImage: string,
+  question?: string,
+  userId?: string,
+): Promise<FrameMatchVerification> {
+  const ai = getAI();
+  const model = 'gemini-3-flash-preview';
+  const screenshot = await ensureBase64Server(screenshotImage);
+  const candidate = await ensureBase64Server(candidateFrameImage);
+  const screenshotMime = screenshot.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
+  const candidateMime = candidate.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
+  const screenshotBase64 = screenshot.replace(/^data:image\/\w+;base64,/, '');
+  const candidateBase64 = candidate.replace(/^data:image\/\w+;base64,/, '');
+  const userHint = question?.trim() ? `\nUser note: ${question.trim()}` : '';
+
+  const prompt = `You are verifying whether two images show the same underlying video moment.
+
+Input image A is the user's screenshot. It may include player UI, crop, compression, annotations, or a different scale.
+Input image B is a candidate frame extracted from the source video.
+
+Return "match" only when the underlying scene, subject/object positions, camera angle, pose, and motion phase clearly match.
+Return "not_match" when the broad scene may be similar but the time-specific details are different.
+Return "uncertain" if UI overlays, crop, blur, or repeated scene structure prevent a reliable decision.
+${userHint}
+
+Return strict JSON only:
+{
+  "verdict": "match" | "not_match" | "uncertain",
+  "confidence": 0.0-1.0,
+  "evidence": ["specific matching or mismatching visual details"],
+  "concerns": ["uncertainty notes"]
+}`;
+
+  const result = await ai.models.generateContent({
+    model,
+    contents: [{ role: 'user', parts: [
+      { inlineData: { mimeType: screenshotMime, data: screenshotBase64 } },
+      { inlineData: { mimeType: candidateMime, data: candidateBase64 } },
+      { text: prompt },
+    ] }],
+  });
+  const usage = result.usageMetadata;
+  if (usage && userId) {
+    import('./billing/credits').then(({ deductByTokens }) =>
+      deductByTokens(userId, 'analyze_video', model, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0)
+        .catch(e => console.error('[billing] frame verification deduct error:', e))
+    );
+  }
+  return parseFrameMatchVerification(result.text || '');
+}
+
+export async function locateFrameInVideoContent(
+  videoUrl: string,
+  image: string,
+  question?: string,
+  userId?: string,
+): Promise<LocateFrameInVideoResult> {
+  console.log(`[locateFrameInVideoContent] video=${videoUrl.substring(0, 100)} image=${image.substring(0, 80)}`);
+  const ai = getAI();
+  const model = 'gemini-3-flash-preview';
+  const resolvedImage = await ensureBase64Server(image);
+  const imageMime = resolvedImage.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
+  const imageBase64 = resolvedImage.replace(/^data:image\/\w+;base64,/, '');
+  const userHint = question?.trim()
+    ? `\nUser note about the screenshot: ${question.trim()}`
+    : '';
+  const prompt = `You are locating a user-provided screenshot inside a video for a local video edit.
+
+Inputs:
+1. A screenshot image. It may contain user annotations, crop marks, compression artifacts, or UI overlays.
+2. The full source video.
+
+Task:
+Find where the underlying screenshot content appears in the video. Use the screenshot as the visual anchor. Ignore annotations or UI overlays if present.
+
+Important:
+- Return the timestamp in seconds relative to the start of the provided video.
+- If the screenshot appears across a continuous moment, return the best center timestamp and a small window around it.
+- If there are multiple plausible places, say multiple_candidates and include the strongest window.
+- If the match is weak, say uncertain instead of pretending.
+- Ground your answer in concrete visual evidence: subject pose, object positions, background layout, camera angle, lighting, and motion state.
+- Some videos reuse very similar visual layouts across time. Do not locate using static appearance alone.
+- Compare time-specific details: motion phase, object positions, animation progress, camera movement, subject pose, lighting changes, and any visible timeline/player time if present.
+- Do not choose the opening frame or 0s just because the broad scene matches. If repeated visuals make the exact moment ambiguous, return multiple_candidates or lower confidence.
+- Use natural visual judgment. Do not overfit to accidental compression noise.
+${userHint}
+
+Return strict JSON only:
+{
+  "verdict": "located" | "multiple_candidates" | "not_found" | "uncertain",
+  "timestamp": number | null,
+  "window": [number, number] | null,
+  "confidence": 0.0-1.0,
+  "evidence": ["short concrete visual evidence"],
+  "concerns": ["short uncertainty or ambiguity notes"]
+}`;
+
+  const billUsage = (inputTokens: number, outputTokens: number) => {
+    if (!userId) return;
+    import('./billing/credits').then(({ deductByTokens }) =>
+      deductByTokens(userId, 'analyze_video', model, inputTokens, outputTokens)
+        .catch(e => console.error('[billing] locate_frame deduct error:', e))
+    );
+  };
+
+  const run = async (videoPart: { fileData: { mimeType: string; fileUri: string } } | { inlineData: { mimeType: string; data: string } }) => {
+    const result = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [
+        { inlineData: { mimeType: imageMime, data: imageBase64 } },
+        videoPart,
+        { text: prompt },
+      ] }],
+    });
+    const usage = result.usageMetadata;
+    if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    return parseLocateFrameResult(result.text || '');
+  };
+
+  try {
+    return await run({ fileData: { mimeType: 'video/mp4', fileUri: videoUrl } });
+  } catch {
+    const res = await fetch(videoUrl);
+    if (!res.ok) throw new Error(`Failed to fetch video: ${res.status}`);
+    const buffer = await res.arrayBuffer();
+    if (buffer.byteLength > 38_500_000) throw new Error('Video too large for locate_frame (>38.5MB). Use FFmpeg frame fallback on candidate windows instead.');
+    return await run({ inlineData: { mimeType: 'video/mp4', data: Buffer.from(buffer).toString('base64') } });
+  }
+}
+
 export async function analyzeVideoContent(
   videoUrl: string,
   question?: string,

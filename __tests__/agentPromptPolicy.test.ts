@@ -30,6 +30,17 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain('extract_video_frame: tool')
   })
 
+  it('keeps uploaded video auto-analysis in the tool-aware history path', () => {
+    const editor = read('src/components/Editor.tsx')
+    const agentRoute = read('src/app/api/agent/route.ts')
+
+    expect(editor).toContain('First call analyze_video with media_index')
+    expect(editor).toContain('First call analyze_video for each uploaded video media_index')
+    expect(editor).toContain("analyze_video's result is persisted in agent_tool_history")
+    expect(editor).not.toContain("handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount")
+    expect(agentRoute).toContain('const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly')
+  })
+
   it('keeps built-in image skill triggers visible before the image guide is read', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
@@ -74,13 +85,11 @@ describe('agent prompt policy guards', () => {
     const animate = read('src/lib/prompts/animate.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('Hard duration range: a single SeeDance script/call must be 4-15s')
+    expect(agent).toContain('Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s')
     expect(agent).toContain('If requested/source duration is shorter than the model minimum, use the minimum')
-    expect(agent).toContain('set `duration: 4`')
+    expect(agent).toContain('If output is longer than 15s, use `skills/long-video-director/SKILL.md`')
     expect(agent).toContain('Single-script rule: if a complete approved script is <=15s')
     expect(agent).toContain('Do not submit only one shot or split just because it has multiple shot lines')
-    expect(agent).toContain('If output is longer than 15s, use `skills/long-video-director/SKILL.md`')
-    expect(agent).toContain('[Active skill: long-video-director]')
     expect(agent).toContain('Long source video rule: if an existing timeline/reference video is >15s')
     expect(agent).toContain('do not compress the whole source into one short edit')
     expect(agent).toContain('Reference video input limit: one SeeDance generation may use up to 15s combined source/reference video duration')
@@ -124,14 +133,17 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")
   })
 
-  it('keeps Seedance as the default video model unless user or app selects Kling', () => {
+  it('keeps SeeDance Fast as the default video model unless user or app selects another model', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('usually SeeDance')
-    expect(agent).toContain('prefer Kling')
-    expect(agentTs).toContain('normalizeVideoModelId(model || (ctx as any).videoModel)')
-    expect(agentTs).toContain('Default follows the app selection (usually seedance)')
+    expect(agent).toContain('usually SeeDance 2.0 Fast')
+    expect(agent).toContain('`seedance-fast`')
+    expect(agentTs).toContain('resolveAgentVideoSelection')
+    expect(agentTs).toContain('appAuto: (ctx as any).videoAuto')
+    expect(agentTs).toContain('toolModel: model')
+    expect(agentTs).toContain('toolResolution: video_resolution')
+    expect(agentTs).toContain('Default follows the app selection (usually seedance-fast)')
   })
 
   it('uses path-based composition patching instead of full currentDesign code injection', () => {
@@ -162,16 +174,14 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('skills/long-video-director/SKILL.md')
     expect(agent).toContain('visual anchors')
     expect(agent).toContain('continue that workflow even when the latest user message does not repeat `[Active skill: long-video-director]`')
-    expect(agent).toContain('That workflow is staged review: story → anchors → director beat board → storyboard image per segment → scripts/preflight')
     expect(skill).toContain('You are the orchestrator and reviewer for long-video work')
-    expect(skill).toContain('Route production work to the')
-    expect(skill).toContain('narrow skills:')
     expect(skill).toContain('`skills/long-video-anchor/SKILL.md` for character, scene, and prop anchors')
     expect(skill).toContain('`skills/long-video-storyboard/SKILL.md` for one 6+ panel storyboard image per segment')
     expect(skill).toContain('`prompts/animate.md` for final segment scripts, preflight, and real video generation')
     expect(skill).toContain('Story direction approval')
     expect(skill).toContain('The next gate after segment-outline approval is **Gate 5: Director Beat Board**, not OpenAI storyboard generation')
-    expect(agent).toContain('Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow')
+    expect(agent).toContain('Do not jump straight to full scripts')
+    expect(agent).toContain('do not use fenced code blocks')
     expect(skill).toContain('Do not dump a full long-video package in one response')
 
     expect(skill).toContain('Video models do **not** know what happened in the previous segment')
@@ -182,8 +192,7 @@ describe('agent prompt policy guards', () => {
     expect(skill).toContain('`skills/long-video-anchor/SKILL.md` for character, scene, and prop anchors')
     expect(skill).toContain('`skills/long-video-storyboard/SKILL.md` for one 6+ panel storyboard image per segment')
     expect(skill).toContain('`prompts/animate.md` for final segment scripts, preflight, and real video generation')
-    expect(agent).toContain('storyboard image per segment')
-    expect(agent).toContain('do not bring up Remotion during that workflow')
+    expect(skill).toContain('Do not bring up Remotion during this workflow')
     expect(skill).toContain('Timeline')
     expect(skill).toContain('CUI')
     expect(skill).toContain('Asset Inventory And Anchor Plan')

@@ -3,11 +3,11 @@
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties, type TouchEvent as ReactTouchEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
-import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
+import AgentChatView, { type ComposerDraftAttachment, type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import CreditPopup from '@/components/CreditPopup';
 import ShareButton from '@/components/ShareButton';
@@ -46,10 +46,20 @@ import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache';
-import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
+import { getDefaultVideoModelId, isFastVideoRenderModel, normalizeVideoResolution } from '@/lib/video-model-capabilities';
 import { formatVideoMediaSpec } from '@/lib/media-aspect';
+import { serializeCompletionActions } from '@/lib/artifact-actions';
+import { appendSnapshotDedupeVideo, dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe';
 
 export type { AnimationState } from '@/lib/editor/types';
+
+type EditorCompletionAction = ArtifactCompletionAction;
+
+function formatFrameEditTime(seconds: number) {
+  if (!seconds || !isFinite(seconds)) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  return `${mins}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
+}
 
 interface EditorProps {
   projectId?: string;
@@ -130,7 +140,7 @@ export default function Editor({
   const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
-  const [snapshots, setSnapshots] = useState<Snapshot[]>(initialSnapshots ?? []);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>(dedupeVideoSnapshots(initialSnapshots ?? []));
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEditing, setIsEditing] = useState(false);
@@ -173,7 +183,10 @@ export default function Editor({
 
   // Fetch credit balance + subscription info on mount
   useEffect(() => {
-    fetch('/api/billing/credits').then(r => r.json()).then(data => {
+    fetch('/api/billing/credits').then(r => {
+      if (!r.ok) throw new Error('Failed to load credits');
+      return r.json();
+    }).then(data => {
       writeNativeJSONCache('/api/billing/credits', data);
       setCreditBalance(data.balance ?? 0);
       setCreditSubscription(data.subscription ?? null);
@@ -215,6 +228,12 @@ export default function Editor({
   const [videoModel, setVideoModel] = useState<VideoModel>(() => getDefaultVideoModelId());
   const videoModelRef = useRef<VideoModel>(getDefaultVideoModelId());
   useEffect(() => { videoModelRef.current = videoModel; }, [videoModel]);
+  const [videoResolution, setVideoResolution] = useState<VideoResolution>('auto');
+  const videoResolutionRef = useRef<VideoResolution>('auto');
+  useEffect(() => { videoResolutionRef.current = videoResolution; }, [videoResolution]);
+  const [videoAuto, setVideoAuto] = useState(true);
+  const videoAutoRef = useRef(true);
+  useEffect(() => { videoAutoRef.current = videoAuto; }, [videoAuto]);
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>(() => (
     readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
   ));
@@ -286,23 +305,30 @@ export default function Editor({
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
   const isAgentActiveRef = useRef(false);
+  const [videoGuiTime, setVideoGuiTime] = useState(0);
+  const [videoGuiDuration, setVideoGuiDuration] = useState(0);
+  const [videoFrameCaptureRequest, setVideoFrameCaptureRequest] = useState(0);
+  const [cuiDraftText, setCuiDraftText] = useState('');
+  const [cuiDraftAttachments, setCuiDraftAttachments] = useState<ComposerDraftAttachment[]>([]);
+  const pendingFrameEditRef = useRef<{ anim: ProjectAnimation; time: number; mediaIndex: number; prompt: string } | null>(null);
 
   // Sync state when initialSnapshots/Messages props change (Supabase fetch or cache)
   useEffect(() => {
     if (!initialSnapshots?.length) return;
     setSnapshots(prev => {
       const existingIds = new Set(prev.map(s => s.id));
-      const newItems = initialSnapshots.filter(s => !existingIds.has(s.id));
+      const incomingSnapshots = dedupeVideoSnapshots(initialSnapshots);
+      const newItems = incomingSnapshots.filter(s => !existingIds.has(s.id));
 
       if (newItems.length > 0) {
         // New snapshots found
-        if (isAgentActive) return [...prev, ...newItems];
-        return initialSnapshots.length > prev.length ? initialSnapshots : [...prev, ...newItems];
+        if (isAgentActive) return dedupeVideoSnapshots([...prev, ...newItems]);
+        return incomingSnapshots.length > prev.length ? incomingSnapshots : dedupeVideoSnapshots([...prev, ...newItems]);
       }
 
       // Same IDs — merge updates from Supabase into cached snapshots.
       // This handles: cache shows stale data, then Supabase loads fresh values.
-      const incoming = new Map(initialSnapshots.map(s => [s.id, s]));
+      const incoming = new Map(incomingSnapshots.map(s => [s.id, s]));
       let changed = false;
       const merged = prev.map(s => {
         const fresh = incoming.get(s.id);
@@ -321,9 +347,13 @@ export default function Editor({
           updated = { ...updated, design: fresh.design };
           changed = true;
         }
+        if (fresh.videoMeta && JSON.stringify(fresh.videoMeta) !== JSON.stringify(updated.videoMeta)) {
+          updated = { ...updated, videoMeta: fresh.videoMeta };
+          changed = true;
+        }
         return updated;
       });
-      return changed ? merged : prev;
+      return changed ? dedupeVideoSnapshots(merged) : prev;
     });
   }, [initialSnapshots, isAgentActive]);
 
@@ -1605,7 +1635,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current, videoModel: videoModelRef.current } : {}), snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
+        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1718,6 +1748,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // CUI send: if annotations exist, merge them; otherwise normal chat
   const handleCuiSend = async (text: string, imgs?: string[], videos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => {
     if (gateInteraction()) return;
+    setCuiDraftText('');
+    setCuiDraftAttachments([]);
     if (annotationMode && annotationEntries.length > 0) {
       await sendWithAnnotations(text);
       return;
@@ -2166,8 +2198,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           createdAt: new Date().toISOString(),
         },
       };
-      setSnapshots(prev => [...prev, processingSnap]);
+      setSnapshots(prev => {
+        const next = [...prev, processingSnap];
+        snapshotsRef.current = next;
+        return next;
+      });
       // Navigate to new video snapshot
+      viewIndexRef.current = snapshots.length;
       requestAnimationFrame(() => setViewIndex(snapshots.length));
 
       // Step 3: Transcode + upload
@@ -2206,14 +2243,22 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       };
       setSnapshots(prev => {
         const next = prev.map(s => s.id === snapId ? completedSnap : s);
+        snapshotsRef.current = next;
         return next;
       });
       onSaveSnapshot?.(completedSnap, snapshots.length, (uploadedUrl) => {
-        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: uploadedUrl } : s));
+        setSnapshots(prev => {
+          const next = prev.map(s => s.id === snapId ? { ...s, imageUrl: uploadedUrl } : s);
+          snapshotsRef.current = next;
+          return next;
+        });
       });
 
-      // Auto-analyze video content — use normal agent request (DB is ready by now)
-      handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount: 1 });
+      // Auto-analyze video content through the normal tool-aware agent flow so
+      // analyze_video's result is persisted in agent_tool_history for reuse.
+      const mediaIndex = snapshots.length + 1;
+      const videoAnalysisPrompt = `[System] User uploaded a video at <<<media_${mediaIndex}>>>. First call analyze_video with media_index ${mediaIndex}. Then summarize the duration, key subjects/actions, and mood in 2-3 conversational sentences.`;
+      handleAgentRequest(videoAnalysisPrompt, undefined, undefined, { silent: true, uploadedVideoCount: 1 });
 
       // Return 1-based index (snapshot was appended at snapshots.length)
       return snapshots.length + 1;
@@ -2234,7 +2279,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       ));
       return null;
     }
-  }, [snapshots.length, projectId, onSaveSnapshot, t]);
+  }, [snapshots.length, projectId, onSaveSnapshot, handleAgentRequest, t]);
 
   // Auto-trigger upload when a pending image is passed (new project from projects page)
   // Lock body scroll while editor is mounted to prevent iOS back-navigation jump
@@ -2360,7 +2405,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
       // ── Step 6b: Video analysis (if videos, no prompt) ──
       if (hasVideos && !hasPrompt) {
-        handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount: pendingVideos!.length });
+        const count = pendingVideos!.length;
+        const firstVideoIndex = Math.max(1, workSnapshots.length - count + 1);
+        const lastVideoIndex = workSnapshots.length;
+        const videoRange = count === 1
+          ? `<<<media_${firstVideoIndex}>>>`
+          : `<<<media_${firstVideoIndex}>>> to <<<media_${lastVideoIndex}>>>`;
+        const videoAnalysisPrompt = `[System] User uploaded ${count === 1 ? 'a video' : `${count} videos`} at ${videoRange}. First call analyze_video for each uploaded video media_index. Then summarize the duration, key subjects/actions, and mood in 2-3 conversational sentences.`;
+        handleAgentRequest(videoAnalysisPrompt, undefined, undefined, { silent: true, uploadedVideoCount: count });
       }
 
       // ── Step 7: Agent request (if prompt) ──
@@ -2483,10 +2535,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               : prev
             );
             // Add CUI message for completed video (dedup against latest state)
+            const actionLines = serializeCompletionActions(snap.videoMeta?.completionActions);
             const videoMsg: Message = {
               id: generateId(),
               role: 'assistant',
-              content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}`,
+              content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
               timestamp: Date.now(),
             };
             setMessages(prev => {
@@ -2495,9 +2548,22 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               return [...prev, videoMsg];
             });
           } else if (data.status === 'failed') {
+            const actionLines = serializeCompletionActions(data.completionActions);
+            const reason = data.error ? `\n${data.error}` : '';
+            const failMsg: Message = {
+              id: generateId(),
+              role: 'assistant',
+              content: `⚠️ ${t('status.videoFailed')}${reason}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
+              timestamp: Date.now(),
+            };
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const, error: data.error || undefined } } : s
             ));
+            setMessages(prev => {
+              if (prev.some(m => m.content?.includes(`snap:${snap.id}`) && m.content?.includes(t('status.videoFailed')))) return prev;
+              onSaveMessage?.(failMsg);
+              return [...prev, failMsg];
+            });
           }
         } catch { /* ignore */ }
       }
@@ -2649,6 +2715,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         createdAt: new Date().toISOString(),
         duration: animationState.duration ?? null,
         videoModel: animationState.videoModel,
+        videoResolution: animationState.videoResolution,
       };
       setAnimations(prev => [newAnim, ...prev]);
       // v2: add video snapshot to snapshots array for polling
@@ -2668,10 +2735,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             status: 'processing',
             duration: animationState.duration,
             model: animationState.videoModel,
+            resolution: animationState.videoResolution,
             createdAt: new Date().toISOString(),
           },
         };
-        setSnapshots(prev => [...prev, newSnap]);
+        setSnapshots(prev => appendSnapshotDedupeVideo(prev, newSnap));
       }
       // Close the creation card
 
@@ -2731,7 +2799,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [animations, messages, onSaveMessage, isV2]);
 
   // Update StatusBar with video rendering progress
+  const processingVideoModel = snapshots.find(s => s.type === 'video' && s.videoMeta?.status === 'processing')?.videoMeta?.model
+    ?? animations.find(a => a.status === 'processing')?.videoModel
+    ?? animationState?.videoModel
+    ?? null;
   const videoProcessing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
+  const videoRenderingStatus = isFastVideoRenderModel(processingVideoModel)
+    ? t('status.videoRenderingFast')
+    : t('status.videoRenderingEllipsis');
   useEffect(() => {
     if (animationState?.status === 'generating_prompt') {
       setAgentStatus(t('status.writingScript'));
@@ -2741,12 +2816,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setAgentStatus(t('status.videoDone'));
     } else if (animationState?.status === 'polling' || videoProcessing) {
       if (!isAgentActive && !musicTaskId) {
-        setAgentStatus(t('status.videoRenderingEllipsis'));
+        setAgentStatus(videoRenderingStatus);
       }
     } else if (!isAgentActive && !musicTaskId) {
       setAgentStatus(t('editor.greeting'));
     }
-  }, [animationState?.status, videoProcessing, isAgentActive, musicTaskId]);
+  }, [animationState?.status, videoProcessing, isAgentActive, musicTaskId, t, videoRenderingStatus]);
 
   // Update StatusBar with music generation progress (same pattern as video)
   useEffect(() => {
@@ -2865,6 +2940,45 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     const agentPrompt = `User selected background music: "${track.title}" (${Math.round(track.duration)}s). Audio URL: ${audioUrl}\nAdd <Audio src="${audioUrl}" volume={0.3} /> to the current Remotion composition via run_code patch with runtime: "composition". If no active composition, read the latest composition code from workspace first.`;
     handleAgentRequest(agentPrompt, undefined, undefined, { silent: true }).catch(e => console.warn('Music inject failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
+
+  const handleArtifactAction = useCallback((action: EditorCompletionAction) => {
+    if (!projectId) { console.warn('artifact action skipped: no projectId'); return; }
+    if (isAgentActive) { console.warn('artifact action skipped: agent busy'); return; }
+    if (!action.prompt) return;
+    console.log(`▶️ [artifact-action] ${action.label}`);
+    addMessage('user', action.label);
+    handleAgentRequest(action.prompt, undefined, undefined, { silent: true })
+      .catch(e => console.warn('Artifact action failed:', e));
+  }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
+
+  const handleVideoFrameEdit = useCallback((anim: ProjectAnimation, time: number) => {
+    if (gateInteraction()) return;
+    if (!projectId) { console.warn('video frame edit skipped: no projectId'); return; }
+    if (isAgentActive) { console.warn('video frame edit skipped: agent busy'); return; }
+
+    const duration = videoGuiDuration || anim.duration || 0;
+    const safeTime = Math.max(0, Math.min(Number.isFinite(duration) && duration > 0 ? duration : time, Number.isFinite(time) ? time : 0));
+    const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
+    const mediaIndex = snapIndex >= 0 ? snapIndex + 1 : Math.max(1, viewIndexRef.current + 1);
+    const timeLabel = formatFrameEditTime(safeTime);
+    const prompt = t('video.frameEditDraftPrompt', mediaIndex, timeLabel);
+
+    pendingFrameEditRef.current = { anim, time: safeTime, mediaIndex, prompt };
+    setVideoFrameCaptureRequest(v => v + 1);
+  }, [gateInteraction, projectId, isAgentActive, videoGuiDuration, t]);
+
+  const handleVideoFrameCaptured = useCallback((dataUrl: string, time: number) => {
+    const pending = pendingFrameEditRef.current;
+    if (!pending || !projectId) return;
+    pendingFrameEditRef.current = null;
+
+    const timeLabel = formatFrameEditTime(time);
+    const attachmentId = `frame-edit-${pending.anim.id}-${Math.round(time * 1000)}-${Date.now()}`;
+    setCuiDraftText('');
+    setCuiDraftAttachments([{ id: attachmentId, type: 'image', data: dataUrl, thumbnail: dataUrl }]);
+    requestAnimationFrame(() => setCuiDraftText(pending.prompt || t('video.frameEditDraftPrompt', pending.mediaIndex, timeLabel)));
+    setViewMode('cui');
+  }, [projectId, t]);
 
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
@@ -3034,7 +3148,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         // before the next line, giving Safari no chance to show stale frames.
         flushSync(() => setViewMode('gui'));
         // Force layout reflow + repaint so Safari's compositor picks up the new DOM
-        document.body.offsetHeight;           // force reflow
+        void document.body.offsetHeight;      // force reflow
         document.body.style.opacity = '0.999';
         requestAnimationFrame(() => {
           document.body.style.opacity = '';
@@ -3148,14 +3262,42 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     currentSnapshotIndex: isViewingVideo ? (currentSnapIndex + 1) : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
     preferredModel: preferredModel as PreferredModel,
     onModelChange: setPreferredModel,
+    videoAuto,
+    onVideoAutoChange: (auto: boolean) => {
+      setVideoAuto(auto);
+      if (auto) {
+        const defaultModel = getDefaultVideoModelId();
+        setVideoModel(defaultModel);
+        setVideoResolution('auto');
+        setAnimationState(prev => prev ? { ...prev, videoModel: defaultModel, videoResolution: 'auto' } : prev);
+      } else {
+        const defaultModel = getDefaultVideoModelId();
+        const defaultResolution = normalizeVideoResolution(defaultModel, 'auto');
+        setVideoModel(defaultModel);
+        setVideoResolution(defaultResolution);
+        setAnimationState(prev => prev ? { ...prev, videoModel: defaultModel, videoResolution: defaultResolution } : prev);
+      }
+    },
     videoModel,
     onVideoModelChange: (m: import('@/types').VideoModel) => {
       if (m === 'upload') return;
+      setVideoAuto(false);
       setVideoModel(m);
-      setAnimationState(prev => prev ? { ...prev, videoModel: m } : prev);
+      const defaultResolution = normalizeVideoResolution(m, 'auto');
+      setVideoResolution(defaultResolution);
+      setAnimationState(prev => prev ? { ...prev, videoModel: m, videoResolution: defaultResolution } : prev);
+    },
+    videoResolution,
+    onVideoResolutionChange: (resolution: import('@/types').VideoResolution) => {
+      setVideoAuto(false);
+      setVideoResolution(resolution);
+      setAnimationState(prev => prev ? { ...prev, videoResolution: resolution } : prev);
     },
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
+    onArtifactAction: handleArtifactAction,
+    draftText: cuiDraftText,
+    draftAttachments: cuiDraftAttachments.length > 0 ? cuiDraftAttachments : undefined,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
     skills: availableSkills,
     selectedSkill,
@@ -3326,6 +3468,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   ? (currentSnap?.videoMeta?.status === 'processing')
                   : (isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing'))}
                 videoFailed={isViewingVideoV2 ? (currentSnap?.videoMeta?.status === 'failed') : false}
+                videoModel={isViewingVideoV2
+                  ? (currentSnap?.videoMeta?.model ?? null)
+                  : (currentVideo?.videoModel ?? null)}
                 videoPosterImage={isViewingVideoV2
                   ? (currentSnap?.image || currentSnap?.imageUrl)
                   : snapshots[snapshots.length - 1]?.image}
@@ -3351,6 +3496,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     }
                   });
                 }}
+                onVideoTimeUpdate={(time, duration) => {
+                  setVideoGuiTime(time);
+                  if (duration && Number.isFinite(duration)) setVideoGuiDuration(duration);
+                }}
+                videoFrameCaptureRequest={videoFrameCaptureRequest}
+                onVideoFrameCaptured={handleVideoFrameCaptured}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
@@ -3642,6 +3793,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       duration: currentSnap.videoMeta.duration,
                       createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
                       videoModel: currentSnap.videoMeta.model,
+                      videoResolution: currentSnap.videoMeta.resolution,
+                      videoAspectRatio: currentSnap.videoMeta.aspectRatio,
                       error: currentSnap.videoMeta.error,
                     }] : animations}
                     selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
@@ -3664,7 +3817,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         const res = await fetch('/api/video-snapshot', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId() }),
+                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId(), videoResolution: anim.videoResolution || 'auto', aspectRatio: anim.videoAspectRatio }),
                         });
                         const json = await res.json();
                         if (!res.ok) throw new Error(json.error || 'Retry failed');
@@ -3698,8 +3851,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         duration: anim.duration ?? null,
                         pollSeconds: 0,
                         videoModel: anim.videoModel && anim.videoModel !== 'upload' ? anim.videoModel : videoModel,
+                        videoResolution: anim.videoResolution || 'auto',
                       });
                     }}
+                    onFrameEdit={handleVideoFrameEdit}
+                    currentTime={videoGuiTime}
+                    currentDuration={videoGuiDuration}
                     isDesktop={isDesktop}
                   />
                 ) : isViewingDesign ? (

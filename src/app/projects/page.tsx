@@ -783,10 +783,13 @@ function ProjectsPageInner() {
   // Fetch credit balance + detect welcome
   useEffect(() => {
     if (!user) return
-    fetch('/api/billing/credits').then(r => r.json()).then(d => {
+    fetch('/api/billing/credits').then(r => {
+      if (!r.ok) throw new Error('Failed to load credits')
+      return r.json()
+    }).then(d => {
       writeNativeJSONCache('/api/billing/credits', d)
       setCreditBalance(d.balance ?? 0)
-    }).catch(() => {})
+    }).catch(() => setCreditBalance(0))
     // Detect ?welcome=1
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)

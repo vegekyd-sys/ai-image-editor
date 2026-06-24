@@ -141,7 +141,7 @@ describe('CreditPopup Apple purchase flow', () => {
     fireEvent.click(screen.getByText('Upgrade'));
     fireEvent.click(screen.getByText('Annual'));
     fireEvent.click(screen.getByText('Pro'));
-    fireEvent.click(await screen.findByText('Subscribe with Apple · $189.99'));
+    fireEvent.click(await screen.findByText('Subscribe · $189.99'));
 
     await waitFor(() => expect(mocks.purchaseNativeAppleSubscription).toHaveBeenCalledWith(
       'app.makaron.ios.subscription.pro.annual',
@@ -160,7 +160,7 @@ describe('CreditPopup Apple purchase flow', () => {
     render(<CreditPopup open onClose={vi.fn()} balance={120} subscription={null} />);
 
     await waitFor(() => expect(mocks.getNativeAppleProducts).toHaveBeenCalled());
-    fireEvent.click(await screen.findByText('Buy with Apple · 2,200 credits'));
+    fireEvent.click(await screen.findByText('Top Up 2,200 credits'));
 
     await waitFor(() => expect(mocks.purchaseNativeAppleProduct).toHaveBeenCalledWith(
       'app.makaron.ios.topup.pro',

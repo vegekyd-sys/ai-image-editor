@@ -9,6 +9,30 @@ export interface VideoModelCapability {
   supportsBaseVideoEdit: boolean
   longVideoChunkSeconds: number
   estimatedCostPerSecondUsd?: number
+  estimatedInputCostUsdPerImage?: number
+  maxImageReferences?: number
+  supportedResolutions?: VideoResolution[]
+  defaultResolution?: VideoResolution
+  supportedAspectRatios?: VideoAspectRatio[]
+  estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
+  provider?: 'kling' | 'seedance' | 'grok' | 'piapi'
+  providerModel?: string
+}
+
+export type VideoResolution = '480p' | '720p' | '1080p' | '4k'
+export type VideoResolutionInput = VideoResolution | 'auto' | null | undefined
+export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
+export type VideoAspectRatioInput = VideoAspectRatio | 'auto' | null | undefined
+
+export interface VideoGenerationRoute {
+  model: string
+  label: string
+  provider: 'kling' | 'seedance' | 'grok' | 'piapi' | string
+  providerModel?: string
+  providerMode?: 'std' | 'pro' | '4k'
+  resolution: VideoResolution
+  estimatedCostPerSecondUsd?: number
+  estimatedInputCostUsdPerImage?: number
 }
 
 export interface VideoReferenceSizeCapability {
@@ -30,7 +54,7 @@ export interface VideoReferenceMeta {
   fileSizeBytes?: number | null
 }
 
-const DEFAULT_MODEL_ID = 'seedance'
+const DEFAULT_MODEL_ID = 'seedance-fast'
 
 const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   kling: {
@@ -48,10 +72,20 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsBaseVideoEdit: true,
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.112,
+    estimatedCostPerSecondUsdByResolution: {
+      '720p': 0.112,
+      '1080p': 0.14,
+      '4k': 0.42,
+    },
+    supportedResolutions: ['720p', '1080p', '4k'],
+    defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    provider: 'kling',
+    providerModel: 'kling-v3-omni',
   },
-  seedance: {
-    id: 'seedance',
-    label: 'SeeDance',
+  'seedance-fast': {
+    id: 'seedance-fast',
+    label: 'SeeDance 2.0 Fast',
     minOutputDuration: 4,
     maxOutputDuration: 15,
     maxReferenceVideoDuration: 15.5,
@@ -71,6 +105,70 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsBaseVideoEdit: false,
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.161,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.074,
+      '720p': 0.161,
+    },
+    supportedResolutions: ['480p', '720p'],
+    defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    provider: 'seedance',
+    providerModel: 'seedance-2.0-fast-reference-to-video',
+  },
+  seedance: {
+    id: 'seedance',
+    label: 'SeeDance 2.0',
+    minOutputDuration: 4,
+    maxOutputDuration: 15,
+    maxReferenceVideoDuration: 15.5,
+    referenceVideoSize: {
+      maxFileSizeMb: 50,
+      minWidth: 300,
+      maxWidth: 6000,
+      minHeight: 300,
+      maxHeight: 6000,
+      minAspectRatio: 0.4,
+      maxAspectRatio: 2.5,
+      minFramePixels: 409_600,
+      maxFramePixels: 2_086_876,
+      description: '<=50MB, width/height 300-6000px, aspect 0.4-2.5, frame pixels 409,600-2,086,876',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: false,
+    longVideoChunkSeconds: 15,
+    estimatedCostPerSecondUsd: 0.199,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.092,
+      '720p': 0.199,
+      '1080p': 0.496,
+    },
+    supportedResolutions: ['480p', '720p', '1080p'],
+    defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    provider: 'seedance',
+    providerModel: 'seedance-2.0-reference-to-video',
+  },
+  grok: {
+    id: 'grok',
+    label: 'Grok Video 1.5',
+    minOutputDuration: 1,
+    maxOutputDuration: 15,
+    maxReferenceVideoDuration: 0,
+    supportsVideoReference: false,
+    supportsBaseVideoEdit: false,
+    longVideoChunkSeconds: 10,
+    estimatedCostPerSecondUsd: 0.14,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.08,
+      '720p': 0.14,
+    },
+    estimatedInputCostUsdPerImage: 0.01,
+    maxImageReferences: 1,
+    supportedResolutions: ['480p', '720p'],
+    defaultResolution: '480p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3'],
+    provider: 'grok',
+    providerModel: 'grok-imagine-video-1.5',
   },
   piapi: {
     id: 'piapi',
@@ -82,6 +180,10 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsBaseVideoEdit: false,
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.112,
+    supportedResolutions: ['720p', '1080p'],
+    defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    provider: 'piapi',
   },
 }
 
@@ -109,7 +211,15 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
 }
 
 export function normalizeVideoModelId(model?: string | null): string {
-  return model || process.env.ANIMATE_PROVIDER || DEFAULT_MODEL_ID
+  if (!model) return DEFAULT_MODEL_ID
+  const normalized = String(model).trim().toLowerCase()
+  if (normalized === 'seedance2-fast' || normalized === 'seedance-2.0-fast' || normalized === 'seedance_fast') {
+    return 'seedance-fast'
+  }
+  if (normalized === 'seedance2' || normalized === 'seedance-2.0' || normalized === 'seedance-standard') {
+    return 'seedance'
+  }
+  return normalized
 }
 
 export function getDefaultVideoModelId(): string {
@@ -123,6 +233,136 @@ export function getVideoModelCapability(model?: string | null): VideoModelCapabi
 
 export function listVideoModelCapabilities(): VideoModelCapability[] {
   return Object.values(MODEL_CAPABILITIES)
+}
+
+export function normalizeVideoResolution(
+  model?: string | null,
+  resolution?: VideoResolutionInput,
+): VideoResolution {
+  const capability = getVideoModelCapability(model)
+  if (!resolution || resolution === 'auto') return capability.defaultResolution ?? '720p'
+  return resolution
+}
+
+export function resolveAgentVideoSelection(options: {
+  appModel?: string | null
+  appResolution?: VideoResolutionInput
+  appAuto?: boolean | null
+  toolModel?: string | null
+  toolResolution?: VideoResolutionInput
+}): { model: string; resolution: VideoResolutionInput; locked: boolean } {
+  const appModel = normalizeVideoModelId(options.appModel)
+  const appResolution = options.appResolution ?? 'auto'
+  const appAuto = options.appAuto ?? (appModel === DEFAULT_MODEL_ID && appResolution === 'auto')
+  const locked = !appAuto
+
+  return {
+    model: locked ? appModel : normalizeVideoModelId(options.toolModel || appModel),
+    resolution: locked ? appResolution : (options.toolResolution ?? appResolution),
+    locked,
+  }
+}
+
+export function resolveVideoGenerationRoute(options: {
+  model?: string | null
+  resolution?: VideoResolutionInput
+}): VideoGenerationRoute {
+  const model = normalizeVideoModelId(options.model)
+  const capability = getVideoModelCapability(model)
+  const resolution = normalizeVideoResolution(model, options.resolution)
+  const perSecond = capability.estimatedCostPerSecondUsdByResolution?.[resolution] ?? capability.estimatedCostPerSecondUsd
+  const provider = capability.provider ?? model
+  const providerMode =
+    provider === 'kling'
+      ? resolution === '4k'
+        ? '4k'
+        : resolution === '1080p'
+          ? 'pro'
+          : 'std'
+      : undefined
+
+  return {
+    model,
+    label: capability.label,
+    provider,
+    providerModel: capability.providerModel,
+    providerMode,
+    resolution,
+    estimatedCostPerSecondUsd: perSecond,
+    estimatedInputCostUsdPerImage: capability.estimatedInputCostUsdPerImage,
+  }
+}
+
+export function validateVideoResolutionRequest(options: {
+  model?: string | null
+  resolution?: VideoResolutionInput
+}): string | null {
+  const capability = getVideoModelCapability(options.model)
+  const resolution = normalizeVideoResolution(options.model, options.resolution)
+  if (capability.supportedResolutions?.length && !capability.supportedResolutions.includes(resolution)) {
+    return `${capability.label} does not support ${resolution}. Supported resolutions: ${capability.supportedResolutions.join(', ')}.`
+  }
+  return null
+}
+
+export function validateVideoAspectRatioRequest(options: {
+  model?: string | null
+  aspectRatio?: VideoAspectRatioInput
+}): string | null {
+  if (!options.aspectRatio || options.aspectRatio === 'auto') return null
+  const capability = getVideoModelCapability(options.model)
+  if (capability.supportedAspectRatios?.length && !capability.supportedAspectRatios.includes(options.aspectRatio)) {
+    return `${capability.label} does not support ${options.aspectRatio}. Supported aspect ratios: ${capability.supportedAspectRatios.join(', ')}.`
+  }
+  return null
+}
+
+export function resolveVideoProviderAspectRatio(
+  model?: string | null,
+  aspectRatio?: VideoAspectRatioInput,
+): string | undefined {
+  const route = resolveVideoGenerationRoute({ model })
+  // xAI stretches the source image when image-to-video receives a forced
+  // aspect_ratio. Grok in Makaron is single-image-to-video, so keep source AR.
+  if (route.provider === 'grok') return undefined
+  if (!aspectRatio || aspectRatio === 'auto') {
+    return route.provider === 'seedance' ? 'adaptive' : undefined
+  }
+  return aspectRatio
+}
+
+export function estimateVideoProviderCostUsd(options: {
+  model?: string | null
+  durationSec: number
+  imageCount?: number
+  resolution?: VideoResolutionInput
+}): number | undefined {
+  const capability = getVideoModelCapability(options.model)
+  const perSecond = resolveVideoGenerationRoute({
+    model: options.model,
+    resolution: options.resolution,
+  }).estimatedCostPerSecondUsd
+  if (perSecond == null) return undefined
+  const billableImages = capability.maxImageReferences != null
+    ? Math.min(options.imageCount ?? 0, capability.maxImageReferences)
+    : (options.imageCount ?? 0)
+  return options.durationSec * perSecond + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
+}
+
+export function estimateVideoCredits(options: {
+  model?: string | null
+  durationSec: number
+  imageCount?: number
+  resolution?: VideoResolutionInput
+  markup?: number
+}): number | undefined {
+  const costUsd = estimateVideoProviderCostUsd(options)
+  if (costUsd == null) return undefined
+  return Math.ceil(costUsd * 100 * (options.markup ?? 2) - 1e-9)
+}
+
+export function isFastVideoRenderModel(model?: string | null): boolean {
+  return normalizeVideoModelId(model) === 'grok'
 }
 
 export function resolveVideoOutputDuration(options: {
@@ -140,12 +380,25 @@ export function resolveVideoOutputDuration(options: {
 
 export function validateVideoModelRequest(options: {
   model?: string | null
+  resolution?: VideoResolutionInput
+  aspectRatio?: VideoAspectRatioInput
   outputDuration?: number
   referenceVideoDuration?: number
   referenceVideoMetas?: VideoReferenceMeta[]
   hasVideoReference?: boolean
+  imageReferenceCount?: number
 }): string | null {
   const capability = getVideoModelCapability(options.model)
+  const resolutionError = validateVideoResolutionRequest({
+    model: options.model,
+    resolution: options.resolution,
+  })
+  if (resolutionError) return resolutionError
+  const aspectRatioError = validateVideoAspectRatioRequest({
+    model: options.model,
+    aspectRatio: options.aspectRatio,
+  })
+  if (aspectRatioError) return aspectRatioError
 
   if (options.outputDuration != null && options.outputDuration < capability.minOutputDuration) {
     return `${capability.label} duration must be ${capability.minOutputDuration} seconds or more.`
@@ -157,6 +410,14 @@ export function validateVideoModelRequest(options: {
 
   if (options.hasVideoReference && !capability.supportsVideoReference) {
     return `${capability.label} does not support reference videos. Choose a model with video-reference support, or use run_code runtime="node" for non-generative MP4 processing.`
+  }
+
+  if (
+    options.imageReferenceCount != null &&
+    capability.maxImageReferences != null &&
+    options.imageReferenceCount > capability.maxImageReferences
+  ) {
+    return `${capability.label} supports at most ${capability.maxImageReferences} reference images per request.`
   }
 
   if (options.referenceVideoDuration != null && options.referenceVideoDuration > capability.maxReferenceVideoDuration) {

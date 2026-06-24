@@ -12,8 +12,24 @@ export type MetaStandardEvent =
   | 'Subscribe'
   | 'Purchase'
 
+export type MetaCustomEvent =
+  | 'UploadIntent'
+  | 'FileSelected'
+
+export type MetaEventName = MetaStandardEvent | MetaCustomEvent
+
 type MetaEventParams = Record<string, string | number | boolean | undefined>
 const ANON_ID_KEY = 'mkr_anonymous_id'
+const STANDARD_EVENTS = new Set<MetaEventName>([
+  'PageView',
+  'ViewContent',
+  'CompleteRegistration',
+  'CustomizeProduct',
+  'StartTrial',
+  'InitiateCheckout',
+  'Subscribe',
+  'Purchase',
+])
 
 declare global {
   interface Window {
@@ -57,7 +73,7 @@ function getAnonymousId(): string | undefined {
 }
 
 function logFirstPartyMarketingEvent(
-  event: MetaStandardEvent,
+  event: MetaEventName,
   params: MetaEventParams,
   eventId: string,
 ) {
@@ -95,7 +111,7 @@ function logFirstPartyMarketingEvent(
 }
 
 export function trackMetaEvent(
-  event: MetaStandardEvent,
+  event: MetaEventName,
   params: MetaEventParams = {},
   eventId?: string,
   attempt = 0,
@@ -110,7 +126,11 @@ export function trackMetaEvent(
     }
     return
   }
-  window.fbq('track', event, merged, { eventID: finalEventId })
+  if (STANDARD_EVENTS.has(event)) {
+    window.fbq('track', event as MetaStandardEvent, merged, { eventID: finalEventId })
+  } else {
+    window.fbq('trackCustom', event, merged, { eventID: finalEventId })
+  }
 }
 
 export function trackCheckoutStart(

@@ -10,6 +10,49 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-21',
+    en: { title: 'Major Video Model Upgrade', items: [
+      'Grok 1.5 is here: turn a photo into video in about 30–40 seconds, with surprisingly strong results.',
+      'SeeDance 2.0 is now available as the high-quality option, separate from Fast. It costs more, but delivers SOTA-level video quality.',
+      'Kling O3 now supports 4K output, so you can create sharper, higher-end videos directly in Makaron.',
+    ]},
+    zh: { title: '视频模型重大升级', items: [
+      'Grok 1.5 上线：可以把照片迅速动起来，通常 30–40 秒完成，效果非常出色。',
+      'SeeDance 2.0 上线：这是区别于 Fast 的高画质版本，价格更高，但效果应该是目前 SOTA。',
+      'Kling O3 支持 4K：可以直接输出更清晰、更高规格的视频。',
+    ]},
+  },
+  {
+    date: '2026-06-18',
+    en: { title: 'Frame-Based Video Repair', items: [
+      'When a video has one awkward moment, tap "Edit video here" to capture that frame and continue in chat with the screenshot already attached.',
+      'Tell Makaron what feels wrong — "make this frame Paris", "the hand looks weird here", or "around this second" — and it focuses on that moment instead of remaking the whole video.',
+      'Makaron locates the matching segment from the screenshot, prepares a local repair, and waits for your confirmation before rendering.',
+      'The rebuilt workspace keeps source videos, captured frames, segments, and generated clips reusable across follow-up steps.',
+    ]},
+    zh: { title: '按当前帧修视频', items: [
+      '视频里只有某一帧不对时，点“从这帧改视频”就能截下当前画面，并带着截图直接进入聊天。',
+      '像平时说话一样描述就行："这帧换成巴黎"、"这里手有点怪"、"大概这一秒不对"；Makaron 会聚焦这个画面附近，只重做这一小段。',
+      'Makaron 会根据截图找到对应片段，准备局部修复方案，并等你确认后再渲染。',
+      '新的工作区会复用源视频、截帧、裁剪片段和生成结果，后续继续修改不用来回找文件。',
+    ]},
+  },
+  {
+    date: '2026-06-07',
+    en: { title: 'Voice Writing & Video Cuts', items: [
+      'Makaron can now draft from spoken video: it listens to uploaded clips and turns speech into editing context.',
+      'Turn a raw talking-head clip into a cleaner draft by asking Agent to tighten pauses, breaths, and dead air.',
+      'Ask for the strongest lines, then cut around those moments to shape a sharper short video.',
+      'Video edits, previews, and analysis results stay on the timeline, so the next prompt can keep building from the same material.',
+    ]},
+    zh: { title: '语音撰写与视频剪辑', items: [
+      'Makaron 现在可以用视频里的口播来写稿：先听懂语音，再把逐字稿和时间点交给 Agent。',
+      '可以直接让 Agent 收紧停顿、气口和废话，把一段原始口播剪成更干净的初稿。',
+      '也可以让 Agent 找出金句，再围绕这些高光时刻剪出更有重点的短视频。',
+      '剪好的视频、预览和分析结果都会留在时间线上，下一轮可以接着同一份素材继续改。',
+    ]},
+  },
+  {
     date: '2026-06-05',
     en: { title: 'AI Search & Growth Readiness', items: [
       'Makaron is now easier for search engines and AI agents to understand, recommend, and route to.',

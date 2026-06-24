@@ -149,10 +149,13 @@ export default function TopBar({ page }: TopBarProps) {
 
   useEffect(() => {
     if (!user) return
-    const refresh = () => fetch('/api/billing/credits').then(r => r.json()).then(d => {
+    const refresh = () => fetch('/api/billing/credits').then(r => {
+      if (!r.ok) throw new Error('Failed to load credits')
+      return r.json()
+    }).then(d => {
       writeNativeJSONCache('/api/billing/credits', d)
       setCreditBalance(d.balance ?? 0)
-    }).catch(() => {})
+    }).catch(() => setCreditBalance(0))
     refresh()
     window.addEventListener('credits-updated', refresh)
     return () => window.removeEventListener('credits-updated', refresh)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe } from '@/lib/billing/stripe'
-import { getActiveSubscription } from '@/lib/billing/subscription'
+import { getActiveSubscription, getOrCreateStripeCustomer } from '@/lib/billing/subscription'
 
 export async function POST() {
   const supabase = await createClient()
@@ -9,21 +9,21 @@ export async function POST() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const sub = await getActiveSubscription(user.id)
-  if (!sub) {
-    return NextResponse.json({ error: 'No active subscription' }, { status: 400 })
-  }
-  if (sub.provider === 'apple') {
+  if (sub?.provider === 'apple') {
     return NextResponse.json({ error: 'Manage Apple subscriptions in the App Store' }, { status: 400 })
   }
-  if (!sub.stripeCustomerId) {
-    return NextResponse.json({ error: 'No Stripe customer for this subscription' }, { status: 400 })
+
+  try {
+    const customerId = await getOrCreateStripeCustomer(user.id, user.email!)
+    const stripe = getStripe()
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: 'https://www.makaron.app/dashboard',
+    })
+
+    return NextResponse.json({ url: session.url })
+  } catch (error) {
+    console.error('[billing/manage] failed to create portal session:', error)
+    return NextResponse.json({ error: 'Unable to open billing portal' }, { status: 500 })
   }
-
-  const stripe = getStripe()
-  const session = await stripe.billingPortal.sessions.create({
-    customer: sub.stripeCustomerId,
-    return_url: 'https://www.makaron.app/dashboard',
-  })
-
-  return NextResponse.json({ url: session.url })
 }

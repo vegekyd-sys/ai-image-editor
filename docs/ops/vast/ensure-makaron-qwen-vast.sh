@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-INSTANCE_ID=${MAKARON_QWEN_INSTANCE_ID:-38953964}
-PROTECTED_LABEL=${MAKARON_QWEN_LABEL:-makaron-qwen-a6000-prod-v2-20260601}
+INSTANCE_ID=${MAKARON_QWEN_INSTANCE_ID:-38761988}
+PROTECTED_LABEL=${MAKARON_QWEN_LABEL:-makaron-qwen-a6000-benchmark}
 VAST=${VASTAI_BIN:-/Users/tianyicai/.local/bin/vastai}
 APP_HEALTH_URL=${MAKARON_APP_HEALTH_URL:-https://www.makaron.app/api/health}
 DIRECT_HEALTH_URL=${MAKARON_COMFY_HEALTH_URL:-https://comfyui.makaron.app/system_stats}
 REMOTE_ONSTART=${MAKARON_REMOTE_ONSTART:-/workspace/makaron-qwen-onstart.sh}
+STOP_EXTRA_RUNNING=${MAKARON_STOP_EXTRA_VAST_RUNNING:-true}
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
@@ -45,6 +46,29 @@ remote_exec() {
 
 [ -x "$VAST" ] || die "Vast CLI not found at $VAST"
 
+stop_extra_running_instances() {
+  [ "$STOP_EXTRA_RUNNING" = "true" ] || return 0
+
+  local instances extra_ids id
+  instances=$("$VAST" show instances --raw)
+  extra_ids=$(
+    printf '%s' "$instances" | jq -r --argjson protected "$INSTANCE_ID" '
+      .[]
+      | select(.id != $protected)
+      | select(.actual_status == "running" or .cur_state == "running" or .intended_status == "running")
+      | .id
+    '
+  )
+
+  for id in $extra_ids; do
+    [ -n "$id" ] || continue
+    log "stopping extra running Vast instance $id"
+    "$VAST" stop instance "$id" || log "failed to stop extra instance $id"
+  done
+}
+
+stop_extra_running_instances
+
 instance_json=$("$VAST" show instance "$INSTANCE_ID" --raw)
 label=$(printf '%s' "$instance_json" | json_get '.label')
 actual_status=$(printf '%s' "$instance_json" | json_get '.actual_status')
@@ -75,13 +99,15 @@ else
 fi
 
 for attempt in $(seq 1 20); do
-  app_status=$(curl -fsS --max-time 20 "$APP_HEALTH_URL" | jq -r '.status // empty' || true)
-  log "app health attempt=$attempt status=${app_status:-failed}"
-  if [ "$app_status" = "healthy" ]; then
-    log "Makaron Qwen Vast worker healthy"
+  app_health=$(curl -fsS --max-time 20 "$APP_HEALTH_URL" || true)
+  qwen_status=$(printf '%s' "$app_health" | jq -r '.services.comfyui_qwen.status // empty' 2>/dev/null || true)
+  overall_status=$(printf '%s' "$app_health" | jq -r '.status // empty' 2>/dev/null || true)
+  log "app health attempt=$attempt overall=${overall_status:-failed} comfyui_qwen=${qwen_status:-failed}"
+  if [ "$qwen_status" = "healthy" ]; then
+    log "Makaron Qwen ComfyUI healthy"
     exit 0
   fi
   sleep 15
 done
 
-die "Makaron app health did not become healthy"
+die "Makaron app Qwen health did not become healthy"

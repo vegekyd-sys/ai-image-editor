@@ -105,13 +105,19 @@ export async function GET(request: NextRequest) {
   const redirectUrl = isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`
   if (isNewUser) {
     const attribution = readAttributionCookie(request.cookies.get('mkr_attribution')?.value)
+    let eventSourceUrl = `${origin}/home`
+    if (typeof attribution.landing_path === 'string') {
+      try {
+        eventSourceUrl = new URL(attribution.landing_path, origin).toString()
+      } catch {}
+    }
     await sendMetaCapiEvent({
       eventName: 'CompleteRegistration',
       eventId: `registration.${user.id}`,
       userId: user.id,
       email: user.email,
       request,
-      eventSourceUrl: `${origin}/home`,
+      eventSourceUrl,
       customData: attribution,
     })
   }
@@ -144,6 +150,8 @@ function buildRedirectPage(
 var r=sessionStorage.getItem('mkr_return_url')||localStorage.getItem('mkr_return_url');
 sessionStorage.removeItem('mkr_return_url');
 localStorage.removeItem('mkr_return_url');
+var skillMatch=r&&r.match(/^\\/home\\/([^/?]+)/);
+if(skillMatch){r='/home?skill='+encodeURIComponent(skillMatch[1]);}
 var welcome="${redirectUrl}".includes('welcome=1');
 if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(welcome?sep+'welcome=1':'');}
 else{window.location.href="${redirectUrl}";}

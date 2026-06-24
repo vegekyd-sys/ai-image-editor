@@ -112,10 +112,14 @@ export async function POST(req: NextRequest) {
     }
 
     await addCredits(userId, credits)
+    const stripeInvoiceId = typeof session.invoice === 'string'
+      ? session.invoice
+      : session.invoice?.id ?? null
 
     await admin.from('credit_purchases').insert({
       user_id: userId,
       stripe_session_id: session.id,
+      stripe_invoice_id: stripeInvoiceId,
       credits,
       amount_usd: amountUsd,
       status: 'completed',

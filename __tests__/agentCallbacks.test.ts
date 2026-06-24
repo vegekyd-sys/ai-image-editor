@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeAgentCallbacks, type AgentCallbackContext } from '@/lib/agentCallbacks';
-import type { Message } from '@/types';
+import type { Message, Snapshot } from '@/types';
 
 function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCallbackContext {
   return {
@@ -272,6 +272,28 @@ describe('makeAgentCallbacks', () => {
 
       // Description should have been saved (first paragraph, max 300 chars)
       expect(ctx.onUpdateDescription).toHaveBeenCalledWith('snap-0', 'A photo of a cat');
+    });
+
+    it('keeps pending analyzed index when new_turn arrives before analysis text', () => {
+      let snapshots: Snapshot[] = [{ id: 'video-0', image: '', tips: [], messageId: '', type: 'video' }];
+      ctx = createMockContext({
+        setMessages: vi.fn((updater: (prev: typeof messages) => typeof messages) => {
+          messages = updater(messages);
+        }),
+        setSnapshots: vi.fn((updater) => {
+          snapshots = updater(snapshots as never) as never;
+        }),
+        snapshotsRef: { current: snapshots as never },
+      });
+
+      const { callbacks } = makeAgentCallbacks(ctx);
+      callbacks.onImageAnalyzed?.(1); // analyze_video tool result arrives before final assistant turn
+      callbacks.onNewTurn?.('msg-1');
+      callbacks.onContent?.('This video shows a product update.');
+      callbacks.onDone?.();
+
+      expect(ctx.onUpdateDescription).toHaveBeenCalledWith('video-0', 'This video shows a product update.');
+      expect(snapshots[0].description).toBe('This video shows a product update.');
     });
   });
 
