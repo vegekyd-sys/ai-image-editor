@@ -135,11 +135,20 @@ export default function TopBar({ page }: TopBarProps) {
               <button
                 onClick={() => setUserMenuOpen(v => !v)}
                 style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
+                  WebkitAppearance: 'none',
+                  appearance: 'none',
+                  background: 'transparent',
+                  border: '0',
+                  boxShadow: 'none',
+                  outline: 'none',
+                  padding: 0,
+                  borderRadius: 0,
+                  cursor: 'pointer',
                   fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
                   color: userMenuOpen ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.45)',
                   transition: 'color 0.2s',
                   display: 'flex', alignItems: 'center', gap: 4,
+                  WebkitTapHighlightColor: 'transparent',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
                 onMouseLeave={e => { if (!userMenuOpen) e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
