@@ -2,9 +2,13 @@ const DB_NAME = 'makaron-images'
 const STORE = 'images'
 const PROJECT_STORE = 'project-data'
 const PROJECTS_LIST_STORE = 'projects-list'
+const PROJECTS_LIST_SESSION_KEY = 'makaron:last-projects-list'
+const PROJECTS_LIST_LOCAL_KEY = 'makaron:last-projects-list:persistent'
 const CREATE_DRAFT_STORE = 'create-drafts'
 const ACTIVE_CREATE_DRAFT_KEY = 'active'
 const TTL_MS = 30 * 24 * 60 * 60 * 1000  // 30 days
+
+export const PROJECTS_LIST_CACHE_UPDATED_EVENT = 'makaron-projects-list-cache-updated'
 
 interface CacheEntry {
   key: string
@@ -14,9 +18,7 @@ interface CacheEntry {
 
 interface ProjectCacheEntry {
   projectId: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   snapshots: any[]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   messages: any[]
   title: string
   cachedAt: number
@@ -24,7 +26,6 @@ interface ProjectCacheEntry {
 
 interface ProjectsListCacheEntry {
   userId: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   projects: any[]
   cachedAt: number
 }
@@ -144,7 +145,6 @@ export async function getCachedImages(keys: string[]): Promise<Map<string, strin
 // Synchronous memory-only lookup (use in useState initializer to avoid spinner flash)
 export function getCachedProjectDataSync(
   projectId: string,
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): { snapshots: any[], messages: any[], title: string } | null {
   if (typeof window === 'undefined') return null
   const mem = projectMemCache.get(projectId)
@@ -155,7 +155,6 @@ export function getCachedProjectDataSync(
 }
 
 // Project metadata cache (snapshots + messages + title, no base64 images)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function cacheProjectData(projectId: string, snapshots: any[], messages: any[], title: string): void {
   const entry: ProjectCacheEntry = { projectId, snapshots, messages, title, cachedAt: Date.now() }
   projectMemCache.set(projectId, entry)
@@ -164,7 +163,6 @@ export function cacheProjectData(projectId: string, snapshots: any[], messages: 
 
 export async function getCachedProjectData(
   projectId: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<{ snapshots: any[], messages: any[], title: string } | null> {
   const mem = projectMemCache.get(projectId)
   if (mem && Date.now() - mem.cachedAt < TTL_MS) {
@@ -204,11 +202,9 @@ async function writeProjectToIDB(entry: ProjectCacheEntry): Promise<void> {
 }
 
 /** Update tips for a snapshot in both memory cache and IDB. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function updateCachedTips(projectId: string, snapshotId: string, tips: any[]): void {
   const mem = projectMemCache.get(projectId)
   if (!mem) return
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const snap = (mem.snapshots as any[]).find((s: any) => s.id === snapshotId)
   if (snap) {
     snap.tips = tips
@@ -219,26 +215,68 @@ export function updateCachedTips(projectId: string, snapshotId: string, tips: an
 
 // ── Projects List Cache (for /projects page) ──
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function cacheProjectsList(userId: string, projects: any[]): void {
   const entry: ProjectsListCacheEntry = { userId, projects, cachedAt: Date.now() }
   projectsListMemCache = entry
+  try {
+    const serialized = JSON.stringify(entry)
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(PROJECTS_LIST_SESSION_KEY, serialized)
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(PROJECTS_LIST_LOCAL_KEY, serialized)
+    }
+  } catch {
+    // Web storage failures are non-critical
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(PROJECTS_LIST_CACHE_UPDATED_EVENT, {
+      detail: { userId, count: projects.length },
+    }))
+  }
   void writeProjectsListToIDB(entry)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getCachedProjectsListSync(userId: string): any[] | null {
   if (typeof window === 'undefined') return null
   const mem = projectsListMemCache
   if (mem && mem.userId === userId && Date.now() - mem.cachedAt < TTL_MS) {
     return mem.projects
   }
+  const session = getLastProjectsListSync()
+  if (session && session.userId === userId) return session.projects
   return null
+}
+
+export function getLastProjectsListSync():
+  { userId: string; projects: any[] } | null {
+  if (typeof window === 'undefined') return null
+  const mem = projectsListMemCache
+  if (mem && Date.now() - mem.cachedAt < TTL_MS) {
+    return { userId: mem.userId, projects: mem.projects }
+  }
+  const readEntry = (raw: string | null) => {
+    if (!raw) return null
+    const entry = JSON.parse(raw) as ProjectsListCacheEntry
+    if (!entry?.userId || !Array.isArray(entry.projects) || Date.now() - entry.cachedAt > TTL_MS) return null
+    return entry
+  }
+  try {
+    let entry = readEntry(sessionStorage.getItem(PROJECTS_LIST_SESSION_KEY))
+    if (!entry && typeof localStorage !== 'undefined') {
+      entry = readEntry(localStorage.getItem(PROJECTS_LIST_LOCAL_KEY))
+      if (entry) sessionStorage.setItem(PROJECTS_LIST_SESSION_KEY, JSON.stringify(entry))
+    }
+    if (!entry) return null
+    projectsListMemCache = entry
+    return { userId: entry.userId, projects: entry.projects }
+  } catch {
+    return null
+  }
 }
 
 export async function getCachedProjectsList(
   userId: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<any[] | null> {
   const mem = projectsListMemCache
   if (mem && mem.userId === userId && Date.now() - mem.cachedAt < TTL_MS) {
@@ -344,4 +382,14 @@ async function writeCreateDraftToIDB(entry: CreateDraftEntry): Promise<void> {
 export function clearUserCache(): void {
   projectsListMemCache = null
   projectMemCache.clear()
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(PROJECTS_LIST_SESSION_KEY)
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(PROJECTS_LIST_LOCAL_KEY)
+    }
+  } catch {
+    // Web storage failures are non-critical
+  }
 }

@@ -402,7 +402,7 @@ function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) 
 /** Shared Markdown renderer to avoid duplicating component overrides.
  *  <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
-function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onViewFile?: (path: string) => void }) {
+function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPreviewSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onPreviewSnapshot?: (index: number, triggerEl?: HTMLElement | null) => void; onViewFile?: (path: string) => void }) {
   // Replace <<<media_N>>> and <<<image_N>>> with inline code `MEDIA_REF_N` so markdown structure stays intact
   let processed = snapshots
     ? text.replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
@@ -428,7 +428,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
         const m = str.match(/^MEDIA_REF_(\d+)$/);
         if (m) {
           const idx = parseInt(m[1]) - 1;
-          return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
+          return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} onPreview={onPreviewSnapshot} />;
         }
       }
       // Intercept FILE_REF tokens → render FileRefChip
@@ -478,7 +478,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
     th: ({ children }: { children?: React.ReactNode }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
     td: ({ children }: { children?: React.ReactNode }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [snapshots, onNavigateToSnapshot, onViewFile, isPanel]);
+  }), [snapshots, onNavigateToSnapshot, onPreviewSnapshot, onViewFile, isPanel]);
 
   return (
     <ReactMarkdown
@@ -628,6 +628,13 @@ export default function AgentChatView({
   const processingCount = attachments.filter(a => a.status === 'processing').length;
   const allReady = attachments.length > 0 && attachments.every(a => a.status === 'ready' || a.status === 'error');
   const [isExiting, setIsExiting] = useState(false);
+  const [inlineImagePreview, setInlineImagePreview] = useState<{
+    src: string;
+    snapIdx: number | null;
+    style: React.CSSProperties;
+  } | null>(null);
+  const [inlineImagePreviewLoadedUrl, setInlineImagePreviewLoadedUrl] = useState<string | null>(null);
+  const inlineImagePreviewRef = useRef<HTMLSpanElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCountRef = useRef(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -644,19 +651,56 @@ export default function AgentChatView({
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
   const [inputBarH, setInputBarH] = useState(96);
+
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
   const [kbInset, setKbInset] = useState(0);
+  const [nativeKbInset, setNativeKbInset] = useState(0);
+  const syncKeyboardInsetFromViewport = useCallback(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    setKbInset(Math.round(inset));
+  }, []);
+  const keepInputAboveKeyboard = useCallback(() => {
+    syncKeyboardInsetFromViewport();
+    window.setTimeout(syncKeyboardInsetFromViewport, 80);
+    window.setTimeout(syncKeyboardInsetFromViewport, 220);
+    window.setTimeout(() => {
+      inputBarRef.current?.scrollIntoView({ block: 'end', inline: 'nearest' });
+    }, 260);
+  }, [syncKeyboardInsetFromViewport]);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const update = () => {
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setKbInset(Math.round(inset));
+    vv.addEventListener('resize', syncKeyboardInsetFromViewport);
+    vv.addEventListener('scroll', syncKeyboardInsetFromViewport);
+    return () => {
+      vv.removeEventListener('resize', syncKeyboardInsetFromViewport);
+      vv.removeEventListener('scroll', syncKeyboardInsetFromViewport);
     };
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, [syncKeyboardInsetFromViewport]);
+  useEffect(() => {
+    const readNativeInset = () => {
+      const raw = getComputedStyle(document.documentElement)
+        .getPropertyValue('--makaron-native-keyboard-inset')
+        .trim();
+      const next = Number.parseFloat(raw);
+      setNativeKbInset(Number.isFinite(next) ? Math.max(0, Math.round(next)) : 0);
+    };
+    const onNativeInset = (event: Event) => {
+      const inset = (event as CustomEvent<{ inset?: number }>).detail?.inset;
+      if (typeof inset === 'number') {
+        setNativeKbInset(Math.max(0, Math.round(inset)));
+      } else {
+        readNativeInset();
+      }
+    };
+    readNativeInset();
+    window.addEventListener('makaron-keyboard-inset-change', onNativeInset);
+    return () => window.removeEventListener('makaron-keyboard-inset-change', onNativeInset);
   }, []);
+  const effectiveKbInset = Math.max(kbInset, nativeKbInset);
+  const keyboardInsetCss = `max(var(--makaron-native-keyboard-inset, 0px), ${kbInset}px)`;
 
   useEffect(() => {
     if (draftText === lastDraftTextRef.current) return;
@@ -700,7 +744,7 @@ export default function AgentChatView({
   const PIP_SIZES = [116, 200] as const; // md / lg (small removed)
   const PIP_M = 14;
   const INPUT_GRADIENT_TOP = 32; // paddingTop on input bar wrapper (gradient zone)
-  const PIP_BOTTOM_OFFSET = inputBarH - INPUT_GRADIENT_TOP + 4; // just above actual input box
+  const PIP_BOTTOM_OFFSET = inputBarH - INPUT_GRADIENT_TOP + 4 + effectiveKbInset; // just above actual input box
   const PIP_PEEK = 28;        // px visible when hidden at right edge
   const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 
@@ -820,9 +864,9 @@ export default function AgentChatView({
       pipStartedAtLeftEdge.current = false;
       // Tap PiP body → hero animation + return to GUI
       const pipEl = _e.currentTarget as HTMLElement;
-      const kbOpen = window.visualViewport
+      const kbOpen = effectiveKbInset > 50 || (window.visualViewport
         ? window.innerHeight - window.visualViewport.height > 50
-        : false;
+        : false);
       if (kbOpen) {
         // Dismiss keyboard first; re-measure PiP rect after it closes, then animate
         inputRef.current?.blur();
@@ -837,7 +881,7 @@ export default function AgentChatView({
         handleBack();
       }
     }
-  }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL, handleBack, onPipTap]);
+  }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL, effectiveKbInset, handleBack, onPipTap]);
   // ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -968,13 +1012,78 @@ export default function AgentChatView({
     if (isExiting) onBack();
   }, [isExiting, onBack]);
 
+  const openInlineImagePreview = useCallback((src: string, snapIdx: number | null, triggerEl?: HTMLElement | null) => {
+    if (!src) return;
+    const triggerRect = triggerEl?.getBoundingClientRect();
+    const pw = Math.min(300, window.innerWidth * 0.6);
+    let left = (window.innerWidth - pw) / 2;
+    let top = Math.max(8, Math.min(96, window.innerHeight - pw - 8));
+    if (triggerRect) {
+      const triggerCenter = triggerRect.left + triggerRect.width / 2;
+      left = triggerCenter - pw / 2;
+      if (left < 8) left = 8;
+      if (left + pw > window.innerWidth - 8) left = window.innerWidth - 8 - pw;
+      const spaceAbove = triggerRect.top - 8;
+      const spaceBelow = window.innerHeight - triggerRect.bottom - 8;
+      top = spaceAbove >= pw || spaceAbove >= spaceBelow
+        ? triggerRect.top - pw - 4
+        : triggerRect.bottom + 4;
+      top = Math.max(8, Math.min(top, window.innerHeight - pw - 8));
+    }
+    setInlineImagePreview({
+      src,
+      snapIdx,
+      style: {
+        position: 'absolute',
+        top,
+        left,
+        width: pw,
+        height: pw,
+        zIndex: 9999,
+      },
+    });
+  }, []);
+
   const handleInlineImageClick = useCallback((messageId: string, e?: React.MouseEvent) => {
-    const imgEl = e?.currentTarget?.querySelector('img') as HTMLImageElement | null;
-    const rect = imgEl?.getBoundingClientRect();
-    const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight) ? imgEl.naturalWidth / imgEl.naturalHeight : undefined;
-    setIsExiting(true);
-    onImageTap(messageId, rect ?? undefined, imgEl?.src);
-  }, [onImageTap]);
+    const triggerEl = e?.currentTarget as HTMLElement | undefined;
+    const imgEl = triggerEl?.querySelector('img') as HTMLImageElement | null;
+    const msg = messages.find(m => m.id === messageId);
+    const previewSrc = msg?.image || imgEl?.src || '';
+    const snapIdx = getSnapshotIndex(messageId);
+    if (!previewSrc) return;
+    openInlineImagePreview(previewSrc, snapIdx, triggerEl);
+  }, [getSnapshotIndex, messages, openInlineImagePreview]);
+
+  const handlePreviewSnapshot = useCallback((index: number, triggerEl?: HTMLElement | null) => {
+    const snapshot = snapshots[index];
+    const previewSrc = snapshot?.imageUrl || snapshot?.image || '';
+    openInlineImagePreview(previewSrc, index + 1, triggerEl);
+  }, [openInlineImagePreview, snapshots]);
+
+  useEffect(() => {
+    if (!inlineImagePreview) return;
+    const close = () => setInlineImagePreview(null);
+    const isOutside = (target: EventTarget | null) => {
+      if (!target) return false;
+      const node = target as Node;
+      if (inlineImagePreviewRef.current?.contains(node)) return false;
+      return true;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (isOutside(event.target)) close();
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      if (isOutside(event.target)) close();
+    };
+    document.addEventListener('scroll', close, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('touchstart', onTouchStart, true);
+    return () => {
+      document.removeEventListener('scroll', close, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('touchstart', onTouchStart, true);
+    };
+  }, [inlineImagePreview]);
 
   const handleInlineVideoClick = useCallback((e: React.MouseEvent, videoUrl: string, animId?: string, startTime?: number) => {
     if (!onVideoTap) return;
@@ -1028,7 +1137,7 @@ export default function AgentChatView({
         <div
           ref={headerRef}
           className="absolute top-0 left-0 z-50 px-3"
-          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+          style={{ paddingTop: 'var(--makaron-cui-header-top, max(0.75rem, env(safe-area-inset-top)))' }}
         >
           <button
             data-testid="chat-back"
@@ -1148,7 +1257,7 @@ export default function AgentChatView({
       )}
 
       {/* ── Messages ── */}
-      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: isPanel ? '16px' : 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: isPanel ? '0' : `${inputBarH}px` }}>
+      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: isPanel ? '16px' : 'var(--makaron-cui-messages-top, calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem))', paddingBottom: isPanel ? '0' : `calc(${inputBarH}px + ${keyboardInsetCss})` }}>
         {/* Empty state or loading */}
         {messages.length === 0 && (
           messagesLoading ? (
@@ -1266,6 +1375,7 @@ export default function AgentChatView({
                             isPanel={isPanel}
                             snapshots={snapshots}
                             onNavigateToSnapshot={onNavigateToSnapshot}
+                            onPreviewSnapshot={handlePreviewSnapshot}
                             onViewFile={setViewingFile}
                           />
                           {/* Inline video — natural aspect ratio, play button, tap to navigate */}
@@ -1451,15 +1561,15 @@ export default function AgentChatView({
 
       {!readOnly && <div
         ref={inputBarRef}
-        className={isPanel ? 'flex-shrink-0 px-3' : 'absolute left-0 right-0 px-3'}
+        className={isPanel ? 'flex-shrink-0 px-3' : 'fixed left-0 right-0 px-3'}
         style={isPanel ? {
           paddingBottom: '12px',
           paddingTop: '12px',
           borderTop: '1px solid rgba(255,255,255,0.06)',
           zIndex: 20,
         } : {
-          bottom: kbInset > 0 ? `${kbInset}px` : 0,
-          paddingBottom: kbInset > 0 ? '8px' : 'max(0.75rem, env(safe-area-inset-bottom))',
+          bottom: keyboardInsetCss,
+          paddingBottom: effectiveKbInset > 0 ? '8px' : 'var(--makaron-cui-input-safe-bottom, max(0.75rem, env(safe-area-inset-bottom)))',
           paddingTop: '32px',
           background: 'linear-gradient(to bottom, transparent 0%, #0a0a0a 32px)',
           zIndex: 20,
@@ -1480,6 +1590,8 @@ export default function AgentChatView({
             aria-label="Chat with agent"
             value={input}
             rows={1}
+            onFocus={keepInputAboveKeyboard}
+            onClick={keepInputAboveKeyboard}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if ((e.key === 'Enter' || e.code === 'Enter') && e.altKey) {
@@ -1629,6 +1741,55 @@ export default function AgentChatView({
           </div>
         </div>
       </div>}
+      {inlineImagePreview && (() => {
+        const previewUrl = inlineImagePreview.src.startsWith('http')
+          ? getThumbnailUrl(inlineImagePreview.src, 400, 90, 400, 'cover')
+          : inlineImagePreview.src;
+        const imgLoaded = inlineImagePreviewLoadedUrl === previewUrl;
+        return (
+          <span
+            ref={inlineImagePreviewRef}
+            data-testid="cui-inline-image-preview"
+            className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
+            style={{
+              ...inlineImagePreview.style,
+              display: 'block',
+              WebkitTouchCallout: 'none',
+              WebkitUserSelect: 'none',
+              userSelect: 'none',
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {!imgLoaded && (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', inset: 0, background: '#111' }}>
+                <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  {inlineImagePreview.snapIdx !== null && (
+                    <span className="text-white/30 text-xs">@{inlineImagePreview.snapIdx}</span>
+                  )}
+                  <span className="animate-spin" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.5)', borderRadius: '50%' }} />
+                </span>
+              </span>
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt=""
+              draggable={false}
+              onLoad={() => setInlineImagePreviewLoadedUrl(previewUrl)}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+            />
+            {imgLoaded && inlineImagePreview.snapIdx !== null && (
+              <span
+                className="bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md"
+                style={{ position: 'absolute', bottom: 8, left: 8 }}
+              >
+                @{inlineImagePreview.snapIdx}
+              </span>
+            )}
+          </span>
+        );
+      })()}
     </div>
     {viewingFile && <FileViewer path={viewingFile} onClose={() => setViewingFile(null)} />}
     </>

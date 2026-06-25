@@ -126,6 +126,7 @@ export default function VideoResultCard({
             <div
               key={anim.id}
               ref={isSelected ? selectedPillRef : undefined}
+              data-makaron-editor-tap-target="true"
               className={`flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all animate-tip-in ${
                 isSelected
                   ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
@@ -134,6 +135,7 @@ export default function VideoResultCard({
               style={{ background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)' }}
             >
               <button
+                data-makaron-editor-tap-target="true"
                 onClick={() => { if (isCompleted) onSelectVideo(anim.id); onViewDetail(anim); }}
                 className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
                 style={{
@@ -188,6 +190,7 @@ export default function VideoResultCard({
               </button>
 
               <button
+                data-makaron-editor-tap-target="true"
                 onClick={() => onViewDetail(anim)}
                 className="flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
                 style={{

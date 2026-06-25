@@ -14,6 +14,8 @@ const businessPlan: SubscriptionPlan = {
   annualPrice: 47900,
   monthlyPriceId: 'price_monthly',
   annualPriceId: 'price_annual',
+  monthlyAppleProductId: 'app.makaron.ios.subscription.business.monthly',
+  annualAppleProductId: 'app.makaron.ios.subscription.business.annual',
 }
 
 describe('subscription credit grants', () => {

@@ -8,6 +8,7 @@ interface MediaRefTextProps {
   text: string;
   mediaUrls: string[];
   onNavigate?: (index: number) => void;
+  onPreview?: (index: number, triggerEl?: HTMLElement | null) => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -16,7 +17,7 @@ interface MediaRefTextProps {
  * Renders text with <<<media_N>>> / <<<image_N>>> tokens replaced by clickable ImageRefChip.
  * mediaUrls[0] corresponds to <<<media_1>>>, etc.
  */
-export default function MediaRefText({ text, mediaUrls, onNavigate, className, style }: MediaRefTextProps) {
+export default function MediaRefText({ text, mediaUrls, onNavigate, onPreview, className, style }: MediaRefTextProps) {
   const snapshots: Snapshot[] = useMemo(
     () => mediaUrls.map((url, i) => ({ id: `media-${i}`, image: '', imageUrl: url, tips: [], messageId: '' })),
     [mediaUrls],
@@ -51,6 +52,7 @@ export default function MediaRefText({ text, mediaUrls, onNavigate, className, s
             index={part.index}
             snapshot={snapshots[part.index]}
             onNavigate={onNavigate}
+            onPreview={onPreview}
           />
         ),
       )}

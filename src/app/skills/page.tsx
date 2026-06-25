@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale } from '@/lib/i18n';
+import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache';
+import { navigateBackInIOSApp } from '@/lib/native-navigation';
 
 interface SkillItem {
   name: string;
@@ -13,11 +15,16 @@ interface SkillItem {
   description: string;
 }
 
+interface SkillsPayload {
+  skills?: SkillItem[];
+}
+
 export default function SkillsPage() {
   const router = useRouter();
   const { locale } = useLocale();
-  const [skills, setSkills] = useState<SkillItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [cachedSkills] = useState<SkillsPayload | null>(() => readNativeJSONCache<SkillsPayload>('/api/skills'));
+  const [skills, setSkills] = useState<SkillItem[]>(() => cachedSkills?.skills || []);
+  const [loading, setLoading] = useState(() => !cachedSkills);
   const [sharing, setSharing] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
@@ -29,6 +36,7 @@ export default function SkillsPage() {
     try {
       const res = await fetch('/api/skills');
       const data = await res.json();
+      writeNativeJSONCache('/api/skills', data);
       if (data.skills) setSkills(data.skills);
     } catch {}
     setLoading(false);
@@ -87,13 +95,18 @@ export default function SkillsPage() {
   const userSkills = skills.filter(s => !s.builtIn);
   const builtInSkills = skills.filter(s => s.builtIn);
 
+  const handleBackToApp = () => {
+    if (navigateBackInIOSApp('/projects')) return;
+    router.push('/projects');
+  };
+
   return (
-    <div style={{ minHeight: '100dvh', background: '#000', color: '#fff', padding: '0 20px 40px' }}>
+    <div className="makaron-ios-page makaron-ios-page-x" style={{ minHeight: '100dvh', background: '#000', color: '#fff', padding: '0 20px 40px' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       {/* Header */}
       <div style={{ padding: '20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button
-          onClick={() => router.push('/projects')}
+          onClick={handleBackToApp}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'rgba(255,255,255,0.5)', fontSize: 14,

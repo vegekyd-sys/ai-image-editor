@@ -45,8 +45,8 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="relative min-h-screen bg-black text-white overflow-hidden max-w-[1440px] mx-auto">
-      {/* eslint-disable-next-line @next/next/no-css-tags */}
+    <div className="makaron-ios-page makaron-ios-page-x relative min-h-screen bg-black text-white overflow-hidden">
+      <div className="max-w-[1440px] mx-auto">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');`}</style>
       {/* Language toggle */}
       <div className="absolute top-4 right-4 z-20">
@@ -217,6 +217,7 @@ export default function LandingPage() {
         </div>
         <span className="text-xs text-[#a1a1aa]/20">© 2026</span>
       </footer>
+      </div>
     </div>
   );
 }

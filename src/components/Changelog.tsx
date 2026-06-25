@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 interface ChangelogEntry {
   date: string;
   en: { title: string; items: string[]; link?: { label: string; href: string } };
@@ -649,6 +651,11 @@ const CHANGELOG: ChangelogEntry[] = [
 
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
   const isZh = locale === 'zh';
+  const [isIOSApp, setIsIOSApp] = useState(false);
+
+  useEffect(() => {
+    setIsIOSApp(document.documentElement.classList.contains('makaron-ios-app') || navigator.userAgent.includes('MakaronIOS'));
+  }, []);
 
   return (
     <div
@@ -658,10 +665,17 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      {/* Modal — full screen on mobile, centered card on desktop */}
+      {/* Modal */}
       <div
-        className="relative w-full h-full sm:h-auto sm:max-w-xl sm:mx-4 sm:max-h-[80dvh] sm:rounded-2xl overflow-hidden flex flex-col"
-        style={{ background: 'rgba(20,20,20,0.97)', border: '1px solid rgba(255,255,255,0.08)' }}
+        className={isIOSApp
+          ? 'relative w-[calc(100%-24px)] max-w-xl max-h-[82dvh] rounded-2xl overflow-hidden flex flex-col'
+          : 'relative w-full h-full sm:h-auto sm:max-w-xl sm:mx-4 sm:max-h-[80dvh] sm:rounded-2xl overflow-hidden flex flex-col'
+        }
+        style={{
+          background: 'rgba(20,20,20,0.97)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          marginBottom: isIOSApp ? 'max(12px, env(safe-area-inset-bottom))' : undefined,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

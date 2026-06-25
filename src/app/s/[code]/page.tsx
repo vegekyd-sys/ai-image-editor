@@ -78,7 +78,7 @@ export default function ClaimPage() {
   }
 
   return (
-    <div style={{
+    <div className="makaron-ios-page makaron-ios-page-x" style={{
       minHeight: '100dvh',
       background: '#000',
       display: 'flex',

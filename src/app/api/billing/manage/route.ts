@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe } from '@/lib/billing/stripe'
-import { getOrCreateStripeCustomer } from '@/lib/billing/subscription'
+import { getActiveSubscription, getOrCreateStripeCustomer } from '@/lib/billing/subscription'
 
 export async function POST() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const sub = await getActiveSubscription(user.id)
+  if (sub?.provider === 'apple') {
+    return NextResponse.json({ error: 'Manage Apple subscriptions in the App Store' }, { status: 400 })
+  }
 
   try {
     const customerId = await getOrCreateStripeCustomer(user.id, user.email!)

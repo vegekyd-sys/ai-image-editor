@@ -27,6 +27,7 @@ const en = {
   'auth.createAccount': 'Create your account',
   'auth.back': 'Back',
   'auth.continueWithGoogle': 'Continue with Google',
+  'auth.continueWithApple': 'Continue with Apple',
   'auth.orDivider': 'or',
   'auth.goRegister': 'Sign up',
   'auth.verifyEmail.title': 'Check your inbox',
@@ -36,6 +37,7 @@ const en = {
   'auth.verifyEmail.resent': 'Email sent!',
   'auth.verifyEmail.checkSpam': "Don't see it? Check your spam folder.",
   'auth.continue': 'Continue',
+  'auth.sendingCode': 'Sending code...',
   'auth.tryFree': 'Try free',
   'auth.otp.title': 'Enter verification code',
   'auth.otp.subtitle': 'We sent a 6-digit code to',
@@ -262,6 +264,8 @@ const en = {
   'billing.subscribeTo': 'Subscribe to',
   'billing.upgradeTo': 'Upgrade to',
   'billing.current': 'Current',
+  'billing.iosUnavailableTitle': 'Purchases are coming to iOS',
+  'billing.iosUnavailableDesc': 'For App Store compliance, credits and subscriptions are not sold in the iOS app until Apple in-app purchase is ready. You can keep creating with your current balance.',
 
   // Skills
   'skills.title': 'Skill Market',
