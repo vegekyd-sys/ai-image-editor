@@ -10,6 +10,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-26',
+    en: { title: 'iOS TestFlight Begins', items: [
+      'Makaron for iPhone is now preparing for App Store launch, with TestFlight testing open for the first release candidate.',
+      'The iOS app connects to the live Makaron workspace, so projects, chat, image previews, video tools, and credits stay in sync with the web app.',
+      'Subscriptions and top-ups are now handled through Apple on iOS, while the web app continues to use the existing checkout flow.',
+    ]},
+    zh: { title: 'iOS TestFlight 开始测试', items: [
+      'Makaron iPhone 版已进入 App Store 上线准备阶段，首个候选版本开始 TestFlight 测试。',
+      'iOS App 连接同一套 Makaron 工作区，项目、对话、图片预览、视频工具和 credits 会与网页端同步。',
+      'iOS 上的订阅和充值现在通过 Apple 完成，网页端继续沿用原有支付流程。',
+    ]},
+  },
+  {
     date: '2026-06-25',
     en: { title: 'SeeDance Mini', items: [
       'SeeDance 2.0 Mini is now available for lower-cost 480p/720p video drafts.',
