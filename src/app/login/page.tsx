@@ -381,7 +381,14 @@ export default function LoginPage() {
       <div className="absolute inset-0 pointer-events-none" style={{
         background: 'radial-gradient(ellipse 60% 40% at 50% 60%, rgba(217,70,239,0.06) 0%, transparent 70%)',
       }} />
-      <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10 }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          left: 'max(20px, env(safe-area-inset-left, 0px))',
+          zIndex: 10,
+        }}
+      >
         <LocaleToggle />
       </div>
 
