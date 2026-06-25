@@ -1279,7 +1279,7 @@ Use with chat:
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
@@ -1757,7 +1757,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--wait') wait = true;
     }
     if ((!images.length && !video) || !script) {
-      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
       process.exit(1);
     }
 
@@ -1776,7 +1776,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       const valid = validateVideoFile(video, {
         maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
-        ...(selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' ? {
+        ...(selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' ? {
           minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
           minSide: SEEDANCE_MIN_VIDEO_SIDE,
           maxSide: SEEDANCE_MAX_VIDEO_SIDE,
@@ -1791,11 +1791,28 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       if (!videoUrl) process.exit(1);
       process.stderr.write(`📹 Uploaded: ${path.basename(video)}\n`);
     }
+    const resolvedImages = [];
+    for (const image of images) {
+      if (isHttpUrl(image)) {
+        resolvedImages.push(image);
+        continue;
+      }
+      const valid = validateImage(image);
+      if (!valid.ok) {
+        console.error(`❌ Cannot upload: ${path.basename(image)}\n   ${valid.error}`);
+        process.exit(1);
+      }
+      process.stderr.write(`🖼️  Uploading ${path.basename(image)} (${(fs.statSync(image).size/1024/1024).toFixed(1)}MB)...\n`);
+      const imageUrl = await uploadFileViaSignedUrl(baseUrl, headers, undefined, image, valid.mime);
+      if (!imageUrl) process.exit(1);
+      resolvedImages.push(imageUrl);
+      process.stderr.write(`🖼️  Uploaded: ${path.basename(image)}\n`);
+    }
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
     const vArgs = videoUrl
-      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: (selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast') ? 'feature' : 'base' }
-      : { script, images, videoModel: selectedVideoModel, videoResolution };
+      ? { videoUrl, editPrompt: script, images: resolvedImages, videoModel: selectedVideoModel, videoResolution, referType: (selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini') ? 'feature' : 'base' }
+      : { script, images: resolvedImages, videoModel: selectedVideoModel, videoResolution };
     const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;

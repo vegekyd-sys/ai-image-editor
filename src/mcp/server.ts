@@ -235,10 +235,11 @@ IMPORTANT:
 - script should use <<<media_N>>> format (from makaron_write_video_script output)
 - Most video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds. Use makaron_get_video_status to poll.
 - Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for single-image.
-- Resolution: omit or use "auto" for the selected model default. seedance-fast/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k.
+- Resolution: omit or use "auto" for the selected model default. seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k.
 
 Models:
 - seedance-fast (default) — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
+- seedance-mini — SeeDance 2.0 Mini via Evolink, lower-cost 480p/720p route for drafts and multi-size tests
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
 - kling — Kling v3-omni, supports 720p/1080p/4k
 - grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
@@ -252,7 +253,7 @@ Style: Cinematic, warm golden light.`,
       images: z.array(z.string().url()).min(1).max(7).describe('Publicly accessible image URLs'),
       duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
-      videoModel: z.enum(['seedance-fast', 'seedance', 'kling', 'grok']).optional().describe('Video model: seedance-fast (default), seedance (standard/1080p), kling (1080p/4k), or grok (fastest single-image-to-video with native audio)'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok']).optional().describe('Video model: seedance-fast (default), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (1080p/4k), or grok (fastest single-image-to-video with native audio)'),
       videoResolution: z.enum(['auto', '480p', '720p', '1080p', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default.'),
     },
     async (params) => {
@@ -301,7 +302,7 @@ IMPORTANT:
 - SeeDance video editing requires target ≤15s and ≤1080p input video, matching the normal frontend upload flow.
 - When referType is "base": the video is the starting point for editing. Images serve as additional references only (no first_frame).
 - When referType is "feature": the video provides style/motion reference. Images define the actual content.
-- For videoModel "seedance-fast" or "seedance", use referType "feature" (default for SeeDance). Base/direct edit is Kling-only.
+- For videoModel "seedance-fast", "seedance-mini", or "seedance", use referType "feature" (default for SeeDance). Base/direct edit is Kling-only.
 - images (if any) must be publicly accessible URLs
 - Most video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds. Use makaron_get_video_status to poll.
 
@@ -313,7 +314,7 @@ Example: Edit a video to add cinematic color grading:
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image but does not edit/reference videos. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
-      videoModel: z.enum(['seedance-fast', 'seedance', 'kling', 'grok']).optional().describe('Video model: seedance-fast (default reference-video edit), seedance (standard/1080p), kling (base/direct edit), or grok (single-image only; no video edit)'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok']).optional().describe('Video model: seedance-fast (default reference-video edit), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (base/direct edit), or grok (single-image only; no video edit)'),
       videoResolution: z.enum(['auto', '480p', '720p', '1080p', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
@@ -326,7 +327,7 @@ Example: Edit a video to add cinematic color grading:
         }
         const t0 = Date.now();
         const resolvedModel = params.videoModel ?? 'seedance-fast';
-        const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' || resolvedModel === 'seedance-fast' ? 'feature' : 'base');
+        const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' || resolvedModel === 'seedance-fast' || resolvedModel === 'seedance-mini' ? 'feature' : 'base');
         const result = await createVideo({
           script: params.editPrompt,
           images: params.images ?? [],

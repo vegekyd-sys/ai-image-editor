@@ -184,6 +184,7 @@ Shot 2 (3s): Close-up, ...
 
 - **Kling**: Supports dialogue with voice synthesis, real human faces, video editing (base mode). Reference video size: one .mp4/.mov, <=200MB, resolution <=2K; no documented video resolution lower bound. Use `Shot N (Xs):` format or continuous prose.
 - **SeeDance**: Best visual quality. Supports real human faces and reference video. Reference video size: .mp4/.mov, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876.
+- **SeeDance Mini**: Lower-cost Seedance route for drafts and multi-size tests. Supports 480p/720p, real human faces, image/video/audio references, and the same reference-video size limits as SeeDance.
 - **Grok 1.5**: Fastest image-to-video option with native audio. One source image can be 1-15s. It does not support multi-image or timeline/reference video editing in Makaron. Do not force `aspect_ratio`; keep the source image ratio unless the image has first been padded/created to the desired shape.
 
 ## Reference Video Usage

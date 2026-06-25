@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -8,7 +8,30 @@ describe('video model reference limits', () => {
     expect(normalizeVideoModelId()).toBe('seedance-fast')
     expect(normalizeVideoModelId('seedance')).toBe('seedance')
     expect(normalizeVideoModelId('seedance-fast')).toBe('seedance-fast')
+    expect(normalizeVideoModelId('seedance-2.0-mini')).toBe('seedance-mini')
     expect(normalizeVideoResolution('seedance-fast', 'auto')).toBe('720p')
+  })
+
+  it('routes Seedance Mini as its own Evolink provider model', () => {
+    expect(normalizeVideoResolution('seedance-mini', 'auto')).toBe('480p')
+    expect(resolveVideoGenerationRoute({ model: 'seedance-mini', resolution: 'auto' })).toMatchObject({
+      model: 'seedance-mini',
+      label: 'SeeDance 2.0 Mini',
+      provider: 'seedance',
+      providerModel: 'seedance-2.0-mini-reference-to-video',
+      resolution: '480p',
+    })
+    expect(resolveVideoGenerationRoute({ model: 'seedance-mini', resolution: '720p' })).toMatchObject({
+      providerModel: 'seedance-2.0-mini-reference-to-video',
+      resolution: '720p',
+    })
+    expect(estimateVideoCredits({ model: 'seedance-mini', resolution: '480p', durationSec: 15, imageCount: 2 })).toBe(168)
+    expect(estimateVideoCredits({ model: 'seedance-mini', resolution: '720p', durationSec: 15, imageCount: 2 })).toBe(360)
+  })
+
+  it('maps non-standard vertical reference videos to supported Seedance aspect ratios', () => {
+    expect(resolveClosestSupportedAspectRatio('seedance-mini', 496, 864)).toBe('9:16')
+    expect(resolveClosestSupportedAspectRatio('seedance-fast', 1920, 1080)).toBe('16:9')
   })
 
   it('fails fast before calling Kling with a reference video longer than 10s', async () => {
@@ -33,6 +56,7 @@ describe('video model reference limits', () => {
       images: [],
       videoUrls: ['https://example.com/short.mp4'],
       referenceVideoDuration: 8,
+      referenceVideoMetas: [{ width: 720, height: 1280, fileSizeBytes: 1_000_000 }],
       duration: 15,
       videoModel: 'kling',
     })
@@ -48,7 +72,7 @@ describe('video model reference limits', () => {
       images: [],
       videoUrls: ['https://example.com/tiny.mp4'],
       referenceVideoDuration: 8,
-      referenceVideoMetas: [{ width: 320, height: 320 }],
+      referenceVideoMetas: [{ width: 320, height: 320, fileSizeBytes: 1_000_000 }],
       duration: 8,
       videoModel: 'seedance',
     })
@@ -66,7 +90,7 @@ describe('video model reference limits', () => {
       images: [],
       videoUrls: ['https://example.com/valid.mp4'],
       referenceVideoDuration: 8,
-      referenceVideoMetas: [{ width: 720, height: 1280 }],
+      referenceVideoMetas: [{ width: 720, height: 1280, fileSizeBytes: 1_000_000 }],
       duration: 8,
       videoModel: 'seedance',
     })
@@ -76,13 +100,43 @@ describe('video model reference limits', () => {
     expect(result.message).toContain('EVOLINK_API_KEY')
   })
 
+  it('keeps Seedance Mini video references on Mini guardrails', async () => {
+    const tiny = await createVideo({
+      script: 'Mini tiny reference\n\nRestyle <<<media_1>>>.',
+      images: [],
+      videoUrls: ['https://example.com/tiny.mp4'],
+      referenceVideoDuration: 8,
+      referenceVideoMetas: [{ width: 320, height: 320, fileSizeBytes: 1_000_000 }],
+      duration: 8,
+      videoModel: 'seedance-mini',
+    })
+
+    expect(tiny.success).toBe(false)
+    expect(tiny.message).toContain('SeeDance 2.0 Mini reference video size')
+    expect(tiny.message).toContain('409,600-2,086,876')
+
+    const valid = await createVideo({
+      script: 'Mini valid reference\n\nRestyle <<<media_1>>>.',
+      images: [],
+      videoUrls: ['https://example.com/valid.mp4'],
+      referenceVideoDuration: 8,
+      referenceVideoMetas: [{ width: 720, height: 1280, fileSizeBytes: 1_000_000 }],
+      duration: 8,
+      videoModel: 'seedance-mini',
+    })
+
+    expect(valid.success).toBe(false)
+    expect(valid.message).not.toContain('reference video size')
+    expect(valid.message).toContain('EVOLINK_API_KEY')
+  })
+
   it('does not invent a Kling reference-video lower resolution limit', async () => {
     const result = await createVideo({
       script: 'Tiny Kling reference\n\nRestyle <<<media_1>>>.',
       images: [],
       videoUrls: ['https://example.com/tiny.mp4'],
       referenceVideoDuration: 8,
-      referenceVideoMetas: [{ width: 320, height: 320 }],
+      referenceVideoMetas: [{ width: 320, height: 320, fileSizeBytes: 1_000_000 }],
       duration: 8,
       videoModel: 'kling',
     })
@@ -98,7 +152,7 @@ describe('video model reference limits', () => {
       images: [],
       videoUrls: ['https://example.com/large.mp4'],
       referenceVideoDuration: 8,
-      referenceVideoMetas: [{ width: 2560, height: 1440 }],
+      referenceVideoMetas: [{ width: 2560, height: 1440, fileSizeBytes: 1_000_000 }],
       duration: 8,
       videoModel: 'kling',
     })

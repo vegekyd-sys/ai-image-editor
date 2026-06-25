@@ -8,6 +8,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-25',
+    en: { title: 'SeeDance Mini', items: [
+      'SeeDance 2.0 Mini is now available for lower-cost 480p/720p video drafts.',
+      'Mini reference videos now keep the real timeline source, inferred aspect ratio, and correct credit logs.',
+    ]},
+    zh: { title: 'SeeDance Mini', items: [
+      'SeeDance 2.0 Mini 上线，可用于更低成本的 480p/720p 视频草稿。',
+      'Mini 参考视频现在会保留真实时间线来源、自动推断比例，并正确记录计费。',
+    ]},
+  },
+  {
     date: '2026-06-21',
     en: { title: 'Major Video Model Upgrade', items: [
       'Grok 1.5 is here: turn a photo into video in about 30–40 seconds, with surprisingly strong results.',
