@@ -273,13 +273,17 @@ export default function TopBar({ page }: TopBarProps) {
                 data-makaron-user-menu-trigger="true"
                 onClick={() => setUserMenuOpen(v => !v)}
                 style={{
-                  background: userMenuOpen ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  borderRadius: 12,
+                  WebkitAppearance: 'none',
+                  appearance: 'none',
+                  background: 'transparent',
+                  border: '0',
+                  boxShadow: 'none',
+                  outline: 'none',
+                  borderRadius: 0,
                   cursor: 'pointer',
                   fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
                   color: userMenuOpen ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.45)',
-                  transition: 'color 0.2s, background 0.2s, border-color 0.2s',
+                  transition: 'color 0.2s',
                   display: 'flex', alignItems: 'center', gap: 4,
                   minWidth: 44,
                   minHeight: 44,
