@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 
 const cliPath = new URL('../bin/makaron.mjs', import.meta.url);
@@ -15,7 +15,8 @@ const server = http.createServer(async (req, res) => {
   req.on('data', chunk => chunks.push(chunk));
   await new Promise(resolve => req.on('end', resolve));
   const rawBody = Buffer.concat(chunks).toString('utf-8');
-  const body = rawBody ? JSON.parse(rawBody) : null;
+  const contentType = req.headers['content-type'] || '';
+  const body = rawBody && String(contentType).includes('application/json') ? JSON.parse(rawBody) : null;
   const url = new URL(req.url, 'http://127.0.0.1');
   requests.push({ method: req.method, pathname: url.pathname, search: url.search, body });
 
@@ -58,8 +59,31 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/storage/upload-url') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    sendJson(200, {
+      uploadUrl: `${baseUrl}/upload/mock-image`,
+      token: 'signed_upload_token',
+      path: 'mock/upload.jpg',
+      publicUrl: 'https://cdn.example/uploaded-image.jpg',
+      contentType: body.contentType,
+    });
+    return;
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/upload/mock-image') {
+    assert.equal(req.headers.authorization, 'Bearer signed_upload_token');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end('{}');
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/projects/create') {
-    sendJson(200, { projectId: 'project-auto-1', snapshots: [] });
+    const snapshots = (body?.imageUrls || []).map((imageUrl, index) => ({
+      snapshotId: `snap_uploaded_${index + 1}`,
+      imageUrl,
+    }));
+    sendJson(200, { projectId: body?._addToProject || 'project-auto-1', snapshots });
     return;
   }
 
@@ -181,6 +205,11 @@ const baseUrl = await new Promise(resolve => {
 });
 
 const tmpHome = mkdtempSync(path.join(os.tmpdir(), 'makaron-cli-smoke-'));
+const tinyImagePath = path.join(tmpHome, 'tiny.jpg');
+writeFileSync(tinyImagePath, Buffer.from([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+  0xff, 0xd9,
+]));
 
 function runCli(args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -236,12 +265,14 @@ try {
     [['--help'], /Makaron CLI/],
     [['login', '--help'], /Usage: makaron login/],
     [['create', '--help'], /Usage: makaron create/],
-    [['chat', '--help'], /Usage: makaron chat/],
+    [['chat', '--help'], /--skill <id\|label\|name>/],
     [['responses', '--help'], /Responses commands:/],
     [['responses', 'get', '--help'], /Usage: makaron responses get/],
     [['responses', 'watch', '--help'], /Usage: makaron responses watch/],
     [['responses', 'list', '--help'], /Usage: makaron responses list/],
     [['list', '--help'], /Usage: makaron list/],
+    [['setup', '--help'], /Usage: makaron setup/],
+    [['install-skill', '--help'], /Usage: makaron install-skill/],
     [['project', '--help'], /Project commands:/],
     [['project', 'media', '--help'], /Usage: makaron project media/],
     [['abort', '--help'], /Usage: makaron abort/],
@@ -285,6 +316,30 @@ try {
     const runRequest = requests.find(req => req.pathname === '/api/agent/run');
     assert.equal(runRequest?.body?.projectId, 'project-auto-1');
     assert.equal(runRequest?.body?.prompt, 'make a compact image');
+  }
+
+  {
+    const result = await expectSuccess(['chat', '--project', 'project-existing-1', '--image', tinyImagePath, '--json', '-b', 'use this reference']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.projectId, 'project-existing-1');
+
+    const uploadUrlRequest = requests.filter(req => req.pathname === '/api/storage/upload-url').at(-1);
+    assert.equal(uploadUrlRequest?.body?.projectId, 'project-existing-1');
+    assert.equal(uploadUrlRequest?.body?.filename, 'tiny.jpg');
+    assert.equal(uploadUrlRequest?.body?.contentType, 'image/jpeg');
+
+    const signedPutRequest = requests.filter(req => req.pathname === '/upload/mock-image').at(-1);
+    assert.equal(signedPutRequest?.method, 'PUT');
+
+    const createRequest = requests.filter(req => req.pathname === '/api/projects/create').at(-1);
+    assert.deepEqual(createRequest?.body, {
+      _addToProject: 'project-existing-1',
+      imageUrls: ['https://cdn.example/uploaded-image.jpg'],
+    });
+
+    const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
+    assert.equal(runRequest?.body?.projectId, 'project-existing-1');
+    assert.equal(runRequest?.body?.prompt, 'use this reference');
   }
 
   {
