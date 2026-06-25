@@ -293,6 +293,8 @@ const en = {
   'model.kling.desc': 'Premium 4K output, fast, with built-in sound.',
   'model.seedanceFast.name': 'SeeDance 2.0 Fast',
   'model.seedanceFast.desc': 'Default video model with the best daily speed and cost balance.',
+  'model.seedanceMini.name': 'SeeDance 2.0 Mini',
+  'model.seedanceMini.desc': 'Lower-cost Seedance route for drafts and multi-size tests.',
   'model.seedance.name': 'SeeDance 2.0',
   'model.seedance.desc': 'Higher-quality path for final renders, with higher cost.',
   'model.grok.name': 'Grok 1.5',

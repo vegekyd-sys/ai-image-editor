@@ -15,6 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { createInterface } from 'readline';
 import { execFileSync } from 'child_process';
+import { fileURLToPath } from 'url';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -267,14 +268,15 @@ function printChatHelp() {
   console.log(`Makaron chat — create and edit with Makaron Agent
 
 Usage:
-  makaron chat --project <id|auto> [options] "your message"
+  makaron chat --project <id|auto> [options] [--skill <id|label|name>] "your message"
 
 Options:
   --project <id|auto>       Project to work in. Use "auto" to create one.
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
+  --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --model <name>            Preferred image/model route.
-  --video-model <name>      Preferred video model: seedance-fast, seedance, kling, or grok.
+  --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, or grok.
   --video-resolution <res>  Video resolution: auto, 480p, 720p, 1080p, or 4k.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
@@ -290,6 +292,9 @@ What you can ask:
 
   Video from image or timeline
     makaron chat --project <id> "make this into a 5 second cinematic video"
+
+  Marketplace skill
+    makaron chat --project auto --image selfie.jpg --skill "Football Captain" "make this cinematic"
 
   Fix one video moment from a screenshot
     makaron chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"
@@ -1026,6 +1031,25 @@ async function uploadFileViaSignedUrl(baseUrl, headers, projectId, filePath, con
   return publicUrl;
 }
 
+async function uploadImageFilesViaSignedUrl(baseUrl, headers, projectId, imagePaths) {
+  const urls = [];
+  for (const imagePath of imagePaths) {
+    const valid = validateImage(imagePath);
+    if (!valid.ok) {
+      process.stderr.write(`❌ Cannot upload: ${path.basename(imagePath)}\n   ${valid.error}\n`);
+      process.exit(1);
+    }
+    process.stderr.write(`📤 Uploading ${path.basename(imagePath)}...\n`);
+    const url = await uploadFileViaSignedUrl(baseUrl, headers, projectId, imagePath, valid.mime);
+    if (!url) {
+      process.stderr.write(`❌ Failed to upload image: ${imagePath}\n`);
+      process.exit(1);
+    }
+    urls.push(url);
+  }
+  return urls;
+}
+
 function imageToArg(imgPath) {
   if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) return imgPath;
   return readImageAsDataUrl(imgPath);
@@ -1197,6 +1221,8 @@ function printRootHelp() {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
 
 Commands:
+  setup                              Install makaron-cli globally and add the Agent Skill
+  install-skill                     Install Makaron Agent Skill into your coding agent
   register --json                    Get challenge for agent self-registration
   register --verify --challenge-id <id> --answer <n>  Verify and save API key
   claim                              Get claim URL for human to link account
@@ -1208,6 +1234,7 @@ Commands:
   create --title "name"              Create empty project (text-to-image)
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
+  chat --project <id> --skill <id>   Use or auto-install a marketplace skill
   chat --project <id> --video <file> Attach video to conversation
   chat --project <id> -b "message"   Background: submit and print runId
   chat --project <id> --stream "msg" Legacy: stream SSE in real-time
@@ -1232,13 +1259,56 @@ Environment:
 `);
 }
 
+function installAgentSkill(values = []) {
+  if (hasHelpFlag(values)) {
+    console.log('Usage: makaron install-skill [--global] [--agent <agent>] [--yes]');
+    return;
+  }
+
+  const skillDir = fileURLToPath(new URL('../skills/makaron', import.meta.url));
+  const skillFile = path.join(skillDir, 'SKILL.md');
+  if (!fs.existsSync(skillFile)) {
+    console.error(`Makaron Agent Skill not found at ${skillFile}`);
+    process.exit(1);
+  }
+
+  execFileSync('npx', [
+    '-y',
+    'skills',
+    'add',
+    skillDir,
+    '--skill',
+    'makaron',
+    '--copy',
+    ...values,
+  ], { stdio: 'inherit' });
+}
+
+function setupMakaron(values = []) {
+  if (hasHelpFlag(values)) {
+    console.log('Usage: makaron setup [--agent <agent>]');
+    return;
+  }
+
+  const version = getCliVersion();
+  console.error(`Installing ${NPM_PACKAGE_NAME}@${version} globally...`);
+  execFileSync('npm', ['install', '-g', `${NPM_PACKAGE_NAME}@${version}`], { stdio: 'inherit' });
+
+  const skillArgs = [...values];
+  if (!skillArgs.includes('--global') && !skillArgs.includes('-g')) skillArgs.unshift('--global');
+  if (!skillArgs.includes('--yes') && !skillArgs.includes('-y')) skillArgs.push('--yes');
+
+  console.error('Installing Makaron Agent Skill globally...');
+  installAgentSkill(skillArgs);
+}
+
 function printHelp(topic, subtopic) {
   if (topic === 'login') {
     console.log('Usage: makaron login');
   } else if (topic === 'create') {
     console.log('Usage: makaron create --image <file> [--image <file2>] | --image-url <url> | --title "name"');
   } else if (topic === 'chat') {
-    console.log('Usage: makaron chat --project <id|auto> [--image <file>] [--video <file|url>] [--stream] [--background|-b] [--json] "your message"');
+    printChatHelp();
   } else if (topic === 'responses' || topic === 'run') {
     if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]');
     else if (subtopic === 'watch') console.log('Usage: makaron responses watch <runId> [--jsonl] [--interval <ms>]');
@@ -1259,6 +1329,10 @@ function printHelp(topic, subtopic) {
 `);
   } else if (topic === 'abort') {
     console.log('Usage: makaron abort <runId>');
+  } else if (topic === 'setup') {
+    console.log('Usage: makaron setup [--agent <agent>]');
+  } else if (topic === 'install-skill') {
+    console.log('Usage: makaron install-skill [--global] [--agent <agent>] [--yes]');
   } else if (topic === 'skills') {
     if (subtopic === 'list') console.log('Usage: makaron skills list [--json]');
     else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--json]');
@@ -1279,12 +1353,12 @@ Use with chat:
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
@@ -1332,6 +1406,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   printHelp(command, args[1]);
 } else if (command === '--version' || command === '-v' || command === 'version') {
   console.log(getCliVersion());
+} else if (command === 'setup') {
+  setupMakaron(args.slice(1));
+} else if (command === 'install-skill') {
+  installAgentSkill(args.slice(1));
 } else if (command === 'login') {
   await login();
 } else if (command === 'create') {
@@ -1403,52 +1481,28 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   // --project auto: create a new project (with images/videos if provided)
   if (!projectId || projectId === 'auto') {
-    if (chatImages.length === 0) {
-      // Create empty project (videos will be uploaded separately after)
-      process.stderr.write(`📦 Creating new project...\n`);
-      const res = await fetch(`${baseUrl}/api/projects/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ title: prompt.slice(0, 50) }),
-      });
-      if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
-      const data = await res.json();
-      projectId = data.projectId;
-      process.stderr.write(`📦 Project created: ${projectId}\n`);
-    } else {
-      // Create project with images (URLs and/or local files)
-      const base64s = imageFileList.map(imgPath => {
-        process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
-        return readImageAsDataUrl(imgPath);
-      });
-      if (imageUrlList.length) process.stderr.write(`📤 Attaching ${imageUrlList.length} URL image(s)...\n`);
-      const body = {};
-      if (base64s.length) body.imageBase64s = base64s;
-      if (imageUrlList.length) body.imageUrls = imageUrlList;
-      const res = await fetch(`${baseUrl}/api/projects/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
-      const data = await res.json();
-      projectId = data.projectId;
-      process.stderr.write(`📦 Project created: ${projectId} (${data.snapshots?.length || 0} images)\n`);
-    }
-    chatImages.length = 0;
-    imageUrlList.length = 0;
-    imageFileList.length = 0;
+    // Create an empty project first, then attach media by URL. Local images use
+    // signed upload URLs so the agent never depends on the caller's filesystem.
+    process.stderr.write(`📦 Creating new project...\n`);
+    const res = await fetch(`${baseUrl}/api/projects/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ title: prompt.slice(0, 50) }),
+    });
+    if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
+    const data = await res.json();
+    projectId = data.projectId;
+    process.stderr.write(`📦 Project created: ${projectId}\n`);
   }
   // Upload additional images to existing project
   if (imageFileList.length > 0 || imageUrlList.length > 0) {
-    const base64s = imageFileList.map(imgPath => {
-      process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
-      return readImageAsDataUrl(imgPath);
-    });
+    const uploadedImageUrls = imageFileList.length
+      ? await uploadImageFilesViaSignedUrl(baseUrl, headers, projectId, imageFileList)
+      : [];
+    const allImageUrls = [...uploadedImageUrls, ...imageUrlList];
     if (imageUrlList.length) process.stderr.write(`📤 Attaching ${imageUrlList.length} URL image(s)...\n`);
     const body = { _addToProject: projectId };
-    if (base64s.length) body.imageBase64s = base64s;
-    if (imageUrlList.length) body.imageUrls = imageUrlList;
+    if (allImageUrls.length) body.imageUrls = allImageUrls;
     const res = await fetch(`${baseUrl}/api/projects/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
@@ -1456,10 +1510,19 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     });
     if (res.ok) {
       const data = await res.json();
-      process.stderr.write(`📤 Added ${data.snapshots?.length || 0} image(s) to project\n`);
+      const addedCount = data.snapshots?.length || 0;
+      if (addedCount < allImageUrls.length) {
+        process.stderr.write(`❌ Added only ${addedCount}/${allImageUrls.length} image(s) to project; aborting run.\n`);
+        process.exit(1);
+      }
+      process.stderr.write(`📤 Added ${addedCount} image(s) to project\n`);
     } else {
-      process.stderr.write(`⚠️ Failed to upload images: ${await res.text()}\n`);
+      process.stderr.write(`❌ Failed to add images: ${await res.text()}\n`);
+      process.exit(1);
     }
+    chatImages.length = 0;
+    imageUrlList.length = 0;
+    imageFileList.length = 0;
   }
 
   const resolvedSkill = await resolveChatSkill(baseUrl, headers, activeSkill);
@@ -1757,7 +1820,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--wait') wait = true;
     }
     if ((!images.length && !video) || !script) {
-      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
       process.exit(1);
     }
 
@@ -1776,7 +1839,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       const valid = validateVideoFile(video, {
         maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
-        ...(selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' ? {
+        ...(selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' ? {
           minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
           minSide: SEEDANCE_MIN_VIDEO_SIDE,
           maxSide: SEEDANCE_MAX_VIDEO_SIDE,
@@ -1794,7 +1857,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
     const vArgs = videoUrl
-      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: (selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast') ? 'feature' : 'base' }
+      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: (selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini') ? 'feature' : 'base' }
       : { script, images, videoModel: selectedVideoModel, videoResolution };
     const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
@@ -1844,7 +1907,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);

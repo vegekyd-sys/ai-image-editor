@@ -293,6 +293,8 @@ const zh = {
   'model.kling.desc': '4K 高规格输出，速度快，内置音效。',
   'model.seedanceFast.name': 'SeeDance 2.0 Fast',
   'model.seedanceFast.desc': '默认视频模型，速度和成本更适合日常生成。',
+  'model.seedanceMini.name': 'SeeDance 2.0 Mini',
+  'model.seedanceMini.desc': '低成本 Seedance 路径，适合草稿和多尺寸测试。',
   'model.seedance.name': 'SeeDance 2.0',
   'model.seedance.desc': '标准高画质路径，适合最终成片，成本更高。',
   'model.grok.name': 'Grok 1.5',

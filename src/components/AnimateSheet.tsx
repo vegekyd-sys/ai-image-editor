@@ -596,11 +596,11 @@ export default function AnimateSheet({
                     fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
                     fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
                   }}>{t('animate.model')}</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {videoModels.map(m => (
                       <button key={m.id} onClick={() => onStateChange({ videoModel: m.id, videoResolution: 'auto' })}
                         style={{
-                          flex: 1, padding: '8px 12px', borderRadius: 10,
+                          flex: '1 1 120px', padding: '8px 12px', borderRadius: 10,
                           border: `1px solid ${videoModel === m.id ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
                           background: videoModel === m.id ? 'rgba(232,121,249,0.1)' : 'rgba(255,255,255,0.04)',
                           color: videoModel === m.id ? '#e879f9' : 'rgba(255,255,255,0.5)',

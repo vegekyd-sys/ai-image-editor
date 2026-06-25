@@ -67,6 +67,7 @@ next-env.d.ts
 /scripts/*
 !/scripts/makaron-release-check.mjs
 !/scripts/makaron-worktree-fastpath.mjs
+!/scripts/backfill-annual-subscription-credits.mjs
 
 
 # claude code local settings
