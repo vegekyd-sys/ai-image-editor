@@ -12,7 +12,8 @@ type PurchaseRow = {
 }
 
 function getInvoiceType(invoice: Stripe.Invoice, purchase?: PurchaseRow): 'subscription' | 'topup' | 'invoice' {
-  if (purchase?.source === 'subscription' || purchase?.source === 'topup') return purchase.source
+  if (purchase?.source?.startsWith('subscription')) return 'subscription'
+  if (purchase?.source === 'topup') return 'topup'
   return invoice.billing_reason?.includes('subscription') ? 'subscription' : 'invoice'
 }
 
