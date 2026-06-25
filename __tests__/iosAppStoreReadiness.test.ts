@@ -10,7 +10,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(config.webDir).toBe('capacitor-www');
     expect(config.server?.url).toBeUndefined();
     expect(config.server?.allowNavigation).toContain('www.makaron.app');
-    expect(config.server?.allowNavigation).toContain('ai-image-editor-fdi797ko7-vegekyd-sys-projects.vercel.app');
+    expect(config.server?.allowNavigation).toContain('makaron.app');
+    expect(config.server?.allowNavigation).toContain('cdn.makaron.app');
+    expect(config.server?.allowNavigation).not.toContain('ai-image-editor-fdi797ko7-vegekyd-sys-projects.vercel.app');
   });
 
   it('keeps the native iOS webview locked to app-like viewport behavior', () => {
@@ -46,7 +48,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(shell).toContain('viewport-fit=cover');
     expect(shell).toContain('SplashScreen');
     expect(shell).toContain('Opening Makaron');
-    expect(shell).toContain('https://ai-image-editor-fdi797ko7-vegekyd-sys-projects.vercel.app/home');
+    expect(shell).toContain('https://www.makaron.app/home');
+    expect(shell).not.toContain('ai-image-editor-fdi797ko7-vegekyd-sys-projects.vercel.app');
     expect(shell).toContain('Cannot reach Makaron');
   });
 
