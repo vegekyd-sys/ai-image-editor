@@ -90,11 +90,12 @@ export default function LoginPage() {
   }, [resendCooldown])
 
   function getReturnUrl(): string {
-    return localStorage.getItem('mkr_return_url') || ''
+    return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
   }
 
   function redirectAfterAuth() {
     let returnUrl = getReturnUrl()
+    sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
     // mkr_return_text and mkr_return_skill are consumed by the home page on mount
     const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
@@ -239,7 +240,8 @@ export default function LoginPage() {
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
         trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
-        let returnUrl = localStorage.getItem('mkr_return_url') || ''
+        let returnUrl = getReturnUrl()
+        sessionStorage.removeItem('mkr_return_url')
         localStorage.removeItem('mkr_return_url')
         // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
         const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)

@@ -1054,6 +1054,15 @@ export default function AgentChatView({
     openInlineImagePreview(previewSrc, snapIdx, triggerEl);
   }, [getSnapshotIndex, messages, openInlineImagePreview]);
 
+  const handleGeneratedImageClick = useCallback((messageId: string, e?: React.MouseEvent) => {
+    const triggerEl = e?.currentTarget as HTMLElement | undefined;
+    const imgEl = triggerEl?.querySelector('img') as HTMLImageElement | null;
+    const msg = messages.find(m => m.id === messageId);
+    const imgRect = imgEl?.getBoundingClientRect() || triggerEl?.getBoundingClientRect();
+    const imgSrc = msg?.image || imgEl?.src || '';
+    onImageTap(messageId, imgRect, imgSrc);
+  }, [messages, onImageTap]);
+
   const handlePreviewSnapshot = useCallback((index: number, triggerEl?: HTMLElement | null) => {
     const snapshot = snapshots[index];
     const previewSrc = snapshot?.imageUrl || snapshot?.image || '';
@@ -1412,7 +1421,7 @@ export default function AgentChatView({
                       const snapIdx = getSnapshotIndex(msg.id);
                       return (
                         <button
-                          onClick={(e) => handleInlineImageClick(msg.id, e)}
+                          onClick={(e) => handleGeneratedImageClick(msg.id, e)}
                           className="block w-full mt-3 active:opacity-75 transition-opacity relative"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}

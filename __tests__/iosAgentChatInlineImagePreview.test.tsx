@@ -10,7 +10,7 @@ vi.mock('@/lib/supabase/storage', () => ({
 }));
 
 describe('AgentChatView inline image preview', () => {
-  it('opens a square CUI preview instead of navigating to GUI', () => {
+  it('navigates generated message images back to GUI', () => {
     const onImageTap = vi.fn();
     const message: Message = {
       id: 'msg-image',
@@ -46,8 +46,12 @@ describe('AgentChatView inline image preview', () => {
 
     fireEvent.click(screen.getByAltText('Generated'));
 
-    expect(screen.getByTestId('cui-inline-image-preview')).toBeTruthy();
-    expect(onImageTap).not.toHaveBeenCalled();
+    expect(onImageTap).toHaveBeenCalledWith(
+      'msg-image',
+      expect.objectContaining({ width: expect.any(Number), height: expect.any(Number) }),
+      'https://example.com/generated.jpg',
+    );
+    expect(screen.queryByTestId('cui-inline-image-preview')).toBeNull();
   });
 
   it('opens the dev-style image ref popover from an @ image reference chip', () => {

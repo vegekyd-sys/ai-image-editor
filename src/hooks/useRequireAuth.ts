@@ -11,10 +11,18 @@ export function useRequireAuth() {
   userRef.current = user
   loadingRef.current = loading
 
+  const rememberReturnUrl = useCallback(() => {
+    const current = window.location.pathname + window.location.search
+    const existing = sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url')
+    const target = existing || current
+    localStorage.setItem('mkr_return_url', target)
+    sessionStorage.setItem('mkr_return_url', target)
+  }, [])
+
   const requireAuth = useCallback(async (): Promise<User | null> => {
     if (!loadingRef.current) {
       if (userRef.current) return userRef.current
-      localStorage.setItem('mkr_return_url', window.location.pathname + window.location.search)
+      rememberReturnUrl()
       router.push('/login')
       return null
     }
@@ -30,10 +38,10 @@ export function useRequireAuth() {
     })
 
     if (resolved) return resolved
-    localStorage.setItem('mkr_return_url', window.location.pathname + window.location.search)
+    rememberReturnUrl()
     router.push('/login')
     return null
-  }, [router])
+  }, [rememberReturnUrl, router])
 
   return requireAuth
 }

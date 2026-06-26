@@ -157,6 +157,7 @@ function HomePageInner() {
   const detailSwipeRef = useRef<{ startY: number; startIdx: number; swiping: boolean } | null>(null)
   const wheelCooldownRef = useRef(false)
   const [kbInset, setKbInset] = useState(0)
+  const [nativeKbInset, setNativeKbInset] = useState(0)
   const [textareaFocused, setTextareaFocused] = useState(false)
   const scrollStartY = useRef<number | null>(null)
   const inlineInputRef = useRef<HTMLDivElement>(null)
@@ -337,6 +338,7 @@ function HomePageInner() {
     if (text) { returnTextRef.current = text; localStorage.removeItem('mkr_return_text') }
     localStorage.removeItem('mkr_return_skill')
     localStorage.removeItem('mkr_return_url')
+    sessionStorage.removeItem('mkr_return_url')
     // Welcome credits popup — activates new user + grants credits
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -495,6 +497,28 @@ function HomePageInner() {
     vv.addEventListener('scroll', update)
     return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update) }
   }, [])
+  useEffect(() => {
+    if (!isIOSAppShell) return
+    const readNativeInset = () => {
+      const raw = getComputedStyle(document.documentElement)
+        .getPropertyValue('--makaron-native-keyboard-inset')
+        .trim()
+      const next = Number.parseFloat(raw)
+      setNativeKbInset(Number.isFinite(next) ? Math.max(0, Math.round(next)) : 0)
+    }
+    const onNativeInset = (event: Event) => {
+      const inset = (event as CustomEvent<{ inset?: number }>).detail?.inset
+      if (typeof inset === 'number') {
+        setNativeKbInset(Math.max(0, Math.round(inset)))
+      } else {
+        readNativeInset()
+      }
+    }
+    readNativeInset()
+    window.addEventListener('makaron-keyboard-inset-change', onNativeInset)
+    return () => window.removeEventListener('makaron-keyboard-inset-change', onNativeInset)
+  }, [isIOSAppShell])
+  const effectiveKbInset = Math.max(kbInset, nativeKbInset)
 
   useEffect(() => {
     const el = inputBoxRef.current
@@ -647,6 +671,21 @@ function HomePageInner() {
     }
     setShowFixedInput(textareaFocused || scrollTop > 24 || !inlineMostlyVisible)
   }, [isDesktop, textareaFocused])
+  const keepSkillComposerAboveKeyboard = useCallback(() => {
+    setTextareaFocused(true)
+    if (!isDesktop) setShowFixedInput(true)
+    const sync = () => {
+      const vv = window.visualViewport
+      if (vv) {
+        const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+        setKbInset(Math.round(inset))
+      }
+      inputWrapperRef.current?.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'smooth' })
+    }
+    sync()
+    window.setTimeout(sync, 80)
+    window.setTimeout(sync, 220)
+  }, [isDesktop])
 
   useEffect(() => {
     if (isDesktop) return
@@ -1379,7 +1418,7 @@ function HomePageInner() {
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
               onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
-              onTextareaFocus={() => setTextareaFocused(true)}
+              onTextareaFocus={keepSkillComposerAboveKeyboard}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
               selectedSkill={selectedSkill}
@@ -1506,7 +1545,7 @@ function HomePageInner() {
         {/* ── Bottom Input Box (fixed, slides in when inline is off-screen) ── */}
         <div ref={inputWrapperRef} data-makaron-home-fixed-composer="true" style={{
           position: 'fixed', left: 0, right: 0,
-          bottom: textareaFocused && kbInset > 0 ? `${kbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
+          bottom: textareaFocused && effectiveKbInset > 0 ? `${effectiveKbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
           zIndex: Z.INPUT,
           pointerEvents: 'none',
           ...(isDesktop ? {
@@ -1550,7 +1589,7 @@ function HomePageInner() {
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
               onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
-              onTextareaFocus={() => setTextareaFocused(true)}
+              onTextareaFocus={keepSkillComposerAboveKeyboard}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
               selectedSkill={selectedSkill}
