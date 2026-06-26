@@ -578,7 +578,8 @@ function HomePageInner() {
         const video = slide.querySelector('video') as HTMLVideoElement | null
         if (!video) return
         if (slide.getAttribute('data-skill-id') === selectedDetail.id) {
-          video.muted = true
+          video.muted = false
+          video.volume = 1
           video.playsInline = true
           try {
             if (video.readyState >= 1) video.currentTime = 0
@@ -586,10 +587,8 @@ function HomePageInner() {
             // Some iOS media states reject currentTime before metadata.
           }
           video.play().catch(() => {
-            window.setTimeout(() => {
-              video.muted = true
-              void video.play().catch(() => undefined)
-            }, 80)
+            video.muted = true
+            void video.play().catch(() => undefined)
           })
         } else {
           video.muted = true
