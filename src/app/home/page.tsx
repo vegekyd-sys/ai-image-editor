@@ -31,6 +31,7 @@ const IOS_SKILL_BACK_LOCK_PX = 10
 const IOS_SKILL_BACK_COMMIT_PX = 88
 const IOS_SKILL_BACK_CLOSE_MS = 180
 const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
+const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'
 
 function getHomeScrollContainer(node: HTMLElement | null): HTMLElement | null {
   if (!node) return null
@@ -206,12 +207,28 @@ function HomePageInner() {
     }, 0)
   }, [])
 
+  const rememberIOSSkillReturn = useCallback((skillId: string | null | undefined) => {
+    if (!isIOSAppShell || !skillId) return
+    const returnPath = `/home/${skillId}`
+    localStorage.setItem('mkr_return_url', returnPath)
+    sessionStorage.setItem('mkr_return_url', returnPath)
+    localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
+    sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
+  }, [isIOSAppShell])
+
+  const clearIOSSkillReturn = useCallback(() => {
+    if (!isIOSAppShell) return
+    localStorage.removeItem(IOS_PENDING_HOME_SKILL_KEY)
+    sessionStorage.removeItem(IOS_PENDING_HOME_SKILL_KEY)
+  }, [isIOSAppShell])
+
   const writeSkillDetailPath = useCallback((skillId: string, mode: 'push' | 'replace') => {
     const state = isIOSAppShell ? { makaronHomeSkill: true, skillId } : null
     const url = isIOSAppShell ? '/home' : `/home?skill=${encodeURIComponent(skillId)}`
     if (mode === 'push') window.history.pushState(state, '', url)
     else window.history.replaceState(state, '', url)
-  }, [isIOSAppShell])
+    if (!user) rememberIOSSkillReturn(skillId)
+  }, [isIOSAppShell, rememberIOSSkillReturn, user])
 
   const resetSkillBackPan = useCallback(() => {
     skillBackPanRef.current = { tracking: false, locked: false, startX: 0, startY: 0, lastX: 0, startTime: 0 }
@@ -236,12 +253,13 @@ function HomePageInner() {
     setSelectedSkill(null)
     createInput.clear()
     if (!options?.preservePan) resetSkillBackPan()
+    clearIOSSkillReturn()
     detailPathActiveRef.current = false
     if (historyMode === 'pushHome') {
       if (isIOSAppShell) window.history.replaceState(null, '', '/home')
       else window.history.pushState(null, '', '/home')
     }
-  }, [createInput, isIOSAppShell, resetSkillBackPan])
+  }, [clearIOSSkillReturn, createInput, isIOSAppShell, resetSkillBackPan])
 
   const handleSkillBackPanStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     if (!selectedDetailRef.current || isDesktop || !isIOSAppShell || e.touches.length !== 1) return
@@ -560,12 +578,35 @@ function HomePageInner() {
     }
   }, [blurHomeComposers])
 
+  const unlockHomeScroll = useCallback((force = false) => {
+    if (!force && selectedDetailRef.current) return
+    document.body.style.overflow = ''
+    document.documentElement.style.overflow = ''
+  }, [])
+
   useEffect(() => {
     if (selectedDetail) {
       document.body.style.overflow = 'hidden'
-      return () => { document.body.style.overflow = '' }
+      document.documentElement.style.overflow = 'hidden'
+      return () => unlockHomeScroll(true)
     }
-  }, [selectedDetail])
+    unlockHomeScroll(true)
+  }, [selectedDetail, unlockHomeScroll])
+
+  useEffect(() => {
+    if (!isIOSAppShell) return
+    const unlockIfNoDetail = () => unlockHomeScroll(false)
+    window.addEventListener('pageshow', unlockIfNoDetail)
+    window.addEventListener('focus', unlockIfNoDetail)
+    window.addEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)
+    window.addEventListener('makaron-ios-page-stack-push', unlockIfNoDetail)
+    return () => {
+      window.removeEventListener('pageshow', unlockIfNoDetail)
+      window.removeEventListener('focus', unlockIfNoDetail)
+      window.removeEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)
+      window.removeEventListener('makaron-ios-page-stack-push', unlockIfNoDetail)
+    }
+  }, [isIOSAppShell, unlockHomeScroll])
 
   // Unmute active slide's video, mute all others (after transition completes)
   useEffect(() => {
@@ -604,9 +645,12 @@ function HomePageInner() {
     }
   }, [selectedDetail])
 
-  // Open detail overlay from URL param (?skill={id})
+  // Open detail overlay from URL param (?skill={id}) or iOS login return state.
   useEffect(() => {
-    const skillId = searchParams.get('skill')
+    const pendingIOSSkillId = isIOSAppShell
+      ? (sessionStorage.getItem(IOS_PENDING_HOME_SKILL_KEY) || localStorage.getItem(IOS_PENDING_HOME_SKILL_KEY))
+      : null
+    const skillId = searchParams.get('skill') || pathSkillId || pendingIOSSkillId
     if (!skillId || homeSkills.length === 0 || selectedDetail) return
     const skill = homeSkills.find(s => s.id === skillId)
     if (!skill) return
@@ -618,7 +662,8 @@ function HomePageInner() {
     setHeroExpanded(true)
     detailPathActiveRef.current = true
     writeSkillDetailPath(skillId, 'replace')
-  }, [homeSkills, writeSkillDetailPath]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (pendingIOSSkillId === skillId) clearIOSSkillReturn()
+  }, [clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, searchParams, selectedDetail, writeSkillDetailPath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
   const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -749,6 +794,8 @@ function HomePageInner() {
     if (!shouldReset) return
 
     const resetToTop = () => {
+      unlockHomeScroll(true)
+      document.documentElement.classList.remove('makaron-ios-project-overlay-open')
       const scrollContainer = getHomeScrollContainer(inlineInputRef.current)
       if (scrollContainer) {
         scrollContainer.scrollTop = 0
@@ -767,7 +814,7 @@ function HomePageInner() {
       window.cancelAnimationFrame(rafId)
       window.clearTimeout(timerId)
     }
-  }, [isIOSAppShell, syncFixedInputVisibility])
+  }, [isIOSAppShell, syncFixedInputVisibility, unlockHomeScroll])
 
   useEffect(() => {
     const el = inlineBoxRef.current
@@ -824,7 +871,8 @@ function HomePageInner() {
   const saveContextBeforeLogin = useCallback(() => {
     if (createInput.text.trim()) localStorage.setItem('mkr_return_text', createInput.text)
     if (activeSkill?.id) localStorage.setItem('mkr_return_skill', activeSkill.id)
-  }, [activeSkill, createInput.text])
+    if (activeSkill?.id) rememberIOSSkillReturn(activeSkill.id)
+  }, [activeSkill, createInput.text, rememberIOSSkillReturn])
 
   const saveCreateDraftBeforeLogin = useCallback(async (files: File[], prompt?: string) => {
     const homeSkill = selectedDetail || activeSkill
@@ -900,6 +948,10 @@ function HomePageInner() {
       const draft = await getCreateDraft()
       if (!draft || cancelled) return
       if (draft.homeSkillId && homeSkills.length === 0) return
+      if (draft.homeSkillId && draft.images.length === 0) {
+        await clearCreateDraft()
+        return
+      }
       if (draft.images.length === 0 && !draft.prompt) {
         await clearCreateDraft()
         return
@@ -966,13 +1018,14 @@ function HomePageInner() {
     const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
     if (files.length === 0) return
     if (!user && selectedDetail) {
+      rememberIOSSkillReturn(selectedDetail.id)
       createInput.addFiles(files)
       return
     }
     const authedUser = await requireAuth()
     if (!authedUser) return
     createInput.addFiles(files)
-  }, [createInput, requireAuth, selectedDetail, user])
+  }, [createInput, rememberIOSSkillReturn, requireAuth, selectedDetail, user])
 
   const trackUploadIntentEvent = useCallback((source: string) => {
     if (user || !activeSkill) return
@@ -1005,6 +1058,7 @@ function HomePageInner() {
               onClick={async () => {
                 if (!isActive || createInput.previews[i] || createInput.creating) return
                 if (!user && selectedDetail) {
+                  rememberIOSSkillReturn(selectedDetail.id)
                   trackUploadIntentEvent('upload_slot')
                   createInput.fileInputRef.current?.click()
                   return
@@ -1093,7 +1147,7 @@ function HomePageInner() {
         )}
       </div>
     )
-  }, [createInput, handleSlotDrop, requireAuth, selectedDetail, slotDragOver, trackUploadIntentEvent, user])
+  }, [createInput, handleSlotDrop, rememberIOSSkillReturn, requireAuth, selectedDetail, slotDragOver, trackUploadIntentEvent, user])
 
   const guestSkillCreateLabel = selectedDetail && !user
     ? createInput.files.length > 0
@@ -1169,15 +1223,17 @@ function HomePageInner() {
 
   const handleCreateOrUpload = useCallback(() => {
     if (isGuestSkillAction && createInput.files.length < requiredPhotoCount) {
+      rememberIOSSkillReturn(activeSkill?.id)
       trackUploadIntent('primary_action')
       createInput.fileInputRef.current?.click()
       return
     }
     handleCreate()
-  }, [createInput.fileInputRef, createInput.files.length, handleCreate, isGuestSkillAction, requiredPhotoCount, trackUploadIntent])
+  }, [activeSkill?.id, createInput.fileInputRef, createInput.files.length, handleCreate, isGuestSkillAction, rememberIOSSkillReturn, requiredPhotoCount, trackUploadIntent])
 
   const handleInputSlotClick = useCallback(async () => {
     if (!user && selectedDetail) {
+      rememberIOSSkillReturn(selectedDetail.id)
       trackUploadIntent('slot')
       createInput.fileInputRef.current?.click()
       return
@@ -1187,7 +1243,7 @@ function HomePageInner() {
       trackUploadIntent('slot')
       createInput.fileInputRef.current?.click()
     }
-  }, [createInput.fileInputRef, requireAuth, selectedDetail, trackUploadIntent, user])
+  }, [createInput.fileInputRef, rememberIOSSkillReturn, requireAuth, selectedDetail, trackUploadIntent, user])
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
@@ -1360,7 +1416,7 @@ function HomePageInner() {
         }} />
 
         <div style={{ display: viewMode === 'agent' || selectedDetail ? 'none' : undefined }}>
-          <TopBar page="home" />
+          <TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} />
         </div>
 
         <div style={{ display: viewMode === 'agent' ? undefined : 'none' }}>

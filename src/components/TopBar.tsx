@@ -13,6 +13,7 @@ import { requestNativePageStackPush } from '@/lib/native-page-stack'
 
 interface TopBarProps {
   page: 'home' | 'projects'
+  authReturnPath?: string | null
 }
 
 interface CreditsPayload {
@@ -35,7 +36,7 @@ function isPrimaryTopBarRoute(path: string): boolean {
   return path === '/home' || path === '/projects'
 }
 
-export default function TopBar({ page }: TopBarProps) {
+export default function TopBar({ page, authReturnPath }: TopBarProps) {
   const { user, signOut } = useAuth()
   const { locale, setLocale } = useLocale()
   const router = useRouter()
@@ -78,6 +79,14 @@ export default function TopBar({ page }: TopBarProps) {
     setUserMenuOpen(false)
     const inIOSApp = isMakaronIOSApp()
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
+    if (path === '/login' && authReturnPath) {
+      try {
+        localStorage.setItem('mkr_return_url', authReturnPath)
+        sessionStorage.setItem('mkr_return_url', authReturnPath)
+      } catch {
+        // Return URL persistence is best-effort; login still works without it.
+      }
+    }
     if (inIOSApp && isPrimaryTopBarRoute(currentPath)) {
       try {
         sessionStorage.setItem(IOS_LAST_PRIMARY_ROUTE_KEY, currentPath)
@@ -106,7 +115,7 @@ export default function TopBar({ page }: TopBarProps) {
       router.push(path)
     }
     scheduleTopBarWarm(path)
-  }, [router, scheduleTopBarWarm])
+  }, [authReturnPath, router, scheduleTopBarWarm])
 
   const handleTopBarTouchNavigate = useCallback((event: TouchEvent<HTMLButtonElement>, path: string) => {
     event.preventDefault()

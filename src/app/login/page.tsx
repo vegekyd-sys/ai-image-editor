@@ -5,13 +5,14 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
-import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
+import { isMakaronIOSApp, userAgentHasMakaronIOSToken } from '@/lib/native-app'
 import RollingTagline from '@/components/RollingTagline'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
+const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'
 
 function isInAppBrowser(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -93,13 +94,24 @@ export default function LoginPage() {
     return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
   }
 
+  function resolveReturnUrlForRuntime(returnUrl: string): string {
+    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
+    if (!skillMatch) return returnUrl
+    const skillId = skillMatch[1]
+    if (isMakaronIOSApp()) {
+      sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
+      localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
+      return '/home'
+    }
+    return `/home?skill=${encodeURIComponent(skillId)}`
+  }
+
   function redirectAfterAuth() {
     let returnUrl = getReturnUrl()
     sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
     // mkr_return_text and mkr_return_skill are consumed by the home page on mount
-    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-    if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
+    returnUrl = resolveReturnUrlForRuntime(returnUrl)
     window.location.href = returnUrl || '/'
   }
 
@@ -243,9 +255,9 @@ export default function LoginPage() {
         let returnUrl = getReturnUrl()
         sessionStorage.removeItem('mkr_return_url')
         localStorage.removeItem('mkr_return_url')
-        // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
-        const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-        if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
+        // H5 can use ?skill=, while the iOS native shell keeps /home and reopens
+        // the detail from a pending key so the native page stack stays stable.
+        returnUrl = resolveReturnUrlForRuntime(returnUrl)
         const target = returnUrl || '/home'
         const sep = target.includes('?') ? '&' : '?'
         // Small delay to ensure Supabase SDK writes session cookie before redirect

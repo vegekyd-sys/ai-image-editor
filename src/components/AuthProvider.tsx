@@ -9,6 +9,7 @@ import { isMakaronIOSApp } from '@/lib/native-app'
 import { warmProjectsListCache } from '@/lib/projects-list-warm'
 
 const AUTH_USER_CACHE_KEY = '/auth/user'
+const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
 
 export interface AuthContextType {
   user: User | null
@@ -92,11 +93,29 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }, [useNativeAuthCache, warmNativeUserCaches])
 
   const signOut = useCallback(async () => {
+    const inIOSApp = isMakaronIOSApp()
     clearUserCache()
     if (useNativeAuthCache) removeNativeJSONCache(AUTH_USER_CACHE_KEY)
+    if (inIOSApp) {
+      try {
+        sessionStorage.setItem(IOS_RESET_HOME_SCROLL_KEY, '1')
+        document.body.style.overflow = ''
+        document.body.style.position = ''
+        document.body.style.width = ''
+        document.body.style.top = ''
+        document.documentElement.style.overflow = ''
+        document.documentElement.classList.remove('makaron-ios-project-overlay-open')
+      } catch {
+        // Best-effort reset before crossing the hard sign-out boundary.
+      }
+    }
     document.cookie = 'mkr_activated=; path=/; max-age=0'
     await getSupabase().auth.signOut()
-    window.location.href = '/login'
+    if (inIOSApp) {
+      window.location.replace('/home')
+    } else {
+      window.location.href = '/login'
+    }
   }, [useNativeAuthCache])
 
   return (

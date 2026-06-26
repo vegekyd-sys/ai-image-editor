@@ -24,7 +24,13 @@ describe('iOS App Store readiness guardrails', () => {
 
   it('keeps Google available in Makaron iOS WebView with Apple as the equivalent App Store login option', () => {
     const loginPage = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
+    const authCallback = fs.readFileSync(path.join(root, 'src/app/api/auth/callback/route.ts'), 'utf8');
     expect(loginPage).toContain('userAgentHasMakaronIOSToken');
+    expect(loginPage).toContain('isMakaronIOSApp');
+    expect(loginPage).toContain("const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'");
+    expect(loginPage).toContain('resolveReturnUrlForRuntime');
+    expect(loginPage).toContain('sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)');
+    expect(loginPage).toContain("return '/home'");
     expect(loginPage).toContain('NEXT_PUBLIC_ENABLE_APPLE_LOGIN');
     expect(loginPage).toContain('inApp && appleLoginEnabled');
     expect(loginPage).toContain(') : !inApp ? (');
@@ -33,6 +39,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(loginPage).toContain("provider: 'google'");
     expect(loginPage).toContain('auth.continueWithApple');
     expect(loginPage).toContain('auth.continueWithGoogle');
+    expect(authCallback).toContain("(navigator.userAgent||'').indexOf('MakaronIOS')!==-1");
+    expect(authCallback).toContain("sessionStorage.setItem('makaron:ios-pending-home-skill-id',skillMatch[1])");
+    expect(authCallback).toContain("r='/home'");
+    expect(authCallback).toContain("r='/home?skill='+encodeURIComponent(skillMatch[1])");
   });
 
   it('tracks the migration acceptance criteria in docs', () => {
@@ -179,8 +189,14 @@ describe('iOS App Store readiness guardrails', () => {
     expect(authProvider).toContain("warmNativeJSONCache('/api/skills')");
     expect(authProvider).toContain("warmNativeJSONCache('/api/home-skills')");
     expect(authProvider).toContain('warmProjectsListCache(userId)');
+    expect(authProvider).toContain("sessionStorage.setItem(IOS_RESET_HOME_SCROLL_KEY, '1')");
+    expect(authProvider).toContain("document.documentElement.classList.remove('makaron-ios-project-overlay-open')");
+    expect(authProvider).toContain("window.location.replace('/home')");
     expect(topBar).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(topBar).toContain("writeNativeJSONCache('/api/billing/credits', d)");
+    expect(topBar).toContain('authReturnPath?: string | null');
+    expect(topBar).toContain("localStorage.setItem('mkr_return_url', authReturnPath)");
+    expect(topBar).toContain("sessionStorage.setItem('mkr_return_url', authReturnPath)");
     expect(topBar).toContain('TOPBAR_ROUTE_WARM_APIS');
     expect(topBar).toContain('isPrimaryTopBarRoute');
     expect(topBar).toContain('if (!isPrimaryTopBarRoute(path))');
@@ -452,6 +468,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bridge).toContain('makaronNative');
     expect(bridge).toContain('saveToPhotos');
     expect(bridge).toContain('pickMedia');
+    expect(bridge).toContain('configuration.preferredAssetRepresentationMode = .compatible');
+    expect(bridge).toContain('normalizedPickedImagePayload');
+    expect(bridge).toContain('jpegData(compressionQuality: 0.92)');
+    expect(bridge).toContain('return (jpegData, jpegFilename(for: filename), "image/jpeg")');
     expect(bridge).toContain('PHAssetCreationRequest.forAsset()');
     expect(bridge).toContain('UIImage(data: data)');
     expect(bridge).toContain('jpegData(compressionQuality: 0.95)');
@@ -525,11 +545,17 @@ describe('iOS App Store readiness guardrails', () => {
     expect(homePage).toContain('writeSkillDetailPath(template.id, \'push\')');
     expect(homePage).toContain('writeSkillDetailPath(t.id, \'replace\')');
     expect(homePage).toContain("const url = isIOSAppShell ? '/home' : `/home?skill=${encodeURIComponent(skillId)}`");
+    expect(homePage).toContain('IOS_PENDING_HOME_SKILL_KEY');
+    expect(homePage).toContain('rememberIOSSkillReturn');
+    expect(homePage).toContain("const skillId = searchParams.get('skill') || pathSkillId || pendingIOSSkillId");
+    expect(homePage).toContain('draft.homeSkillId && draft.images.length === 0');
+    expect(homePage).toContain("document.documentElement.style.overflow = 'hidden'");
+    expect(homePage).toContain("window.addEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)");
     expect(homePage).toContain('function SkillVideo');
     expect(homePage).toContain("slide.getAttribute('data-skill-id') === selectedDetail.id");
     expect(homePage).not.toContain('document.body.style.transform');
     expect(homePage).not.toContain('cloneNode');
-    expect(homePage).not.toContain('makaron-ios-project');
+    expect(homePage).not.toContain('data-makaron-ios-project-overlay');
   });
 
   it('keeps iOS project navigation inside a live projects-page overlay while preserving CUI pan close', () => {
