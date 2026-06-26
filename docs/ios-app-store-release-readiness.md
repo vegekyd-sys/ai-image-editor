@@ -25,6 +25,9 @@ This checklist intentionally excludes App Store product page copy and screenshot
 - Added public Support URL surface: `https://www.makaron.app/support`.
 - Added `/privacy` and `/support` to public middleware routes.
 - Added `/privacy` and `/support` to sitemap/robots public surfaces.
+- Deployed production web with `/privacy` and `/support`.
+- Set App Store Connect Privacy Policy URL to `https://www.makaron.app/privacy`.
+- Set App Store Connect Support URL to `https://www.makaron.app/support`.
 - Verified native privacy manifest and permission strings:
   - `ios/App/App/PrivacyInfo.xcprivacy`
   - `ios/App/App/Info.plist`
@@ -118,8 +121,8 @@ Must verify in App Store Connect:
 
 - App Privacy questionnaire matches actual product behavior, not only native manifest.
 - Account identifiers, user content, purchases, product interaction, diagnostics, and support communications are disclosed if Apple asks at the App Privacy level.
-- Privacy Policy URL is set to `https://www.makaron.app/privacy`.
-- Support URL is set to `https://www.makaron.app/support`.
+- Privacy Policy URL remains set to `https://www.makaron.app/privacy`.
+- Support URL remains set to `https://www.makaron.app/support`.
 
 ## Final Technical Gate Before Submit
 
@@ -172,7 +175,6 @@ Known launch caveat:
 ## Remaining P0 Before Submit
 
 - App Store product page copy and screenshots from the other agent.
-- Set Privacy Policy URL and Support URL in App Store Connect if not already filled.
 - Fill or verify App Review contact, reviewer notes, and test account in App Store Connect.
 - Confirm App Privacy questionnaire.
 - Confirm IAP/subscription screenshots, prices, territories, and localization.
