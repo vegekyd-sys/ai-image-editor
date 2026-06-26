@@ -407,10 +407,12 @@ describe('iOS App Store readiness guardrails', () => {
       'src/app/login/page.tsx',
       'src/app/mcp/page.tsx',
       'src/app/moveable-test/page.tsx',
+      'src/app/privacy/page.tsx',
       'src/app/profile/page.tsx',
       'src/app/releases/video-in-timeline/page.tsx',
       'src/app/s/[code]/page.tsx',
       'src/app/skills/page.tsx',
+      'src/app/support/page.tsx',
     ]);
     const handledByComposition = new Set([
       'src/app/agent/page.tsx',
