@@ -63,6 +63,9 @@ Subscriptions, all `READY_TO_SUBMIT`:
 Pre-submit checks still required:
 
 - Confirm all IAP/subscription review screenshots are uploaded.
+  - Use real screenshots from the current iOS app purchase UI.
+  - Do not use the old standalone Apple IAP test page or placeholder dashboard screenshots.
+  - Required surfaces: subscription plan selection, top-up list, Apple purchase sheet if available, and successful credits/subscription state after purchase.
 - Confirm all IAP/subscription localizations are user-facing and consistent with in-app UI.
 - Confirm subscription group display order and subscription display order.
 - Confirm all intended territories/prices are active.
@@ -123,6 +126,46 @@ Must verify in App Store Connect:
 - Account identifiers, user content, purchases, product interaction, diagnostics, and support communications are disclosed if Apple asks at the App Privacy level.
 - Privacy Policy URL remains set to `https://www.makaron.app/privacy`.
 - Support URL remains set to `https://www.makaron.app/support`.
+
+## App Privacy Questionnaire Recommendation
+
+Apple's questionnaire is app-level, not only native SDK-level. It should include data collected by the web app, backend, and third-party service providers used by the iOS app.
+
+Recommended first submission stance after disabling Meta marketing tracking inside the iOS native shell:
+
+- Do not choose "No, we do not collect data from this app".
+- Do not declare "Data Used to Track You" for the iOS app as long as Meta Pixel/CAPI and ads attribution remain disabled in the native shell.
+- For selected data types, choose "Data Linked to You" when App Store Connect asks whether it is linked to identity. Most Makaron data is keyed by Supabase user id or account email.
+- Purposes should generally be limited to App Functionality, Analytics, Product Personalization, and Developer's Advertising or Marketing only if that purpose is still active inside iOS. For the current native shell, avoid advertising/third-party tracking purposes.
+
+Suggested data types:
+
+| Apple category | Data type to select | Why Makaron collects it | Linked to user | Used to track |
+| --- | --- | --- | --- | --- |
+| Contact Info | Email Address | Account login, support, review/test account, receipts/account recovery | Yes | No |
+| User Content | Photos or Videos | User-uploaded input media and generated creative outputs | Yes | No |
+| User Content | Other User Content | Prompts, chat messages, project titles/descriptions, generated text, workspace files | Yes | No |
+| User Content | Customer Support | Support emails and support context when users contact us | Yes | No |
+| Purchases | Purchase History | Apple IAP top-ups/subscriptions, Stripe web billing records, credits ledger | Yes | No |
+| Identifiers | User ID | Supabase user id, app account token, API key ownership, Apple transaction ownership | Yes | No |
+| Usage Data | Product Interaction | Project creation, feature usage, credit usage, tool/model usage, paywall/checkout attempts | Yes | No |
+| Diagnostics | Crash Data | Server/client error reports and app failure diagnostics if captured by platform logs/providers | Yes | No |
+| Diagnostics | Performance Data | Latency, provider health, generation status, build/runtime health checks | Yes | No |
+| Location | Precise Location | EXIF GPS from uploaded photos, reverse-geocoded for photo context when present | Yes | No |
+
+Usually do not select unless product behavior changes:
+
+- Device ID: leave off unless an IDFA/IDFV/vendor/device identifier is intentionally collected in iOS.
+- Advertising Data: leave off for iOS native shell while Meta marketing tracking is disabled.
+- Contacts, Health, Financial Info, Browsing History, Search History, Sensitive Info: not part of current Makaron app behavior.
+
+Current location note:
+
+- The current app extracts EXIF photo GPS when present (`extractPhotoMetadata`, `/api/photo-metadata`) and may persist raw lat/lng plus a readable location in snapshot metadata. Therefore select Precise Location unless we deliberately remove or strip this behavior before submission.
+
+Implementation note:
+
+- `MarketingTracker`, `meta-pixel`, and `meta-capi` must remain suppressed for `MakaronIOS` native shell. If Meta Pixel/CAPI is re-enabled inside iOS, revisit App Privacy and likely ATT/tracking implications before submitting an update.
 
 ## Final Technical Gate Before Submit
 

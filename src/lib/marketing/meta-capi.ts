@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import type { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { MAKARON_IOS_USER_AGENT_TOKEN } from '@/lib/native-app'
 
 export type MetaCapiEventName =
   | 'CompleteRegistration'
@@ -100,6 +101,8 @@ async function recordServerMarketingEvent(input: MetaCapiInput, customData: Reco
 }
 
 export async function sendMetaCapiEvent(input: MetaCapiInput): Promise<void> {
+  if (input.request?.headers.get('user-agent')?.includes(MAKARON_IOS_USER_AGENT_TOKEN)) return
+
   const customData: Record<string, unknown> = {
     ...input.customData,
     ...(input.value !== undefined ? { value: input.value } : {}),

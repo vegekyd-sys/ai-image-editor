@@ -14,7 +14,7 @@ const sections = [
     title: 'Information we collect',
     items: [
       'Account information, such as email address and authentication identifiers.',
-      'Content you choose to upload, create, or save in Makaron, including photos, videos, prompts, chat messages, generated media, and project metadata.',
+      'Content you choose to upload, create, or save in Makaron, including photos, videos, prompts, chat messages, generated media, and project metadata. Photos may include embedded metadata such as capture time or location when present.',
       'Billing and purchase records needed to provide credits, subscriptions, top-ups, invoices, and fraud prevention. Payment card details are handled by payment providers and app store billing systems.',
       'Usage, device, diagnostic, and performance information used to operate, secure, debug, and improve the service.',
     ],
