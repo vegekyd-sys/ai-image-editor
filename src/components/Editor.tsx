@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties, type TouchEvent as ReactTouchEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
@@ -22,6 +22,10 @@ import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelin
 import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
+
+const IOS_CUI_PAN_EDGE_PX = 36;
+const IOS_CUI_PAN_COMMIT_PX = 86;
+const IOS_CUI_PAN_MIN_DX = 10;
 import { downloadAsset } from '@/lib/editor/download';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
@@ -41,6 +45,7 @@ import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
+import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache';
 import { getDefaultVideoModelId, isFastVideoRenderModel, normalizeVideoResolution } from '@/lib/video-model-capabilities';
 import { formatVideoMediaSpec } from '@/lib/media-aspect';
 import { serializeCompletionActions } from '@/lib/artifact-actions';
@@ -79,6 +84,18 @@ interface EditorProps {
   initialMusicTaskId?: string | null;
   timelineVersion?: number;
   readOnly?: boolean;
+  disableAgentLiveReload?: boolean;
+  disableBodyScrollLock?: boolean;
+  inactive?: boolean;
+}
+
+interface CreditsPayload {
+  balance?: number;
+  subscription?: { planId: string; status: string } | null;
+}
+
+interface SkillsPayload {
+  skills?: { name: string; label: string; icon: string; builtIn?: boolean }[];
 }
 
 export default function Editor({
@@ -104,6 +121,9 @@ export default function Editor({
   initialMusicTaskId,
   timelineVersion = 1,
   readOnly,
+  disableAgentLiveReload = false,
+  disableBodyScrollLock = false,
+  inactive = false,
 }: EditorProps = {}) {
   // Merge legacy single + new multi into one array
   const pendingImages = pendingImagesProp ?? (pendingImage ? [pendingImage] : undefined);
@@ -134,6 +154,11 @@ export default function Editor({
   const [failedCategories, setFailedCategories] = useState<Set<Tip['category']>>(new Set());
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
+  const [cuiPanX, setCuiPanX] = useState(0);
+  const [cuiPanActive, setCuiPanActive] = useState(false);
+  const [cuiPanSettling, setCuiPanSettling] = useState(false);
+  const cuiPanRef = useRef({ tracking: false, startX: 0, startY: 0, lastX: 0, startTime: 0, locked: false });
+
   // Annotation (paintbrush) mode
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationTool, setAnnotationTool] = useState<'brush' | 'rect' | 'text'>('brush');
@@ -149,8 +174,9 @@ export default function Editor({
 
   // Credit popup + status bar notification
   const [creditPopupOpen, setCreditPopupOpen] = useState(false);
-  const [creditBalance, setCreditBalance] = useState<number>(0);
-  const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(null);
+  const [cachedCredits] = useState<CreditsPayload | null>(() => readNativeJSONCache<CreditsPayload>('/api/billing/credits'));
+  const [creditBalance, setCreditBalance] = useState<number>(() => cachedCredits?.balance ?? 0);
+  const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(() => cachedCredits?.subscription ?? null);
   const [creditExhausted, setCreditExhausted] = useState(false);
   const [creditSuccess, setCreditSuccess] = useState(false);
   const [creditWaiting, setCreditWaiting] = useState(false);
@@ -161,6 +187,7 @@ export default function Editor({
       if (!r.ok) throw new Error('Failed to load credits');
       return r.json();
     }).then(data => {
+      writeNativeJSONCache('/api/billing/credits', data);
       setCreditBalance(data.balance ?? 0);
       setCreditSubscription(data.subscription ?? null);
     }).catch(() => {});
@@ -207,11 +234,16 @@ export default function Editor({
   const [videoAuto, setVideoAuto] = useState(true);
   const videoAutoRef = useRef(true);
   useEffect(() => { videoAutoRef.current = videoAuto; }, [videoAuto]);
-  const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>(() => (
+    readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
+  ));
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const skillFileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    fetch('/api/skills').then(r => r.json()).then(d => { if (d.skills) setAvailableSkills(d.skills); }).catch(() => {});
+    fetch('/api/skills').then(r => r.json()).then(d => {
+      writeNativeJSONCache('/api/skills', d);
+      if (d.skills) setAvailableSkills(d.skills);
+    }).catch(() => {});
   }, []);
   const [installingSkill, setInstallingSkill] = useState(false);
   const handleSkillUpload = useCallback(async (file: File) => {
@@ -224,6 +256,7 @@ export default function Editor({
       if (data.success) {
         const r = await fetch('/api/skills');
         const d = await r.json();
+        writeNativeJSONCache('/api/skills', d);
         if (d.skills) setAvailableSkills(d.skills);
         if (data.skillName) setSelectedSkill(data.skillName);
       }
@@ -1642,13 +1675,16 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // ── Reconnect to active background agent run ──
   // Mount-time detection: use standard reconnect flow (replay + realtime).
-  // Live detection (CLI triggers run while page already loaded): reload page so
-  // the mount-time reconnect handles it identically to a manual refresh.
+  // Live detection (CLI triggers run while page already loaded): standalone
+  // project pages may reload for a clean reconnect. iOS inline project overlays
+  // must never schedule a page reload because the timeout can outlive the
+  // overlay and reload /projects after the user taps Back.
   const mountReconnectHandledRef = useRef(false);
   useEffect(() => {
+    if (inactive) return;
     if (!activeRunId || isAgentActive) return;
 
-    if (!mountReconnectHandledRef.current) {
+    if (!mountReconnectHandledRef.current || disableAgentLiveReload) {
       // First detection after mount — use standard reconnect
       mountReconnectHandledRef.current = true;
       setIsAgentActive(true);
@@ -1688,9 +1724,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     // Live detection — reload page for clean reconnect
     // Delay slightly to ensure DualWriter has flushed user message to DB
-    setTimeout(() => window.location.reload(), 1500);
+    const reloadTimer = window.setTimeout(() => window.location.reload(), 1500);
+    return () => window.clearTimeout(reloadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRunId]);
+  }, [activeRunId, disableAgentLiveReload, inactive]);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
   // NOTE: no compressBase64 here — annotated image is used as generation base,
@@ -2247,6 +2284,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // Auto-trigger upload when a pending image is passed (new project from projects page)
   // Lock body scroll while editor is mounted to prevent iOS back-navigation jump
   useEffect(() => {
+    if (disableBodyScrollLock) return;
     const prev = { overflow: document.body.style.overflow, position: document.body.style.position, width: document.body.style.width, top: document.body.style.top };
     document.body.style.overflow = 'hidden';
     document.body.style.position = 'fixed';
@@ -2258,7 +2296,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       document.body.style.width = prev.width;
       document.body.style.top = prev.top;
     };
-  }, []);
+  }, [disableBodyScrollLock]);
 
   const initHandled = useRef(false);
 
@@ -2395,6 +2433,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // Existing project with no tips on latest snapshot — auto-fetch (skip design snapshots)
   const autoFetchTriggered = useRef(false);
   useEffect(() => {
+    if (inactive) return;
     if (autoFetchTriggered.current || pendingImages?.length) return;
     const lastSnap = snapshots[snapshots.length - 1];
     if (!lastSnap || lastSnap.tips.length > 0) return;
@@ -2409,7 +2448,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     } else {
       fetchTipsForSnapshot(lastSnap.id, image);
     }
-  }, [snapshots, pendingImages, fetchTipsForSnapshot]);
+  }, [snapshots, pendingImages, fetchTipsForSnapshot, inactive]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
   // Pick up late-arriving initialMusicTaskId (from Supabase fetch after cache-init)
@@ -2441,6 +2480,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   // Poll all processing animations (v1 only — v2 uses snapshot polling above)
   useEffect(() => {
+    if (inactive) return;
     if (isV2) return;
     const processing = animations.filter(a => a.status === 'processing' && a.taskId);
     if (processing.length === 0) return;
@@ -2462,10 +2502,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [animations]);
+  }, [animations, inactive]);
 
   // v2: Poll video snapshots with status=processing
   useEffect(() => {
+    if (inactive) return;
     if (!isV2) return;
     const processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing' && s.videoMeta.taskId);
     if (processing.length === 0) return;
@@ -2528,11 +2569,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [snapshots, isV2]);
+  }, [snapshots, isV2, inactive]);
 
 
   // Preload adjacent snapshots (not yet in DOM) so swipe transitions are instant
   useEffect(() => {
+    if (inactive) return;
     for (const offset of [-1, 1]) {
       const src = timeline[viewIndex + offset];
       if (src && src.startsWith('http')) {
@@ -2540,7 +2582,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         img.src = src;
       }
     }
-  }, [viewIndex, timeline]);
+  }, [viewIndex, timeline, inactive]);
 
   // Drive StatusBar text based on tips/preview generation progress
   useEffect(() => {
@@ -2583,6 +2625,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   // ── Music polling: poll Suno status when musicTaskId is set ──
   useEffect(() => {
+    if (inactive) return;
     if (!musicTaskId) return;
     console.log(`🎵 [music] polling started for ${musicTaskId}`);
     let stopped = false;
@@ -2650,7 +2693,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     poll();
     const interval = setInterval(poll, 2_000);
     return () => { stopped = true; clearInterval(interval); };
-  }, [musicTaskId, projectId, t]);
+  }, [musicTaskId, projectId, t, inactive]);
 
 
   // When animationState transitions — handle creation flow lifecycle
@@ -2858,6 +2901,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   // Agent elapsed timer — DOM updates every 1s keep iOS Safari from dropping SSE
   useEffect(() => {
+    if (inactive) {
+      agentTimerRef.current = null;
+      return;
+    }
     if (!isAgentActive) {
       agentTimerRef.current = null;
       return;
@@ -2872,7 +2919,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       setAgentStatus(`${ref.phase} (${elapsed}s)`);
     }, 1000);
     return () => clearInterval(timer);
-  }, [isAgentActive, t]);
+  }, [isAgentActive, t, inactive]);
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
@@ -2983,6 +3030,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // Auto-capture poster for design snapshots loaded from Supabase without a poster image
   const posterCapturedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
+    if (inactive) return;
     for (const snap of snapshots) {
       if (snap.design && !snap.image && !posterCapturedRef.current.has(snap.id)) {
         posterCapturedRef.current.add(snap.id);
@@ -2993,7 +3041,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         ).catch(() => {});
       }
     }
-  }, [snapshots, handleDesignPoster]);
+  }, [snapshots, handleDesignPoster, inactive]);
 
   const videoStartTimeRef = useRef<number>(0);
   const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string, startTime?: number) => {
@@ -3083,6 +3131,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // push a history state on enter, listen for popstate to go back to GUI.
   // Desktop: no history management needed (CUI is always visible as side panel)
   useEffect(() => {
+    if (inactive) {
+      hasCuiHistoryState.current = false;
+      return;
+    }
     if (isDesktop) return;
     if (viewMode === 'cui') {
       // pushState may already have been called by openCUI (for Safari snapshot timing)
@@ -3111,7 +3163,86 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       hasCuiHistoryState.current = false;
       window.history.back(); // listener already removed by cleanup above — silently pops
     }
-  }, [viewMode, isDesktop]);
+  }, [viewMode, isDesktop, inactive]);
+
+  const resetCuiPan = useCallback(() => {
+    cuiPanRef.current.tracking = false;
+    cuiPanRef.current.locked = false;
+    setCuiPanX(0);
+    setCuiPanActive(false);
+    setCuiPanSettling(false);
+  }, []);
+
+  const isCuiPanEditableTarget = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+  };
+
+  const handleCuiPanStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    if (isDesktop || event.touches.length !== 1 || isCuiPanEditableTarget(event.target)) return;
+    const touch = event.touches[0];
+    if (touch.clientX > IOS_CUI_PAN_EDGE_PX) return;
+
+    cuiPanRef.current = {
+      tracking: true,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      startTime: performance.now(),
+      locked: false,
+    };
+    setCuiPanSettling(false);
+  }, [isDesktop]);
+
+  const handleCuiPanMove = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    const pan = cuiPanRef.current;
+    if (!pan.tracking || event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    const dx = touch.clientX - pan.startX;
+    const dy = touch.clientY - pan.startY;
+    pan.lastX = touch.clientX;
+
+    if (!pan.locked) {
+      if (dx <= IOS_CUI_PAN_MIN_DX || dx < Math.abs(dy) * 1.15) {
+        if (Math.abs(dy) > IOS_CUI_PAN_MIN_DX && Math.abs(dy) > dx) {
+          resetCuiPan();
+        }
+        return;
+      }
+      pan.locked = true;
+      setCuiPanActive(true);
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setCuiPanX(Math.max(0, Math.min(dx, window.innerWidth)));
+  }, [resetCuiPan]);
+
+  const handleCuiPanEnd = useCallback(() => {
+    const pan = cuiPanRef.current;
+    if (!pan.tracking) return;
+
+    const dx = Math.max(0, pan.lastX - pan.startX);
+    const elapsed = Math.max(1, performance.now() - pan.startTime);
+    const velocity = dx / elapsed;
+    const shouldClose = dx >= IOS_CUI_PAN_COMMIT_PX || velocity > 0.42;
+    pan.tracking = false;
+
+    setCuiPanSettling(true);
+    if (shouldClose) {
+      setCuiPanActive(true);
+      setCuiPanX(window.innerWidth);
+      window.setTimeout(() => {
+        window.history.back();
+        resetCuiPan();
+      }, 150);
+      return;
+    }
+
+    setCuiPanX(0);
+    window.setTimeout(resetCuiPan, 180);
+  }, [resetCuiPan]);
 
   // ── Shared props for AgentChatView — single source of truth ──
   // Both desktop panel and mobile overlay use these. Add new props HERE
@@ -3172,7 +3303,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     selectedSkill,
     onSkillChange: setSelectedSkill,
     onDeleteSkill: (name: string) => {
-      setAvailableSkills(prev => prev.filter(s => s.name !== name));
+      setAvailableSkills(prev => {
+        const next = prev.filter(s => s.name !== name);
+        writeNativeJSONCache('/api/skills', { skills: next });
+        return next;
+      });
       if (selectedSkill === name) setSelectedSkill(null);
       fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {});
     },
@@ -3194,7 +3329,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       data-current-snapshot={viewIndex}
       data-view-mode={viewMode}
       data-preferred-model={preferredModel}
-      className={`h-dvh bg-black relative z-[1] overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
+      className={`makaron-editor-shell h-dvh bg-black relative z-[1] overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
     >
       <input
         ref={fileInputRef}
@@ -3228,7 +3363,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       />
 
       {/* GUI mode — always visible on desktop, toggled on mobile (also during pull-down for gesture tracking) */}
-      {(isDesktop || viewMode === 'gui' || pullProgress !== null) && (
+      {(isDesktop || viewMode === 'gui' || pullProgress !== null || cuiPanActive) && (
         <div className={isDesktop ? 'flex-1 min-w-0 flex flex-col relative' : 'contents'}>
           {/* Canvas area (fills remaining space) */}
           <div
@@ -3384,7 +3519,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
             {/* Top toolbar — hidden in design editor mode */}
             {snapshots.length > 0 && !selectedEditableFieldId && (
-              <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
+              <div className="makaron-editor-topbar absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
                 <div className="flex items-center gap-1">
                   {onBack && (
                     <button
@@ -3631,7 +3766,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
           {/* Bottom bar: tips or video results */}
           {snapshots.length > 0 && (
-              <div className="flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
+              <div className="makaron-editor-bottom-bar flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
                 <AgentStatusBar
                   statusText={agentStatus}
                   isActive={isAgentActive}
@@ -3841,20 +3976,35 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           />
         </div>
       </>) : viewMode === 'cui' ? (
-        <AgentChatView
-          {...cuiSharedProps}
-          onBack={() => {
-            if (snapshots.length === 0 && onBack) {
-              onBack();
-            } else {
-              window.history.back();
-            }
+        <div
+          data-makaron-cui-pan="true"
+          className="fixed inset-0 z-40"
+          style={{
+            transform: `translate3d(${cuiPanX}px, 0, 0)`,
+            transition: cuiPanSettling ? 'transform 170ms ease-out' : 'none',
+            willChange: cuiPanActive ? 'transform' : undefined,
+            touchAction: 'pan-y',
           }}
-          onPipTap={handlePipTap}
-          hidePip={heroAnim !== null || pullProgress !== null}
-          focusOnOpen={isViewingDraft}
-          onNavigateToSnapshot={undefined}
-        />
+          onTouchStart={handleCuiPanStart}
+          onTouchMove={handleCuiPanMove}
+          onTouchEnd={handleCuiPanEnd}
+          onTouchCancel={handleCuiPanEnd}
+        >
+          <AgentChatView
+            {...cuiSharedProps}
+            onBack={() => {
+              if (snapshots.length === 0 && onBack) {
+                onBack();
+              } else {
+                window.history.back();
+              }
+            }}
+            onPipTap={handlePipTap}
+            hidePip={heroAnim !== null || pullProgress !== null}
+            focusOnOpen={isViewingDraft}
+            onNavigateToSnapshot={undefined}
+          />
+        </div>
       ) : null}
 
       {/* Pull-down dim overlay + "Entering Chat" hint */}

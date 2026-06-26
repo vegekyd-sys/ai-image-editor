@@ -276,7 +276,7 @@ Options:
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --model <name>            Preferred image/model route.
-  --video-model <name>      Preferred video model: seedance-fast, seedance, kling, or grok.
+  --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, or grok.
   --video-resolution <res>  Video resolution: auto, 480p, 720p, 1080p, or 4k.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
@@ -1031,6 +1031,25 @@ async function uploadFileViaSignedUrl(baseUrl, headers, projectId, filePath, con
   return publicUrl;
 }
 
+async function uploadImageFilesViaSignedUrl(baseUrl, headers, projectId, imagePaths) {
+  const urls = [];
+  for (const imagePath of imagePaths) {
+    const valid = validateImage(imagePath);
+    if (!valid.ok) {
+      process.stderr.write(`❌ Cannot upload: ${path.basename(imagePath)}\n   ${valid.error}\n`);
+      process.exit(1);
+    }
+    process.stderr.write(`📤 Uploading ${path.basename(imagePath)}...\n`);
+    const url = await uploadFileViaSignedUrl(baseUrl, headers, projectId, imagePath, valid.mime);
+    if (!url) {
+      process.stderr.write(`❌ Failed to upload image: ${imagePath}\n`);
+      process.exit(1);
+    }
+    urls.push(url);
+  }
+  return urls;
+}
+
 function imageToArg(imgPath) {
   if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) return imgPath;
   return readImageAsDataUrl(imgPath);
@@ -1334,12 +1353,12 @@ Use with chat:
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
@@ -1462,52 +1481,28 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   // --project auto: create a new project (with images/videos if provided)
   if (!projectId || projectId === 'auto') {
-    if (chatImages.length === 0) {
-      // Create empty project (videos will be uploaded separately after)
-      process.stderr.write(`📦 Creating new project...\n`);
-      const res = await fetch(`${baseUrl}/api/projects/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ title: prompt.slice(0, 50) }),
-      });
-      if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
-      const data = await res.json();
-      projectId = data.projectId;
-      process.stderr.write(`📦 Project created: ${projectId}\n`);
-    } else {
-      // Create project with images (URLs and/or local files)
-      const base64s = imageFileList.map(imgPath => {
-        process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
-        return readImageAsDataUrl(imgPath);
-      });
-      if (imageUrlList.length) process.stderr.write(`📤 Attaching ${imageUrlList.length} URL image(s)...\n`);
-      const body = {};
-      if (base64s.length) body.imageBase64s = base64s;
-      if (imageUrlList.length) body.imageUrls = imageUrlList;
-      const res = await fetch(`${baseUrl}/api/projects/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
-      const data = await res.json();
-      projectId = data.projectId;
-      process.stderr.write(`📦 Project created: ${projectId} (${data.snapshots?.length || 0} images)\n`);
-    }
-    chatImages.length = 0;
-    imageUrlList.length = 0;
-    imageFileList.length = 0;
+    // Create an empty project first, then attach media by URL. Local images use
+    // signed upload URLs so the agent never depends on the caller's filesystem.
+    process.stderr.write(`📦 Creating new project...\n`);
+    const res = await fetch(`${baseUrl}/api/projects/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ title: prompt.slice(0, 50) }),
+    });
+    if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
+    const data = await res.json();
+    projectId = data.projectId;
+    process.stderr.write(`📦 Project created: ${projectId}\n`);
   }
   // Upload additional images to existing project
   if (imageFileList.length > 0 || imageUrlList.length > 0) {
-    const base64s = imageFileList.map(imgPath => {
-      process.stderr.write(`📤 Uploading ${path.basename(imgPath)}...\n`);
-      return readImageAsDataUrl(imgPath);
-    });
+    const uploadedImageUrls = imageFileList.length
+      ? await uploadImageFilesViaSignedUrl(baseUrl, headers, projectId, imageFileList)
+      : [];
+    const allImageUrls = [...uploadedImageUrls, ...imageUrlList];
     if (imageUrlList.length) process.stderr.write(`📤 Attaching ${imageUrlList.length} URL image(s)...\n`);
     const body = { _addToProject: projectId };
-    if (base64s.length) body.imageBase64s = base64s;
-    if (imageUrlList.length) body.imageUrls = imageUrlList;
+    if (allImageUrls.length) body.imageUrls = allImageUrls;
     const res = await fetch(`${baseUrl}/api/projects/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
@@ -1515,10 +1510,19 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     });
     if (res.ok) {
       const data = await res.json();
-      process.stderr.write(`📤 Added ${data.snapshots?.length || 0} image(s) to project\n`);
+      const addedCount = data.snapshots?.length || 0;
+      if (addedCount < allImageUrls.length) {
+        process.stderr.write(`❌ Added only ${addedCount}/${allImageUrls.length} image(s) to project; aborting run.\n`);
+        process.exit(1);
+      }
+      process.stderr.write(`📤 Added ${addedCount} image(s) to project\n`);
     } else {
-      process.stderr.write(`⚠️ Failed to upload images: ${await res.text()}\n`);
+      process.stderr.write(`❌ Failed to add images: ${await res.text()}\n`);
+      process.exit(1);
     }
+    chatImages.length = 0;
+    imageUrlList.length = 0;
+    imageFileList.length = 0;
   }
 
   const resolvedSkill = await resolveChatSkill(baseUrl, headers, activeSkill);
@@ -1816,7 +1820,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--wait') wait = true;
     }
     if ((!images.length && !video) || !script) {
-      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
       process.exit(1);
     }
 
@@ -1835,7 +1839,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       const valid = validateVideoFile(video, {
         maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
-        ...(selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' ? {
+        ...(selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' ? {
           minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
           minSide: SEEDANCE_MIN_VIDEO_SIDE,
           maxSide: SEEDANCE_MAX_VIDEO_SIDE,
@@ -1853,7 +1857,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
     const vArgs = videoUrl
-      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: (selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast') ? 'feature' : 'base' }
+      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: (selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini') ? 'feature' : 'base' }
       : { script, images, videoModel: selectedVideoModel, videoResolution };
     const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
@@ -1903,7 +1907,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);

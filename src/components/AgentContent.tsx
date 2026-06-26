@@ -6,7 +6,8 @@ const INSTALL_SKILL_COMMAND = 'npx makaron-cli setup'
 
 export default function AgentContent() {
   return (
-    <div className="min-h-screen w-full bg-black text-gray-200 font-mono p-6 md:p-12 max-w-4xl mx-auto overflow-hidden">
+    <div className="makaron-ios-page makaron-ios-page-x min-h-screen w-full bg-black text-gray-200 font-mono p-6 md:p-12 overflow-hidden">
+      <div className="max-w-4xl mx-auto">
       <header className="flex items-center gap-2 mb-12">
         <h1 className="text-2xl font-bold text-white">makaron<span className="text-fuchsia-400">-cli</span></h1>
         <AgentCopyButton />
@@ -236,6 +237,7 @@ Share claim_url with a human. They log in and link the API key to your account.`
       <footer className="border-t border-gray-800 pt-6 pb-16 text-sm text-gray-500">
         <p>Makaron AI — One Man Studio</p>
       </footer>
+      </div>
     </div>
   )
 }

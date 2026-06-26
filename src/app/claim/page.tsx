@@ -88,7 +88,7 @@ function ClaimContent() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-6">
+    <div className="makaron-ios-page makaron-ios-page-x min-h-screen bg-black flex items-center justify-center p-6">
       <div className="max-w-md w-full bg-gray-900 rounded-2xl p-8 text-center">
         {status === 'checking' && (
           <div className="flex items-center justify-center">
@@ -170,7 +170,7 @@ function ClaimContent() {
 
 export default function ClaimPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center"><p className="text-gray-400">Loading...</p></div>}>
+    <Suspense fallback={<div className="makaron-ios-page makaron-ios-page-x min-h-screen bg-black flex items-center justify-center"><p className="text-gray-400">Loading...</p></div>}>
       <ClaimContent />
     </Suspense>
   )

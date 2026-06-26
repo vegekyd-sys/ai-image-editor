@@ -4,8 +4,12 @@ import { getStripe } from './stripe'
 export interface Subscription {
   id: string
   userId: string
-  stripeSubscriptionId: string
-  stripeCustomerId: string
+  provider: 'stripe' | 'apple'
+  stripeSubscriptionId: string | null
+  stripeCustomerId: string | null
+  appleOriginalTransactionId: string | null
+  appleTransactionId: string | null
+  appleProductId: string | null
   planId: string
   billingInterval: 'month' | 'year'
   status: string
@@ -30,8 +34,12 @@ export async function getActiveSubscription(userId: string): Promise<Subscriptio
   return {
     id: data.id,
     userId: data.user_id,
-    stripeSubscriptionId: data.stripe_subscription_id,
-    stripeCustomerId: data.stripe_customer_id,
+    provider: data.provider ?? 'stripe',
+    stripeSubscriptionId: data.stripe_subscription_id ?? null,
+    stripeCustomerId: data.stripe_customer_id ?? null,
+    appleOriginalTransactionId: data.apple_original_transaction_id ?? null,
+    appleTransactionId: data.apple_transaction_id ?? null,
+    appleProductId: data.apple_product_id ?? null,
     planId: data.plan_id,
     billingInterval: data.billing_interval,
     status: data.status,
@@ -127,6 +135,7 @@ export async function upsertSubscription(
     .from('subscriptions')
     .upsert({
       user_id: userId,
+      provider: 'stripe',
       stripe_subscription_id: stripeSubscriptionId,
       stripe_customer_id: stripeCustomerId,
       plan_id: planId,
@@ -135,6 +144,44 @@ export async function upsertSubscription(
       current_period_start: currentPeriodStart?.toISOString() ?? null,
       current_period_end: currentPeriodEnd?.toISOString() ?? null,
       cancel_at_period_end: cancelAtPeriodEnd,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
+}
+
+/**
+ * Upsert subscription record from verified App Store transaction data.
+ */
+export async function upsertAppleSubscription(args: {
+  userId: string
+  originalTransactionId: string
+  transactionId: string
+  productId: string
+  planId: string
+  billingInterval: 'month' | 'year'
+  status: string
+  currentPeriodStart: Date | null
+  currentPeriodEnd: Date | null
+  cancelAtPeriodEnd?: boolean
+  appAccountToken?: string | null
+  environment?: string | null
+}): Promise<void> {
+  const admin = getSupabaseAdmin()
+  await admin
+    .from('subscriptions')
+    .upsert({
+      user_id: args.userId,
+      provider: 'apple',
+      apple_original_transaction_id: args.originalTransactionId,
+      apple_transaction_id: args.transactionId,
+      apple_product_id: args.productId,
+      apple_app_account_token: args.appAccountToken ?? null,
+      apple_environment: args.environment ?? null,
+      plan_id: args.planId,
+      billing_interval: args.billingInterval,
+      status: args.status,
+      current_period_start: args.currentPeriodStart?.toISOString() ?? null,
+      current_period_end: args.currentPeriodEnd?.toISOString() ?? null,
+      cancel_at_period_end: args.cancelAtPeriodEnd ?? false,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
 }

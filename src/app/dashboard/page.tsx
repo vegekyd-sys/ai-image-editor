@@ -1,12 +1,22 @@
 'use client'
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
-import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { CREDIT_TIERS } from '@/lib/billing/tiers'
 import CreditPopup from '@/components/CreditPopup'
+import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
+import { navigateBackInIOSApp } from '@/lib/native-navigation'
 import { getAttributionForRequest } from '@/lib/marketing/attribution'
 import { trackCheckoutStart } from '@/lib/marketing/meta-pixel'
+import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing'
+import {
+  finishNativeAppleTransaction,
+  getNativeApplePurchaseErrorMessage,
+  isNativeApplePurchaseCancellation,
+  purchaseNativeAppleProduct,
+  purchaseNativeAppleSubscription,
+  restoreNativeApplePurchases,
+} from '@/lib/native-purchases'
 
 interface ApiKey {
   id: string
@@ -29,6 +39,7 @@ interface UsageLog {
 }
 
 interface SubscriptionInfo {
+  provider?: 'stripe' | 'apple'
   planId: string
   status: string
   billingInterval: 'month' | 'year'
@@ -55,6 +66,11 @@ interface Balance {
   lifetimePurchased: number
   lifetimeUsed: number
   subscription: SubscriptionInfo | null
+}
+
+interface DashboardPayload extends Balance {
+  keys?: ApiKey[]
+  usage?: UsageLog[]
 }
 
 const PLANS = [
@@ -84,7 +100,9 @@ type TabType = 'subscribe' | 'topup' | 'keys' | 'usage' | 'invoices'
 const VALID_TABS: TabType[] = ['subscribe', 'topup', 'keys', 'usage', 'invoices']
 
 function DashboardInner() {
+  const router = useRouter()
   const searchParams = useSearchParams()
+  const [cachedDashboard] = useState<DashboardPayload | null>(() => readNativeJSONCache<DashboardPayload>('/api/billing/dashboard'))
   const [tab, setTab] = useState<TabType>(() => {
     const t = searchParams.get('tab')
     return VALID_TABS.includes(t as TabType) ? (t as TabType) : 'subscribe'
@@ -94,12 +112,12 @@ function DashboardInner() {
     const t = searchParams.get('tab')
     if (VALID_TABS.includes(t as TabType)) setTab(t as TabType)
   }, [searchParams])
-  const [balance, setBalance] = useState<Balance | null>(null)
-  const [keys, setKeys] = useState<ApiKey[]>([])
-  const [usage, setUsage] = useState<UsageLog[]>([])
+  const [balance, setBalance] = useState<Balance | null>(() => cachedDashboard)
+  const [keys, setKeys] = useState<ApiKey[]>(() => cachedDashboard?.keys || [])
+  const [usage, setUsage] = useState<UsageLog[]>(() => cachedDashboard?.usage || [])
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([])
   const [invoicesLoading, setInvoicesLoading] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !cachedDashboard)
   const [newKeyName, setNewKeyName] = useState('')
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -108,11 +126,14 @@ function DashboardInner() {
   const [subscribing, setSubscribing] = useState<string | null>(null)
   const [managingSubscription, setManagingSubscription] = useState(false)
   const [billingActionError, setBillingActionError] = useState<string | null>(null)
+  const appleBilling = useAppleBillingProducts({ enabled: true })
+  const appleBillingAvailable = appleBilling.available
 
   const fetchDashboard = useCallback(async () => {
     const res = await fetch('/api/billing/dashboard')
     if (res.ok) {
-      const data = await res.json()
+      const data = await res.json() as DashboardPayload
+      writeNativeJSONCache('/api/billing/dashboard', data)
       setBalance(data)
       setKeys(data.keys || [])
       setUsage(data.usage || [])
@@ -133,9 +154,15 @@ function DashboardInner() {
   }, [])
 
   useEffect(() => {
-    setLoading(true)
-    fetchDashboard().finally(() => setLoading(false))
-  }, [fetchDashboard])
+    let cancelled = false
+    if (!cachedDashboard) setLoading(true)
+    fetchDashboard().finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [fetchDashboard, cachedDashboard])
 
   useEffect(() => {
     if (tab === 'invoices') fetchInvoices()
@@ -169,8 +196,17 @@ function DashboardInner() {
     fetchDashboard()
   }
 
+  const finishAppleTransaction = async (transactionId: string) => {
+    try {
+      await finishNativeAppleTransaction(transactionId)
+    } catch (error) {
+      console.warn('[dashboard/apple] could not finish native transaction:', error)
+    }
+  }
+
   const handleCheckout = async (tier: string) => {
     setCheckingOut(tier)
+    setBillingActionError(null)
     try {
       const tierConfig = CREDIT_TIERS.find(t => t.id === tier)
       const metaEventId = trackCheckoutStart('topup', {
@@ -178,6 +214,24 @@ function DashboardInner() {
         value: tierConfig ? tierConfig.price / 100 : undefined,
         currency: 'USD',
       })
+      if (appleBillingAvailable) {
+        const appleProduct = appleBilling.findTopup(tier)
+        if (!appleProduct) throw new Error('Apple top-up product is not configured.')
+        if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple top-up product is still loading.')
+        const transaction = await purchaseNativeAppleProduct(appleProduct.productId, appleBilling.appAccountToken)
+        const res = await fetch('/api/billing/apple/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Apple top-up verification failed.')
+        await finishAppleTransaction(transaction.transactionId)
+        writeNativeJSONCache('/api/billing/dashboard', { ...(balance ?? {}), ...data })
+        await fetchDashboard()
+        return
+      }
+
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -185,6 +239,11 @@ function DashboardInner() {
       })
       const data = await res.json()
       if (data.url) window.location.href = data.url
+    } catch (error) {
+      if (!isNativeApplePurchaseCancellation(error)) {
+        console.error('[dashboard] top-up failed:', error)
+      }
+      setBillingActionError(getNativeApplePurchaseErrorMessage(error, 'Unable to start top-up.'))
     } finally {
       setCheckingOut(null)
     }
@@ -192,7 +251,25 @@ function DashboardInner() {
 
   const handleSubscribe = async (planId: string) => {
     setSubscribing(planId)
+    setBillingActionError(null)
     try {
+      if (appleBillingAvailable) {
+        const appleProduct = appleBilling.findSubscription(planId, billingInterval)
+        if (!appleProduct) throw new Error('Apple subscription product is not configured.')
+        if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple subscription product is still loading.')
+        const transaction = await purchaseNativeAppleSubscription(appleProduct.productId, appleBilling.appAccountToken)
+        const res = await fetch('/api/billing/apple/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Apple purchase verification failed.')
+        await finishAppleTransaction(transaction.transactionId)
+        await fetchDashboard()
+        return
+      }
+
       const plan = PLANS.find(p => p.id === planId)
       const metaEventId = trackCheckoutStart('subscription', {
         content_name: planId,
@@ -206,12 +283,21 @@ function DashboardInner() {
       })
       const data = await res.json()
       if (data.url) window.location.href = data.url
+    } catch (error) {
+      if (!isNativeApplePurchaseCancellation(error)) {
+        console.error('[dashboard] subscribe failed:', error)
+      }
+      setBillingActionError(getNativeApplePurchaseErrorMessage(error, 'Unable to start subscription.'))
     } finally {
       setSubscribing(null)
     }
   }
 
   const handleManageSubscription = async () => {
+    if (appleBillingAvailable || sub?.provider === 'apple') {
+      window.location.href = 'https://apps.apple.com/account/subscriptions'
+      return
+    }
     setManagingSubscription(true)
     setBillingActionError(null)
     try {
@@ -228,24 +314,54 @@ function DashboardInner() {
     }
   }
 
+  const handleBackToApp = () => {
+    if (navigateBackInIOSApp('/projects')) return
+    router.push('/projects')
+  }
+
   const sub = balance?.subscription
+  const visibleTabs: TabType[] = ['subscribe', 'topup', 'keys', 'usage', 'invoices']
 
   if (loading) {
     return (
-      <div className="min-h-dvh bg-black flex items-center justify-center">
-        <svg className="animate-spin h-6 w-6 text-fuchsia-500" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+      <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black text-white p-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <button
+              type="button"
+              onClick={handleBackToApp}
+              className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white/60"
+            >
+              <span className="text-lg leading-none">‹</span>
+              <span>Back</span>
+            </button>
+            <div className="h-5 w-16 rounded-md bg-white/5" />
+          </div>
+          <div className="mb-8">
+            <div className="text-xs uppercase tracking-[0.16em] text-white/25 mb-3">Loading</div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+          </div>
+          <div className="space-y-4">
+            <div className="h-28 rounded-2xl border border-white/8 bg-white/[0.04]" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-24 rounded-xl border border-white/8 bg-white/[0.035]" />
+              <div className="h-24 rounded-xl border border-white/8 bg-white/[0.035]" />
+            </div>
+            <div className="h-40 rounded-2xl border border-white/8 bg-white/[0.025]" />
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-dvh bg-black text-white p-6 max-w-2xl mx-auto">
+    <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black text-white p-6">
+      <div className="max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <Link href="/projects" className="text-white/40 text-sm hover:text-white/60">&larr; Back to app</Link>
+        <button onClick={handleBackToApp} className="text-white/40 text-sm hover:text-white/60">
+          &larr; Back to app
+        </button>
       </div>
 
       {/* Balance card */}
@@ -270,9 +386,24 @@ function DashboardInner() {
         </div>
       </div>
 
+      {appleBillingAvailable && (
+        <div className="mb-6 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+          <div className="text-sm font-semibold text-white/75">Apple In-App Purchase</div>
+          <div className={`mt-1 text-xs ${appleBilling.error ? 'text-red-400/75' : 'text-white/40'}`}>
+            {appleBilling.error || (appleBilling.loading ? 'Loading Apple prices...' : 'Plan changes and top-ups are billed through Apple on iOS.')}
+          </div>
+        </div>
+      )}
+
+      {billingActionError && (
+        <div className="mb-6 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {billingActionError}
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-white/5 rounded-lg p-1">
-        {(['subscribe', 'topup', 'keys', 'usage', 'invoices'] as const).map(t => (
+        {visibleTabs.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -335,6 +466,20 @@ function DashboardInner() {
                 {PLANS.map(plan => {
                   const price = billingInterval === 'month' ? plan.monthlyPrice : plan.annualPrice
                   const perMonth = billingInterval === 'year' ? Math.round(plan.annualPrice / 12) : plan.monthlyPrice
+                  const appleProduct = appleBilling.findSubscription(plan.id, billingInterval)
+                  const nativeProduct = appleBilling.nativeProductFor(appleProduct)
+                  const displayPrice = nativeProduct?.displayPrice
+                  const appleReady = !appleBillingAvailable || !!nativeProduct
+                  const disabled = !!subscribing || (appleBillingAvailable && (appleBilling.loading || !!appleBilling.error || !appleReady))
+                  const buttonLabel = subscribing === plan.id
+                    ? '...'
+                    : appleBillingAvailable
+                      ? appleBilling.loading
+                        ? 'Loading...'
+                        : appleReady
+                          ? displayPrice || 'Unavailable'
+                          : 'Unavailable'
+                      : `$${(price / 100).toFixed(2)}${billingInterval === 'year' ? '/yr' : '/mo'}`
                   return (
                     <div key={plan.id} className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
                       <div>
@@ -350,15 +495,45 @@ function DashboardInner() {
                       </div>
                       <button
                         onClick={() => handleSubscribe(plan.id)}
-                        disabled={!!subscribing}
+                        disabled={disabled}
                         className="px-5 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-40 transition-all"
                       >
-                        {subscribing === plan.id ? '...' : `$${(price / 100).toFixed(2)}${billingInterval === 'year' ? '/yr' : '/mo'}`}
+                        {buttonLabel}
                       </button>
                     </div>
                   )
                 })}
               </div>
+              {appleBillingAvailable && (
+                <button
+                  onClick={async () => {
+                    setSubscribing('restore')
+                    setBillingActionError(null)
+                    try {
+                      const transactions = await restoreNativeApplePurchases()
+                      const transaction = transactions[0]
+                      if (!transaction) throw new Error('No active Apple subscription was found.')
+                      const res = await fetch('/api/billing/apple/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+                      })
+                      const data = await res.json()
+                      if (!res.ok) throw new Error(data.error || 'Could not restore Apple subscription.')
+                      await finishAppleTransaction(transaction.transactionId)
+                      await fetchDashboard()
+                    } catch (error) {
+                      setBillingActionError(error instanceof Error ? error.message : 'Could not restore Apple subscription.')
+                    } finally {
+                      setSubscribing(null)
+                    }
+                  }}
+                  disabled={!!subscribing}
+                  className="mt-4 w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white/60 disabled:opacity-40"
+                >
+                  {subscribing === 'restore' ? '...' : 'Restore Apple Purchase'}
+                </button>
+              )}
             </>
           )}
         </>
@@ -367,23 +542,42 @@ function DashboardInner() {
       {/* ══════ TOP UP TAB ══════ */}
       {tab === 'topup' && (
         <div className="grid gap-3">
-          {CREDIT_TIERS.map(tier => (
-            <div key={tier.id} className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
-              <div>
-                <div className="font-medium">{tier.name}</div>
-                <div className="text-white/40 text-sm mt-1">
-                  {tier.credits.toLocaleString()} credits &middot; {tier.unitPrice}/credit
+          {CREDIT_TIERS.map(tier => {
+            const appleProduct = appleBilling.findTopup(tier.id)
+            const nativeProduct = appleBilling.nativeProductFor(appleProduct)
+            const displayPrice = nativeProduct?.displayPrice
+            const appleReady = !appleBillingAvailable || !!nativeProduct
+            const disabled = !!checkingOut || (appleBillingAvailable && (appleBilling.loading || !!appleBilling.error || !appleReady))
+            const buttonLabel = checkingOut === tier.id
+              ? '...'
+              : appleBillingAvailable
+                ? appleBilling.loading
+                  ? 'Loading...'
+                  : appleReady
+                    ? displayPrice || 'Unavailable'
+                    : 'Unavailable'
+                : `$${(tier.price / 100).toFixed(0)}`
+            return (
+              <div key={tier.id} className="bg-white/[0.03] rounded-xl p-5 border border-white/5 flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{tier.name}</div>
+                  <div className="text-white/40 text-sm mt-1">
+                    {tier.credits.toLocaleString()} credits &middot; {tier.unitPrice}/credit
+                  </div>
                 </div>
+                <button
+                  onClick={() => handleCheckout(tier.id)}
+                  disabled={disabled}
+                  className="px-5 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-40 transition-all"
+                >
+                  {buttonLabel}
+                </button>
               </div>
-              <button
-                onClick={() => handleCheckout(tier.id)}
-                disabled={!!checkingOut}
-                className="px-5 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-40 transition-all"
-              >
-                {checkingOut === tier.id ? '...' : `$${(tier.price / 100).toFixed(0)}`}
-              </button>
-            </div>
-          ))}
+            )
+          })}
+          {appleBillingAvailable && (
+            <p className="text-white/30 text-xs">Top-ups are billed through Apple.</p>
+          )}
         </div>
       )}
 
@@ -597,6 +791,7 @@ function DashboardInner() {
         autoDetectPayment
         onBalanceUpdate={() => fetchDashboard()}
       />
+      </div>
     </div>
   )
 }

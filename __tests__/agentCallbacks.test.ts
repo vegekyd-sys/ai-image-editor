@@ -151,6 +151,32 @@ describe('makeAgentCallbacks', () => {
       expect(messages[0].image).toBe('data:image/jpeg;base64,abc');
     });
 
+    it('restores inline image by snapshot messageId when reconnect current turn is stale', () => {
+      messages = [
+        { id: 'stale-msg', role: 'assistant', content: '', timestamp: Date.now() },
+        { id: 'linked-msg', role: 'assistant', content: 'done', timestamp: Date.now() },
+      ];
+      const snapshots = [
+        { id: 'snap-1', image: '', imageUrl: 'https://old.url', tips: [], messageId: 'linked-msg' },
+      ];
+      ctx = createMockContext({
+        snapshotsRef: { current: snapshots },
+        setMessages: vi.fn((updater: (prev: typeof messages) => typeof messages) => {
+          messages = updater(messages);
+        }),
+        setSnapshots: vi.fn((updater) => {
+          updater(snapshots as never);
+        }),
+      });
+
+      const { callbacks } = makeAgentCallbacks(ctx);
+      callbacks.onNewTurn?.('stale-msg');
+      callbacks.onImage?.('', 'gemini', 'snap-1', 'https://storage.url/generated.jpg');
+
+      expect(messages.find(m => m.id === 'linked-msg')?.image).toBe('https://storage.url/generated.jpg');
+      expect(messages.find(m => m.id === 'stale-msg')?.image).toBeUndefined();
+    });
+
     it('calls fetchTipsForSnapshot', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.('msg-1');

@@ -122,6 +122,8 @@ export function buildVideoFailureActions(videoMeta?: Partial<VideoMeta> | null):
   const error = compact(videoMeta?.error, 420);
   const prompt = compact(videoMeta?.prompt, 900);
   const isPolicyFailure = looksLikePolicyFailure(error);
+  const isMiniServiceAuthFailure = String(videoMeta?.model || '') === 'seedance-mini' &&
+    /service authentication failed|service_unavailable|internal service authentication/i.test(error);
   const duration = typeof videoMeta?.duration === 'number' && Number.isFinite(videoMeta.duration)
     ? `${videoMeta.duration}s`
     : '沿用原时长';
@@ -144,7 +146,23 @@ export function buildVideoFailureActions(videoMeta?: Partial<VideoMeta> | null):
     prompt ? `原来的脚本/要求是：${prompt}` : '',
   ].filter(Boolean).join('\n');
 
-  return [
+  const actions: ArtifactCompletionAction[] = [];
+
+  if (isMiniServiceAuthFailure) {
+    actions.push({
+      label: '用 Fast 重试',
+      description: 'Mini 服务侧失败，切到更稳的 Fast',
+      prompt: [
+        '刚才 SeeDance Mini 在服务侧鉴权/可用性检查失败了，请用 SeeDance 2.0 Fast 重新生成。',
+        `原来的脚本/要求是：${prompt || '沿用刚才这次视频任务的要求和素材。'}`,
+        `时长：${duration}；模型改为 seedance-fast；分辨率用 480p，除非我明确要求更高清。`,
+        '不要再用 seedance-mini 原样重试。',
+      ].join('\n'),
+      policy: 'confirm',
+    });
+  }
+
+  actions.push(
     {
       label: isPolicyFailure ? '改安全点重试' : '调整后重试',
       description: isPolicyFailure ? '换成更容易通过审核的版本' : '根据失败原因改一下再生成',
@@ -157,5 +175,7 @@ export function buildVideoFailureActions(videoMeta?: Partial<VideoMeta> | null):
       prompt: explainPrompt,
       policy: 'confirm',
     },
-  ];
+  );
+
+  return actions.slice(0, 4);
 }

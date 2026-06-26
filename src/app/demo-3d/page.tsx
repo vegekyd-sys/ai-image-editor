@@ -161,7 +161,7 @@ export default function Demo3DPage() {
   const showViewer = status === 'succeeded' && modelUrls?.glb;
 
   return (
-    <div className="min-h-dvh bg-black text-white flex flex-col items-center p-6 gap-6">
+    <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black text-white flex flex-col items-center p-6 gap-6">
       {/* Header */}
       <div className="text-center mt-8">
         <h1 className="text-2xl font-bold">Image → 3D Model</h1>

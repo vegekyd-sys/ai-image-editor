@@ -4,6 +4,11 @@ import { createContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User, SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { clearUserCache } from '@/lib/imageCache'
+import { readNativeJSONCache, writeNativeJSONCache, removeNativeJSONCache, warmNativeJSONCache } from '@/lib/native-app-cache'
+import { isMakaronIOSApp } from '@/lib/native-app'
+import { warmProjectsListCache } from '@/lib/projects-list-warm'
+
+const AUTH_USER_CACHE_KEY = '/auth/user'
 
 export interface AuthContextType {
   user: User | null
@@ -18,9 +23,14 @@ export const AuthContext = createContext<AuthContextType>({
 })
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [useNativeAuthCache] = useState(() => isMakaronIOSApp())
+  const [cachedUser] = useState<User | null>(() => (
+    useNativeAuthCache ? readNativeJSONCache<User>(AUTH_USER_CACHE_KEY) : null
+  ))
+  const [user, setUser] = useState<User | null>(cachedUser)
+  const [loading, setLoading] = useState(() => !cachedUser)
   const supabaseRef = useRef<SupabaseClient | null>(null)
+  const nativeWarmUserIdRef = useRef<string | null>(null)
 
   function getSupabase() {
     if (!supabaseRef.current) {
@@ -29,6 +39,23 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return supabaseRef.current
   }
 
+  const warmNativeUserCaches = useCallback((userId: string) => {
+    if (!useNativeAuthCache || nativeWarmUserIdRef.current === userId) return
+    nativeWarmUserIdRef.current = userId
+    const warm = () => {
+      void warmNativeJSONCache('/api/billing/credits')
+      void warmNativeJSONCache('/api/billing/dashboard')
+      void warmNativeJSONCache('/api/skills')
+      void warmNativeJSONCache('/api/home-skills')
+      void warmProjectsListCache(userId)
+    }
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(warm, { timeout: 1800 })
+    } else {
+      window.setTimeout(warm, 600)
+    }
+  }, [useNativeAuthCache])
+
   useEffect(() => {
     const supabase = getSupabase()
 
@@ -36,6 +63,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
+      if (useNativeAuthCache) {
+        if (session?.user) writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)
+        else removeNativeJSONCache(AUTH_USER_CACHE_KEY)
+      }
+      if (session?.user) warmNativeUserCaches(session.user.id)
 
       // Background validation: verify JWT is still valid (non-blocking, never forces logout)
       if (session?.user) {
@@ -49,17 +81,23 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      if (useNativeAuthCache) {
+        if (session?.user) writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)
+        else removeNativeJSONCache(AUTH_USER_CACHE_KEY)
+      }
+      if (session?.user) warmNativeUserCaches(session.user.id)
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [useNativeAuthCache, warmNativeUserCaches])
 
   const signOut = useCallback(async () => {
     clearUserCache()
+    if (useNativeAuthCache) removeNativeJSONCache(AUTH_USER_CACHE_KEY)
     document.cookie = 'mkr_activated=; path=/; max-age=0'
     await getSupabase().auth.signOut()
     window.location.href = '/login'
-  }, [])
+  }, [useNativeAuthCache])
 
   return (
     <AuthContext.Provider value={{ user, loading, signOut }}>

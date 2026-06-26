@@ -148,7 +148,7 @@ const result = await client.callTool({
   }, []);
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-hidden" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+    <div className="makaron-ios-page makaron-ios-page-x min-h-screen bg-black text-white overflow-hidden" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
       {/* eslint-disable-next-line @next/next/no-css-tags */}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
         @keyframes float { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }

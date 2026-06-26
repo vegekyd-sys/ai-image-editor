@@ -27,6 +27,7 @@ const zh = {
   'auth.createAccount': '创建账号',
   'auth.back': '返回',
   'auth.continueWithGoogle': '使用 Google 登录',
+  'auth.continueWithApple': '使用 Apple 登录',
   'auth.orDivider': '或',
   'auth.goRegister': '注册',
   'auth.verifyEmail.title': '查看你的收件箱',
@@ -36,6 +37,7 @@ const zh = {
   'auth.verifyEmail.resent': '邮件已发送！',
   'auth.verifyEmail.checkSpam': '没看到？检查一下垃圾邮件文件夹。',
   'auth.continue': '继续',
+  'auth.sendingCode': '发送验证码中...',
   'auth.tryFree': '免费试用',
   'auth.otp.title': '输入验证码',
   'auth.otp.subtitle': '验证码已发送到',
@@ -262,6 +264,8 @@ const zh = {
   'billing.subscribeTo': '订阅',
   'billing.upgradeTo': '升级到',
   'billing.current': '当前',
+  'billing.iosUnavailableTitle': 'iOS 内购买稍后开放',
+  'billing.iosUnavailableDesc': '为了符合 App Store 审核要求，iOS App 暂不通过网页出售点数或订阅。你可以继续使用当前余额创作。',
 
   // Misc
   // Skills
@@ -289,6 +293,8 @@ const zh = {
   'model.kling.desc': '4K 高规格输出，速度快，内置音效。',
   'model.seedanceFast.name': 'SeeDance 2.0 Fast',
   'model.seedanceFast.desc': '默认视频模型，速度和成本更适合日常生成。',
+  'model.seedanceMini.name': 'SeeDance 2.0 Mini',
+  'model.seedanceMini.desc': '低成本 Seedance 路径，适合草稿和多尺寸测试。',
   'model.seedance.name': 'SeeDance 2.0',
   'model.seedance.desc': '标准高画质路径，适合最终成片，成本更高。',
   'model.grok.name': 'Grok 1.5',

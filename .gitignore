@@ -21,6 +21,7 @@
 
 # production
 /build
+/ios/build/
 
 # misc
 .DS_Store
@@ -58,6 +59,7 @@ next-env.d.ts
 !src/**/*.png
 !public/**/*.jpg
 !public/**/*.png
+!ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
 
 # dev scripts
 /scripts/
@@ -65,6 +67,7 @@ next-env.d.ts
 /scripts/*
 !/scripts/makaron-release-check.mjs
 !/scripts/makaron-worktree-fastpath.mjs
+!/scripts/backfill-annual-subscription-credits.mjs
 
 
 # claude code local settings

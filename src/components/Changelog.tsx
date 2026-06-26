@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 interface ChangelogEntry {
   date: string;
   en: { title: string; items: string[]; link?: { label: string; href: string } };
@@ -7,6 +9,30 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: '2026-06-26',
+    en: { title: 'iOS TestFlight Begins', items: [
+      'Makaron for iPhone is now preparing for App Store launch, with TestFlight testing open for the first release candidate.',
+      'The iOS app connects to the live Makaron workspace, so projects, chat, image previews, video tools, and credits stay in sync with the web app.',
+      'Subscriptions and top-ups are now handled through Apple on iOS, while the web app continues to use the existing checkout flow.',
+    ]},
+    zh: { title: 'iOS TestFlight 开始测试', items: [
+      'Makaron iPhone 版已进入 App Store 上线准备阶段，首个候选版本开始 TestFlight 测试。',
+      'iOS App 连接同一套 Makaron 工作区，项目、对话、图片预览、视频工具和 credits 会与网页端同步。',
+      'iOS 上的订阅和充值现在通过 Apple 完成，网页端继续沿用原有支付流程。',
+    ]},
+  },
+  {
+    date: '2026-06-25',
+    en: { title: 'SeeDance Mini', items: [
+      'SeeDance 2.0 Mini is now available for lower-cost 480p/720p video drafts.',
+      'Mini reference videos now keep the real timeline source, inferred aspect ratio, and correct credit logs.',
+    ]},
+    zh: { title: 'SeeDance Mini', items: [
+      'SeeDance 2.0 Mini 上线，可用于更低成本的 480p/720p 视频草稿。',
+      'Mini 参考视频现在会保留真实时间线来源、自动推断比例，并正确记录计费。',
+    ]},
+  },
   {
     date: '2026-06-21',
     en: { title: 'Major Video Model Upgrade', items: [
@@ -625,19 +651,31 @@ const CHANGELOG: ChangelogEntry[] = [
 
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
   const isZh = locale === 'zh';
+  const [isIOSApp, setIsIOSApp] = useState(false);
+
+  useEffect(() => {
+    setIsIOSApp(document.documentElement.classList.contains('makaron-ios-app') || navigator.userAgent.includes('MakaronIOS'));
+  }, []);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center"
       onClick={onClose}
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      {/* Modal — full screen on mobile, centered card on desktop */}
+      {/* Modal */}
       <div
-        className="relative w-full h-full sm:h-auto sm:max-w-xl sm:mx-4 sm:max-h-[80dvh] sm:rounded-2xl overflow-hidden flex flex-col"
-        style={{ background: 'rgba(20,20,20,0.97)', border: '1px solid rgba(255,255,255,0.08)' }}
+        className={isIOSApp
+          ? 'relative w-[calc(100%-24px)] max-w-xl max-h-[82dvh] rounded-2xl overflow-hidden flex flex-col'
+          : 'relative w-full h-full sm:h-auto sm:max-w-xl sm:mx-4 sm:max-h-[80dvh] sm:rounded-2xl overflow-hidden flex flex-col'
+        }
+        style={{
+          background: 'rgba(20,20,20,0.97)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          marginBottom: isIOSApp ? 'max(12px, env(safe-area-inset-bottom))' : undefined,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

@@ -115,6 +115,38 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     provider: 'seedance',
     providerModel: 'seedance-2.0-fast-reference-to-video',
   },
+  'seedance-mini': {
+    id: 'seedance-mini',
+    label: 'SeeDance 2.0 Mini',
+    minOutputDuration: 4,
+    maxOutputDuration: 15,
+    maxReferenceVideoDuration: 15.5,
+    referenceVideoSize: {
+      maxFileSizeMb: 50,
+      minWidth: 300,
+      maxWidth: 6000,
+      minHeight: 300,
+      maxHeight: 6000,
+      minAspectRatio: 0.4,
+      maxAspectRatio: 2.5,
+      minFramePixels: 409_600,
+      maxFramePixels: 2_086_876,
+      description: '<=50MB, width/height 300-6000px, aspect 0.4-2.5, frame pixels 409,600-2,086,876',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: false,
+    longVideoChunkSeconds: 15,
+    estimatedCostPerSecondUsd: 0.056,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.056,
+      '720p': 0.12,
+    },
+    supportedResolutions: ['480p', '720p'],
+    defaultResolution: '480p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    provider: 'seedance',
+    providerModel: 'seedance-2.0-mini-reference-to-video',
+  },
   seedance: {
     id: 'seedance',
     label: 'SeeDance 2.0',
@@ -215,6 +247,9 @@ export function normalizeVideoModelId(model?: string | null): string {
   const normalized = String(model).trim().toLowerCase()
   if (normalized === 'seedance2-fast' || normalized === 'seedance-2.0-fast' || normalized === 'seedance_fast') {
     return 'seedance-fast'
+  }
+  if (normalized === 'seedance2-mini' || normalized === 'seedance-2.0-mini' || normalized === 'seedance_mini' || normalized === 'mini') {
+    return 'seedance-mini'
   }
   if (normalized === 'seedance2' || normalized === 'seedance-2.0' || normalized === 'seedance-standard') {
     return 'seedance'
@@ -329,6 +364,44 @@ export function resolveVideoProviderAspectRatio(
     return route.provider === 'seedance' ? 'adaptive' : undefined
   }
   return aspectRatio
+}
+
+const ASPECT_RATIO_VALUES: Record<VideoAspectRatio, number> = {
+  '16:9': 16 / 9,
+  '9:16': 9 / 16,
+  '1:1': 1,
+  '4:3': 4 / 3,
+  '3:4': 3 / 4,
+  '21:9': 21 / 9,
+  '3:2': 3 / 2,
+  '2:3': 2 / 3,
+}
+
+export function resolveClosestSupportedAspectRatio(
+  model?: string | null,
+  width?: number | null,
+  height?: number | null,
+): VideoAspectRatio | undefined {
+  const w = Number(width)
+  const h = Number(height)
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return undefined
+
+  const supported = getVideoModelCapability(model).supportedAspectRatios
+  if (!supported?.length) return undefined
+
+  const target = w / h
+  let best: VideoAspectRatio | undefined
+  let bestDistance = Infinity
+  for (const ratio of supported) {
+    const value = ASPECT_RATIO_VALUES[ratio]
+    if (!value) continue
+    const distance = Math.abs(Math.log(target / value))
+    if (distance < bestDistance) {
+      best = ratio
+      bestDistance = distance
+    }
+  }
+  return best
 }
 
 export function estimateVideoProviderCostUsd(options: {
