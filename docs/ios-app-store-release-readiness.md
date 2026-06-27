@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-27
 
-This checklist intentionally excludes App Store product page copy and screenshots because that work is being prepared separately.
+This checklist includes the final App Store product-page state prepared for the first iOS submission.
 
 ## Current App Store Connect Snapshot
 
@@ -17,6 +17,8 @@ This checklist intentionally excludes App Store product page copy and screenshot
 - Encryption: `usesNonExemptEncryption=false`
 - Release type: `AFTER_APPROVAL`
 - Public TestFlight link: `https://testflight.apple.com/join/fgPusTG9`
+- Product page locale: `en-US`
+- App category: still requires App Store Connect web UI confirmation if not visible in the submit flow. Recommended primary category `Graphics & Design`, secondary category `Photo & Video`.
 
 ## Prepared This Pass
 
@@ -34,6 +36,25 @@ This checklist intentionally excludes App Store product page copy and screenshot
 - Verified App Store Connect API key path exists:
   - `/Users/tianyicai/.appstoreconnect/makaron/api-key.json`
   - `/Users/tianyicai/.appstoreconnect/makaron/AuthKey_X9947Z2DZ6.p8`
+- Uploaded final iPhone 6.9-inch product screenshots from:
+  - `app-store-assets/ios-2026-06-27/final/app-store-01.png`
+  - `app-store-assets/ios-2026-06-27/final/app-store-02.png`
+  - `app-store-assets/ios-2026-06-27/final/app-store-03.png`
+  - `app-store-assets/ios-2026-06-27/final/app-store-04.png`
+  - `app-store-assets/ios-2026-06-27/final/app-store-05.png`
+- Product screenshots uploaded to App Store Connect screenshot display type `APP_IPHONE_67`, all `COMPLETE`.
+- Updated App Store product metadata:
+  - Subtitle: `AI creative studio`
+  - Description: English product description for AI photo/video creative studio
+  - Keywords: `AI photo editor,image editor,video generator,creative studio,photo retouch,design,art`
+  - Promotional text: `AI creative editing for photos, videos, and visual ideas.`
+  - Marketing URL: `https://www.makaron.app`
+  - Copyright: `2026 Shanghai YiTian Network Technology Co., Ltd.`
+- Wrote App Review information in App Store Connect:
+  - Contact: Tianyi Cai, `+86 13818865130`, `tianyi@versa-ai.com`
+  - Demo account required: yes
+  - Demo account email: `test-claude@makaron.app`
+  - Review notes: AI creative studio test flow + Apple IAP purchase note
 
 ## In-App Purchases and Subscriptions
 
@@ -60,16 +81,21 @@ Subscriptions, all `READY_TO_SUBMIT`:
 - `app.makaron.ios.subscription.business.monthly` — Business Monthly
 - `app.makaron.ios.subscription.business.annual` — Business Annual
 
-Pre-submit checks still required:
+Confirmed by App Store Connect API on 2026-06-27:
 
-- Confirm all IAP/subscription review screenshots are uploaded.
-  - Use real screenshots from the current iOS app purchase UI.
-  - Do not use the old standalone Apple IAP test page or placeholder dashboard screenshots.
-  - Required surfaces: subscription plan selection, top-up list, Apple purchase sheet if available, and successful credits/subscription state after purchase.
-- Confirm all IAP/subscription localizations are user-facing and consistent with in-app UI.
-- Confirm subscription group display order and subscription display order.
-- Confirm all intended territories/prices are active.
-- Confirm first IAP/submission package is included with App Review submission.
+- Top-up review screenshots exist and are `COMPLETE`.
+- Subscription review screenshots exist and are `COMPLETE`.
+- Top-up localizations exist and are user-facing credit amounts.
+- Subscription localizations exist.
+- Top-up price schedules exist.
+- Subscription prices exist.
+- Top-up and subscription availability have `availableInNewTerritories=true`.
+- Subscription group levels are ordered Business = 1, Pro = 2, Basic = 3.
+
+Pre-submit checks still required in the web UI:
+
+- Confirm first IAP/subscription package is included with the App Review submission.
+- If App Store Connect shows an IAP/subscription warning, resolve it before pressing Submit.
 
 ## App Review Information
 
@@ -77,7 +103,7 @@ Do not commit reviewer passwords to the repo.
 
 Known review test account:
 
-- Email: use the existing App Store Connect review test account.
+- Email: `test-claude@makaron.app`
 - Password: stored outside repo / entered in App Store Connect only.
 
 Contact:
@@ -126,6 +152,7 @@ Must verify in App Store Connect:
 - Account identifiers, user content, purchases, product interaction, diagnostics, and support communications are disclosed if Apple asks at the App Privacy level.
 - Privacy Policy URL remains set to `https://www.makaron.app/privacy`.
 - Support URL remains set to `https://www.makaron.app/support`.
+- Age Rating questionnaire is completed in the web UI. API currently shows the age rating declaration exists but its questionnaire fields are still null.
 
 ## App Privacy Questionnaire Recommendation
 
@@ -217,12 +244,17 @@ Known launch caveat:
 
 ## Remaining P0 Before Submit
 
-- App Store product page copy and screenshots from the other agent.
-- Fill or verify App Review contact, reviewer notes, and test account in App Store Connect.
+- Confirm App Store product page visually in the web UI after API upload.
 - Confirm App Privacy questionnaire.
-- Confirm IAP/subscription screenshots, prices, territories, and localization.
+- Complete/confirm Age Rating questionnaire.
+- Confirm App Store categories in the web UI. Recommended: primary `Graphics & Design`, secondary `Photo & Video`.
+- Confirm first IAP/subscription package is included in the same App Review submission.
 - Run final device regression on the exact candidate build.
-- Submit app version `1.0` and first IAP/subscription package together.
+- Submit app version `1.0` and first IAP/subscription package together from the App Store Connect web UI.
+
+Submission API note:
+
+- `POST /v1/appStoreVersionSubmissions` returned `403` with allowed operation `DELETE`; this API key/API surface cannot create the final submission. Use App Store Connect web UI for the final Submit button.
 
 ## P1 Launch Operations
 
