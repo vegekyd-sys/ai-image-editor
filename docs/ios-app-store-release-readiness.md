@@ -10,7 +10,7 @@ This checklist includes the final App Store product-page state prepared for the 
 - Bundle ID: `app.makaron.ios`
 - App Store Connect App ID: `6779672002`
 - App Store version: `1.0`
-- Version state: `PREPARE_FOR_SUBMISSION`
+- Version state: submitted for App Review on 2026-06-27
 - Selected build: `1.0 (5)`
 - Build ID: `df280aa7-7b9f-41c9-ad69-e992b0f9c52d`
 - Build state: `VALID`
@@ -18,7 +18,8 @@ This checklist includes the final App Store product-page state prepared for the 
 - Release type: `AFTER_APPROVAL`
 - Public TestFlight link: `https://testflight.apple.com/join/fgPusTG9`
 - Product page locale: `en-US`
-- App category: still requires App Store Connect web UI confirmation if not visible in the submit flow. Recommended primary category `Graphics & Design`, secondary category `Photo & Video`.
+- App category: primary `Graphics & Design`, secondary `Photo & Video`
+- App Review submission ID: `6462e5bb-7a89-4ec2-b336-ded02ccf6707`
 
 ## Prepared This Pass
 
@@ -43,6 +44,13 @@ This checklist includes the final App Store product-page state prepared for the 
   - `app-store-assets/ios-2026-06-27/final/app-store-04.png`
   - `app-store-assets/ios-2026-06-27/final/app-store-05.png`
 - Product screenshots uploaded to App Store Connect screenshot display type `APP_IPHONE_67`, all `COMPLETE`.
+- Generated and uploaded iPad 13-inch screenshots from:
+  - `app-store-assets/ios-2026-06-27/ipad-13-final/ipad-13-01.png`
+  - `app-store-assets/ios-2026-06-27/ipad-13-final/ipad-13-02.png`
+  - `app-store-assets/ios-2026-06-27/ipad-13-final/ipad-13-03.png`
+  - `app-store-assets/ios-2026-06-27/ipad-13-final/ipad-13-04.png`
+  - `app-store-assets/ios-2026-06-27/ipad-13-final/ipad-13-05.png`
+- Product screenshots uploaded to iPad 13-inch media slot, 5/10 screenshots.
 - Updated App Store product metadata:
   - Subtitle: `AI creative studio`
   - Description: English product description for AI photo/video creative studio
@@ -55,6 +63,13 @@ This checklist includes the final App Store product-page state prepared for the 
   - Demo account required: yes
   - Demo account email: `test-claude@makaron.app`
   - Review notes: AI creative studio test flow + Apple IAP purchase note
+- Completed App Store Connect web-only release fields:
+  - App Privacy questionnaire published
+  - Age Rating completed as 4+
+  - App category set
+  - App content rights set to no third-party content
+  - App base price set to free in 175 countries/regions
+- Submitted iOS App version `1.0` build `5` for App Review. App Store Connect showed: `已提交 1 个项目`.
 
 ## In-App Purchases and Subscriptions
 
@@ -92,10 +107,10 @@ Confirmed by App Store Connect API on 2026-06-27:
 - Top-up and subscription availability have `availableInNewTerritories=true`.
 - Subscription group levels are ordered Business = 1, Pro = 2, Basic = 3.
 
-Pre-submit checks still required in the web UI:
+Submission inclusion confirmed in the web UI:
 
-- Confirm first IAP/subscription package is included with the App Review submission.
-- If App Store Connect shows an IAP/subscription warning, resolve it before pressing Submit.
+- All 5 consumable top-ups and 6 auto-renewing subscriptions were included in the App Review submission package before final submit.
+- App Store Connect accepted the submission with the iOS App `1.0 (5)` item.
 
 ## App Review Information
 
@@ -146,13 +161,12 @@ Prepared:
   - No collected data types in native manifest
   - UserDefaults accessed API reason `CA92.1`
 
-Must verify in App Store Connect:
+Verified in App Store Connect on 2026-06-27:
 
-- App Privacy questionnaire matches actual product behavior, not only native manifest.
-- Account identifiers, user content, purchases, product interaction, diagnostics, and support communications are disclosed if Apple asks at the App Privacy level.
+- App Privacy questionnaire was completed and published by Tianyi Cai.
 - Privacy Policy URL remains set to `https://www.makaron.app/privacy`.
 - Support URL remains set to `https://www.makaron.app/support`.
-- Age Rating questionnaire is completed in the web UI. API currently shows the age rating declaration exists but its questionnaire fields are still null.
+- Age Rating questionnaire completed in the web UI. Result: global 4+ with regional variants.
 
 ## App Privacy Questionnaire Recommendation
 
