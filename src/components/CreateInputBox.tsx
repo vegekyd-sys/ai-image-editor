@@ -36,7 +36,7 @@ export interface CreateInputBoxProps {
   onSubmit: () => void;
   onSlotClick?: () => void;
   onFilesSelected?: (files: File[]) => void;
-  onTextareaFocus?: () => void;
+  onTextareaFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
   onTextareaBlur?: () => void;
   // Skill selector props
   skills: SkillItem[];

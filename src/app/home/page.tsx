@@ -222,7 +222,10 @@ function HomePageInner() {
     inlineTextareaRef.current?.blur()
     setTextareaFocused(false)
     setKbInset(0)
-  }, [])
+    if (!isDesktop) {
+      setShowFixedInput(Boolean(selectedDetailRef.current))
+    }
+  }, [isDesktop])
 
   const handleHomeTextareaBlur = useCallback(() => {
     window.setTimeout(() => {
@@ -622,8 +625,9 @@ function HomePageInner() {
       document.documentElement.style.overflow = 'hidden'
       return () => unlockHomeScroll(true)
     }
+    if (!isDesktop) setShowFixedInput(false)
     unlockHomeScroll(true)
-  }, [selectedDetail, unlockHomeScroll])
+  }, [isDesktop, selectedDetail, unlockHomeScroll])
 
   useEffect(() => {
     if (!isIOSAppShell) return
@@ -732,31 +736,25 @@ function HomePageInner() {
 
   const syncFixedInputVisibility = useCallback(() => {
     if (isDesktop) return
-    const scrollContainer = getHomeScrollContainer(inlineInputRef.current)
-    const inlineRect = inlineInputRef.current?.getBoundingClientRect()
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-    const inlineMostlyVisible = inlineRect
-      ? inlineRect.top >= 0 && inlineRect.bottom <= viewportHeight - 24
-      : false
-    const scrollTop = scrollContainer
-      ? scrollContainer.scrollTop
-      : Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)
-    if (!textareaFocused && scrollTop <= 24) {
+    if (!selectedDetailRef.current) {
       setShowFixedInput(false)
       return
     }
-    setShowFixedInput(textareaFocused || scrollTop > 24 || !inlineMostlyVisible)
+    setShowFixedInput(textareaFocused || document.activeElement === textareaRef.current)
   }, [isDesktop, textareaFocused])
-  const keepSkillComposerAboveKeyboard = useCallback(() => {
+  const keepSkillComposerAboveKeyboard = useCallback((event?: React.FocusEvent<HTMLTextAreaElement>) => {
+    const inlineTextareaFocused = event?.currentTarget === inlineTextareaRef.current
     setTextareaFocused(true)
-    if (!isDesktop) setShowFixedInput(true)
+    if (!isDesktop) setShowFixedInput(!inlineTextareaFocused)
     const sync = () => {
       const vv = window.visualViewport
       if (vv) {
         const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
         setKbInset(Math.round(inset))
       }
-      inputWrapperRef.current?.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'smooth' })
+      if (!inlineTextareaFocused) {
+        inputWrapperRef.current?.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'smooth' })
+      }
     }
     sync()
     window.setTimeout(sync, 80)
@@ -787,6 +785,7 @@ function HomePageInner() {
     }
 
     scrollContainer?.addEventListener('scroll', scheduleSync, { passive: true })
+    document.addEventListener('scroll', scheduleSync, true)
     window.addEventListener('scroll', scheduleSync, { passive: true })
     window.addEventListener('resize', scheduleSync)
     window.addEventListener('pageshow', scheduleSync)
@@ -803,6 +802,7 @@ function HomePageInner() {
       }
       inlineResizeObserver?.disconnect()
       scrollContainer?.removeEventListener('scroll', scheduleSync)
+      document.removeEventListener('scroll', scheduleSync, true)
       window.removeEventListener('scroll', scheduleSync)
       window.removeEventListener('resize', scheduleSync)
       window.removeEventListener('pageshow', scheduleSync)
