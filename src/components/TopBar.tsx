@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
@@ -22,6 +22,9 @@ interface CreditsPayload {
 
 const IOS_LAST_PRIMARY_ROUTE_KEY = 'makaron:ios-last-primary-route'
 const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
+const ACCOUNT_EDGE_SWIPE_WIDTH = 30
+const ACCOUNT_EDGE_SWIPE_OPEN_DISTANCE = 44
+const ACCOUNT_EDGE_SWIPE_MAX_VERTICAL_DRIFT = 42
 
 const TOPBAR_ROUTE_WARM_APIS: Record<string, string[]> = {
   '/home': ['/api/home-skills', '/api/skills'],
@@ -35,6 +38,100 @@ function isPrimaryTopBarRoute(path: string): boolean {
   return path === '/home' || path === '/projects'
 }
 
+const accountMenuGlassLayerStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  pointerEvents: 'none',
+  borderRadius: 'inherit',
+  background:
+    'radial-gradient(circle at 18% 0%, rgba(255,255,255,0.18), rgba(255,255,255,0.04) 28%, transparent 54%), linear-gradient(138deg, rgba(255,255,255,0.08), rgba(255,255,255,0.018) 34%, rgba(236,72,153,0.032) 72%, rgba(34,211,238,0.026))',
+  mixBlendMode: 'screen',
+  opacity: 0.72,
+}
+
+const accountMenuEdgeStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 1,
+  borderRadius: 'inherit',
+  pointerEvents: 'none',
+  boxShadow:
+    'inset 0 0.5px 0 rgba(255,255,255,0.22), inset 0 -0.5px 0 rgba(0,0,0,0.34), inset 1px 0 0 rgba(56,189,248,0.035), inset -1px 0 0 rgba(236,72,153,0.036)',
+}
+
+const desktopAccountMenuStyle: CSSProperties = {
+  position: 'absolute',
+  top: '100%',
+  right: 0,
+  marginTop: 8,
+  minWidth: 208,
+  padding: 5,
+  borderRadius: 16,
+  border: '0.5px solid rgba(255,255,255,0.10)',
+  background:
+    'linear-gradient(180deg, rgba(42,43,50,0.68), rgba(18,19,24,0.72) 52%, rgba(9,10,13,0.80))',
+  boxShadow:
+    '0 18px 46px rgba(0,0,0,0.44), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -12px 24px rgba(0,0,0,0.20)',
+  backdropFilter: 'blur(30px) saturate(155%) contrast(106%)',
+  WebkitBackdropFilter: 'blur(30px) saturate(155%) contrast(106%)',
+  zIndex: 240,
+  overflow: 'hidden',
+  isolation: 'isolate',
+}
+
+const mobileAccountOverlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 320,
+  display: 'none',
+}
+
+const mobileAccountBackdropStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  border: 0,
+  padding: 0,
+  background: 'rgba(0,0,0,0.48)',
+  backdropFilter: 'blur(2px)',
+  WebkitBackdropFilter: 'blur(2px)',
+  cursor: 'pointer',
+}
+
+const mobileAccountPanelStyle: CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  right: 0,
+  height: '100dvh',
+  width: 'min(86vw, 390px)',
+  padding: 'calc(env(safe-area-inset-top, 0px) + 18px) 16px calc(env(safe-area-inset-bottom, 0px) + 18px)',
+  borderRadius: '26px 0 0 26px',
+  border: '0.5px solid rgba(255,255,255,0.11)',
+  borderRight: 0,
+  background:
+    'linear-gradient(180deg, rgba(45,46,54,0.74), rgba(17,18,23,0.78) 48%, rgba(7,8,11,0.86))',
+  boxShadow:
+    '-28px 0 56px rgba(0,0,0,0.42), inset 0 0.5px 0 rgba(255,255,255,0.17), inset 18px 0 34px rgba(255,255,255,0.025), inset 0 -22px 34px rgba(0,0,0,0.24)',
+  backdropFilter: 'blur(32px) saturate(160%) contrast(106%)',
+  WebkitBackdropFilter: 'blur(32px) saturate(160%) contrast(106%)',
+  overflow: 'hidden',
+  isolation: 'isolate',
+  animation: 'makaron-account-drawer-in 260ms cubic-bezier(0.22, 1, 0.36, 1)',
+}
+
+const accountSeparatorStyle: CSSProperties = {
+  height: 1,
+  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)',
+  margin: '5px 6px',
+}
+
+function AccountGlassLayers() {
+  return (
+    <>
+      <div style={accountMenuGlassLayerStyle} />
+      <div style={accountMenuEdgeStyle} />
+    </>
+  )
+}
+
 export default function TopBar({ authReturnPath }: TopBarProps) {
   const { user, signOut } = useAuth()
   const { locale, setLocale } = useLocale()
@@ -42,6 +139,11 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
+  const accountEdgeSwipeRef = useRef<{ tracking: boolean; startX: number; startY: number }>({
+    tracking: false,
+    startX: 0,
+    startY: 0,
+  })
   const [creditBalance, setCreditBalance] = useState<number | null>(() => {
     const cached = readNativeJSONCache<CreditsPayload>('/api/billing/credits')
     return cached?.balance ?? null
@@ -165,9 +267,85 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
     return () => document.removeEventListener('mousedown', handler)
   }, [userMenuOpen, warmTopBarMenuRoutes])
 
+  useEffect(() => {
+    if (!userMenuOpen) return
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setUserMenuOpen(false)
+    }
+    window.addEventListener('keydown', keyHandler)
+
+    const shouldLockScroll = window.matchMedia('(max-width: 767px)').matches
+    const previousOverflow = document.body.style.overflow
+    if (shouldLockScroll) {
+      document.body.style.overflow = 'hidden'
+    }
+
+    return () => {
+      window.removeEventListener('keydown', keyHandler)
+      if (shouldLockScroll) {
+        document.body.style.overflow = previousOverflow
+      }
+    }
+  }, [userMenuOpen])
+
+  useEffect(() => {
+    if (!user || userMenuOpen) return
+
+    const isMobileViewport = () => window.matchMedia('(max-width: 767px)').matches
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return false
+      return !!target.closest('input, textarea, select, [contenteditable="true"]')
+    }
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (!isMobileViewport() || isEditableTarget(e.target)) return
+      const touch = e.touches[0]
+      if (!touch) return
+      const fromRightEdge = touch.clientX >= window.innerWidth - ACCOUNT_EDGE_SWIPE_WIDTH
+      accountEdgeSwipeRef.current = {
+        tracking: fromRightEdge,
+        startX: touch.clientX,
+        startY: touch.clientY,
+      }
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const state = accountEdgeSwipeRef.current
+      if (!state.tracking) return
+      const touch = e.touches[0]
+      if (!touch) return
+      const deltaX = touch.clientX - state.startX
+      const deltaY = touch.clientY - state.startY
+      if (Math.abs(deltaY) > ACCOUNT_EDGE_SWIPE_MAX_VERTICAL_DRIFT) {
+        accountEdgeSwipeRef.current.tracking = false
+        return
+      }
+      if (deltaX <= -ACCOUNT_EDGE_SWIPE_OPEN_DISTANCE) {
+        accountEdgeSwipeRef.current.tracking = false
+        setUserMenuOpen(true)
+      }
+    }
+
+    const clearTracking = () => {
+      accountEdgeSwipeRef.current.tracking = false
+    }
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: true })
+    window.addEventListener('touchend', clearTracking, { passive: true })
+    window.addEventListener('touchcancel', clearTracking, { passive: true })
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', clearTracking)
+      window.removeEventListener('touchcancel', clearTracking)
+    }
+  }, [user, userMenuOpen])
+
   return (
     <>
-      <div className="makaron-topbar" style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 140 }}>
+      <div className="makaron-topbar" style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: userMenuOpen ? 360 : 140 }}>
         {/* Left side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
@@ -218,6 +396,8 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
               <button
                 type="button"
                 aria-label={locale === 'zh' ? '打开个人菜单' : 'Open account menu'}
+                aria-expanded={userMenuOpen}
+                aria-controls="makaron-account-menu makaron-account-menu-mobile"
                 data-makaron-user-menu-trigger="true"
                 onClick={() => setUserMenuOpen(v => !v)}
                 style={{
@@ -247,103 +427,255 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: userMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                <svg className="makaron-account-trigger-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: userMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
               </button>
               {userMenuOpen && (() => {
                 const avatarUrl = user.user_metadata?.avatar_url
                 const displayName = user.user_metadata?.full_name || user.user_metadata?.name
-                const initials = (displayName || user.email || '?')[0].toUpperCase()
-                const menuBtnStyle: React.CSSProperties = {
-                  display: 'block', width: '100%', textAlign: 'left',
-                  padding: '10px 16px', background: 'none', border: 'none',
-                  color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem',
-                  cursor: 'pointer', transition: 'background 0.15s',
+                const initials = ((displayName || user.email || '?').trim()[0] || '?').toUpperCase()
+                const email = user.email || ''
+                const desktopMenuBtnStyle: CSSProperties = {
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '10px 12px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: 10,
+                  color: 'rgba(255,255,255,0.68)',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, color 0.15s',
                 }
-                return (
+                const mobileMenuBtnStyle: CSSProperties = {
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 14,
+                  width: '100%',
+                  minHeight: 50,
+                  textAlign: 'left',
+                  padding: '0 14px',
+                  background: 'rgba(255,255,255,0.035)',
+                  border: '0.5px solid rgba(255,255,255,0.055)',
+                  borderRadius: 16,
+                  color: 'rgba(255,255,255,0.78)',
+                  fontSize: '0.88rem',
+                  fontWeight: 540,
+                  cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                }
+                const signOutButtonStyle: CSSProperties = {
+                  ...mobileMenuBtnStyle,
+                  color: 'rgba(255,255,255,0.52)',
+                  background: 'rgba(255,255,255,0.026)',
+                }
+                const onDesktopItemEnter = (e: ReactMouseEvent<HTMLButtonElement>) => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.055)'
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.88)'
+                }
+                const onDesktopItemLeave = (e: ReactMouseEvent<HTMLButtonElement>) => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.68)'
+                }
+                const avatarNode = (size: number) => (
                   <div style={{
-                    position: 'absolute', top: '100%', right: 0, marginTop: 8,
-                    background: 'rgba(24,24,28,0.98)', border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 12, padding: '4px 0', minWidth: 200,
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 240,
-	                  }}>
-	                    {/* User card header */}
-                    <button
-                      onClick={() => navigateTopBar('/profile')}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                        padding: '12px 16px', background: 'none', border: 'none',
-                        cursor: 'pointer', transition: 'background 0.15s', borderRadius: '8px 8px 0 0',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                    >
-                      <div style={{
-                        width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-                        background: avatarUrl ? 'none' : 'linear-gradient(135deg, #a855f7, #ec4899)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {avatarUrl ? (
-                          <img src={getThumbnailUrl(avatarUrl, 72, 80, 72, 'cover')} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 600 }}>{initials}</span>
-                        )}
-                      </div>
-                      <div style={{ overflow: 'hidden', textAlign: 'left' }}>
-                        {displayName && (
-                          <div style={{ fontSize: '0.78rem', fontWeight: 500, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {displayName}
-                          </div>
-                        )}
-                        <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {user.email}
-                        </div>
-                      </div>
-                    </button>
-                    <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
-                    <button
-                      onClick={() => navigateTopBar('/dashboard')}
-                      style={menuBtnStyle}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                    >
-                      {locale === 'zh' ? '数据面板' : 'Dashboard'}
-                    </button>
-                    <button
-                      onClick={() => navigateTopBar('/dashboard?tab=keys')}
-                      style={menuBtnStyle}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                    >
-                      {locale === 'zh' ? '获取 API' : 'Get API'}
-                    </button>
-                    <button
-                      onClick={() => navigateTopBar('/skills')}
-                      style={menuBtnStyle}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                    >
-                      Skills
-                    </button>
-                    <button
-                      onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }}
-                      style={menuBtnStyle}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                    >
-                      {locale === 'zh' ? 'English' : '中文'}
-                    </button>
-                    <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />
-                    <button
-                      onClick={() => { setUserMenuOpen(false); signOut() }}
-                      style={{ ...menuBtnStyle, color: 'rgba(255,255,255,0.45)' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                    >
-                      {locale === 'zh' ? '退出登录' : 'Sign out'}
-                    </button>
+                    width: size,
+                    height: size,
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    background: avatarUrl
+                      ? 'rgba(255,255,255,0.06)'
+                      : 'linear-gradient(135deg, rgba(168,85,247,0.92), rgba(236,72,153,0.92))',
+                    border: '0.5px solid rgba(255,255,255,0.16)',
+                    boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.18), 0 8px 18px rgba(0,0,0,0.22)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    {avatarUrl ? (
+                      <img src={getThumbnailUrl(avatarUrl, size * 2, 80, size * 2, 'cover')} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ color: 'white', fontSize: size > 40 ? '1.05rem' : '0.8rem', fontWeight: 700 }}>{initials}</span>
+                    )}
                   </div>
+                )
+                return (
+                  <>
+                    <div id="makaron-account-menu" className="makaron-account-menu-desktop" style={desktopAccountMenuStyle}>
+                      <AccountGlassLayers />
+                      <div style={{ position: 'relative', zIndex: 1 }}>
+                        <button
+                          onClick={() => navigateTopBar('/profile')}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            width: '100%',
+                            padding: '11px 12px',
+                            background: 'rgba(255,255,255,0.022)',
+                            border: '0.5px solid rgba(255,255,255,0.045)',
+                            cursor: 'pointer',
+                            transition: 'background 0.15s',
+                            borderRadius: 12,
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.022)')}
+                        >
+                          {avatarNode(36)}
+                          <div style={{ overflow: 'hidden', textAlign: 'left', minWidth: 0 }}>
+                            {displayName && (
+                              <div style={{ fontSize: '0.78rem', fontWeight: 560, color: 'rgba(255,255,255,0.88)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {displayName}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.42)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {email}
+                            </div>
+                          </div>
+                        </button>
+                        <div style={accountSeparatorStyle} />
+                        <button onClick={() => navigateTopBar('/dashboard')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
+                          <span>{locale === 'zh' ? '数据面板' : 'Dashboard'}</span>
+                        </button>
+                        <button onClick={() => navigateTopBar('/dashboard?tab=keys')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
+                          <span>{locale === 'zh' ? '获取 API' : 'Get API'}</span>
+                        </button>
+                        <button onClick={() => navigateTopBar('/skills')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
+                          <span>Skills</span>
+                        </button>
+                        <button onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
+                          <span>{locale === 'zh' ? 'English' : '中文'}</span>
+                        </button>
+                        <div style={accountSeparatorStyle} />
+                        <button
+                          onClick={() => { setUserMenuOpen(false); signOut() }}
+                          style={{ ...desktopMenuBtnStyle, color: 'rgba(255,255,255,0.45)' }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                            e.currentTarget.style.color = 'rgba(255,255,255,0.68)'
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = 'transparent'
+                            e.currentTarget.style.color = 'rgba(255,255,255,0.45)'
+                          }}
+                        >
+                          <span>{locale === 'zh' ? '退出登录' : 'Sign out'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="makaron-account-menu-mobile" style={mobileAccountOverlayStyle}>
+                      <button
+                        type="button"
+                        aria-label={locale === 'zh' ? '关闭个人菜单' : 'Close account menu'}
+                        onMouseDown={() => setUserMenuOpen(false)}
+                        style={mobileAccountBackdropStyle}
+                      />
+                      <aside
+                        id="makaron-account-menu-mobile"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={locale === 'zh' ? '个人菜单' : 'Account menu'}
+                        style={mobileAccountPanelStyle}
+                      >
+                        <AccountGlassLayers />
+                        <div style={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 18 }}>
+                            <div style={{ fontSize: '0.74rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>
+                              {locale === 'zh' ? '账户' : 'Account'}
+                            </div>
+                            <button
+                              type="button"
+                              aria-label={locale === 'zh' ? '关闭个人菜单' : 'Close account menu'}
+                              onClick={() => setUserMenuOpen(false)}
+                              style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: '50%',
+                                border: '0.5px solid rgba(255,255,255,0.08)',
+                                background: 'rgba(255,255,255,0.04)',
+                                color: 'rgba(255,255,255,0.66)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                WebkitTapHighlightColor: 'transparent',
+                              }}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                              </svg>
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => navigateTopBar('/profile')}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 13,
+                              width: '100%',
+                              padding: 14,
+                              marginBottom: 14,
+                              borderRadius: 20,
+                              border: '0.5px solid rgba(255,255,255,0.075)',
+                              background:
+                                'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.024))',
+                              color: 'inherit',
+                              cursor: 'pointer',
+                              boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.12)',
+                              WebkitTapHighlightColor: 'transparent',
+                            }}
+                          >
+                            {avatarNode(48)}
+                            <div style={{ minWidth: 0, textAlign: 'left' }}>
+                              <div style={{ fontSize: '0.98rem', fontWeight: 650, color: 'rgba(255,255,255,0.92)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {displayName || (locale === 'zh' ? '个人资料' : 'Profile')}
+                              </div>
+                              <div style={{ marginTop: 3, fontSize: '0.76rem', color: 'rgba(255,255,255,0.46)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {email}
+                              </div>
+                              {creditBalance !== null && (
+                                <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.045)', color: creditBalance < 20 ? '#fbbf24' : 'rgba(255,255,255,0.58)', fontSize: '0.68rem', fontWeight: 700 }}>
+                                  <span>{creditBalance.toLocaleString()}</span>
+                                  <span style={{ color: 'rgba(255,255,255,0.32)', fontWeight: 600 }}>credits</span>
+                                </div>
+                              )}
+                            </div>
+                          </button>
+
+                          <nav aria-label={locale === 'zh' ? '账户导航' : 'Account navigation'} style={{ display: 'grid', gap: 10 }}>
+                            <button onClick={() => navigateTopBar('/dashboard')} style={mobileMenuBtnStyle}>
+                              <span>{locale === 'zh' ? '数据面板' : 'Dashboard'}</span>
+                            </button>
+                            <button onClick={() => navigateTopBar('/dashboard?tab=keys')} style={mobileMenuBtnStyle}>
+                              <span>{locale === 'zh' ? '获取 API' : 'Get API'}</span>
+                            </button>
+                            <button onClick={() => navigateTopBar('/skills')} style={mobileMenuBtnStyle}>
+                              <span>Skills</span>
+                            </button>
+                            <button onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }} style={mobileMenuBtnStyle}>
+                              <span>{locale === 'zh' ? 'English' : '中文'}</span>
+                            </button>
+                          </nav>
+
+                          <div style={{ marginTop: 'auto', paddingTop: 18 }}>
+                            <button onClick={() => { setUserMenuOpen(false); signOut() }} style={signOutButtonStyle}>
+                              <span>{locale === 'zh' ? '退出登录' : 'Sign out'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </aside>
+                    </div>
+                  </>
                 )
               })()}
             </div>
