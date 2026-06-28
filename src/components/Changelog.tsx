@@ -10,6 +10,15 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-06-29',
+    en: { title: 'Liquid Glass UI Refresh', items: [
+      'Home, Projects, Updates, account menus, and input areas now share a softer Liquid Glass style, with faster navigation and safer mobile/iOS spacing.',
+    ]},
+    zh: { title: 'Liquid Glass UI 升级', items: [
+      '首页、项目页、更新、账号菜单和输入框统一为更克制的 Liquid Glass 风格，同时优化了切换速度和移动端/iOS 安全区适配。',
+    ]},
+  },
+  {
     date: '2026-06-26',
     en: { title: 'iOS TestFlight Begins', items: [
       'Makaron for iPhone is now preparing for App Store launch, with TestFlight testing open for the first release candidate.',
@@ -680,6 +689,9 @@ const changelogGlassEdgeStyle: CSSProperties = {
     'inset 0 0 0 0.5px rgba(255,255,255,0.045), inset 0 10px 18px rgba(255,255,255,0.032), inset 0 -0.5px 0 rgba(0,0,0,0.34), inset 1px 0 0 rgba(56,189,248,0.032), inset -1px 0 0 rgba(236,72,153,0.034)',
 };
 
+const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
+const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
+
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
   const isZh = locale === 'zh';
   const [isIOSApp, setIsIOSApp] = useState(false);
@@ -692,6 +704,11 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
     <div
       className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center"
       onClick={onClose}
+      style={isIOSApp ? {
+        boxSizing: 'border-box',
+        paddingTop: iOSAppTopGap,
+        paddingBottom: iOSAppBottomGap,
+      } : undefined}
     >
       {/* Backdrop */}
       <div
@@ -707,7 +724,7 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
       {/* Modal */}
       <div
         className={isIOSApp
-          ? 'relative mb-2 w-[calc(100%-24px)] max-w-xl max-h-[calc(100dvh-64px)] rounded-[22px] overflow-hidden flex flex-col'
+          ? 'relative w-[calc(100%-24px)] max-w-xl rounded-[22px] overflow-hidden flex flex-col'
           : 'relative mb-2 w-[calc(100%-24px)] max-w-xl max-h-[calc(100dvh-64px)] rounded-[22px] sm:mb-0 sm:mx-4 sm:max-h-[80dvh] overflow-hidden flex flex-col'
         }
         role="dialog"
@@ -715,7 +732,7 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
         aria-label={isZh ? '更新' : 'Updates'}
         style={{
           ...changelogGlassStyle,
-          marginBottom: isIOSApp ? 'max(12px, env(safe-area-inset-bottom))' : undefined,
+          maxHeight: isIOSApp ? `calc(100dvh - ${iOSAppTopGap} - ${iOSAppBottomGap})` : undefined,
         }}
         onClick={(e) => e.stopPropagation()}
       >
