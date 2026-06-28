@@ -44,9 +44,9 @@ const accountMenuGlassLayerStyle: CSSProperties = {
   pointerEvents: 'none',
   borderRadius: 'inherit',
   background:
-    'radial-gradient(circle at 18% 0%, rgba(255,255,255,0.18), rgba(255,255,255,0.04) 28%, transparent 54%), linear-gradient(138deg, rgba(255,255,255,0.08), rgba(255,255,255,0.018) 34%, rgba(236,72,153,0.032) 72%, rgba(34,211,238,0.026))',
+    'radial-gradient(circle at 18% -8%, rgba(255,255,255,0.18), rgba(255,255,255,0.045) 24%, transparent 52%), linear-gradient(126deg, rgba(255,255,255,0.058), rgba(255,255,255,0.014) 36%, rgba(236,72,153,0.028) 74%, rgba(34,211,238,0.022))',
   mixBlendMode: 'screen',
-  opacity: 0.72,
+  opacity: 0.66,
 }
 
 const accountMenuEdgeStyle: CSSProperties = {
@@ -55,7 +55,7 @@ const accountMenuEdgeStyle: CSSProperties = {
   borderRadius: 'inherit',
   pointerEvents: 'none',
   boxShadow:
-    'inset 0 0.5px 0 rgba(255,255,255,0.22), inset 0 -0.5px 0 rgba(0,0,0,0.34), inset 1px 0 0 rgba(56,189,248,0.035), inset -1px 0 0 rgba(236,72,153,0.036)',
+    'inset 0 0 0 0.5px rgba(255,255,255,0.045), inset 0 10px 18px rgba(255,255,255,0.032), inset 0 -0.5px 0 rgba(0,0,0,0.34), inset 1px 0 0 rgba(56,189,248,0.032), inset -1px 0 0 rgba(236,72,153,0.034)',
 }
 
 const desktopAccountMenuStyle: CSSProperties = {
@@ -65,14 +65,14 @@ const desktopAccountMenuStyle: CSSProperties = {
   marginTop: 8,
   minWidth: 208,
   padding: 5,
-  borderRadius: 16,
+  borderRadius: 22,
   border: '0.5px solid rgba(255,255,255,0.10)',
   background:
-    'linear-gradient(180deg, rgba(42,43,50,0.68), rgba(18,19,24,0.72) 52%, rgba(9,10,13,0.80))',
+    'linear-gradient(180deg, rgba(46,47,56,0.68), rgba(17,18,24,0.75) 48%, rgba(7,8,11,0.86))',
   boxShadow:
-    '0 18px 46px rgba(0,0,0,0.44), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -12px 24px rgba(0,0,0,0.20)',
-  backdropFilter: 'blur(30px) saturate(155%) contrast(106%)',
-  WebkitBackdropFilter: 'blur(30px) saturate(155%) contrast(106%)',
+    '0 24px 64px rgba(0,0,0,0.50), inset 0 0.5px 0 rgba(255,255,255,0.14), inset 0 -16px 30px rgba(0,0,0,0.22)',
+  backdropFilter: 'blur(32px) saturate(158%) contrast(106%)',
+  WebkitBackdropFilter: 'blur(32px) saturate(158%) contrast(106%)',
   zIndex: 240,
   overflow: 'hidden',
   isolation: 'isolate',
@@ -101,17 +101,17 @@ const mobileAccountPanelStyle: CSSProperties = {
   top: 0,
   right: 0,
   height: '100dvh',
-  width: 'min(86vw, 390px)',
+  width: 'min(84vw, 382px)',
   padding: 'calc(env(safe-area-inset-top, 0px) + 18px) 16px calc(env(safe-area-inset-bottom, 0px) + 18px)',
-  borderRadius: '26px 0 0 26px',
+  borderRadius: '22px 0 0 22px',
   border: '0.5px solid rgba(255,255,255,0.11)',
   borderRight: 0,
   background:
-    'linear-gradient(180deg, rgba(45,46,54,0.74), rgba(17,18,23,0.78) 48%, rgba(7,8,11,0.86))',
+    'linear-gradient(180deg, rgba(46,47,56,0.70), rgba(17,18,24,0.78) 48%, rgba(7,8,11,0.88))',
   boxShadow:
-    '-28px 0 56px rgba(0,0,0,0.42), inset 0 0.5px 0 rgba(255,255,255,0.17), inset 18px 0 34px rgba(255,255,255,0.025), inset 0 -22px 34px rgba(0,0,0,0.24)',
-  backdropFilter: 'blur(32px) saturate(160%) contrast(106%)',
-  WebkitBackdropFilter: 'blur(32px) saturate(160%) contrast(106%)',
+    '-26px 0 60px rgba(0,0,0,0.46), inset 0 0.5px 0 rgba(255,255,255,0.14), inset 18px 0 34px rgba(255,255,255,0.020), inset 0 -22px 34px rgba(0,0,0,0.24)',
+  backdropFilter: 'blur(32px) saturate(158%) contrast(106%)',
+  WebkitBackdropFilter: 'blur(32px) saturate(158%) contrast(106%)',
   overflow: 'hidden',
   isolation: 'isolate',
   animation: 'makaron-account-drawer-in 260ms cubic-bezier(0.22, 1, 0.36, 1)',
@@ -138,6 +138,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
   const router = useRouter()
 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [hasMounted, setHasMounted] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const accountEdgeSwipeRef = useRef<{ tracking: boolean; startX: number; startY: number }>({
     tracking: false,
@@ -149,6 +150,10 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
     return cached?.balance ?? null
   })
   const [showChangelog, setShowChangelog] = useState(false)
+
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
 
   const warmTopBarRoute = useCallback((path: string) => {
     const route = path.split('?')[0] || path
@@ -343,6 +348,8 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
     }
   }, [user, userMenuOpen])
 
+  const visibleUser = hasMounted ? user : null
+
   return (
     <>
       <div className="makaron-topbar" style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: userMenuOpen ? 360 : 140 }}>
@@ -355,17 +362,30 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
               fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
               color: 'rgba(255,255,255,0.45)',
               transition: 'color 0.2s',
+              display: 'flex', alignItems: 'center', gap: 5,
+              minHeight: 44,
+              padding: '0 2px',
             }}
             onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
             onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
           >
-            {locale === 'zh' ? '更新日志' : "What's new"}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3v3" />
+              <path d="M12 18v3" />
+              <path d="M3 12h3" />
+              <path d="M18 12h3" />
+              <path d="m6.4 6.4 2.1 2.1" />
+              <path d="m15.5 15.5 2.1 2.1" />
+              <path d="m17.6 6.4-2.1 2.1" />
+              <path d="m8.5 15.5-2.1 2.1" />
+            </svg>
+            {locale === 'zh' ? '更新' : 'Updates'}
           </button>
         </div>
 
         {/* Right side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {user && creditBalance !== null && (
+          {visibleUser && creditBalance !== null && (
             <button
               type="button"
               aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}
@@ -391,7 +411,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
               </span>
             </button>
           )}
-          {user ? (
+          {visibleUser ? (
             <div ref={userMenuRef} style={{ position: 'relative' }}>
               <button
                 type="button"
@@ -432,10 +452,10 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                 </svg>
               </button>
               {userMenuOpen && (() => {
-                const avatarUrl = user.user_metadata?.avatar_url
-                const displayName = user.user_metadata?.full_name || user.user_metadata?.name
-                const initials = ((displayName || user.email || '?').trim()[0] || '?').toUpperCase()
-                const email = user.email || ''
+                const avatarUrl = visibleUser.user_metadata?.avatar_url
+                const displayName = visibleUser.user_metadata?.full_name || visibleUser.user_metadata?.name
+                const initials = ((displayName || visibleUser.email || '?').trim()[0] || '?').toUpperCase()
+                const email = visibleUser.email || ''
                 const desktopMenuBtnStyle: CSSProperties = {
                   display: 'flex',
                   alignItems: 'center',
