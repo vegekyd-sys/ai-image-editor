@@ -38,13 +38,13 @@ const shellStyle: CSSProperties = {
   zIndex: 210,
   padding: 4,
   borderRadius: 999,
-  border: '0.5px solid rgba(255,255,255,0.16)',
+  border: '0.5px solid rgba(255,255,255,0.11)',
   background:
-    'linear-gradient(180deg, rgba(255,255,255,0.105) 0%, rgba(88,92,104,0.13) 32%, rgba(8,9,12,0.22) 100%)',
+    'linear-gradient(180deg, rgba(255,255,255,0.062) 0%, rgba(88,92,104,0.105) 34%, rgba(8,9,12,0.23) 100%)',
   boxShadow:
-    'inset 0 0.5px 0 rgba(255,255,255,0.58), inset 0 -0.5px 0 rgba(0,0,0,0.34), inset 0 -14px 22px rgba(0,0,0,0.14), 0 14px 34px rgba(0,0,0,0.42)',
-  backdropFilter: 'blur(28px) saturate(180%) contrast(108%) brightness(1.06)',
-  WebkitBackdropFilter: 'blur(28px) saturate(180%) contrast(108%) brightness(1.06)',
+    'inset 0 0.5px 0 rgba(255,255,255,0.34), inset 0 -0.5px 0 rgba(0,0,0,0.34), inset 0 -14px 22px rgba(0,0,0,0.15), 0 14px 34px rgba(0,0,0,0.42)',
+  backdropFilter: 'blur(28px) saturate(165%) contrast(106%) brightness(1.035)',
+  WebkitBackdropFilter: 'blur(28px) saturate(165%) contrast(106%) brightness(1.035)',
   overflow: 'hidden',
   clipPath: 'inset(0 round 999px)',
   isolation: 'isolate',
@@ -63,11 +63,11 @@ const refractionStyle: CSSProperties = {
   inset: 0,
   borderRadius: 999,
   pointerEvents: 'none',
-  opacity: 0.24,
+  opacity: 0.14,
   background:
-    'radial-gradient(circle at 15% 0%, rgba(255,255,255,0.12), transparent 38%), radial-gradient(circle at 92% 100%, rgba(236,72,153,0.045), transparent 36%)',
-  backdropFilter: `url(#${LIQUID_FILTER_ID}) blur(10px) saturate(150%) contrast(104%)`,
-  WebkitBackdropFilter: `url(#${LIQUID_FILTER_ID}) blur(10px) saturate(150%) contrast(104%)`,
+    'radial-gradient(circle at 15% 0%, rgba(255,255,255,0.055), transparent 38%), radial-gradient(circle at 92% 100%, rgba(236,72,153,0.032), transparent 36%)',
+  backdropFilter: `url(#${LIQUID_FILTER_ID}) blur(10px) saturate(135%) contrast(102%)`,
+  WebkitBackdropFilter: `url(#${LIQUID_FILTER_ID}) blur(10px) saturate(135%) contrast(102%)`,
 }
 
 const highlightStyle: CSSProperties = {
@@ -75,9 +75,9 @@ const highlightStyle: CSSProperties = {
   inset: 0,
   pointerEvents: 'none',
   background:
-    'radial-gradient(circle at 18% -16%, rgba(255,255,255,0.50), rgba(255,255,255,0.12) 20%, transparent 45%), linear-gradient(112deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.035) 26%, transparent 46%, rgba(236,72,153,0.052) 70%, rgba(34,211,238,0.046) 100%)',
+    'radial-gradient(circle at 18% -16%, rgba(255,255,255,0.30), rgba(255,255,255,0.065) 20%, transparent 45%), linear-gradient(112deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.022) 26%, transparent 46%, rgba(236,72,153,0.04) 72%, rgba(34,211,238,0.034) 100%)',
   mixBlendMode: 'screen',
-  opacity: 0.68,
+  opacity: 0.46,
 }
 
 const edgeStyle: CSSProperties = {
@@ -86,7 +86,7 @@ const edgeStyle: CSSProperties = {
   borderRadius: 999,
   pointerEvents: 'none',
   boxShadow:
-    'inset 0 0 0 0.5px rgba(255,255,255,0.10), inset 0 8px 16px rgba(255,255,255,0.075), inset 1px 0 0 rgba(56,189,248,0.055), inset -1px 0 0 rgba(236,72,153,0.06), inset 0 -10px 18px rgba(0,0,0,0.18)',
+    'inset 0 0 0 0.5px rgba(255,255,255,0.065), inset 0 8px 16px rgba(255,255,255,0.04), inset 1px 0 0 rgba(56,189,248,0.038), inset -1px 0 0 rgba(236,72,153,0.04), inset 0 -10px 18px rgba(0,0,0,0.18)',
 }
 
 const activeLensStyle: CSSProperties = {
@@ -95,9 +95,9 @@ const activeLensStyle: CSSProperties = {
   borderRadius: 999,
   pointerEvents: 'none',
   background:
-    'radial-gradient(circle at 30% 0%, rgba(255,255,255,0.32), transparent 46%), linear-gradient(180deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.075) 38%, rgba(255,255,255,0.025) 62%, rgba(0,0,0,0.075) 100%)',
+    'radial-gradient(circle at 30% 0%, rgba(255,255,255,0.18), transparent 46%), linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.045) 38%, rgba(255,255,255,0.016) 62%, rgba(0,0,0,0.08) 100%)',
   mixBlendMode: 'screen',
-  opacity: 0.58,
+  opacity: 0.42,
 }
 
 export default function LiquidGlassNav({
@@ -190,7 +190,7 @@ export default function LiquidGlassNav({
   const buttonStyle = (isActive: boolean): CSSProperties => ({
     position: 'relative',
     zIndex: 2,
-    minWidth: locale === 'zh' ? 64 : 92,
+    minWidth: 92,
     height: 34,
     border: 0,
     borderRadius: 999,
@@ -256,16 +256,16 @@ export default function LiquidGlassNav({
             left: 0,
             width: `${100 / navItems.length}%`,
             borderRadius: 999,
-            border: '0.5px solid rgba(255,255,255,0.13)',
+            border: '0.5px solid rgba(255,255,255,0.09)',
             background:
-              'radial-gradient(circle at 28% 4%, rgba(255,255,255,0.28), transparent 40%), linear-gradient(180deg, rgba(255,255,255,0.12), rgba(82,86,100,0.12) 44%, rgba(14,15,20,0.18))',
+              'radial-gradient(circle at 28% 4%, rgba(255,255,255,0.16), transparent 40%), linear-gradient(180deg, rgba(255,255,255,0.08), rgba(82,86,100,0.10) 44%, rgba(14,15,20,0.18))',
             boxShadow:
-              'inset 0 0.5px 0 rgba(255,255,255,0.42), inset 0 -0.5px 0 rgba(0,0,0,0.28), inset 1px 0 0 rgba(56,189,248,0.045), inset -1px 0 0 rgba(236,72,153,0.045), inset 0 -8px 14px rgba(0,0,0,0.13), 0 6px 16px rgba(0,0,0,0.26)',
+              'inset 0 0.5px 0 rgba(255,255,255,0.25), inset 0 -0.5px 0 rgba(0,0,0,0.28), inset 1px 0 0 rgba(56,189,248,0.032), inset -1px 0 0 rgba(236,72,153,0.032), inset 0 -8px 14px rgba(0,0,0,0.13), 0 6px 16px rgba(0,0,0,0.24)',
             transform: `translateX(${activeIndex * 100}%)`,
             transition: 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)',
             willChange: 'transform',
-            backdropFilter: `url(#${LENS_FILTER_ID}) blur(10px) saturate(165%) brightness(1.08)`,
-            WebkitBackdropFilter: `url(#${LENS_FILTER_ID}) blur(10px) saturate(165%) brightness(1.08)`,
+            backdropFilter: `url(#${LENS_FILTER_ID}) blur(10px) saturate(145%) brightness(1.035)`,
+            WebkitBackdropFilter: `url(#${LENS_FILTER_ID}) blur(10px) saturate(145%) brightness(1.035)`,
             overflow: 'hidden',
           }}
         >
