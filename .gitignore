@@ -61,6 +61,16 @@ next-env.d.ts
 !public/**/*.png
 !ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
 
+# App Store / marketing asset binaries stay local; track README/docs only.
+app-store-assets/**/*.jpg
+app-store-assets/**/*.jpeg
+app-store-assets/**/*.png
+app-store-assets/**/*.webp
+app-store-assets/**/*.heic
+app-store-assets/**/*.pdf
+app-store-assets/**/*.mp4
+app-store-assets/**/*.mov
+
 # dev scripts
 /scripts/
 !/scripts/

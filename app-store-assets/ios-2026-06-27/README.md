@@ -12,6 +12,9 @@ This folder contains the App Store asset set used for the first Makaron iOS App 
   - `final/app-store-05.png`
   - Size: `1320 x 2868`
   - Uploaded to App Store Connect iPhone 6.9-inch screenshot slot.
+  - Source iteration: `drafts/v15-fix-p5-single-pixel-wizard/final-1080x1920/`
+  - Upload record: App Review submission `3e93a123-d088-4f5a-85fe-59e916fcae5e` on 2026-06-28.
+  - `final/` is the source of truth for the exact uploaded iPhone files. Do not use generated upload files from `drafts/`.
 
 - iPad product screenshots:
   - `ipad-13-final/ipad-13-01.png`
@@ -30,7 +33,7 @@ This folder contains the App Store asset set used for the first Makaron iOS App 
 ## Drafts
 
 All intermediate image-generation attempts, prompt files, contact sheets, and reference material are archived in `drafts/`.
-Do not upload files from `drafts/` to App Store Connect unless they are promoted into one of the final folders above.
+Do not upload files from `drafts/` to App Store Connect unless they are promoted into one of the final folders above. Any App Store-ready export must live outside `drafts/`.
 
 ## Submission Record
 
