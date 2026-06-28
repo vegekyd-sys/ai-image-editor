@@ -732,7 +732,20 @@ function HomePageInner() {
 
   const syncFixedInputVisibility = useCallback(() => {
     if (isDesktop) return
-    setShowFixedInput(textareaFocused)
+    const scrollContainer = getHomeScrollContainer(inlineInputRef.current)
+    const inlineRect = inlineInputRef.current?.getBoundingClientRect()
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+    const inlineMostlyVisible = inlineRect
+      ? inlineRect.top >= 0 && inlineRect.bottom <= viewportHeight - 24
+      : false
+    const scrollTop = scrollContainer
+      ? scrollContainer.scrollTop
+      : Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)
+    if (!textareaFocused && scrollTop <= 24) {
+      setShowFixedInput(false)
+      return
+    }
+    setShowFixedInput(textareaFocused || scrollTop > 24 || !inlineMostlyVisible)
   }, [isDesktop, textareaFocused])
   const keepSkillComposerAboveKeyboard = useCallback(() => {
     setTextareaFocused(true)
