@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useRef, type TouchEvent } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
@@ -22,7 +22,6 @@ interface CreditsPayload {
 
 const IOS_LAST_PRIMARY_ROUTE_KEY = 'makaron:ios-last-primary-route'
 const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
-const TOPBAR_TOUCH_NAV_SUPPRESS_MS = 700
 
 const TOPBAR_ROUTE_WARM_APIS: Record<string, string[]> = {
   '/home': ['/api/home-skills', '/api/skills'],
@@ -36,7 +35,7 @@ function isPrimaryTopBarRoute(path: string): boolean {
   return path === '/home' || path === '/projects'
 }
 
-export default function TopBar({ page, authReturnPath }: TopBarProps) {
+export default function TopBar({ authReturnPath }: TopBarProps) {
   const { user, signOut } = useAuth()
   const { locale, setLocale } = useLocale()
   const router = useRouter()
@@ -48,7 +47,6 @@ export default function TopBar({ page, authReturnPath }: TopBarProps) {
     return cached?.balance ?? null
   })
   const [showChangelog, setShowChangelog] = useState(false)
-  const lastTouchNavRef = useRef<{ path: string; at: number } | null>(null)
 
   const warmTopBarRoute = useCallback((path: string) => {
     const route = path.split('?')[0] || path
@@ -117,21 +115,6 @@ export default function TopBar({ page, authReturnPath }: TopBarProps) {
     scheduleTopBarWarm(path)
   }, [authReturnPath, router, scheduleTopBarWarm])
 
-  const handleTopBarTouchNavigate = useCallback((event: TouchEvent<HTMLButtonElement>, path: string) => {
-    event.preventDefault()
-    event.stopPropagation()
-    lastTouchNavRef.current = { path, at: Date.now() }
-    navigateTopBar(path)
-  }, [navigateTopBar])
-
-  const handleTopBarClickNavigate = useCallback((path: string) => {
-    const lastTouchNav = lastTouchNavRef.current
-    if (lastTouchNav && lastTouchNav.path === path && Date.now() - lastTouchNav.at < TOPBAR_TOUCH_NAV_SUPPRESS_MS) {
-      return
-    }
-    navigateTopBar(path)
-  }, [navigateTopBar])
-
   const warmTopBarMenuRoutes = useCallback(() => {
     const warm = () => {
       ['/profile', '/dashboard', '/dashboard?tab=keys', '/skills'].forEach(warmTopBarRoute)
@@ -187,50 +170,6 @@ export default function TopBar({ page, authReturnPath }: TopBarProps) {
       <div className="makaron-topbar" style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 140 }}>
         {/* Left side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {page === 'home' && user && (
-            <button
-              onClick={() => handleTopBarClickNavigate('/projects')}
-              onTouchEnd={(e) => handleTopBarTouchNavigate(e, '/projects')}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.45)',
-                display: 'flex', alignItems: 'center', gap: 5,
-                transition: 'color 0.2s',
-                touchAction: 'manipulation',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-              </svg>
-              {locale === 'zh' ? '项目' : 'Projects'}
-            </button>
-          )}
-          {page === 'projects' && (
-            <button
-              onClick={() => handleTopBarClickNavigate('/home')}
-              onTouchEnd={(e) => handleTopBarTouchNavigate(e, '/home')}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.45)',
-                display: 'flex', alignItems: 'center', gap: 5,
-                transition: 'color 0.2s',
-                touchAction: 'manipulation',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-              {locale === 'zh' ? '探索' : 'Explore'}
-            </button>
-          )}
           <button
             onClick={() => setShowChangelog(true)}
             style={{

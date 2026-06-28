@@ -79,6 +79,8 @@ const PLANS = [
   { id: 'business', name: 'Business', monthlyPrice: 4990, annualPrice: 47900, credits: 10000 },
 ] as const
 
+const AGENT_SETUP_COMMAND = 'npx makaron-cli setup'
+
 function formatMoney(cents: number, currency: string) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -126,6 +128,7 @@ function DashboardInner() {
   const [subscribing, setSubscribing] = useState<string | null>(null)
   const [managingSubscription, setManagingSubscription] = useState(false)
   const [billingActionError, setBillingActionError] = useState<string | null>(null)
+  const [setupCopied, setSetupCopied] = useState(false)
   const appleBilling = useAppleBillingProducts({ enabled: true })
   const appleBillingAvailable = appleBilling.available
 
@@ -168,6 +171,12 @@ function DashboardInner() {
     if (tab === 'invoices') fetchInvoices()
   }, [tab, fetchInvoices])
 
+  useEffect(() => {
+    if (!setupCopied) return
+    const timeout = window.setTimeout(() => setSetupCopied(false), 1400)
+    return () => window.clearTimeout(timeout)
+  }, [setupCopied])
+
   const handleCreateKey = async () => {
     setCreating(true)
     try {
@@ -194,6 +203,15 @@ function DashboardInner() {
       body: JSON.stringify({ id }),
     })
     fetchDashboard()
+  }
+
+  const handleCopySetup = async () => {
+    setSetupCopied(true)
+    try {
+      await navigator.clipboard?.writeText(AGENT_SETUP_COMMAND)
+    } catch (error) {
+      console.warn('[dashboard] setup command copy failed:', error)
+    }
   }
 
   const finishAppleTransaction = async (transactionId: string) => {
@@ -584,6 +602,38 @@ function DashboardInner() {
       {/* ══════ API KEYS TAB ══════ */}
       {tab === 'keys' && (
         <>
+          <div className="mb-4 rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_18%_0%,rgba(255,255,255,0.12),transparent_32%),linear-gradient(135deg,rgba(255,255,255,0.075),rgba(255,255,255,0.025))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-fuchsia-300/80">Agent API</div>
+              <div className="mt-1 text-base font-medium text-white">Set up Makaron for your coding agent</div>
+              <p className="mt-1 max-w-md text-sm leading-relaxed text-white/45">
+                Run this setup command first, then generate or reuse an API key below.
+              </p>
+            </div>
+            <div className="mt-4 flex items-center gap-2 rounded-xl border border-fuchsia-300/18 bg-black/45 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_24px_rgba(0,0,0,0.20)]">
+              <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre px-2 py-1 font-mono text-sm text-white/78">
+                {AGENT_SETUP_COMMAND}
+              </code>
+              <button
+                type="button"
+                onClick={handleCopySetup}
+                className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                  setupCopied
+                    ? 'border-emerald-300/25 bg-emerald-400/12 text-emerald-200'
+                    : 'border-white/10 bg-white/[0.08] text-white/65 hover:border-white/20 hover:bg-white/[0.13] hover:text-white'
+                }`}
+              >
+                {setupCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div className="mt-3 text-xs text-white/32">
+              Need full CLI docs?{' '}
+              <a href="/agent" className="text-white/45 underline decoration-white/15 underline-offset-4 transition-colors hover:text-white/70">
+                View /agent
+              </a>
+            </div>
+          </div>
+
           {createdKey && (
             <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-4 mb-4">
               <div className="text-green-400 text-sm font-medium mb-2">API Key Created &mdash; copy it now, it won&apos;t be shown again!</div>
