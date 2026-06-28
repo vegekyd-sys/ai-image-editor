@@ -88,6 +88,35 @@ body {
   padding-top: max(64px, calc(env(safe-area-inset-top) + 12px)) !important;
 }
 
+.makaron-account-menu-mobile {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .makaron-account-menu-desktop {
+    display: none !important;
+  }
+
+  .makaron-account-menu-mobile {
+    display: block !important;
+  }
+
+  .makaron-account-trigger-chevron {
+    display: none !important;
+  }
+}
+
+@keyframes makaron-account-drawer-in {
+  from {
+    opacity: 0.78;
+    transform: translateX(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .makaron-ios-app .makaron-projects-hero {
   padding-top: calc(20vh - 44px) !important;
 }
