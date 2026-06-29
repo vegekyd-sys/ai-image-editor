@@ -161,23 +161,17 @@ Use `chat --project <id|auto> --video ...` for any project/timeline video work. 
 
 ### With reference audio (MP3/WAV)
 
-Use `--audio` when a song, beat, or voice recording should guide the video generation. Audio is imported into the project music library and passed to the agent as `audio_1`, `audio_2`, etc.; it does not become a timeline media item.
+Attach a short song, beat, or voice recording when the video should follow audio pacing:
 
 ```bash
-# Local audio: validate, upload, import, then generate with Seedance
 npx makaron-cli chat --project auto \
   --audio beat.mp3 \
   --video-model seedance-fast \
   --video-resolution 480p \
-  -b "make a 15s beat-synced video from this music"
-
-# Public audio URL: store the URL directly, no mirroring
-npx makaron-cli chat --project <id> \
-  --audio https://example.com/voice.wav \
-  -b "use this voice recording as the pacing reference for the video"
+  -b "make a 15s beat-synced video"
 ```
 
-Local audio supports MP3/WAV, 2-15s duration, and max 15MB. Reference audio is currently supported for Seedance video generation; Kling and Grok will return a clear unsupported-model error if audio refs are used.
+`--audio` accepts repeatable local files or public URLs. Local MP3/WAV files must be 2-15s and <=15MB; reference audio currently works with Seedance video generation.
 
 ### Fix one video moment from a screenshot
 
