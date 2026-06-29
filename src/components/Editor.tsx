@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoMeta, type VideoModel } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -70,6 +70,14 @@ interface EditorProps {
   initialMusicTaskId?: string | null;
   timelineVersion?: number;
   readOnly?: boolean;
+}
+
+function shouldMergeFreshVideoMeta(current?: VideoMeta, fresh?: VideoMeta): boolean {
+  if (!fresh) return false;
+  if (!current) return true;
+  if (fresh.status === 'completed') return true;
+  if (current.status === 'completed') return false;
+  return JSON.stringify(current) !== JSON.stringify(fresh);
 }
 
 export default function Editor({
@@ -287,6 +295,13 @@ export default function Editor({
         // Merge design/props updates
         if (fresh.design && (!updated.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(updated.design.props)))) {
           updated = { ...updated, design: fresh.design };
+          changed = true;
+        }
+        // Merge video state from Supabase over stale project cache.
+        // Example: one retry succeeds after an earlier job marked the same
+        // publish snapshot failed; the completed DB state must win on reload.
+        if (shouldMergeFreshVideoMeta(updated.videoMeta, fresh.videoMeta)) {
+          updated = { ...updated, videoMeta: fresh.videoMeta };
           changed = true;
         }
         return updated;
@@ -2719,6 +2734,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, []);
 
   const handleDownload = useCallback(async () => {
+    if (isSaving) return;
     await downloadAsset({
       timeline,
       viewIndex,
@@ -2732,8 +2748,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       showSaveToast,
       t,
       projectTitle: initialTitle,
+      projectId,
     });
-  }, [timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
+  }, [isSaving, timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle, projectId]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
@@ -3326,10 +3343,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     <button
                       onClick={handleDownload}
                       disabled={isSaving}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all cursor-pointer ${
+                      aria-busy={isSaving}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all ${
                         isSaving
-                          ? 'text-white/50 bg-fuchsia-500/10 border-fuchsia-500/20'
-                          : 'text-white bg-fuchsia-500/20 border-fuchsia-500/30'
+                          ? 'cursor-wait text-white/50 bg-fuchsia-500/10 border-fuchsia-500/20'
+                          : 'cursor-pointer text-white bg-fuchsia-500/20 border-fuchsia-500/30'
                       }`}
                     >
                       {isSaving ? (

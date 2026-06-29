@@ -96,6 +96,38 @@ npx makaron-cli project media <projectId> --json
 
 This is project-scoped. `responses get <runId> --pick output` only returns artifacts from one run; `project media` returns the whole project timeline: original uploads, references, generated images, video snapshots, and editable compositions.
 
+### Export editable Remotion compositions
+
+Animated Remotion compositions are saved as editable timeline/code artifacts first. To materialize one into an MP4 that CLI, V, or another service can read, call the backend export worker:
+
+```bash
+npx makaron-cli materialize --project <projectId> --media <N> --pick url
+npx makaron-cli materialize --project <projectId> --design-json composition.json --pick url
+npx makaron-cli composition export --project <projectId> --media <N> --wait
+npx makaron-cli composition export --project <projectId> --snapshot <snapshotId> --wait
+npx makaron-cli composition status <jobId> --wait
+```
+
+`materialize` defaults to `--wait`, `--publish`, and the `fast_720p` profile (short side 720, no upscale). Use `--profile source` only when full source resolution is required.
+
+For a run that produced an animated composition, materialize before picking the video URL:
+
+```bash
+npx makaron-cli responses get <runId> --materialize --wait --pick first_video_url
+npx makaron-cli responses get <runId> --export-compositions --wait --pick first_video_url
+```
+
+The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio` so agents can compare video length against export time.
+
+In production, run the exporter as a separate warm worker:
+
+```bash
+REMOTION_EXPORT_INLINE_AFTER=false npm run worker:remotion-export:check
+REMOTION_EXPORT_INLINE_AFTER=false npm run worker:remotion-export
+```
+
+Keeping this worker warm avoids paying sandbox cold-start cost on every CLI or service call.
+
 ### With video input (edit, compose, extend)
 
 ```bash

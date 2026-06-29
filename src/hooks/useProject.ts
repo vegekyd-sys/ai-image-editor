@@ -256,8 +256,12 @@ export function useProject(projectId: string, userId: string) {
 
         // Upsert snapshot row (upsert handles React StrictMode double-invoke)
         // Don't overwrite message_id if DualWriter already set it (DualWriter's ID matches messages table)
-        const { data: existing } = await supabase.from('snapshots').select('message_id').eq('id', snapshot.id).maybeSingle()
+        const { data: existing } = await supabase.from('snapshots').select('message_id, video_meta').eq('id', snapshot.id).maybeSingle()
         const messageId = existing?.message_id || snapshot.messageId
+        const existingVideoMeta = existing?.video_meta as VideoMeta | null | undefined
+        const videoMeta = existingVideoMeta?.status === 'completed' && snapshot.videoMeta?.status === 'processing'
+          ? existingVideoMeta
+          : snapshot.videoMeta
 
         const { error } = await supabase.from('snapshots').upsert({
           id: snapshot.id,
@@ -269,7 +273,7 @@ export function useProject(projectId: string, userId: string) {
           ...(snapshot.description ? { description: snapshot.description } : {}),
           ...(snapshot.type ? { type: snapshot.type } : {}),
           ...(designPath ? { design_path: designPath } : {}),
-          ...(snapshot.videoMeta ? { video_meta: snapshot.videoMeta } : {}),
+          ...(videoMeta ? { video_meta: videoMeta } : {}),
           ...(snapshot.metadata ? { metadata: snapshot.metadata } : {}),
         }, { onConflict: 'id' })
 

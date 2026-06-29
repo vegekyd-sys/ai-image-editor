@@ -274,9 +274,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     (async () => {
       try {
         await preloadBabel().catch(() => {});
-        const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
-        blobUrls.push(...videoBlobUrls);
-        if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
+        const videoResolved = resolvePreviewVideoUrls(design.code);
         const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
         blobUrls.push(...imageBlobUrls);
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
@@ -391,6 +389,16 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
 // Session-level cache: video URL → blob URL (avoids re-downloading on timeline switch)
 const videoBlobCache = new Map<string, string>();
+
+/** Browser preview should stream videos with Range requests instead of blocking
+ * on full-file blob downloads. Full blob resolution is only needed by web render/export. */
+function resolvePreviewVideoUrls(code: string): string {
+  const videoExtPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi;
+  return code.replace(videoExtPattern, (url) => {
+    if (url.includes('/api/proxy-video?')) return url;
+    return `/api/proxy-video?url=${encodeURIComponent(url)}`;
+  });
+}
 
 /** Pre-fetch remote video URLs via server proxy → blob URLs (fixes CORS for renderMediaOnWeb) */
 async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
