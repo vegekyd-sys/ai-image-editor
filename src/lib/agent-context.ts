@@ -49,6 +49,8 @@ export interface PromptContextResult {
   currentSnapshotIndex: number;
   currentDesign?: DesignPayload;
   currentDesignPath?: string;
+  /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
+  audioAttachments: AudioAttachmentContext[];
 }
 
 interface DbSnapshot {
@@ -68,6 +70,48 @@ interface DbMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+}
+
+interface DbProjectMusic {
+  audio_url?: string | null;
+  suno_audio_url?: string | null;
+  stream_audio_url?: string | null;
+  duration?: number | null;
+  title?: string | null;
+  track_index?: number | null;
+  status?: string | null;
+  tags?: string | null;
+}
+
+function getUsableAudioUrl(row: DbProjectMusic): string {
+  return row.audio_url || row.suno_audio_url || row.stream_audio_url || '';
+}
+
+function normalizeAudioAttachment(audio: AudioAttachmentContext): AudioAttachmentContext | null {
+  if (!audio.audioUrl || !/^https?:\/\//.test(audio.audioUrl)) return null;
+  return {
+    audioUrl: audio.audioUrl,
+    title: audio.title,
+    duration: typeof audio.duration === 'number' && Number.isFinite(audio.duration) ? audio.duration : undefined,
+    trackIndex: typeof audio.trackIndex === 'number' && Number.isFinite(audio.trackIndex) ? audio.trackIndex : undefined,
+  };
+}
+
+function mergeAudioAttachments(
+  projectAudios: AudioAttachmentContext[],
+  turnAudios: AudioAttachmentContext[] | undefined,
+): AudioAttachmentContext[] {
+  const merged: AudioAttachmentContext[] = [];
+  const seen = new Set<string>();
+  for (const audio of [...projectAudios, ...(turnAudios || [])]) {
+    const normalized = normalizeAudioAttachment(audio);
+    if (!normalized) continue;
+    const key = normalized.audioUrl.trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(normalized);
+  }
+  return merged;
 }
 
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
@@ -94,8 +138,10 @@ export async function buildPromptContext(
 ): Promise<PromptContextResult> {
   const { userMessage, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, audioAttachments } = options;
 
-  // Query snapshots, visible messages, and private tool history in parallel.
-  const [snapshotsRes, messagesRes, toolHistoryRes] = await Promise.all([
+  // Query snapshots, visible messages, private tool history, and project audio
+  // in parallel. Audio is a separate project-scoped index; it never occupies
+  // Timeline Media Index slots like <<<media_N>>>.
+  const [snapshotsRes, messagesRes, toolHistoryRes, musicRes] = await Promise.all([
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
@@ -112,11 +158,31 @@ export async function buildPromptContext(
       .eq('project_id', projectId)
       .eq('user_id', userId)
       .order('created_at', { ascending: true }),
+    supabase
+      .from('project_music')
+      .select('audio_url, suno_audio_url, stream_audio_url, duration, title, track_index, status, tags')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .in('status', ['completed', 'streaming'])
+      .order('track_index', { ascending: true })
+      .limit(20),
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
   const messages: DbMessage[] = messagesRes.data ?? [];
   const toolHistory: DbToolHistoryRow[] = toolHistoryRes.data ?? [];
+  const projectAudios: AudioAttachmentContext[] = ((musicRes.data ?? []) as DbProjectMusic[])
+    .map((row) => {
+      const audioUrl = getUsableAudioUrl(row);
+      return {
+        audioUrl,
+        title: row.title || undefined,
+        duration: typeof row.duration === 'number' ? row.duration : undefined,
+        trackIndex: typeof row.track_index === 'number' ? row.track_index : undefined,
+      };
+    })
+    .filter((audio) => !!audio.audioUrl);
+  const resolvedAudioAttachments = mergeAudioAttachments(projectAudios, audioAttachments);
 
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
@@ -238,14 +304,14 @@ export async function buildPromptContext(
       })()
     : '';
 
-  const audioAttachmentContext = audioAttachments?.length
-    ? `[Current Audio Attachments - not Timeline Media]\n${audioAttachments.map((audio, i) => {
+  const audioAttachmentContext = resolvedAudioAttachments.length
+    ? `[Audio Index - not Timeline Media]\n${resolvedAudioAttachments.map((audio, i) => {
         const label = `audio_${i + 1}`;
         const title = audio.title || `Reference audio ${i + 1}`;
         const duration = typeof audio.duration === 'number' ? `, ${formatSecondsForPrompt(audio.duration)}s` : '';
         const track = typeof audio.trackIndex === 'number' ? `, project_music track_index=${audio.trackIndex}` : '';
         return `${label}: ${title}${duration}${track}, ${audio.audioUrl}`;
-      }).join('\n')}\nUse these as music/audio references. They are not <<<media_N>>> items and must not be referenced through the Media Index.\n\n`
+      }).join('\n')}\nUse these as music/audio references via audio_refs, e.g. ["audio_1"]. They are not <<<media_N>>> items and must not be referenced through the Timeline Media Index.\n\n`
     : '';
 
   // Assemble
@@ -264,6 +330,7 @@ export async function buildPromptContext(
     currentSnapshotIndex,
     currentDesign,
     currentDesignPath,
+    audioAttachments: resolvedAudioAttachments,
   };
 }
 

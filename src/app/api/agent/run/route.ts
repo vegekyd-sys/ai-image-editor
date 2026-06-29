@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
           videoModel,
           videoResolution,
           videoAuto,
-          audioAttachments,
+          audioAttachments: ctx.audioAttachments,
           snapshotImages: ctx.snapshotImages,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,

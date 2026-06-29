@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
             tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
-            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = await req.json();
+            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, audioAttachments } = await req.json();
     endReadBody({
       projectId: projectId || null,
       promptChars: typeof prompt === 'string' ? prompt.length : 0,
@@ -211,6 +211,7 @@ export async function POST(req: NextRequest) {
           let agentCurrentDesign = currentDesign;
           let agentCurrentDesignPath = typeof currentDesignPath === 'string' ? currentDesignPath : undefined;
           let agentHistory: ModelMessage[] = [];
+          let agentAudioAttachments = audioAttachments;
 
           if (needsPromptContext) {
             // Unified context: both frontend and headless use buildPromptContext.
@@ -225,6 +226,7 @@ export async function POST(req: NextRequest) {
               isDraft,
               referenceImageCount: referenceImageCount || undefined,
               uploadedVideoCount: uploadedVideoCount || undefined,
+              audioAttachments,
             });
             endContext({
               promptChars: ctx.fullPrompt.length,
@@ -242,6 +244,7 @@ export async function POST(req: NextRequest) {
             agentCurrentDesign = currentDesign || ctx.currentDesign;
             agentCurrentDesignPath = agentCurrentDesignPath || ctx.currentDesignPath;
             agentHistory = ctx.history;
+            agentAudioAttachments = ctx.audioAttachments;
           } else {
             perf.mark('build_prompt_context_skipped', {
               reason: 'analysisOnly_request_has_media',
@@ -277,7 +280,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, videoResolution, videoAuto, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
                 if (event.type === 'usage') { usageEvent = event; continue; }
                 if (writer) {
                   await writer.processAndEnqueue(event);

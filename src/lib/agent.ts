@@ -66,7 +66,7 @@ interface AgentContext {
   videoResolution?: import('@/types').VideoResolution;
   /** True when the app video selector is in automatic mode. */
   videoAuto?: boolean;
-  /** Current-turn audio references imported through CLI/app music infrastructure. Not Media Index. */
+  /** Project-scoped audio references imported through CLI/app music infrastructure. Not Timeline Media Index. */
   audioAttachments?: AudioAttachment[];
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event (v1) */
   // Legacy v1 fields — no longer set by generate_animation, but kept for SSE event type compat
@@ -1053,7 +1053,7 @@ Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
-- To use CLI/app imported reference music/audio for pacing or beat sync, pass \`audio_refs\` like ["audio_1"] from the Current Audio Attachments block. Audio refs are NOT Media Index refs. Reference audio is only supported by SeeDance/SeeDance Fast/SeeDance Mini.
+- To use CLI/app imported reference music/audio for pacing or beat sync, pass \`audio_refs\` like ["audio_1"] from the Audio Index block. Audio refs are NOT Timeline Media Index refs. Reference audio is only supported by SeeDance/SeeDance Fast/SeeDance Mini.
 - Works for Kling, SeeDance, SeeDance Mini, and Grok, but respect capability limits and tool errors.
 - Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. If the user wants 30s, 60s, 1-2 minutes, or anything longer than 15s, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments of 15s or less.
 - If a complete script totals 15 seconds or less, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
@@ -1075,7 +1075,7 @@ Hard constraints:
         model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance-fast) at 720p. Generic HD/高清/high quality requests should still use seedance-fast; use seedance-mini for explicit Mini/lower-cost/draft/multi-size tests; use seedance only for explicit 1080p, standard/full SeeDance, or premium/highest-resolution requests. Supported ids include seedance-fast, seedance-mini, seedance, kling, and grok.'),
         video_resolution: z.enum(['480p', '720p', '1080p', '4k', 'auto']).optional().describe('Output resolution. Omit/auto follows the selected model default. Generic HD/高清/high quality means seedance-fast 720p, not 1080p. seedance-fast/seedance-mini support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; grok supports 480p/720p.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Current Audio Attachments block, e.g. ["audio_1"]. Use for beat sync, pacing, or music reference. These are separate from <<<media_N>>> and only supported by SeeDance models.'),
+        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"]. Use for beat sync, pacing, or music reference. These are separate from <<<media_N>>> and only supported by SeeDance models.'),
         video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Grok does not support video references in Makaron yet.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
