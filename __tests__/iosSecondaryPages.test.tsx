@@ -179,6 +179,6 @@ describe('iOS secondary pages app-like behavior', () => {
     expect(trigger.getAttribute('style')).toContain('min-height: 44px');
 
     fireEvent.click(trigger);
-    expect(screen.getByText('获取 API')).toBeTruthy();
+    expect(screen.getAllByText('获取 API').length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -113,8 +113,11 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projects).not.toContain('makaron-ios-projects-snapshot-html');
     expect(topBar).toContain('makaron-topbar');
     expect(changelog).toContain('makaron-ios-app');
-    expect(changelog).toContain('max-h-[82dvh]');
-    expect(changelog).toContain('w-full h-full sm:h-auto');
+    expect(changelog).toContain('iOSAppTopGap');
+    expect(changelog).toContain('iOSAppBottomGap');
+    expect(changelog).toContain('paddingTop: iOSAppTopGap');
+    expect(changelog).toContain('paddingBottom: iOSAppBottomGap');
+    expect(changelog).toContain('maxHeight: isIOSApp ? `calc(100dvh - ${iOSAppTopGap} - ${iOSAppBottomGap})` : undefined');
   });
 
   it('gives secondary iOS app pages safe top space and a normal edge-back gesture', () => {
@@ -136,6 +139,7 @@ describe('iOS App Store readiness guardrails', () => {
     const home = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
     const topBar = fs.readFileSync(path.join(root, 'src/components/TopBar.tsx'), 'utf8');
+    const liquidGlassNav = fs.readFileSync(path.join(root, 'src/components/LiquidGlassNav.tsx'), 'utf8');
     const creditPopup = fs.readFileSync(path.join(root, 'src/components/CreditPopup.tsx'), 'utf8');
     const authProvider = fs.readFileSync(path.join(root, 'src/components/AuthProvider.tsx'), 'utf8');
     const nativeCache = fs.readFileSync(path.join(root, 'src/lib/native-app-cache.ts'), 'utf8');
@@ -225,9 +229,12 @@ describe('iOS App Store readiness guardrails', () => {
     expect(topBar).toContain('warmTopBarMenuRoutes');
     expect(topBar).toContain("['/profile', '/dashboard', '/dashboard?tab=keys', '/skills'].forEach(warmTopBarRoute)");
     expect(topBar).toContain('router.push(path)');
-    expect(topBar).toContain('handleTopBarTouchNavigate');
-    expect(topBar).toContain('handleTopBarClickNavigate');
-    expect(topBar).toContain('TOPBAR_TOUCH_NAV_SUPPRESS_MS');
+    expect(liquidGlassNav).toContain("type PrimarySurface = 'explore' | 'projects'");
+    expect(liquidGlassNav).toContain("surface === 'explore' ? '/home' : '/projects'");
+    expect(liquidGlassNav).toContain("sessionStorage.setItem(IOS_RESET_HOME_SCROLL_KEY, '1')");
+    expect(liquidGlassNav).toContain("touchAction: 'manipulation'");
+    expect(liquidGlassNav).toContain('window.requestAnimationFrame(() => router.push(path))');
+    expect(liquidGlassNav).toContain('onTouchStart={() => warmRoute(item.value)}');
     expect(topBar).toContain("requestIdleCallback(warm, { timeout: 1600 })");
     expect(topBar).toContain('window.setTimeout(warm, 240)');
     expect(topBar).not.toContain('window.setTimeout(() => warmTopBarRoute(path), 0)');
@@ -266,7 +273,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(home).toContain('const blurHomeComposers = useCallback');
     expect(home).toContain('inlineTextareaRef.current?.blur()');
     expect(home).toContain('setKbInset(0)');
-    expect(home).toContain("display: viewMode === 'agent' || selectedDetail ? 'none' : undefined");
+    expect(home).toContain("transform: (showFixedInput || selectedDetail) ? 'translateY(0)' : 'translateY(calc(100% + 20px))'");
     expect(home).toContain("isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}");
     expect(home).not.toContain('const focusFixedComposer = useCallback');
     expect(home).not.toContain('textareaRef.current?.focus({ preventScroll: true })');
@@ -692,7 +699,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('getOriginFormatThumbnailUrl(lastSnap.image_url, 400, 50, 400)');
     expect(storage).toContain("'format=origin'");
     expect(projectsPage).toContain('useState(useIOSSafeImageUrls)');
-    expect(projectsPage).toContain("animationDelay: useIOSSafeImageUrls ? undefined");
+    expect(projectsPage).toContain('const shouldAnimateIn = !useIOSSafeImageUrls && index < 12');
+    expect(projectsPage).toContain('animationDelay: shouldAnimateIn ?');
+    expect(projectsPage).toContain("className={shouldAnimateIn ? 'mkr-card mkr-row-enter' : 'mkr-card'}");
     expect(projectsPage).toContain("transition: useIOSSafeImageUrls ? 'none'");
     expect(projectsPage).toContain('loading={index < 4 ?');
     expect(projectsPage).toContain('decoding="async"');
