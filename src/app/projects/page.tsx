@@ -21,6 +21,7 @@ import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 import ProjectEditorContainer from '@/components/ProjectEditorContainer'
+import LiquidGlassNav from '@/components/LiquidGlassNav'
 
 interface ProjectWithSnapshots {
   id: string
@@ -1295,7 +1296,7 @@ function ProjectsPageInner() {
               display: 'grid',
               gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
               gap: isDesktop ? '14px' : '10px',
-              padding: '0 16px 80px',
+              padding: '0 16px calc(124px + env(safe-area-inset-bottom, 0px))',
               maxWidth: isDesktop ? '1200px' : undefined,
               margin: isDesktop ? '0 auto' : undefined,
             }}>
@@ -1316,6 +1317,7 @@ function ProjectsPageInner() {
             </div>
           )}
         </div>
+        <LiquidGlassNav active="projects" hidden={Boolean(actionSheet || activeIOSProjectId)} />
       </div>
 
       {/* ── Action Sheet ── */}
@@ -1537,6 +1539,8 @@ function ProjectCard({
       : getThumbnailUrl(lastSnap.image_url, 400, 50, 400)
     : undefined
   const [loaded, setLoaded] = useState(useIOSSafeImageUrls)
+  const shouldAnimateIn = !useIOSSafeImageUrls && index < 12
+  const shouldDeferRender = !useIOSSafeImageUrls && index >= 12
 
   const cardStyle: CSSProperties = {
     display: 'block',
@@ -1545,12 +1549,14 @@ function ProjectCard({
     borderRadius: '16px',
     overflow: 'hidden',
     background: '#120d1a',
-    animationDelay: useIOSSafeImageUrls ? undefined : `${index * 0.06}s`,
+    animationDelay: shouldAnimateIn ? `${index * 0.04}s` : undefined,
     textDecoration: 'none',
     border: 'none',
     padding: 0,
     width: '100%',
     color: 'inherit',
+    contentVisibility: shouldDeferRender ? 'auto' : undefined,
+    containIntrinsicSize: shouldDeferRender ? '200px 200px' : undefined,
   }
 
   const cardContent = (
@@ -1705,7 +1711,7 @@ function ProjectCard({
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="mkr-card mkr-row-enter"
+      className={shouldAnimateIn ? 'mkr-card mkr-row-enter' : 'mkr-card'}
       data-project-id={project.id}
       data-snapshot-count={project.snapshots.length}
       onTouchStart={onWarm}

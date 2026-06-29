@@ -5,13 +5,14 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
-import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
+import { isMakaronIOSApp, userAgentHasMakaronIOSToken } from '@/lib/native-app'
 import RollingTagline from '@/components/RollingTagline'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
+const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'
 
 function isInAppBrowser(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -90,15 +91,27 @@ export default function LoginPage() {
   }, [resendCooldown])
 
   function getReturnUrl(): string {
-    return localStorage.getItem('mkr_return_url') || ''
+    return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
+  }
+
+  function resolveReturnUrlForRuntime(returnUrl: string): string {
+    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
+    if (!skillMatch) return returnUrl
+    const skillId = skillMatch[1]
+    if (isMakaronIOSApp()) {
+      sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
+      localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
+      return '/home'
+    }
+    return `/home?skill=${encodeURIComponent(skillId)}`
   }
 
   function redirectAfterAuth() {
     let returnUrl = getReturnUrl()
+    sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
     // mkr_return_text and mkr_return_skill are consumed by the home page on mount
-    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-    if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
+    returnUrl = resolveReturnUrlForRuntime(returnUrl)
     window.location.href = returnUrl || '/'
   }
 
@@ -239,11 +252,12 @@ export default function LoginPage() {
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
         trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
-        let returnUrl = localStorage.getItem('mkr_return_url') || ''
+        let returnUrl = getReturnUrl()
+        sessionStorage.removeItem('mkr_return_url')
         localStorage.removeItem('mkr_return_url')
-        // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
-        const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-        if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
+        // H5 can use ?skill=, while the iOS native shell keeps /home and reopens
+        // the detail from a pending key so the native page stack stays stable.
+        returnUrl = resolveReturnUrlForRuntime(returnUrl)
         const target = returnUrl || '/home'
         const sep = target.includes('?') ? '&' : '?'
         // Small delay to ensure Supabase SDK writes session cookie before redirect
@@ -498,7 +512,7 @@ export default function LoginPage() {
                 className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 style={{ background: 'linear-gradient(to right, #c026d3, #9333ea)' }}>
                 {loading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-                {loading ? t('auth.sendingCode') : t('auth.continue')}
+                {t('auth.continue')}
               </button>
             </form>
 

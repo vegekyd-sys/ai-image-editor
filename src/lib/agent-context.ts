@@ -15,6 +15,13 @@ import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 import { formatVideoMediaSpec } from './media-aspect';
 
+export interface AudioAttachmentContext {
+  audioUrl: string;
+  title?: string;
+  duration?: number;
+  trackIndex?: number;
+}
+
 export interface PromptContextOptions {
   /** 0-based index of the snapshot the user is viewing. Defaults to last. */
   currentSnapshotIndex?: number;
@@ -28,6 +35,8 @@ export interface PromptContextOptions {
   referenceImageCount?: number;
   /** Number of just-uploaded videos (for context hint with media index) */
   uploadedVideoCount?: number;
+  /** Audio references for this turn. Not part of Timeline Media Index. */
+  audioAttachments?: AudioAttachmentContext[];
 }
 
 export interface PromptContextResult {
@@ -83,7 +92,7 @@ export async function buildPromptContext(
   userId: string,
   options: PromptContextOptions,
 ): Promise<PromptContextResult> {
-  const { userMessage, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = options;
+  const { userMessage, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, audioAttachments } = options;
 
   // Query snapshots, visible messages, and private tool history in parallel.
   const [snapshotsRes, messagesRes, toolHistoryRes] = await Promise.all([
@@ -229,8 +238,18 @@ export async function buildPromptContext(
       })()
     : '';
 
+  const audioAttachmentContext = audioAttachments?.length
+    ? `[Current Audio Attachments - not Timeline Media]\n${audioAttachments.map((audio, i) => {
+        const label = `audio_${i + 1}`;
+        const title = audio.title || `Reference audio ${i + 1}`;
+        const duration = typeof audio.duration === 'number' ? `, ${formatSecondsForPrompt(audio.duration)}s` : '';
+        const track = typeof audio.trackIndex === 'number' ? `, project_music track_index=${audio.trackIndex}` : '';
+        return `${label}: ${title}${duration}${track}, ${audio.audioUrl}`;
+      }).join('\n')}\nUse these as music/audio references. They are not <<<media_N>>> items and must not be referenced through the Media Index.\n\n`
+    : '';
+
   // Assemble
-  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
@@ -246,4 +265,8 @@ export async function buildPromptContext(
     currentDesign,
     currentDesignPath,
   };
+}
+
+function formatSecondsForPrompt(seconds: number): string {
+  return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
 }

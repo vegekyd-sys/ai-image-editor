@@ -36,7 +36,7 @@ export interface CreateInputBoxProps {
   onSubmit: () => void;
   onSlotClick?: () => void;
   onFilesSelected?: (files: File[]) => void;
-  onTextareaFocus?: () => void;
+  onTextareaFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
   onTextareaBlur?: () => void;
   // Skill selector props
   skills: SkillItem[];
@@ -138,6 +138,7 @@ export default function CreateInputBox({
 
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const taRef = externalTextareaRef || internalTextareaRef;
+  const liquidInputClassName = 'mkr-input-box mkr-input-box-liquid';
   const handlePrimaryAction = useCallback(() => {
     if (creating) return;
     if (files.length > 0 || text.trim()) {
@@ -171,7 +172,7 @@ export default function CreateInputBox({
     return (
       <div
         ref={boxRef}
-        className="mkr-input-box"
+        className={liquidInputClassName}
         role="button"
         tabIndex={0}
         onClick={handlePrimaryAction}
@@ -197,18 +198,18 @@ export default function CreateInputBox({
           pointerEvents: 'auto',
           border: dragOver ? '1px solid rgba(217,70,239,0.58)' : '1px solid rgba(255,255,255,0.18)',
           background: dragOver
-            ? 'rgba(217,70,239,0.08)'
-            : 'rgba(15,15,15,0.65)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          boxShadow: '0 0 0 0.5px rgba(255,255,255,0.08), 0 8px 32px rgba(0,0,0,0.8), 0 0 60px 30px rgba(0,0,0,0.5)',
+            ? 'linear-gradient(135deg, rgba(217,70,239,0.10), rgba(12,14,18,0.46) 42%, rgba(34,211,238,0.05))'
+            : 'linear-gradient(145deg, rgba(55,57,66,0.36), rgba(13,14,19,0.48) 48%, rgba(6,7,10,0.56))',
+          backdropFilter: 'blur(16px) saturate(142%) contrast(108%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(142%) contrast(108%)',
+          boxShadow: '0 16px 40px rgba(0,0,0,0.48), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -14px 26px rgba(0,0,0,0.16)',
           transition: 'transform 0.18s ease, border-color 0.2s ease, background 0.2s ease',
         }}
       >
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.06), transparent 42%), radial-gradient(circle at 88% 75%, rgba(217,70,239,0.10), transparent 30%)',
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.055), transparent 42%), radial-gradient(circle at 88% 75%, rgba(217,70,239,0.10), transparent 30%)',
           pointerEvents: 'none',
         }} />
 
@@ -223,7 +224,7 @@ export default function CreateInputBox({
             zIndex: 1,
             width: collapseSlot ? 0 : isDesktop ? 96 : 82,
             flexShrink: 0,
-            borderRight: collapseSlot ? 'none' : '1px solid rgba(255,255,255,0.08)',
+            borderRight: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -417,7 +418,7 @@ export default function CreateInputBox({
   return (
     <div
       ref={boxRef}
-      className="mkr-input-box"
+      className={liquidInputClassName}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -425,16 +426,20 @@ export default function CreateInputBox({
       style={{
         display: 'flex', gap: 0,
         borderRadius: 18,
-        border: dragOver ? '1px solid rgba(217,70,239,0.6)' : `1px solid rgba(255,255,255,${isInline ? 0.1 : 0.18})`,
-        background: dragOver ? 'rgba(217,70,239,0.08)' : isInline ? 'rgba(255,255,255,0.03)' : 'rgba(15,15,15,0.65)',
+        border: dragOver ? '1px solid rgba(217,70,239,0.58)' : `0.5px solid rgba(255,255,255,${isInline ? 0.13 : 0.16})`,
+        background: dragOver
+          ? 'linear-gradient(135deg, rgba(217,70,239,0.10), rgba(12,14,18,0.46) 42%, rgba(34,211,238,0.05))'
+          : isInline
+            ? 'linear-gradient(145deg, rgba(55,57,66,0.28), rgba(12,13,18,0.36) 50%, rgba(5,6,9,0.44))'
+            : 'linear-gradient(145deg, rgba(55,57,66,0.36), rgba(13,14,19,0.48) 48%, rgba(6,7,10,0.56))',
         overflow: 'hidden',
         transition: 'border-color 0.2s, background 0.2s',
-        ...(isInline ? {} : {
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          pointerEvents: 'auto' as const,
-          boxShadow: '0 0 0 0.5px rgba(255,255,255,0.08), 0 8px 32px rgba(0,0,0,0.8), 0 0 60px 30px rgba(0,0,0,0.5)',
-        }),
+        backdropFilter: isInline ? 'blur(12px) saturate(136%) contrast(108%)' : 'blur(16px) saturate(142%) contrast(108%)',
+        WebkitBackdropFilter: isInline ? 'blur(12px) saturate(136%) contrast(108%)' : 'blur(16px) saturate(142%) contrast(108%)',
+        pointerEvents: isInline ? undefined : 'auto' as const,
+        boxShadow: isInline
+          ? '0 12px 30px rgba(0,0,0,0.28), inset 0 0.5px 0 rgba(255,255,255,0.13), inset 0 -10px 22px rgba(0,0,0,0.12)'
+          : '0 16px 40px rgba(0,0,0,0.48), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -14px 26px rgba(0,0,0,0.16)',
       }}
     >
       {/* Left: + button / photo slot */}
@@ -446,7 +451,7 @@ export default function CreateInputBox({
           flexShrink: 0, alignSelf: 'stretch',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: creating || collapseSlot ? 'default' : 'pointer',
-          borderRight: collapseSlot ? 'none' : '1px solid rgba(255,255,255,0.08)',
+          borderRight: 'none',
           position: 'relative', overflow: 'hidden',
           background: files.length > 0 ? 'transparent' : 'rgba(217,70,239,0.04)',
           transition: 'width 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-right 0.2s',

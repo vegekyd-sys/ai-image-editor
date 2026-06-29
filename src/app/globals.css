@@ -88,6 +88,35 @@ body {
   padding-top: max(64px, calc(env(safe-area-inset-top) + 12px)) !important;
 }
 
+.makaron-account-menu-mobile {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .makaron-account-menu-desktop {
+    display: none !important;
+  }
+
+  .makaron-account-menu-mobile {
+    display: block !important;
+  }
+
+  .makaron-account-trigger-chevron {
+    display: none !important;
+  }
+}
+
+@keyframes makaron-account-drawer-in {
+  from {
+    opacity: 0.78;
+    transform: translateX(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .makaron-ios-app .makaron-projects-hero {
   padding-top: calc(20vh - 44px) !important;
 }
@@ -145,6 +174,70 @@ textarea::-webkit-scrollbar {
 }
 textarea {
   scrollbar-width: none;
+}
+
+.mkr-input-box-liquid {
+  position: relative;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+.mkr-input-box-liquid > * {
+  position: relative;
+  z-index: 1;
+}
+
+.mkr-input-box-liquid::before,
+.mkr-input-box-liquid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.mkr-input-box-liquid::before {
+  z-index: 0;
+  background:
+    radial-gradient(circle at 18% -18%, rgba(255,255,255,0.16), rgba(255,255,255,0.044) 28%, transparent 56%),
+    radial-gradient(circle at 94% 92%, rgba(217,70,239,0.13), transparent 38%),
+    linear-gradient(128deg, rgba(255,255,255,0.052), rgba(255,255,255,0.012) 42%, rgba(34,211,238,0.030) 100%);
+  mix-blend-mode: screen;
+  opacity: 0.58;
+}
+
+.mkr-input-box-liquid::after {
+  z-index: 0;
+  inset: -1px;
+  background:
+    linear-gradient(104deg, transparent 0%, transparent 19%, rgba(255,255,255,0.085) 31%, rgba(232,121,249,0.19) 43%, rgba(34,211,238,0.12) 56%, transparent 75%, transparent 100%),
+    radial-gradient(ellipse at 50% 115%, rgba(217,70,239,0.12), transparent 56%);
+  background-size: 215% 100%, 100% 100%;
+  background-position: 115% 0, 0 0;
+  filter: blur(0.2px);
+  mix-blend-mode: screen;
+  opacity: 0.42;
+  animation: makaron-input-energy-flow 7.2s ease-in-out infinite;
+}
+
+.mkr-input-box-liquid:hover::after {
+  opacity: 0.52;
+}
+
+.mkr-input-box-liquid:focus-within::after {
+  opacity: 0.62;
+  animation-duration: 5.4s;
+}
+
+@keyframes makaron-input-energy-flow {
+  0%, 100% { background-position: 118% 0, 0 0; }
+  48% { background-position: -18% 0, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mkr-input-box-liquid::after {
+    animation: none;
+  }
 }
 
 /* Editor page slide-in from right */

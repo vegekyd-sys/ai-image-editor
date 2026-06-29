@@ -1,6 +1,7 @@
 'use client'
 
 import { getMarketingAttribution, type MarketingAttribution } from './attribution'
+import { isMakaronIOSApp } from '@/lib/native-app'
 
 export type MetaStandardEvent =
   | 'PageView'
@@ -78,6 +79,7 @@ function logFirstPartyMarketingEvent(
   eventId: string,
 ) {
   if (typeof window === 'undefined') return
+  if (isMakaronIOSApp()) return
 
   const attribution = getMarketingAttribution()
   const payload = {
@@ -117,6 +119,7 @@ export function trackMetaEvent(
   attempt = 0,
 ) {
   if (typeof window === 'undefined') return
+  if (isMakaronIOSApp()) return
   const finalEventId = eventId || createMetaEventId(event.toLowerCase())
   const merged = { ...attributionParams(), ...params }
   if (attempt === 0) logFirstPartyMarketingEvent(event, merged, finalEventId)

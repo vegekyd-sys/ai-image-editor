@@ -6,7 +6,9 @@ const PROJECTS_LIST_SESSION_KEY = 'makaron:last-projects-list'
 const PROJECTS_LIST_LOCAL_KEY = 'makaron:last-projects-list:persistent'
 const CREATE_DRAFT_STORE = 'create-drafts'
 const ACTIVE_CREATE_DRAFT_KEY = 'active'
+const MEDIA_BLOB_STORE = 'media-blobs'
 const TTL_MS = 30 * 24 * 60 * 60 * 1000  // 30 days
+const MAX_MEDIA_BLOB_BYTES = 32 * 1024 * 1024
 
 export const PROJECTS_LIST_CACHE_UPDATED_EVENT = 'makaron-projects-list-cache-updated'
 
@@ -30,6 +32,13 @@ interface ProjectsListCacheEntry {
   cachedAt: number
 }
 
+interface MediaBlobCacheEntry {
+  key: string
+  blob: Blob
+  contentType: string
+  cachedAt: number
+}
+
 export interface CreateDraftEntry {
   key: string
   images: string[]
@@ -46,6 +55,8 @@ const memoryCache = new Map<string, string>()
 const projectMemCache = new Map<string, ProjectCacheEntry>()
 let projectsListMemCache: ProjectsListCacheEntry | null = null
 let createDraftMemCache: CreateDraftEntry | null = null
+const mediaObjectUrlCache = new Map<string, { url: string; cachedAt: number }>()
+const mediaFetchInFlight = new Map<string, Promise<string | null>>()
 
 // IDB layer: persistent across tab close/reopen
 let dbPromise: Promise<IDBDatabase | null> | null = null
@@ -54,7 +65,7 @@ function getDB(): Promise<IDBDatabase | null> {
   if (typeof window === 'undefined') return Promise.resolve(null)
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 5)
+      const req = indexedDB.open(DB_NAME, 6)
       req.onupgradeneeded = () => {
         const db = req.result
         if (!db.objectStoreNames.contains(STORE)) {
@@ -69,12 +80,87 @@ function getDB(): Promise<IDBDatabase | null> {
         if (!db.objectStoreNames.contains(CREATE_DRAFT_STORE)) {
           db.createObjectStore(CREATE_DRAFT_STORE, { keyPath: 'key' })
         }
+        if (!db.objectStoreNames.contains(MEDIA_BLOB_STORE)) {
+          db.createObjectStore(MEDIA_BLOB_STORE, { keyPath: 'key' })
+        }
       }
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => { dbPromise = null; reject(req.error) }
     })
   }
   return dbPromise
+}
+
+export function mediaCacheKeyForUrl(url: string): string {
+  return `media:${url}`
+}
+
+export async function getCachedMediaObjectUrl(key: string): Promise<string | null> {
+  const mem = mediaObjectUrlCache.get(key)
+  if (mem && Date.now() - mem.cachedAt < TTL_MS) return mem.url
+
+  try {
+    const db = await getDB()
+    if (!db || !db.objectStoreNames.contains(MEDIA_BLOB_STORE)) return null
+    const entry = await new Promise<MediaBlobCacheEntry | null>((resolve) => {
+      const tx = db.transaction(MEDIA_BLOB_STORE, 'readonly')
+      const req = tx.objectStore(MEDIA_BLOB_STORE).get(key)
+      req.onsuccess = () => resolve(req.result as MediaBlobCacheEntry | null ?? null)
+      req.onerror = () => resolve(null)
+    })
+    if (!entry || Date.now() - entry.cachedAt > TTL_MS) return null
+    const url = URL.createObjectURL(entry.blob)
+    mediaObjectUrlCache.set(key, { url, cachedAt: Date.now() })
+    return url
+  } catch {
+    return null
+  }
+}
+
+async function writeMediaBlobToIDB(entry: MediaBlobCacheEntry): Promise<void> {
+  try {
+    const db = await getDB()
+    if (!db || !db.objectStoreNames.contains(MEDIA_BLOB_STORE)) return
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(MEDIA_BLOB_STORE, 'readwrite')
+      tx.objectStore(MEDIA_BLOB_STORE).put(entry)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch {
+    // Media cache failures should never block the UI.
+  }
+}
+
+export async function cacheMediaUrl(url: string, key = mediaCacheKeyForUrl(url)): Promise<string | null> {
+  const cached = await getCachedMediaObjectUrl(key)
+  if (cached) return cached
+
+  const inFlight = mediaFetchInFlight.get(key)
+  if (inFlight) return inFlight
+
+  const task = fetch(url, { credentials: 'omit' })
+    .then(async (res) => {
+      if (!res.ok) return null
+      const blob = await res.blob()
+      if (blob.size === 0 || blob.size > MAX_MEDIA_BLOB_BYTES) return null
+      await writeMediaBlobToIDB({
+        key,
+        blob,
+        contentType: blob.type || res.headers.get('content-type') || 'application/octet-stream',
+        cachedAt: Date.now(),
+      })
+      const objectUrl = URL.createObjectURL(blob)
+      mediaObjectUrlCache.set(key, { url: objectUrl, cachedAt: Date.now() })
+      return objectUrl
+    })
+    .catch(() => null)
+    .finally(() => {
+      mediaFetchInFlight.delete(key)
+    })
+
+  mediaFetchInFlight.set(key, task)
+  return task
 }
 
 async function writeToIDB(key: string, base64: string): Promise<void> {

@@ -69,6 +69,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.68,
     },
     {
+      url: `${SITE_URL}/privacy`,
+      lastModified: now,
+      changeFrequency: 'yearly',
+      priority: 0.45,
+    },
+    {
+      url: `${SITE_URL}/support`,
+      lastModified: now,
+      changeFrequency: 'monthly',
+      priority: 0.5,
+    },
+    {
       url: `${SITE_URL}/releases/video-in-timeline`,
       lastModified: now,
       changeFrequency: 'monthly',

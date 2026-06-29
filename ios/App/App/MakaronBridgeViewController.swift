@@ -318,7 +318,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             var configuration = PHPickerConfiguration(photoLibrary: .shared())
             configuration.selectionLimit = 1
             configuration.filter = allowVideo ? .any(of: [.images, .videos]) : .images
-            configuration.preferredAssetRepresentationMode = .current
+            configuration.preferredAssetRepresentationMode = .compatible
 
             let picker = PHPickerViewController(configuration: configuration)
             picker.delegate = self
@@ -385,8 +385,20 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             }
             let filename = self.filename(for: provider, typeIdentifier: imageType, fallback: "makaron-photo.jpg")
             let mimeType = self.mimeType(for: imageType, fallback: "image/jpeg")
-            self.sendPickedMediaResponse(id: id, data: data, filename: filename, mimeType: mimeType, mediaType: "image")
+            let normalized = self.normalizedPickedImagePayload(data: data, filename: filename, mimeType: mimeType, typeIdentifier: imageType)
+            self.sendPickedMediaResponse(id: id, data: normalized.data, filename: normalized.filename, mimeType: normalized.mimeType, mediaType: "image")
         }
+    }
+
+    private func normalizedPickedImagePayload(data: Data, filename: String, mimeType: String, typeIdentifier: String) -> (data: Data, filename: String, mimeType: String) {
+        if UTType(typeIdentifier)?.conforms(to: .gif) == true {
+            return (data, filename, mimeType)
+        }
+        guard let image = UIImage(data: data),
+              let jpegData = image.jpegData(compressionQuality: 0.92) else {
+            return (data, filename, mimeType)
+        }
+        return (jpegData, jpegFilename(for: filename), "image/jpeg")
     }
 
     private func sendPickedMediaResponse(id: String, data: Data, filename: String, mimeType: String, mediaType: String) {

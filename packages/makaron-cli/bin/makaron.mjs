@@ -38,6 +38,11 @@ const MAX_VIDEO_UPLOAD_DURATION = 120;
 const MAX_VIDEO_UPLOAD_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE = 0.5;
+const MIN_AUDIO_REFERENCE_DURATION = 2;
+const MAX_AUDIO_REFERENCE_DURATION = 15;
+const MAX_AUDIO_REFERENCE_DURATION_TOLERANCE = 0.5;
+const MAX_AUDIO_REFERENCE_FILE_SIZE_MB = 15;
+const MAX_AUDIO_REFERENCE_FILE_SIZE = MAX_AUDIO_REFERENCE_FILE_SIZE_MB * 1024 * 1024;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
 const SEEDANCE_MIN_VIDEO_FRAME_PIXELS = 409_600;
 const SEEDANCE_MIN_VIDEO_SIDE = 300;
@@ -274,6 +279,7 @@ Options:
   --project <id|auto>       Project to work in. Use "auto" to create one.
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
+  --audio <file|url>        Attach reference audio/music for this turn. MP3/WAV, repeatable.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --model <name>            Preferred image/model route.
   --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, or grok.
@@ -304,6 +310,10 @@ What you can ask:
 
   Music
     makaron chat --project <id> "add calm piano background music"
+
+  Reference audio / beat sync
+    makaron chat --project auto --audio beat.mp3 --video-model seedance-fast --video-resolution 480p "用这个音乐做卡点视频"
+    makaron chat --project <id> --audio https://example.com/beat.mp3 "add this as the soundtrack"
 
   Motion design
     makaron chat --project <id> "make an animated Instagram story with this image"
@@ -450,6 +460,7 @@ async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
   if (opts.videoResolution) body.videoResolution = opts.videoResolution;
   if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
   if (opts.isNsfw) body.isNsfw = opts.isNsfw;
+  if (opts.audioAttachments?.length) body.audioAttachments = opts.audioAttachments;
 
   const res = await fetch(`${baseUrl}/api/agent/run`, {
     method: 'POST',
@@ -1000,13 +1011,13 @@ function readImageAsDataUrl(filePath) {
  * 2. PUT file directly to Supabase Storage (no Vercel body limit)
  * Returns public URL on success, null on failure.
  */
-async function uploadFileViaSignedUrl(baseUrl, headers, projectId, filePath, contentType) {
+async function uploadFileViaSignedUrl(baseUrl, headers, projectId, filePath, contentType, options = {}) {
   const filename = path.basename(filePath);
   // Step 1: get signed upload URL
   const urlRes = await fetch(`${baseUrl}/api/storage/upload-url`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({ projectId, filename, contentType }),
+    body: JSON.stringify({ projectId, filename, contentType, uploadKind: options.uploadKind }),
   });
   if (!urlRes.ok) {
     process.stderr.write(`⚠️ Failed to get upload URL: ${await urlRes.text()}\n`);
@@ -1106,6 +1117,125 @@ function parseFfmpegProbe(text) {
 
 function probeLocalVideo(videoPath) {
   return probeVideoWithFfprobe(videoPath) || probeVideoWithFfmpeg(videoPath);
+}
+
+function probeAudioDurationWithFfprobe(audioPath) {
+  try {
+    const out = execFileSync('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'json',
+      audioPath,
+    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const data = JSON.parse(out);
+    const duration = Number(data.format?.duration);
+    if (Number.isFinite(duration) && duration > 0) return duration;
+  } catch { /* ffprobe unavailable or file unsupported */ }
+  return null;
+}
+
+function getAudioMimeFromExt(ext) {
+  if (ext === 'mp3') return 'audio/mpeg';
+  if (ext === 'wav') return 'audio/wav';
+  return null;
+}
+
+function validateAudioReferenceFile(audioPath) {
+  if (!fs.existsSync(audioPath)) {
+    return { ok: false, error: `Audio file not found: ${audioPath}` };
+  }
+  const stat = fs.statSync(audioPath);
+  if (stat.size === 0) {
+    return { ok: false, error: `Audio file is empty: ${audioPath}` };
+  }
+  if (stat.size > MAX_AUDIO_REFERENCE_FILE_SIZE) {
+    return { ok: false, error: `Audio too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_AUDIO_REFERENCE_FILE_SIZE_MB}MB).` };
+  }
+  const ext = path.extname(audioPath).slice(1).toLowerCase();
+  const mime = getAudioMimeFromExt(ext);
+  if (!mime) {
+    return { ok: false, error: `Unsupported audio format: .${ext || 'unknown'}. Use MP3 or WAV.` };
+  }
+  const duration = probeAudioDurationWithFfprobe(audioPath);
+  if (duration == null) {
+    return { ok: false, error: 'Cannot read audio duration. Install ffprobe or use a public MP3/WAV URL.' };
+  }
+  if (duration < MIN_AUDIO_REFERENCE_DURATION) {
+    return { ok: false, error: `Audio too short: ${formatSeconds(duration)}s (min ${MIN_AUDIO_REFERENCE_DURATION}s).` };
+  }
+  if (duration > MAX_AUDIO_REFERENCE_DURATION + MAX_AUDIO_REFERENCE_DURATION_TOLERANCE) {
+    return { ok: false, error: `Audio too long: ${formatSeconds(duration)}s (max ${MAX_AUDIO_REFERENCE_DURATION}s, with ${MAX_AUDIO_REFERENCE_DURATION_TOLERANCE}s metadata tolerance).` };
+  }
+  return { ok: true, mime, meta: { duration, fileSizeBytes: stat.size } };
+}
+
+function validateAudioReferenceUrl(audioUrl) {
+  let parsed;
+  try {
+    parsed = new URL(audioUrl);
+  } catch {
+    return { ok: false, error: `Invalid audio URL: ${audioUrl}` };
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { ok: false, error: `Invalid audio URL protocol: ${parsed.protocol}` };
+  }
+  const ext = path.extname(parsed.pathname).slice(1).toLowerCase();
+  const mime = getAudioMimeFromExt(ext);
+  if (!mime) {
+    return { ok: false, error: `Unsupported audio URL format: .${ext || 'unknown'}. Use an MP3 or WAV URL.` };
+  }
+  return { ok: true, mime };
+}
+
+async function probeAudioReferenceUrl(audioUrl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(audioUrl, {
+      method: 'HEAD',
+      signal: controller.signal,
+      headers: { Accept: 'audio/mpeg,audio/wav,audio/wave,audio/x-wav,*/*' },
+    });
+    if (!res.ok) return { ok: true, warning: `Could not HEAD probe audio URL (${res.status}); storing external URL as-is.` };
+    const contentLength = Number(res.headers.get('content-length') || 0);
+    if (contentLength > MAX_AUDIO_REFERENCE_FILE_SIZE) {
+      return { ok: false, error: `Audio URL appears too large: ${(contentLength / 1024 / 1024).toFixed(1)}MB (max ${MAX_AUDIO_REFERENCE_FILE_SIZE_MB}MB).` };
+    }
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    if (contentType && !contentType.includes('audio/') && !contentType.includes('octet-stream')) {
+      return { ok: false, error: `Audio URL content-type is not audio: ${contentType}` };
+    }
+    return { ok: true, fileSizeBytes: contentLength || undefined };
+  } catch {
+    return { ok: true, warning: 'Could not HEAD probe audio URL; storing external URL as-is.' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function titleFromAudioInput(value) {
+  if (isHttpUrl(value)) {
+    try {
+      const name = decodeURIComponent(new URL(value).pathname.split('/').filter(Boolean).pop() || '');
+      return name || 'Reference audio';
+    } catch {
+      return 'Reference audio';
+    }
+  }
+  return path.basename(value);
+}
+
+async function importAudioTracks(baseUrl, headers, projectId, audios) {
+  const res = await fetch(`${baseUrl}/api/music/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ projectId, audios }),
+  });
+  if (!res.ok) {
+    process.stderr.write(`❌ Failed to import audio: ${await res.text()}\n`);
+    process.exit(1);
+  }
+  return await res.json();
 }
 
 function validateVideoFile(videoPath, options = {}) {
@@ -1435,6 +1565,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let projectId = null;
   const chatImages = [];
   const chatVideos = [];
+  const chatAudios = [];
   const promptParts = [];
   let useStream = false;
   let background = false;
@@ -1447,6 +1578,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else if (args[i] === '--video' && args[i + 1]) chatVideos.push(args[++i]);
+    else if (args[i] === '--audio' && args[i + 1]) chatAudios.push(args[++i]);
     else if (args[i] === '--skill' && args[i + 1]) activeSkill = args[++i];
     else if (args[i].startsWith('--skill=')) activeSkill = args[i].slice('--skill='.length);
     else if (args[i] === '--stream') useStream = true;
@@ -1469,6 +1601,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const imageFileList = chatImages.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
   const prevalidatedVideoUrlList = chatVideos.filter(p => p.startsWith('http://') || p.startsWith('https://'));
   const prevalidatedVideoFileList = chatVideos.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
+  const prevalidatedAudioUrlList = chatAudios.filter(p => p.startsWith('http://') || p.startsWith('https://'));
+  const prevalidatedAudioFileList = chatAudios.filter(p => !p.startsWith('http://') && !p.startsWith('https://'));
   const prevalidatedVideoMetas = new Map();
   for (const videoPath of prevalidatedVideoFileList) {
     const valid = validateVideoFile(videoPath);
@@ -1477,6 +1611,33 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       process.exit(1);
     }
     prevalidatedVideoMetas.set(videoPath, valid.meta);
+  }
+  const prevalidatedAudioMetas = new Map();
+  for (const audioUrl of prevalidatedAudioUrlList) {
+    const valid = validateAudioReferenceUrl(audioUrl);
+    if (!valid.ok) {
+      process.stderr.write(`❌ ${valid.error}\n`);
+      process.exit(1);
+    }
+    const probed = await probeAudioReferenceUrl(audioUrl);
+    if (!probed.ok) {
+      process.stderr.write(`❌ ${probed.error}\n`);
+      process.exit(1);
+    }
+    if (probed.warning) process.stderr.write(`⚠️ ${probed.warning}\n`);
+    prevalidatedAudioMetas.set(audioUrl, { ...valid, ...probed });
+  }
+  for (const audioPath of prevalidatedAudioFileList) {
+    const valid = validateAudioReferenceFile(audioPath);
+    if (!valid.ok) {
+      process.stderr.write(`❌ ${valid.error}\n`);
+      process.exit(1);
+    }
+    prevalidatedAudioMetas.set(audioPath, valid);
+  }
+  if (useStream && chatAudios.length > 0) {
+    process.stderr.write('❌ --audio is supported in the default async chat path. Remove --stream and retry.\n');
+    process.exit(1);
   }
 
   // --project auto: create a new project (with images/videos if provided)
@@ -1529,6 +1690,48 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   // Upload videos to project timeline (via /api/projects/create with videoUrls)
   let finalPrompt = resolvedSkill ? `[Active skill: ${resolvedSkill}]\n${prompt}` : prompt;
+  let audioAttachments = [];
+  if (chatAudios.length > 0) {
+    const audioImports = [];
+    for (const audioUrl of prevalidatedAudioUrlList) {
+      const valid = prevalidatedAudioMetas.get(audioUrl);
+      audioImports.push({
+        audioUrl,
+        title: titleFromAudioInput(audioUrl),
+        mimeType: valid.mime,
+        fileSizeBytes: valid.fileSizeBytes,
+        source: 'cli_url',
+      });
+    }
+    for (const audioPath of prevalidatedAudioFileList) {
+      const valid = prevalidatedAudioMetas.get(audioPath);
+      process.stderr.write(`🎵 Uploading ${path.basename(audioPath)} (${(fs.statSync(audioPath).size / 1024 / 1024).toFixed(1)}MB)...\n`);
+      const url = await uploadFileViaSignedUrl(baseUrl, headers, projectId, audioPath, valid.mime, { uploadKind: 'audio' });
+      if (!url) {
+        process.stderr.write(`❌ Failed to upload audio: ${audioPath}\n`);
+        process.exit(1);
+      }
+      audioImports.push({
+        audioUrl: url,
+        title: titleFromAudioInput(audioPath),
+        duration: valid.meta.duration,
+        mimeType: valid.mime,
+        fileSizeBytes: valid.meta.fileSizeBytes,
+        source: 'cli_upload',
+      });
+      process.stderr.write(`🎵 Uploaded: ${path.basename(audioPath)}\n`);
+    }
+
+    const imported = await importAudioTracks(baseUrl, headers, projectId, audioImports);
+    audioAttachments = (imported.tracks || []).map(track => ({
+      audioUrl: track.audioUrl,
+      title: track.title,
+      duration: track.duration,
+      trackIndex: track.trackIndex,
+    }));
+    process.stderr.write(`🎵 Imported ${audioAttachments.length} reference audio track(s)\n`);
+  }
+
   if (chatVideos.length > 0) {
     // Upload local files via signed URL (no size limit, works with API key auth)
     const uploadedVideoUrls = [...prevalidatedVideoUrlList];
@@ -1586,7 +1789,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
     // Default: fire-and-forget + poll
-    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel });
+    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, audioAttachments });
     if (background) {
       // Just print runId and exit
       if (jsonOutput) {
